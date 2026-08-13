@@ -1,4 +1,4 @@
-import NextAuth, { type NextAuthConfig } from "next-auth";
+import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
@@ -73,6 +73,32 @@ if (!process.env.AUTH_SECRET) {
   }
 }
 
+export async function requireRole(requiredRole: "ADMIN" | "HOLDER" | "INTERPRETER") {
+  const session = await auth();
+  const email = session?.user?.email?.toLowerCase().trim();
+  const sessionUserId = session?.user?.id;
+
+  if (!email && !sessionUserId) {
+    throw new Error("Unauthorized");
+  }
+
+  const user = await prisma.rbacUser.findFirst({
+    where: {
+      OR: [
+        ...(sessionUserId ? [{ id: sessionUserId }] : []),
+        ...(email ? [{ email }] : []),
+      ],
+    },
+    select: { id: true, email: true, name: true, role: true },
+  });
+
+  if (!user || user.role !== requiredRole) {
+    throw new Error(`Unauthorized: ${requiredRole} role required`);
+  }
+
+  return user;
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   secret: process.env.AUTH_SECRET,
@@ -103,9 +129,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) token.role = user.role;
       return token;
     },
-    session({ session, token }: { session: Session; token: JWT }) {
+    async session({ session, token }: { session: Session; token: JWT }) {
       if (session.user) {
-        (session.user as any).role = token.role;
+        const normalizedEmail = session.user.email?.toLowerCase().trim();
+        const dbUser = await prisma.rbacUser.findFirst({
+          where: {
+            OR: [
+              ...(token.sub ? [{ id: token.sub }] : []),
+              ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+            ],
+          },
+          select: { id: true, email: true, name: true, role: true },
+        });
+
+        if (dbUser) {
+          session.user.id = dbUser.id;
+          session.user.email = dbUser.email;
+          session.user.name = dbUser.name;
+          (session.user as any).role = dbUser.role;
+        } else {
+          (session.user as any).role = token.role;
+        }
       }
       return session;
     }

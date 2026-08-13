@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { getToken } from 'next-auth/jwt';
 
 /**
  * UNIFIED MIDDLEWARE — FREE INTERPRETERS OS
@@ -28,10 +27,6 @@ import { getToken } from 'next-auth/jwt';
  * ============================================================
  */
 
-// ANON KEY FIX: La key real de Supabase (NO el placeholder sb_publishable_)
-// Obtenida desde Supabase Dashboard → Project Settings → API
-const SUPABASE_ANON_KEY_REAL = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Ymt5Z3BwcGxrbnlucndtdG1mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczMTQ4OTYsImV4cCI6MjA5Mjg5MDg5Nn0.1KafepcZR8r-_TAYNEmA0cxO6gviIeL-2ydi4LSsleo";
-
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://freeinterpreters.com";
 
 const AUTH_SESSION_COOKIE_NAMES = [
@@ -45,27 +40,10 @@ function hasAuthSessionCookie(req: NextRequest) {
   return AUTH_SESSION_COOKIE_NAMES.some((name) => req.cookies.has(name));
 }
 
-async function hasValidAuthSession(req: NextRequest) {
-  if (!hasAuthSessionCookie(req)) return false;
-
-  const secret = process.env.AUTH_SECRET?.trim() || process.env.NEXTAUTH_SECRET?.trim();
-  if (!secret) {
-    console.warn('[MIDDLEWARE] Auth.js session cookie found, but AUTH_SECRET/NEXTAUTH_SECRET is missing; treating session as invalid.');
-    return false;
-  }
-
-  for (const cookieName of AUTH_SESSION_COOKIE_NAMES) {
-    if (!req.cookies.has(cookieName)) continue;
-    const token = await getToken({
-      req,
-      secret,
-      cookieName,
-      secureCookie: cookieName.startsWith('__Secure-'),
-    });
-    if (token) return true;
-  }
-
-  return false;
+function hasValidAuthSession(req: NextRequest) {
+  // Edge-safe gate: only check for Auth.js session cookie presence here.
+  // Server Components / Actions perform role validation with Prisma.
+  return hasAuthSessionCookie(req);
 }
 
 // Pre-check logic moved inside middleware to avoid missing env vars at module load in dev mode.
@@ -130,7 +108,7 @@ export async function middleware(req: NextRequest) {
       (cookie) => cookie.name.startsWith('sb-') && cookie.name.endsWith('-auth-token')
     );
 
-  const hasValidNextAuthSession = await hasValidAuthSession(req);
+  const hasValidNextAuthSession = hasValidAuthSession(req);
 
   const isSupabaseSecureRoute = SUPABASE_SECURE_PREFIXES.some(
     (prefix) => pathname.startsWith(prefix)

@@ -1,5 +1,4 @@
 import { createServerClient } from '@supabase/ssr';
-import { getToken, type JWT } from 'next-auth/jwt';
 import { NextResponse, type NextRequest } from 'next/server';
 
 type UpdateSessionResult = {
@@ -18,27 +17,10 @@ function hasAuthSessionCookie(request: NextRequest) {
   return AUTH_SESSION_COOKIE_NAMES.some((name) => request.cookies.has(name));
 }
 
-async function getValidAuthToken(request: NextRequest): Promise<JWT | null> {
-  if (!hasAuthSessionCookie(request)) return null;
-
-  const secret = process.env.AUTH_SECRET?.trim() || process.env.NEXTAUTH_SECRET?.trim();
-  if (!secret) {
-    console.warn('[MIDDLEWARE] Auth.js session cookie found, but AUTH_SECRET/NEXTAUTH_SECRET is missing; treating session as invalid.');
-    return null;
-  }
-
-  for (const cookieName of AUTH_SESSION_COOKIE_NAMES) {
-    if (!request.cookies.has(cookieName)) continue;
-    const token = await getToken({
-      req: request,
-      secret,
-      cookieName,
-      secureCookie: cookieName.startsWith('__Secure-'),
-    });
-    if (token) return token;
-  }
-
-  return null;
+function hasValidAuthSession(request: NextRequest) {
+  // Edge-safe gate: only check for Auth.js session cookie presence here.
+  // Server Components / Actions perform strict role validation with Prisma.
+  return hasAuthSessionCookie(request);
 }
 
 function isInvalidRefreshTokenError(error: unknown) {
@@ -137,8 +119,7 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
     }
   }
   const { pathname } = request.nextUrl;
-  const validNextAuthToken = await getValidAuthToken(request);
-  const hasValidNextAuthSession = !!validNextAuthToken;
+  const hasValidNextAuthSession = hasValidAuthSession(request);
 
   const hasValidSession = !!user || hasValidNextAuthSession;
 
@@ -170,50 +151,12 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
     };
   }
 
-  // 4. Fetch profile and role ONCE if authenticated
-  let role = 'interpreter';
-  if (user) {
-    try {
-      const { getSupabaseServiceRoleKey } = await import('@/lib/supabase/admin');
-      const serviceKey = getSupabaseServiceRoleKey();
-      if (serviceKey) {
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabaseAdmin = createClient(
-          supabaseUrl,
-          serviceKey
-        );
-        const { data: profile, error } = await supabaseAdmin
-          .from('user_profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-
-        if (error) {
-          console.error('🔴 [MIDDLEWARE] Error fetching role with service client:', error);
-        } else {
-          role = profile?.role || 'interpreter';
-        }
-      } else {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single();
-        role = profile?.role || 'interpreter';
-      }
-    } catch (err) {
-      console.error('🔴 [MIDDLEWARE] Exception fetching user role:', err);
-    }
-  } else if (validNextAuthToken) {
-    role = validNextAuthToken.role === 'admin' ? 'admin' : 'interpreter';
-  }
-
-  const hasSession = !!user || hasValidNextAuthSession;
-
-  // 5. Handle logged-in users on public pages (like login)
-  if (hasSession && pathname === '/login') {
+  // 4. Middleware intentionally avoids database-backed role checks.
+  // Role authorization belongs in Server Components / Actions where Prisma and
+  // Node-only dependencies are available.
+  if (hasValidSession && pathname === '/login') {
     const url = request.nextUrl.clone();
-    url.pathname = role === 'admin' ? '/admin' : '/dashboard';
+    url.pathname = '/dashboard';
     const redirectResponse = NextResponse.redirect(url);
     applyCookieDeletions(redirectResponse, staleCookieNames);
     return {
@@ -222,35 +165,10 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
     };
   }
 
-  // 6. Role-based route protection
-  if (hasSession && (pathname.startsWith('/admin') || pathname.startsWith('/dashboard'))) {
-    if (pathname.startsWith('/admin') && role !== 'admin') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/dashboard';
-      const redirectResponse = NextResponse.redirect(url);
-      applyCookieDeletions(redirectResponse, staleCookieNames);
-      return {
-        response: redirectResponse,
-        hasValidSession: true,
-      };
-    }
-
-    if (pathname.startsWith('/dashboard') && role === 'admin') {
-      const url = request.nextUrl.clone();
-      url.pathname = '/admin';
-      const redirectResponse = NextResponse.redirect(url);
-      applyCookieDeletions(redirectResponse, staleCookieNames);
-      return {
-        response: redirectResponse,
-        hasValidSession: true,
-      };
-    }
-  }
-
-  // 7. Basic role-based root redirection
-  if (hasSession && pathname === '/') {
+  // 5. Basic authenticated root redirection without role lookup.
+  if (hasValidSession && pathname === '/') {
     const url = request.nextUrl.clone();
-    url.pathname = role === 'admin' ? '/admin' : '/dashboard';
+    url.pathname = '/dashboard';
     const redirectResponse = NextResponse.redirect(url);
     applyCookieDeletions(redirectResponse, staleCookieNames);
     return {
