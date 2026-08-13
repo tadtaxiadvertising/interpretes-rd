@@ -1,5 +1,5 @@
 "use server";
-import { auth } from "@/lib/auth-rbac";
+import { requireRole } from "@/lib/auth-rbac";
 import prisma from "@/lib/prisma";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -10,10 +10,7 @@ const HolderSchema = z.object({
 });
 
 export async function createHolder(data: z.infer<typeof HolderSchema>) {
-  const session = await auth();
-  if ((session?.user as any)?.role !== "ADMIN") {
-    throw new Error("Unauthorized: Admin role required");
-  }
+  await requireRole("ADMIN");
 
   const { email, password, name } = HolderSchema.parse(data);
   const hashedPassword = await bcrypt.hash(password, 10);
