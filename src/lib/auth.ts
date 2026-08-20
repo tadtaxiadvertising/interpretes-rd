@@ -1,6 +1,7 @@
 import { createClient, isSupabaseConfigError } from './supabase/server';
 import prisma from './prisma';
 import { auth as nextAuth } from './auth-rbac';
+import { resolveUserRoleByEmail } from './admin-identity';
 
 /**
  * AUTH BRIDGE
@@ -21,7 +22,7 @@ export async function auth() {
       });
       user = {
         ...currentUser,
-        role: profile?.role || 'interpreter',
+        role: resolveUserRoleByEmail(currentUser.email, profile?.role || 'interpreter'),
         displayName: profile?.displayName || currentUser.email?.split('@')[0]
       };
     }
@@ -46,7 +47,7 @@ export async function auth() {
         user = {
           id: session.user.id,
           email: session.user.email,
-          role: (session.user as any).role || 'interpreter',
+          role: resolveUserRoleByEmail(session.user.email, (session.user as any).role || 'interpreter'),
           displayName: session.user.name || session.user.email?.split('@')[0]
         };
       }

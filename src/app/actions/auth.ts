@@ -6,6 +6,7 @@ import { upsertConfirmedAuthUser, repairAuthUser } from '@/lib/supabase/auth-use
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import type { UserProfile, UserRole } from '@/lib/types';
+import { resolveRbacRoleByEmail, resolveUserRoleByEmail } from '@/lib/admin-identity';
 import prismaClient from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -28,7 +29,9 @@ async function syncUserProfileFromAuth(params: {
   role: UserRole;
   displayName: string;
 }) {
-  const interpreter = await prisma.interpreter.findFirst({
+  const resolvedRole = resolveUserRoleByEmail(params.email, params.role);
+
+  const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
     where: {
       OR: [
         { emailCorporativo: params.email },
@@ -43,15 +46,15 @@ async function syncUserProfileFromAuth(params: {
     update: {
       email: params.email,
       displayName: params.displayName,
-      role: params.role,
-      interpreterId: interpreter?.id ?? null,
+      role: resolvedRole,
+      interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
     },
     create: {
       id: params.userId,
       email: params.email,
       displayName: params.displayName,
-      role: params.role,
-      interpreterId: interpreter?.id ?? null,
+      role: resolvedRole,
+      interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
     },
   });
 }
@@ -104,7 +107,7 @@ async function repairAuthUserAndRetry(params: {
       await syncUserProfileFromAuth({
         userId: retry.data.user.id,
         email: params.email,
-        role: params.requestedRole,
+        role: resolveUserRoleByEmail(params.email, params.requestedRole),
         displayName: repairedUser.user_metadata?.display_name || params.email.split('@')[0],
       });
     }
@@ -112,7 +115,7 @@ async function repairAuthUserAndRetry(params: {
     console.log(`✅ [AUTH_REPAIR] Repair successful for ${params.email} — role=${profile?.role ?? params.requestedRole}`);
     return {
       success: true,
-      role: normalizeRbacRole(profile?.role ?? params.requestedRole),
+      role: resolveUserRoleByEmail(params.email, profile?.role ?? params.requestedRole),
     };
   } catch (repairErr) {
     console.error(`🔴 [AUTH_REPAIR] upsertConfirmedAuthUser threw for ${params.email}:`, repairErr);
@@ -127,9 +130,10 @@ export async function login(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
   const requestedRole = ((formData.get('role') as string) || 'interpreter').toLowerCase() as UserRole;
+  const effectiveRequestedRole = resolveUserRoleByEmail(email, requestedRole);
 
   try {
-    const validated = AuthSchema.parse({ email, password, role: requestedRole });
+    const validated = AuthSchema.parse({ email, password, role: effectiveRequestedRole });
     const supabase = await createClient();
 
     const { data, error } = await supabase.auth.signInWithPassword({
@@ -148,7 +152,7 @@ export async function login(formData: FormData) {
             supabase,
             email,
             password,
-            requestedRole,
+            requestedRole: effectiveRequestedRole,
           });
 
           // Only short-circuit on success — on failure, fall through to
@@ -184,8 +188,14 @@ export async function login(formData: FormData) {
         return { success: false, error: 'Credenciales inválidas o error de autenticación.' };
       }
 
-      const localRole = normalizeRbacRole(localUser.role);
-      if (requestedRole !== localRole) {
+      const localRole = resolveUserRoleByEmail(email, normalizeRbacRole(localUser.role));
+      if (normalizeRbacRole(localUser.role) !== localRole) {
+        await prisma.rbacUser.update({
+          where: { id: localUser.id },
+          data: { role: resolveRbacRoleByEmail(email, localUser.role) },
+        });
+      }
+      if (effectiveRequestedRole !== localRole) {
         return {
           success: false,
           error: 'Estas credenciales no corresponden al portal seleccionado.',
@@ -214,7 +224,7 @@ export async function login(formData: FormData) {
               await syncUserProfileFromAuth({
                 userId: retry.data.user.id,
                 email,
-                role: localRole,
+                role: resolveUserRoleByEmail(email, localRole),
                 displayName,
               });
               const cookieStore = await cookies();
@@ -243,12 +253,19 @@ export async function login(formData: FormData) {
       await syncUserProfileFromAuth({
         userId: data.user.id,
         email: validated.email,
-        role: requestedRole,
+        role: resolveUserRoleByEmail(validated.email, effectiveRequestedRole),
         displayName: data.user.user_metadata?.display_name || validated.email.split('@')[0],
       });
     }
 
-    const finalRole = normalizeRbacRole(profile?.role ?? requestedRole);
+    const finalRole = resolveUserRoleByEmail(validated.email, profile?.role ?? effectiveRequestedRole);
+
+    if (profile?.role !== finalRole) {
+      await prisma.userProfile.update({
+        where: { id: data.user.id },
+        data: { role: finalRole, interpreterId: finalRole === 'admin' ? null : undefined },
+      });
+    }
     const cookieStore3 = await cookies();
     cookieStore3.set('user-role', finalRole, { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
     return { success: true, role: finalRole };
@@ -277,9 +294,9 @@ export async function register(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
   const name = (formData.get('name') as string) || email.split('@')[0];
-  // Role is never taken from client input. Registrations always register
-  // interpreters; admin assignment is an explicit privileged operation.
-  const role: UserRole = 'interpreter';
+  // Role is never taken from arbitrary client input. Registrations default to
+  // interpreter, except protected owner identities that must stay admin.
+  const role: UserRole = resolveUserRoleByEmail(email, 'interpreter');
 
   try {
     const validated = AuthSchema.parse({ email, password, role });
@@ -323,7 +340,9 @@ export async function register(formData: FormData) {
       userId = data.user.id;
     }
 
-    const interpreter = await prisma.interpreter.findFirst({
+    const resolvedRole = resolveUserRoleByEmail(validated.email, validated.role);
+
+    const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
       where: {
         OR: [
           { emailCorporativo: validated.email },
@@ -338,15 +357,15 @@ export async function register(formData: FormData) {
       update: {
         email: validated.email,
         displayName: name,
-        role: validated.role,
-        interpreterId: interpreter?.id ?? null,
+        role: resolvedRole,
+        interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
       },
       create: {
         id: userId,
         email: validated.email,
         displayName: name,
-        role: validated.role,
-        interpreterId: interpreter?.id ?? null,
+        role: resolvedRole,
+        interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
       },
     });
 
@@ -359,14 +378,14 @@ export async function register(formData: FormData) {
           email: validated.email,
           password: hashedPassword,
           name,
-          role: validated.role.toUpperCase() === 'ADMIN' ? 'ADMIN' : 'INTERPRETER',
+          role: resolveRbacRoleByEmail(validated.email, validated.role.toUpperCase()),
         },
       });
     } catch (rbacSyncErr) {
       console.warn(`⚠️ [AUTH_REGISTER] rbac_users sync skipped for ${validated.email}:`, rbacSyncErr);
     }
 
-    return { success: true, role: validated.role };
+    return { success: true, role: resolvedRole };
   } catch (err: unknown) {
     if (err instanceof z.ZodError) return { success: false, error: 'Datos de registro inválidos.' };
 
@@ -453,10 +472,18 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
 
     if (!profile) return null;
 
-           // Admin promotion removed from runtime flow. Admin status is now
-           // explicit-only; granting admin requires a direct DB operation by an
-           // authorized operator. This prevents email-pattern guessing from
-           // escalating arbitrary accounts to admin (CVE-like auth bypass).
+    const resolvedRole = resolveUserRoleByEmail(profile.email, profile.role);
+    if (profile.role !== resolvedRole) {
+      await prisma.userProfile.update({
+        where: { id: profile.id },
+        data: { role: resolvedRole, interpreterId: resolvedRole === 'admin' ? null : undefined },
+      });
+      profile = { ...profile, role: resolvedRole, interpreterId: resolvedRole === 'admin' ? null : profile.interpreterId, interpreter: resolvedRole === 'admin' ? null : profile.interpreter };
+    }
+
+    // General admin promotion remains removed from runtime flow; only the
+    // protected owner identity above is force-repaired so it cannot be
+    // downgraded by auto-provisioning or sync paths.
 
     // Self-healing: link interpreter when profile exists but interpreterId is null (skip for admins)
     if (!profile.interpreterId && profile.email && profile.role !== 'admin') {

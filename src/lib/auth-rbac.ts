@@ -6,6 +6,7 @@ import bcrypt from "bcryptjs";
 import type { JWT } from "next-auth/jwt";
 import type { Session } from "next-auth";
 import crypto from "crypto";
+import { resolveRbacRoleByEmail } from "@/lib/admin-identity";
 
 // ---------------------------------------------------------------------------
 // Dotenv fallback — load .env.local / .env when running standalone server
@@ -115,10 +116,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new Error("Invalid credentials");
         }
 
+        const role = resolveRbacRoleByEmail(user.email, user.role);
+        if (user.role !== role) {
+          await prisma.rbacUser.update({ where: { id: user.id }, data: { role } });
+        }
+
         return {
           id: user.id,
           email: user.email,
-          role: user.role,
+          role,
           name: user.name
         };
       }
@@ -146,9 +152,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           session.user.id = dbUser.id;
           session.user.email = dbUser.email;
           session.user.name = dbUser.name;
-          (session.user as any).role = dbUser.role;
+          (session.user as any).role = resolveRbacRoleByEmail(dbUser.email, dbUser.role);
         } else {
-          (session.user as any).role = token.role;
+          (session.user as any).role = resolveRbacRoleByEmail(session.user.email, token.role as string | undefined);
         }
       }
       return session;
