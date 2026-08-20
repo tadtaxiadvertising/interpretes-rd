@@ -6,6 +6,7 @@ import { auth } from '@/lib/auth';
 import { UserRole } from '@/lib/types';
 import { supabaseAdmin, isAdminUnavailableError, ADMIN_UNAVAILABLE_MESSAGE } from '@/lib/supabase/admin';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
+import { resolveUserRoleByEmail } from '@/lib/admin-identity';
 
 const prisma = prismaClient;
 
@@ -225,8 +226,20 @@ export async function syncAllSupabaseUsers() {
         where: { id: sUser.id }
       });
 
+      const role = resolveUserRoleByEmail(sUser.email, existing?.role || 'interpreter');
+
+      if (existing) {
+        if (existing.role !== role || (role === 'admin' && existing.interpreterId !== null)) {
+          await prisma.userProfile.update({
+            where: { id: existing.id },
+            data: { role, interpreterId: role === 'admin' ? null : undefined },
+          });
+          syncedCount++;
+        }
+        continue;
+      }
+
       if (!existing) {
-        // Role is explicit-only on admin sync. Do not promote by email pattern.
 
         // Auto-link to matching physical interpreter by email
         const interpreter = await prisma.interpreter.findUnique({
@@ -239,8 +252,8 @@ export async function syncAllSupabaseUsers() {
             id: sUser.id,
             email: sUser.email,
             displayName: sUser.user_metadata?.display_name || sUser.email.split('@')[0],
-            role: 'interpreter',
-            interpreterId: interpreter ? interpreter.id : null,
+            role,
+            interpreterId: role === 'admin' ? null : (interpreter ? interpreter.id : null),
             onboardingComplete: true
           }
         });

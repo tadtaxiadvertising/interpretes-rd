@@ -14,6 +14,7 @@ import { OnboardingGate } from '@/components/OnboardingGate';
 import { getCurrentProfile } from '@/app/actions/auth';
 import prismaClient from '@/lib/prisma';
 import { getDayBounds, getMonthBounds, sumEffectiveLogMinutes } from '@/lib/interpreter-metrics';
+import { resolveUserRoleByEmail } from '@/lib/admin-identity';
 const prisma = prismaClient;
 
 // ── Santo Domingo working-days helper ──
@@ -54,7 +55,7 @@ export default async function InterpreterDashboard() {
       // Determine role for new profile — default is interpreter.
       // Admin promotion is explicit-only (DB/admin action), never inferred
       // from email patterns to prevent unauthorized escalation.
-      const role: string = 'interpreter';
+      const role = resolveUserRoleByEmail(user.email, 'interpreter');
 
       // Use Prisma for auto-repair — broader matching (email or name)
       const interpreter = await prisma.interpreter.findFirst({

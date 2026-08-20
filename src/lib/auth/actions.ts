@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { ActionResult, UserRole } from '@/lib/types';
 import { cache } from 'react';
 import { auth } from '@/lib/auth-rbac';
+import { resolveUserRoleByEmail } from '@/lib/admin-identity';
 
 /**
  * CACHED AUTH HELPER
@@ -37,7 +38,7 @@ export const getCurrentUser = cache(async () => {
         // Default role is always 'interpreter' on auto-provision.
         // Admin must be assigned explicitly by an authorized operator
         // via admin action or direct DB assignment.
-        const role: UserRole = 'interpreter';
+        const role: UserRole = resolveUserRoleByEmail(user.email, 'interpreter');
 
         // Link with an interpreter profile — broader matching (email or name)
         const interpreter = await prisma.interpreter.findFirst({
@@ -51,7 +52,7 @@ export const getCurrentUser = cache(async () => {
         });
 
         // AUTO-CREATE: If no matching interpreter and role is 'interpreter', create one
-        let interpreterId: number | null = interpreter?.id || null;
+        let interpreterId: number | null = role === 'admin' ? null : (interpreter?.id || null);
         if (!interpreterId && role === 'interpreter') {
           const displayName = user.user_metadata?.display_name || user.email?.split('@')[0] || 'Interpreter';
           try {
