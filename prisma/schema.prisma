@@ -184,10 +184,11 @@ model PayrollRecord {
   paidAt               DateTime?    @map("paid_at") @db.Timestamptz(6)
   transactionReference String?      @map("transaction_reference")
   reconciliationHash   String?      @unique @map("reconciliation_hash")
-  interpreter          Interpreter? @relation(fields: [interpreterId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  interpreter          Interpreter? @relation(fields: [interpreterId], references: [id], onDelete: Restrict, onUpdate: NoAction)
   productionLogs       ProductionLog[]
   callSessions         CallSession[]
 
+  @@unique([interpreterId, periodStart, periodEnd], map: "unique_payroll_per_interpreter_period")
   @@index([interpreterId], map: "idx_payroll_records_interpreter")
   @@index([periodStart, periodEnd], map: "idx_payroll_records_period")
   @@index([status], map: "idx_payroll_records_status")

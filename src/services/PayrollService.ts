@@ -325,9 +325,10 @@ export async function calculateFullPayroll(
   // 10. Cálculo Neto Consolidado
   // netTotal = (grossTotal + qualityBonus + incentivesTotal) - (penalidades + transferDeduction)
   const finalIncentives = incentive.totalIncentive + q1Refund + superGoalBonus;
-  const netTotal = Math.round(
-    ((grossTotal + qualityBonus + finalIncentives) - (penalidades + transferDeduction)) * 100
-  ) / 100;
+  const netTotal = Math.max(
+      0,
+      Math.round(((grossTotal + qualityBonus + finalIncentives) - (penalidades + transferDeduction)) * 100) / 100
+    );
 
   return {
     interpreterId: interpreter.id,
@@ -386,9 +387,10 @@ export async function recalculateWithVerifiedMinutes(
     transferDeduction = Math.round(grossTotal * 0.05 * 100) / 100;
   }
 
-  const netTotal = Math.round(
-    ((grossTotal + qualityBonus + incentive.totalIncentive) - (penalidades + transferDeduction)) * 100
-  ) / 100;
+  const netTotal = Math.max(
+      0,
+      Math.round(((grossTotal + qualityBonus + incentive.totalIncentive) - (penalidades + transferDeduction)) * 100) / 100
+    );
 
   return {
     grossTotal,

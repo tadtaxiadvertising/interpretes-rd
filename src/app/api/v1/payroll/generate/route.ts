@@ -54,42 +54,50 @@ export async function POST(request: Request) {
       const periodStart = periodStartLogs;
       const periodEnd = periodEndLogs;
 
-      // Unique reconciliation hash
-      const reconciliationHash = crypto.createHash('sha256').update(`${interpreter.id}-${periodStart.toISOString()}-${periodEnd.toISOString()}-${Date.now()}`).digest('hex');
+      // Unique reconciliation hash (stable: no Date.now())
+          const reconciliationHash = crypto
+            .createHash('sha256')
+            .update(`${interpreter.id}-${periodStart.toISOString()}-${periodEnd.toISOString()}`)
+            .digest('hex');
 
-      try {
-        // Atomic transaction
-        const result = await prisma.$transaction(async (tx: any) => {
-          const payroll = await tx.payrollRecord.create({
-            data: {
-              interpreterId: interpreter.id,
-              periodStart,
-              periodEnd,
-              totalMinutes: calculation.totalMinutes,
-              verifiedMinutes: calculation.totalMinutes, // Using totalMinutes as verified since it represents the processed amount
-              grossTotal: calculation.grossTotal,
-              qualityBonus: calculation.qualityBonus,
-              incentivesTotal: calculation.incentivesTotal,
-              penalidades: calculation.penalidades,
-              transferDeduction: calculation.transferDeduction,
-              netTotal: calculation.netTotal,
-              status: 'PENDING',
-              reconciliationHash
-            }
-          });
+          try {
+            // Atomic transaction with serializable isolation to prevent race conditions
+            const result = await prisma.$transaction(
+              async (tx: any) => {
+                const payroll = await tx.payrollRecord.create({
+                  data: {
+                    interpreterId: interpreter.id,
+                    periodStart,
+                    periodEnd,
+                    totalMinutes: calculation.totalMinutes,
+                    verifiedMinutes: calculation.totalMinutes,
+                    grossTotal: calculation.grossTotal,
+                    qualityBonus: calculation.qualityBonus,
+                    incentivesTotal: calculation.incentivesTotal,
+                    penalidades: calculation.penalidades,
+                    transferDeduction: calculation.transferDeduction,
+                    netTotal: calculation.netTotal,
+                    status: 'PENDING',
+                    reconciliationHash,
+                  },
+                });
 
-          // Mark logs as processed
-          await tx.productionLog.updateMany({
-            where: {
-              id: { in: unprocessedLogs.map((l: { id: number }) => l.id) }
-            },
-            data: {
-              status: 'PROCESSED'
-            }
-          });
+                // Mark logs as processed
+                await tx.productionLog.updateMany({
+                  where: {
+                    id: { in: unprocessedLogs.map((l: { id: number }) => l.id) },
+                  },
+                  data: {
+                    status: 'PROCESSED',
+                  },
+                });
 
-          return payroll;
-        });
+                return payroll;
+              },
+              {
+                isolationLevel: 'Serializable',
+              }
+            );
         
         results.push({ interpreterId: interpreter.id, payrollId: result.id, status: 'Success' });
       } catch (err) {
