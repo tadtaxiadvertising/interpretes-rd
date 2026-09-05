@@ -66,24 +66,19 @@ export function isAdminUnavailableError(error: unknown): error is SupabaseAdminU
 // Service-role key resolution (tolerant — logs once, returns empty string)
 // ---------------------------------------------------------------------------
 
-// SERVICE_ROLE KEY FIX: real key from Supabase Dashboard
-// Falls back to env var, then hardcoded real key
-const SERVICE_ROLE_KEY_REAL = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt6Ymt5Z3BwcGxrbnlucndtdG1mIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzMxNDg5NiwiZXhwIjoyMDkyODkwODk2fQ.uT9CWgUxbexehLt-0T7zv2wm4TYMzEXerQKgLfJdAL8";
-
 let _serviceKeyWarningLogged = false;
 
 /**
  * Resolves the Supabase service-role / secret key.
  *
+ * REQUIRED: `SUPABASE_SERVICE_ROLE_KEY` or `SUPABASE_SERVICE_KEY` must be
+ * set as runtime environment variables. No hardcoded fallback is provided.
+ *
  * Priority:
  *   1. `SUPABASE_SERVICE_ROLE_KEY` env (legacy JWT `eyJ…` OR new-format `sb_secret_…`).
  *   2. `SUPABASE_SERVICE_KEY` env (same accepted formats).
- *   3. Hardcoded legacy fallback — SECURITY DEBT: keep only until a real secret is
- *      configured in the runtime environment (Easypanel). The embedded key grants
- *      full access and MUST be rotated out of source as soon as a valid env secret
- *      is in place.
  */
-export function getSupabaseServiceRoleKey() {
+export function getSupabaseServiceRoleKey(): string {
   const value1 = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
   const value2 = process.env.SUPABASE_SERVICE_KEY?.trim();
   const envKey = value1 || value2;
@@ -98,18 +93,16 @@ export function getSupabaseServiceRoleKey() {
      if (globalKey) return globalKey;
   }
 
-  // Hardcoded fallback: real service_role key (legacy JWT).
-  // Only reached when no env var is set.
+  // NO HARDCODED FALLBACK — throw to force runtime configuration.
   if (!_serviceKeyWarningLogged) {
     _serviceKeyWarningLogged = true;
-    console.warn(
-      '⚠️ [SUPABASE_ADMIN] SUPABASE_SERVICE_ROLE_KEY is not set. ' +
-      'Falling back to the embedded legacy key. ' +
-      'Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY) in EasyPanel env vars ' +
-      'and rotate the embedded key to avoid leaving a service-role secret in source.'
+    console.error(
+      '🔴 [SUPABASE_ADMIN] SUPABASE_SERVICE_ROLE_KEY is not set in runtime environment. ' +
+      'Service-role operations are UNAVAILABLE. Set SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_SERVICE_KEY) ' +
+      'in Easypanel env vars. The hardcoded fallback was REMOVED for security.'
     );
   }
-  return SERVICE_ROLE_KEY_REAL;
+  throw new SupabaseAdminUnavailableError();
 }
 
 // ---------------------------------------------------------------------------

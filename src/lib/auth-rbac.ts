@@ -43,9 +43,18 @@ process.env.AUTH_TRUST_HOST = "true";
 
 // ---------------------------------------------------------------------------
 // AUTH_SECRET resolution
-// Priority: AUTH_SECRET env → derived from ENCRYPTION_KEY → random per-process secret
+// Priority: AUTH_SECRET env (REQUIRED in production)
+//           → derived from ENCRYPTION_KEY (dev only)
+//           → random per-process secret (dev only, sessions invalidated on restart)
 // ---------------------------------------------------------------------------
 if (!process.env.AUTH_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      '[AUTH-RBAC] CRITICAL: AUTH_SECRET is required in production. ' +
+      'Set AUTH_SECRET in your Easypanel runtime environment. ' +
+      'The application will not start without it to prevent session instability.'
+    );
+  }
   if (process.env.ENCRYPTION_KEY) {
     process.env.AUTH_SECRET = crypto
       .createHash('sha256')
@@ -53,24 +62,16 @@ if (!process.env.AUTH_SECRET) {
       .digest('hex')
       .slice(0, 32);
     console.warn(
-      '[AUTH-RBAC] AUTH_SECRET derived from ENCRYPTION_KEY. ' +
+      '[AUTH-RBAC] AUTH_SECRET derived from ENCRYPTION_KEY (dev only). ' +
       'Set AUTH_SECRET explicitly for stable sessions across restarts.'
     );
   } else {
     // Random per-process secret — sessions invalidated on restart, but not predictable
     process.env.AUTH_SECRET = crypto.randomBytes(32).toString('hex');
-    if (process.env.NODE_ENV === 'production') {
-      console.error(
-        '[AUTH-RBAC] CRITICAL: AUTH_SECRET is not set in production! ' +
-        'Using a random per-process secret — sessions will break on every restart. ' +
-        'Set AUTH_SECRET in your Easypanel runtime environment immediately.'
-      );
-    } else {
-      console.warn(
-        '[AUTH-RBAC] AUTH_SECRET not set — using random per-process secret. ' +
-        'Sessions will be invalidated on server restart. Set AUTH_SECRET for stable sessions.'
-      );
-    }
+    console.warn(
+      '[AUTH-RBAC] AUTH_SECRET not set — using random per-process secret (dev only). ' +
+      'Sessions will be invalidated on server restart. Set AUTH_SECRET for stable sessions.'
+    );
   }
 }
 
