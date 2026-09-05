@@ -25,12 +25,30 @@ export default async function DashboardLayout({ children }: { children: React.Re
     notificationUserIds.push(profile.id);
   }
 
+  // ── ROBUSTNESS GUARD ─────────────────────────────────────────
+  // Notification.userId is @db.Uuid. The local-RBAC login flow (NextAuth
+  // credentials against rbac_users) produces NON-UUID ids (cuid). Passing
+  // those to `user_id = ANY($1::uuid[])` throws "invalid input syntax for
+  // type uuid" → 500 on /dashboard. Filter to real UUIDs only so the
+  // notification panel silently returns empty instead of crashing the page.
+  const UUID_RE =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const uuidUserIds = notificationUserIds.filter((id) => id && UUID_RE.test(id));
+
   const db = prisma as any;
-  const notifications = await db.notification.findMany({
-    where: { userId: { in: notificationUserIds } },
-    orderBy: { createdAt: 'desc' },
-    take: 10
-  });
+  const notifications =
+    uuidUserIds.length > 0
+      ? await db.notification
+          .findMany({
+            where: { userId: { in: uuidUserIds } },
+            orderBy: { createdAt: 'desc' },
+            take: 10,
+          })
+          .catch((err: unknown) => {
+            console.error('❌ LAYOUT: Notification fetch failed (non-fatal):', err);
+            return [];
+          })
+      : [];
 
   // ── Compute ranking data for the sidebar ──
   let ranking = null;
