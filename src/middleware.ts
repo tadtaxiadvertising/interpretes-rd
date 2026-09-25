@@ -95,9 +95,9 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── 2. SUPABASE SESSION REFRESH ───────────────────────────
-  // Only run Supabase refresh when a Supabase cookie exists or the route is
-  // protected by Supabase. This avoids repeated refresh-token errors for
-  // NextAuth-only sessions (e.g. RBAC credentials login).
+  // Only run Supabase refresh when a Supabase cookie exists. This avoids
+  // unnecessary auth requests for anonymous visitors and NextAuth-only
+  // sessions (for example, RBAC credentials login).
   let response: NextResponse;
   let hasActiveSupabaseSession = false;
 
@@ -119,7 +119,12 @@ export async function middleware(req: NextRequest) {
     (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || process.env.SUPABASE_ANON_KEY?.trim())
   );
 
-  if (HAS_SUPABASE_ENV && (hasSupabaseCookie || (isSupabaseSecureRoute && !hasValidNextAuthSession))) {
+  // Do not contact Supabase solely because a route is protected. Requests with
+  // no Supabase session cannot be refreshed, and making that request for every
+  // anonymous visitor turns a Supabase connectivity issue into repeated Edge
+  // Runtime `fetch failed` errors. Protected routes are redirected below when
+  // neither authentication system has a valid session.
+  if (HAS_SUPABASE_ENV && hasSupabaseCookie) {
     try {
       const { updateSession } = await import('@/lib/supabase/middleware');
       const refreshResult = await updateSession(req);

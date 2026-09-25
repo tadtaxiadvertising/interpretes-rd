@@ -57,6 +57,20 @@ function applyCookieDeletions(response: NextResponse, names: Set<string>) {
   names.forEach((name) => response.cookies.delete(name));
 }
 
+/**
+ * Prevent @supabase/auth-js from logging the original network exception from
+ * inside its request handler. A non-success response is still surfaced as an
+ * auth error, so the middleware treats the session as unauthenticated, but a
+ * temporary DNS/network failure does not emit a stack trace for every request.
+ */
+const middlewareFetch: typeof fetch = async (...args) => {
+  try {
+    return await fetch(...args);
+  } catch {
+    return new Response(null, { status: 503, statusText: 'Supabase unavailable' });
+  }
+};
+
 export async function updateSession(request: NextRequest): Promise<UpdateSessionResult> {
   // Guard: if Supabase env vars are missing, let the request pass through
   // instead of crashing the entire server with a 502.
@@ -82,6 +96,9 @@ export async function updateSession(request: NextRequest): Promise<UpdateSession
     supabaseUrl,
     supabaseAnonKey,
     {
+      global: {
+        fetch: middlewareFetch,
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll();
