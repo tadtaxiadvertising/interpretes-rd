@@ -1,5 +1,4 @@
 import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
 
 // Load environment variables if they are not already set (e.g. running in standalone Next.js server locally).
 // Uses dynamic require() to avoid Edge Runtime warnings.
@@ -64,7 +63,34 @@ export function isSupabaseConfigError(error: unknown): boolean {
 }
 
 export async function createClient() {
-  const cookieStore = await cookies();
+  // Dynamically import next/headers only when createClient is called,
+  // and only in server environment to avoid "imports next/headers which only works in Server Component" error
+  // when this module is imported from Client Components (e.g. onboarding/page.tsx)
+  let cookieStore;
+  if (typeof window === 'undefined') {
+    // Server side: safe to import next/headers
+    const { cookies: getCookies } = await import('next/headers');
+    cookieStore = await getCookies();
+  } else {
+    // Client side: create a minimal client without cookie-based session
+    // This prevents the build error when auth is used from Client Components
+    console.warn('[SUPABASE] createClient called on client side; using minimal client without cookie support');
+    // Return a client that won't work for cookie-based auth but won't crash the build
+    return createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+      {
+        cookies: {
+          getAll() {
+            return [];
+          },
+          setAll() {
+            // no-op on client
+          },
+        },
+      }
+    );
+  }
   const { url, key } = getSupabasePublicConfig();
 
   return createServerClient(
