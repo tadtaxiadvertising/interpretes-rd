@@ -17,7 +17,7 @@ RUN npm ci --legacy-peer-deps
 
 # --- STAGE 2: Builder ---
 FROM node:22 AS builder
-RUN apt-get update && apt-get install -y libc6-compat openssl
+RUN apt-get update && apt-get install -y openssl
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
