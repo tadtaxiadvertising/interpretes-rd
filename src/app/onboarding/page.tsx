@@ -1,58 +1,29 @@
-'use client';
-
-import React, { useEffect, useState } from 'react';
-import { OnboardingWizard } from '@/components/OnboardingWizard';
-import { getOnboardingStatus } from '@/app/actions/onboarding';
-import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
+import { auth } from '@/lib/auth';
+import { getOnboardingStatus } from '@/app/actions/onboarding';
+import { OnboardingPageClient } from './OnboardingPageClient';
 
+/**
+ * Authentication and database reads must stay in the Server Component.
+ * Do not add 'use client' here: auth() reaches Prisma and the Node pg driver.
+ */
 export const dynamic = 'force-dynamic';
 
-export default function OnboardingPage() {
-  const [userId, setUserId] = useState<number | null>(null);
-  const [user, setUser] = useState<any>(null);
-  const [interpreterName, setInterpreterName] = useState<string>('Intérprete');
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
-  const [didAuthCheck, setDidAuthCheck] = useState(false);
+export default async function OnboardingPage() {
+  const authResult = await auth();
+  const user = authResult.user;
 
-  // Auth check on mount
-  useEffect(() => {
-    async function checkAuth() {
-      const authResult = await auth();
-      if (authResult.userId && authResult.user) {
-        setUserId(authResult.userId);
-        setUser(authResult.user);
-        setInterpreterName(authResult.user.name || 'Intérprete');
-      }
-      setDidAuthCheck(true);
+  // Keep the completed-onboarding guard server-side so users do not see the
+  // wizard flash before being redirected to the dashboard.
+  if (authResult.userId && user) {
+    const result = await getOnboardingStatus();
+
+    if (result.success && result.data?.onboardingComplete) {
+      redirect('/dashboard');
     }
-    checkAuth();
-  }, []);
-
-  // Load onboarding status after auth check
-  useEffect(() => {
-    if (didAuthCheck) {
-      async function loadOnboardingStatus() {
-        const result = await getOnboardingStatus();
-        if (result.success && result.data) {
-          setOnboardingComplete(result.data.onboardingComplete);
-        }
-      }
-      loadOnboardingStatus();
-    }
-  }, [didAuthCheck]);
-
-  // If onboarding already complete, redirect to dashboard
-  if (didAuthCheck && onboardingComplete === true) {
-    redirect('/dashboard');
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
-      <OnboardingWizard
-        onComplete={() => setOnboardingComplete(true)}
-        interpreterName={interpreterName}
-      />
-    </div>
+    <OnboardingPageClient interpreterName={user?.name || 'Intérprete'} />
   );
 }
