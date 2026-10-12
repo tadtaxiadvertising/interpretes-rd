@@ -1,3 +1,7 @@
+-- This migration intentionally sorts after 20261012_reconcile_production_runtime.
+-- The reconciliation migration must commit RoleplayStatus.DRAFT before this
+-- migration uses it in data updates or as the column default.
+
 -- Align the database default with prisma/schema.prisma after the
 -- preceding migration has committed the DRAFT enum label.
 BEGIN;
