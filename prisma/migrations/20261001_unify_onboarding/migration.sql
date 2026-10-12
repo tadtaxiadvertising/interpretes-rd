@@ -1,12 +1,12 @@
--- Unify onboarding state: make user_profiles.onboarding_complete the canonical source
--- Backfill interpreters.documentos_completo from user_profiles.onboarding_complete
+-- Unify onboarding state using the physical column names defined in Prisma.
+-- user_profiles.onboarding_complete is canonical; documentos_completo is legacy.
 
--- Update interpreters.documentos_completo based on user_profiles.onboarding_complete
-UPDATE "public"."interpreters" i
-SET "documentos_completo" = up."onboardingComplete"
-FROM "public"."user_profiles" up
-WHERE i.id = up."interpreterId";
+UPDATE public.interpreters AS i
+SET documentos_completo = up.onboarding_complete
+FROM public.user_profiles AS up
+WHERE i.id = up.interpreter_id;
 
--- Add a comment to document the canonical state
-COMMENT ON COLUMN "public"."user_profiles"."onboardingComplete" IS 'Canonical onboarding state. interpreters.documentos_completo is legacy and synced from this field.';
-COMMENT ON COLUMN "public"."interpreters"."documentos_completo" IS 'Legacy onboarding state. Kept for backward compatibility. Canonical source is user_profiles.onboardingComplete.';
+COMMENT ON COLUMN public.user_profiles.onboarding_complete
+  IS 'Canonical onboarding state. interpreters.documentos_completo is legacy and synced from this field.';
+COMMENT ON COLUMN public.interpreters.documentos_completo
+  IS 'Legacy onboarding state. Kept for backward compatibility. Canonical source is user_profiles.onboarding_complete.';
