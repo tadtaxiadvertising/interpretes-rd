@@ -2,50 +2,56 @@
 
 ## Propósito
 
-Versionar la reconciliación aditiva que alinea el esquema real de Supabase con los modelos actuales de `prisma/schema.prisma`. El script de esquema está en `scripts/migrations/20261012_runtime_schema_alignment.sql` y puede ejecutarse mediante el ejecutor seguro del repositorio.
+Registrar la reconciliación aditiva entre Supabase y los 34 modelos de `prisma/schema.prisma`, y dejar las operaciones reproducibles desde el repositorio.
 
-La intervención conserva las columnas heredadas para compatibilidad. No elimina tablas o filas, no crea cuentas de usuario y no cambia las credenciales de Auth. Los campos heredados de notificaciones (`userid`, `createdat`) se conservan; `notifications.id` se amplía a `text` porque los UUID de 36 caracteres no cabían en el límite antiguo de 30.
+La intervención conserva las columnas heredadas para compatibilidad. No elimina tablas o filas, no crea cuentas de usuario y no cambia credenciales de Auth. Los campos heredados de notificaciones (`userid`, `createdat`) se conservan; `notifications.id` se amplió a `text` porque un UUID de 36 caracteres no cabía en el límite antiguo de 30.
 
-## Cambios aplicados en Supabase
+## Cambios aplicados y verificados en Supabase
 
 Proyecto: `kzbkygppplknynrwmtmf`.
 
-- Alineación del esquema base para los 34 modelos/tables de Prisma que faltaban parcialmente en producción.
-- Columnas del perfil para bancos, aceptación de términos y estado canónico del onboarding.
-- Campos de notificación nuevos y compatibilidad con columnas antiguas.
-- Tablas de reclutamiento, roleplay, QA, producción/nómina, RBAC y bóveda con restricciones e índices.
-- Enum de roleplay completo y valor predeterminado `DRAFT`; transición del valor legado `PENDING` a `DRAFT`.
-- Corrección de campos físicos con nombres camelCase que Prisma no mapea a snake_case: `recruitment_applications."currentStep"`, `roleplay_responses."selfScore"` y `password_reset_tokens."createdAt"`.
+- Alineación de las 34 tablas de la aplicación con el catálogo del esquema Prisma; incluye reclutamiento, roleplay, QA, producción/nómina, RBAC y bóveda.
+- Columnas de perfil para datos bancarios, aceptación de términos y estado canónico de onboarding.
+- Nuevos campos de notificaciones y compatibilidad con columnas heredadas.
+- Enum y ciclo de vida completos de roleplay; estado predeterminado `DRAFT`.
+- Corrección de campos físicos camelCase no mapeados a snake_case: `recruitment_applications."currentStep"`, `roleplay_responses."selfScore"` y `password_reset_tokens."createdAt"`.
+- RLS habilitado en las 34 tablas de negocio. No se crearon políticas permisivas.
+- Confirmado: cero tablas de negocio sin RLS, cero permisos directos de tabla para los roles SQL `anon` y `authenticated`, cero columnas requeridas ausentes en la verificación realizada.
 
-No se sembraron usuarios ni se alteraron las identidades existentes de Supabase Auth.
+No se sembraron usuarios ficticios ni se alteraron las identidades existentes de Supabase Auth.
 
-## Verificación realizada
+## Validaciones ejecutadas
 
-- Supabase confirmó 34 tablas de la aplicación, además de `_prisma_migrations`.
-- La consulta de control no encontró ausencias en la lista de columnas requeridas por las consultas de runtime verificadas.
-- `roleplay_sessions.status` tiene el default `DRAFT` y el enum contiene el ciclo de vida completo.
-- Prueba transaccional de inserción ejecutada sobre reclutamiento, perfiles, notificaciones, roleplay, RBAC y bóveda; todas las operaciones completaron y se hizo `ROLLBACK`. Una consulta posterior confirmó cero filas de prueba.
-- El workflow de GitHub del commit que ya está en `main` reportó éxito para validación/build y los dos webhooks de despliegue a Easypanel respondieron con éxito. Eso comprueba el lanzamiento del webhook, no una prueba E2E de cada pantalla.
+- La consulta de esquema confirmó 34 tablas de aplicación y ninguna columna requerida ausente en la lista de runtime inspeccionada.
+- `roleplay_sessions.status` tiene default `DRAFT`.
+- Prueba transaccional de escritura sobre reclutamiento, perfiles, notificaciones, roleplay, RBAC y bóveda finalizó correctamente con `ROLLBACK`; una consulta posterior confirmó que no dejó registros de prueba.
+- La alineación versionada se aplicó dos veces satisfactoriamente, verificando idempotencia.
+- El workflow de `main` en GitHub pasó Prisma Validate/Generate, TypeScript, ESLint, tests y build; los webhooks de ambos despliegues de Easypanel terminaron con éxito. Esto valida CI y la llamada a los webhooks, no sustituye una prueba E2E externa de las pantallas y el login.
 
-## Operación
+## Ejecución segura
 
-Para re-ejecutar la alineación en un ambiente controlado con sus variables `DIRECT_URL` y `DATABASE_URL` configuradas en tiempo de ejecución:
+Para reaplicar el esquema de forma controlada, con `DIRECT_URL` y `DATABASE_URL` configuradas solo en el entorno de ejecución y después de respaldar la base:
 
 ```bash
 npm run migrate -- scripts/migrations/20261012_runtime_schema_alignment.sql --apply
 ```
 
-Antes de usarlo en otro ambiente, respaldar la base y revisar diferencias del esquema; la migración está diseñada para ser idempotente, pero no reemplaza una estrategia de datos específica para ambientes con filas en conflicto.
+Después, activar RLS en todas las tablas públicas de la aplicación:
 
-Las migraciones de conciliación específicas para perfil/notificaciones y el default de roleplay siguen en `prisma/migrations/20261012_reconcile_production_runtime/migration.sql` y `prisma/migrations/20261012_align_roleplay_status_default/migration.sql`.
+```bash
+npm run migrate -- scripts/migrations/20261012_enable_public_rls.sql --apply
+```
 
-## Pendientes que requieren intervención prudente
+La segunda migración asume el acceso de datos a través de Prisma en el servidor y verifica que `anon` y `authenticated` no tengan permisos directos de tabla. Si el proyecto decide exponer tablas por la Data API, diseñar primero políticas específicas para cada recurso y propietario; no añadir una política genérica para todas las tablas. Referencia: https://supabase.com/docs/guides/database/postgres/row-level-security
 
-1. Las tablas de negocio expuestas siguen con RLS deshabilitado. En las comprobaciones, los roles SQL `anon` y `authenticated` no tenían permisos directos de tabla, pero el asesor de Supabase sigue marcando RLS. No activar RLS sin definir y probar políticas por tabla y rol; de lo contrario se pueden romper los flujos legítimos. Referencia: https://supabase.com/docs/guides/database/postgres/row-level-security
-2. Se encontraron usuarios existentes en Supabase Auth sin perfil público ni vínculo demostrado a una fila de intérprete. No asociarlos ni recrearlos automáticamente: hay que reconciliar la identidad basándose en evidencia autoritativa.
-3. Vercel seguía reportando un estado de check fallido en la observación de esta ejecución. El proyecto documenta Easypanel como destino principal y los dos webhooks de Easypanel sí finalizaron; aún falta una prueba E2E externa de inicio de sesión y rutas protegidas.
-4. Las credenciales que aparecieron en logs compartidos anteriormente deben rotarse desde los paneles correspondientes. Nunca copiar claves reales a este repositorio ni exponerlas en logs.
+## Pendientes que no deben resolverse adivinando datos
 
-## Criterio de cierre
+1. Se encontraron usuarios en Supabase Auth sin perfil público ni vínculo demostrado con un intérprete. No asociarlos automáticamente ni recrearlos: la relación debe reconciliarse con registros oficiales de identidad/reclutamiento.
+2. El asesor de Supabase marca desactivada la protección de contraseñas filtradas. Activarla desde la configuración de Auth.
+3. Rotar desde los paneles correspondientes todas las credenciales que se compartieron en logs anteriores. Una clave eliminada de un archivo o de logs todavía pudo haberse expuesto históricamente; rotarla es necesario. No incluir claves reales en el repositorio ni en los logs.
+4. Confirmar la configuración SMTP y la lista de URL de redirección de Supabase Auth. El código de recuperación se ha actualizado para usar `resetPasswordForEmail` y no imprimir enlaces secretos en logs, pero no se envió ni verificó un correo real como parte de esta intervención.
+5. El workflow de `main` confirmó la llamada a Easypanel; no fue posible comprobar desde el entorno de herramientas una prueba HTTP E2E de inicio de sesión y rutas protegidas. Un estado de Vercel también aparecía fallido en las comprobaciones anteriores; el despliegue primario documentado aquí es Easypanel.
 
-No declarar “sin errores” hasta comprobar inicio y cierre de sesión con cuentas autorizadas, perfil/onboarding, notificaciones, Roleplay y reclutamiento en el despliegue activo, revisar errores de runtime y terminar el diseño de políticas RLS.
+## Criterio honesto de cierre
+
+El esquema de producción y las pruebas técnicas descritas quedaron corregidos. No declarar “sin errores en todos los flujos” hasta validar el login real con cuentas autorizadas, correo de recuperación, perfil/onboarding, notificaciones, Roleplay y reclutamiento sobre la URL de producción, además de confirmar la rotación de secretos.
