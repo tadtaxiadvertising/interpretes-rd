@@ -115,10 +115,10 @@ export async function confirmAuthUserEmail(email: string): Promise<User | null> 
 }
 
 /**
- * Create or update a Supabase Auth user with a confirmed email.
- * WARNING: This function CREATES new auth users. Only use in admin flows
- * where the user is pre-registered (e.g., admin creating a new interpreter).
- * Never delete/recreate an existing user if the identity record is malformed.
+ * Create a new Supabase Auth user with a confirmed email.
+ * Existing accounts are rejected so a public registration request cannot reset
+ * an existing user's password. Account recovery belongs in a verified recovery flow.
+ * Malformed identities are preserved for an audited administrative repair.
  */
 export async function upsertConfirmedAuthUser(params: {
   email: string;
