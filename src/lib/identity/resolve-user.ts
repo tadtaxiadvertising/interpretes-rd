@@ -223,13 +223,10 @@ async function resolveActorFromSupabase(
 
   // If no interpreterId linked, try to find by email (migration/repair fallback)
   if (resolvedRole !== 'admin' && !interpreterId) {
+    // Resolve ownership only by the authoritative corporate email.
+    // Display names may be duplicated or user-editable and are not identity proof.
     const interpreter = await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: email },
-          { name: supabaseUser.user_metadata?.display_name || email.split('@')[0] },
-        ],
-      },
+      where: { emailCorporativo: email },
       select: { id: true },
     });
     interpreterId = interpreter?.id ?? null;
