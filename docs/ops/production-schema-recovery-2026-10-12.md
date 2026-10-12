@@ -16,6 +16,7 @@ Proyecto: `kzbkygppplknynrwmtmf`.
 - Enum y ciclo de vida completos de roleplay; estado predeterminado `DRAFT`.
 - Corrección de campos físicos camelCase no mapeados a snake_case: `recruitment_applications."currentStep"`, `roleplay_responses."selfScore"` y `password_reset_tokens."createdAt"`.
 - RLS habilitado en las 34 tablas de negocio. No se crearon políticas permisivas.
+- Los flujos de autenticación y resolución de identidad ya no asocian perfiles a intérpretes mediante coincidencias de nombre; requieren coincidencia exacta del correo corporativo.
 - Confirmado: cero tablas de negocio sin RLS, cero permisos directos de tabla para los roles SQL `anon` y `authenticated`, cero columnas requeridas ausentes en la verificación realizada.
 
 No se sembraron usuarios ficticios ni se alteraron las identidades existentes de Supabase Auth.
