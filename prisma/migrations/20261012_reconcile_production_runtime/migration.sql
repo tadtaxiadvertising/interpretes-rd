@@ -13,6 +13,9 @@ BEGIN
   IF to_regclass('public.notifications') IS NULL THEN
     RAISE EXCEPTION 'Preflight failed: public.notifications does not exist; stop and reconcile the database baseline first.';
   END IF;
+  IF to_regclass('public.roleplay_sessions') IS NULL THEN
+    RAISE EXCEPTION 'Preflight failed: public.roleplay_sessions does not exist; stop and reconcile the roleplay database baseline first.';
+  END IF;
 END
 $preflight$;
 
@@ -70,6 +73,31 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END
 $message_status_type$;
+
+-- The current Prisma enum supports the full roleplay lifecycle. Older production
+-- migrations created only PENDING/EVALUATED, which would reject newer states.
+DO $roleplay_status_type$
+BEGIN
+  CREATE TYPE public."RoleplayStatus" AS ENUM (
+    'DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED',
+    'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$roleplay_status_type$;
+
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'DRAFT';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'INVITED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'STARTED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'IN_PROGRESS';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'SUBMITTED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'UNDER_REVIEW';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'EVALUATED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'PASSED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'FAILED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'EXPIRED';
+ALTER TYPE public."RoleplayStatus" ADD VALUE IF NOT EXISTS 'CANCELLED';
 
 CREATE TABLE IF NOT EXISTS public.rbac_users (
   id TEXT NOT NULL,
@@ -246,6 +274,21 @@ BEGIN
       AND column_name = 'onboarding_complete' AND data_type = 'boolean'
   ) THEN
     RAISE EXCEPTION 'Verification failed: user_profiles.onboarding_complete must be BOOLEAN';
+  END IF;
+
+  IF (
+    SELECT COUNT(*)
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'RoleplayStatus'
+      AND e.enumlabel IN (
+        'DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED',
+        'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED'
+      )
+  ) <> 11 THEN
+    RAISE EXCEPTION 'Verification failed: RoleplayStatus enum does not contain all application states';
   END IF;
 END
 $verify$;
