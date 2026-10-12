@@ -78,88 +78,6 @@ async function syncUserProfileFromAuth(params: {
   });
 }
 
-async function repairAuthUserAndRetry(params: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-  email: string;
-  password: string;
-  requestedRole: UserRole;
-}) {
-  const serviceKey = getSupabaseServiceRoleKey();
-  console.log(`🔧 [AUTH_REPAIR] Attempting repair for ${params.email} — serviceKey available: ${!!serviceKey}`);
-  if (!serviceKey) {
-    console.warn('⚠️ [AUTH_REPAIR] SUPABASE_SERVICE_ROLE_KEY not available — skipping repair.');
-    return null;
-  }
-
-  // repairAuthUser handles the known failure modes without creating new users:
-  //  - identities: null/empty → deletes broken user, recreates with proper identity link
-  //  - email not confirmed → updates with email_confirm: true
-  //  - user doesn't exist → returns null (no auto-creation for security)
-  try {
-    const oldProfile = await prisma.userProfile.findFirst({
-      where: { email: params.email },
-      select: { id: true, interpreterId: true },
-    });
-
-    const repairedUser = await repairAuthUser({
-      email: params.email,
-      password: params.password,
-      displayName: params.email.split('@')[0],
-    });
-    console.log(`🔧 [AUTH_REPAIR] repairAuthUser result for ${params.email}: ${repairedUser ? `id=${repairedUser.id} identities=${repairedUser.identities?.length ?? 'null'}` : 'null'}`);
-    if (!repairedUser) return null;
-
-    const retry = await params.supabase.auth.signInWithPassword({
-      email: params.email,
-      password: params.password,
-    });
-    console.log(`🔧 [AUTH_REPAIR] signInWithPassword retry for ${params.email}: ${retry.error ? `error=${retry.error.message}` : `success userId=${retry.data.user?.id}`}`);
-
-    if (retry.error || !retry.data.user) {
-      return {
-        success: false,
-        error: retry.error?.message || 'Credenciales inválidas o error de autenticación.',
-      };
-    }
-
-    // If auth user was recreated (new UUID), clean up old profile and sync new one
-    if (oldProfile && oldProfile.id !== retry.data.user.id) {
-      console.log(`🔧 [AUTH_REPAIR] Auth user recreated with new UUID (${oldProfile.id} → ${retry.data.user.id}), cleaning up old profile`);
-      // Use deleteMany to avoid P2025 error if record doesn't exist
-      await prisma.userProfile.deleteMany({ where: { id: oldProfile.id } });
-    }
-
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: retry.data.user.id },
-      select: { id: true, role: true, interpreterId: true },
-    });
-
-    if (!profile) {
-      await syncUserProfileFromAuth({
-        userId: retry.data.user.id,
-        email: params.email,
-        role: resolveUserRoleByEmail(params.email, params.requestedRole),
-        displayName: repairedUser.user_metadata?.display_name || params.email.split('@')[0],
-      });
-    } else if (oldProfile?.interpreterId && !profile.interpreterId) {
-      // Preserve interpreter link if it existed on old profile
-      await prisma.userProfile.update({
-        where: { id: profile.id },
-        data: { interpreterId: oldProfile.interpreterId },
-      });
-    }
-
-    console.log(`✅ [AUTH_REPAIR] Repair successful for ${params.email} — role=${profile?.role ?? params.requestedRole}`);
-    return {
-      success: true,
-      role: resolveUserRoleByEmail(params.email, profile?.role ?? params.requestedRole),
-    };
-  } catch (repairErr) {
-    console.error(`🔴 [AUTH_REPAIR] upsertConfirmedAuthUser threw for ${params.email}:`, repairErr);
-    return null;
-  }
-}
-
 /**
  * ACTION: User Login
  */
@@ -180,31 +98,6 @@ export async function login(formData: FormData) {
 
     if (error) {
       console.error(`🔴 [AUTH_LOGIN] Failed for ${email}:`, error.message);
-
-      // Attempt admin API repair when the service key is available.
-      // Handles: identities:null, unconfirmed email, missing user.
-      if (getSupabaseServiceRoleKey() && canAttemptRepair(email)) {
-        try {
-          recordRepairAttempt(email);
-          const repairedLogin = await repairAuthUserAndRetry({
-            supabase,
-            email,
-            password,
-            requestedRole: effectiveRequestedRole,
-          });
-
-          // Only short-circuit on success — on failure, fall through to
-          // the local rbac_users fallback so we don't block users who
-          // have a valid password in the local table.
-          if (repairedLogin?.success) {
-            const cookieStore = await cookies();
-            cookieStore.set('user-role', repairedLogin.role || 'interpreter', { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
-            return repairedLogin;
-          }
-        } catch (repairError) {
-          console.error(`🔴 [AUTH_LOGIN] Admin API repair failed for ${email}:`, repairError);
-        }
-      }
 
       // ── LOCAL RBAC FALLBACK ─────────────────────────────────
       // Authenticate against the rbac_users table (works even without
@@ -265,22 +158,21 @@ export async function login(formData: FormData) {
               password: validated.password,
             });
             if (!retry.error && retry.data.user) {
-              // If auth user was recreated (new UUID), clean up old profile
               if (oldProfile && oldProfile.id !== retry.data.user.id) {
-                console.log(`🔧 [AUTH_LOGIN] Auth user recreated with new UUID (${oldProfile.id} → ${retry.data.user.id}), cleaning up old profile`);
-                await prisma.userProfile.deleteMany({ where: { id: oldProfile.id } });
+                // Never delete or duplicate an application profile if an Auth UUID changes unexpectedly.
+                console.error('[AUTH_LOGIN] Supabase user ID differs from the existing profile ID; profile preserved for manual reconciliation.');
+              } else {
+                await syncUserProfileFromAuth({
+                  userId: retry.data.user.id,
+                  email,
+                  role: resolveUserRoleByEmail(email, localRole),
+                  displayName,
+                });
+
+                const cookieStore = await cookies();
+                cookieStore.set('user-role', localRole, { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
+                return { success: true, role: localRole };
               }
-
-              await syncUserProfileFromAuth({
-                userId: retry.data.user.id,
-                email,
-                role: resolveUserRoleByEmail(email, localRole),
-                displayName,
-              });
-
-              const cookieStore = await cookies();
-              cookieStore.set('user-role', localRole, { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
-              return { success: true, role: localRole };
             }
           }
         } catch (fallbackError) {
@@ -352,6 +244,27 @@ export async function register(formData: FormData) {
   try {
     const validated = AuthSchema.parse({ email, password, role });
     const supabase = await createClient();
+
+    // Reject duplicates in application tables before any Auth admin operation.
+    // Registration is not a password-reset mechanism and must not take over legacy RBAC accounts.
+    const [existingProfile, existingRbacUser] = await Promise.all([
+      prisma.userProfile.findUnique({
+        where: { email: validated.email },
+        select: { id: true },
+      }),
+      prisma.rbacUser.findUnique({
+        where: { email: validated.email },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingProfile || existingRbacUser) {
+      return {
+        success: false,
+        error: 'Ya existe una cuenta con este correo. Inicia sesión o utiliza la recuperación de contraseña.',
+      };
+    }
+
     let userId: string;
 
     const serviceKey = getSupabaseServiceRoleKey();
@@ -422,10 +335,8 @@ export async function register(formData: FormData) {
 
     try {
       const hashedPassword = await bcrypt.hash(validated.password, 10);
-      await (prisma as any).rbacUser.upsert({
-        where: { email: validated.email },
-        update: { password: hashedPassword, name },
-        create: {
+      await (prisma as any).rbacUser.create({
+        data: {
           email: validated.email,
           password: hashedPassword,
           name,

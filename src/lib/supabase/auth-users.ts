@@ -9,8 +9,8 @@ type SupabaseAdminClient = SupabaseClient;
 
 /**
  * Repair an existing auth user — NEVER creates a new one.
- * Only handles: fix null identities, confirm email, update password.
- * Used during login repair to prevent unauthorized account creation.
+ * Updates an already-authenticated credential after a separate local RBAC password check.
+ * It never deletes or recreates an identity. Null/empty identities require manual repair.
  */
 export async function repairAuthUser(params: {
   email: string;
@@ -32,22 +32,12 @@ export async function repairAuthUser(params: {
       display_name: params.displayName,
     };
 
-    // If identities is null/empty, the user is broken — delete and recreate
+    // Missing identities require an audited Supabase-side repair. Never delete/recreate
+    // an account during login: the UUID may be referenced by profiles and business data.
     if (!existingUser.identities || existingUser.identities.length === 0) {
-      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(existingUser.id);
-      if (deleteError) {
-        console.error('[AUTH-USERS] Failed to delete broken user with null identities:', deleteError.message);
-        throw deleteError;
-      }
-      console.log(`[AUTH-USERS] Deleted auth user ${existingUser.id} (${email}) with null identities — recreating.`);
-      const { data, error } = await supabaseAdmin.auth.admin.createUser({
-        email,
-        password: params.password,
-        email_confirm: true,
-        user_metadata: userMetadata,
-      });
-      if (error) throw error;
-      return data.user;
+      throw new Error(
+        'La cuenta de autenticación requiere reparación administrativa. No se modificó ni eliminó el usuario.'
+      );
     }
 
     const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
@@ -125,10 +115,10 @@ export async function confirmAuthUserEmail(email: string): Promise<User | null> 
 }
 
 /**
- * Create or update a Supabase Auth user with a confirmed email.
- * WARNING: This function CREATES new auth users. Only use in admin flows
- * where the user is pre-registered (e.g., admin creating a new interpreter).
- * Do NOT use in login repair — use repairAuthUser() instead.
+ * Create a new Supabase Auth user with a confirmed email.
+ * Existing accounts are rejected so a public registration request cannot reset
+ * an existing user's password. Account recovery belongs in a verified recovery flow.
+ * Malformed identities are preserved for an audited administrative repair.
  */
 export async function upsertConfirmedAuthUser(params: {
   email: string;
@@ -143,37 +133,12 @@ export async function upsertConfirmedAuthUser(params: {
       display_name: params.displayName,
     };
 
+    // Public registration must never reset an existing account's password.
+    // Existing users must use login or the dedicated, verified password-recovery flow.
     if (existingUser) {
-      // If identities is null/empty, signInWithPassword will always fail.
-      // The only reliable fix is to delete the broken user and recreate it.
-      if (!existingUser.identities || existingUser.identities.length === 0) {
-        const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(existingUser.id);
-        if (deleteError) {
-          console.error('[AUTH-USERS] Failed to delete broken user with null identities:', deleteError.message);
-          throw deleteError;
-        }
-        console.log(`[AUTH-USERS] Deleted auth user ${existingUser.id} (${email}) with null identities — recreating.`);
-        const { data, error } = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password: params.password,
-          email_confirm: true,
-          user_metadata: userMetadata,
-        });
-        if (error) throw error;
-        return data.user;
-      }
-
-      const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-        existingUser.id,
-        {
-          password: params.password,
-          email_confirm: true,
-          user_metadata: userMetadata,
-        }
+      throw new Error(
+        'An account with this email already exists. Sign in or use password recovery instead.'
       );
-
-      if (error) throw error;
-      return data.user;
     }
 
     // ── NEW USER ──────────────────────────────────────────────
