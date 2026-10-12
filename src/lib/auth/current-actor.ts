@@ -45,12 +45,9 @@ async function resolveActorFromSupabase(
 
   if (resolvedRole !== 'admin' && !interpreterId) {
     const interpreter = await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: email },
-          { name: supabaseUser.user_metadata?.display_name || email.split('@')[0] },
-        ],
-      },
+      // Missing profiles may be initialized later, but interpreter ownership
+      // is resolved only by exact corporate email, never a user-editable name.
+      where: { emailCorporativo: email },
       select: { id: true },
     });
     interpreterId = interpreter?.id ?? null;
