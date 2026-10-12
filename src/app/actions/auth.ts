@@ -51,12 +51,10 @@ async function syncUserProfileFromAuth(params: {
   const resolvedRole = resolveUserRoleByEmail(params.email, params.role);
 
   const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
-    where: {
-      OR: [
-        { emailCorporativo: params.email },
-        { name: params.displayName },
-      ],
-    },
+    // Link to an interpreter only by the authoritative corporate email.
+    // A matching display name is not proof of identity and can expose another
+    // interpreter's profile or production data when names are similar.
+    where: { emailCorporativo: params.email },
     select: { id: true },
   });
 
@@ -307,12 +305,8 @@ export async function register(formData: FormData) {
     const resolvedRole = resolveUserRoleByEmail(validated.email, validated.role);
 
     const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: validated.email },
-          { name: name },
-        ],
-      },
+      // Do not associate a registration with an interpreter by name alone.
+      where: { emailCorporativo: validated.email },
       select: { id: true },
     });
 
