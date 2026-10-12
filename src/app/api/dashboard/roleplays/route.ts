@@ -24,8 +24,10 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: sessions });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Get My Roleplays Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error('Get My Roleplays Error:', error);
+    return NextResponse.json(
+      { success: false, error: 'No fue posible recuperar tus roleplays.' },
+      { status: 500 }
+    );
   }
 }
