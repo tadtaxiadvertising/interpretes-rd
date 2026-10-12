@@ -49,7 +49,7 @@ La segunda migración asume el acceso de datos a través de Prisma en el servido
 1. Se encontraron usuarios en Supabase Auth sin perfil público ni vínculo demostrado con un intérprete. No asociarlos automáticamente ni recrearlos: la relación debe reconciliarse con registros oficiales de identidad/reclutamiento.
 2. El asesor de Supabase marca desactivada la protección de contraseñas filtradas. Activarla desde la configuración de Auth.
 3. Rotar desde los paneles correspondientes todas las credenciales que se compartieron en logs anteriores. Una clave eliminada de un archivo o de logs todavía pudo haberse expuesto históricamente; rotarla es necesario. No incluir claves reales en el repositorio ni en los logs.
-4. Confirmar la configuración SMTP y la lista de URL de redirección de Supabase Auth. El código de recuperación se ha actualizado para usar `resetPasswordForEmail` y no imprimir enlaces secretos en logs, pero no se envió ni verificó un correo real como parte de esta intervención.
+4. Confirmar la configuración SMTP y la lista de URL de redirección de Supabase Auth. El código de recuperación usa `resetPasswordForEmail`, no imprime enlaces secretos en logs y el callback ahora valida el origen configurado y acepta solo rutas internas. No se envió ni verificó un correo real como parte de esta intervención.
 5. El workflow de `main` confirmó la llamada a Easypanel; no fue posible comprobar desde el entorno de herramientas una prueba HTTP E2E de inicio de sesión y rutas protegidas. Un estado de Vercel también aparecía fallido en las comprobaciones anteriores; el despliegue primario documentado aquí es Easypanel.
 
 ## Criterio honesto de cierre
