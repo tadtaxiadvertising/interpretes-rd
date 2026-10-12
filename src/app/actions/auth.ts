@@ -83,7 +83,10 @@ export async function login(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
   const requestedRole = ((formData.get('role') as string) || 'interpreter').toLowerCase() as UserRole;
-  const effectiveRequestedRole = resolveUserRoleByEmail(email, requestedRole);
+  // The selected portal is untrusted client input. Supabase users get admin
+  // privileges only from the protected identity allowlist or an existing
+  // trusted profile; selecting "admin" in the form never elevates a new account.
+  const effectiveRequestedRole = resolveUserRoleByEmail(email, 'interpreter');
 
   try {
     const validated = AuthSchema.parse({ email, password, role: effectiveRequestedRole });
@@ -124,7 +127,10 @@ export async function login(formData: FormData) {
           data: { role: resolveRbacRoleByEmail(email, localUser.role) },
         });
       }
-      if (effectiveRequestedRole !== localRole) {
+      // The local RBAC database role is authoritative only after its password
+      // has been verified. Compare the requested portal to that role, never use
+      // the portal selection to calculate or grant the role itself.
+      if (requestedRole !== localRole) {
         return {
           success: false,
           error: 'Estas credenciales no corresponden al portal seleccionado.',
