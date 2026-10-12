@@ -172,32 +172,80 @@ $vault_recipient_fks$;
 
 -- Post-migration assertions: rollback instead of shipping a partial repair.
 DO $verify$
+DECLARE
+  missing_column_count INTEGER;
 BEGIN
+  SELECT COUNT(*) INTO missing_column_count
+  FROM (
+    VALUES
+      ('user_profiles', 'bank_name'),
+      ('user_profiles', 'bank_account'),
+      ('user_profiles', 'bank_cedula'),
+      ('user_profiles', 'bank_account_type'),
+      ('user_profiles', 'terms_accepted_at'),
+      ('user_profiles', 'signature_date'),
+      ('user_profiles', 'onboarding_complete'),
+      ('notifications', 'user_id'),
+      ('notifications', 'type'),
+      ('notifications', 'category'),
+      ('notifications', 'is_read'),
+      ('notifications', 'link'),
+      ('notifications', 'created_at'),
+      ('rbac_users', 'id'),
+      ('rbac_users', 'email'),
+      ('rbac_users', 'password'),
+      ('rbac_users', 'name'),
+      ('rbac_users', 'role'),
+      ('rbac_users', 'createdAt'),
+      ('rbac_users', 'updatedAt'),
+      ('vault_accounts', 'id'),
+      ('vault_accounts', 'platformName'),
+      ('vault_accounts', 'url'),
+      ('vault_accounts', 'vpnConfig'),
+      ('vault_accounts', 'credentials'),
+      ('vault_accounts', 'notes'),
+      ('vault_accounts', 'holderId'),
+      ('vault_accounts', 'interpreterId'),
+      ('vault_accounts', 'createdAt'),
+      ('vault_accounts', 'updatedAt'),
+      ('vault_attachments', 'id'),
+      ('vault_attachments', 'fileName'),
+      ('vault_attachments', 'fileUrl'),
+      ('vault_attachments', 'fileSize'),
+      ('vault_attachments', 'mimeType'),
+      ('vault_attachments', 'accountId'),
+      ('vault_attachments', 'uploadedAt'),
+      ('vault_messages', 'id'),
+      ('vault_messages', 'content'),
+      ('vault_messages', 'status'),
+      ('vault_messages', 'authorId'),
+      ('vault_messages', 'recipientId'),
+      ('vault_messages', 'createdAt')
+  ) AS expected(table_name, column_name)
+  LEFT JOIN information_schema.columns actual
+    ON actual.table_schema = 'public'
+   AND actual.table_name = expected.table_name
+   AND actual.column_name = expected.column_name
+  WHERE actual.column_name IS NULL;
+
+  IF missing_column_count > 0 THEN
+    RAISE EXCEPTION 'Verification failed: % required schema columns are missing. Transaction will roll back.', missing_column_count;
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'bank_name'
+    WHERE table_schema = 'public' AND table_name = 'notifications'
+      AND column_name = 'user_id' AND data_type = 'uuid'
   ) THEN
-    RAISE EXCEPTION 'Verification failed: user_profiles.bank_name is missing';
+    RAISE EXCEPTION 'Verification failed: notifications.user_id must be UUID to match the Prisma model';
   END IF;
+
   IF NOT EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'onboarding_complete'
+    WHERE table_schema = 'public' AND table_name = 'user_profiles'
+      AND column_name = 'onboarding_complete' AND data_type = 'boolean'
   ) THEN
-    RAISE EXCEPTION 'Verification failed: user_profiles.onboarding_complete is missing';
-  END IF;
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public' AND table_name = 'notifications' AND column_name = 'user_id'
-  ) THEN
-    RAISE EXCEPTION 'Verification failed: notifications.user_id is missing';
-  END IF;
-  IF to_regclass('public.rbac_users') IS NULL THEN
-    RAISE EXCEPTION 'Verification failed: public.rbac_users was not created';
-  END IF;
-  IF to_regclass('public.vault_accounts') IS NULL
-     OR to_regclass('public.vault_attachments') IS NULL
-     OR to_regclass('public.vault_messages') IS NULL THEN
-    RAISE EXCEPTION 'Verification failed: one or more vault tables are missing';
+    RAISE EXCEPTION 'Verification failed: user_profiles.onboarding_complete must be BOOLEAN';
   END IF;
 END
 $verify$;
