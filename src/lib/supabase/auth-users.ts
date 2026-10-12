@@ -133,25 +133,12 @@ export async function upsertConfirmedAuthUser(params: {
       display_name: params.displayName,
     };
 
+    // Public registration must never reset an existing account's password.
+    // Existing users must use login or the dedicated, verified password-recovery flow.
     if (existingUser) {
-      // Preserve the identity UUID; account repair must be performed manually in Supabase.
-      if (!existingUser.identities || existingUser.identities.length === 0) {
-        throw new Error(
-          'La cuenta de autenticación requiere reparación administrativa. No se modificó ni eliminó el usuario.'
-        );
-      }
-
-      const { data, error } = await supabaseAdmin.auth.admin.updateUserById(
-        existingUser.id,
-        {
-          password: params.password,
-          email_confirm: true,
-          user_metadata: userMetadata,
-        }
+      throw new Error(
+        'An account with this email already exists. Sign in or use password recovery instead.'
       );
-
-      if (error) throw error;
-      return data.user;
     }
 
     // ── NEW USER ──────────────────────────────────────────────
