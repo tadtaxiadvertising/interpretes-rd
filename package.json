@@ -11,7 +11,7 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
-    "migrate": "tsx scripts/migrate.ts",
+    "migrate": "tsx scripts/run-migration.ts",
     "migrate:onboarding": "tsx scripts/migrate-onboarding.ts",
     "seed": "tsx prisma/seed.ts",
     "anomaly:detect": "tsx scripts/detect-anomalies.ts"
