@@ -244,6 +244,27 @@ export async function register(formData: FormData) {
   try {
     const validated = AuthSchema.parse({ email, password, role });
     const supabase = await createClient();
+
+    // Reject duplicates in application tables before any Auth admin operation.
+    // Registration is not a password-reset mechanism and must not take over legacy RBAC accounts.
+    const [existingProfile, existingRbacUser] = await Promise.all([
+      prisma.userProfile.findUnique({
+        where: { email: validated.email },
+        select: { id: true },
+      }),
+      prisma.rbacUser.findUnique({
+        where: { email: validated.email },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingProfile || existingRbacUser) {
+      return {
+        success: false,
+        error: 'Ya existe una cuenta con este correo. Inicia sesión o utiliza la recuperación de contraseña.',
+      };
+    }
+
     let userId: string;
 
     const serviceKey = getSupabaseServiceRoleKey();
@@ -314,10 +335,8 @@ export async function register(formData: FormData) {
 
     try {
       const hashedPassword = await bcrypt.hash(validated.password, 10);
-      await (prisma as any).rbacUser.upsert({
-        where: { email: validated.email },
-        update: { password: hashedPassword, name },
-        create: {
+      await (prisma as any).rbacUser.create({
+        data: {
           email: validated.email,
           password: hashedPassword,
           name,
