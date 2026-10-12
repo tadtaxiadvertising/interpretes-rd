@@ -21,6 +21,12 @@ BEGIN
 END
 $preflight$;
 
+-- Migrate legacy status values to labels recognized by the current Prisma enum.
+-- This runs in a separate migration after DRAFT has been committed to the enum.
+UPDATE public.roleplay_sessions
+SET status = 'DRAFT'
+WHERE status::text = 'PENDING';
+
 ALTER TABLE public.roleplay_sessions
   ALTER COLUMN status SET DEFAULT 'DRAFT';
 
@@ -35,6 +41,12 @@ BEGIN
       AND column_default LIKE '%DRAFT%'
   ) THEN
     RAISE EXCEPTION 'Verification failed: roleplay_sessions.status default is not DRAFT';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.roleplay_sessions WHERE status::text = 'PENDING'
+  ) THEN
+    RAISE EXCEPTION 'Verification failed: legacy PENDING roleplay rows remain';
   END IF;
 END
 $verify$;
