@@ -29,6 +29,92 @@ ALTER TABLE public.user_profiles
   ADD COLUMN IF NOT EXISTS signature_date TIMESTAMPTZ(6),
   ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN NOT NULL DEFAULT FALSE;
 
+-- Preserve values if an older migration created camelCase physical columns
+-- before Prisma field mappings were standardized to snake_case.
+DO $legacy_profile_backfill$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'bankName'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET bank_name = COALESCE(bank_name, "bankName") WHERE "bankName" IS NOT NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'bankAccount'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET bank_account = COALESCE(bank_account, "bankAccount") WHERE "bankAccount" IS NOT NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'bankCedula'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET bank_cedula = COALESCE(bank_cedula, "bankCedula") WHERE "bankCedula" IS NOT NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'bankAccountType'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET bank_account_type = COALESCE(bank_account_type, "bankAccountType") WHERE "bankAccountType" IS NOT NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'termsAcceptedAt'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET terms_accepted_at = COALESCE(terms_accepted_at, "termsAcceptedAt") WHERE "termsAcceptedAt" IS NOT NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'signatureDate'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET signature_date = COALESCE(signature_date, "signatureDate") WHERE "signatureDate" IS NOT NULL';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'onboardingComplete'
+  ) THEN
+    EXECUTE 'UPDATE public.user_profiles SET onboarding_complete = TRUE WHERE "onboardingComplete" IS TRUE';
+  END IF;
+END
+$legacy_profile_backfill$;
+
+-- Recover banking data from the linked interpreter record only where the new
+-- profile fields are empty. This is a data-preserving fallback, not a source overwrite.
+DO $interpreter_bank_backfill$
+BEGIN
+  IF to_regclass('public.interpreters') IS NOT NULL
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'user_profiles' AND column_name = 'interpreter_id'
+     )
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'interpreters' AND column_name = 'banco'
+     )
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'interpreters' AND column_name = 'cuenta_pago'
+     )
+     AND EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'interpreters' AND column_name = 'cedula_rnc'
+     ) THEN
+    EXECUTE '
+      UPDATE public.user_profiles AS profile
+      SET bank_name = COALESCE(profile.bank_name, interpreter.banco),
+          bank_account = COALESCE(profile.bank_account, interpreter.cuenta_pago),
+          bank_cedula = COALESCE(profile.bank_cedula, interpreter.cedula_rnc)
+      FROM public.interpreters AS interpreter
+      WHERE interpreter.id = profile.interpreter_id
+        AND (
+          profile.bank_name IS NULL
+          OR profile.bank_account IS NULL
+          OR profile.bank_cedula IS NULL
+        )';
+  END IF;
+END
+$interpreter_bank_backfill$;
+
 CREATE INDEX IF NOT EXISTS idx_user_profiles_onboarding
   ON public.user_profiles (onboarding_complete)
   WHERE onboarding_complete = FALSE;
