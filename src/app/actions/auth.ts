@@ -51,12 +51,10 @@ async function syncUserProfileFromAuth(params: {
   const resolvedRole = resolveUserRoleByEmail(params.email, params.role);
 
   const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
-    where: {
-      OR: [
-        { emailCorporativo: params.email },
-        { name: params.displayName },
-      ],
-    },
+    // Link to an interpreter only by the authoritative corporate email.
+    // A matching display name is not proof of identity and can expose another
+    // interpreter's profile or production data when names are similar.
+    where: { emailCorporativo: params.email },
     select: { id: true },
   });
 
@@ -85,7 +83,10 @@ export async function login(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
   const requestedRole = ((formData.get('role') as string) || 'interpreter').toLowerCase() as UserRole;
-  const effectiveRequestedRole = resolveUserRoleByEmail(email, requestedRole);
+  // The selected portal is untrusted client input. Supabase users get admin
+  // privileges only from the protected identity allowlist or an existing
+  // trusted profile; selecting "admin" in the form never elevates a new account.
+  const effectiveRequestedRole = resolveUserRoleByEmail(email, 'interpreter');
 
   try {
     const validated = AuthSchema.parse({ email, password, role: effectiveRequestedRole });
@@ -126,7 +127,10 @@ export async function login(formData: FormData) {
           data: { role: resolveRbacRoleByEmail(email, localUser.role) },
         });
       }
-      if (effectiveRequestedRole !== localRole) {
+      // The local RBAC database role is authoritative only after its password
+      // has been verified. Compare the requested portal to that role, never use
+      // the portal selection to calculate or grant the role itself.
+      if (requestedRole !== localRole) {
         return {
           success: false,
           error: 'Estas credenciales no corresponden al portal seleccionado.',
@@ -307,12 +311,8 @@ export async function register(formData: FormData) {
     const resolvedRole = resolveUserRoleByEmail(validated.email, validated.role);
 
     const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: validated.email },
-          { name: name },
-        ],
-      },
+      // Do not associate a registration with an interpreter by name alone.
+      where: { emailCorporativo: validated.email },
       select: { id: true },
     });
 
@@ -464,45 +464,46 @@ export async function requestPasswordReset(formData: FormData) {
   if (!email) return { success: false, error: 'Email is required' };
 
   try {
-    const headersList = await (await import('next/headers')).headers();
-    const host = headersList.get('x-forwarded-host') || headersList.get('host');
-    const proto = headersList.get('x-forwarded-proto') || 'https';
-    const origin = host ? `${proto}://${host}` : '';
+    // Use a configured origin only. Do not construct password-recovery URLs
+    // from Host / X-Forwarded-Host headers, which can be attacker-controlled.
+    const configuredOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.FRONTEND_ORIGIN ||
+      (process.env.NODE_ENV === 'production'
+        ? 'https://interpretes.rd.ibusiness.com.do'
+        : 'http://localhost:3001');
+    const siteOrigin = new URL(configuredOrigin).origin;
+    const redirectTo = new URL('/auth/callback?next=/reset-password', siteOrigin).toString();
 
-    const { supabaseAdmin } = await import('@/lib/supabase/admin');
-
-    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-      options: {
-        redirectTo: `${origin}/auth/callback?next=/reset-password`,
-      },
+    // This sends the reset email through Supabase Auth. Never generate a
+    // recovery token solely for server logs: action links grant account access.
+    const supabase = await createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
     });
 
     if (error) {
-      console.error('🔴 [AUTH_RESET] Error generating link:', error.message);
-      return { success: false, error: error.message };
+      // Do not log the address or any token. Avoid leaking account existence.
+      console.error('[AUTH_RESET] Password reset request failed:', error.name || 'AuthError');
+      return {
+        success: false,
+        error: 'No se pudo enviar el enlace de recuperación. Inténtalo más tarde.',
+      };
     }
-
-    console.log('\n======================================================');
-    console.log('🔐 [ZERO-COST RECOVERY] PASSWORD RESET LINK GENERATED');
-    console.log(`👤 User: ${email}`);
-    console.log(`🔗 Link: ${data.properties?.action_link}`);
-    console.log('======================================================\n');
 
     return { success: true };
   } catch (err: unknown) {
-    const { isAdminUnavailableError } = await import('@/lib/supabase/admin');
-    if (
-      isAdminUnavailableError(err) ||
-      (err instanceof Error &&
-        (err.message.includes('SUPABASE_SERVICE_ROLE_KEY') || err.message.includes('NEXT_PUBLIC_SUPABASE_URL')))
-    ) {
-      console.warn('⚠️ [AUTH_RESET] Request password omitido por falta de configuración.');
+    if (isSupabaseConfigError(err)) {
       return { success: false, error: 'Servicio deshabilitado temporalmente.' };
     }
-    console.error('🔴 [AUTH_RESET] Unexpected error:', err);
-    return { success: false, error: 'Error al solicitar el reset de contraseña.' };
+    console.error(
+      '[AUTH_RESET] Unexpected recovery error:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
+    return {
+      success: false,
+      error: 'No se pudo enviar el enlace de recuperación. Inténtalo más tarde.',
+    };
   }
 }
 

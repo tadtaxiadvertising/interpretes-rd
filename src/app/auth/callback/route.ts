@@ -1,29 +1,52 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
 
+function getConfiguredSiteOrigin(): string {
+  const configuredOrigin =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.FRONTEND_ORIGIN ||
+    (process.env.NODE_ENV === 'production'
+      ? 'https://interpretes.rd.ibusiness.com.do'
+      : 'http://localhost:3001');
+
+  return new URL(configuredOrigin).origin;
+}
+
+function getSafeNextPath(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) {
+    return '/dashboard';
+  }
+
+  const base = new URL('https://internal.invalid');
+  const target = new URL(value, base);
+  if (target.origin !== base.origin) return '/dashboard';
+
+  return `${target.pathname}${target.search}${target.hash}`;
+}
+
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const code = searchParams.get('code');
-  // if "next" is in search params, use it as the redirection URL
-  const next = searchParams.get('next') ?? '/dashboard';
+  const nextPath = getSafeNextPath(searchParams.get('next'));
+  let siteOrigin: string;
+
+  try {
+    siteOrigin = getConfiguredSiteOrigin();
+  } catch {
+    // Fail closed to the known production origin rather than trusting Host or
+    // X-Forwarded-Host headers supplied on the incoming recovery callback.
+    siteOrigin = 'https://interpretes.rd.ibusiness.com.do';
+  }
 
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
-      const forwardedHost = request.headers.get('x-forwarded-host'); // useful for production
-      const isLocalEnv = process.env.NODE_ENV === 'development';
-      if (isLocalEnv) {
-        // we can be sure that origin is the same as the current host
-        return NextResponse.redirect(`${origin}${next}`);
-      } else if (forwardedHost) {
-        return NextResponse.redirect(`https://${forwardedHost}${next}`);
-      } else {
-        return NextResponse.redirect(`${origin}${next}`);
-      }
+      return NextResponse.redirect(new URL(nextPath, siteOrigin));
     }
   }
 
-  // return the user to an error page with instructions
-  return NextResponse.redirect(`${origin}/login?error=Could not authenticate user`);
+  return NextResponse.redirect(
+    new URL('/login?error=Could%20not%20authenticate%20user', siteOrigin)
+  );
 }
