@@ -1,5 +1,5 @@
 import React from 'react';
-import { auth } from '@/lib/auth';
+import { getCurrentProfile } from '@/app/actions/auth';
 import { redirect } from 'next/navigation';
 import {
   Users, Phone, Activity, AlertTriangle, CheckCircle2, Wifi
@@ -24,20 +24,15 @@ export default async function AdminDashboard(props: PageProps) {
   await props.params;
   await props.searchParams;
 
-  const { userId } = await auth();
-  if (!userId) redirect('/login');
+  const profile = await getCurrentProfile();
 
-  let profile: any = null;
-  try {
-    profile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { role: true, displayName: true }
-    });
-  } catch (error) {
-    console.error('❌ ADMIN: Profile fetch failed:', error);
+  // Fail closed: a missing or unresolved profile must never be treated as an
+  // administrator merely because the session cookie is present.
+  if (!profile) {
+    redirect('/login');
   }
 
-  if (profile && profile.role !== 'admin') {
+  if (profile.role !== 'admin') {
     redirect('/dashboard');
   }
 
