@@ -3,11 +3,17 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { validateAction } from '@/lib/auth/actions';
 
 const prisma = prismaClient;
 
 // 1. Añadir Incentivos y Penalidades (useActionState compatible)
 export async function updatePayrollAdjustments(prevState: any, formData: FormData) {
+  const authorization = await validateAction('admin');
+  if ('error' in authorization) {
+    return { success: false, error: authorization.error };
+  }
+
   try {
     const id = formData.get('id') as string;
     const incentives = parseFloat(formData.get('incentives') as string) || 0;
@@ -42,6 +48,11 @@ export async function updatePayrollAdjustments(prevState: any, formData: FormDat
 
 // 2. Verificar Minutos y recalcular grossTotal
 export async function verifyPayrollMinutes(prevState: any, formData: FormData) {
+  const authorization = await validateAction('admin');
+  if ('error' in authorization) {
+    return { success: false, error: authorization.error };
+  }
+
   try {
     const id = formData.get('id') as string;
     const verifiedMinutes = parseInt(formData.get('verifiedMinutes') as string) || 0;
@@ -82,6 +93,11 @@ export async function verifyPayrollMinutes(prevState: any, formData: FormData) {
 
 // 3. Flujo Transaccional PATCH -> PAID
 export async function markPayrollAsPaid(prevState: any, formData: FormData) {
+  const authorization = await validateAction('admin');
+  if ('error' in authorization) {
+    return { success: false, error: authorization.error };
+  }
+
   try {
     const id = formData.get('id') as string;
     const transactionRef = formData.get('transactionReference') as string;
