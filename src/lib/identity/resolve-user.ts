@@ -126,26 +126,10 @@ function computeRoleplayState(session: {
     return { state: 'NO_ROLEPLAY', sessionId: null };
   }
 
-  // Map current status to new state machine
+// Map current status to new state machine
+  // PENDING is a legacy status not in the current RoleplayStatus enum;
+  // treated as INVITED for backward compatibility via the default case.
   switch (session.status) {
-    case 'PENDING':
-      if (!session.access) {
-        return { state: 'INVITED', sessionId: session.id };
-      }
-      if (session.access.usedAt) {
-        if (session.recordedAudioUrl && session.submittedAt) {
-          return { state: 'SUBMITTED', sessionId: session.id };
-        }
-        if (session.currentScenarioIndex > 0 || session.recordedAudioUrl) {
-          return { state: 'IN_PROGRESS', sessionId: session.id };
-        }
-        return { state: 'STARTED', sessionId: session.id };
-      }
-      if (session.access.expiresAt < new Date()) {
-        return { state: 'EXPIRED', sessionId: session.id };
-      }
-      return { state: 'INVITED', sessionId: session.id };
-      
     case 'EVALUATED':
       if (session.qaScoreId) {
         // Would need to check QAScore for criticalError or totalScore to determine PASSED/FAILED

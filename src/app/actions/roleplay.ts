@@ -305,11 +305,6 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
 
     // Validate only - do NOT consume token
     // Token will be consumed when user actually starts the roleplay
-    await db.roleplayAccess.update({
-      where: { id: access.id },
-      data: { validatedAt: new Date() },
-    });
-
     const cookieStore = await cookies();
     cookieStore.set('roleplay_session', access.session.id, {
       httpOnly: true,
