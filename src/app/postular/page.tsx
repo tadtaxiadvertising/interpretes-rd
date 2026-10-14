@@ -2,8 +2,8 @@ import { Metadata } from 'next';
 import RecruitmentFunnel from '@/components/recruitment/RecruitmentFunnel';
 
 export const metadata: Metadata = {
-  title: 'Postúlate como Intérprete | Free Interpreters OS',
-  description: 'Únete a nuestro equipo de intérpretes profesionales. Proceso de postulación en 4 pasos: Formulario, Inducción, Roleplay y Setup.',
+  title: 'Postúlate como Intérprete | Intérpretes RD',
+  description: 'Únete a Intérpretes RD. Completa tu postulación y conoce las etapas de evaluación para formar parte de nuestro equipo.',
 };
 
 export default function PostularPage() {
