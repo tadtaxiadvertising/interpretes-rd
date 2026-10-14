@@ -170,7 +170,7 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
           hiredInterpreterId: interpreter.id,
           completedAt: new Date(),
           lastActivityAt: new Date(),
-          lastActorId: auth.user.id,
+          lastActorId: auth.user.userId,
           version: { increment: 1 },
         },
       });
@@ -185,7 +185,7 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
           fromStatus: application.status,
           toStatus: 'HIRED',
           actorType: 'admin',
-          actorId: auth.user.id,
+          actorId: auth.user.userId,
           metadata: { interpreterId: interpreter.id, candidateId: candidate.id },
         },
       });
@@ -198,7 +198,7 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
     revalidatePath('/admin/recruitment');
     revalidatePath('/dashboard');
     revalidatePath('/dashboard/interpreters');
-    return { success: true, data: { interpreterId: result.interpreterId } };
+    return { success: true };
   } catch (error) {
     console.error('Error in hireCandidate action:', error);
     return {
