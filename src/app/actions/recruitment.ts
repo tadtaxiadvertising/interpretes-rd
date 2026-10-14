@@ -19,28 +19,48 @@ export async function submitApplicationAction(data: ApplicantData) {
 
     // 2. Database operation using Singleton (Transaction Pooler - port 6543)
     // Insert into funnel as "Aplicante" initial status
-    const candidate = await db.recruitmentCandidate.create({
-      data: {
-        name: parsed.name,
-        email: parsed.email,
-        telefono: parsed.phone,
-        pais: parsed.country,
-        englishLevel: parsed.englishLevel,
-        speedtestMbps: parsed.speedtestMbps,
-        // Store EFSET link and CV URL in a JSON field or extend schema
-        // For now, we store in notas as JSON
-        notas: JSON.stringify({
-          efsetLink: parsed.efsetLink,
-          ...(parsed.cvUrl ? { cvUrl: parsed.cvUrl } : {}),
-        }),
-        status: 'Aplicante',
-        fuente: 'Web Portal',
-      },
-      select: { id: true },
+    const candidate = await db.$transaction(async (tx) => {
+      const created = await tx.recruitmentCandidate.create({
+        data: {
+          name: parsed.name,
+          email: parsed.email,
+          telefono: parsed.phone,
+          pais: parsed.country,
+          englishLevel: parsed.englishLevel,
+          speedtestMbps: parsed.speedtestMbps,
+          notas: JSON.stringify({
+            efsetLink: parsed.efsetLink,
+            ...(parsed.cvUrl ? { cvUrl: parsed.cvUrl } : {}),
+          }),
+          status: 'Aplicante',
+          fuente: 'Web Portal',
+        },
+        select: { id: true },
+      });
+      const application = await tx.recruitmentApplication.create({
+        data: {
+          candidateId: created.id,
+          status: 'APPLIED',
+          currentStep: 'APPLICATION',
+          lastActivityAt: new Date(),
+        },
+        select: { id: true, status: true },
+      });
+      await tx.recruitmentEvent.create({
+        data: {
+          applicationId: application.id,
+          eventType: 'APPLICATION_CREATED',
+          toStatus: 'APPLIED',
+          actorType: 'candidate',
+          actorId: parsed.email,
+          metadata: { source: 'Web Portal' },
+        },
+      });
+      return { id: created.id, applicationId: application.id };
     });
 
-    // Standardized success return
-    return { success: true, candidateId: candidate.id };
+    revalidatePath('/admin/recruitment');
+    return { success: true, candidateId: candidate.id, applicationId: candidate.applicationId };
     
   } catch (error) {
     console.error('[Recruitment Action Error]:', error);
