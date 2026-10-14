@@ -15,8 +15,12 @@ export default function RecruitmentFunnel() {
     name: "",
     email: "",
     phone: "",
+    country: "",
+    englishLevel: "B2",
+    speedtestMbps: 25,
     efsetLink: "",
-   });
+    cvUrl: "",
+  });
 
   const handleApply = () => {
     setErrorMsg(null);
@@ -74,6 +78,33 @@ export default function RecruitmentFunnel() {
               className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
               value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
             />
+            <input
+              type="text" required placeholder="País de residencia"
+              className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })}
+            />
+            <select required aria-label="Nivel de inglés" className="p-3 border border-gray-300 rounded-lg bg-white"
+              value={formData.englishLevel}
+              onChange={(e) => setFormData({ ...formData, englishLevel: e.target.value as ApplicantData["englishLevel"] })}
+            >
+              <option value="B1">Inglés B1 — Intermedio</option>
+              <option value="B2">Inglés B2 — Intermedio alto</option>
+              <option value="C1">Inglés C1 — Avanzado</option>
+              <option value="C2">Inglés C2 — Dominio</option>
+            </select>
+            <label className="flex flex-col gap-2 text-sm text-gray-600">
+              Velocidad de descarga (Mbps)
+              <input type="number" min={1} max={10000} step={1} required
+                className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                value={formData.speedtestMbps}
+                onChange={(e) => setFormData({ ...formData, speedtestMbps: Number(e.target.value) })}
+              />
+            </label>
+            <input type="url" placeholder="Enlace al currículum (opcional, HTTPS)"
+              className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+              value={formData.cvUrl ?? ""}
+              onChange={(e) => setFormData({ ...formData, cvUrl: e.target.value || undefined })}
+            />
             <input 
               type="url" placeholder="Link de tu certificado EFSET" 
               className="p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
@@ -83,7 +114,7 @@ export default function RecruitmentFunnel() {
 
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-gray-500">
             <UploadCloud className="w-8 h-8 mb-2" />
-            <span className="text-sm">Currículum (opcional): pega un enlace HTTPS seguro en el siguiente paso o envíalo al equipo de reclutamiento.</span>
+            <span className="text-sm">Revisa que los datos de contacto, nivel de inglés y conexión sean correctos.</span>
           </div>
 
           <button 
