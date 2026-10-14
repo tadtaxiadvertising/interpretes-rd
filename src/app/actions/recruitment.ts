@@ -28,7 +28,7 @@ export async function submitApplicationAction(data: ApplicantData) {
         // For now, we store in notas as JSON
         notas: JSON.stringify({
           efsetLink: parsed.efsetLink,
-          cvUrl: parsed.cvUrl,
+          ...(parsed.cvUrl ? { cvUrl: parsed.cvUrl } : {}),
         }),
         status: 'Aplicante',
         fuente: 'Web Portal',
@@ -41,10 +41,10 @@ export async function submitApplicationAction(data: ApplicantData) {
     
   } catch (error) {
     console.error('[Recruitment Action Error]:', error);
-    // Graceful degradation: never crash container with raw 500
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Error interno al procesar tu aplicación. Por favor, intenta de nuevo.' 
+    // Never expose database/provider details to anonymous applicants.
+    return {
+      success: false,
+      error: 'No pudimos procesar tu postulación. Verifica tus datos e inténtalo de nuevo.',
     };
   }
 }
