@@ -24,6 +24,9 @@ export async function submitApplicationAction(data: ApplicantData) {
         name: parsed.name,
         email: parsed.email,
         telefono: parsed.phone,
+        pais: parsed.country,
+        englishLevel: parsed.englishLevel,
+        speedtestMbps: parsed.speedtestMbps,
         // Store EFSET link and CV URL in a JSON field or extend schema
         // For now, we store in notas as JSON
         notas: JSON.stringify({
