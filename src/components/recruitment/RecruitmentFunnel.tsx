@@ -16,8 +16,7 @@ export default function RecruitmentFunnel() {
     email: "",
     phone: "",
     efsetLink: "",
-    cvUrl: "https://storage.freeinterpreters.com/temp-cv-url.pdf", // Simulated
-  });
+   });
 
   const handleApply = () => {
     setErrorMsg(null);
@@ -82,9 +81,9 @@ export default function RecruitmentFunnel() {
             />
           </div>
 
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-gray-500 hover:bg-gray-50 cursor-pointer transition-colors">
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center text-gray-500">
             <UploadCloud className="w-8 h-8 mb-2" />
-            <span className="text-sm">Carga tu Currículum (PDF)</span>
+            <span className="text-sm">Currículum (opcional): pega un enlace HTTPS seguro en el siguiente paso o envíalo al equipo de reclutamiento.</span>
           </div>
 
           <button 
@@ -100,7 +99,7 @@ export default function RecruitmentFunnel() {
       {/* STEP 2: Materials & Induction */}
       {step === 2 && (
         <div className="space-y-6 animate-in fade-in">
-          <h2 className="text-xl font-semibold text-gray-800">Conoce más sobre Free Interpreters OS</h2>
+          <h2 className="text-xl font-semibold text-gray-800">Conoce más sobre Intérpretes RD</h2>
           <p className="text-gray-600 text-sm">Visualiza este material antes de proceder a tu evaluación técnica.</p>
           
           <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center relative overflow-hidden">
