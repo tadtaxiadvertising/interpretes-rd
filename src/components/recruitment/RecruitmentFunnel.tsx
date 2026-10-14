@@ -19,7 +19,7 @@ export default function RecruitmentFunnel() {
     englishLevel: "B2",
     speedtestMbps: 25,
     efsetLink: "",
-    cvUrl: "",
+    cvUrl: undefined,
   });
 
   const handleApply = () => {
