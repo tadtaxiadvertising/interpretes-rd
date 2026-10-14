@@ -12,6 +12,9 @@ export const ApplicantSchema = z.object({
   name: z.string().trim().min(2, "El nombre completo es obligatorio.").max(120, "El nombre es demasiado largo."),
   email: z.string().trim().email("Formato de correo inválido.").toLowerCase().max(254),
   phone: z.string().trim().min(10, "El número de teléfono debe incluir al menos 10 caracteres.").max(25, "El número de teléfono es demasiado largo.").regex(/^[+0-9().\s-]+$/, "El teléfono contiene caracteres no válidos."),
+  country: z.string().trim().min(2, "Indica tu país de residencia.").max(80),
+  englishLevel: z.enum(["B1", "B2", "C1", "C2"]),
+  speedtestMbps: z.number().int().min(1).max(10000),
   efsetLink: httpsUrl,
   cvUrl: httpsUrl.optional(),
 });
