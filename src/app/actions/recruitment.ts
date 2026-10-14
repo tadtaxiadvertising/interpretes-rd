@@ -84,33 +84,107 @@ export async function deleteCandidate(id: number): Promise<ActionResult> {
 export async function hireCandidate(id: number): Promise<ActionResult> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  if (!Number.isSafeInteger(id) || id < 1) {
+    return { success: false, error: 'Invalid candidate id', code: 'BAD_REQUEST' };
+  }
 
   try {
-    const candidate = await db.recruitmentCandidate.findUnique({
-      where: { id },
-      select: { id: true }
+    const result = await db.$transaction(async (tx) => {
+      const candidate = await tx.recruitmentCandidate.findUnique({
+        where: { id },
+        include: { applications: true },
+      });
+      if (!candidate) return { ok: false as const, error: 'Candidate not found', code: 'NOT_FOUND' as const };
+      const application = candidate.applications[0];
+      if (!application) {
+        return { ok: false as const, error: 'Candidate has no tracked recruitment application', code: 'CONFLICT' as const };
+      }
+      if (application.status === 'HIRED' && application.hiredInterpreterId) {
+        return { ok: true as const, interpreterId: application.hiredInterpreterId };
+      }
+      if (!['READY_FOR_ACTIVATION', 'HIRING'].includes(application.status)) {
+        return { ok: false as const, error: 'Complete recruitment checks and mark the application ready for activation before hiring.', code: 'CONFLICT' as const };
+      }
+
+      const rateConfig = await tx.systemConfig.findUnique({
+        where: { key: 'DEFAULT_INTERPRETER_TARIFF_PER_MINUTE' },
+        select: { value: true },
+      });
+      const tariff = rateConfig ? Number(rateConfig.value) : NaN;
+      if (!Number.isFinite(tariff) || tariff < 0) {
+        return { ok: false as const, error: 'Configure DEFAULT_INTERPRETER_TARIFF_PER_MINUTE in system_configs before hiring.', code: 'SERVICE_UNAVAILABLE' as const };
+      }
+
+      const existing = await tx.interpreter.findFirst({
+        where: { emailCorporativo: candidate.email },
+        select: { id: true },
+      });
+      if (existing) {
+        return { ok: false as const, error: 'An interpreter already uses this candidate email. Review the existing record before continuing.', code: 'CONFLICT' as const };
+      }
+
+      const interpreter = await tx.interpreter.create({
+        data: {
+          externalId: `recruitment-candidate-${candidate.id}`,
+          name: candidate.name,
+          status: 'Activo',
+          emailCorporativo: candidate.email,
+          telefono: candidate.telefono,
+          pais: candidate.pais,
+          tariffPerMinute: tariff,
+          notas: JSON.stringify({
+            recruitmentCandidateId: candidate.id,
+            englishLevel: candidate.englishLevel,
+            speedtestMbps: candidate.speedtestMbps,
+            source: 'recruitment',
+          }),
+        },
+        select: { id: true },
+      });
+
+      await tx.recruitmentApplication.update({
+        where: { id: application.id },
+        data: {
+          status: 'HIRED',
+          currentStep: 'HIRING',
+          hiredInterpreterId: interpreter.id,
+          completedAt: new Date(),
+          lastActivityAt: new Date(),
+          lastActorId: auth.user.id,
+          version: { increment: 1 },
+        },
+      });
+      await tx.recruitmentCandidate.update({
+        where: { id: candidate.id },
+        data: { status: 'Contratado', fechaInicio: new Date() },
+      });
+      await tx.recruitmentEvent.create({
+        data: {
+          applicationId: application.id,
+          eventType: 'HIRED',
+          fromStatus: application.status,
+          toStatus: 'HIRED',
+          actorType: 'admin',
+          actorId: auth.user.id,
+          metadata: { interpreterId: interpreter.id, candidateId: candidate.id },
+        },
+      });
+      return { ok: true as const, interpreterId: interpreter.id };
     });
 
-    if (!candidate) {
-      return { success: false, error: 'Candidate not found', code: 'NOT_FOUND' };
+    if (!result.ok) {
+      return { success: false, error: result.error, code: result.code };
     }
-
-    // Actual implementation would create an interpreter record, user profile, etc.
-    // For now, just update status
-    await db.recruitmentCandidate.update({
-      where: { id },
-      data: { status: 'Contratado' },
-      select: { id: true }
-    });
-
     revalidatePath('/admin/recruitment');
-    return { success: true };
+    revalidatePath('/dashboard');
+    revalidatePath('/dashboard/interpreters');
+    return { success: true, data: { interpreterId: result.interpreterId } };
   } catch (error) {
     console.error('Error in hireCandidate action:', error);
-    return { 
-      success: false, 
-      error: 'Failed to hire candidate',
-      code: 'INTERNAL_ERROR'
+    return {
+      success: false,
+      error: 'No se pudo completar la contratación. Revisa la configuración y los registros del servidor.',
+      code: 'INTERNAL_ERROR',
     };
   }
 }
