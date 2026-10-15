@@ -107,7 +107,7 @@ function computeOnboardingStatus(profile: {
   return { status: 'NOT_STARTED', step: 'legal', version: 1, completedAt: null };
 }
 
-function computeRoleplayState(session: {
+export function computeRoleplayState(session: {
   id: string;
   status: string;
   interpreterId: number | null;
@@ -126,18 +126,38 @@ function computeRoleplayState(session: {
     return { state: 'NO_ROLEPLAY', sessionId: null };
   }
 
-// Map current status to new state machine
-  // PENDING is a legacy status not in the current RoleplayStatus enum;
-  // treated as INVITED for backward compatibility via the default case.
+  // Map the persisted RoleplayStatus to the derived routing state. The
+  // vocabulary here MUST match the RoleplayStatus enum and the transitions
+  // written by the roleplay service (DRAFT/INVITED/STARTED/IN_PROGRESS/
+  // SUBMITTED/UNDER_REVIEW/EVALUATED/PASSED/FAILED/EXPIRED/CANCELLED).
+  // Collapsing every status into INVITED previously sent candidates with a
+  // submitted or evaluated session back into the roleplay instead of the
+  // dashboard.
   switch (session.status) {
+    case 'DRAFT':
+    case 'INVITED':
+      return { state: 'INVITED', sessionId: session.id };
+    case 'STARTED':
+      return { state: 'STARTED', sessionId: session.id };
+    case 'IN_PROGRESS':
+      return { state: 'IN_PROGRESS', sessionId: session.id };
+    case 'SUBMITTED':
+      return { state: 'SUBMITTED', sessionId: session.id };
+    case 'UNDER_REVIEW':
+      return { state: 'UNDER_REVIEW', sessionId: session.id };
     case 'EVALUATED':
-      if (session.qaScoreId) {
-        // Would need to check QAScore for criticalError or totalScore to determine PASSED/FAILED
-        return { state: 'EVALUATED', sessionId: session.id };
-      }
       return { state: 'EVALUATED', sessionId: session.id };
-      
+    case 'PASSED':
+      return { state: 'PASSED', sessionId: session.id };
+    case 'FAILED':
+      return { state: 'FAILED', sessionId: session.id };
+    case 'EXPIRED':
+      return { state: 'EXPIRED', sessionId: session.id };
+    case 'CANCELLED':
+      return { state: 'CANCELLED', sessionId: session.id };
     default:
+      // Legacy status ('PENDING') not present in the current enum: keep
+      // treating it as an active invitation for backward compatibility.
       return { state: 'INVITED', sessionId: session.id };
   }
 }
