@@ -215,7 +215,7 @@ export default async function RootPage() {
 
       <footer className="border-t border-white/10">
         <div className="mx-auto flex max-w-7xl flex-col gap-3 px-5 py-7 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between sm:px-8">
-          <span>© {new Date().getFullYear()} Intérpretes RD · Free Interpreters OS</span>
+          <span>© {new Date().getFullYear()} Intérpretes RD</span>
           <div className="flex gap-5"><Link href="/login" className="hover:text-slate-300">Acceso al portal</Link><a href="#plataforma" className="hover:text-slate-300">La plataforma</a></div>
         </div>
       </footer>

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { RecruitmentCandidateSchema } from '@/lib/validators';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export async function OPTIONS() {
   return NextResponse.json({}, {
@@ -15,6 +16,9 @@ export async function OPTIONS() {
 
 export async function GET(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const search = searchParams.get('search');
@@ -50,6 +54,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const data = await parseJsonBody(request, RecruitmentCandidateSchema);
     const newCandidate = await prisma.recruitmentCandidate.create({
       data,

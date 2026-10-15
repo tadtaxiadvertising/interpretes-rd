@@ -1,9 +1,13 @@
 import { NextResponse, NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withSecurity } from '@/lib/api-security';
+import { guardApiAuth } from '@/lib/api-auth';
 import { z } from 'zod';
 
 export const PATCH = withSecurity(async (request: NextRequest) => {
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) return denied;
+
   const body = await request.json();
   const { logId, verifiedMinutes } = body;
 

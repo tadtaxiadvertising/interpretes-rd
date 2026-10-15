@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -18,6 +19,9 @@ import { Readable } from 'stream';
 
 export async function POST(req: NextRequest) {
   try {
+    const denied = await guardApiAuth(req, 'admin');
+    if (denied) return denied;
+
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const type = formData.get('type') as string; // 'interpreters' | 'production' | 'qa'

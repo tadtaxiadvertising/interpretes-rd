@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
-            Free Interpreters OS
+            Intérpretes RD
           </h1>
           <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Update Credentials</p>
         </div>
@@ -138,7 +138,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Free Interpreters. Secure Enterprise Access.
+          © 2026 Intérpretes RD. Secure Enterprise Access.
         </p>
       </div>
     </div>

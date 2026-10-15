@@ -199,7 +199,7 @@ export function OnboardingWizard({ onComplete, interpreterName }: OnboardingWiza
       <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
         <div className="relative w-full max-w-md animate-in fade-in zoom-in-95 duration-700">
           <div className="absolute -top-20 -left-20 w-64 h-64 bg-emerald-500/30 rounded-full blur-[100px] pointer-events-none" />
-          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-teal-500/30 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-blue-500/30 rounded-full blur-[100px] pointer-events-none" />
           <div className="relative bg-slate-900 border border-emerald-500/20 rounded-[2.5rem] shadow-2xl p-12 text-center">
             <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-emerald-500/10 text-emerald-400 mb-6 border border-emerald-500/20">
               <PartyPopper size={40} />
@@ -485,7 +485,7 @@ export function OnboardingWizard({ onComplete, interpreterName }: OnboardingWiza
                   disabled={isLoading}
                   className="group relative flex items-center gap-3 px-10 py-4 rounded-2xl font-black text-lg transition-all duration-500 overflow-hidden bg-emerald-600 text-white shadow-xl shadow-emerald-600/30 hover:scale-[1.05] active:scale-95"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <span className="relative z-10 flex items-center gap-2">
                     {isLoading ? <Loader2 size={20} className="animate-spin" /> : <>¡LISTO PARA EMPEZAR! 🚀</>}
                   </span>

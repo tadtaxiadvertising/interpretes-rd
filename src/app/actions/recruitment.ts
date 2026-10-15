@@ -10,54 +10,120 @@ const db = prisma;
 
 /**
  * ACTION: Submit Application (Public - no auth required)
- * Inserts a new candidate into the recruitment funnel with status "Aplicante"
+ * Inserts a new candidate into the recruitment funnel with status "Aplicante".
+ *
+ * Idempotent create-or-resume keyed on the candidate email (unique): a
+ * resubmission updates the applicant-provided profile and reuses the existing
+ * candidate/application instead of failing with a unique-constraint error.
  */
 export async function submitApplicationAction(data: ApplicantData) {
   try {
-    // 1. Strict Zod validation
+    // 1. Strict Zod validation (also normalizes email to lowercase)
     const parsed = ApplicantSchema.parse(data);
+    const email = parsed.email;
 
-    // 2. Database operation using Singleton (Transaction Pooler - port 6543)
-    // Insert into funnel as "Aplicante" initial status
-    const candidate = await db.$transaction(async (tx) => {
-      const created = await tx.recruitmentCandidate.create({
-        data: {
-          name: parsed.name,
-          email: parsed.email,
-          telefono: parsed.phone,
-          pais: parsed.country,
-          englishLevel: parsed.englishLevel,
-          speedtestMbps: parsed.speedtestMbps,
-          notas: JSON.stringify({
-            efsetLink: parsed.efsetLink,
-            ...(parsed.cvUrl ? { cvUrl: parsed.cvUrl } : {}),
-          }),
-          status: 'Aplicante',
-          fuente: 'Web Portal',
-        },
-        select: { id: true },
-      });
-      const application = await tx.recruitmentApplication.create({
-        data: {
-          candidateId: created.id,
-          status: 'APPLIED',
-          currentStep: 'APPLICATION',
-          lastActivityAt: new Date(),
-        },
-        select: { id: true, status: true },
-      });
-      await tx.recruitmentEvent.create({
-        data: {
-          applicationId: application.id,
-          eventType: 'APPLICATION_CREATED',
-          toStatus: 'APPLIED',
-          actorType: 'candidate',
-          actorId: parsed.email,
-          metadata: { source: 'Web Portal' },
-        },
-      });
-      return { id: created.id, applicationId: application.id };
+    const notas = JSON.stringify({
+      efsetLink: parsed.efsetLink,
+      ...(parsed.cvUrl ? { cvUrl: parsed.cvUrl } : {}),
     });
+
+    const profileData = {
+      name: parsed.name,
+      telefono: parsed.phone,
+      pais: parsed.country,
+      englishLevel: parsed.englishLevel,
+      speedtestMbps: parsed.speedtestMbps,
+      notas,
+    };
+
+    // 2. Create-or-resume inside a transaction. Retry once to absorb a
+    //    concurrent first submission racing on the unique email.
+    const runSubmit = () =>
+      db.$transaction(async (tx) => {
+        const existing = await tx.recruitmentCandidate.findUnique({
+          where: { email },
+          select: { id: true, applications: { select: { id: true }, take: 1 } },
+        });
+
+        if (existing) {
+          // Resume: refresh applicant fields only; never regress funnel status.
+          await tx.recruitmentCandidate.update({
+            where: { id: existing.id },
+            data: profileData,
+          });
+
+          const application = existing.applications[0];
+          if (application) {
+            await tx.recruitmentApplication.update({
+              where: { id: application.id },
+              data: { lastActivityAt: new Date() },
+            });
+            return { id: existing.id, applicationId: application.id };
+          }
+
+          const created = await tx.recruitmentApplication.create({
+            data: {
+              candidateId: existing.id,
+              status: 'APPLIED',
+              currentStep: 'APPLICATION',
+              lastActivityAt: new Date(),
+            },
+            select: { id: true },
+          });
+          await tx.recruitmentEvent.create({
+            data: {
+              applicationId: created.id,
+              eventType: 'APPLICATION_CREATED',
+              toStatus: 'APPLIED',
+              actorType: 'candidate',
+              actorId: email,
+              metadata: { source: 'Web Portal', resumed: true },
+            },
+          });
+          return { id: existing.id, applicationId: created.id };
+        }
+
+        const created = await tx.recruitmentCandidate.create({
+          data: {
+            ...profileData,
+            email,
+            status: 'Aplicante',
+            fuente: 'Web Portal',
+          },
+          select: { id: true },
+        });
+        const application = await tx.recruitmentApplication.create({
+          data: {
+            candidateId: created.id,
+            status: 'APPLIED',
+            currentStep: 'APPLICATION',
+            lastActivityAt: new Date(),
+          },
+          select: { id: true, status: true },
+        });
+        await tx.recruitmentEvent.create({
+          data: {
+            applicationId: application.id,
+            eventType: 'APPLICATION_CREATED',
+            toStatus: 'APPLIED',
+            actorType: 'candidate',
+            actorId: email,
+            metadata: { source: 'Web Portal' },
+          },
+        });
+        return { id: created.id, applicationId: application.id };
+      });
+
+    let candidate;
+    try {
+      candidate = await runSubmit();
+    } catch (error) {
+      const isUniqueViolation =
+        error && typeof error === 'object' && 'code' in error && error.code === 'P2002';
+      if (!isUniqueViolation) throw error;
+      // Concurrent first submission won the race; resume now.
+      candidate = await runSubmit();
+    }
 
     revalidatePath('/admin/recruitment');
     return { success: true, candidateId: candidate.id, applicationId: candidate.applicationId };

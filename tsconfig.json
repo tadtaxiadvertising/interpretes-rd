@@ -46,6 +46,7 @@
     "**/*.test.ts",
     "**/*.test.tsx",
     "**/__tests__/**",
-    "tests"
+    "tests",
+    "Interpreter Plastform"
   ]
 }

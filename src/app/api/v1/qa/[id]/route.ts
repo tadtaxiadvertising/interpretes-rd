@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { QAScorePatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export async function OPTIONS() {
   return NextResponse.json({}, {
@@ -18,6 +19,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     const score = await prisma.qAScore.findUnique({
@@ -49,6 +53,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     const body = await parseJsonBody(request, QAScorePatchSchema);
@@ -116,6 +123,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     await prisma.qAScore.delete({

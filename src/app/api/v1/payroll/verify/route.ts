@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { recalculateWithVerifiedMinutes } from '@/services/PayrollService';
 import { PayrollVerifySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 const db = prisma;
 
@@ -25,6 +26,9 @@ const db = prisma;
  */
 export async function POST(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const body = await parseJsonBody(request, PayrollVerifySchema);
     const { payrollRecordId, action } = body;
     const verifiedMinutes = action === 'verify' ? body.verifiedMinutes : undefined;

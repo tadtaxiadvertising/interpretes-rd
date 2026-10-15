@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { InterpreterSchema } from '@/lib/validators';
 import { withSecurity } from '@/lib/api-security';
+import { guardApiAuth } from '@/lib/api-auth';
 import { parseJsonBody } from '@/lib/api-responses';
 import { z } from 'zod';
 
@@ -16,6 +17,9 @@ export async function OPTIONS() {
 }
 
 export const GET = withSecurity(async (request: NextRequest) => {
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) return denied;
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const search = searchParams.get('search');
@@ -46,6 +50,9 @@ export const GET = withSecurity(async (request: NextRequest) => {
 });
 
 export const POST = withSecurity(async (request: NextRequest) => {
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) return denied;
+
   const body = await parseJsonBody(request, InterpreterSchema);
   const { password, ...interpreterData } = body;
 

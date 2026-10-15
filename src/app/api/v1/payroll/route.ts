@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import { withSecurity } from '@/lib/api-security';
+import { guardApiAuth } from '@/lib/api-auth';
 import { z } from 'zod';
 
 export async function OPTIONS() {
@@ -14,6 +15,9 @@ export async function OPTIONS() {
 }
 
 export const GET = withSecurity(async (request: NextRequest) => {
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) return denied;
+
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const interpreterId = searchParams.get('interpreterId');

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PayrollRecordPatchSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody, stringIdParamSchema } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export async function OPTIONS() {
   return NextResponse.json({}, {
@@ -18,6 +19,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = stringIdParamSchema.parse(await params);
 
     const record = await prisma.payrollRecord.findUnique({
@@ -46,6 +50,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = stringIdParamSchema.parse(await params);
 
     const body = await parseJsonBody(request, PayrollRecordPatchSchema);
@@ -85,6 +92,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = stringIdParamSchema.parse(await params);
 
     await prisma.payrollRecord.delete({

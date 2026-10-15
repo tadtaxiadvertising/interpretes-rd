@@ -42,7 +42,7 @@ export default function RegisterPage() {
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
-            Free Interpreters OS
+            Intérpretes RD
           </h1>
           <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Create Account</p>
         </div>
@@ -84,7 +84,7 @@ export default function RegisterPage() {
                   name="email"
                   type="email"
                   required
-                  placeholder="user@freeinterpreters.com"
+                  placeholder="usuario@interpretesrd.com"
                   className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                 />
               </div>
@@ -134,7 +134,7 @@ export default function RegisterPage() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Free Interpreters. Secure Enterprise Access.
+          © 2026 Intérpretes RD. Secure Enterprise Access.
         </p>
       </div>
     </div>

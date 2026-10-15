@@ -48,6 +48,65 @@ function hasValidAuthSession(req: NextRequest) {
   return hasAuthSessionCookie(req);
 }
 
+/**
+ * Public API prefixes that do NOT require authentication.
+ * - /api/health, /api/version: liveness / build-id probes.
+ * - /api/auth/*: NextAuth handlers (must be reachable to sign in).
+ * - /api/webhooks/*: third-party webhooks (self-verify signatures).
+ * - /api/cron/*: scheduled jobs (self-verify CRON_SECRET).
+ * - /api/roleplay/*: candidate flow authenticated by one-time invite tokens.
+ *
+ * Everything else under /api/* requires a verified Supabase session OR a
+ * verified Supabase `Authorization: Bearer <token>`.
+ */
+const API_PUBLIC_PREFIXES = [
+  '/api/health',
+  '/api/version',
+  '/api/auth/',
+  '/api/webhooks/',
+  '/api/cron/',
+  '/api/roleplay/',
+] as const;
+
+function isPublicApiPath(pathname: string) {
+  return API_PUBLIC_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix)
+  );
+}
+
+function extractBearer(req: NextRequest): string | null {
+  const header = req.headers.get('authorization');
+  if (!header) return null;
+  const [scheme, ...rest] = header.split(' ');
+  if (!scheme || scheme.toLowerCase() !== 'bearer') return null;
+  const token = rest.join(' ').trim();
+  return token || null;
+}
+
+/**
+ * Verify a Supabase access token in the edge runtime via the public anon key.
+ * Never requires the service-role key. Fails closed on any error.
+ */
+async function verifySupabaseAccessToken(token: string): Promise<boolean> {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    process.env.SUPABASE_ANON_KEY?.trim();
+  if (!url || !key) return false;
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.getUser(token);
+    return !error && !!data.user;
+  } catch {
+    return false;
+  }
+}
+
 // Pre-check logic moved inside middleware to avoid missing env vars at module load in dev mode.
 
 /** Routes exclusively managed by Supabase Auth */
@@ -149,6 +208,36 @@ export async function middleware(req: NextRequest) {
       const loginUrl = req.nextUrl.clone();
       loginUrl.pathname = '/login';
       return NextResponse.redirect(loginUrl);
+    }
+  }
+
+  // ── 3b. API AUTHENTICATION GATE ───────────────────────────
+  // Every /api/* route (except the explicit public allowlist) requires a
+  // verified Supabase session OR a verified Supabase Bearer token. Route
+  // handlers remain responsible for role / ownership authorization.
+  if (pathname.startsWith('/api/') && !isPublicApiPath(pathname)) {
+    // Coarse edge gate: a refreshed Supabase session, an Auth.js session
+    // cookie, or a verified Supabase Bearer token. Route handlers still
+    // enforce role / ownership (see src/lib/api-auth.ts).
+    let apiAuthenticated = hasActiveSupabaseSession || hasValidNextAuthSession;
+    if (!apiAuthenticated) {
+      const bearer = extractBearer(req);
+      if (bearer) {
+        apiAuthenticated = await verifySupabaseAccessToken(bearer);
+      }
+    }
+
+    if (!apiAuthenticated) {
+      const unauthorized = NextResponse.json(
+        { success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' },
+        { status: 401 }
+      );
+      unauthorized.headers.set('Access-Control-Allow-Origin', corsOrigin);
+      unauthorized.headers.set(
+        'Access-Control-Allow-Credentials',
+        isTrustedOrigin ? 'true' : 'false'
+      );
+      return unauthorized;
     }
   }
 

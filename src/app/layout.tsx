@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     "reclutamiento",
     "gestión de intérpretes",
     "producción",
-    "Free Interpreters OS",
+    "Intérpretes RD",
   ],
   authors: [{ name: "Intérpretes RD" }],
   icons: { icon: "/favicon.ico" },

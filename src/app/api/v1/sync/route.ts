@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { guardApiAuth } from '@/lib/api-auth';
 
 /**
  * Format a Santo_Domingo timestamp (from @db.Timestamptz) to "YYYY-MM-DD".
@@ -22,7 +23,10 @@ function formatDbDate(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) return denied;
+
   console.log('--- Iniciando sincronización de CallSessions a ProductionLogs ---');
 
   try {

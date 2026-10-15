@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Sign In | Free Interpreters OS',
-  description: 'Secure login to the Free Interpreters enterprise platform',
+  title: 'Iniciar sesión | Intérpretes RD',
+  description: 'Acceso seguro a la plataforma de gestión de Intérpretes RD',
 };
 
 export default function LoginLayout({ children }: { children: React.ReactNode }) {

@@ -2,9 +2,13 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PayrollPaySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export async function PATCH(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { payrollRecordId, transactionReference } = await parseJsonBody(request, PayrollPaySchema);
 
     // Check if payroll record exists and is in APPROVED state
