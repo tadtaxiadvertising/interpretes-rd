@@ -34,7 +34,7 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurrentIdentity>>, sessionId: string): Promise<{ hasAccess: boolean; session?: any; error?: string }> {
+async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurrentIdentity>>, sessionId: string, sessionCookie: string | null): Promise<{ hasAccess: boolean; session?: any; error?: string }> {
   const identityResult = identity;
   if (!identityResult) {
     return { hasAccess: false, error: 'Not authenticated' };
@@ -69,11 +69,13 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     return { hasAccess: true, session };
   }
 
-  // Check candidate access via valid token
+  // Candidate sessions are bound to the opaque, server-issued roleplay_session
+  // cookie created by the invite/start flow. An authenticated user alone — or
+  // an unused invitation that merely exists on the session — is NOT sufficient:
+  // the caller must present the exact credential bound to this session.
   if (session.recruitmentCandidateId) {
-    const hasValidToken = session.access?.validatedAt && !session.access?.usedAt;
-    if (!hasValidToken) {
-      return { hasAccess: false, error: 'Invalid or expired invitation' };
+    if (sessionCookie !== session.id) {
+      return { hasAccess: false, error: 'Access denied' };
     }
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
@@ -256,7 +258,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Check upload access
-    const accessCheck = await checkUploadAccess(identity, sessionId);
+    const sessionCookie = req.cookies.get('roleplay_session')?.value ?? null;
+    const accessCheck = await checkUploadAccess(identity, sessionId, sessionCookie);
     if (!accessCheck.hasAccess) {
       return NextResponse.json({ success: false, error: accessCheck.error }, { status: 403 });
     }

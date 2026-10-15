@@ -161,7 +161,17 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
       return { success: false, error: 'Response already submitted', code: 'ALREADY_SUBMITTED' };
     }
 
-    if (session.interpreterId && session.interpreterId !== auth.profile?.interpreterId) {
+    const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
+
+    if (session.interpreterId) {
+      if (session.interpreterId !== auth.profile?.interpreterId) {
+        return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
+      }
+    } else if (session.recruitmentCandidateId) {
+      if (sessionCookie !== session.id) {
+        return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
+      }
+    } else {
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
@@ -200,6 +210,8 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
 
+  const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
+
   try {
     const result = await db.$transaction(async (tx) => {
       const session = await tx.roleplaySession.findUnique({
@@ -219,7 +231,19 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         throw new Error('Session not available for submission');
       }
 
-      if (session.interpreterId && session.interpreterId !== auth.profile?.interpreterId) {
+      // Interpreter sessions are bound to the resolved interpreter id.
+      // Candidate sessions are bound to the opaque, server-issued
+      // roleplay_session cookie created by the invite/start flow: an
+      // authenticated user alone is not sufficient.
+      if (session.interpreterId) {
+        if (session.interpreterId !== auth.profile?.interpreterId) {
+          throw new Error('Unauthorized');
+        }
+      } else if (session.recruitmentCandidateId) {
+        if (sessionCookie !== session.id) {
+          throw new Error('Unauthorized');
+        }
+      } else {
         throw new Error('Unauthorized');
       }
 
