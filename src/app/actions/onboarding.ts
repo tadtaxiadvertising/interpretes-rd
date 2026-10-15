@@ -10,6 +10,16 @@ const db = prisma;
 
 const CEDULA_REGEX = /^\d{3}-\d{7}-\d{1}$/;
 
+/**
+ * Version of the legal agreement presented during onboarding. Bump this when
+ * the contract text changes so the accepted version is traceable per user.
+ */
+const TERMS_VERSION = '2026-10-01';
+
+function termsMarker(now: Date): string {
+  return `[TERMS_ACCEPTED] signed at ${now.toISOString()} (v${TERMS_VERSION})`;
+}
+
 const BankingDetailsSchema = z.object({
   bankName: z.string().min(1, 'Selecciona un banco').trim(),
   bankAccount: z.string().min(5, 'El número de cuenta debe tener al menos 5 dígitos').regex(/^\d+$/, 'Solo números permitidos').trim(),
@@ -63,7 +73,7 @@ export async function acceptTerms(): Promise<ActionResult> {
             await db.interpreter.update({
               where: { id: interpreter.id },
               data: {
-                notas: `${currentNotas}\n[TERMS_ACCEPTED] signed at ${now.toISOString()}`.trim()
+                notas: `${currentNotas}\n${termsMarker(now)}`.trim()
               },
               select: { id: true }
             });
@@ -71,13 +81,33 @@ export async function acceptTerms(): Promise<ActionResult> {
         }
       }
     } else {
-      await db.userProfile.update({
-        where: { id: actor.userId },
-        data: {
-          termsAcceptedAt: now,
-          signatureDate: now,
-        },
-        select: { id: true }
+      // ── Record acceptance on the profile and mirror it onto the linked
+      //    interpreter record so the accepted version is traceable. ──
+      await db.$transaction(async (tx) => {
+        const profile = await tx.userProfile.update({
+          where: { id: actor.userId },
+          data: {
+            termsAcceptedAt: now,
+            signatureDate: now,
+          },
+          select: { interpreterId: true }
+        });
+
+        if (profile?.interpreterId) {
+          changedInterpreterId = profile.interpreterId;
+          const interpreter = await tx.interpreter.findUnique({
+            where: { id: profile.interpreterId },
+            select: { notas: true },
+          });
+          const currentNotas = interpreter?.notas || '';
+          if (!currentNotas.includes('[TERMS_ACCEPTED]')) {
+            await tx.interpreter.update({
+              where: { id: profile.interpreterId },
+              data: { notas: `${currentNotas}\n${termsMarker(now)}`.trim() },
+              select: { id: true },
+            });
+          }
+        }
       });
     }
 
@@ -201,22 +231,45 @@ export async function completeOnboarding(): Promise<ActionResult> {
     const isAuthJsUser = actor.provider === 'authjs';
     let changedInterpreterId = actor.interpreterId ?? null;
 
-    // ── Guard: prevent re-submission if already complete (canonical state) ──
+    // ── Guard: prevent re-submission if already complete AND verify the
+    //    required steps (terms + banking) were actually completed. ──
     if (!isAuthJsUser) {
       const existingProfile = await db.userProfile.findUnique({
         where: { id: actor.userId },
-        select: { onboardingComplete: true },
+        select: {
+          onboardingComplete: true,
+          termsAcceptedAt: true,
+          bankName: true,
+          bankAccount: true,
+          bankCedula: true,
+        },
       });
       if (existingProfile?.onboardingComplete) {
         return { success: false, error: 'Onboarding ya fue completado previamente', code: 'CONFLICT' };
       }
+      const hasTerms = !!existingProfile?.termsAcceptedAt;
+      const hasBanking = !!(existingProfile?.bankName && existingProfile?.bankAccount && existingProfile?.bankCedula);
+      if (!hasTerms || !hasBanking) {
+        return { success: false, error: 'Completa la aceptación de términos y los datos bancarios antes de finalizar', code: 'BAD_REQUEST' };
+      }
     } else if (actor.interpreterId) {
       const existingInterpreter = await db.interpreter.findUnique({
         where: { id: actor.interpreterId },
-        select: { documentosCompleto: true },
+        select: {
+          documentosCompleto: true,
+          banco: true,
+          cuentaPago: true,
+          cedulaRnc: true,
+          notas: true,
+        },
       });
       if (existingInterpreter?.documentosCompleto) {
         return { success: false, error: 'Onboarding ya fue completado previamente', code: 'CONFLICT' };
+      }
+      const hasTerms = !!existingInterpreter?.notas?.includes('[TERMS_ACCEPTED]');
+      const hasBanking = !!(existingInterpreter?.banco && existingInterpreter?.cuentaPago && existingInterpreter?.cedulaRnc);
+      if (!hasTerms || !hasBanking) {
+        return { success: false, error: 'Completa la aceptación de términos y los datos bancarios antes de finalizar', code: 'BAD_REQUEST' };
       }
     }
 

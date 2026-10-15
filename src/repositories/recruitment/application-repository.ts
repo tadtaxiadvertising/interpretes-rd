@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import type { RecruitmentEventType } from '@/lib/prisma-types';
 
 const db = prisma;
 
@@ -94,6 +95,7 @@ export const applicationRepository = {
     newStep: string,
     actorId: string,
     actorType: 'candidate' | 'admin' | 'system',
+    eventType: RecruitmentEventType,
     metadata?: any
   ) {
     return db.$transaction(async (tx) => {
@@ -130,7 +132,7 @@ export const applicationRepository = {
       await tx.recruitmentEvent.create({
         data: {
           applicationId,
-          eventType: `${newStatus}` as any,
+          eventType,
           fromStatus: fromStatus as any,
           toStatus: newStatus as any,
           actorType,

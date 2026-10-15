@@ -1,20 +1,47 @@
 'use server';
 
+import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
 import { candidateRepository } from '@/repositories/recruitment/candidate-repository';
 import { applicationRepository } from '@/repositories/recruitment/application-repository';
 import { accessRepository } from '@/repositories/recruitment/access-repository';
-import { documentRepository } from '@/repositories/recruitment/document-repository';
-import { eventRepository } from '@/repositories/recruitment/event-repository';
-import { interviewRepository } from '@/repositories/recruitment/interview-repository';
-import { offerRepository } from '@/repositories/recruitment/offer-repository';
-import { contractRepository } from '@/repositories/recruitment/contract-repository';
-import { bankingRepository } from '@/repositories/recruitment/banking-repository';
-import { techSetupRepository } from '@/repositories/recruitment/tech-setup-repository';
-import { trainingRepository } from '@/repositories/recruitment/training-repository';
 
 const db = prisma;
+
+/**
+ * Maps an application status to the valid RecruitmentEventType recorded when a
+ * step advances INTO that status. The previous `${status}` cast produced values
+ * (e.g. PROFILE_PENDING) that are not members of the event enum and would fail
+ * at the database layer.
+ */
+const STATUS_EVENT_TYPE: Record<RecruitmentApplicationStatus, RecruitmentEventType> = {
+  APPLIED: 'APPLICATION_CREATED',
+  PROFILE_PENDING: 'PROFILE_COMPLETED',
+  DOCUMENTS_PENDING: 'DOCUMENT_UPLOADED',
+  LANGUAGE_PENDING: 'LANGUAGE_APPROVED',
+  TECHNICAL_PENDING: 'TECHNICAL_COMPLETED',
+  INDUCTION_PENDING: 'INDUCTION_COMPLETED',
+  ROLEPLAY_PENDING: 'ROLEPLAY_CREATED',
+  ROLEPLAY_IN_PROGRESS: 'ROLEPLAY_STARTED',
+  ROLEPLAY_REVIEW: 'ROLEPLAY_SUBMITTED',
+  INTERVIEW_PENDING: 'INTERVIEW_SCHEDULED',
+  INTERVIEW_SCHEDULED: 'INTERVIEW_SCHEDULED',
+  INTERVIEW_REVIEW: 'INTERVIEW_COMPLETED',
+  OFFER_PENDING: 'OFFER_SENT',
+  OFFER_SENT: 'OFFER_SENT',
+  OFFER_ACCEPTED: 'OFFER_ACCEPTED',
+  CONTRACT_PENDING: 'CONTRACT_SIGNED',
+  BANKING_PENDING: 'BANKING_COMPLETED',
+  TECH_SETUP_PENDING: 'TECH_SETUP_COMPLETED',
+  TRAINING_PENDING: 'TRAINING_COMPLETED',
+  READY_FOR_ACTIVATION: 'READY_FOR_ACTIVATION',
+  HIRING: 'HIRING_STARTED',
+  HIRED: 'HIRED',
+  REJECTED: 'REJECTED',
+  WITHDRAWN: 'WITHDRAWN',
+  EXPIRED: 'WITHDRAWN',
+};
 
 /**
  * RECRUITMENT SERVICE - Core business logic for recruitment workflow
@@ -62,7 +89,7 @@ export interface HiringResult {
 /**
  * Crea una nueva aplicación para un candidato
  */
-export async function createApplication(candidateId: number, email: string): Promise<CreateApplicationResult> {
+export async function createApplication(email: string): Promise<CreateApplicationResult> {
   try {
     // Normalize email
     const normalizedEmail = email.toLowerCase().trim();
@@ -72,7 +99,7 @@ export async function createApplication(candidateId: number, email: string): Pro
 
     if (candidate) {
       // Candidate exists - check if there's an active application
-      const existingApp = await applicationRepository.findByCandidateId(candidateId);
+      const existingApp = await applicationRepository.findByCandidateId(candidate.id);
 
       if (existingApp) {
         return {
@@ -83,12 +110,12 @@ export async function createApplication(candidateId: number, email: string): Pro
       }
 
       // Create new application
-      const application = await applicationRepository.getOrCreate(candidateId);
+      const application = await applicationRepository.getOrCreate(candidate.id);
 
       return {
         success: true,
         applicationId: application.id,
-        candidateId,
+        candidateId: candidate.id,
       };
     }
 
@@ -99,7 +126,7 @@ export async function createApplication(candidateId: number, email: string): Pro
     });
 
     // Create application
-    const application = await applicationRepository.getOrCreate(candidateId);
+    const application = await applicationRepository.getOrCreate(newCandidate.id);
 
     return {
       success: true,
@@ -128,26 +155,23 @@ export async function advanceStep(
   metadata?: any
 ): Promise<AdvanceStepResult> {
   try {
+    const current = await applicationRepository.findById(applicationId);
+    if (!current) {
+      return { success: false, error: 'Aplicación no encontrada', code: 'NOT_FOUND' };
+    }
+
+    // The repository performs the optimistic status check and logs the event
+    // inside its transaction; the service must not log a second event.
     const result = await applicationRepository.advanceStep(
       applicationId,
-      newStatus,
+      current.status,
       newStatus,
       newStep,
       actorId,
       actorType,
+      STATUS_EVENT_TYPE[newStatus] ?? 'APPLICATION_CREATED',
       metadata
     );
-
-    // Log the event
-    await eventRepository.log({
-      applicationId,
-      eventType: newStatus as any,
-      fromStatus: 'UNKNOWN', // Will be the previous status in the event
-      toStatus: newStatus as any,
-      actorType,
-      actorId,
-      metadata,
-    });
 
     return {
       success: true,
@@ -406,13 +430,19 @@ export async function hireCandidate(
   actorType: 'admin' | 'system'
 ): Promise<HiringResult> {
   try {
-    const application = (await applicationRepository.findById(applicationId)) as any;
+    const application = await applicationRepository.findById(applicationId);
     if (!application) {
       return { success: false, error: 'Aplicación no encontrada', code: 'NOT_FOUND' };
     }
 
-    // Verificar que la aplicación esté en READY_FOR_ACTIVATION
-    if (application.status !== 'READY_FOR_ACTIVATION') {
+    // The application include does not carry the candidate; load it explicitly.
+    const candidate = await candidateRepository.findById(application.candidateId);
+    if (!candidate) {
+      return { success: false, error: 'Candidato no encontrado', code: 'NOT_FOUND' };
+    }
+
+    // Verificar que la aplicación esté lista para contratación
+    if (!['READY_FOR_ACTIVATION', 'HIRING'].includes(application.status)) {
       return { success: false, error: `La aplicación no está lista para contratación. Estado actual: ${application.status}`, code: 'INVALID_STATE' };
     }
 
@@ -420,7 +450,8 @@ export async function hireCandidate(
     const result = await db.$transaction(async (tx) => {
       // 1. Verificar si ya existe un intérprete con esta identidad
       const existingInterpreter = await tx.interpreter.findFirst({
-        where: { emailCorporativo: application.candidate.email },
+        where: { emailCorporativo: candidate.email },
+        select: { id: true },
       });
 
       let interpreterId: number;
@@ -428,26 +459,13 @@ export async function hireCandidate(
 
       if (existingInterpreter) {
         interpreterId = existingInterpreter.id;
-        // Link to existing interpreter
-        await tx.userProfile.upsert({
-          where: { id: application.id },
-          update: { interpreterId: existingInterpreter.id },
-          create: {
-            id: application.id,
-            email: application.candidate.email,
-            displayName: application.candidate.name,
-            role: 'interpreter',
-            interpreterId: existingInterpreter.id,
-          },
-        });
-        userProfileId = application.id;
       } else {
         // Create new interpreter
         const newInterpreter = await tx.interpreter.create({
           data: {
-            externalId: `cand-${application.id}`,
-            name: application.candidate.name,
-            emailCorporativo: application.candidate.email,
+            externalId: `recruitment-candidate-${candidate.id}`,
+            name: candidate.name,
+            emailCorporativo: candidate.email,
             status: 'Activo',
             realtimeStatus: 'Offline',
             tariffPerMinute: 0,
@@ -455,21 +473,26 @@ export async function hireCandidate(
             languageA: 'Español',
             languageB: 'Inglés',
           },
+          select: { id: true },
         });
         interpreterId = newInterpreter.id;
-
-        // Create user profile
-        userProfileId = application.id;
-        await tx.userProfile.create({
-          data: {
-            id: application.id,
-            email: application.candidate.email,
-            displayName: application.candidate.name,
-            role: 'interpreter',
-            interpreterId,
-          },
-        });
       }
+
+      // 2. Upsert the profile keyed on the unique email. user_profiles.id is a
+      //    uuid column, so it must NOT reuse the cuid application id.
+      const profile = await tx.userProfile.upsert({
+        where: { email: candidate.email },
+        update: { interpreterId },
+        create: {
+          id: randomUUID(),
+          email: candidate.email,
+          displayName: candidate.name,
+          role: 'interpreter',
+          interpreterId,
+        },
+        select: { id: true },
+      });
+      userProfileId = profile.id;
 
       // Update application status
       await tx.recruitmentApplication.update({
@@ -487,7 +510,7 @@ export async function hireCandidate(
         data: {
           applicationId,
           eventType: 'HIRED',
-          fromStatus: application.status,
+          fromStatus: application.status as any,
           toStatus: 'HIRED',
           actorType: actorType,
           actorId,

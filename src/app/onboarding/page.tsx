@@ -13,17 +13,26 @@ export default async function OnboardingPage() {
   const authResult = await auth();
   const user = authResult.user;
 
-  // Keep the completed-onboarding guard server-side so users do not see the
-  // wizard flash before being redirected to the dashboard.
+  // Resume at the first step the user has not completed yet, and keep the
+  // completed-onboarding guard server-side so the wizard never flashes for a
+  // finished user.
+  let initialStep = 0;
   if (authResult.userId && user) {
     const result = await getOnboardingStatus();
 
-    if (result.success && result.data?.onboardingComplete) {
-      redirect('/dashboard');
+    if (result.success && result.data) {
+      const { termsAccepted, bankingComplete, onboardingComplete } = result.data;
+      if (onboardingComplete) {
+        redirect('/dashboard');
+      }
+      initialStep = !termsAccepted ? 0 : !bankingComplete ? 1 : 2;
     }
   }
 
   return (
-    <OnboardingPageClient interpreterName={user?.name || 'Intérprete'} />
+    <OnboardingPageClient
+      interpreterName={user?.name || 'Intérprete'}
+      initialStep={initialStep}
+    />
   );
 }

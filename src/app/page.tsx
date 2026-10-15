@@ -16,8 +16,11 @@ import {
   resolveCurrentIdentity,
   resolveDestination,
 } from "@/lib/identity/resolve-user";
+import { getLandingStats } from "@/lib/stats/landing-stats";
 
 export const dynamic = "force-dynamic";
+
+const numberFormatter = new Intl.NumberFormat("es-DO");
 
 const pillars = [
   {
@@ -58,6 +61,8 @@ export default async function RootPage() {
   if (identity) {
     redirect(resolveDestination(identity));
   }
+
+  const stats = await getLandingStats();
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#07111f] text-slate-100">
@@ -145,6 +150,27 @@ export default async function RootPage() {
             </div>
           </div>
         </section>
+
+        {stats && (
+          <section id="impacto" aria-label="Métricas de la plataforma" className="border-y border-white/8 bg-white/[0.025]">
+            <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-8 md:grid-cols-2">
+              <div className="text-center md:text-left">
+                <p className="text-5xl font-black tracking-tight text-[#2675ff] sm:text-6xl">
+                  {numberFormatter.format(stats.interpreters)}
+                </p>
+                <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-200">Intérpretes</p>
+                <p className="mt-1 text-sm leading-6 text-slate-400">Profesionales registrados en la plataforma.</p>
+              </div>
+              <div className="text-center md:text-left">
+                <p className="text-5xl font-black tracking-tight text-[#2675ff] sm:text-6xl">
+                  {numberFormatter.format(stats.accountsWorked)}
+                </p>
+                <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-200">Cuentas trabajadas</p>
+                <p className="mt-1 text-sm leading-6 text-slate-400">Cuentas con producción registrada en los últimos 5 años.</p>
+              </div>
+            </div>
+          </section>
+        )}
 
         <section id="plataforma" className="border-y border-white/8 bg-white/[0.025]">
           <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">

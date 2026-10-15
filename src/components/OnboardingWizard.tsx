@@ -60,10 +60,14 @@ const STEPS = [
 interface OnboardingWizardProps {
   onComplete: () => void;
   interpreterName?: string;
+  initialStep?: number;
 }
 
-export function OnboardingWizard({ onComplete, interpreterName }: OnboardingWizardProps) {
-  const [currentStep, setCurrentStep] = useState(0);
+export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 }: OnboardingWizardProps) {
+  // Clamp the resume step so an out-of-range prop can never index past the wizard.
+  const [currentStep, setCurrentStep] = useState(() =>
+    Math.min(Math.max(initialStep, 0), STEPS.length - 1)
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);

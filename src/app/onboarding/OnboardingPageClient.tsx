@@ -5,6 +5,7 @@ import { OnboardingWizard } from '@/components/OnboardingWizard';
 
 interface OnboardingPageClientProps {
   interpreterName?: string;
+  initialStep?: number;
 }
 
 /**
@@ -13,6 +14,7 @@ interface OnboardingPageClientProps {
  */
 export function OnboardingPageClient({
   interpreterName,
+  initialStep = 0,
 }: OnboardingPageClientProps) {
   const router = useRouter();
 
@@ -25,6 +27,7 @@ export function OnboardingPageClient({
       <OnboardingWizard
         onComplete={handleComplete}
         interpreterName={interpreterName}
+        initialStep={initialStep}
       />
     </div>
   );

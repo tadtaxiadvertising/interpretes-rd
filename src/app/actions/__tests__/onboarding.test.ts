@@ -65,21 +65,27 @@ describe('Onboarding Actions', () => {
       expect(result.code).toBe('CONFLICT');
     });
 
-    it('updates termsAcceptedAt for Supabase user', async () => {
+    it('records terms acceptance (with version) for Supabase user', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
       (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: false });
-      (prisma.userProfile.update as any).mockResolvedValue({ id: 'user-123' });
+      const profileUpdate = vi.fn().mockResolvedValue({ interpreterId: null });
+      (prisma.$transaction as any).mockImplementation(async (cb: any) =>
+        cb({
+          userProfile: { update: profileUpdate },
+          interpreter: { findUnique: vi.fn(), update: vi.fn() },
+        })
+      );
 
       const result = await acceptTerms();
 
       expect(result.success).toBe(true);
-      expect(prisma.userProfile.update).toHaveBeenCalledWith({
+      expect(profileUpdate).toHaveBeenCalledWith({
         where: { id: 'user-123' },
         data: expect.objectContaining({
           termsAcceptedAt: expect.any(Date),
           signatureDate: expect.any(Date),
         }),
-        select: { id: true },
+        select: { interpreterId: true },
       });
     });
   });
@@ -149,9 +155,32 @@ describe('Onboarding Actions', () => {
       expect(result.code).toBe('CONFLICT');
     });
 
+    it('rejects completion when terms or banking are missing', async () => {
+      (validateAction as any).mockResolvedValue(mockAuthResult);
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        onboardingComplete: false,
+        termsAcceptedAt: null,
+        bankName: null,
+        bankAccount: null,
+        bankCedula: null,
+      });
+
+      const result = await completeOnboarding();
+
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('BAD_REQUEST');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
     it('completes onboarding for Supabase user in transaction', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
-      (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: false });
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        onboardingComplete: false,
+        termsAcceptedAt: new Date(),
+        bankName: 'Banco Popular',
+        bankAccount: '1234567890',
+        bankCedula: '001-1234567-8',
+      });
       (prisma.$transaction as any).mockImplementation(async (cb: any) => {
         const tx = {
           userProfile: { update: vi.fn().mockResolvedValue({ interpreterId: 42 }) },
