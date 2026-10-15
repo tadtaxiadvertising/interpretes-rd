@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
+  const denied = await guardApiAuth(req, 'admin');
+  if (denied) return denied;
+
   try {
     const interpreters = await prisma.interpreter.findMany({
       select: {
