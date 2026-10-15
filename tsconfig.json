@@ -47,6 +47,8 @@
     "**/*.test.tsx",
     "**/__tests__/**",
     "tests",
+    "e2e",
+    "playwright.config.ts",
     "Interpreter Plastform"
   ]
 }

@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
+    "test:e2e": "playwright test",
     "migrate": "tsx scripts/run-migration.ts",
     "migrate:onboarding": "tsx scripts/migrate-onboarding.ts",
     "seed": "tsx prisma/seed.ts",
@@ -44,6 +45,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/dom": "^10.4.2",
     "@testing-library/jest-dom": "^7.0.1",
