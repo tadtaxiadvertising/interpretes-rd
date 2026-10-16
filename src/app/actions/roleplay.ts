@@ -120,6 +120,104 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
   }
 }
 
+const RESUME_EXCLUDED_STATUSES = ['CANCELLED', 'EXPIRED'] as const;
+
+/**
+ * Start (or resume) the roleplay session for the currently authenticated
+ * recruitment candidate. This is the candidate-facing entry point used by the
+ * /postular funnel: it binds the request to the candidate identity (via the
+ * account email), reuses any active session instead of creating duplicates,
+ * guarantees at least one scenario exists, and issues the opaque
+ * `roleplay_session` cookie that the candidate-facing submit paths require.
+ */
+export async function startCandidateRoleplay() {
+  const auth = await validateAction();
+  if ('error' in auth) {
+    return { success: false as const, error: auth.error, code: auth.code, requiresAuth: true as const };
+  }
+
+  const email = auth.user.email?.toLowerCase().trim();
+  if (!email) {
+    return { success: false as const, error: 'Account has no email', code: 'VALIDATION_ERROR' as const };
+  }
+
+  try {
+    const candidate = await db.recruitmentCandidate.findUnique({
+      where: { email },
+      select: { id: true },
+    });
+    if (!candidate) {
+      return { success: false as const, error: 'No application found for this account', code: 'NOT_FOUND' as const };
+    }
+
+    let session = await db.roleplaySession.findFirst({
+      where: {
+        recruitmentCandidateId: candidate.id,
+        status: { notIn: [...RESUME_EXCLUDED_STATUSES] },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true },
+    });
+
+    if (!session) {
+      session = await db.roleplaySession.create({
+        data: {
+          recruitmentCandidateId: candidate.id,
+          baseAudioUrl: '',
+          status: 'STARTED',
+        },
+        select: { id: true, status: true },
+      });
+    } else if (session.status !== 'STARTED' && session.status !== 'IN_PROGRESS') {
+      await db.roleplaySession.update({
+        where: { id: session.id },
+        data: { status: 'STARTED' },
+      });
+    }
+
+    const scenarioCount = await db.roleplayScenario.count({ where: { sessionId: session.id } });
+    if (scenarioCount === 0) {
+      await db.roleplayScenario.create({
+        data: {
+          sessionId: session.id,
+          order: 0,
+          title: 'Escenario 1',
+          baseAudioUrl: '',
+          durationLimitSec: null,
+          scriptPrompt: null,
+          expectedKeys: [],
+        },
+      });
+    }
+
+    await db.roleplayAccess.upsert({
+      where: { sessionId: session.id },
+      update: { validatedAt: new Date() },
+      create: {
+        sessionId: session.id,
+        tokenHash: `candidate:${session.id}:${randomBytes(16).toString('hex')}`,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        validatedAt: new Date(),
+      },
+    });
+
+    (await cookies()).set('roleplay_session', session.id, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/',
+      maxAge: 60 * 60 * 24 * 7,
+    });
+
+    revalidatePath('/dashboard/roleplays');
+    return { success: true as const, data: { sessionId: session.id } };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Start Candidate Roleplay Error:', message);
+    return { success: false as const, error: message, code: 'INTERNAL_ERROR' as const };
+  }
+}
+
 const SubmitResponseSchema = z.object({
   sessionId: z.string().min(1),
   scenarioId: z.string().min(1).optional(),
@@ -249,6 +347,29 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
 
       const scenarioId = input.scenarioId || `scenario_${session.currentScenarioIndex}`;
 
+      // Persist the per-scenario response against the real RoleplayScenario row
+      // when the client supplies a scenario id (cuid). The legacy
+      // `scenario_<index>` fallback has no row to attach to, so it is skipped.
+      if (input.scenarioId) {
+        const existingResponse = await tx.roleplayResponse.findFirst({
+          where: { scenarioId },
+          select: { id: true },
+        });
+        if (existingResponse) {
+          await tx.roleplayResponse.update({
+            where: { id: existingResponse.id },
+            data: { sourceAudioUrl: input.recordedAudioUrl, submittedAt: new Date() },
+          });
+        } else {
+          await tx.roleplayResponse.create({
+            data: { scenarioId, sourceAudioUrl: input.recordedAudioUrl, submittedAt: new Date() },
+          });
+        }
+      }
+
+      const totalScenarios = await tx.roleplayScenario.count({ where: { sessionId: session.id } });
+      const isFinal = totalScenarios > 0 && session.currentScenarioIndex + 1 >= totalScenarios;
+
       const updated = await tx.roleplaySession.update({
         where: { 
           id: input.sessionId,
@@ -258,6 +379,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           recordedAudioUrl: input.recordedAudioUrl,
           submittedAt: new Date(),
           currentScenarioIndex: { increment: 1 },
+          ...(isFinal ? { status: 'SUBMITTED' as const } : {}),
         },
         select: { id: true },
       });
@@ -266,7 +388,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         throw new Error('Concurrent submission detected');
       }
 
-      return { recordedAudioUrl: input.recordedAudioUrl };
+      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal };
     });
 
     revalidatePath('/dashboard/roleplays');

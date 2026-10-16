@@ -33,7 +33,20 @@ export async function GET(
         status: true,
         interpreterId: true,
         recruitmentCandidateId: true,
+        currentScenarioIndex: true,
         access: { select: { tokenHash: true, usedAt: true, validatedAt: true } },
+        scenarios: {
+          orderBy: { order: 'asc' },
+          select: {
+            id: true,
+            order: true,
+            title: true,
+            baseAudioUrl: true,
+            durationLimitSec: true,
+            scriptPrompt: true,
+            expectedKeys: true,
+          },
+        },
       },
     });
 
@@ -49,12 +62,14 @@ export async function GET(
 
     let baseAudioUrl: string | null = session.baseAudioUrl;
     let recordedAudioUrl: string | null = session.recordedAudioUrl;
+    let scenarios = session.scenarios;
 
     if (identity.role !== 'admin' && session.recruitmentCandidateId) {
       const hasValidToken = session.access?.validatedAt && !session.access.usedAt;
       if (!hasValidToken) {
         baseAudioUrl = null;
         recordedAudioUrl = null;
+        scenarios = scenarios.map((s) => ({ ...s, baseAudioUrl: '' }));
       }
     }
 
@@ -66,6 +81,8 @@ export async function GET(
           baseAudioUrl,
           recordedAudioUrl,
           status: session.status,
+          currentScenarioIndex: session.currentScenarioIndex,
+          scenarios,
         },
       },
       { headers: createRateLimitHeaders(rateLimitResult) }

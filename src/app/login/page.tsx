@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Lock, Mail, AlertCircle, Loader2, Users, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { login } from '@/app/actions/auth';
 import { signIn } from 'next-auth/react';
+import { safeNextPath } from '@/lib/auth/safe-next';
 
 type LoginRole = 'interpreter' | 'admin';
 
@@ -13,7 +14,13 @@ export default function LoginPage() {
   const [role, setRole] = useState<LoginRole>('interpreter');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [nextPath, setNextPath] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(safeNextPath(params.get('next')));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -40,7 +47,7 @@ export default function LoginPage() {
             return;
           }
         }
-        router.push(result.role === 'admin' ? '/admin' : '/dashboard');
+        router.push(nextPath || (result.role === 'admin' ? '/admin' : '/dashboard'));
       }
     } catch (err) {
       console.error('🔴 [AUTH_LOGIN_PAGE] Login submit error:', err);
@@ -165,7 +172,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
               Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium">
+              <Link href={nextPath ? `/register?next=${encodeURIComponent(nextPath)}` : "/register"} className="text-blue-400 hover:text-blue-300 font-medium">
                 Create Account
               </Link>
             </p>

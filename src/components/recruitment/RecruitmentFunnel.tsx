@@ -1,13 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { submitApplicationAction } from "@/app/actions/recruitment";
+import { startCandidateRoleplay } from "@/app/actions/roleplay";
 import { ApplicantSchema, ApplicantData } from "@/lib/validators/recruitment";
 import { User, FileText, PlaySquare, Mic, Calendar, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function RecruitmentFunnel() {
+  const router = useRouter();
   const [step, setStep] = useState<number>(1);
   const [isPending, startTransition] = useTransition();
+  const [isStartingRoleplay, setIsStartingRoleplay] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // Form state
@@ -38,6 +42,28 @@ export default function RecruitmentFunnel() {
       } else {
         setErrorMsg(result.error || "Ocurrió un error inesperado.");
       }
+    });
+  };
+
+  const handleStartRoleplay = () => {
+    setErrorMsg(null);
+    setIsStartingRoleplay(true);
+    startTransition(async () => {
+      const result = await startCandidateRoleplay();
+      setIsStartingRoleplay(false);
+
+      if (result.success) {
+        router.push(`/roleplays/${result.data.sessionId}`);
+        return;
+      }
+
+      if ("requiresAuth" in result && result.requiresAuth) {
+        setErrorMsg("Para continuar con el roleplay necesitas iniciar sesión o registrarte con el mismo correo de tu postulación. Redirigiendo…");
+        setTimeout(() => router.push("/login?next=/postular"), 1500);
+        return;
+      }
+
+      setErrorMsg(result.error || "No se pudo iniciar el roleplay.");
     });
   };
 
@@ -174,11 +200,18 @@ export default function RecruitmentFunnel() {
             </ul>
           </div>
 
+          {errorMsg && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-left text-sm font-medium text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
+            </div>
+          )}
+
           <button 
-            onClick={() => setStep(4)} 
-            className="w-full rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30"
+            onClick={handleStartRoleplay} 
+            disabled={isStartingRoleplay || isPending}
+            className="w-full rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
           >
-            Iniciar Simulador de Roleplay
+            {isStartingRoleplay || isPending ? "Iniciando…" : "Iniciar Simulador de Roleplay"}
           </button>
         </div>
       )}
@@ -189,8 +222,8 @@ export default function RecruitmentFunnel() {
           <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-8 h-8 text-green-600" />
           </div>
-          <h2 className="text-xl font-semibold text-slate-900">¡Felicidades, has completado las pruebas!</h2>
-          <p className="text-slate-600 mb-6">Como último paso, agenda tu reunión de Onboarding para configurar tus credenciales en el <strong>Portal Vault (RBAC)</strong>.</p>
+          <h2 className="text-xl font-semibold text-slate-900">Agenda tu entrevista de Onboarding</h2>
+          <p className="text-slate-600 mb-6">Una vez completado y revisado tu roleplay, agenda tu reunión de Onboarding para configurar tus credenciales en el <strong>Portal Vault (RBAC)</strong>.</p>
           
           {/* Placeholder for Calendly/Cal.com Embed */}
           <div className="h-64 border border-slate-200 bg-slate-50 rounded-lg flex flex-col items-center justify-center">

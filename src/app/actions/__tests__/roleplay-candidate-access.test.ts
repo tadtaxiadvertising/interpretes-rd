@@ -6,12 +6,17 @@ const m = vi.hoisted(() => ({
   session: null as any,
   findUnique: vi.fn(),
   update: vi.fn(),
+  scenarioCount: vi.fn(),
+  responseFindFirst: vi.fn(),
+  responseCreate: vi.fn(),
+  responseUpdate: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({
     get: (name: string) =>
       name === 'roleplay_session' && m.cookie != null ? { value: m.cookie } : undefined,
+    set: () => {},
   }),
 }));
 
@@ -24,7 +29,15 @@ vi.mock('@/lib/auth/actions', () => ({
 vi.mock('@/lib/prisma', () => ({
   default: {
     $transaction: async (cb: any) =>
-      cb({ roleplaySession: { findUnique: m.findUnique, update: m.update } }),
+      cb({
+        roleplaySession: { findUnique: m.findUnique, update: m.update },
+        roleplayScenario: { count: m.scenarioCount },
+        roleplayResponse: {
+          findFirst: m.responseFindFirst,
+          create: m.responseCreate,
+          update: m.responseUpdate,
+        },
+      }),
   },
 }));
 
@@ -63,6 +76,10 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     vi.clearAllMocks();
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
+    m.scenarioCount.mockResolvedValue(0);
+    m.responseFindFirst.mockResolvedValue(null);
+    m.responseCreate.mockResolvedValue({ id: 'resp-1' });
+    m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
     m.cookie = null;
     m.actor = { interpreterId: null };
   });
@@ -117,5 +134,17 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('persists a per-scenario response when a scenario id is supplied', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.scenarioCount.mockResolvedValue(1);
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/a.webm' });
+
+    expect(res.success).toBe(true);
+    expect(m.responseCreate).toHaveBeenCalledTimes(1);
+    expect(m.update).toHaveBeenCalledTimes(1);
   });
 });

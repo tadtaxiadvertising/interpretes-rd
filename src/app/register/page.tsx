@@ -1,15 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Lock, Mail, AlertCircle, Loader2, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { register } from '@/app/actions/auth';
+import { safeNextPath } from '@/lib/auth/safe-next';
 
 export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [nextPath, setNextPath] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(safeNextPath(params.get('next')));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -23,7 +30,7 @@ export default function RegisterPage() {
       if (result?.error) {
         setError(result.error);
       } else if (result?.success) {
-        router.push(result.role === 'admin' ? '/admin' : '/dashboard');
+        router.push(nextPath || (result.role === 'admin' ? '/admin' : '/dashboard'));
       }
     } catch {
       setError('Registration failed. Please try again.');
@@ -126,7 +133,7 @@ export default function RegisterPage() {
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
               Already have an account?{' '}
-              <Link href="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+              <Link href={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"} className="text-blue-400 hover:text-blue-300 font-medium">
                 Sign In
               </Link>
             </p>
