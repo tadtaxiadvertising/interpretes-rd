@@ -190,6 +190,20 @@ New tests: `src/lib/__tests__/roleplay-review.test.ts` (8) and
 **Gates (Session 6):** lint ✅ (0 errors, 3 pre-existing warnings) ·
 `npm run test` ✅ 211 tests / 24 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
 
+**CI follow-up (ISSUE-023):** the first push (`7ad8f31f`) failed CI at the
+`Build` step (`Failed to collect page data for /admin/roleplays/evaluate/[id]` →
+`Supabase configuration missing for Roleplay`). Root cause: importing
+`@/lib/roleplay` at the top of the evaluate page triggered the module-load
+`throw` during Next's "collecting page data" phase, where the CI build has no
+Supabase env. Locally the build passed only because `.env.local` supplies the
+vars. Fix: `src/lib/roleplay.ts` now creates the Supabase admin client **lazily**
+(`getSupabaseAdmin()` throws only on first use), keeping the module
+import-safe while preserving runtime fail-closed behavior.
+
+| ID | Priority | Category | Description | Fix Applied | Status |
+|---|---|---|---|---|---|
+| ISSUE-023 | P1 | Build/Deploy | `src/lib/roleplay.ts` threw at module load when Supabase env was absent, so any server component importing it broke `next build` page-data collection (CI has no Supabase env in the build step). | Lazily initialize the Supabase admin client in `src/lib/roleplay.ts` via `getSupabaseAdmin()`; removed the top-level `throw`; all 7 call sites use the getter. | ✅ Fixed |
+
 ### Commands to Run (baseline)
 
 ```bash
