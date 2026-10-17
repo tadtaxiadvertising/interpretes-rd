@@ -158,6 +158,8 @@ export async function adminUpdateOnboardingDetails(input: unknown): Promise<Acti
     });
 
     revalidatePath('/admin/users');
+    revalidatePath('/interpreters');
+    revalidatePath('/dashboard');
     revalidateInterpreterProfileRecords(result.interpreterId);
 
     return {
@@ -230,6 +232,7 @@ export async function adminResetOnboarding(input: unknown): Promise<ActionResult
     });
 
     revalidatePath('/admin/users');
+    revalidatePath('/interpreters');
     revalidatePath('/dashboard');
     revalidateInterpreterProfileRecords(result.interpreterId);
 

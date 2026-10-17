@@ -131,6 +131,28 @@ sessions, no re-consume on an already-submitted replay.
 **Gates (Session 3):** lint ✅ (0 errors, 3 pre-existing warnings) ·
 `npm run test` ✅ 172 tests / 20 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
 
+### Session 4 — Onboarding admin configurability (plan #12)
+
+Working tree based on `3e4fda7c`.
+
+**Verification (plan #12: "verify admin UI edits actually drive `src/services/onboarding`").**
+
+- Admin entry points: `InterpreterOnboardingPanel` (`/admin/users`, opened with `user.id` = `UserProfile.id`) and `BankingInfoCard` (`/interpreters`, given `interpreter.userProfile.id`).
+- Both call the admin-guarded actions in `src/app/actions/admin-onboarding.ts` (`validateAction('admin')`).
+- `adminUpdateOnboardingDetails` writes the banking fields to **both** `userProfile` (bankName/bankAccount/bankAccountType/bankCedula + `onboardingComplete`) and the linked `interpreter` (banco/cuentaPago/tipoCuenta/cedulaRnc + `documentosCompleto`); `adminResetOnboarding` nulls the same fields.
+- Onboarding state is derived by `resolveCurrentIdentity` → `computeOnboardingStatus` from exactly those fields (Supabase: profile; Auth.js: interpreter). The onboarding service (`getOnboardingState`) and the live status action (`getOnboardingStatus`) read the same source. **Conclusion: admin edits do drive onboarding state.** IDs and the authorization guard are correct.
+
+| ID | Priority | Category | Description | Fix Applied | Status |
+|---|---|---|---|---|---|
+| ISSUE-019 | P2 | Onboarding | Editing banking from `/interpreters` (`BankingInfoCard`) persisted correctly but the actions only revalidated `/admin/users` (+ `/dashboard` on reset), never `/interpreters`, so the roster card could render stale banking data after an edit. | `adminUpdateOnboardingDetails` and `adminResetOnboarding` now also `revalidatePath('/interpreters')` (and update now revalidates `/dashboard` for parity with reset). | ✅ Fixed |
+
+**Tests added:** new `src/app/actions/__tests__/admin-onboarding.test.ts` (7 tests) — non-admin rejected without touching the DB; `getOnboardingDetails` happy path + `NOT_FOUND`; update mirrors onto profile **and** interpreter; update/reset revalidate `/admin/users`, `/interpreters`, `/dashboard`; invalid banking data rejected before persisting. (Previously this action file had **no** tests.)
+
+**Residual (documented, not blocking):** `src/services/onboarding/onboarding-service.ts` is a **dead duplicate** of the live `src/app/actions/onboarding.ts` — only tests import it, no runtime path uses it. Consolidating/removing it is the onboarding analog of the roleplay "consolidate writers" item (plan #9) and was intentionally left as a separate decision. Also noted: `adminUpdateOnboardingDetails` sets `onboardingComplete`/`documentosCompleto` to `true` unconditionally (admin completing on the interpreter's behalf); behavior unchanged.
+
+**Gates (Session 4):** lint ✅ (0 errors, 3 pre-existing warnings) ·
+`npm run test` ✅ 185 tests / 21 files · `npx tsc --noEmit` ✅.
+
 ### Commands to Run (baseline)
 
 ```bash

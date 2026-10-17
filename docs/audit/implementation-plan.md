@@ -21,7 +21,7 @@ Derived from the audit at `f6f1d00d`. Priorities ordered by candidate-impact and
 
 10. **Canonicalize roleplay status vocabulary** — remove legacy `'PENDING'` comparisons or backfill rows; keep one vocabulary.
 11. **Admin queue/UX** — reflect `SUBMITTED/UNDER_REVIEW` transitions and reviewer claims via `/api/admin/roleplays/claim`.
-12. **Onboarding admin configurability** — verify admin UI edits actually drive `src/services/onboarding`.
+12. **Onboarding admin configurability** — verify admin UI edits actually drive `src/services/onboarding`. ✅ Verified (Session 4): admin actions write the same `userProfile`/`interpreter` fields the resolver reads; added `revalidatePath('/interpreters')` (ISSUE-019) and `admin-onboarding.test.ts`. Residual: `src/services/onboarding/onboarding-service.ts` is an unwired duplicate of `src/app/actions/onboarding.ts`.
 13. **`/postular` step 2 assets** — wire the PDF/glossary buttons or remove them.
 
 ## Acceptance criteria for the shipped slice
