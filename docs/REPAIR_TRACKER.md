@@ -151,7 +151,20 @@ Working tree based on `3e4fda7c`.
 **Residual (documented, not blocking):** `src/services/onboarding/onboarding-service.ts` is a **dead duplicate** of the live `src/app/actions/onboarding.ts` — only tests import it, no runtime path uses it. Consolidating/removing it is the onboarding analog of the roleplay "consolidate writers" item (plan #9) and was intentionally left as a separate decision. Also noted: `adminUpdateOnboardingDetails` sets `onboardingComplete`/`documentosCompleto` to `true` unconditionally (admin completing on the interpreter's behalf); behavior unchanged.
 
 **Gates (Session 4):** lint ✅ (0 errors, 3 pre-existing warnings) ·
-`npm run test` ✅ 185 tests / 21 files · `npx tsc --noEmit` ✅.
+`npm run test` ✅ 185 tests / 21 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
+
+### Session 5 — Admin multi-scenario creation (plan #6)
+
+Working tree based on `cf976aff`.
+
+Plan #6 ("make `POST /api/admin/roleplays` parse the `scenarios` JSON and create `RoleplayScenario` rows; create the missing `POST /api/admin/roleplays/scenarios/audio` route … currently broken") was derived from the `f6f1d00d` audit and is **already implemented**: commit `52df690e` rewrote the route to take a single multipart request carrying `scenarios` (JSON) plus `scenarioAudios` (one base audio per scenario), create one `RoleplayScenario` per entry (`order`, `title`, `baseAudioUrl`, `durationLimitSec`, `scriptPrompt`, `expectedKeys`), point the session-level `baseAudioUrl` at scenario 0 for legacy readers (intro screen, dashboard), and create a `RoleplayAccess` invitation + short `/r/{code}` link for candidates. The live `NewRoleplayForm` posts exactly this shape, so a separate `/scenarios/audio` route is unnecessary. The old single-`baseAudio` + `/scenarios/audio` shape exists **only** in the untracked `Interpreter Plastform/` archive (not part of the build).
+
+| ID | Priority | Category | Description | Fix Applied | Status |
+|---|---|---|---|---|---|
+| ISSUE-020 | P1 | Roleplay | Plan #6 described admin multi-scenario create as broken/absent; it was already fixed in `52df690e` but had **no tests**, so a regression (or an accidental revert to the single-audio shape) would go unnoticed. | Added `src/app/api/admin/roleplays/__tests__/route.test.ts` (16 tests): admin gate; missing/invalid field rejection; scenario JSON validation (malformed / empty / missing title); one base audio per scenario; zero-byte and disallowed audio type; participant-not-found 404 (interpreter + candidate); storage-not-configured 503; interpreter happy path (session + scenario rows + session `baseAudioUrl` = scenario 0); candidate happy path (invitation + `/r/{code}` link); failure cleanup deletes the half-created session. Run in the **Node** environment so `instanceof File` matches the undici-parsed uploads. | ✅ Verified + tested |
+
+**Gates (Session 5):** lint ✅ (0 errors, 3 pre-existing warnings) ·
+`npm run test` ✅ 201 tests / 22 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
 
 ### Commands to Run (baseline)
 

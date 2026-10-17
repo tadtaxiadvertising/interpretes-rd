@@ -12,7 +12,7 @@ Derived from the audit at `f6f1d00d`. Priorities ordered by candidate-impact and
 
 ## P1 — next, not in this change set
 
-6. **Admin multi-scenario creation** — make `POST /api/admin/roleplays` parse the `scenarios` JSON and create `RoleplayScenario` rows; create the missing `POST /api/admin/roleplays/scenarios/audio` route to attach per-scenario base audio. Currently broken (feature matrix row 12).
+6. **Admin multi-scenario creation** — `POST /api/admin/roleplays` now parses the `scenarios` JSON, creates one `RoleplayScenario` row per scenario, and attaches per-scenario base audio **in the same multipart request** (`scenarioAudios`), so no separate `POST /api/admin/roleplays/scenarios/audio` route is needed. Implemented in `52df690e`; the live `NewRoleplayForm` posts this shape. ✅ Verified + regression-tested (Session 5). The old single-`baseAudio` + `/scenarios/audio` shape (referenced by the original audit's "feature matrix row 12") survives **only** in the untracked archived copies under `Interpreter Plastform/`, which are not part of the build.
 7. **Persist audio paths** — accept and store `sourceAudioPath`/`processedAudioPath` in the confirm path so admin review can re-sign audio after URL expiry.
 8. **Persist self-assessment** — send `selfScore`/`selfNotes` with the confirm call.
 9. **Consolidate roleplay writers** — either wire `roleplayService` into production or remove it, and fix `saveResponse`'s `{ id: scenarioId }` upsert bug.
