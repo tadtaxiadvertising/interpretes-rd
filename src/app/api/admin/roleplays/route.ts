@@ -4,6 +4,10 @@ import { validateAction } from '@/lib/auth/actions';
 
 const db = prisma;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
+const MAX_SCENARIOS = 10;
+const MAX_TITLE = 200;
+const MAX_SCRIPT_PROMPT = 5000;
+const MAX_DURATION_SEC = 86400;
 const ALLOWED_AUDIO_TYPES = new Set([
   'audio/webm',
   'audio/webm;codecs=opus',
@@ -12,17 +16,64 @@ const ALLOWED_AUDIO_TYPES = new Set([
   'audio/mpeg',
 ]);
 
+interface ScenarioInput {
+  title: string;
+  durationLimitSec: number | null;
+  scriptPrompt: string | null;
+}
+
+function parseScenarios(raw: string): ScenarioInput[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > MAX_SCENARIOS) {
+    return null;
+  }
+
+  const scenarios: ScenarioInput[] = [];
+  for (const item of parsed) {
+    if (typeof item !== 'object' || item === null) return null;
+    const { title, durationLimitSec, scriptPrompt } = item as Record<string, unknown>;
+
+    if (typeof title !== 'string' || !title.trim() || title.trim().length > MAX_TITLE) return null;
+
+    let duration: number | null = null;
+    if (durationLimitSec !== undefined && durationLimitSec !== null && durationLimitSec !== '') {
+      const n = Number(durationLimitSec);
+      if (!Number.isSafeInteger(n) || n < 0 || n > MAX_DURATION_SEC) return null;
+      duration = n === 0 ? null : n;
+    }
+
+    let prompt: string | null = null;
+    if (typeof scriptPrompt === 'string' && scriptPrompt.trim()) {
+      if (scriptPrompt.length > MAX_SCRIPT_PROMPT) return null;
+      prompt = scriptPrompt.trim();
+    }
+
+    scenarios.push({ title: title.trim(), durationLimitSec: duration, scriptPrompt: prompt });
+  }
+  return scenarios;
+}
+
 export async function POST(req: NextRequest) {
+  let sessionId: string | null = null;
+  let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
+  const uploadedPaths: string[] = [];
+
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
 
     const formData = await req.formData();
-    const baseAudio = formData.get('baseAudio');
     const participantType = formData.get('participantType');
     const participantId = formData.get('participantId');
+    const rawScenarios = formData.get('scenarios');
+    const scenarioAudios = formData.getAll('scenarioAudios');
 
-    if (!(baseAudio instanceof File) || typeof participantType !== 'string' || typeof participantId !== 'string') {
+    if (typeof participantType !== 'string' || typeof participantId !== 'string' || typeof rawScenarios !== 'string') {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -35,11 +86,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
     }
 
-    if (baseAudio.size <= 0 || baseAudio.size > MAX_AUDIO_SIZE) {
-      return NextResponse.json({ success: false, error: 'Audio must be between 1 byte and 15 MB' }, { status: 400 });
+    const scenarios = parseScenarios(rawScenarios);
+    if (!scenarios) {
+      return NextResponse.json(
+        { success: false, error: `Invalid scenarios: expected 1-${MAX_SCENARIOS} entries with a non-empty title` },
+        { status: 400 }
+      );
     }
-    if (!ALLOWED_AUDIO_TYPES.has(baseAudio.type)) {
-      return NextResponse.json({ success: false, error: `Audio type ${baseAudio.type || 'unknown'} not allowed` }, { status: 400 });
+
+    if (scenarioAudios.length !== scenarios.length) {
+      return NextResponse.json(
+        { success: false, error: 'Each scenario requires exactly one base audio file' },
+        { status: 400 }
+      );
+    }
+
+    for (const audio of scenarioAudios) {
+      if (!(audio instanceof File)) {
+        return NextResponse.json({ success: false, error: 'Invalid scenario audio payload' }, { status: 400 });
+      }
+      if (audio.size <= 0 || audio.size > MAX_AUDIO_SIZE) {
+        return NextResponse.json({ success: false, error: 'Audio must be between 1 byte and 15 MB' }, { status: 400 });
+      }
+      if (!ALLOWED_AUDIO_TYPES.has(audio.type)) {
+        return NextResponse.json(
+          { success: false, error: `Audio type ${audio.type || 'unknown'} not allowed` },
+          { status: 400 }
+        );
+      }
     }
 
     if (participantType === 'interpreter') {
@@ -57,7 +131,7 @@ export async function POST(req: NextRequest) {
     }
 
     const { createClient } = await import('@supabase/supabase-js');
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
     const session = await db.roleplaySession.create({
       data: {
@@ -68,26 +142,45 @@ export async function POST(req: NextRequest) {
       },
       select: { id: true },
     });
+    sessionId = session.id;
 
-    const extension = baseAudio.name.split('.').pop()?.toLowerCase() || 'webm';
-    const basePath = `base/${session.id}.${extension}`;
+    const audioUrls: string[] = [];
+    for (let i = 0; i < scenarios.length; i++) {
+      const audio = scenarioAudios[i] as File;
+      const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
+      const path = `base/${session.id}/${i}.${extension}`;
 
-    const { error: uploadError } = await supabaseAdmin.storage
-      .from('roleplay-audio')
-      .upload(basePath, baseAudio, { contentType: baseAudio.type });
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('roleplay-audio')
+        .upload(path, audio, { contentType: audio.type });
+      if (uploadError) throw new Error('Failed to upload audio');
+      uploadedPaths.push(path);
 
-    if (uploadError) {
-      await db.roleplaySession.delete({ where: { id: session.id } });
-      return NextResponse.json({ success: false, error: 'Failed to upload audio' }, { status: 500 });
+      const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
+      audioUrls.push(publicUrlData.publicUrl);
     }
 
-    const { data: { publicUrl } } = supabaseAdmin.storage
-      .from('roleplay-audio')
-      .getPublicUrl(basePath);
-
-    await db.roleplaySession.update({
-      where: { id: session.id },
-      data: { baseAudioUrl: publicUrl },
+    await db.$transaction(async (tx) => {
+      for (let i = 0; i < scenarios.length; i++) {
+        await tx.roleplayScenario.create({
+          data: {
+            sessionId: session.id,
+            order: i,
+            title: scenarios[i].title,
+            baseAudioUrl: audioUrls[i],
+            durationLimitSec: scenarios[i].durationLimitSec,
+            scriptPrompt: scenarios[i].scriptPrompt,
+            expectedKeys: [],
+          },
+          select: { id: true },
+        });
+      }
+      // Legacy readers (intro screen, dashboard) still resolve the session-level
+      // audio; keep it pointing at the first scenario's base audio.
+      await tx.roleplaySession.update({
+        where: { id: session.id },
+        data: { baseAudioUrl: audioUrls[0] },
+      });
     });
 
     const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
@@ -106,18 +199,39 @@ export async function POST(req: NextRequest) {
         data: { sessionId: session.id, tokenHash, inviteCode, expiresAt },
       });
 
-      const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
       inviteLink = `${origin}/r/${inviteCode}`;
     }
 
     return NextResponse.json({
       success: true,
-      data: { sessionId: session.id, inviteLink },
+      data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Create Roleplay API Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+
+    // Best-effort cleanup: never leave a half-created session (no scenarios,
+    // missing audios) behind after a failed create.
+    if (sessionId) {
+      try {
+        await db.roleplaySession.delete({ where: { id: sessionId } });
+      } catch (cleanupError) {
+        console.error('Create Roleplay cleanup failed:', cleanupError);
+      }
+    }
+    if (supabaseAdmin && uploadedPaths.length > 0) {
+      try {
+        await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
+      } catch (cleanupError) {
+        console.error('Create Roleplay storage cleanup failed:', cleanupError);
+      }
+    }
+
+    const isUploadFailure = message === 'Failed to upload audio';
+    return NextResponse.json(
+      { success: false, error: isUploadFailure ? message : 'Failed to create roleplay' },
+      { status: 500 }
+    );
   }
 }
 

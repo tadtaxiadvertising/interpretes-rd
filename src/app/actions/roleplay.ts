@@ -168,7 +168,9 @@ export async function startCandidateRoleplay() {
         },
         select: { id: true, status: true },
       });
-    } else if (session.status !== 'STARTED' && session.status !== 'IN_PROGRESS') {
+    } else if (['DRAFT', 'INVITED', 'PENDING'].includes(session.status)) {
+      // Only pre-submit states advance to STARTED. SUBMITTED / UNDER_REVIEW /
+      // EVALUATED / PASSED / FAILED sessions must never regress on resume.
       await db.roleplaySession.update({
         where: { id: session.id },
         data: { status: 'STARTED' },
@@ -296,6 +298,8 @@ const ConfirmResponseSchema = z.object({
   sessionId: z.string().min(1),
   scenarioId: z.string().min(1).optional(),
   recordedAudioUrl: z.string().min(1),
+  sourceAudioPath: z.string().min(1).max(1024).optional(),
+  durationSec: z.number().int().min(0).max(86400).optional(),
 });
 
 export type ConfirmResponseInput = z.infer<typeof ConfirmResponseSchema>;
@@ -324,8 +328,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         },
       });
 
-      const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING'];
-      if (!session || !validSubmitStates.includes(session.status) || session.recordedAudioUrl) {
+      if (!session) {
         throw new Error('Session not available for submission');
       }
 
@@ -345,40 +348,92 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         throw new Error('Unauthorized');
       }
 
-      const scenarioId = input.scenarioId || `scenario_${session.currentScenarioIndex}`;
+      // A supplied scenario must belong to this session. Without this check a
+      // caller could read or overwrite another session's response by passing
+      // a foreign scenario id (cross-session write).
+      if (input.scenarioId) {
+        const scenario = await tx.roleplayScenario.findFirst({
+          where: { id: input.scenarioId, sessionId: session.id },
+          select: { id: true },
+        });
+        if (!scenario) {
+          throw new Error('Unauthorized');
+        }
+      }
+
+      const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING'];
+      const canSubmit = validSubmitStates.includes(session.status);
+
+      if (!canSubmit) {
+        // Idempotent replay: a retried confirm whose response is already
+        // recorded succeeds without writing; any other write is rejected.
+        if (input.scenarioId) {
+          const recorded = await tx.roleplayResponse.findFirst({
+            where: { scenarioId: input.scenarioId, sourceAudioUrl: input.recordedAudioUrl },
+            select: { id: true },
+          });
+          if (recorded) {
+            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true };
+          }
+        }
+        throw new Error('Session not available for submission');
+      }
+
+      // Legacy callers that do not target a scenario row keep the original
+      // single-submission semantics: one recorded response per session.
+      if (!input.scenarioId && session.recordedAudioUrl) {
+        throw new Error('Session not available for submission');
+      }
 
       // Persist the per-scenario response against the real RoleplayScenario row
       // when the client supplies a scenario id (cuid). The legacy
       // `scenario_<index>` fallback has no row to attach to, so it is skipped.
       if (input.scenarioId) {
         const existingResponse = await tx.roleplayResponse.findFirst({
-          where: { scenarioId },
+          where: { scenarioId: input.scenarioId },
           select: { id: true },
         });
         if (existingResponse) {
           await tx.roleplayResponse.update({
             where: { id: existingResponse.id },
-            data: { sourceAudioUrl: input.recordedAudioUrl, submittedAt: new Date() },
+            data: {
+              sourceAudioUrl: input.recordedAudioUrl,
+              sourceAudioPath: input.sourceAudioPath ?? undefined,
+              durationSec: input.durationSec ?? undefined,
+              submittedAt: new Date(),
+            },
           });
         } else {
           await tx.roleplayResponse.create({
-            data: { scenarioId, sourceAudioUrl: input.recordedAudioUrl, submittedAt: new Date() },
+            data: {
+              scenarioId: input.scenarioId,
+              sourceAudioUrl: input.recordedAudioUrl,
+              sourceAudioPath: input.sourceAudioPath ?? null,
+              durationSec: input.durationSec ?? null,
+              submittedAt: new Date(),
+            },
           });
         }
       }
 
+      // Progress is derived from persisted responses so a retried confirm
+      // cannot advance the session twice.
       const totalScenarios = await tx.roleplayScenario.count({ where: { sessionId: session.id } });
-      const isFinal = totalScenarios > 0 && session.currentScenarioIndex + 1 >= totalScenarios;
+      const respondedCount = await tx.roleplayResponse.count({
+        where: { scenario: { sessionId: session.id } },
+      });
+      const isFinal = input.scenarioId
+        ? totalScenarios > 0 && respondedCount >= totalScenarios
+        : totalScenarios > 0 && session.currentScenarioIndex + 1 >= totalScenarios;
 
       const updated = await tx.roleplaySession.update({
-        where: { 
-          id: input.sessionId,
-          recordedAudioUrl: null,
-        },
+        where: { id: input.sessionId },
         data: {
           recordedAudioUrl: input.recordedAudioUrl,
           submittedAt: new Date(),
-          currentScenarioIndex: { increment: 1 },
+          ...(input.scenarioId
+            ? { currentScenarioIndex: respondedCount }
+            : { currentScenarioIndex: { increment: 1 } }),
           ...(isFinal ? { status: 'SUBMITTED' as const } : {}),
         },
         select: { id: true },
@@ -397,6 +452,79 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Confirm Response Error:', message);
+    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+  }
+}
+
+const SelfAssessmentSchema = z.object({
+  sessionId: z.string().min(1),
+  scenarioId: z.string().min(1),
+  scores: z.record(z.string(), z.number().min(0).max(100)),
+  notes: z.string().max(2000).optional(),
+});
+
+export type SelfAssessmentInput = z.infer<typeof SelfAssessmentSchema>;
+
+export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
+  const auth = await validateAction('interpreter');
+  if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+
+  const parseResult = SelfAssessmentSchema.safeParse(rawInput);
+  if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
+  const input = parseResult.data;
+
+  const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
+
+  try {
+    await db.$transaction(async (tx) => {
+      const session = await tx.roleplaySession.findUnique({
+        where: { id: input.sessionId },
+        select: {
+          id: true,
+          interpreterId: true,
+          recruitmentCandidateId: true,
+        },
+      });
+
+      if (!session) throw new Error('Session not available for submission');
+
+      if (session.interpreterId) {
+        if (session.interpreterId !== auth.profile?.interpreterId) throw new Error('Unauthorized');
+      } else if (session.recruitmentCandidateId) {
+        if (sessionCookie !== session.id) throw new Error('Unauthorized');
+      } else {
+        throw new Error('Unauthorized');
+      }
+
+      const scenario = await tx.roleplayScenario.findFirst({
+        where: { id: input.scenarioId, sessionId: session.id },
+        select: { id: true },
+      });
+      if (!scenario) throw new Error('Unauthorized');
+
+      // Self-assessment attaches to the already-confirmed response row; the
+      // audio confirm must happen first so QA always has an audio to grade.
+      const response = await tx.roleplayResponse.findFirst({
+        where: { scenarioId: input.scenarioId },
+        select: { id: true },
+      });
+      if (!response) throw new Error('No confirmed response to assess');
+
+      await tx.roleplayResponse.update({
+        where: { id: response.id },
+        data: {
+          selfScore: input.scores,
+          selfNotes: input.notes ?? null,
+        },
+      });
+    });
+
+    revalidatePath('/dashboard/roleplays');
+    revalidatePath('/admin/roleplays');
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Save Self Assessment Error:', message);
     return { success: false, error: message, code: 'INTERNAL_ERROR' };
   }
 }

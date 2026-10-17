@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { setRoleplaySessionCookie } from '@/lib/roleplay/session-cookie';
 
 const db = prisma;
+
+// Invitation entry is validate + start: opening a still-available link binds
+// the browser to the session and moves it out of the pre-start states. A
+// session already in progress is resumed. Consumption (usedAt) stays a
+// separate, later step and is never triggered by validation.
+const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'PENDING', 'STARTED', 'IN_PROGRESS'];
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting
@@ -45,17 +52,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invitation expired' }, { status: 400 });
     }
 
-    const validInviteStates = ['DRAFT', 'INVITED', 'PENDING'];
-    if (!validInviteStates.includes(access.session.status)) {
+    if (!ENTERABLE_STATES.includes(access.session.status)) {
       return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 400 });
     }
 
-    // Validate only - do NOT consume token
-    // Token will be consumed when user actually starts the roleplay
+    // Bind the browser to this session (opaque server-issued credential).
+    await setRoleplaySessionCookie(access.session.id);
+
+    // Validate + start. Never consumes the invitation.
     await db.roleplayAccess.update({
       where: { id: access.id },
       data: { validatedAt: new Date() },
     });
+
+    if (['DRAFT', 'INVITED', 'PENDING'].includes(access.session.status)) {
+      await db.roleplaySession.update({
+        where: { id: access.sessionId },
+        data: { status: 'STARTED' },
+      });
+      await db.roleplayAccess.updateMany({
+        where: { sessionId: access.sessionId, startedAt: null },
+        data: { startedAt: new Date() },
+      });
+    }
 
     return NextResponse.json(
       { 

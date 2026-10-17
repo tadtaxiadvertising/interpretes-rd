@@ -128,4 +128,17 @@ describe('startCandidateRoleplay', () => {
       expect.objectContaining({ where: { id: 'sess-draft' }, data: { status: 'STARTED' } })
     );
   });
+
+  it.each(['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'])(
+    'does not regress a %s session back to STARTED on resume',
+    async (status) => {
+      m.sessionFindFirst.mockResolvedValue({ id: 'sess-advanced', status });
+      m.scenarioCount.mockResolvedValue(1);
+
+      const res = await startCandidateRoleplay();
+
+      expect(res.success).toBe(true);
+      expect(m.sessionUpdate).not.toHaveBeenCalled();
+    }
+  );
 });

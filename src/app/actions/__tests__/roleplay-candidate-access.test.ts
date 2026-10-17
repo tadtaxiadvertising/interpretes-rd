@@ -7,6 +7,8 @@ const m = vi.hoisted(() => ({
   findUnique: vi.fn(),
   update: vi.fn(),
   scenarioCount: vi.fn(),
+  scenarioFindFirst: vi.fn(),
+  responseCount: vi.fn(),
   responseFindFirst: vi.fn(),
   responseCreate: vi.fn(),
   responseUpdate: vi.fn(),
@@ -31,11 +33,12 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: async (cb: any) =>
       cb({
         roleplaySession: { findUnique: m.findUnique, update: m.update },
-        roleplayScenario: { count: m.scenarioCount },
+        roleplayScenario: { count: m.scenarioCount, findFirst: m.scenarioFindFirst },
         roleplayResponse: {
           findFirst: m.responseFindFirst,
           create: m.responseCreate,
           update: m.responseUpdate,
+          count: m.responseCount,
         },
       }),
   },
@@ -51,7 +54,7 @@ vi.mock('@/lib/roleplay', () => ({
 
 vi.mock('@/app/actions/notifications', () => ({ createNotification: vi.fn() }));
 
-import { confirmRoleplayResponse } from '@/app/actions/roleplay';
+import { confirmRoleplayResponse, saveSelfAssessment } from '@/app/actions/roleplay';
 
 const CANDIDATE_SESSION = {
   id: 'sess-cand',
@@ -77,6 +80,8 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
     m.scenarioCount.mockResolvedValue(0);
+    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1' });
+    m.responseCount.mockResolvedValue(0);
     m.responseFindFirst.mockResolvedValue(null);
     m.responseCreate.mockResolvedValue({ id: 'resp-1' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
@@ -140,11 +145,160 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(1);
+    m.responseCount.mockResolvedValue(1);
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-1.webm',
+      durationSec: 42,
+    });
+
+    expect(res.success).toBe(true);
+    expect(m.responseCreate).toHaveBeenCalledTimes(1);
+    expect(m.responseCreate.mock.calls[0][0].data.sourceAudioPath).toBe('responses/sess-cand/scn-1.webm');
+    expect(m.responseCreate.mock.calls[0][0].data.durationSec).toBe(42);
+    expect(m.update).toHaveBeenCalledTimes(1);
+    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
+    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBe(1);
+  });
+
+  it('rejects a scenario id that belongs to a different session (cross-session write)', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.scenarioFindFirst.mockResolvedValue(null);
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', recordedAudioUrl: 'https://x/a.webm' });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unauthorized');
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts a later scenario confirm after a first response was already recorded', async () => {
+    m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/first.webm' };
+    m.cookie = 'sess-cand';
+    m.scenarioCount.mockResolvedValue(2);
+    m.responseCount.mockResolvedValue(2);
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-2', recordedAudioUrl: 'https://x/second.webm' });
 
     expect(res.success).toBe(true);
     expect(m.responseCreate).toHaveBeenCalledTimes(1);
     expect(m.update).toHaveBeenCalledTimes(1);
+    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBe(2);
+  });
+
+  it('rejects a stray confirm once the session has left the submit window', async () => {
+    m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/other.webm' });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Session not available');
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('treats a retried confirm of an already-recorded response as an idempotent success', async () => {
+    m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
+    m.cookie = 'sess-cand';
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded' });
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/first.webm' });
+
+    expect(res.success).toBe(true);
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps single-submission semantics for legacy confirms without a scenario id', async () => {
+    m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/already.webm' };
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/again.webm' });
+
+    expect(res.success).toBe(false);
+    expect(m.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('saveSelfAssessment gate', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.findUnique.mockImplementation(async () => m.session);
+    m.update.mockResolvedValue({ id: 'sess-cand' });
+    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1' });
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-1' });
+    m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
+    m.cookie = null;
+    m.actor = { interpreterId: null };
+    m.session = CANDIDATE_SESSION;
+  });
+
+  it('rejects a candidate session when the session cookie is missing', async () => {
+    m.cookie = null;
+
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unauthorized');
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a scenario that belongs to a different session', async () => {
+    m.cookie = 'sess-cand';
+    m.scenarioFindFirst.mockResolvedValue(null);
+
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', scores: { fluency: 8 } });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unauthorized');
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects when no confirmed response exists for the scenario', async () => {
+    m.cookie = 'sess-cand';
+    m.responseFindFirst.mockResolvedValue(null);
+
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('No confirmed response');
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+  });
+
+  it('persists scores and notes for the owning candidate', async () => {
+    m.cookie = 'sess-cand';
+
+    const res = await saveSelfAssessment({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      scores: { fluency: 8, pronunciation: 7 },
+      notes: 'good pacing',
+    });
+
+    expect(res.success).toBe(true);
+    expect(m.responseUpdate).toHaveBeenCalledTimes(1);
+    expect(m.responseUpdate.mock.calls[0][0].data).toEqual({
+      selfScore: { fluency: 8, pronunciation: 7 },
+      selfNotes: 'good pacing',
+    });
+  });
+
+  it('rejects an interpreter session for a different interpreter', async () => {
+    m.session = INTERPRETER_SESSION;
+    m.actor = { interpreterId: 999 };
+
+    const res = await saveSelfAssessment({ sessionId: 'sess-int', scenarioId: 'scn-1', scores: { fluency: 8 } });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unauthorized');
+    expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 });

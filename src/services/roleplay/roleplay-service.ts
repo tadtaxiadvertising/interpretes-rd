@@ -251,6 +251,7 @@ export class RoleplayService {
    */
   async saveResponse(sessionId: string, scenarioId: string, data: {
     recordedAudioUrl?: string;
+    sourceAudioPath?: string;
     durationSec?: number;
     selfScore?: Record<string, number>;
     selfNotes?: string;
@@ -270,7 +271,7 @@ export class RoleplayService {
       // Check if candidate with valid access
       if (session.recruitmentCandidateId) {
         const access = session.access;
-        if (!access || !access.usedAt) {
+        if (!access) {
           return { success: false, error: 'Invalid access', code: 'FORBIDDEN' };
         }
       } else {
@@ -286,31 +287,38 @@ export class RoleplayService {
     }
 
     try {
-      const response = await db.roleplayResponse.upsert({
-        where: { 
-          id: scenarioId, // This won't work directly, need composite key
-        },
-        // We'll handle this differently - find by scenarioId
-        create: {
-          scenarioId,
-          sourceAudioUrl: data.recordedAudioUrl,
-          sourceAudioPath: data.recordedAudioUrl, // Will be updated with actual storage path
-          audioStatus: 'UPLOADED',
-          durationSec: data.durationSec,
-          selfScore: data.selfScore ?? undefined,
-          selfNotes: data.selfNotes,
-          submittedAt: new Date(),
-        },
-        update: {
-          sourceAudioUrl: data.recordedAudioUrl,
-          sourceAudioPath: data.recordedAudioUrl,
-          audioStatus: 'UPLOADED',
-          durationSec: data.durationSec,
-          selfScore: data.selfScore ?? undefined,
-          selfNotes: data.selfNotes,
-          submittedAt: new Date(),
-        },
+      // One response row per scenario: locate by scenarioId, then update or
+      // create. An upsert keyed on the response id would duplicate rows.
+      const existing = await db.roleplayResponse.findFirst({
+        where: { scenarioId },
+        select: { id: true },
       });
+
+      const response = existing
+        ? await db.roleplayResponse.update({
+            where: { id: existing.id },
+            data: {
+              sourceAudioUrl: data.recordedAudioUrl,
+              sourceAudioPath: data.sourceAudioPath ?? undefined,
+              audioStatus: 'UPLOADED',
+              durationSec: data.durationSec,
+              selfScore: data.selfScore ?? undefined,
+              selfNotes: data.selfNotes,
+              submittedAt: new Date(),
+            },
+          })
+        : await db.roleplayResponse.create({
+            data: {
+              scenarioId,
+              sourceAudioUrl: data.recordedAudioUrl,
+              sourceAudioPath: data.sourceAudioPath ?? null,
+              audioStatus: 'UPLOADED',
+              durationSec: data.durationSec,
+              selfScore: data.selfScore ?? undefined,
+              selfNotes: data.selfNotes,
+              submittedAt: new Date(),
+            },
+          });
 
       return { success: true, data: response };
     } catch (error) {
