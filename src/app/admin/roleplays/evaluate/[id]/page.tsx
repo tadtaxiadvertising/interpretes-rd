@@ -3,6 +3,8 @@ import { ArrowLeft, Volume2, VolumeX, Play, Pause, AlertTriangle, CheckCircle2, 
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
 import prisma from '@/lib/prisma';
+import { getAdminReviewUrl } from '@/lib/roleplay';
+import { resolveResponseAudioUrl } from '@/lib/roleplay-review';
 import { RoleplayStatus } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
@@ -64,6 +66,22 @@ async function getSessionData(sessionId: string) {
       where: { id: session.evaluatorId },
       select: { id: true, name: true, email: true },
     });
+  }
+
+  // Re-sign each stored response audio path so admin review playback does not
+  // depend on the short-lived signed URL captured at submission time.
+  if (session) {
+    session.scenarios = await Promise.all(
+      session.scenarios.map(async (scenario) => ({
+        ...scenario,
+        responses: await Promise.all(
+          scenario.responses.map(async (response) => ({
+            ...response,
+            reviewAudioUrl: await resolveResponseAudioUrl(response, getAdminReviewUrl),
+          }))
+        ),
+      }))
+    );
   }
 
   return { ...session, evaluator };
@@ -282,7 +300,7 @@ function ScenarioEvaluationCard({
   const hasSelfScore = !!response?.selfScore;
 
   const baseAudioUrl = response?.sourceAudioUrl || response?.processedAudioUrl || scenario.baseAudioUrl;
-  const responseAudioUrl = response?.sourceAudioUrl || response?.processedAudioUrl;
+  const responseAudioUrl = response?.reviewAudioUrl || response?.sourceAudioUrl || response?.processedAudioUrl;
 
   return (
     <div className="glass rounded-3xl border border-white/5 overflow-hidden">

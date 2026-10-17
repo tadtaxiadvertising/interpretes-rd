@@ -166,6 +166,30 @@ Plan #6 ("make `POST /api/admin/roleplays` parse the `scenarios` JSON and create
 **Gates (Session 5):** lint ✅ (0 errors, 3 pre-existing warnings) ·
 `npm run test` ✅ 201 tests / 22 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
 
+### Session 6 — Persist audio paths / admin review re-sign (plan #7)
+
+Working tree based on `075198b0`.
+
+Plan #7 ("accept and store `sourceAudioPath`/`processedAudioPath` in the confirm path so admin review can re-sign after URL expiry") was derived from the `f6f1d00d` audit. The "accept + store `sourceAudioPath`" half was already implemented in `52df690e` (`confirmRoleplayResponse` persists `sourceAudioPath`/`durationSec`, and `RoleplayClient` forwards `convert-audio`'s `sourcePath`). The remaining halves were **not** working:
+
+1. **Admin review never re-signed.** `src/app/admin/roleplays/evaluate/[id]/page.tsx` rendered `response.sourceAudioUrl` (a 1‑hour signed URL written at submission time) directly, so any review after an hour played an expired URL. `getAdminReviewUrl()` existed in `src/lib/roleplay.ts` but had **no caller**.
+2. **`processedAudioPath` was persisted on the wrong row (or not at all).** The async MP3 job in `src/app/api/roleplay/convert-audio/route.ts` derived the target with `where: { scenario: { sessionId, order: parseInt(scenarioId.replace('scenario_','')) || 0 } }`. `scenarioId` is a `RoleplayScenario.id` cuid, so `parseInt` → `NaN` → `0`, meaning the MP3 path/`audioStatus:READY` was always written to the scenario‑0 response (`order` is an index, not an id). It also built its own `new PrismaClient()` and called `prisma.$disconnect()`, which is invalid under the Prisma 7 `@prisma/adapter-pg` singleton (AGENTS.md).
+
+| ID | Priority | Category | Description | Fix Applied | Status |
+|---|---|---|---|---|---|
+| ISSUE-021 | P1 | Roleplay | Admin review (`evaluate/[id]`) rendered the persisted (short-lived) signed audio URL instead of re-signing the stored path, so QA playback broke after ~1h even though `sourceAudioPath`/`processedAudioPath` were stored. | New pure helper `src/lib/roleplay-review.ts` (`selectResponseAudioPath`, `resolveResponseAudioUrl` — prefers `processedAudioPath`, re-signs via an injected signer, falls back to the persisted URL). `getSessionData` in the evaluate page now re-signs every response with `getAdminReviewUrl(...)` (24h) and exposes `reviewAudioUrl`; the scenario card prefers `reviewAudioUrl`. | ✅ Fixed + tested |
+| ISSUE-022 | P1 | Roleplay | Async MP3 conversion wrote `processedAudioPath`/`audioStatus` to the scenario‑0 response (order derived from a cuid → always 0) and used a non-singleton `new PrismaClient()` + `$disconnect()` (invalid under the Prisma 7 pg adapter), so `processedAudioPath` was effectively never persisted on the correct response. | Extracted the conversion into `src/lib/roleplay-audio-conversion.ts` (imported by the route). It now uses the shared Prisma singleton (`@/lib/prisma`) and targets `where: { scenarioId }` (the response FK) in both the success and failure paths. No `new PrismaClient()`, no `$disconnect()`. | ✅ Fixed + tested |
+
+Notes:
+- **Known residual (not fixed, documented):** `queueMp3Conversion` is fire-and-forget; if ffmpeg completes before `confirmRoleplayResponse` creates the `RoleplayResponse` row the `updateMany` matches 0 rows. It degrades gracefully (admin re-sign falls back to `sourceAudioPath`, which the helper handles), so it is left for a future queued/transactional job.
+- **Known flaky test (pre-existing, not introduced):** `src/app/api/admin/roleplays/__tests__/route.test.ts` → "deletes the half-created session when an audio upload fails" failed once under the full parallel suite and passed in isolation and on re-run; load-induced, unrelated to this change.
+
+New tests: `src/lib/__tests__/roleplay-review.test.ts` (8) and
+`src/app/api/roleplay/convert-audio/__tests__/convert-audio.test.ts` (2, Node env, mocks ffmpeg/fs/supabase/prisma).
+
+**Gates (Session 6):** lint ✅ (0 errors, 3 pre-existing warnings) ·
+`npm run test` ✅ 211 tests / 24 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
+
 ### Commands to Run (baseline)
 
 ```bash
