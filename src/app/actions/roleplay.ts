@@ -300,6 +300,8 @@ const ConfirmResponseSchema = z.object({
   recordedAudioUrl: z.string().min(1),
   sourceAudioPath: z.string().min(1).max(1024).optional(),
   durationSec: z.number().int().min(0).max(86400).optional(),
+  selfScore: z.record(z.string(), z.number()).optional(),
+  selfNotes: z.string().optional(),
 });
 
 export type ConfirmResponseInput = z.infer<typeof ConfirmResponseSchema>;
@@ -400,6 +402,8 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
               sourceAudioUrl: input.recordedAudioUrl,
               sourceAudioPath: input.sourceAudioPath ?? undefined,
               durationSec: input.durationSec ?? undefined,
+              selfScore: input.selfScore ?? undefined,
+              selfNotes: input.selfNotes ?? null,
               submittedAt: new Date(),
             },
           });
@@ -410,6 +414,8 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
               sourceAudioUrl: input.recordedAudioUrl,
               sourceAudioPath: input.sourceAudioPath ?? null,
               durationSec: input.durationSec ?? null,
+              selfScore: input.selfScore ?? undefined,
+              selfNotes: input.selfNotes ?? null,
               submittedAt: new Date(),
             },
           });
