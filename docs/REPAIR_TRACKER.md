@@ -4,12 +4,12 @@
 
 ### Critical Current-State Checks (from AGENTS.md)
 
-1. ⚠️ **Failing Vercel status** on latest main commit — deployment P0 until later green deployment verified.
-2. ⚠️ **`resolve-user.ts`** contains legacy `PENDING` roleplay-state interpretation while documented state machine uses `DRAFT/INVITED/STARTED/IN_PROGRESS/...`. Need to verify canonical vocabulary.
-3. ⚠️ **`resolve-user.ts`** has email/name repair fallback. Must remain migration fallback and never override authoritative linked identity.
+1. ✅ **Deploy status** — obsolete as written: the real deployer is Easypanel (project `database`, services `interpreters` + `interpreters-api`), not Vercel. Both services run the current `main` HEAD with `/health` returning 200 (verified Session 1–3).
+2. ✅ **`resolve-user.ts` canonical vocabulary** — `computeRoleplayState` maps the persisted `RoleplayStatus` (`DRAFT/INVITED/STARTED/IN_PROGRESS/SUBMITTED/UNDER_REVIEW/EVALUATED/PASSED/FAILED/EXPIRED/CANCELLED`) 1:1. There is no `case 'PENDING'`; legacy/unknown statuses fall to `default → INVITED` as an explicit fail-safe. The session query restricts to the active/known subset. Covered by `roleplay-state.test.ts`.
+3. ✅ **`resolve-user.ts` repair fallback** — both resolvers only fall back to `interpreter.findFirst({ emailCorporativo: email })` **when no authoritative `interpreterId` is linked** (`!interpreterId`, non-admin). It never overrides a linked identity, and it matches on corporate email only (no name matching).
 4. ✅ **Candidate session access** binds the request to the candidate/invitation: candidate reads require the opaque server-issued `roleplay_session` cookie to equal the session id, and submits additionally require an active session state. Interpreter reads/submits require `identity.interpreterId === session.interpreterId`. Enforced and covered by tests.
-5. ⚠️ **`src/app/page.tsx`** delegates to route-group entry router. Need to verify `/entry` runtime path.
-6. ⚠️ **Skipped webhook secrets** produce successful no-op. Treat "deployment skipped" as operationally incomplete.
+5. ✅ **Entry routing** — verified: there is **no** `(entry)` route group. `src/app/page.tsx` is the sole `/` route — anonymous visitors get the marketing page; authenticated users are `redirect(resolveDestination(identity))`. The regression matrix is implemented in `resolveDestination` and covered by `roleplay-state.test.ts`. The earlier `/entry` claim in this tracker and `docs/audit/architecture.md` was stale and has been corrected.
+6. ✅ **Webhook secrets** configured (`EASYPANEL_WEBHOOK_INTERPRETERS`, `EASYPANEL_WEBHOOK_API`) and verified: CI now logs `OK: interpreters deployed (HTTP 200)` / `OK: interpreters-api deployed (HTTP 200)`. Auto-deploy is functional (previously a silent no-op).
 
 ### Identified Issues — Status After Fixes
 

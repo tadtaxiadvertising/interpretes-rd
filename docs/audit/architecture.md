@@ -58,4 +58,4 @@ Keep the canonical model and make the wired path populate it (rather than deleti
 
 ## Entry routing
 
-`src/app/page.tsx` delegates to the route-group entry router (`/entry`). `/roleplays` is intentionally not behind `middleware.ts` auth; each roleplay route performs its own authorization. `/api/roleplay/*` is listed in the middleware public API prefixes and self-authenticates.
+`src/app/page.tsx` is the single `/` route (there is **no** `(entry)` route group). It renders the public marketing page for anonymous visitors and, for an authenticated user, calls `redirect(resolveDestination(identity))` (`src/lib/identity/resolve-user.ts`), which maps onboarding + roleplay state to `/admin`, `/onboarding`, `/roleplays/{id}` or `/dashboard`. `/roleplays` is intentionally not behind `middleware.ts` auth; each roleplay route performs its own authorization. `/api/roleplay/*` is listed in the middleware public API prefixes and self-authenticates.

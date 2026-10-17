@@ -117,4 +117,34 @@ describe('resolveDestination routing', () => {
   it('keeps admins on the admin panel regardless of roleplay state', () => {
     expect(resolveDestination(makeIdentity('INVITED', { role: 'admin', interpreterId: null }))).toBe('/admin');
   });
+
+  it('prefers the admin panel even when onboarding is incomplete', () => {
+    expect(
+      resolveDestination(
+        makeIdentity('NO_ROLEPLAY', { role: 'admin', interpreterId: null, onboardingStatus: 'NOT_STARTED' })
+      )
+    ).toBe('/admin');
+  });
+
+  it('sends a user with NOT_STARTED onboarding to onboarding', () => {
+    expect(resolveDestination(makeIdentity('NO_ROLEPLAY', { onboardingStatus: 'NOT_STARTED' }))).toBe('/onboarding');
+  });
+
+  it('resumes an IN_PROGRESS onboarding with the resume flag', () => {
+    expect(resolveDestination(makeIdentity('NO_ROLEPLAY', { onboardingStatus: 'IN_PROGRESS' }))).toBe(
+      '/onboarding?resume=true'
+    );
+  });
+
+  it('routes NEEDS_REVIEW onboarding back to onboarding for review', () => {
+    expect(resolveDestination(makeIdentity('NO_ROLEPLAY', { onboardingStatus: 'NEEDS_REVIEW' }))).toBe('/onboarding');
+  });
+
+  it('sends a completed user with no roleplay to the dashboard', () => {
+    expect(resolveDestination(makeIdentity('NO_ROLEPLAY'))).toBe('/dashboard');
+  });
+
+  it('falls back to the roleplay dashboard when an invited session id is missing', () => {
+    expect(resolveDestination(makeIdentity('INVITED', { roleplaySessionId: null }))).toBe('/dashboard/roleplays');
+  });
 });
