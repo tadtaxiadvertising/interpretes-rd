@@ -443,6 +443,19 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         throw new Error('Concurrent submission detected');
       }
 
+      // Invitation lifecycle: validate -> start -> consume. Validation and
+      // start never consume; the invitation is spent exactly once here, when a
+      // candidate submits the final scenario and the session moves to
+      // SUBMITTED. The `usedAt: null` predicate makes the claim atomic and
+      // idempotent so a concurrent or retried submit cannot double-consume.
+      // Interpreter sessions have no candidate invitation and are not consumed.
+      if (isFinal && session.recruitmentCandidateId) {
+        await tx.roleplayAccess.updateMany({
+          where: { sessionId: session.id, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+      }
+
       return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal };
     });
 

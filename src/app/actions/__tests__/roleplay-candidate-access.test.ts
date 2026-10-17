@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   responseFindFirst: vi.fn(),
   responseCreate: vi.fn(),
   responseUpdate: vi.fn(),
+  accessUpdateMany: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -40,6 +41,7 @@ vi.mock('@/lib/prisma', () => ({
           update: m.responseUpdate,
           count: m.responseCount,
         },
+        roleplayAccess: { updateMany: m.accessUpdateMany },
       }),
   },
 }));
@@ -85,6 +87,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.responseFindFirst.mockResolvedValue(null);
     m.responseCreate.mockResolvedValue({ id: 'resp-1' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
+    m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.cookie = null;
     m.actor = { interpreterId: null };
   });
@@ -225,6 +228,72 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
 
     expect(res.success).toBe(false);
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('consumes the candidate invitation when the final scenario is submitted', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.scenarioCount.mockResolvedValue(1);
+    m.responseCount.mockResolvedValue(1);
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
+
+    expect(res.success).toBe(true);
+    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
+    expect(m.accessUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.accessUpdateMany.mock.calls[0][0]).toEqual({
+      where: { sessionId: 'sess-cand', usedAt: null },
+      data: { usedAt: expect.any(Date) },
+    });
+  });
+
+  it('does not consume the invitation on a non-final scenario', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.scenarioCount.mockResolvedValue(3);
+    m.responseCount.mockResolvedValue(1);
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
+
+    expect(res.success).toBe(true);
+    expect(m.update.mock.calls[0][0].data.status).toBeUndefined();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not consume an invitation for interpreter sessions', async () => {
+    m.session = INTERPRETER_SESSION;
+    m.actor = { interpreterId: 7 };
+    m.scenarioCount.mockResolvedValue(1);
+    m.responseCount.mockResolvedValue(1);
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-int',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
+
+    expect(res.success).toBe(true);
+    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not consume again when an already-submitted confirm is replayed', async () => {
+    m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
+    m.cookie = 'sess-cand';
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded' });
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/first.webm' });
+
+    expect(res.success).toBe(true);
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 });
 

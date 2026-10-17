@@ -93,13 +93,43 @@ Working tree based on `c06bff97`. All changes are uncommitted at the time of wri
 
 #### Residuals (documented, not blocking)
 
-1. **Invitation never consumed**: nothing writes `access.usedAt`; access is bounded by `expiresAt` and by the session status gate (submitted/evaluated sessions reject entry). A dedicated consume step remains a future item.
+1. **Invitation consumption**: resolved in Session 3 (ISSUE-018). `access.usedAt` is now written exactly once, transactionally, when a candidate submits the final scenario (session → `SUBMITTED`). Validation and start still never consume.
 2. **Self-assessment `criticalError`** is not persisted (no column). `selfScore` (numeric map) and `selfNotes` are.
 3. **Legacy admin reader** `admin/roleplays/[id]/page.tsx` expects a nested `selfScore.criticalError` / `selfScore.selfNotes` shape, while `admin/roleplays/evaluate/[id]` and the schema use a flat scores map + the `selfNotes` column. The persisted shape follows the evaluate page/schema convention.
 4. **Invite code collision**: `POST /api/admin/roleplays` generates an 8-char code without an insert-retry on the unique constraint (a collision returns a 500 after cleanup).
 5. **No unique constraint** on `RoleplayResponse.scenarioId`; one-row-per-scenario is enforced by `findFirst` + update/create, not by the database.
 6. **Dead code (unwired)**: the `validateInviteToken` server action has no callers (the invite pages call the `/api/roleplay/validate-invite*` routes), and `/api/roleplay/start` (raw-token start) also has no callers. Both were left in place; if they are ever wired they must reuse the cookie + start semantics of the routes.
-7. **ISSUE-004 clarified**: the mandate was "validation must not consume the invitation". Consumption is `access.usedAt`, which is still never written. `access.validatedAt` is only a validated-access marker (used by the session GET to decide whether a candidate may see scenario audio), and Patch E intentionally writes it on the validate routes together with `startedAt`.
+7. **ISSUE-004 clarified**: the mandate was "validation must not consume the invitation". Consumption is `access.usedAt`, now written by `confirmRoleplayResponse` on submission (Session 3 / ISSUE-018) and never by validation. `access.validatedAt` is only a validated-access marker (used by the session GET to decide whether a candidate may see scenario audio), and Patch E intentionally writes it on the validate routes together with `startedAt`.
+
+### Session 3 — Invitation lifecycle: consume-on-submit (ISSUE-018)
+
+Working tree based on `52df690e`.
+
+The AGENTS.md invariant `validate → start → consume` requires the three steps to
+be distinct and forbids validation from consuming. Validation and start were
+already non-consuming; the consume step was missing (nothing wrote
+`access.usedAt`), so the `if (access.usedAt)` guards in the invite routes and the
+candidate audio gate (`validatedAt && !usedAt` in
+`GET /api/roleplay/session/[id]`) were effectively dead.
+
+| ID | Priority | Category | Description | Fix Applied | Status |
+|---|---|---|---|---|---|
+| ISSUE-018 | P1 | Roleplay | The invitation was never consumed: `access.usedAt` was never written, so a single-use invitation remained valid until `expiresAt` and the audio gate never activated. | `confirmRoleplayResponse` now claims the invitation inside the same transaction that moves the session to `SUBMITTED`, using an atomic `updateMany({ where: { sessionId, usedAt: null } })`. Candidate-only, idempotent, no double-consume on retry/concurrency. | ✅ Fixed |
+
+**Consume point rationale (verified against the repository):** the canonical
+(though unwired) `roleplayService.submitAssessment` consumes on the
+`IN_PROGRESS → SUBMITTED` transition ("If candidate, consume the access token
+now"), and the candidate audio gate hides audio once `usedAt` is set — so the
+invitation must stay valid (unconsumed) while the candidate is recording. The
+consume point is therefore submission, not start. Consuming at start would blank
+the recorder audio.
+
+**Tests added:** `roleplay-candidate-access.test.ts` +4 — consume on final
+scenario, no consume on a non-final scenario, no consume for interpreter
+sessions, no re-consume on an already-submitted replay.
+
+**Gates (Session 3):** lint ✅ (0 errors, 3 pre-existing warnings) ·
+`npm run test` ✅ 172 tests / 20 files · `npx tsc --noEmit` ✅ · `npm run build` ✅.
 
 ### Commands to Run (baseline)
 
