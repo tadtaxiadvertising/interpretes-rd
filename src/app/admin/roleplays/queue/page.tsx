@@ -110,8 +110,12 @@ export default async function AdminRoleplayQueuePage({
   searchParams: Promise<QueueFilters>;
 }) {
   const params = await searchParams;
-  const { sessions, total, totalPages, stats } = await getQueueData(params);
-  await getEvaluators();
+  const [{ sessions, total, totalPages, stats }, evaluators] = await Promise.all([
+    getQueueData(params),
+    getEvaluators(),
+  ]);
+
+  const evaluatorById = new Map(evaluators.map((e) => [e.id, e]));
 
   const currentPage = params.page || 1;
   const statusFilter = params.status || 'all';
@@ -323,8 +327,12 @@ export default async function AdminRoleplayQueuePage({
                     <td className="py-6 px-4">
                       {session.evaluatorId ? (
                         <div>
-                          <p className="font-medium text-white">Evaluador asignado</p>
-                          <p className="text-xs text-gray-500">ID: {session.evaluatorId.slice(0, 12)}...</p>
+                          <p className="font-medium text-white">
+                            {evaluatorById.get(session.evaluatorId)?.name || 'Evaluador asignado'}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {evaluatorById.get(session.evaluatorId)?.email || `ID: ${session.evaluatorId.slice(0, 12)}...`}
+                          </p>
                           {session.reviewStartedAt && (
                             <p className="text-xs text-blue-400">Iniciado: {formatDate(session.reviewStartedAt)}</p>
                           )}
@@ -342,16 +350,11 @@ export default async function AdminRoleplayQueuePage({
                     <td className="py-6 px-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Link
-                          href={`/admin/roleplays/evaluate/${session.id}`}
+                          href={`/admin/roleplays/${session.id}`}
                           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors"
                         >
                           {session.status === 'SUBMITTED' ? 'Reclamar' : session.status === 'UNDER_REVIEW' ? 'Continuar' : 'Ver Evaluación'}
                         </Link>
-                        {session.status === 'SUBMITTED' && (
-                          <button className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors" title="Asignar evaluador">
-                            <User size={16} />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>

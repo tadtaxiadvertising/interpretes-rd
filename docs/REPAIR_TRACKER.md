@@ -204,6 +204,31 @@ import-safe while preserving runtime fail-closed behavior.
 |---|---|---|---|---|---|
 | ISSUE-023 | P1 | Build/Deploy | `src/lib/roleplay.ts` threw at module load when Supabase env was absent, so any server component importing it broke `next build` page-data collection (CI has no Supabase env in the build step). | Lazily initialize the Supabase admin client in `src/lib/roleplay.ts` via `getSupabaseAdmin()`; removed the top-level `throw`; all 7 call sites use the getter. | ✅ Fixed |
 
+### Session 7 — Consolidate writers + admin queue (plans #9, #10, #11, #12 residual, #13)
+
+Working tree based on `61cda05e`.
+
+Plan #9's `saveResponse` upsert was fixed in `5f6433db`/`61cda05e`
+(`where: { scenarioId, scenario: { sessionId } }`). Plan #10 (`PENDING` removal)
+shipped in the same commit. This session finished the remaining consolidation and
+admin-UI items, all of which were **unwired duplicates or dead UI**:
+
+| ID | Priority | Category | Description | Fix Applied | Status |
+|---|---|---|---|---|---|
+| ISSUE-028 | P2 | Roleplay | `src/services/roleplay/roleplay-service.ts` + `src/repositories/roleplay/*` formed a full parallel roleplay state machine but had **no production caller** (only their own test). It diverged from the live actions — QA score weights `35/40/15/5/5` vs the live `20/40/20/10/10`, looser `VALID_TRANSITIONS`, and a token-consumption bug — so keeping it risked a future mis-wire. | Deleted the service + both repositories + their tests. The live writers in `src/app/actions/roleplay.ts` are canonical. | ✅ Removed |
+| ISSUE-029 | P2 | Onboarding | `src/services/onboarding/onboarding-service.ts` was an unwired near-duplicate of `src/app/actions/onboarding.ts` (the path actually used by `OnboardingWizard`/`OnboardingGate`); only its own test imported it. | Deleted the service + its test. The action remains canonical. | ✅ Removed |
+| ISSUE-030 | P2 | Admin/Roleplay | The admin review/queue flow was split across three surfaces: the live `/admin/roleplays/[id]` page (working `evaluateRoleplay` action) and a dead `/admin/roleplays/evaluate/[id]` mock whose form was entirely inert (`onSubmit={preventDefault}`, dead claim/save buttons, old `35/40/15/5/5` weights). The queue's "Reclamar" link pointed at the dead page; `/api/admin/roleplays/evaluate` and `/api/admin/roleplays/claim` had **zero callers**; the queue fetched `getEvaluators()` then discarded it; the roleplays list still used the legacy `PENDING`/`EVALUATED` badge vocabulary; and the live page read the non-existent `response.recordedAudioUrl` (so reviewer audio never played). | Deleted the dead evaluate page and both orphan API routes. Pointed the queue at `/admin/roleplays/${session.id}`, removed the dead "Asignar evaluador" button, rendered the assigned evaluator's name/email, and removed the dead "Copy Invite Link"/Eye buttons on the list page. Replaced the legacy badge map with the canonical 11-status map. Ported the ISSUE-021 re-sign into the live `[id]` page via `resolveResponseAudioUrl(response, getAdminReviewUrl)`. Claiming stays atomic at evaluation submit time (`evaluateRoleplay`). | ✅ Fixed |
+| ISSUE-031 | P3 | Recruitment | `/postular` step 2 rendered a dead PDF button, a dead glossary button, and an inert video placeholder (no `onClick`/`href`/`src`). | Removed the inert video and both non-wired buttons; step 2 now leads straight to "Continuar al Roleplay". Dropped the now-unused `FileText` import. | ✅ Removed |
+
+Docs: `docs/audit/implementation-plan.md` items #9/#10/#11/#12/#13 marked resolved;
+`docs/audit/architecture.md` domain table + "parallel writers" section updated to a
+single wired writer.
+
+**Gates (Session 7):** `npx tsc --noEmit` ✅ · `npm run lint` (changed files) ✅ ·
+`npx vitest run --maxWorkers=2` ✅ 149 passed / 18 files + 16 passed in isolation
+(4 pre-existing load-induced `Failed to start forks worker` timeouts, all pass when
+re-run) · `npx prisma validate` ✅ · `npm run build` ✅ (exit 0).
+
 ### Commands to Run (baseline)
 
 ```bash

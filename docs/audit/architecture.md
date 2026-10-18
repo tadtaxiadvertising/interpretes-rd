@@ -24,8 +24,8 @@ Canonical order: `auth identity → UserProfile.id → UserProfile.interpreterId
 |---|---|---|
 | Identity | `src/lib/identity/resolve-user.ts` | onboarding + roleplay state helpers |
 | Recruitment | `src/app/actions/recruitment.ts`, `src/services/recruitment` | candidate application persistence |
-| Onboarding | `src/app/actions/onboarding.ts`, `src/services/onboarding` | configurable steps |
-| Roleplay | `src/app/actions/roleplay.ts`, `src/services/roleplay`, `src/app/api/roleplay/*` | two write paths (see below) |
+| Onboarding | `src/app/actions/onboarding.ts` | configurable steps (the old `src/services/onboarding` duplicate was removed in Session 7) |
+| Roleplay | `src/app/actions/roleplay.ts`, `src/app/api/roleplay/*` | single wired write path (see below) |
 | Metrics/ranking | `src/services/metrics`, `src/lib/ranking` | |
 | Audio | `src/lib/roleplay.ts`, `/api/roleplay/convert-audio` | signed Supabase uploads |
 
@@ -39,8 +39,8 @@ The **canonical** data model is `RoleplaySession → RoleplayScenario → Rolepl
 
 Two parallel writers existed:
 
-1. `src/services/roleplay/roleplay-service.ts` — models scenarios/responses fully, but had **no production caller**.
-2. `src/app/actions/roleplay.ts` + `/api/admin/roleplays` — the wired path, which only stored a single `session.recordedAudioUrl` and never created scenarios.
+1. `src/services/roleplay/roleplay-service.ts` — modelled scenarios/responses fully, but had **no production caller** (and its `src/repositories/roleplay/*` dependencies were likewise unwired). It diverged from the wired path (different QA score weights, looser state transitions, a token-consumption bug), so it was **deleted** in Session 7 to leave a single writer.
+2. `src/app/actions/roleplay.ts` + `/api/admin/roleplays` — the wired path, which originally only stored a single `session.recordedAudioUrl` and never created scenarios.
 
 Consequences found during audit:
 - `RoleplayScenario` rows were never created in production → admin review would always be empty.

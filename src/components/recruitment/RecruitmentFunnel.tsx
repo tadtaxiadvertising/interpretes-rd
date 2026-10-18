@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { submitApplicationAction } from "@/app/actions/recruitment";
 import { startCandidateRoleplay } from "@/app/actions/roleplay";
 import { ApplicantSchema, ApplicantData } from "@/lib/validators/recruitment";
-import { User, FileText, PlaySquare, Mic, Calendar, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
+import { User, PlaySquare, Mic, Calendar, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function RecruitmentFunnel() {
   const router = useRouter();
@@ -157,21 +157,7 @@ export default function RecruitmentFunnel() {
       {step === 2 && (
         <div className="space-y-6 animate-in fade-in">
           <h2 className="text-xl font-semibold text-slate-900">Conoce más sobre Intérpretes RD</h2>
-          <p className="text-slate-600 text-sm">Visualiza este material antes de proceder a tu evaluación técnica.</p>
-          
-          <div className="aspect-video bg-gray-900 rounded-lg flex items-center justify-center relative overflow-hidden">
-             <PlaySquare className="w-12 h-12 text-white/50" />
-             <div className="absolute bottom-4 left-4 text-white font-medium text-sm">Video: Recompensas y Beneficios del Empleo</div>
-          </div>
-
-          <div className="flex gap-4">
-            <button className="flex-1 border border-slate-200 p-4 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-gray-700 font-medium transition-colors">
-              <FileText className="w-5 h-5 text-[#2675ff]" /> Descargar PDF Informativo
-            </button>
-            <button className="flex-1 border border-slate-200 p-4 rounded-lg flex items-center justify-center gap-2 hover:bg-slate-50 text-gray-700 font-medium transition-colors">
-              <FileText className="w-5 h-5 text-green-600" /> Material de Estudio (Glosario)
-            </button>
-          </div>
+          <p className="text-slate-600 text-sm">Continúa cuando estés listo para tu evaluación técnica.</p>
 
           <button 
             onClick={() => setStep(3)} 

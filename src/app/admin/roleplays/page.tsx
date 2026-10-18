@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic2, Loader2, Filter, Search, Play, Clock, CheckCircle2, AlertTriangle, Eye, Copy } from 'lucide-react';
+import { Mic2, Loader2, Filter, Search, Play, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -22,8 +22,17 @@ export default async function AdminRoleplaysPage() {
   const roleplays = await getRoleplays();
 
   const statusColors: Record<string, string> = {
-    PENDING: 'bg-yellow-500/10 text-yellow-400',
+    DRAFT: 'bg-slate-500/10 text-slate-400',
+    INVITED: 'bg-amber-500/10 text-amber-400',
+    STARTED: 'bg-blue-500/10 text-blue-400',
+    IN_PROGRESS: 'bg-blue-500/10 text-blue-400',
+    SUBMITTED: 'bg-yellow-500/10 text-yellow-400',
+    UNDER_REVIEW: 'bg-blue-500/10 text-blue-400',
     EVALUATED: 'bg-green-500/10 text-green-400',
+    PASSED: 'bg-emerald-500/10 text-emerald-400',
+    FAILED: 'bg-red-500/10 text-red-400',
+    EXPIRED: 'bg-slate-500/10 text-slate-400',
+    CANCELLED: 'bg-slate-500/10 text-slate-400',
   };
 
   const participantTypeColors: Record<string, string> = {
@@ -140,21 +149,12 @@ export default async function AdminRoleplaysPage() {
                   </td>
                   <td className="py-6 px-4 text-right">
                     <div className="flex items-center justify-end gap-2">
-                      <Link 
+                      <Link
                         href={`/admin/roleplays/${session.id}`}
-                        className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
-                        title="View Details"
+                        className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium transition-colors border border-white/10 text-sm"
                       >
-                        <Eye size={16} />
+                        Ver evaluación
                       </Link>
-                      {['DRAFT', 'INVITED'].includes(session.status) && session.recruitmentCandidateId && (
-                        <button 
-                          className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
-                          title="Copy Invite Link"
-                        >
-                          <Copy size={16} />
-                        </button>
-                      )}
                     </div>
                   </td>
                 </tr>
