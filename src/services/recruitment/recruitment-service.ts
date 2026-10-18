@@ -1,5 +1,7 @@
-'use server';
-
+// NOTE: intentionally NOT a 'use server' module. This service is a dormant
+// server-side library (only imported by its own tests); marking it as server
+// actions would expose every export as an RPC endpoint the moment any client
+// module imports it. Server actions live in src/app/actions/*.
 import { randomUUID } from 'crypto';
 import prisma from '@/lib/prisma';
 import { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';

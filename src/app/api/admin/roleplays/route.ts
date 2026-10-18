@@ -16,6 +16,21 @@ const ALLOWED_AUDIO_TYPES = new Set([
   'audio/mpeg',
 ]);
 
+// Statuses that block creating a new session for the same participant
+// (create-or-resume invariant): a live or already-evaluated attempt must
+// never be silently duplicated. DRAFT means an unfinished admin draft that
+// this route may replace; EXPIRED/CANCELLED allow a fresh creation.
+const BLOCKING_SESSION_STATUSES = [
+  'INVITED',
+  'STARTED',
+  'IN_PROGRESS',
+  'SUBMITTED',
+  'UNDER_REVIEW',
+  'EVALUATED',
+  'PASSED',
+  'FAILED',
+] as const;
+
 interface ScenarioInput {
   title: string;
   durationLimitSec: number | null;
@@ -60,6 +75,7 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 
 export async function POST(req: NextRequest) {
   let sessionId: string | null = null;
+  let createdSession = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -124,6 +140,30 @@ export async function POST(req: NextRequest) {
       if (!candidate) return NextResponse.json({ success: false, error: 'Candidate not found' }, { status: 404 });
     }
 
+    // Create-or-resume invariant: never create a second live/evaluated
+    // session for the same participant. Checked before any upload happens.
+    const participantWhere =
+      participantType === 'interpreter'
+        ? { interpreterId: parsedParticipantId }
+        : { recruitmentCandidateId: parsedParticipantId };
+
+    const blockingSession = await db.roleplaySession.findFirst({
+      where: { ...participantWhere, status: { in: [...BLOCKING_SESSION_STATUSES] } },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    if (blockingSession) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Participant already has a roleplay session in status ${blockingSession.status}`,
+          sessionId: blockingSession.id,
+          status: blockingSession.status,
+        },
+        { status: 409 }
+      );
+    }
+
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) {
@@ -133,15 +173,42 @@ export async function POST(req: NextRequest) {
     const { createClient } = await import('@supabase/supabase-js');
     supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
-    const session = await db.roleplaySession.create({
-      data: {
-        interpreterId: participantType === 'interpreter' ? parsedParticipantId : null,
-        recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId : null,
-        baseAudioUrl: '',
-        status: 'DRAFT',
-      },
+    // Resume an unfinished DRAFT by reusing its row (stable id => stable
+    // invite link) and replacing its scenarios/audios with this submission.
+    const draftSession = await db.roleplaySession.findFirst({
+      where: { ...participantWhere, status: 'DRAFT' },
+      orderBy: { createdAt: 'desc' },
       select: { id: true },
     });
+
+    let session: { id: string };
+    if (draftSession) {
+      session = { id: draftSession.id };
+      await db.roleplayScenario.deleteMany({ where: { sessionId: draftSession.id } });
+      try {
+        const { data: staleFiles, error: listError } = await supabaseAdmin.storage
+          .from('roleplay-audio')
+          .list(`base/${draftSession.id}`);
+        if (!listError && staleFiles && staleFiles.length > 0) {
+          await supabaseAdmin.storage
+            .from('roleplay-audio')
+            .remove(staleFiles.map((f) => `base/${draftSession.id}/${f.name}`));
+        }
+      } catch (cleanupError) {
+        console.error('Draft resume storage cleanup failed:', cleanupError);
+      }
+    } else {
+      session = await db.roleplaySession.create({
+        data: {
+          interpreterId: participantType === 'interpreter' ? parsedParticipantId : null,
+          recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId : null,
+          baseAudioUrl: '',
+          status: 'DRAFT',
+        },
+        select: { id: true },
+      });
+      createdSession = true;
+    }
     sessionId = session.id;
 
     const audioUrls: string[] = [];
@@ -152,7 +219,7 @@ export async function POST(req: NextRequest) {
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from('roleplay-audio')
-        .upload(path, audio, { contentType: audio.type });
+        .upload(path, audio, { contentType: audio.type, upsert: true });
       if (uploadError) throw new Error('Failed to upload audio');
       uploadedPaths.push(path);
 
@@ -211,10 +278,16 @@ export async function POST(req: NextRequest) {
     console.error('Create Roleplay API Error:', message);
 
     // Best-effort cleanup: never leave a half-created session (no scenarios,
-    // missing audios) behind after a failed create.
+    // missing audios) behind after a failed create. A resumed DRAFT row is
+    // kept (idempotent retry target) but reset to an empty draft.
     if (sessionId) {
       try {
-        await db.roleplaySession.delete({ where: { id: sessionId } });
+        if (createdSession) {
+          await db.roleplaySession.delete({ where: { id: sessionId } });
+        } else {
+          await db.roleplayScenario.deleteMany({ where: { sessionId } });
+          await db.roleplaySession.update({ where: { id: sessionId }, data: { baseAudioUrl: '' } });
+        }
       } catch (cleanupError) {
         console.error('Create Roleplay cleanup failed:', cleanupError);
       }

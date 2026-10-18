@@ -18,6 +18,7 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
+    const speedtestValue = parseInt(String(formData.get('speedtestMbps') ?? ''), 10);
     const data = {
       name: formData.get('name'),
       email: formData.get('email'),
@@ -25,21 +26,25 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
       pais: formData.get('pais'),
       fuente: formData.get('fuente'),
       englishLevel: formData.get('englishLevel'),
-      speedtestMbps: parseInt(formData.get('speedtestMbps') as string) || 0,
+      speedtestMbps: Number.isFinite(speedtestValue) && speedtestValue > 0 ? speedtestValue : null,
       fechaPostulacion: new Date().toISOString(),
       status: 'Aplicante',
     };
 
     try {
-      const response = await fetch('/api/recruitment', {
+      const response = await fetch('/api/v1/recruitment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create candidate');
+        const errorData = await response.json().catch(() => null);
+        const detail =
+          Array.isArray(errorData?.details) && errorData.details[0]?.message
+            ? errorData.details[0].message
+            : null;
+        throw new Error(detail || errorData?.error || 'Failed to create candidate');
       }
 
       onSuccess?.();
