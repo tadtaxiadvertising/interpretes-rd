@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { submitApplicationAction } from "@/app/actions/recruitment";
+import {
+  submitApplicationAction,
+  getMyApplicationAction,
+  acknowledgeInductionAction,
+} from "@/app/actions/recruitment";
 import { startCandidateRoleplay } from "@/app/actions/roleplay";
 import { ApplicantSchema, ApplicantData } from "@/lib/validators/recruitment";
 import { User, PlaySquare, Mic, Calendar, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
@@ -13,6 +17,7 @@ export default function RecruitmentFunnel() {
   const [isPending, startTransition] = useTransition();
   const [isStartingRoleplay, setIsStartingRoleplay] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<ApplicantData>({
@@ -26,8 +31,35 @@ export default function RecruitmentFunnel() {
     cvUrl: undefined,
   });
 
+  // Restore the persisted application state on mount (server-derived step).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const result = await getMyApplicationAction();
+        if (cancelled || !result.success) return;
+        const data = result.data;
+        if (!data.found) return;
+        const restoredName = data.name;
+        const restoredEmail = data.email;
+        setStep(data.funnelStep);
+        setFormData((prev) => ({
+          ...prev,
+          name: prev.name || restoredName,
+          email: prev.email || restoredEmail,
+        }));
+      } catch {
+        // Restore is best-effort; the form stays usable at step 1.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleApply = () => {
     setErrorMsg(null);
+    setInfoMsg(null);
     startTransition(async () => {
       const validation = ApplicantSchema.safeParse(formData);
       
@@ -38,10 +70,33 @@ export default function RecruitmentFunnel() {
 
       const result = await submitApplicationAction(validation.data);
       if (result.success) {
-        setStep(2); // Advance to materials section
+        // The server recomputes the reachable step from persisted state.
+        const nextStep = "funnelStep" in result && typeof result.funnelStep === "number" ? result.funnelStep : 2;
+        setStep(Math.max(2, nextStep));
+        if ("alreadyApplied" in result && result.alreadyApplied) {
+          setInfoMsg("Ya existe una postulación con este correo. Retomamos tu proceso desde donde quedó.");
+        }
       } else {
         setErrorMsg(result.error || "Ocurrió un error inesperado.");
       }
+    });
+  };
+
+  const handleContinueInduction = () => {
+    setErrorMsg(null);
+    setInfoMsg(null);
+    startTransition(async () => {
+      const result = await acknowledgeInductionAction();
+      if (result.success) {
+        setStep(3);
+        return;
+      }
+      if (result.code === "UNAUTHORIZED") {
+        setErrorMsg("Para continuar con el roleplay necesitas iniciar sesión con el correo de tu postulación. Redirigiendo…");
+        setTimeout(() => router.push("/login?next=/postular"), 1500);
+        return;
+      }
+      setErrorMsg(result.error || "No pudimos registrar tu avance. Inténtalo de nuevo.");
     });
   };
 
@@ -159,11 +214,24 @@ export default function RecruitmentFunnel() {
           <h2 className="text-xl font-semibold text-slate-900">Conoce más sobre Intérpretes RD</h2>
           <p className="text-slate-600 text-sm">Continúa cuando estés listo para tu evaluación técnica.</p>
 
+          {infoMsg && (
+            <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-sm font-medium text-blue-700">
+              <CheckCircle2 className="w-4 h-4 shrink-0" /> {infoMsg}
+            </div>
+          )}
+
+          {errorMsg && (
+            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
+              <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
+            </div>
+          )}
+
           <button 
-            onClick={() => setStep(3)} 
-            className="w-full rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30"
+            onClick={handleContinueInduction}
+            disabled={isPending}
+            className="w-full rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
-            Continuar al Roleplay
+            {isPending ? "Guardando…" : "Continuar al Roleplay"}
           </button>
         </div>
       )}
