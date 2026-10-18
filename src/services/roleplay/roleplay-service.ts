@@ -287,10 +287,10 @@ export class RoleplayService {
     }
 
     try {
-      // One response row per scenario: locate by sessionId + scenarioId, then update or
-      // create. This prevents cross-session collisions if scenarioIds ever collide.
+      // One response row per scenario: locate by sessionId + scenarioId via relation,
+      // then update or create. This prevents cross-session collisions.
       const existing = await db.roleplayResponse.findFirst({
-        where: { sessionId, scenarioId },
+        where: { scenarioId, scenario: { sessionId } },
         select: { id: true },
       });
 
