@@ -287,10 +287,10 @@ export class RoleplayService {
     }
 
     try {
-      // One response row per scenario: locate by scenarioId, then update or
-      // create. An upsert keyed on the response id would duplicate rows.
+      // One response row per scenario: locate by sessionId + scenarioId, then update or
+      // create. This prevents cross-session collisions if scenarioIds ever collide.
       const existing = await db.roleplayResponse.findFirst({
-        where: { scenarioId },
+        where: { sessionId, scenarioId },
         select: { id: true },
       });
 
@@ -574,7 +574,6 @@ export class RoleplayService {
     switch (dbStatus) {
       case 'DRAFT':
         return 'DRAFT';
-      case 'PENDING':
       case 'INVITED':
         if (access?.usedAt) {
           return access.startedAt ? 'IN_PROGRESS' : 'STARTED';
