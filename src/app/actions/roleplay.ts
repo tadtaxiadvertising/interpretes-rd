@@ -8,6 +8,7 @@ import { createNotification } from './notifications';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
 import { cookies } from 'next/headers';
+import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
 
 const db = prisma;
 
@@ -122,6 +123,67 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
 
 const RESUME_EXCLUDED_STATUSES = ['CANCELLED', 'EXPIRED'] as const;
 
+type ApplicationAdvance = {
+  candidateId: number;
+  fromStatuses: RecruitmentApplicationStatus[];
+  toStatus: RecruitmentApplicationStatus;
+  toStep: RecruitmentStep;
+  eventType: RecruitmentEventType;
+  actorType: 'candidate' | 'admin' | 'system';
+  actorId: string;
+};
+
+/**
+ * Advances the candidate's recruitment application through the hiring
+ * pipeline when a roleplay milestone happens (start, submit, evaluation).
+ *
+ * The transition is guarded by an optimistic `status IN (fromStatuses)` +
+ * `version` predicate, so a retried or concurrent action can never
+ * double-advance or regress the application: the database is the authority.
+ * Bookkeeping is best-effort — a pipeline write failure is logged and never
+ * fails the roleplay action itself (the roleplay state remains correct).
+ */
+async function advanceApplicationPipeline(advance: ApplicationAdvance): Promise<void> {
+  try {
+    const application = await db.recruitmentApplication.findUnique({
+      where: { candidateId: advance.candidateId },
+      select: { id: true, status: true, version: true },
+    });
+    if (!application || !advance.fromStatuses.includes(application.status)) return;
+
+    await db.$transaction(async (tx) => {
+      const res = await tx.recruitmentApplication.updateMany({
+        where: {
+          id: application.id,
+          status: { in: advance.fromStatuses },
+          version: application.version,
+        },
+        data: {
+          status: advance.toStatus,
+          currentStep: advance.toStep,
+          version: { increment: 1 },
+          lastActivityAt: new Date(),
+          lastActorId: advance.actorId,
+        },
+      });
+      if (res.count === 0) return; // Concurrent transition already advanced it.
+      await tx.recruitmentEvent.create({
+        data: {
+          applicationId: application.id,
+          eventType: advance.eventType,
+          fromStatus: application.status,
+          toStatus: advance.toStatus,
+          actorType: advance.actorType,
+          actorId: advance.actorId,
+        },
+      });
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Application pipeline advance failed (ignored):', message);
+  }
+}
+
 /**
  * Start (or resume) the roleplay session for the currently authenticated
  * recruitment candidate. This is the candidate-facing entry point used by the
@@ -209,6 +271,18 @@ export async function startCandidateRoleplay() {
       secure: process.env.NODE_ENV === 'production',
       path: '/',
       maxAge: 60 * 60 * 24 * 7,
+    });
+
+    // Pipeline bookkeeping: the roleplay is now in progress for this
+    // candidate. Guarded + best-effort (see advanceApplicationPipeline).
+    await advanceApplicationPipeline({
+      candidateId: candidate.id,
+      fromStatuses: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING'],
+      toStatus: 'ROLEPLAY_IN_PROGRESS',
+      toStep: 'ROLEPLAY',
+      eventType: 'ROLEPLAY_STARTED',
+      actorType: 'candidate',
+      actorId: String(candidate.id),
     });
 
     revalidatePath('/dashboard/roleplays');
@@ -375,7 +449,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             select: { id: true },
           });
           if (recorded) {
-            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true };
+            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId };
           }
         }
         throw new Error('Session not available for submission');
@@ -462,8 +536,23 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         });
       }
 
-      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal };
+      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal, candidateId: session.recruitmentCandidateId };
     });
+
+    // Pipeline bookkeeping: the final submit moves the application to review.
+    // Guarded + best-effort; runs after the submit transaction so a pipeline
+    // failure can never roll back a recorded submission.
+    if (result.submitted && result.candidateId) {
+      await advanceApplicationPipeline({
+        candidateId: result.candidateId,
+        fromStatuses: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'],
+        toStatus: 'ROLEPLAY_REVIEW',
+        toStep: 'ROLEPLAY_REVIEW',
+        eventType: 'ROLEPLAY_SUBMITTED',
+        actorType: 'candidate',
+        actorId: String(result.candidateId),
+      });
+    }
 
     revalidatePath('/dashboard/roleplays');
     revalidatePath('/admin/roleplays');
@@ -740,8 +829,36 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
         });
       }
 
-      return { qaScoreId: qaScore.id, totalScore: Math.round(totalScore * 100) / 100, actionRequired, interpreterId: session.interpreterId };
+      return {
+        qaScoreId: qaScore.id,
+        totalScore: Math.round(totalScore * 100) / 100,
+        actionRequired,
+        interpreterId: session.interpreterId,
+        recruitmentCandidateId: session.recruitmentCandidateId,
+      };
     });
+
+    // Pipeline bookkeeping: a passing evaluation advances the application to
+    // interview. A failed evaluation intentionally leaves the application at
+    // ROLEPLAY_REVIEW so rejection stays an explicit admin decision.
+    // Guarded + best-effort (see advanceApplicationPipeline).
+    if (result.recruitmentCandidateId && !input.criticalError && totalScore >= 70) {
+      await advanceApplicationPipeline({
+        candidateId: result.recruitmentCandidateId,
+        fromStatuses: [
+          'APPLIED',
+          'INDUCTION_PENDING',
+          'ROLEPLAY_PENDING',
+          'ROLEPLAY_IN_PROGRESS',
+          'ROLEPLAY_REVIEW',
+        ],
+        toStatus: 'INTERVIEW_PENDING',
+        toStep: 'INTERVIEW',
+        eventType: 'ROLEPLAY_PASSED',
+        actorType: 'admin',
+        actorId: auth.user.userId,
+      });
+    }
 
     // Send notification to interpreter if this was an interpreter session
     if (result.interpreterId) {
@@ -775,7 +892,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
     }
 
     revalidatePath('/admin/roleplays');
-    revalidatePath('/admin/recruitment');
+    revalidatePath('/recruitment');
     revalidatePath('/qa');
     revalidatePath('/dashboard/roleplays');
     return { success: true, data: result };

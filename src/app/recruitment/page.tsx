@@ -26,6 +26,7 @@ interface Candidate {
   pais: string | null;
   status: string;
   resultRoleplay: number | null;
+  applicationStatus: string | null;
 }
 
 interface Stat {
@@ -41,9 +42,18 @@ async function getCandidates(): Promise<Candidate[]> {
   try {
     const candidates = await prisma.recruitmentCandidate.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 50
+      take: 50,
+      include: {
+        applications: { select: { status: true }, take: 1, orderBy: { createdAt: 'desc' as const } },
+      },
     });
-    return JSON.parse(JSON.stringify(candidates)) as Candidate[];
+    return candidates.map((candidate) => {
+      const { applications, ...rest } = candidate;
+      return {
+        ...(rest as Omit<Candidate, 'applicationStatus'>),
+        applicationStatus: applications[0]?.status ?? null,
+      };
+    });
   } catch (error) {
     console.error('Error fetching candidates from DB:', error);
     return [];
@@ -156,12 +166,19 @@ export default async function RecruitmentPage() {
                   </div>
                 </td>
                 <td className="py-6 px-4">
-                  <span className={cn(
-                    "px-3 py-1 rounded-full text-xs font-bold",
-                    statusColors[candidate.status] || "bg-gray-500/10 text-gray-400"
-                  )}>
-                    {candidate.status}
-                  </span>
+                  <div className="flex flex-col gap-1.5 items-start">
+                    <span className={cn(
+                      "px-3 py-1 rounded-full text-xs font-bold",
+                      statusColors[candidate.status] || "bg-gray-500/10 text-gray-400"
+                    )}>
+                      {candidate.status}
+                    </span>
+                    {candidate.applicationStatus && (
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-gray-400 border border-white/10">
+                        {candidate.applicationStatus}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="py-6 px-4">
                   {candidate.resultRoleplay !== null && candidate.resultRoleplay !== undefined ? (
