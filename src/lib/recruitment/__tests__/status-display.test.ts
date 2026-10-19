@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   candidateStatusDisplay,
+  isCanonicalStatus,
   isHired,
   isInInterview,
   isRejected,
@@ -41,39 +42,51 @@ const TONES: StatusTone[] = ['neutral', 'info', 'progress', 'success', 'danger']
 
 describe('candidateStatusDisplay', () => {
   it.each(ALL_STATUSES)('resolves a canonical label and tone for %s', (status) => {
-    const display = candidateStatusDisplay(status, 'Aplicante');
+    const display = candidateStatusDisplay(status);
     expect(display.canonical).toBe(true);
     expect(display.key).toBe(status);
     expect(display.label.length).toBeGreaterThan(0);
     expect(TONES).toContain(display.tone);
   });
 
-  it('lets the canonical status override a conflicting legacy status', () => {
-    const display = candidateStatusDisplay('HIRED', 'Aplicante');
+  it('maps a specific canonical status to its label and tone', () => {
+    const display = candidateStatusDisplay('HIRED');
     expect(display.canonical).toBe(true);
     expect(display.label).toBe('Contratado');
     expect(display.tone).toBe('success');
   });
 
-  it('falls back to the legacy status when there is no application', () => {
-    const display = candidateStatusDisplay(null, 'Entrevista Agendada');
+  it('neutralizes an unknown status without losing the raw value', () => {
+    const display = candidateStatusDisplay('Aplicante');
     expect(display.canonical).toBe(false);
-    expect(display.label).toBe('Entrevista agendada');
-    expect(display.tone).toBe('progress');
-  });
-
-  it('neutralizes an unknown legacy status without losing the raw value', () => {
-    const display = candidateStatusDisplay(null, 'Estado Desconocido');
-    expect(display.canonical).toBe(false);
-    expect(display.label).toBe('Estado Desconocido');
+    expect(display.key).toBe('Aplicante');
+    expect(display.label).toBe('Sin estado');
     expect(display.tone).toBe('neutral');
   });
 
   it('handles a candidate with no status at all', () => {
-    const display = candidateStatusDisplay(undefined, undefined);
-    expect(display.canonical).toBe(false);
-    expect(display.label).toBe('Sin estado');
-    expect(display.tone).toBe('neutral');
+    for (const value of [null, undefined]) {
+      const display = candidateStatusDisplay(value);
+      expect(display.canonical).toBe(false);
+      expect(display.key).toBe('UNKNOWN');
+      expect(display.label).toBe('Sin estado');
+      expect(display.tone).toBe('neutral');
+    }
+  });
+});
+
+describe('isCanonicalStatus', () => {
+  it('accepts canonical application statuses', () => {
+    expect(isCanonicalStatus('APPLIED')).toBe(true);
+    expect(isCanonicalStatus('HIRED')).toBe(true);
+  });
+
+  it('rejects legacy, unknown and empty values', () => {
+    expect(isCanonicalStatus('Aplicante')).toBe(false);
+    expect(isCanonicalStatus('Contratado')).toBe(false);
+    expect(isCanonicalStatus('')).toBe(false);
+    expect(isCanonicalStatus(null)).toBe(false);
+    expect(isCanonicalStatus(undefined)).toBe(false);
   });
 });
 
@@ -103,16 +116,12 @@ describe('pipeline predicates', () => {
     expect(isRejected('HIRED')).toBe(false);
   });
 
-  it('never lets legacy values override a canonical status', () => {
-    expect(isHired('APPLIED', 'Contratado')).toBe(false);
-    expect(isRejected('ROLEPLAY_IN_PROGRESS', 'Rechazado')).toBe(false);
-    expect(isInInterview('HIRED', 'Entrevista Agendada')).toBe(false);
-  });
-
-  it('uses the legacy status only as a fallback', () => {
-    expect(isInInterview(null, 'Entrevista Agendada')).toBe(true);
-    expect(isHired(null, 'Contratado')).toBe(true);
-    expect(isRejected(null, 'Rechazado')).toBe(true);
-    expect(isHired(undefined, 'Aplicante')).toBe(false);
+  it('returns false for legacy, unknown and empty values', () => {
+    expect(isHired('Contratado')).toBe(false);
+    expect(isInInterview('Entrevista Agendada')).toBe(false);
+    expect(isRejected('Rechazado')).toBe(false);
+    expect(isHired(null)).toBe(false);
+    expect(isInInterview(undefined)).toBe(false);
+    expect(isRejected('')).toBe(false);
   });
 });

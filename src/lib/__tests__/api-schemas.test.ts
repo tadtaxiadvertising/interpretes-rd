@@ -7,7 +7,7 @@ describe('RecruitmentCandidatePatchSchema', () => {
     expect(result).toEqual({ telefono: '+1 555 0100', pais: 'MX' });
   });
 
-  it('strips the legacy status so it cannot be set through the API', () => {
+  it('exposes no status field (canonical state lives on the application)', () => {
     const result = RecruitmentCandidatePatchSchema.parse({ name: 'Ana', status: 'Contratado' });
     expect(result).toEqual({ name: 'Ana' });
     expect('status' in result).toBe(false);

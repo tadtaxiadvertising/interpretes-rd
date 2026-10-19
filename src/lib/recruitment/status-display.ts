@@ -1,10 +1,9 @@
 /**
  * Presentation mapping for the admin recruitment pipeline.
  *
- * The canonical vocabulary is `RecruitmentApplicationStatus` (persisted on the
- * application). The legacy `RecruitmentCandidate.status` string is only a
- * fallback for rows created before the application table existed, and must
- * never override a canonical status.
+ * The canonical vocabulary is `RecruitmentApplicationStatus`, persisted on the
+ * application and only mutated through `advanceApplication`. There is no
+ * legacy fallback: the retired `RecruitmentCandidate.status` column is gone.
  */
 
 import type { RecruitmentApplicationStatus } from '@/lib/prisma-types';
@@ -12,11 +11,11 @@ import type { RecruitmentApplicationStatus } from '@/lib/prisma-types';
 export type StatusTone = 'neutral' | 'info' | 'progress' | 'success' | 'danger';
 
 export interface CandidateStatusDisplay {
-  /** The raw status value that produced this label. */
+  /** The raw status value that produced this label, or 'UNKNOWN' when absent. */
   key: string;
   label: string;
   tone: StatusTone;
-  /** True when the label came from the canonical application status. */
+  /** True when the value matched a canonical application status. */
   canonical: boolean;
 }
 
@@ -56,13 +55,6 @@ const CANONICAL: Record<RecruitmentApplicationStatus, { label: string; tone: Sta
   EXPIRED: { label: 'Expirado', tone: 'danger' },
 };
 
-const LEGACY: Record<string, { label: string; tone: StatusTone }> = {
-  Aplicante: { label: 'Aplicante', tone: 'info' },
-  'Entrevista Agendada': { label: 'Entrevista agendada', tone: 'progress' },
-  Contratado: { label: 'Contratado', tone: 'success' },
-  Rechazado: { label: 'Rechazado', tone: 'danger' },
-};
-
 const INTERVIEW_STATUSES: readonly RecruitmentApplicationStatus[] = [
   'INTERVIEW_PENDING',
   'INTERVIEW_SCHEDULED',
@@ -77,24 +69,23 @@ const REJECTED_STATUSES: readonly RecruitmentApplicationStatus[] = [
   'EXPIRED',
 ];
 
-function isCanonicalStatus(value: string): value is RecruitmentApplicationStatus {
-  return Object.prototype.hasOwnProperty.call(CANONICAL, value);
+export function isCanonicalStatus(
+  value: string | null | undefined
+): value is RecruitmentApplicationStatus {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(CANONICAL, value);
 }
 
 export function candidateStatusDisplay(
-  applicationStatus: string | null | undefined,
-  legacyStatus: string | null | undefined
+  applicationStatus: string | null | undefined
 ): CandidateStatusDisplay {
-  if (applicationStatus && isCanonicalStatus(applicationStatus)) {
+  if (isCanonicalStatus(applicationStatus)) {
     const entry = CANONICAL[applicationStatus];
     return { key: applicationStatus, label: entry.label, tone: entry.tone, canonical: true };
   }
-
-  const legacy = legacyStatus ? LEGACY[legacyStatus] : undefined;
   return {
-    key: legacyStatus ?? 'UNKNOWN',
-    label: legacy?.label ?? legacyStatus ?? 'Sin estado',
-    tone: legacy?.tone ?? 'neutral',
+    key: applicationStatus ?? 'UNKNOWN',
+    label: 'Sin estado',
+    tone: 'neutral',
     canonical: false,
   };
 }
@@ -103,32 +94,14 @@ export function statusToneClass(tone: StatusTone): string {
   return TONE_CLASSES[tone];
 }
 
-export function isInInterview(
-  applicationStatus: string | null | undefined,
-  legacyStatus?: string | null
-): boolean {
-  if (applicationStatus && isCanonicalStatus(applicationStatus)) {
-    return INTERVIEW_STATUSES.includes(applicationStatus);
-  }
-  return legacyStatus === 'Entrevista Agendada';
+export function isInInterview(applicationStatus: string | null | undefined): boolean {
+  return isCanonicalStatus(applicationStatus) && INTERVIEW_STATUSES.includes(applicationStatus);
 }
 
-export function isHired(
-  applicationStatus: string | null | undefined,
-  legacyStatus?: string | null
-): boolean {
-  if (applicationStatus && isCanonicalStatus(applicationStatus)) {
-    return HIRED_STATUSES.includes(applicationStatus);
-  }
-  return legacyStatus === 'Contratado';
+export function isHired(applicationStatus: string | null | undefined): boolean {
+  return isCanonicalStatus(applicationStatus) && HIRED_STATUSES.includes(applicationStatus);
 }
 
-export function isRejected(
-  applicationStatus: string | null | undefined,
-  legacyStatus?: string | null
-): boolean {
-  if (applicationStatus && isCanonicalStatus(applicationStatus)) {
-    return REJECTED_STATUSES.includes(applicationStatus);
-  }
-  return legacyStatus === 'Rechazado';
+export function isRejected(applicationStatus: string | null | undefined): boolean {
+  return isCanonicalStatus(applicationStatus) && REJECTED_STATUSES.includes(applicationStatus);
 }

@@ -123,7 +123,6 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           email: 'ana@example.com',
-          status: 'Aplicante',
           fuente: 'Web Portal',
         }),
       })
@@ -622,7 +621,7 @@ describe('admin activation actions (transactional state machine)', () => {
       metadata: { interpreterId: 42, candidateId: 7 },
     });
     expect(tx.recruitmentCandidate.update).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ status: 'Contratado' }) })
+      expect.objectContaining({ data: expect.objectContaining({ fechaInicio: expect.any(Date) }) })
     );
   });
 

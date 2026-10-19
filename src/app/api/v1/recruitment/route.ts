@@ -4,6 +4,7 @@ import { RecruitmentCandidateSchema } from '@/lib/validators';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth, resolveApiActor } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
+import { isCanonicalStatus } from '@/lib/recruitment/status-display';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
@@ -20,7 +21,15 @@ export async function GET(request: Request) {
 
     const whereClause: Record<string, unknown> = {};
     if (status) {
-      whereClause.status = status;
+      // Filters on the canonical application status. Invalid values are
+      // rejected up front instead of surfacing as a Prisma enum error.
+      if (!isCanonicalStatus(status)) {
+        return NextResponse.json(
+          { success: false, error: `Unknown application status: ${status}` },
+          { status: 400, headers: corsHeaders(request) }
+        );
+      }
+      whereClause.applications = { some: { status } };
     }
     if (search) {
       whereClause.OR = [

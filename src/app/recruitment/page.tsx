@@ -31,7 +31,6 @@ interface Candidate {
   email: string;
   telefono: string | null;
   pais: string | null;
-  status: string;
   resultRoleplay: number | null;
   applicationStatus: string | null;
 }
@@ -70,9 +69,9 @@ async function getCandidates(): Promise<Candidate[]> {
 export default async function RecruitmentPage() {
   const candidates: Candidate[] = await getCandidates();
 
-  const inInterviewCount = candidates.filter((c) => isInInterview(c.applicationStatus, c.status)).length;
-  const hiredCount = candidates.filter((c) => isHired(c.applicationStatus, c.status)).length;
-  const rejectedCount = candidates.filter((c) => isRejected(c.applicationStatus, c.status)).length;
+  const inInterviewCount = candidates.filter((c) => isInInterview(c.applicationStatus)).length;
+  const hiredCount = candidates.filter((c) => isHired(c.applicationStatus)).length;
+  const rejectedCount = candidates.filter((c) => isRejected(c.applicationStatus)).length;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -141,7 +140,7 @@ export default async function RecruitmentPage() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {candidates.map((candidate: Candidate) => {
-              const display = candidateStatusDisplay(candidate.applicationStatus, candidate.status);
+              const display = candidateStatusDisplay(candidate.applicationStatus);
               return (
               <tr key={candidate.id} className="group hover:bg-white/5 transition-colors">
                 <td className="py-6 px-8">

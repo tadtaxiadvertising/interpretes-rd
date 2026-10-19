@@ -24,7 +24,7 @@ async function getInterpreters() {
 async function getCandidates() {
   try {
     return await prisma.recruitmentCandidate.findMany({
-      where: { status: 'Aplicante' },
+      where: { applications: { some: { status: 'APPLIED' } } },
       select: { id: true, name: true, email: true },
       orderBy: { fechaPostulacion: 'desc' },
       take: 500,

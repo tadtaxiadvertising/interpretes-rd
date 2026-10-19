@@ -229,7 +229,6 @@ model RecruitmentCandidate {
   fuente           String?
   englishLevel     String?   @map("english_level")
   speedtestMbps    Int?      @map("speedtest_mbps")
-  status           String?   @default("Aplicante")
   fechaPostulacion DateTime  @default(now()) @map("fecha_postulacion") @db.Timestamptz(6)
   fechaEntrevista  DateTime? @map("fecha_entrevista") @db.Timestamptz(6)
   resultRoleplay   Int?      @map("result_roleplay")
@@ -243,7 +242,6 @@ model RecruitmentCandidate {
   applications     RecruitmentApplication[]
 
   @@index([fechaPostulacion], map: "idx_recruitment_candidates_fecha_postulacion")
-  @@index([status], map: "idx_recruitment_candidates_status")
   @@map("recruitment_candidates")
   @@schema("public")
 }

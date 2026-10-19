@@ -113,7 +113,6 @@ export const RecruitmentCandidateSchema = z.object({
   fuente: z.enum(['LinkedIn', 'Facebook', 'Referido']).optional().nullable(),
   englishLevel: z.enum(['B2', 'C1', 'C2']).optional().nullable(),
   speedtestMbps: z.number().positive().optional().nullable(),
-  status: z.enum(['Aplicante', 'Entrevista Agendada', 'Rechazado', 'Contratado']).default('Aplicante'),
   fechaPostulacion: z.coerce.date(),
   fechaEntrevista: z.coerce.date().optional().nullable(),
   resultRoleplay: z.number().min(0).max(100).optional().nullable(),

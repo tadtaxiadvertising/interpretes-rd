@@ -260,7 +260,6 @@ export async function submitApplicationAction(data: ApplicantData) {
           data: {
             ...profileData,
             email,
-            status: 'Aplicante',
             fuente: 'Web Portal',
           },
           select: { id: true },
@@ -665,7 +664,7 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
       });
       await tx.recruitmentCandidate.update({
         where: { id: candidate.id },
-        data: { status: 'Contratado', fechaInicio: new Date() },
+        data: { fechaInicio: new Date() },
       });
       return { ok: true as const, interpreterId: interpreter.id };
     });

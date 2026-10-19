@@ -13,8 +13,7 @@ interface Candidate {
   fuente: string | null;
   englishLevel: string | null;
   speedtestMbps: number | null;
-  status: string;
-  applicationStatus?: string | null;
+  applicationStatus: string | null;
   resultRoleplay: number | null;
   fechaPostulacion: string;
 }
@@ -48,7 +47,7 @@ export function ExportCandidatesButton({ data }: ExportCandidatesButtonProps) {
       candidate.fuente || 'N/A',
       candidate.englishLevel || 'N/A',
       candidate.speedtestMbps ? `${candidate.speedtestMbps} Mbps` : 'N/A',
-      candidateStatusDisplay(candidate.applicationStatus, candidate.status).label,
+      candidateStatusDisplay(candidate.applicationStatus).label,
       candidate.resultRoleplay ? `${candidate.resultRoleplay}%` : 'N/A',
       new Date(candidate.fechaPostulacion).toLocaleDateString()
     ].join(','));
