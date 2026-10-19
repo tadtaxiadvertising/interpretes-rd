@@ -279,7 +279,14 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
     // We just return success and the session info for the client to call the API
     const scenarioId = input.scenarioId || `scenario_${session.currentScenarioIndex}`;
 
-    return { 
+    // Sequential binding: a supplied scenarioId must be the next expected one.
+    // Without this, a client could skip steps in the same session.
+    const expectedScenarioId = `scenario_${session.currentScenarioIndex}`;
+    if (input.scenarioId && input.scenarioId !== expectedScenarioId) {
+      return { success: false, error: 'Escenario no disponible', code: 'FORBIDDEN' };
+    }
+
+    return {
       success: true, 
       data: { 
         sessionId: session.id,
@@ -359,6 +366,16 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           select: { id: true },
         });
         if (!scenario) {
+          throw new Error('Unauthorized');
+        }
+
+        // Sequential binding: a targeted scenario must be the one expected at
+        // the session's current index, so a candidate cannot skip steps.
+        const nextScenario = await tx.roleplayScenario.findFirst({
+          where: { sessionId: session.id, order: session.currentScenarioIndex },
+          select: { id: true },
+        });
+        if (!nextScenario || nextScenario.id !== input.scenarioId) {
           throw new Error('Unauthorized');
         }
       }
