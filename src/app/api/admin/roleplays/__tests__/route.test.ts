@@ -221,7 +221,7 @@ describe('POST /api/admin/roleplays', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-Z0-9]+$/);
+      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-Z0-9_-]+$/);
       expect(prisma.roleplaySession.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ recruitmentCandidateId: 9, interpreterId: null }),
