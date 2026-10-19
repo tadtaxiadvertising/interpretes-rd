@@ -10,6 +10,9 @@ const m = vi.hoisted(() => ({
   scenarioCount: vi.fn(),
   scenarioCreate: vi.fn(),
   accessUpsert: vi.fn(),
+  appFindUnique: vi.fn(),
+  appUpdateMany: vi.fn(),
+  eventCreate: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -33,6 +36,12 @@ vi.mock('@/lib/prisma', () => ({
     },
     roleplayScenario: { count: m.scenarioCount, create: m.scenarioCreate },
     roleplayAccess: { upsert: m.accessUpsert },
+    recruitmentApplication: { findUnique: m.appFindUnique },
+    $transaction: async (cb: any) =>
+      cb({
+        recruitmentApplication: { updateMany: m.appUpdateMany },
+        recruitmentEvent: { create: m.eventCreate },
+      }),
   },
 }));
 
@@ -68,6 +77,9 @@ describe('startCandidateRoleplay', () => {
     m.scenarioCount.mockResolvedValue(0);
     m.scenarioCreate.mockResolvedValue({ id: 'scn-1' });
     m.accessUpsert.mockResolvedValue({ id: 'acc-1' });
+    m.appFindUnique.mockResolvedValue(null);
+    m.appUpdateMany.mockResolvedValue({ count: 1 });
+    m.eventCreate.mockResolvedValue({ id: 'evt-1' });
   });
 
   it('requires authentication', async () => {
@@ -141,4 +153,53 @@ describe('startCandidateRoleplay', () => {
       expect(m.sessionUpdate).not.toHaveBeenCalled();
     }
   );
+
+  it('advances the application from ROLEPLAY_PENDING to ROLEPLAY_IN_PROGRESS with a guarded transition', async () => {
+    m.appFindUnique.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_PENDING', version: 4 });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
+      where: { id: 'app-1', status: { in: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING'] }, version: 4 },
+      data: expect.objectContaining({
+        status: 'ROLEPLAY_IN_PROGRESS',
+        currentStep: 'ROLEPLAY',
+        version: { increment: 1 },
+        lastActorId: '5',
+      }),
+    });
+    expect(m.eventCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          applicationId: 'app-1',
+          eventType: 'ROLEPLAY_STARTED',
+          fromStatus: 'ROLEPLAY_PENDING',
+          toStatus: 'ROLEPLAY_IN_PROGRESS',
+        }),
+      })
+    );
+  });
+
+  it('does not touch an application already in ROLEPLAY_IN_PROGRESS (idempotent resume)', async () => {
+    m.appFindUnique.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_IN_PROGRESS', version: 5 });
+    m.sessionFindFirst.mockResolvedValue({ id: 'sess-existing', status: 'STARTED' });
+    m.scenarioCount.mockResolvedValue(1);
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.appUpdateMany).not.toHaveBeenCalled();
+    expect(m.eventCreate).not.toHaveBeenCalled();
+  });
+
+  it('skips pipeline bookkeeping when the candidate has no application row', async () => {
+    m.appFindUnique.mockResolvedValue(null);
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.appUpdateMany).not.toHaveBeenCalled();
+  });
 });

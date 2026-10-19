@@ -1,18 +1,26 @@
 import React from 'react';
 import { Mic2, Loader2, Filter, Search, Play, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
+import prisma from '@/lib/prisma';
+import { SessionActions } from '@/components/admin/SessionActions';
 import { cn, formatDate } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
+// Read straight from Prisma: a server component must not self-fetch the
+// internal REST API (cookies are not forwarded, so the admin guard would
+// answer 403 and the list would silently render empty).
 async function getRoleplays() {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/admin/roleplays`, {
-      cache: 'no-store',
+    return await prisma.roleplaySession.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+      include: {
+        interpreter: { select: { id: true, name: true, externalId: true, emailCorporativo: true } },
+        recruitmentCandidate: { select: { id: true, name: true, email: true } },
+        qaScore: { select: { id: true, totalScore: true, criticalError: true } },
+      },
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.data || [];
   } catch {
     return [];
   }
@@ -155,6 +163,7 @@ export default async function AdminRoleplaysPage() {
                       >
                         Ver evaluación
                       </Link>
+                      <SessionActions sessionId={session.id} status={session.status} />
                     </div>
                   </td>
                 </tr>

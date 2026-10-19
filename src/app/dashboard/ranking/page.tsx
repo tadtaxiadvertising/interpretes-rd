@@ -1,7 +1,9 @@
 import React from 'react';
-import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { Trophy, TrendingUp, Target, Award, Medal } from 'lucide-react';
+import { getCurrentActor } from '@/lib/auth/current-actor';
+import { getPrivateRankingSummary } from '@/lib/ranking/calculate';
+import { getLeaderboard } from '@/services/metrics/metrics-service';
 import { cn } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -24,25 +26,38 @@ interface InterpreterRankingSummary {
   leaderboard?: LeaderboardEntry[];
 }
 
-async function fetchPrivateRanking(): Promise<InterpreterRankingSummary | null> {
+async function fetchPrivateRanking(interpreterId: number): Promise<InterpreterRankingSummary | null> {
   try {
-    const res = await fetch('/api/dashboard/ranking', {
-      cache: 'no-store',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.success ? data.data : null;
-  } catch {
+    // Call the service directly instead of self-fetching `/api/dashboard/ranking`:
+    // a server-side relative fetch is unparseable, and that endpoint returned a
+    // different shape (rankingPosition/interpretedMinutes) than this page expects.
+    const [summary, leaderboard] = await Promise.all([
+      getPrivateRankingSummary(interpreterId),
+      getLeaderboard(undefined, 10),
+    ]);
+
+    if (!summary) return null;
+
+    return {
+      ...summary,
+      leaderboard: leaderboard.map((entry, index) => ({
+        position: index + 1,
+        name: entry.name,
+        minutes: entry.interpretedMinutes,
+        qaScore: entry.qaScore,
+      })),
+    };
+  } catch (error) {
+    console.error('[RankingPage] Failed to load private ranking:', error);
     return null;
   }
 }
 
 export default async function RankingPage() {
-  const { userId } = await auth();
-  if (!userId) redirect('/login');
+  const actor = await getCurrentActor();
+  if (!actor) redirect('/login');
 
-  const ranking = await fetchPrivateRanking();
+  const ranking = actor.interpreterId ? await fetchPrivateRanking(actor.interpreterId) : null;
 
   const monthName = new Date().toLocaleDateString('es-DO', { month: 'long', year: 'numeric' });
 
