@@ -13,9 +13,9 @@ import { ScenarioCard } from './ScenarioCard';
 interface Participant {
   id: number;
   name: string;
-  email?: string;
-  externalId?: string;
-  emailCorporativo?: string;
+  email?: string | null;
+  externalId?: string | null;
+  emailCorporativo?: string | null;
 }
 
 interface Scenario {
