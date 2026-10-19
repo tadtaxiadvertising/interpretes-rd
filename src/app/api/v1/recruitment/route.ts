@@ -3,15 +3,10 @@ import prisma from '@/lib/prisma';
 import { RecruitmentCandidateSchema } from '@/lib/validators';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth, resolveApiActor } from '@/lib/api-auth';
+import { corsHeaders } from '@/lib/cors';
 
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export async function OPTIONS(request: Request) {
+  return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
 }
 
 export async function GET(request: Request) {
@@ -40,11 +35,7 @@ export async function GET(request: Request) {
       orderBy: { fechaPostulacion: 'desc' },
     });
 
-    return NextResponse.json(candidates, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
-    });
+    return NextResponse.json(candidates, { headers: corsHeaders(request) });
   } catch (error) {
     console.error('Error fetching candidates:', error);
     const message = error instanceof Error ? error.message : 'Error fetching candidates';
@@ -88,11 +79,9 @@ export async function POST(request: Request) {
       return candidate;
     });
 
-    return NextResponse.json(newCandidate, { 
+    return NextResponse.json(newCandidate, {
       status: 201,
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request),
     });
   } catch (error) {
     console.error('Error creating candidate:', error);
