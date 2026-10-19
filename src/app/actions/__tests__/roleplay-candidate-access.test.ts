@@ -192,10 +192,22 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
   });
 
   it('accepts a later scenario confirm after a first response was already recorded', async () => {
-    m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/first.webm' };
+    // Sequential binding: a supplied scenario id must match the scenario at
+    // the session's current index. With the first response already recorded
+    // the index sits at 1, so the belongs check (by id) and the sequential
+    // check (by order) must both resolve to scn-2.
+    m.session = { ...CANDIDATE_SESSION, currentScenarioIndex: 1, recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(2);
     m.responseCount.mockResolvedValue(2);
+    m.scenarioFindFirst.mockImplementation(
+      async (args: { where: { id?: string; order?: number } }) => {
+        if (args.where.order !== undefined) {
+          return args.where.order === 1 ? { id: 'scn-2' } : { id: 'scn-1' };
+        }
+        return args.where.id === 'scn-2' ? { id: 'scn-2' } : null;
+      }
+    );
 
     const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-2', recordedAudioUrl: 'https://x/second.webm' });
 
