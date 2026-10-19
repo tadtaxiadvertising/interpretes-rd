@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Save, Loader2, User, Mail, Phone, Globe, Share2, Award, Zap } from 'lucide-react';
+import { submitApplicationAction } from '@/app/actions/recruitment';
 
 interface CandidateFormProps {
   onSuccess?: () => void;
@@ -18,39 +19,61 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
     setError(null);
 
     const formData = new FormData(e.currentTarget);
-    const speedtestValue = parseInt(String(formData.get('speedtestMbps') ?? ''), 10);
-    const data = {
-      name: formData.get('name'),
-      email: formData.get('email'),
-      telefono: formData.get('telefono'),
-      pais: formData.get('pais'),
-      fuente: formData.get('fuente'),
-      englishLevel: formData.get('englishLevel'),
-      speedtestMbps: Number.isFinite(speedtestValue) && speedtestValue > 0 ? speedtestValue : null,
-      fechaPostulacion: new Date().toISOString(),
-      status: 'Aplicante',
-    };
+    let name = formData.get('name');
+    let email = formData.get('email');
+    let phone = formData.get('telefono');
+    let country = formData.get('pais');
+    let englishLevel = formData.get('englishLevel');
+    let speedtestMbps = formData.get('speedtestMbps');
+    let efsetLink = formData.get('efsetLink');
+    let cvUrl = formData.get('cvUrl');
+
+    if (typeof name !== 'string') throw new Error('El nombre completo es obligatorio.');
+    if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new Error('El correo electrónico no es válido.');
+    }
+    if (typeof phone !== 'string' || phone.trim().length < 10) {
+      throw new Error('El teléfono debe incluir al menos 10 caracteres.');
+    }
+    if (typeof country !== 'string' || country.trim().length < 2) {
+      throw new Error('Indica tu país de residencia.');
+    }
+    if (typeof englishLevel !== 'string' || !['B1','B2','C1','C2'].includes(englishLevel)) {
+      throw new Error('Selecciona un nivel de inglés válido.');
+    }
+    if (typeof speedtestMbps !== 'string') {
+      throw new Error('El speedtest (Mbps) es obligatorio.');
+    }
+    const speedtest = parseInt(speedtestMbps, 10);
+    if (!Number.isInteger(speedtest) || speedtest < 1 || speedtest > 10000) {
+      throw new Error('El speedtest debe ser un número entero entre 1 y 10000.');
+    }
+    if (typeof efsetLink !== 'string' || !efsetLink.startsWith('https://')) {
+      throw new Error('El enlace EF SET debe ser HTTPS.');
+    }
+    if (cvUrl !== null && cvUrl !== undefined && typeof cvUrl !== 'string') {
+      throw new Error('El enlace del CV no es válido.');
+    }
 
     try {
-      const response = await fetch('/api/v1/recruitment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+      const result = await submitApplicationAction({
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        country: country.trim(),
+        englishLevel: englishLevel as 'B1' | 'B2' | 'C1' | 'C2',
+        speedtestMbps: speedtest,
+        efsetLink,
+        cvUrl: cvUrl ?? undefined,
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        const detail =
-          Array.isArray(errorData?.details) && errorData.details[0]?.message
-            ? errorData.details[0].message
-            : null;
-        throw new Error(detail || errorData?.error || 'Failed to create candidate');
+      if (result.success) {
+        onSuccess?.();
+      } else {
+        setError(result.error || 'No se pudo registrar el candidato.');
       }
-
-      onSuccess?.();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setError(message);
+      setError(err instanceof Error ? err.message : 'Error inesperado al registrar el candidato.');
     } finally {
       setLoading(false);
     }
@@ -119,17 +142,15 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Source</label>
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">EF SET Link</label>
           <div className="relative">
-            <Share2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={18} />
-            <select
-              name="fuente"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer [&>option]:bg-[#1a1a1a]"
-            >
-              <option value="LinkedIn">LinkedIn</option>
-              <option value="Facebook">Facebook</option>
-              <option value="Referido">Referido</option>
-            </select>
+            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <input
+              name="efsetLink"
+              type="url"
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder="https://efset.org/..."
+            />
           </div>
         </div>
         <div className="space-y-2">
@@ -140,10 +161,23 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
               name="englishLevel"
               className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer [&>option]:bg-[#1a1a1a]"
             >
+              <option value="B1">B1 (Intermediate)</option>
               <option value="B2">B2 (Upper Intermediate)</option>
               <option value="C1">C1 (Advanced)</option>
               <option value="C2">C2 (Proficient)</option>
             </select>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">CV URL (optional)</label>
+          <div className="relative">
+            <Share2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <input
+              name="cvUrl"
+              type="url"
+              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              placeholder="https://...pdf"
+            />
           </div>
         </div>
         <div className="space-y-2">
@@ -157,6 +191,9 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
               placeholder="50"
             />
           </div>
+        </div>
+        <div className="hidden" aria-hidden="true">
+          <input name="fuente" value="web" />
         </div>
       </div>
 
