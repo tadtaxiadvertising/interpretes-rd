@@ -233,11 +233,11 @@ function ScenarioEvaluationCard({
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
-              { key: 'protocol', label: 'Protocol', weight: '20%' },
+              { key: 'protocol', label: 'Protocol', weight: '35%' },
               { key: 'interpretation', label: 'Interpretation', weight: '40%' },
-              { key: 'language', label: 'Language', weight: '20%' },
-              { key: 'service', label: 'Service', weight: '10%' },
-              { key: 'technical', label: 'Technical', weight: '10%' },
+              { key: 'language', label: 'Language', weight: '15%' },
+              { key: 'service', label: 'Service', weight: '5%' },
+              { key: 'technical', label: 'Technical', weight: '5%' },
             ].map(({ key, label, weight }) => (
               <div key={key} className="text-center">
                 <p className="text-xs text-gray-500 mb-1">{label} ({weight})</p>
@@ -252,10 +252,10 @@ function ScenarioEvaluationCard({
               <p className="text-red-400 font-bold">⚠ Critical Error Flagged</p>
             </div>
           )}
-          {response.selfScore?.selfNotes && (
+          {response.selfNotes && (
             <div className="mt-4">
               <p className="text-xs text-gray-500 mb-1">Notes:</p>
-              <p className="text-sm text-gray-300">{response.selfScore.selfNotes}</p>
+              <p className="text-sm text-gray-300">{response.selfNotes}</p>
             </div>
           )}
         </div>

@@ -894,6 +894,7 @@ model RoleplayResponse {
 
   scenario           RoleplayScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
+  @@unique([scenarioId], map: "roleplay_responses_scenario_id_key")
   @@map("roleplay_responses")
   @@schema("public")
 }

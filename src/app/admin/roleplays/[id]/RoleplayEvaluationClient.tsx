@@ -4,7 +4,17 @@ import React, { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { ShieldCheck, CheckCircle2, AlertTriangle, Loader2, Scale } from 'lucide-react';
 import { evaluateRoleplay } from '@/app/actions/roleplay';
+import { calculateRoleplayScore, clampDimensionScore } from '@/lib/roleplay/scoring';
 import { cn } from '@/lib/utils';
+
+// Dimension inputs are 0..10; weights come from the canonical scoring module.
+const DIMENSION_FIELDS = [
+  { key: 'protocolScore', label: 'Protocol (35%)' },
+  { key: 'interpretationScore', label: 'Interpretation (40%)' },
+  { key: 'languageScore', label: 'Language (15%)' },
+  { key: 'serviceScore', label: 'Service (5%)' },
+  { key: 'technicalScore', label: 'Technical (5%)' },
+] as const;
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -47,13 +57,12 @@ export function RoleplayEvaluationClient({
   existingScore 
 }: RoleplayEvaluationClientProps) {
   const [state, formAction] = useActionState(evaluateRoleplay, null);
-  const [criticalError, setCriticalError] = useState(false);
   const [formData, setFormData] = useState({
-    protocolScore: 100,
-    interpretationScore: 100,
-    languageScore: 100,
-    serviceScore: 100,
-    technicalScore: 100,
+    protocolScore: 10,
+    interpretationScore: 10,
+    languageScore: 10,
+    serviceScore: 10,
+    technicalScore: 10,
     criticalError: false,
     comments: '',
   });
@@ -85,13 +94,7 @@ export function RoleplayEvaluationClient({
           </div>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mt-6">
-          {[
-            { key: "protocolScore", label: "Protocol (20%)" },
-            { key: "interpretationScore", label: "Interpretation (40%)" },
-            { key: "languageScore", label: "Language (20%)" },
-            { key: "serviceScore", label: "Service (10%)" },
-            { key: "technicalScore", label: "Technical (10%)" },
-          ].map(({ key, label }) => (
+          {DIMENSION_FIELDS.map(({ key, label }) => (
             <div key={key} className="text-center">
               <p className="text-xs text-gray-500 mb-1">{label}</p>
               <p className="text-2xl font-bold text-white">
@@ -110,12 +113,14 @@ export function RoleplayEvaluationClient({
   }
 
 
-  const calculatedScore = criticalError ? 0 : 
-    (formData.protocolScore * 0.20) +
-    (formData.interpretationScore * 0.40) +
-    (formData.languageScore * 0.20) +
-    (formData.serviceScore * 0.10) +
-    (formData.technicalScore * 0.10);
+  const calculatedScore = calculateRoleplayScore({
+    protocol: clampDimensionScore(formData.protocolScore),
+    interpretation: clampDimensionScore(formData.interpretationScore),
+    language: clampDimensionScore(formData.languageScore),
+    service: clampDimensionScore(formData.serviceScore),
+    technical: clampDimensionScore(formData.technicalScore),
+    criticalError: formData.criticalError,
+  }).totalScore;
 
   return (
     <div className="glass p-6 rounded-2xl border border-white/5">
@@ -131,7 +136,7 @@ export function RoleplayEvaluationClient({
         {/* Critical Error Toggle */}
         <div className={cn(
           "p-6 rounded-2xl border transition-all flex items-start gap-4",
-          criticalError ? "bg-red-500/10 border-red-500/50" : "bg-white/5 border-white/10 hover:border-red-500/30"
+          formData.criticalError ? "bg-red-500/10 border-red-500/50" : "bg-white/5 border-white/10 hover:border-red-500/30"
         )}>
           <div className="pt-1">
              <input 
@@ -155,23 +160,18 @@ export function RoleplayEvaluationClient({
         </div>
 
         {/* Scoring Grid */}
-        <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 transition-opacity duration-300", criticalError && "opacity-30 pointer-events-none grayscale")}>
-          {[
-            { key: "protocolScore", label: "Protocol (20%)" },
-            { key: "interpretationScore", label: "Interpretation (40%)" },
-            { key: "languageScore", label: "Language (20%)" },
-            { key: "serviceScore", label: "Service (10%)" },
-            { key: "technicalScore", label: "Technical (10%)" },
-          ].map(field => (
+        <div className={cn("grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 transition-opacity duration-300", formData.criticalError && "opacity-30 pointer-events-none grayscale")}>
+          {DIMENSION_FIELDS.map(field => (
             <div key={field.key} className="space-y-2">
               <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block">{field.label}</label>
               <input
                 type="number"
                 name={field.key}
                 min="0"
-                max="100"
+                max="10"
+                step="0.5"
                 value={String(formData[field.key as keyof typeof formData])}
-                onChange={(e) => handleChange(field.key, parseInt(e.target.value) || 0)}
+                onChange={(e) => handleChange(field.key, clampDimensionScore(parseFloat(e.target.value) || 0))}
                 className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono text-center text-xl"
               />
             </div>
@@ -180,13 +180,13 @@ export function RoleplayEvaluationClient({
 
         {/* Live Score Preview */}
         <div className="p-4 rounded-xl border transition-colors" style={{
-          backgroundColor: criticalError ? "rgba(239, 68, 68, 0.1)" : "rgba(34, 197, 94, 0.1)",
-          borderColor: criticalError ? "rgba(239, 68, 68, 0.3)" : "rgba(34, 197, 94, 0.3)"
+          backgroundColor: formData.criticalError ? "rgba(239, 68, 68, 0.1)" : "rgba(34, 197, 94, 0.1)",
+          borderColor: formData.criticalError ? "rgba(239, 68, 68, 0.3)" : "rgba(34, 197, 94, 0.3)"
         }}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-500">Estimated Total Score</p>
-              <p className="text-3xl font-bold" style={{ color: criticalError ? "#ef4444" : "#22c55e" }}>
+              <p className="text-3xl font-bold" style={{ color: formData.criticalError ? "#ef4444" : "#22c55e" }}>
                 {calculatedScore.toFixed(2)}%
               </p>
             </div>

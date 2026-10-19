@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   session: null as any,
   sessionFindUnique: vi.fn(),
   sessionUpdate: vi.fn(),
+  sessionUpdateMany: vi.fn(),
   qaCreate: vi.fn(),
   candidateUpdate: vi.fn(),
   appFindUnique: vi.fn(),
@@ -27,10 +28,17 @@ vi.mock('@/lib/prisma', () => ({
     userProfile: { findUnique: async () => null },
     $transaction: async (cb: any) =>
       cb({
-        roleplaySession: { findUnique: m.sessionFindUnique, update: m.sessionUpdate },
+        roleplaySession: {
+          findUnique: m.sessionFindUnique,
+          update: m.sessionUpdate,
+          updateMany: m.sessionUpdateMany,
+        },
         qAScore: { create: m.qaCreate },
         recruitmentCandidate: { update: m.candidateUpdate },
-        recruitmentApplication: { updateMany: m.appUpdateMany },
+        recruitmentApplication: {
+          findUnique: m.appFindUnique,
+          updateMany: m.appUpdateMany,
+        },
         recruitmentEvent: { create: m.eventCreate },
       }),
   },
@@ -59,16 +67,17 @@ const ADMIN = {
 function makeForm(overrides: Record<string, string> = {}): FormData {
   const fd = new FormData();
   fd.set('sessionId', 'sess-1');
-  fd.set('protocolScore', '80');
-  fd.set('interpretationScore', '85');
-  fd.set('languageScore', '90');
-  fd.set('serviceScore', '80');
-  fd.set('technicalScore', '85');
+  // Dimension scores are 0..10 (canonical scale).
+  fd.set('protocolScore', '8');
+  fd.set('interpretationScore', '8.5');
+  fd.set('languageScore', '9');
+  fd.set('serviceScore', '8');
+  fd.set('technicalScore', '8.5');
   for (const [key, value] of Object.entries(overrides)) fd.set(key, value);
   return fd;
 }
 
-describe('evaluateRoleplay (application pipeline advancement)', () => {
+describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     m.actor = ADMIN;
@@ -78,20 +87,83 @@ describe('evaluateRoleplay (application pipeline advancement)', () => {
       recordedAudioUrl: 'https://x/response.webm',
       recruitmentCandidateId: 5,
       interpreterId: null,
+      status: 'SUBMITTED',
     };
     m.sessionFindUnique.mockImplementation(async () => m.session);
     m.sessionUpdate.mockResolvedValue({ id: 'sess-1' });
-    m.qaCreate.mockResolvedValue({ id: 'qa-1', totalScore: 84.5 });
+    m.sessionUpdateMany.mockResolvedValue({ count: 1 });
+    m.qaCreate.mockResolvedValue({ id: 'qa-1', totalScore: 83.75 });
     m.candidateUpdate.mockResolvedValue({ id: 5 });
     m.appFindUnique.mockResolvedValue({ id: 'app-5', status: 'ROLEPLAY_REVIEW', version: 6 });
     m.appUpdateMany.mockResolvedValue({ count: 1 });
     m.eventCreate.mockResolvedValue({ id: 'evt-1' });
   });
 
+  it('claims the session atomically (SUBMITTED + evaluatorId NULL -> UNDER_REVIEW)', async () => {
+    const res = await evaluateRoleplay(null, makeForm());
+
+    expect(res.success).toBe(true);
+    expect(m.sessionUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.sessionUpdateMany.mock.calls[0][0]).toEqual({
+      where: {
+        id: 'sess-1',
+        status: 'SUBMITTED',
+        evaluatorId: null,
+      },
+      data: expect.objectContaining({
+        evaluatorId: 'admin-1',
+        status: 'UNDER_REVIEW',
+      }),
+    });
+  });
+
+  it('persists the canonical weighted total and dimension scores on QAScore', async () => {
+    const res = await evaluateRoleplay(null, makeForm());
+
+    expect(res.success).toBe(true);
+    // 8*0.35 + 8.5*0.40 + 9*0.15 + 8*0.05 + 8.5*0.05 = 8.375 -> 83.75
+    expect(m.qaCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          protocolScore: 8,
+          interpretationScore: 8.5,
+          languageScore: 9,
+          serviceScore: 8,
+          technicalScore: 8.5,
+          totalScore: 83.75,
+          criticalError: false,
+        }),
+      })
+    );
+  });
+
+  it('fails the claim when another evaluator won (no QAScore created)', async () => {
+    m.sessionUpdateMany.mockResolvedValue({ count: 0 });
+
+    const res = await evaluateRoleplay(null, makeForm());
+
+    expect(res.success).toBe(false);
+    expect(m.qaCreate).not.toHaveBeenCalled();
+    expect(m.appFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects a session that was already evaluated without touching the application', async () => {
+    m.session = { ...m.session, qaScoreId: 'qa-existing' };
+
+    const res = await evaluateRoleplay(null, makeForm());
+
+    expect(res.success).toBe(false);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.appFindUnique).not.toHaveBeenCalled();
+  });
+
   it('advances a passing candidate application to INTERVIEW_PENDING', async () => {
     const res = await evaluateRoleplay(null, makeForm());
 
     expect(res.success).toBe(true);
+    expect(m.candidateUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { resultRoleplay: 84 } })
+    );
     expect(m.appFindUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { candidateId: 5 } })
     );
@@ -99,9 +171,7 @@ describe('evaluateRoleplay (application pipeline advancement)', () => {
     expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
       where: {
         id: 'app-5',
-        status: {
-          in: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS', 'ROLEPLAY_REVIEW'],
-        },
+        status: 'ROLEPLAY_REVIEW',
         version: 6,
       },
       data: expect.objectContaining({
@@ -138,15 +208,21 @@ describe('evaluateRoleplay (application pipeline advancement)', () => {
     const res = await evaluateRoleplay(
       null,
       makeForm({
-        protocolScore: '50',
-        interpretationScore: '50',
-        languageScore: '50',
-        serviceScore: '50',
-        technicalScore: '50',
+        protocolScore: '5',
+        interpretationScore: '5',
+        languageScore: '5',
+        serviceScore: '5',
+        technicalScore: '5',
       })
     );
 
     expect(res.success).toBe(true);
+    // 5.0 -> 50.0, below the 70 pass threshold.
+    expect(m.qaCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ totalScore: 50 }),
+      })
+    );
     expect(m.appFindUnique).not.toHaveBeenCalled();
     expect(m.appUpdateMany).not.toHaveBeenCalled();
   });
@@ -171,13 +247,11 @@ describe('evaluateRoleplay (application pipeline advancement)', () => {
     expect(m.eventCreate).not.toHaveBeenCalled();
   });
 
-  it('rejects a session that was already evaluated without touching the application', async () => {
-    m.session = { ...m.session, qaScoreId: 'qa-existing' };
-
-    const res = await evaluateRoleplay(null, makeForm());
+  it('rejects out-of-range dimension scores', async () => {
+    const res = await evaluateRoleplay(null, makeForm({ protocolScore: '50' }));
 
     expect(res.success).toBe(false);
-    expect(m.appFindUnique).not.toHaveBeenCalled();
+    expect(m.sessionFindUnique).not.toHaveBeenCalled();
   });
 
   it('requires admin authorization', async () => {

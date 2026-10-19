@@ -47,7 +47,10 @@ vi.mock('@/lib/prisma', () => ({
           count: m.responseCount,
         },
         roleplayAccess: { updateMany: m.accessUpdateMany },
-        recruitmentApplication: { updateMany: m.appUpdateMany },
+        recruitmentApplication: {
+          findUnique: m.appFindUnique,
+          updateMany: m.appUpdateMany,
+        },
         recruitmentEvent: { create: m.eventCreate },
       }),
   },
@@ -337,7 +340,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     );
     expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
     expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
-      where: { id: 'app-5', status: { in: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'] }, version: 3 },
+      where: { id: 'app-5', status: 'ROLEPLAY_IN_PROGRESS', version: 3 },
       data: expect.objectContaining({ status: 'ROLEPLAY_REVIEW', currentStep: 'ROLEPLAY_REVIEW' }),
     });
     expect(m.eventCreate).toHaveBeenCalledWith(
@@ -476,13 +479,14 @@ describe('saveSelfAssessment gate', () => {
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
       scores: { fluency: 8, pronunciation: 7 },
+      criticalError: false,
       notes: 'good pacing',
     });
 
     expect(res.success).toBe(true);
     expect(m.responseUpdate).toHaveBeenCalledTimes(1);
     expect(m.responseUpdate.mock.calls[0][0].data).toEqual({
-      selfScore: { fluency: 8, pronunciation: 7 },
+      selfScore: { fluency: 8, pronunciation: 7, criticalError: false },
       selfNotes: 'good pacing',
     });
   });

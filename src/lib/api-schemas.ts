@@ -40,7 +40,11 @@ export const InterpreterPasswordSchema = z.object({
 
 export const PayrollRecordPatchSchema = PayrollRecordSchema.partial();
 export const QAScorePatchSchema = QAScoreSchema.partial();
-export const RecruitmentCandidatePatchSchema = RecruitmentCandidateSchema.partial();
+// The legacy `status` string is display-only bookkeeping; the canonical funnel
+// state lives on RecruitmentApplication and may only transition through
+// `advanceApplication`. The patch endpoint therefore cannot set it, which would
+// otherwise be an arbitrary state-machine bypass.
+export const RecruitmentCandidatePatchSchema = RecruitmentCandidateSchema.partial().omit({ status: true });
 
 
 export const PayrollPaySchema = z.object({

@@ -20,7 +20,9 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(async () =>
-    m.actor ? { user: m.actor, profile: m.actor } : undefined
+    m.actor
+      ? { user: m.actor, profile: m.actor }
+      : { error: 'Not authenticated', code: 'UNAUTHORIZED' as const }
   ),
 }));
 
@@ -38,6 +40,8 @@ import {
   submitApplicationAction,
   getMyApplicationAction,
   acknowledgeInductionAction,
+  markApplicationReadyAction,
+  hireCandidate,
 } from '@/app/actions/recruitment';
 import { createApplicationRef, APPLICATION_REF_COOKIE } from '@/lib/recruitment/application-ref';
 
@@ -64,6 +68,7 @@ function makeTx(overrides: Record<string, any> = {}) {
       findUnique: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue({ id: 'app-1', status: 'APPLIED' }),
       update: vi.fn().mockResolvedValue({ id: 'app-1' }),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     recruitmentEvent: {
       create: vi.fn().mockResolvedValue({ id: 'evt-1' }),
@@ -417,9 +422,11 @@ describe('acknowledgeInductionAction (step 2 -> 3, server-validated)', () => {
           candidateId: 7,
           status: 'APPLIED',
           currentStep: 'APPLICATION',
+          version: 2,
         }),
         create: vi.fn(),
         update: vi.fn().mockResolvedValue({ id: 'app-existing' }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
     });
     mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
@@ -428,12 +435,13 @@ describe('acknowledgeInductionAction (step 2 -> 3, server-validated)', () => {
     const result = await acknowledgeInductionAction();
 
     expect(result.success).toBe(true);
-    expect(tx.recruitmentApplication.update).toHaveBeenCalledWith(
+    expect(tx.recruitmentApplication.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'app-existing' },
+        where: { id: 'app-existing', status: 'APPLIED', version: 2 },
         data: expect.objectContaining({ status: 'ROLEPLAY_PENDING', currentStep: 'ROLEPLAY' }),
       })
     );
+    expect(tx.recruitmentEvent.create).toHaveBeenCalledTimes(1);
     expect(tx.recruitmentEvent.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ eventType: 'INDUCTION_COMPLETED', toStatus: 'ROLEPLAY_PENDING' }),
@@ -485,5 +493,176 @@ describe('acknowledgeInductionAction (step 2 -> 3, server-validated)', () => {
     expect(result.success).toBe(false);
     expect(result.code).toBe('NOT_FOUND');
     expect(tx.recruitmentApplication.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('admin activation actions (transactional state machine)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    m.actor = {
+      userId: 'admin-1',
+      email: 'admin@example.com',
+      role: 'admin',
+      interpreterId: null,
+      profileId: 'p-admin',
+    };
+  });
+
+  function activationTx(application: Record<string, any>, overrides: Record<string, any> = {}) {
+    return {
+      recruitmentCandidate: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 7,
+          email: 'ana@example.com',
+          name: 'Ana Perez',
+          telefono: '+18095551234',
+          pais: 'República Dominicana',
+          englishLevel: 'C1',
+          speedtestMbps: 50,
+          applications: [application],
+        }),
+        update: vi.fn().mockResolvedValue({ id: 7 }),
+      },
+      recruitmentApplication: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: application.id,
+          status: application.status,
+          version: application.version,
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        update: vi.fn().mockResolvedValue({ id: application.id }),
+      },
+      recruitmentEvent: { create: vi.fn().mockResolvedValue({ id: 'evt-1' }) },
+      systemConfig: { findUnique: vi.fn().mockResolvedValue({ value: '0.5' }) },
+      interpreter: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        create: vi.fn().mockResolvedValue({ id: 42 }),
+      },
+      ...overrides,
+    };
+  }
+
+  it('markApplicationReadyAction advances an open application through the state machine', async () => {
+    const tx = activationTx({ id: 'app-1', status: 'INTERVIEW_REVIEW', version: 4 });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await markApplicationReadyAction(7);
+
+    expect(result).toEqual({ success: true });
+    expect(tx.recruitmentApplication.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'app-1', status: 'INTERVIEW_REVIEW', version: 4 },
+        data: expect.objectContaining({ status: 'READY_FOR_ACTIVATION', currentStep: 'READY_FOR_ACTIVATION' }),
+      })
+    );
+    expect(tx.recruitmentEvent.create).toHaveBeenCalledTimes(1);
+    expect(tx.recruitmentEvent.create.mock.calls[0][0].data).toMatchObject({
+      eventType: 'READY_FOR_ACTIVATION',
+      fromStatus: 'INTERVIEW_REVIEW',
+      toStatus: 'READY_FOR_ACTIVATION',
+      metadata: { candidateId: 7 },
+    });
+  });
+
+  it('markApplicationReadyAction is idempotent once already ready', async () => {
+    const tx = activationTx({ id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5 });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await markApplicationReadyAction(7);
+
+    expect(result).toEqual({ success: true });
+    expect(tx.recruitmentApplication.updateMany).not.toHaveBeenCalled();
+    expect(tx.recruitmentEvent.create).not.toHaveBeenCalled();
+  });
+
+  it('markApplicationReadyAction rejects a closed application', async () => {
+    const tx = activationTx({ id: 'app-1', status: 'REJECTED', version: 5 });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await markApplicationReadyAction(7);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('CONFLICT');
+    expect(tx.recruitmentApplication.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('markApplicationReadyAction requires an admin actor', async () => {
+    m.actor = null;
+
+    const result = await markApplicationReadyAction(7);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('UNAUTHORIZED');
+  });
+
+  it('hireCandidate creates the interpreter, then advances READY_FOR_ACTIVATION -> HIRED with audit metadata', async () => {
+    const tx = activationTx({ id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5, hiredInterpreterId: null });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await hireCandidate(7);
+
+    expect(result).toEqual({ success: true });
+    expect(tx.interpreter.create).toHaveBeenCalledTimes(1);
+    const createOrder = tx.interpreter.create.mock.invocationCallOrder[0];
+    const advanceOrder = tx.recruitmentApplication.updateMany.mock.invocationCallOrder[0];
+    expect(advanceOrder).toBeGreaterThan(createOrder);
+    expect(tx.recruitmentApplication.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5 },
+        data: expect.objectContaining({ status: 'HIRED', currentStep: 'HIRING' }),
+      })
+    );
+    expect(tx.recruitmentApplication.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ hiredInterpreterId: 42 }) })
+    );
+    expect(tx.recruitmentEvent.create).toHaveBeenCalledTimes(1);
+    expect(tx.recruitmentEvent.create.mock.calls[0][0].data).toMatchObject({
+      eventType: 'HIRED',
+      toStatus: 'HIRED',
+      metadata: { interpreterId: 42, candidateId: 7 },
+    });
+    expect(tx.recruitmentCandidate.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'Contratado' }) })
+    );
+  });
+
+  it('hireCandidate refuses an application that is not ready for activation', async () => {
+    const tx = activationTx({ id: 'app-1', status: 'INTERVIEW_REVIEW', version: 3, hiredInterpreterId: null });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await hireCandidate(7);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('CONFLICT');
+    expect(tx.interpreter.create).not.toHaveBeenCalled();
+    expect(tx.recruitmentApplication.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('hireCandidate aborts the transaction when the HIRED transition loses a race', async () => {
+    const tx = activationTx({ id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5, hiredInterpreterId: null });
+    tx.recruitmentApplication.updateMany.mockResolvedValue({ count: 0 });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await hireCandidate(7);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('CONFLICT');
+    expect(tx.recruitmentApplication.update).not.toHaveBeenCalled();
+    expect(tx.recruitmentCandidate.update).not.toHaveBeenCalled();
+  });
+
+  it('hireCandidate refuses before writing when the tariff is not configured', async () => {
+    const tx = activationTx(
+      { id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5, hiredInterpreterId: null },
+      { systemConfig: { findUnique: vi.fn().mockResolvedValue(null) } }
+    );
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    const result = await hireCandidate(7);
+
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('SERVICE_UNAVAILABLE');
+    expect(tx.interpreter.create).not.toHaveBeenCalled();
+    expect(tx.recruitmentApplication.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -18,6 +18,20 @@ export default function RecruitmentFunnel() {
   const [isStartingRoleplay, setIsStartingRoleplay] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  const [terminal, setTerminal] = useState(false);
+  const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
+
+  /**
+   * Re-reads the authoritative step from the server. The client never derives
+   * the funnel step from its own action result: persisted state decides.
+   */
+  const syncFromServer = async () => {
+    const result = await getMyApplicationAction();
+    if (!result.success || !result.data.found) return;
+    setStep(result.data.funnelStep);
+    setTerminal(result.data.terminal === true);
+    setApplicationStatus(result.data.applicationStatus);
+  };
 
   // Form state
   const [formData, setFormData] = useState<ApplicantData>({
@@ -43,6 +57,8 @@ export default function RecruitmentFunnel() {
         const restoredName = data.name;
         const restoredEmail = data.email;
         setStep(data.funnelStep);
+        setTerminal(data.terminal === true);
+        setApplicationStatus(data.applicationStatus);
         setFormData((prev) => ({
           ...prev,
           name: prev.name || restoredName,
@@ -71,8 +87,7 @@ export default function RecruitmentFunnel() {
       const result = await submitApplicationAction(validation.data);
       if (result.success) {
         // The server recomputes the reachable step from persisted state.
-        const nextStep = "funnelStep" in result && typeof result.funnelStep === "number" ? result.funnelStep : 2;
-        setStep(Math.max(2, nextStep));
+        await syncFromServer();
         if ("alreadyApplied" in result && result.alreadyApplied) {
           setInfoMsg("Ya existe una postulación con este correo. Retomamos tu proceso desde donde quedó.");
         }
@@ -88,7 +103,7 @@ export default function RecruitmentFunnel() {
     startTransition(async () => {
       const result = await acknowledgeInductionAction();
       if (result.success) {
-        setStep(3);
+        await syncFromServer();
         return;
       }
       if (result.code === "UNAUTHORIZED") {
@@ -124,6 +139,18 @@ export default function RecruitmentFunnel() {
 
   return (
     <div className="mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-[0_24px_80px_rgba(2,6,23,0.28)] sm:p-7 md:p-8">
+      {terminal ? (
+        <div className="py-10 text-center">
+          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-slate-500" />
+          </div>
+          <h2 className="text-xl font-semibold text-slate-900">Tu proceso de postulación ha finalizado</h2>
+          <p className="text-slate-600 mt-2">
+            Estado actual: <strong>{applicationStatus}</strong>. Si tienes dudas, contacta a nuestro equipo.
+          </p>
+        </div>
+      ) : (
+        <>
       {/* Visual Progress */}
       <div className="flex items-center justify-between mb-8 border-b border-slate-200 pb-5">
         <StepIndicator icon={User} label="Postulación" active={step >= 1} current={step === 1} />
@@ -286,6 +313,8 @@ export default function RecruitmentFunnel() {
              <span className="text-sm text-slate-500">Selecciona tu horario para la entrevista.</span>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

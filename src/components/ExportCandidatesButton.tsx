@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Download } from 'lucide-react';
+import { candidateStatusDisplay } from '@/lib/recruitment/status-display';
 
 interface Candidate {
   id: number;
@@ -13,6 +14,7 @@ interface Candidate {
   englishLevel: string | null;
   speedtestMbps: number | null;
   status: string;
+  applicationStatus?: string | null;
   resultRoleplay: number | null;
   fechaPostulacion: string;
 }
@@ -46,7 +48,7 @@ export function ExportCandidatesButton({ data }: ExportCandidatesButtonProps) {
       candidate.fuente || 'N/A',
       candidate.englishLevel || 'N/A',
       candidate.speedtestMbps ? `${candidate.speedtestMbps} Mbps` : 'N/A',
-      candidate.status,
+      candidateStatusDisplay(candidate.applicationStatus, candidate.status).label,
       candidate.resultRoleplay ? `${candidate.resultRoleplay}%` : 'N/A',
       new Date(candidate.fechaPostulacion).toLocaleDateString()
     ].join(','));

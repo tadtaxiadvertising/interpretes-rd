@@ -210,6 +210,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         sessionId,
         scenarioId: scenario.id,
         scores,
+        criticalError,
         notes: notes || undefined,
       });
       if (!saveResult.success) throw new Error(saveResult.error);

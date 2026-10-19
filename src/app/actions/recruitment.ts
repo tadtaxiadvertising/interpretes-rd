@@ -13,26 +13,51 @@ import {
   createApplicationRef,
   verifyApplicationRef,
 } from '@/lib/recruitment/application-ref';
+import { advanceApplication } from '@/services/recruitment/transitions';
+import {
+  deriveFunnelStep as deriveCanonicalFunnelStep,
+  FUNNEL_STEP_APPLICATION,
+  isApplicationTerminal,
+} from '@/services/recruitment/funnel';
+import type { RecruitmentApplicationStatus } from '@/lib/prisma-types';
 
 const db = prisma;
 
-/** Funnel steps rendered by /postular (1 application, 2 induction, 3 roleplay, 4 setup). */
-const FUNNEL_STEP_APPLICATION = 1;
-const FUNNEL_STEP_INDUCTION = 2;
-const FUNNEL_STEP_ROLEPLAY = 3;
-const FUNNEL_STEP_SETUP = 4;
+type ActionCode = NonNullable<ActionResult['code']>;
 
-const ROLEPLAY_SUBMITTED_STATUSES = ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
+/**
+ * Maps an `advanceApplication` failure code onto the action-surface code
+ * union. `INVALID_STATE` (a legal-code but not an action code) is reported as
+ * `CONFLICT`: the request is well-formed but the application is not in a
+ * state that allows it.
+ */
+function toActionCode(code: 'NOT_FOUND' | 'INVALID_STATE' | 'CONFLICT' | 'VALIDATION_ERROR'): ActionCode {
+  return code === 'INVALID_STATE' ? 'CONFLICT' : code;
+}
+
+/**
+ * Thrown when a side effect has already been written inside the `hireCandidate`
+ * transaction and a later step fails. Returning a value from a `$transaction`
+ * callback commits it, so failures after a real write must abort by throwing;
+ * this carries the action-surface result out to the catch handler.
+ */
+class TransactionAborted extends Error {
+  constructor(readonly result: ActionResult) {
+    super(result.error);
+    this.name = 'TransactionAborted';
+  }
+}
 
 /**
  * Server-side source of truth for the funnel step. Never derived from a
  * client-supplied value: it is computed from the persisted application and
- * roleplay session state.
+ * roleplay session state via the pure mapper in
+ * `@/services/recruitment/funnel`.
  */
 async function deriveFunnelStep(
   tx: Pick<Prisma.TransactionClient, 'roleplaySession'>,
   candidateId: number,
-  applicationStatus?: string
+  applicationStatus: RecruitmentApplicationStatus
 ): Promise<number> {
   const session = await tx.roleplaySession.findFirst({
     where: { recruitmentCandidateId: candidateId },
@@ -40,17 +65,7 @@ async function deriveFunnelStep(
     select: { status: true },
   });
 
-  if (session) {
-    return ROLEPLAY_SUBMITTED_STATUSES.includes(session.status)
-      ? FUNNEL_STEP_SETUP
-      : FUNNEL_STEP_ROLEPLAY;
-  }
-
-  if (applicationStatus === 'ROLEPLAY_PENDING' || applicationStatus === 'ROLEPLAY_IN_PROGRESS') {
-    return FUNNEL_STEP_ROLEPLAY;
-  }
-
-  return FUNNEL_STEP_INDUCTION;
+  return deriveCanonicalFunnelStep(applicationStatus, session?.status ?? null);
 }
 
 /**
@@ -365,6 +380,7 @@ export async function getMyApplicationAction() {
         name: candidate.name,
         email: candidate.email,
         applicationStatus: application.status,
+        terminal: isApplicationTerminal(application.status),
         funnelStep,
       },
     };
@@ -400,30 +416,27 @@ export async function acknowledgeInductionAction() {
       }
 
       // Already at (or past) the roleplay step: idempotent success.
-      const advanced = ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'];
-      if (advanced.includes(application.status) || application.currentStep !== 'APPLICATION') {
+      const advancedStatuses = ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'];
+      if (advancedStatuses.includes(application.status) || application.currentStep !== 'APPLICATION') {
         return { ok: true as const };
       }
 
-      await tx.recruitmentApplication.update({
-        where: { id: application.id },
-        data: {
-          status: 'ROLEPLAY_PENDING',
-          currentStep: 'ROLEPLAY',
-          lastActivityAt: new Date(),
-          version: { increment: 1 },
-        },
+      const advanced = await advanceApplication({
+        db: tx,
+        applicationId: application.id,
+        toStatus: 'ROLEPLAY_PENDING',
+        toStep: 'ROLEPLAY',
+        actorType: 'candidate',
+        actorId: String(ownership.candidateId),
+        eventType: 'INDUCTION_COMPLETED',
       });
-      await tx.recruitmentEvent.create({
-        data: {
-          applicationId: application.id,
-          eventType: 'INDUCTION_COMPLETED',
-          fromStatus: application.status,
-          toStatus: 'ROLEPLAY_PENDING',
-          actorType: 'candidate',
-          actorId: String(ownership.candidateId),
-        },
-      });
+      if (!advanced.success) {
+        return {
+          ok: false as const,
+          error: advanced.error,
+          code: toActionCode(advanced.code),
+        };
+      }
       return { ok: true as const };
     });
 
@@ -520,27 +533,23 @@ export async function markApplicationReadyAction(candidateId: number): Promise<A
         return { ok: true as const, changed: false };
       }
 
-      await tx.recruitmentApplication.update({
-        where: { id: application.id },
-        data: {
-          status: 'READY_FOR_ACTIVATION',
-          currentStep: 'READY_FOR_ACTIVATION',
-          lastActivityAt: new Date(),
-          lastActorId: auth.user.userId,
-          version: { increment: 1 },
-        },
+      const advanced = await advanceApplication({
+        db: tx,
+        applicationId: application.id,
+        toStatus: 'READY_FOR_ACTIVATION',
+        toStep: 'READY_FOR_ACTIVATION',
+        actorType: 'admin',
+        actorId: auth.user.userId,
+        eventType: 'READY_FOR_ACTIVATION',
+        metadata: { candidateId: candidate.id },
       });
-      await tx.recruitmentEvent.create({
-        data: {
-          applicationId: application.id,
-          eventType: 'READY_FOR_ACTIVATION',
-          fromStatus: application.status,
-          toStatus: 'READY_FOR_ACTIVATION',
-          actorType: 'admin',
-          actorId: auth.user.userId,
-          metadata: { candidateId: candidate.id },
-        },
-      });
+      if (!advanced.success) {
+        return {
+          ok: false as const,
+          error: advanced.error,
+          code: toActionCode(advanced.code),
+        };
+      }
       return { ok: true as const, changed: true };
     });
 
@@ -583,8 +592,12 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
       if (application.status === 'HIRED' && application.hiredInterpreterId) {
         return { ok: true as const, interpreterId: application.hiredInterpreterId };
       }
-      if (!['READY_FOR_ACTIVATION', 'HIRING'].includes(application.status)) {
-        return { ok: false as const, error: 'Complete recruitment checks and mark the application ready for activation before hiring.', code: 'CONFLICT' as const };
+      if (application.status !== 'READY_FOR_ACTIVATION' && application.status !== 'HIRING') {
+        return {
+          ok: false as const,
+          error: 'Complete recruitment checks and mark the application ready for activation before hiring.',
+          code: 'CONFLICT' as const,
+        };
       }
 
       const rateConfig = await tx.systemConfig.findUnique({
@@ -623,32 +636,36 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
         select: { id: true },
       });
 
+      const advanced = await advanceApplication({
+        db: tx,
+        applicationId: application.id,
+        toStatus: 'HIRED',
+        toStep: 'HIRING',
+        actorType: 'admin',
+        actorId: auth.user.userId,
+        eventType: 'HIRED',
+        fromStatuses: ['READY_FOR_ACTIVATION', 'HIRING'],
+        metadata: { interpreterId: interpreter.id, candidateId: candidate.id },
+      });
+      if (!advanced.success) {
+        throw new TransactionAborted({
+          success: false,
+          error: advanced.error,
+          code: toActionCode(advanced.code),
+        });
+      }
+
       await tx.recruitmentApplication.update({
         where: { id: application.id },
         data: {
-          status: 'HIRED',
-          currentStep: 'HIRING',
           hiredInterpreterId: interpreter.id,
           completedAt: new Date(),
-          lastActivityAt: new Date(),
           lastActorId: auth.user.userId,
-          version: { increment: 1 },
         },
       });
       await tx.recruitmentCandidate.update({
         where: { id: candidate.id },
         data: { status: 'Contratado', fechaInicio: new Date() },
-      });
-      await tx.recruitmentEvent.create({
-        data: {
-          applicationId: application.id,
-          eventType: 'HIRED',
-          fromStatus: application.status,
-          toStatus: 'HIRED',
-          actorType: 'admin',
-          actorId: auth.user.userId,
-          metadata: { interpreterId: interpreter.id, candidateId: candidate.id },
-        },
       });
       return { ok: true as const, interpreterId: interpreter.id };
     });
@@ -661,6 +678,9 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
     revalidatePath('/interpreters');
     return { success: true };
   } catch (error) {
+    if (error instanceof TransactionAborted) {
+      return error.result;
+    }
     console.error('Error in hireCandidate action:', error);
     return {
       success: false,
