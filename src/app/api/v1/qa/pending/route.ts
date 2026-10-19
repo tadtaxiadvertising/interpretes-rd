@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
+import { corsHeaders } from '@/lib/cors';
 
 export async function GET(request: Request) {
   try {
@@ -23,9 +24,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(pendingCalls, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request),
     });
   } catch (error) {
     console.error('Error fetching pending audits:', error);
