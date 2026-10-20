@@ -14,36 +14,39 @@ interface SelfAssessmentProps {
   initialNotes?: string;
 }
 
+// Canonical QA dimensions (see src/lib/roleplay/scoring.ts). The candidate
+// self-assesses on the same five dimensions the evaluator grades, so the
+// admin evaluation view can render both side by side without key mapping.
 const CRITERIA = [
   { 
-    id: 'comprehension', 
-    label: 'Comprensión', 
-    description: '¿Entendiste completamente el mensaje del audio base?',
-    icon: '🎧'
+    id: 'protocol', 
+    label: 'Protocolo', 
+    description: '¿Seguiste el protocolo y las instrucciones del escenario?',
+    icon: '📋'
   },
   { 
-    id: 'accuracy', 
-    label: 'Precisión', 
-    description: '¿Transmitiste la información exacta sin omisiones ni adiciones?',
+    id: 'interpretation', 
+    label: 'Interpretación', 
+    description: '¿Transmitiste fielmente el mensaje sin omisiones ni adiciones?',
     icon: '🎯'
   },
   { 
-    id: 'fluency', 
-    label: 'Fluidez', 
-    description: '¿Mantuviste un ritmo natural y continuo al interpretar?',
+    id: 'language', 
+    label: 'Idioma', 
+    description: '¿Mantuviste precisión gramatical y el vocabulario adecuado?',
     icon: '🌊'
   },
   { 
-    id: 'terminology', 
-    label: 'Terminología', 
-    description: '¿Usaste la terminología técnica correcta del contexto?',
-    icon: '📚'
+    id: 'service', 
+    label: 'Servicio', 
+    description: '¿Mantuviste un tono profesional, empático y neutral?',
+    icon: '🤝'
   },
   { 
-    id: 'professionalism', 
-    label: 'Profesionalismo', 
-    description: '¿Mantuviste el tono, registro y neutralidad adecuados?',
-    icon: '🤝'
+    id: 'technical', 
+    label: 'Técnico', 
+    description: '¿Cuidaste el ritmo, la audibilidad y el manejo de la grabación?',
+    icon: '🎧'
   },
 ] as const;
 
@@ -132,12 +135,12 @@ export function SelfAssessment({
 
                 {showHelp === criterion.id && (
                   <div className="mt-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-sm text-blue-300 animate-in fade-in">
-                    <strong>{criterion.label}:</strong> Evalúa tu capacidad para{' '}
-                    {criterion.id === 'comprehension' && 'captar todos los detalles del mensaje original, incluyendo números, nombres y matices.'}
-                    {criterion.id === 'accuracy' && 'reproducir fielmente la información sin añadir, omitir ni distorsionar nada.'}
-                    {criterion.id === 'fluency' && 'hablar con ritmo natural, sin pausas excesivas ni tartamudeos, manteniendo la coherencia.'}
-                    {criterion.id === 'terminology' && 'emplear los términos técnicos correctos del ámbito (médico, legal, financiero, etc.).'}
-                    {criterion.id === 'professionalism' && 'mantener neutralidad, tono adecuado y registro profesional sin opiniones personales.'}
+                        <strong>{criterion.label}:</strong> Evalúa tu capacidad para{' '}
+                        {criterion.id === 'protocol' && 'seguir el protocolo, las instrucciones y el flujo establecido para el escenario.'}
+                        {criterion.id === 'interpretation' && 'reproducir fielmente la información sin añadir, omitir ni distorsionar nada.'}
+                        {criterion.id === 'language' && 'mantener precisión gramatical y el vocabulario adecuado en ambos idiomas.'}
+                        {criterion.id === 'service' && 'mantener neutralidad, tono adecuado y registro profesional sin opiniones personales.'}
+                        {criterion.id === 'technical' && 'cuidar el ritmo, la audibilidad y el manejo correcto de la grabación.'}
                   </div>
                 )}
               </div>

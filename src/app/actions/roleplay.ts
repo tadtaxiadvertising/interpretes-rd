@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
+import { calculateRoleplayScore } from '@/lib/roleplay/scoring';
+import { advanceApplication } from '@/services/recruitment/transitions';
 
 const db = prisma;
 
@@ -137,46 +139,23 @@ type ApplicationAdvance = {
  * Advances the candidate's recruitment application through the hiring
  * pipeline when a roleplay milestone happens (start, submit, evaluation).
  *
- * The transition is guarded by an optimistic `status IN (fromStatuses)` +
- * `version` predicate, so a retried or concurrent action can never
+ * Delegates to the canonical state machine in
+ * `@/services/recruitment/transitions` (optimistic `status`+`version` guard,
+ * RecruitmentEvent audit), so a retried or concurrent action can never
  * double-advance or regress the application: the database is the authority.
  * Bookkeeping is best-effort — a pipeline write failure is logged and never
  * fails the roleplay action itself (the roleplay state remains correct).
  */
 async function advanceApplicationPipeline(advance: ApplicationAdvance): Promise<void> {
   try {
-    const application = await db.recruitmentApplication.findUnique({
-      where: { candidateId: advance.candidateId },
-      select: { id: true, status: true, version: true },
-    });
-    if (!application || !advance.fromStatuses.includes(application.status)) return;
-
-    await db.$transaction(async (tx) => {
-      const res = await tx.recruitmentApplication.updateMany({
-        where: {
-          id: application.id,
-          status: { in: advance.fromStatuses },
-          version: application.version,
-        },
-        data: {
-          status: advance.toStatus,
-          currentStep: advance.toStep,
-          version: { increment: 1 },
-          lastActivityAt: new Date(),
-          lastActorId: advance.actorId,
-        },
-      });
-      if (res.count === 0) return; // Concurrent transition already advanced it.
-      await tx.recruitmentEvent.create({
-        data: {
-          applicationId: application.id,
-          eventType: advance.eventType,
-          fromStatus: application.status,
-          toStatus: advance.toStatus,
-          actorType: advance.actorType,
-          actorId: advance.actorId,
-        },
-      });
+    await advanceApplication({
+      candidateId: advance.candidateId,
+      fromStatuses: advance.fromStatuses,
+      toStatus: advance.toStatus,
+      toStep: advance.toStep,
+      eventType: advance.eventType,
+      actorType: advance.actorType,
+      actorId: advance.actorId,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -584,7 +563,8 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
 const SelfAssessmentSchema = z.object({
   sessionId: z.string().min(1),
   scenarioId: z.string().min(1),
-  scores: z.record(z.string(), z.number().min(0).max(100)),
+  scores: z.record(z.string(), z.number().min(0).max(10)),
+  criticalError: z.boolean().optional(),
   notes: z.string().max(2000).optional(),
 });
 
@@ -638,7 +618,10 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
       await tx.roleplayResponse.update({
         where: { id: response.id },
         data: {
-          selfScore: input.scores,
+          // Canonical shape: the five QA dimensions plus the critical-error
+          // flag, so the admin evaluation view reads exactly what the
+          // candidate submitted (see admin/roleplays/[id]/page.tsx).
+          selfScore: { ...input.scores, criticalError: input.criticalError ?? false },
           selfNotes: input.notes ?? null,
         },
       });
@@ -730,13 +713,13 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
 
 const EvaluateRoleplaySchema = z.object({
   sessionId: z.string().min(1),
-  protocolScore: z.number().min(0).max(100),
-  interpretationScore: z.number().min(0).max(100),
-  languageScore: z.number().min(0).max(100),
-  serviceScore: z.number().min(0).max(100),
-  technicalScore: z.number().min(0).max(100),
+  protocolScore: z.number().min(0).max(10),
+  interpretationScore: z.number().min(0).max(10),
+  languageScore: z.number().min(0).max(10),
+  serviceScore: z.number().min(0).max(10),
+  technicalScore: z.number().min(0).max(10),
   criticalError: z.boolean(),
-  comments: z.string().optional(),
+  comments: z.string().max(5000).optional(),
 });
 
 export type EvaluateRoleplayInput = z.infer<typeof EvaluateRoleplaySchema>;
@@ -745,14 +728,14 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  // Parse form data
+  // Parse form data (dimension scores are 0..10)
   const rawInput = {
     sessionId: formData.get('sessionId') as string,
-    protocolScore: parseInt(formData.get('protocolScore') as string) || 0,
-    interpretationScore: parseInt(formData.get('interpretationScore') as string) || 0,
-    languageScore: parseInt(formData.get('languageScore') as string) || 0,
-    serviceScore: parseInt(formData.get('serviceScore') as string) || 0,
-    technicalScore: parseInt(formData.get('technicalScore') as string) || 0,
+    protocolScore: parseFloat(formData.get('protocolScore') as string) || 0,
+    interpretationScore: parseFloat(formData.get('interpretationScore') as string) || 0,
+    languageScore: parseFloat(formData.get('languageScore') as string) || 0,
+    serviceScore: parseFloat(formData.get('serviceScore') as string) || 0,
+    technicalScore: parseFloat(formData.get('technicalScore') as string) || 0,
     criticalError: formData.get('criticalError') === 'on',
     comments: formData.get('comments') as string || '',
   };
@@ -761,24 +744,18 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
 
-  let totalScore = 0;
-  if (input.criticalError) {
-    totalScore = 0;
-  } else {
-    totalScore = 
-      (input.protocolScore * 0.20) +
-      (input.interpretationScore * 0.40) +
-      (input.languageScore * 0.20) +
-      (input.serviceScore * 0.10) +
-      (input.technicalScore * 0.10);
-  }
-
-  let actionRequired = 'Ninguna';
-  if (input.criticalError || totalScore < 70) {
-    actionRequired = 'Advertencia / Coaching';
-  } else if (totalScore < 85) {
-    actionRequired = 'Feedback Requerido';
-  }
+  // Canonical scoring: 0..10 dimensions in, 0..100 total out; criticalError
+  // forces 0. All consumers share this single function (lib/roleplay/scoring).
+  const score = calculateRoleplayScore({
+    protocol: input.protocolScore,
+    interpretation: input.interpretationScore,
+    language: input.languageScore,
+    service: input.serviceScore,
+    technical: input.technicalScore,
+    criticalError: input.criticalError,
+  });
+  const totalScore = score.totalScore;
+  const actionRequired = score.actionRequired;
 
   const auditorEmail = auth.user.email || 'System';
 
@@ -792,6 +769,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
           recordedAudioUrl: true, 
           recruitmentCandidateId: true,
           interpreterId: true,
+          status: true,
         },
       });
 
@@ -799,17 +777,24 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
       if (session.qaScoreId) throw new Error('Session already evaluated');
       if (!session.recordedAudioUrl) throw new Error('No response submitted yet');
 
-      const updated = await tx.roleplaySession.update({
-        where: { 
+      // Atomic claim: exactly one evaluator wins. Guarded by
+      // status = SUBMITTED AND evaluatorId IS NULL; the claim also moves the
+      // session into UNDER_REVIEW (plan §32/§33). A concurrent request updates
+      // zero rows and is rejected as a conflict.
+      const claimed = await tx.roleplaySession.updateMany({
+        where: {
           id: input.sessionId,
-          qaScoreId: null as any,
-          recordedAudioUrl: { not: null },
+          status: 'SUBMITTED',
+          evaluatorId: null,
         },
-        data: { evaluatorId: auth.user.userId },
-        select: { id: true },
+        data: {
+          evaluatorId: auth.user.userId,
+          status: 'UNDER_REVIEW',
+          reviewStartedAt: new Date(),
+        },
       });
 
-      if (!updated) {
+      if (claimed.count !== 1) {
         throw new Error('Concurrent evaluation detected or session not available');
       }
 
@@ -823,6 +808,8 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
           languageScore: input.languageScore,
           serviceScore: input.serviceScore,
           technicalScore: input.technicalScore,
+          // Persist the canonical total so admin lists/dashboards never show null.
+          totalScore,
           criticalError: input.criticalError,
           comentarios: input.comments,
           accionRequerida: actionRequired,
@@ -848,7 +835,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
 
       return {
         qaScoreId: qaScore.id,
-        totalScore: Math.round(totalScore * 100) / 100,
+        totalScore,
         actionRequired,
         interpreterId: session.interpreterId,
         recruitmentCandidateId: session.recruitmentCandidateId,
@@ -859,12 +846,10 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
     // interview. A failed evaluation intentionally leaves the application at
     // ROLEPLAY_REVIEW so rejection stays an explicit admin decision.
     // Guarded + best-effort (see advanceApplicationPipeline).
-    if (result.recruitmentCandidateId && !input.criticalError && totalScore >= 70) {
+    if (result.recruitmentCandidateId && score.passed) {
       await advanceApplicationPipeline({
         candidateId: result.recruitmentCandidateId,
         fromStatuses: [
-          'APPLIED',
-          'INDUCTION_PENDING',
           'ROLEPLAY_PENDING',
           'ROLEPLAY_IN_PROGRESS',
           'ROLEPLAY_REVIEW',

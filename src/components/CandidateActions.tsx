@@ -24,7 +24,6 @@ interface CandidateActionsProps {
     id: number;
     name: string;
     email: string;
-    status: string;
     applicationStatus?: string | null;
   };
 }
@@ -47,6 +46,9 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
     applicationStatus !== null &&
     !APPLICATION_READY_STATES.includes(applicationStatus) &&
     !APPLICATION_CLOSED_STATES.includes(applicationStatus);
+  // `hireCandidate` only accepts READY_FOR_ACTIVATION / HIRING, so the UI must
+  // not offer hiring before the application has been marked ready.
+  const canHire = applicationStatus !== null && APPLICATION_READY_STATES.includes(applicationStatus);
 
   const handleCreateRoleplay = async () => {
     setIsCreatingRoleplay(true);
@@ -183,7 +185,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
                 Mark Ready for Hiring
               </button>
             )}
-            {candidate.status !== 'Contratado' && (
+            {canHire && (
               <button 
                 disabled={isHiring}
                 className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-green-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"

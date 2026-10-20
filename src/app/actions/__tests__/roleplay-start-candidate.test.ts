@@ -39,7 +39,10 @@ vi.mock('@/lib/prisma', () => ({
     recruitmentApplication: { findUnique: m.appFindUnique },
     $transaction: async (cb: any) =>
       cb({
-        recruitmentApplication: { updateMany: m.appUpdateMany },
+        recruitmentApplication: {
+          findUnique: m.appFindUnique,
+          updateMany: m.appUpdateMany,
+        },
         recruitmentEvent: { create: m.eventCreate },
       }),
   },
@@ -162,7 +165,7 @@ describe('startCandidateRoleplay', () => {
     expect(res.success).toBe(true);
     expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
     expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
-      where: { id: 'app-1', status: { in: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING'] }, version: 4 },
+      where: { id: 'app-1', status: 'ROLEPLAY_PENDING', version: 4 },
       data: expect.objectContaining({
         status: 'ROLEPLAY_IN_PROGRESS',
         currentStep: 'ROLEPLAY',

@@ -147,7 +147,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Marcos Peña',
       email: 'marcos@example.com',
-      status: 'Aplicante',
       pais: 'Dominican Republic',
       englishLevel: 'C1',
       fechaPostulacion: new Date('2026-04-20'),
@@ -155,7 +154,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Laura Garcia',
       email: 'laura@example.com',
-      status: 'Entrevista',
       pais: 'Argentina',
       englishLevel: 'C2',
       resultRoleplay: 85,
@@ -164,7 +162,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Ricardo Fort',
       email: 'ricardo@example.com',
-      status: 'Contratado',
       pais: 'Argentina',
       englishLevel: 'C1',
       resultRoleplay: 92,
@@ -173,7 +170,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Bad Bunny',
       email: 'benito@example.com',
-      status: 'Rechazado',
       pais: 'Puerto Rico',
       englishLevel: 'B2',
       resultRoleplay: 45,

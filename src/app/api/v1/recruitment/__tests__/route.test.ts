@@ -33,7 +33,6 @@ const validBody = {
   fuente: 'LinkedIn',
   englishLevel: 'B2',
   speedtestMbps: 50,
-  status: 'Aplicante',
   fechaPostulacion: new Date().toISOString(),
 };
 
@@ -162,15 +161,24 @@ describe('/api/v1/recruitment', () => {
   });
 
   describe('GET listing', () => {
-    it('filters candidates by status', async () => {
+    it('filters candidates by the canonical application status', async () => {
       (prisma.recruitmentCandidate.findMany as any).mockResolvedValue([]);
 
-      const res = await GET(new Request('http://localhost/api/v1/recruitment?status=Aplicante'));
+      const res = await GET(new Request('http://localhost/api/v1/recruitment?status=APPLIED'));
 
       expect(res.status).toBe(200);
       expect(prisma.recruitmentCandidate.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ status: 'Aplicante' }) })
+        expect.objectContaining({
+          where: expect.objectContaining({ applications: { some: { status: 'APPLIED' } } }),
+        })
       );
+    });
+
+    it('rejects an unknown status filter with 400 and does not query', async () => {
+      const res = await GET(new Request('http://localhost/api/v1/recruitment?status=Aplicante'));
+
+      expect(res.status).toBe(400);
+      expect(prisma.recruitmentCandidate.findMany).not.toHaveBeenCalled();
     });
   });
 });
