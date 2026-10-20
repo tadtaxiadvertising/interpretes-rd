@@ -77,6 +77,11 @@ function makeTx(overrides: Record<string, any> = {}) {
       findFirst: vi.fn().mockResolvedValue(null),
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
+    interpreter: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue({ id: 99 }),
+      update: vi.fn().mockResolvedValue({ id: 99 }),
+    },
     ...overrides,
   };
 }

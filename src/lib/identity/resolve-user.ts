@@ -28,6 +28,7 @@ export type ResolvedIdentity = {
   profileId: string | null;
   interpreterId: number | null;
   candidateId: number | null;
+  candidateHired: boolean;
   email: string | null;
   role: UserRole;
   provider: AuthProvider;
@@ -236,12 +237,44 @@ async function resolveActorFromSupabase(
     interpreterId = interpreter?.id ?? null;
   }
 
-  // Check for active roleplay session
+  // Resolve candidate identity by email (candidate becomes future interpreter).
+  // Candidate data is authoritative for recruitment/roleplay continuation.
+  let candidateHired = false;
+  if (resolvedRole !== 'admin' && email) {
+    const candidate = await prisma.recruitmentCandidate.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        applications: { select: { status: true, hiredInterpreterId: true }, take: 1, orderBy: { createdAt: 'desc' } },
+      },
+    });
+    if (candidate) {
+      candidateId = candidate.id;
+      const app = candidate.applications[0];
+      candidateHired = app?.status === 'HIRED';
+      // A hired candidate should reuse the linked interpreter identity.
+      if (candidateHired && !interpreterId && app?.hiredInterpreterId) {
+        interpreterId = app.hiredInterpreterId;
+      }
+    }
+  }
+
+  // Check for active roleplay session (interpreter first, then candidate)
   let roleplaySession: any = null;
   if (interpreterId) {
     roleplaySession = await prisma.roleplaySession.findFirst({
       where: { 
         interpreterId, 
+        status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
+      },
+      include: { access: true },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+  if (!roleplaySession && candidateId) {
+    roleplaySession = await prisma.roleplaySession.findFirst({
+      where: { 
+        recruitmentCandidateId: candidateId, 
         status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
       },
       include: { access: true },
@@ -272,6 +305,7 @@ async function resolveActorFromSupabase(
     profileId: profile?.id ?? null,
     interpreterId,
     candidateId,
+    candidateHired,
     email,
     role: resolvedRole,
     provider: 'supabase',
@@ -328,12 +362,42 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
       resolvedInterpreterId = interpreter?.id ?? null;
     }
 
-    // Check for active roleplay session
+    // Resolve candidate identity by email (candidate becomes future interpreter).
+    let candidateHired = false;
+    if (role !== 'admin' && email) {
+      const candidate = await prisma.recruitmentCandidate.findUnique({
+        where: { email },
+        select: {
+          id: true,
+          applications: { select: { status: true, hiredInterpreterId: true }, take: 1, orderBy: { createdAt: 'desc' } },
+        },
+      });
+      if (candidate) {
+        candidateId = candidate.id;
+        const app = candidate.applications[0];
+        candidateHired = app?.status === 'HIRED';
+        if (candidateHired && !resolvedInterpreterId && app?.hiredInterpreterId) {
+          resolvedInterpreterId = app.hiredInterpreterId;
+        }
+      }
+    }
+
+    // Check for active roleplay session (interpreter first, then candidate)
     let roleplaySession: any = null;
     if (resolvedInterpreterId) {
       roleplaySession = await prisma.roleplaySession.findFirst({
         where: { 
           interpreterId: resolvedInterpreterId, 
+          status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
+        },
+        include: { access: true },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+    if (!roleplaySession && candidateId) {
+      roleplaySession = await prisma.roleplaySession.findFirst({
+        where: { 
+          recruitmentCandidateId: candidateId, 
           status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
         },
         include: { access: true },
@@ -364,6 +428,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
       profileId,
       interpreterId: resolvedInterpreterId,
       candidateId,
+      candidateHired,
       email,
       role,
       provider: 'authjs',

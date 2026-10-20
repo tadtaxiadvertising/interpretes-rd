@@ -15,6 +15,9 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: vi.fn(),
       findUnique: vi.fn(),
     },
+    recruitmentCandidate: {
+      findUnique: vi.fn(),
+    },
     roleplaySession: {
       findFirst: vi.fn(),
     },
@@ -48,6 +51,7 @@ describe('Identity Resolver', () => {
     mockPrisma.userProfile.findUnique.mockResolvedValue(null);
     mockPrisma.interpreter.findFirst.mockResolvedValue(null);
     mockPrisma.interpreter.findUnique.mockResolvedValue(null);
+    mockPrisma.recruitmentCandidate.findUnique.mockResolvedValue(null);
     mockPrisma.roleplaySession.findFirst.mockResolvedValue(null);
     
     mockAuth.mockResolvedValue(null);

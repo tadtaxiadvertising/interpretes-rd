@@ -246,6 +246,32 @@ export async function submitApplicationAction(data: ApplicantData) {
             });
           }
 
+          // Ensure the candidate also has a restricted interpreter record so the
+          // same account can later complete onboarding/roleplay without re-entering data.
+          const existingInterpreter = await tx.interpreter.findFirst({
+            where: { emailCorporativo: email },
+            select: { id: true, status: true },
+          });
+          if (!existingInterpreter) {
+            await tx.interpreter.create({
+              data: {
+                externalId: `recruitment-candidate-${existing.id}`,
+                name: parsed.name,
+                status: 'Candidato',
+                emailCorporativo: email,
+                telefono: parsed.phone,
+                pais: parsed.country,
+                tariffPerMinute: 0,
+                notas: JSON.stringify({ recruitmentCandidateId: existing.id, source: 'recruitment', status: 'candidate' }),
+              },
+            });
+          } else if (existingInterpreter.status === 'Candidato' || existingInterpreter.status === 'En proceso') {
+            await tx.interpreter.update({
+              where: { id: existingInterpreter.id },
+              data: { name: parsed.name, telefono: parsed.phone, pais: parsed.country },
+            });
+          }
+
           const funnelStep = await deriveFunnelStep(tx, existing.id, application.status);
           return {
             candidateId: existing.id,
@@ -281,6 +307,20 @@ export async function submitApplicationAction(data: ApplicantData) {
             actorType: 'candidate',
             actorId: email,
             metadata: { source: 'Web Portal' },
+          },
+        });
+
+        // Create the restricted interpreter record for the new candidate.
+        await tx.interpreter.create({
+          data: {
+            externalId: `recruitment-candidate-${created.id}`,
+            name: parsed.name,
+            status: 'Candidato',
+            emailCorporativo: email,
+            telefono: parsed.phone,
+            pais: parsed.country,
+            tariffPerMinute: 0,
+            notas: JSON.stringify({ recruitmentCandidateId: created.id, source: 'recruitment', status: 'candidate' }),
           },
         });
 
@@ -608,32 +648,58 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
         return { ok: false as const, error: 'Configure DEFAULT_INTERPRETER_TARIFF_PER_MINUTE in system_configs before hiring.', code: 'SERVICE_UNAVAILABLE' as const };
       }
 
+      // Reuse the restricted interpreter record created during application instead
+      // of creating a duplicate. Candidate becomes the same interpreter account.
       const existing = await tx.interpreter.findFirst({
         where: { emailCorporativo: candidate.email },
-        select: { id: true },
+        select: { id: true, status: true },
       });
+
+      let interpreterId: number;
       if (existing) {
-        return { ok: false as const, error: 'An interpreter already uses this candidate email. Review the existing record before continuing.', code: 'CONFLICT' as const };
+        await tx.interpreter.update({
+          where: { id: existing.id },
+          data: {
+            name: candidate.name,
+            status: 'Activo',
+            telefono: candidate.telefono,
+            pais: candidate.pais,
+            tariffPerMinute: tariff,
+            documentosCompleto: true,
+            notas: JSON.stringify({
+              recruitmentCandidateId: candidate.id,
+              englishLevel: candidate.englishLevel,
+              speedtestMbps: candidate.speedtestMbps,
+              source: 'recruitment',
+              hiredAt: new Date().toISOString(),
+            }),
+          },
+        });
+        interpreterId = existing.id;
+      } else {
+        const created = await tx.interpreter.create({
+          data: {
+            externalId: `recruitment-candidate-${candidate.id}`,
+            name: candidate.name,
+            status: 'Activo',
+            emailCorporativo: candidate.email,
+            telefono: candidate.telefono,
+            pais: candidate.pais,
+            tariffPerMinute: tariff,
+            documentosCompleto: true,
+            notas: JSON.stringify({
+              recruitmentCandidateId: candidate.id,
+              englishLevel: candidate.englishLevel,
+              speedtestMbps: candidate.speedtestMbps,
+              source: 'recruitment',
+            }),
+          },
+          select: { id: true },
+        });
+        interpreterId = created.id;
       }
 
-      const interpreter = await tx.interpreter.create({
-        data: {
-          externalId: `recruitment-candidate-${candidate.id}`,
-          name: candidate.name,
-          status: 'Activo',
-          emailCorporativo: candidate.email,
-          telefono: candidate.telefono,
-          pais: candidate.pais,
-          tariffPerMinute: tariff,
-          notas: JSON.stringify({
-            recruitmentCandidateId: candidate.id,
-            englishLevel: candidate.englishLevel,
-            speedtestMbps: candidate.speedtestMbps,
-            source: 'recruitment',
-          }),
-        },
-        select: { id: true },
-      });
+      const interpreter = { id: interpreterId };
 
       const advanced = await advanceApplication({
         db: tx,

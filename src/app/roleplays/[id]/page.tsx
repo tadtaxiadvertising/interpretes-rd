@@ -6,6 +6,7 @@ interface SerializedIdentity {
   profileId: string | null;
   interpreterId: number | null;
   candidateId: number | null;
+  candidateHired: boolean;
   email: string | null;
   role: string;
   provider: 'supabase' | 'authjs';
