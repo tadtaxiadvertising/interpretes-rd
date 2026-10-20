@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { guardApiAuth } from '@/lib/api-auth';
 import { apiError } from '@/lib/api-responses';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     await prisma.$executeRawUnsafe(`
       ALTER TABLE interpreters 
       ADD COLUMN IF NOT EXISTS payment_frequency TEXT DEFAULT 'Monthly',

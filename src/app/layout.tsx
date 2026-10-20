@@ -1,25 +1,29 @@
 import type { Metadata, Viewport } from "next";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
-
+import VersionGuard from "@/components/VersionGuard";
 
 export const metadata: Metadata = {
-  title: "Free Interpreters OS | Enterprise Management",
-  description: "Advanced Real-time Interpreter Management & Payroll Ecosystem",
-  keywords: ["interpreter", "management", "payroll", "real-time", "os"],
-  authors: [{ name: "Free Interpreters Team" }],
-  icons: {
-    icon: "/favicon.ico",
-  }
+  title: "Intérpretes RD | Plataforma de gestión y oportunidades",
+  description:
+    "Conoce Intérpretes RD: una plataforma para postulación de candidatos, seguimiento profesional y gestión operativa de intérpretes.",
+  keywords: [
+    "intérpretes",
+    "postulación",
+    "reclutamiento",
+    "gestión de intérpretes",
+    "producción",
+    "Intérpretes RD",
+  ],
+  authors: [{ name: "Intérpretes RD" }],
+  icons: { icon: "/favicon.ico" },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#020617",
+  themeColor: "#2675ff",
   width: "device-width",
   initialScale: 1,
 };
-
-import VersionGuard from '@/components/VersionGuard';
 
 export default function RootLayout({
   children,
@@ -27,10 +31,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning>
       <body className="antialiased font-sans selection:bg-primary selection:text-white">
         <VersionGuard />
-        <Toaster 
+        <Toaster
           position="top-right"
           toastOptions={{
             duration: 4000,
@@ -41,11 +45,9 @@ export default function RootLayout({
               border: "1px solid rgba(255, 255, 255, 0.1)",
               borderRadius: "12px",
             },
-          }} 
+          }}
         />
-        <main className="relative min-h-screen">
-          {children}
-        </main>
+        <main className="relative min-h-screen">{children}</main>
       </body>
     </html>
   );

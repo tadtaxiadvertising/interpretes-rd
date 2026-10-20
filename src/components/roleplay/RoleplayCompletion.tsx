@@ -34,7 +34,7 @@ export function RoleplayCompletion({
       <div className="min-h-screen bg-slate-950 py-12 px-4 flex items-center justify-center">
         <div className="glass p-12 rounded-3xl border border-white/5 text-center max-w-md animate-in fade-in zoom-in-95 duration-700">
           <div className="absolute -top-20 -left-20 w-64 h-64 bg-emerald-500/30 rounded-full blur-[100px] pointer-events-none" />
-          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-teal-500/30 rounded-full blur-[100px] pointer-events-none" />
+          <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-blue-500/30 rounded-full blur-[100px] pointer-events-none" />
           
           <div className="relative w-24 h-24 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-emerald-500/20">
             <CheckCircle2 size={48} className="text-emerald-400" />

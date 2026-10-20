@@ -543,7 +543,7 @@ export function InterpreterOnboardingPanel({ userId, onClose }: InterpreterOnboa
                         : 'bg-slate-800 text-slate-500 cursor-not-allowed'
                     )}
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-teal-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                     <span className="relative z-10 flex items-center gap-2">
                       {isPending ? <Loader2 size={18} className="animate-spin" /> : <><Save size={18} /> Guardar Cambios</>}
                     </span>

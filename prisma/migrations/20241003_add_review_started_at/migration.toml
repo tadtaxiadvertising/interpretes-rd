@@ -1,0 +1,2 @@
+provider = "postgresql"
+description = "Add review_started_at and review_priority columns to roleplay_sessions table for QA review queue tracking"

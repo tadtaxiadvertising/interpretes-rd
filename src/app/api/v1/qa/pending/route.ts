@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { guardApiAuth } from '@/lib/api-auth';
+import { corsHeaders } from '@/lib/cors';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     // In a real scenario, this would filter calls that haven't been audited
     // For now, we fetch the most recent completed calls
     const pendingCalls = await prisma.callSession.findMany({
@@ -19,9 +24,7 @@ export async function GET() {
     });
 
     return NextResponse.json(pendingCalls, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request),
     });
   } catch (error) {
     console.error('Error fetching pending audits:', error);

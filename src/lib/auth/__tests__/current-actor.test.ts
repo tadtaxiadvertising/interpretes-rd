@@ -37,6 +37,10 @@ import { resolveUserRoleByEmail } from '@/lib/admin-identity';
 describe('CurrentActor abstraction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Keep mock state isolated between tests. clearAllMocks() clears call history
+    // but intentionally preserves implementations/return values.
+    (prisma.userProfile.findUnique as any).mockResolvedValue(undefined);
+    (prisma.interpreter.findFirst as any).mockResolvedValue(undefined);
   });
 
   describe('getCurrentActor', () => {
@@ -106,6 +110,8 @@ describe('CurrentActor abstraction', () => {
 
     it('falls back to Auth.js when Supabase not configured', async () => {
       (createClient as any).mockRejectedValue(new Error('Supabase not configured'));
+      (prisma.userProfile.findUnique as any).mockResolvedValue(undefined);
+      (prisma.interpreter.findFirst as any).mockResolvedValue(undefined);
       (auth as any).mockResolvedValue({
         user: {
           id: 'authjs-123',

@@ -107,7 +107,7 @@ function computeOnboardingStatus(profile: {
   return { status: 'NOT_STARTED', step: 'legal', version: 1, completedAt: null };
 }
 
-function computeRoleplayState(session: {
+export function computeRoleplayState(session: {
   id: string;
   status: string;
   interpreterId: number | null;
@@ -126,34 +126,38 @@ function computeRoleplayState(session: {
     return { state: 'NO_ROLEPLAY', sessionId: null };
   }
 
-  // Map current status to new state machine
+  // Map the persisted RoleplayStatus to the derived routing state. The
+  // vocabulary here MUST match the RoleplayStatus enum and the transitions
+  // written by the roleplay service (DRAFT/INVITED/STARTED/IN_PROGRESS/
+  // SUBMITTED/UNDER_REVIEW/EVALUATED/PASSED/FAILED/EXPIRED/CANCELLED).
+  // Collapsing every status into INVITED previously sent candidates with a
+  // submitted or evaluated session back into the roleplay instead of the
+  // dashboard.
   switch (session.status) {
-    case 'PENDING':
-      if (!session.access) {
-        return { state: 'INVITED', sessionId: session.id };
-      }
-      if (session.access.usedAt) {
-        if (session.recordedAudioUrl && session.submittedAt) {
-          return { state: 'SUBMITTED', sessionId: session.id };
-        }
-        if (session.currentScenarioIndex > 0 || session.recordedAudioUrl) {
-          return { state: 'IN_PROGRESS', sessionId: session.id };
-        }
-        return { state: 'STARTED', sessionId: session.id };
-      }
-      if (session.access.expiresAt < new Date()) {
-        return { state: 'EXPIRED', sessionId: session.id };
-      }
+    case 'DRAFT':
+    case 'INVITED':
       return { state: 'INVITED', sessionId: session.id };
-      
+    case 'STARTED':
+      return { state: 'STARTED', sessionId: session.id };
+    case 'IN_PROGRESS':
+      return { state: 'IN_PROGRESS', sessionId: session.id };
+    case 'SUBMITTED':
+      return { state: 'SUBMITTED', sessionId: session.id };
+    case 'UNDER_REVIEW':
+      return { state: 'UNDER_REVIEW', sessionId: session.id };
     case 'EVALUATED':
-      if (session.qaScoreId) {
-        // Would need to check QAScore for criticalError or totalScore to determine PASSED/FAILED
-        return { state: 'EVALUATED', sessionId: session.id };
-      }
       return { state: 'EVALUATED', sessionId: session.id };
-      
+    case 'PASSED':
+      return { state: 'PASSED', sessionId: session.id };
+    case 'FAILED':
+      return { state: 'FAILED', sessionId: session.id };
+    case 'EXPIRED':
+      return { state: 'EXPIRED', sessionId: session.id };
+    case 'CANCELLED':
+      return { state: 'CANCELLED', sessionId: session.id };
     default:
+      // Legacy status ('PENDING') not present in the current enum: keep
+      // treating it as an active invitation for backward compatibility.
       return { state: 'INVITED', sessionId: session.id };
   }
 }
@@ -223,13 +227,10 @@ async function resolveActorFromSupabase(
 
   // If no interpreterId linked, try to find by email (migration/repair fallback)
   if (resolvedRole !== 'admin' && !interpreterId) {
+    // Resolve ownership only by the authoritative corporate email.
+    // Display names may be duplicated or user-editable and are not identity proof.
     const interpreter = await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: email },
-          { name: supabaseUser.user_metadata?.display_name || email.split('@')[0] },
-        ],
-      },
+      where: { emailCorporativo: email },
       select: { id: true },
     });
     interpreterId = interpreter?.id ?? null;
@@ -420,4 +421,69 @@ export function requireOwnership(
     throw new Error('Access denied: not your resource');
   }
   return i;
+}
+
+export function resolveOnboardingState(identity: ResolvedIdentity): {
+  status: OnboardingStatus;
+  step: 'legal' | 'banking' | 'tutorial' | 'complete' | null;
+  version: number;
+  completedAt: Date | null;
+} {
+  // Use the onboardingStatus directly from the resolved identity,
+  // as it was computed by resolveActorFromSupabase or resolveActorFromAuthJs
+  const status = identity.onboardingStatus as OnboardingStatus;
+  const step = identity.onboardingStep as 'legal' | 'banking' | 'tutorial' | 'complete' | null;
+  const version = identity.onboardingVersion;
+  const completedAt = identity.onboardingCompletedAt;
+  return { status, step, version, completedAt };
+}
+
+export function resolveDestination(identity: ResolvedIdentity): string {
+  // Admin always goes to admin panel
+  if (identity.role === 'admin') {
+    return '/admin';
+  }
+
+  // Check onboarding state
+  const onboarding = resolveOnboardingState(identity);
+
+  if (onboarding.status !== 'COMPLETED') {
+    // User needs to complete or resume onboarding
+    const resumeParam = onboarding.status === 'IN_PROGRESS' ? '?resume=true' : '';
+    return `/onboarding${resumeParam}`;
+  }
+
+  // Onboarding complete - check roleplay state
+  switch (identity.roleplayState) {
+    case 'INVITED':
+    case 'STARTED':
+    case 'IN_PROGRESS':
+      // User has an active roleplay session - go to roleplay
+      if (identity.roleplaySessionId) {
+        return `/roleplays/${identity.roleplaySessionId}`;
+      }
+      // Fallback if no session ID
+      return '/dashboard/roleplays';
+
+    case 'SUBMITTED':
+    case 'UNDER_REVIEW':
+    case 'EVALUATED':
+      // Roleplay submitted or under review - show dashboard with status
+      return '/dashboard';
+
+    case 'PASSED':
+    case 'FAILED':
+      // Roleplay completed with result - show dashboard
+      return '/dashboard';
+
+    case 'EXPIRED':
+    case 'CANCELLED':
+      // Roleplay expired/cancelled - show dashboard
+      return '/dashboard';
+
+    case 'NO_ROLEPLAY':
+    default:
+      // No roleplay - go to dashboard
+      return '/dashboard';
+  }
 }

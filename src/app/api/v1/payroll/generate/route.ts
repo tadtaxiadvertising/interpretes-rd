@@ -4,9 +4,13 @@ import crypto from 'crypto';
 import { calculateFullPayroll } from '@/services/PayrollService';
 import { PayrollGenerateSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 export async function POST(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { targetDate } = await parseJsonBody(request, PayrollGenerateSchema);
     const dateToProcess = targetDate ?? new Date();
     

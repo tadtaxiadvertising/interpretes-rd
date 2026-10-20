@@ -1,0 +1,128 @@
+export type RecruitmentApplicationStatus =
+  | 'APPLIED'
+  | 'PROFILE_PENDING'
+  | 'DOCUMENTS_PENDING'
+  | 'LANGUAGE_PENDING'
+  | 'TECHNICAL_PENDING'
+  | 'INDUCTION_PENDING'
+  | 'ROLEPLAY_PENDING'
+  | 'ROLEPLAY_IN_PROGRESS'
+  | 'ROLEPLAY_REVIEW'
+  | 'INTERVIEW_PENDING'
+  | 'INTERVIEW_SCHEDULED'
+  | 'INTERVIEW_REVIEW'
+  | 'OFFER_PENDING'
+  | 'OFFER_SENT'
+  | 'OFFER_ACCEPTED'
+  | 'CONTRACT_PENDING'
+  | 'BANKING_PENDING'
+  | 'TECH_SETUP_PENDING'
+  | 'TRAINING_PENDING'
+  | 'READY_FOR_ACTIVATION'
+  | 'HIRING'
+  | 'HIRED'
+  | 'REJECTED'
+  | 'WITHDRAWN'
+  | 'EXPIRED';
+
+export type RecruitmentStep =
+  | 'APPLICATION'
+  | 'PROFILE'
+  | 'DOCUMENTS'
+  | 'LANGUAGE'
+  | 'TECHNICAL'
+  | 'INDUCTION'
+  | 'ROLEPLAY'
+  | 'ROLEPLAY_REVIEW'
+  | 'INTERVIEW'
+  | 'DECISION'
+  | 'OFFER'
+  | 'CONTRACT'
+  | 'BANKING'
+  | 'TECH_SETUP'
+  | 'TRAINING'
+  | 'READY_FOR_ACTIVATION'
+  | 'HIRING';
+
+export type RecruitmentEventType =
+  | 'APPLICATION_CREATED'
+  | 'PROFILE_COMPLETED'
+  | 'DOCUMENT_UPLOADED'
+  | 'DOCUMENT_APPROVED'
+  | 'DOCUMENT_REJECTED'
+  | 'LANGUAGE_APPROVED'
+  | 'LANGUAGE_REJECTED'
+  | 'TECHNICAL_COMPLETED'
+  | 'TECHNICAL_REJECTED'
+  | 'INDUCTION_COMPLETED'
+  | 'ROLEPLAY_CREATED'
+  | 'ROLEPLAY_STARTED'
+  | 'ROLEPLAY_SUBMITTED'
+  | 'ROLEPLAY_EVALUATED'
+  | 'ROLEPLAY_PASSED'
+  | 'ROLEPLAY_FAILED'
+  | 'INTERVIEW_SCHEDULED'
+  | 'INTERVIEW_COMPLETED'
+  | 'INTERVIEW_FAILED'
+  | 'OFFER_SENT'
+  | 'OFFER_ACCEPTED'
+  | 'OFFER_REJECTED'
+  | 'CONTRACT_SIGNED'
+  | 'BANKING_COMPLETED'
+  | 'TECH_SETUP_COMPLETED'
+  | 'TRAINING_COMPLETED'
+  | 'READY_FOR_ACTIVATION'
+  | 'HIRING_STARTED'
+  | 'HIRED'
+  | 'REJECTED'
+  | 'WITHDRAWN';
+
+export type RecruitmentDocumentType =
+  | 'CV'
+  | 'IDENTITY'
+  | 'LANGUAGE_CERTIFICATE'
+  | 'BACKGROUND_CHECK'
+  | 'PHOTO'
+  | 'CONTRACT'
+  | 'OTHER';
+
+export type RecruitmentDocumentStatus =
+  | 'UPLOADED'
+  | 'UNDER_REVIEW'
+  | 'APPROVED'
+  | 'REJECTED';
+
+export type RecruitmentInterviewStatus =
+  | 'PENDING'
+  | 'SCHEDULED'
+  | 'COMPLETED'
+  | 'NO_SHOW'
+  | 'CANCELLED';
+
+export type RecruitmentOfferStatus =
+  | 'DRAFT'
+  | 'SENT'
+  | 'ACCEPTED'
+  | 'REJECTED'
+  | 'EXPIRED';
+
+export type RecruitmentContractStatus =
+  | 'PENDING'
+  | 'SENT'
+  | 'SIGNED'
+  | 'REJECTED'
+  | 'EXPIRED';
+
+export type RecruitmentBankingStatus =
+  | 'PENDING'
+  | 'VERIFIED'
+  | 'COMPLETED';
+
+export type RecruitmentTechSetupStatus =
+  | 'PENDING'
+  | 'COMPLETED';
+
+export type RecruitmentTrainingStatus =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'COMPLETED';

@@ -13,6 +13,13 @@ import {
 } from 'lucide-react';
 import prisma from '@/lib/prisma';
 import { cn } from '@/lib/utils';
+import {
+  candidateStatusDisplay,
+  isHired,
+  isInInterview,
+  isRejected,
+  statusToneClass,
+} from '@/lib/recruitment/status-display';
 
 import { AddCandidateButton } from '@/components/AddCandidateButton';
 import { ExportCandidatesButton } from '@/components/ExportCandidatesButton';
@@ -24,8 +31,8 @@ interface Candidate {
   email: string;
   telefono: string | null;
   pais: string | null;
-  status: string;
   resultRoleplay: number | null;
+  applicationStatus: string | null;
 }
 
 interface Stat {
@@ -41,9 +48,18 @@ async function getCandidates(): Promise<Candidate[]> {
   try {
     const candidates = await prisma.recruitmentCandidate.findMany({
       orderBy: { createdAt: 'desc' },
-      take: 50
+      take: 50,
+      include: {
+        applications: { select: { status: true }, take: 1, orderBy: { createdAt: 'desc' as const } },
+      },
     });
-    return JSON.parse(JSON.stringify(candidates)) as Candidate[];
+    return candidates.map((candidate) => {
+      const { applications, ...rest } = candidate;
+      return {
+        ...(rest as Omit<Candidate, 'applicationStatus'>),
+        applicationStatus: applications[0]?.status ?? null,
+      };
+    });
   } catch (error) {
     console.error('Error fetching candidates from DB:', error);
     return [];
@@ -53,12 +69,9 @@ async function getCandidates(): Promise<Candidate[]> {
 export default async function RecruitmentPage() {
   const candidates: Candidate[] = await getCandidates();
 
-  const statusColors: Record<string, string> = {
-    'Aplicante': 'bg-blue-500/10 text-blue-400',
-    'Entrevista Agendada': 'bg-purple-500/10 text-purple-400',
-    'Rechazado': 'bg-red-500/10 text-red-400',
-    'Contratado': 'bg-green-500/10 text-green-400',
-  };
+  const inInterviewCount = candidates.filter((c) => isInInterview(c.applicationStatus)).length;
+  const hiredCount = candidates.filter((c) => isHired(c.applicationStatus)).length;
+  const rejectedCount = candidates.filter((c) => isRejected(c.applicationStatus)).length;
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -78,9 +91,9 @@ export default async function RecruitmentPage() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
           { label: 'Total Applicants', count: candidates.length, icon: Users, color: 'text-blue-400' },
-          { label: 'In Interview', count: candidates.filter((c: Candidate) => c.status === 'Entrevista Agendada').length, icon: Calendar, color: 'text-purple-400' },
-          { label: 'Hired this Month', count: candidates.filter((c: Candidate) => c.status === 'Contratado').length, icon: CheckCircle2, color: 'text-green-400' },
-          { label: 'Rejection Rate', count: candidates.length > 0 ? `${Math.round((candidates.filter((c: Candidate) => c.status === 'Rechazado').length / candidates.length) * 100)}%` : '0%', icon: XCircle, color: 'text-red-400' },
+          { label: 'In Interview', count: inInterviewCount, icon: Calendar, color: 'text-purple-400' },
+          { label: 'Hired this Month', count: hiredCount, icon: CheckCircle2, color: 'text-green-400' },
+          { label: 'Rejection Rate', count: candidates.length > 0 ? `${Math.round((rejectedCount / candidates.length) * 100)}%` : '0%', icon: XCircle, color: 'text-red-400' },
         ].map((stat: Stat, i: number) => (
           <div key={i} className="glass p-6 rounded-3xl border border-white/5">
             <div className="flex justify-between items-start">
@@ -126,7 +139,9 @@ export default async function RecruitmentPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {candidates.map((candidate: Candidate) => (
+            {candidates.map((candidate: Candidate) => {
+              const display = candidateStatusDisplay(candidate.applicationStatus);
+              return (
               <tr key={candidate.id} className="group hover:bg-white/5 transition-colors">
                 <td className="py-6 px-8">
                   <div className="flex items-center gap-4">
@@ -158,9 +173,9 @@ export default async function RecruitmentPage() {
                 <td className="py-6 px-4">
                   <span className={cn(
                     "px-3 py-1 rounded-full text-xs font-bold",
-                    statusColors[candidate.status] || "bg-gray-500/10 text-gray-400"
+                    statusToneClass(display.tone)
                   )}>
-                    {candidate.status}
+                    {display.label}
                   </span>
                 </td>
                 <td className="py-6 px-4">
@@ -186,7 +201,8 @@ export default async function RecruitmentPage() {
                   <CandidateActions candidate={candidate} />
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         

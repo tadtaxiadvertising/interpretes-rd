@@ -17,7 +17,7 @@ export default function ImportPage() {
         </Link>
         <div>
           <h2 className="text-3xl font-bold text-white">Data Migration</h2>
-          <p className="text-gray-400">Import your legacy CSV files into the Free Interpreters OS</p>
+          <p className="text-gray-400">Import your legacy CSV files into Intérpretes RD</p>
         </div>
       </header>
 

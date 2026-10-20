@@ -1,16 +1,21 @@
 import React from 'react';
 import { Mic2, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import prisma from '@/lib/prisma';
 import NewRoleplayForm from './NewRoleplayForm';
 
+// Data is read straight from Prisma instead of self-fetching the REST API:
+// server components must not rely on internal HTTP calls (no cookie
+// forwarding, and `/api/interpreters` / `/api/recruitment/candidates` do
+// not exist — only the `/api/v1/*` routes do).
 async function getInterpreters() {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/interpreters?active=true`, {
-      cache: 'no-store',
+    return await prisma.interpreter.findMany({
+      where: { status: { in: ['Activo', 'Training', 'Probation'] } },
+      select: { id: true, name: true, externalId: true, emailCorporativo: true },
+      orderBy: { name: 'asc' },
+      take: 500,
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.data || [];
   } catch {
     return [];
   }
@@ -18,12 +23,12 @@ async function getInterpreters() {
 
 async function getCandidates() {
   try {
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || ''}/api/recruitment/candidates?status=Aplicante`, {
-      cache: 'no-store',
+    return await prisma.recruitmentCandidate.findMany({
+      where: { applications: { some: { status: 'APPLIED' } } },
+      select: { id: true, name: true, email: true },
+      orderBy: { fechaPostulacion: 'desc' },
+      take: 500,
     });
-    if (!res.ok) return [];
-    const data = await res.json();
-    return data.data || [];
   } catch {
     return [];
   }

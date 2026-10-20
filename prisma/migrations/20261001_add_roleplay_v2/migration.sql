@@ -12,9 +12,35 @@ ALTER TABLE "public"."roleplay_sessions"
   ADD COLUMN IF NOT EXISTS "completed_at" TIMESTAMPTZ(6),
   ADD COLUMN IF NOT EXISTS "current_scenario_index" INTEGER DEFAULT 0;
 
--- Fix the status default
-ALTER TABLE "public"."roleplay_sessions" 
-  ALTER COLUMN "status" SET DEFAULT 'PENDING';
+-- Preserve compatibility with both the legacy enum and the current lifecycle enum.
+-- The current application uses DRAFT; older databases may still only have PENDING.
+DO $status_default$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'RoleplayStatus'
+      AND e.enumlabel = 'DRAFT'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.roleplay_sessions ALTER COLUMN status SET DEFAULT ''DRAFT''';
+  ELSIF EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'RoleplayStatus'
+      AND e.enumlabel = 'PENDING'
+  ) THEN
+    EXECUTE 'ALTER TABLE public.roleplay_sessions ALTER COLUMN status SET DEFAULT ''PENDING''';
+  ELSE
+    RAISE EXCEPTION 'RoleplayStatus must contain DRAFT or PENDING before applying the roleplay migration.';
+  END IF;
+END
+$status_default$;
 
 -- Create RoleplayScenario table
 CREATE TABLE IF NOT EXISTS "public"."roleplay_scenarios" (

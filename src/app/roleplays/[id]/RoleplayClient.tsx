@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Save, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { submitRoleplayResponse, confirmRoleplayResponse } from '@/app/actions/roleplay';
+import { submitRoleplayResponse, confirmRoleplayResponse, saveSelfAssessment } from '@/app/actions/roleplay';
 import { RoleplayIntro } from '@/components/roleplay/RoleplayIntro';
 import { RoleplayScenario } from '@/components/roleplay/RoleplayScenario';
 import { Recorder } from '@/components/roleplay/Recorder';
@@ -90,10 +90,13 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         if (data.success && data.data) {
           setSession(data.data);
           setCurrentScenarioIndex(data.data.currentScenarioIndex || 0);
-          
+
           // Mark completed scenarios based on currentScenarioIndex
           const completed = Array.from({ length: data.data.currentScenarioIndex }, (_, i) => i);
           setCompletedScenarios(completed);
+
+          const terminalStates = ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
+          setPageState(terminalStates.includes(data.data.status) ? 'completion' : 'intro');
         } else {
           setError(data.error || 'Failed to load session');
           setPageState('error');
@@ -101,14 +104,10 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       } catch {
         setError('Failed to load session');
         setPageState('error');
-      } finally {
-        if (pageState === 'loading') {
-          setPageState('intro');
-        }
       }
     }
     fetchSession();
-  }, [sessionId, pageState]);
+  }, [sessionId]);
 
   const handlePlayBase = useCallback(() => {
     setIsBasePlaying(!isBasePlaying);
@@ -118,9 +117,20 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     setBaseAudioVolume(vol);
   }, []);
 
-  const handleStartRoleplay = useCallback(() => {
-    setPageState('scenario');
-  }, []);
+  const handleStartRoleplay = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/roleplay/session/${sessionId}/start`, { method: 'POST' });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to start roleplay');
+      setPageState('scenario');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start roleplay');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sessionId]);
 
   const handleNextScenario = useCallback(() => {
     const nextIndex = currentScenarioIndex + 1;
@@ -154,14 +164,29 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       
       if (!convertResult.success) throw new Error(convertResult.error || 'Conversion failed');
 
+      const recordedUrl = convertResult.data.sourceUrl || convertResult.data.mp3Url;
+
       const confirmResult = await confirmRoleplayResponse({
         sessionId,
         scenarioId: scenario.id,
-        recordedAudioUrl: convertResult.data.sourceUrl || convertResult.data.mp3Url,
+        recordedAudioUrl: recordedUrl,
+        sourceAudioPath: convertResult.data.sourcePath || undefined,
+        durationSec: Math.max(0, Math.round(duration)),
       });
 
       if (!confirmResult.success) throw new Error(confirmResult.error);
 
+      setScenarioResponses(prev => ({
+        ...prev,
+        [scenario.id]: {
+          ...prev[scenario.id],
+          audioUrl: recordedUrl,
+          duration,
+          scores: prev[scenario.id]?.scores ?? {},
+          criticalError: prev[scenario.id]?.criticalError ?? false,
+          notes: prev[scenario.id]?.notes ?? '',
+        }
+      }));
       setCompletedScenarios(prev => [...prev, currentScenarioIndex]);
       setPageState('self-assessment');
     } catch (err) {
@@ -179,25 +204,44 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     const scenario = session?.scenarios[currentScenarioIndex];
     if (!scenario) return;
 
-    setScenarioResponses(prev => ({
-      ...prev,
-      [scenario.id]: {
-        audioUrl: '',
-        duration: 0,
+    setIsLoading(true);
+    try {
+      const saveResult = await saveSelfAssessment({
+        sessionId,
+        scenarioId: scenario.id,
         scores,
         criticalError,
-        notes,
-      }
-    }));
+        notes: notes || undefined,
+      });
+      if (!saveResult.success) throw new Error(saveResult.error);
 
-    const nextIndex = currentScenarioIndex + 1;
-    if (nextIndex < (session?.scenarios.length || 0)) {
-      setCurrentScenarioIndex(nextIndex);
-      setPageState('recording');
-    } else {
-      setPageState('completion');
+      setScenarioResponses(prev => ({
+        ...prev,
+        [scenario.id]: {
+          ...prev[scenario.id],
+          audioUrl: prev[scenario.id]?.audioUrl ?? '',
+          duration: prev[scenario.id]?.duration ?? 0,
+          scores,
+          criticalError,
+          notes,
+        }
+      }));
+
+      const nextIndex = currentScenarioIndex + 1;
+      if (nextIndex < (session?.scenarios.length || 0)) {
+        setCurrentScenarioIndex(nextIndex);
+        setPageState('recording');
+      } else {
+        setPageState('completion');
+      }
+    } catch (err) {
+      // Stay on the self-assessment step so the candidate can retry; the
+      // audio response is already confirmed server-side.
+      setError(err instanceof Error ? err.message : 'Failed to save self-assessment');
+    } finally {
+      setIsLoading(false);
     }
-  }, [currentScenarioIndex, session]);
+  }, [sessionId, currentScenarioIndex, session]);
 
   const handleFinalSubmit = useCallback(async () => {
     setIsLoading(true);

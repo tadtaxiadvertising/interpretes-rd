@@ -4,6 +4,7 @@ import prismaClient from '@/lib/prisma';
 import { z } from 'zod';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { parse } from 'csv-parse/sync';
+import { validateAction } from '@/lib/auth/actions';
 
 const prisma = prismaClient;
 
@@ -22,6 +23,11 @@ interface ParsedRow {
 }
 
 export async function uploadLogChunk(prevState: any, data: { headers: string, rows: string[] }) {
+  const authorization = await validateAction('admin');
+  if ('error' in authorization) {
+    return { success: false, error: authorization.error };
+  }
+
   try {
     const parsed = LogChunkSchema.safeParse(data);
     if (!parsed.success) {

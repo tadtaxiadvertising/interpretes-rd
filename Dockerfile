@@ -16,8 +16,8 @@ COPY prisma ./prisma/
 RUN npm ci --legacy-peer-deps
 
 # --- STAGE 2: Builder ---
-FROM node:22-alpine AS builder
-RUN apk add --no-cache libc6-compat openssl
+FROM node:22 AS builder
+RUN apt-get update && apt-get install -y openssl
 WORKDIR /app
 
 COPY --from=deps /app/node_modules ./node_modules
@@ -34,10 +34,17 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_APP_ROLE
 
+# Stable Server Actions encryption key, passed from Easypanel service env.
+# Baked into the build so every instance of a build shares the same key
+# (avoids key mismatches during rolling/zero-downtime deploys). If unset,
+# Next.js falls back to its per-build generated key.
+ARG NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
+
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_ROLE=$NEXT_PUBLIC_APP_ROLE
+ENV NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=$NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production

@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Lock, Mail, AlertCircle, Loader2, Users, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { login } from '@/app/actions/auth';
 import { signIn } from 'next-auth/react';
+import { safeNextPath } from '@/lib/auth/safe-next';
 
 type LoginRole = 'interpreter' | 'admin';
 
@@ -13,7 +14,13 @@ export default function LoginPage() {
   const [role, setRole] = useState<LoginRole>('interpreter');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [nextPath, setNextPath] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setNextPath(safeNextPath(params.get('next')));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -40,7 +47,7 @@ export default function LoginPage() {
             return;
           }
         }
-        router.push(result.role === 'admin' ? '/admin' : '/dashboard');
+        router.push(nextPath || (result.role === 'admin' ? '/admin' : '/dashboard'));
       }
     } catch (err) {
       console.error('🔴 [AUTH_LOGIN_PAGE] Login submit error:', err);
@@ -60,9 +67,9 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
-            Free Interpreters OS
+            Interpretes RD
           </h1>
-          <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Enterprise Platform</p>
+          <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Plataforma de Intérpretes</p>
         </div>
 
         <div className="glass rounded-3xl p-8 border border-white/10">
@@ -76,7 +83,7 @@ export default function LoginPage() {
                 }`}
             >
               <Users size={16} />
-              Interpreter
+              Intérprete
             </button>
             <button
               type="button"
@@ -87,12 +94,12 @@ export default function LoginPage() {
                 }`}
             >
               <ShieldAlert size={16} />
-              Administrator
+              Administrador
             </button>
           </div>
 
           <h2 className="text-xl font-bold text-white mb-6">
-            {role === 'admin' ? 'Admin Portal' : 'Interpreter Portal'}
+            {role === 'admin' ? 'Portal de Administración' : 'Portal de Intérprete'}
           </h2>
 
           {error && (
@@ -115,7 +122,7 @@ export default function LoginPage() {
                   name="email"
                   type="email"
                   required
-                  placeholder={role === 'admin' ? "admin@freeinterpreters.com" : "user@freeinterpreters.com"}
+                  placeholder={role === 'admin' ? "admin@interpretesrd.com" : "interprete@interpretesrd.com"}
                   className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                 />
               </div>
@@ -165,7 +172,7 @@ export default function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
               Don&apos;t have an account?{' '}
-              <Link href="/register" className="text-blue-400 hover:text-blue-300 font-medium">
+              <Link href={nextPath ? `/register?next=${encodeURIComponent(nextPath)}` : "/register"} className="text-blue-400 hover:text-blue-300 font-medium">
                 Create Account
               </Link>
             </p>
@@ -173,7 +180,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Free Interpreters. Secure Enterprise Access.
+          © 2026 Interpretes RD. Plataforma Segura de Intérpretes.
         </p>
       </div>
     </div>

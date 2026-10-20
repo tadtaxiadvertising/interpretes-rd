@@ -2,15 +2,13 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { RecruitmentCandidatePatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
+import { corsHeaders } from '@/lib/cors';
 
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      'Access-Control-Allow-Methods': 'GET, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+const METHODS = 'GET, PATCH, DELETE, OPTIONS';
+
+export async function OPTIONS(request: Request) {
+  return NextResponse.json({}, { headers: corsHeaders(request, METHODS) });
 }
 
 export async function GET(
@@ -18,6 +16,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     const candidate = await prisma.recruitmentCandidate.findUnique({
@@ -28,11 +29,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: 'Candidate not found' }, { status: 404 });
     }
 
-    return NextResponse.json(candidate, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
-    });
+    return NextResponse.json(candidate, { headers: corsHeaders(request, METHODS) });
   } catch (error) {
     console.error('Error fetching candidate:', error);
     const message = error instanceof Error ? error.message : 'Error fetching candidate';
@@ -45,6 +42,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     const body = await parseJsonBody(request, RecruitmentCandidatePatchSchema);
@@ -63,11 +63,7 @@ export async function PATCH(
       data: validationResult.data,
     });
 
-    return NextResponse.json(updatedCandidate, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
-    });
+    return NextResponse.json(updatedCandidate, { headers: corsHeaders(request, METHODS) });
   } catch (error) {
     console.error('Error updating candidate:', error);
     const isPrismaError = error && typeof error === 'object' && 'code' in error;
@@ -84,6 +80,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     await prisma.recruitmentCandidate.delete({
@@ -91,9 +90,7 @@ export async function DELETE(
     });
 
     return NextResponse.json({ success: true, message: 'Candidate deleted successfully' }, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
     console.error('Error deleting candidate:', error);

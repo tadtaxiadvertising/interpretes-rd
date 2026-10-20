@@ -2,6 +2,8 @@ import React from 'react';
 import { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import prisma from '@/lib/prisma';
+import { getAdminReviewUrl } from '@/lib/roleplay';
+import { resolveResponseAudioUrl } from '@/lib/roleplay-review';
 import { RoleplayEvaluationClient } from './RoleplayEvaluationClient';
 import { formatDate } from '@/lib/utils';
 
@@ -33,6 +35,20 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
   if (!session) {
     notFound();
   }
+
+  // Re-sign stored audio paths so admin review does not depend on the
+  // short-lived signed URL captured at submission time (ISSUE-021).
+  const scenarios = await Promise.all(
+    session.scenarios.map(async (scenario) => ({
+      ...scenario,
+      responses: await Promise.all(
+        scenario.responses.map(async (response) => ({
+          ...response,
+          reviewAudioUrl: await resolveResponseAudioUrl(response, getAdminReviewUrl),
+        }))
+      ),
+    }))
+  );
 
   return (
     <div className="min-h-screen bg-slate-950 py-12 px-4">
@@ -92,14 +108,14 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
         </div>
 
         {/* Scenarios Evaluation */}
-        {session.scenarios.length > 0 && (
+        {scenarios.length > 0 && (
           <div className="space-y-6">
-            {session.scenarios.map((scenario, index) => (
+            {scenarios.map((scenario, index) => (
               <ScenarioEvaluationCard 
                 key={scenario.id}
                 scenario={scenario}
                 scenarioIndex={index + 1}
-                totalScenarios={session.scenarios.length}
+                totalScenarios={scenarios.length}
                 sessionId={session.id}
                 isEvaluated={session.status === 'EVALUATED'}
                 qaScore={session.qaScore}
@@ -108,7 +124,7 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
           </div>
         )}
 
-        {!session.scenarios.length && (
+        {!scenarios.length && (
           <div className="glass p-12 rounded-3xl border border-white/5 text-center">
             <p className="text-gray-400">No scenarios configured for this session.</p>
           </div>
@@ -199,7 +215,7 @@ function ScenarioEvaluationCard({
             Interpreter Response
           </h4>
           {hasResponse ? (
-            <audio src={response.recordedAudioUrl} controls className="w-full" />
+            <audio src={response.reviewAudioUrl ?? undefined} controls className="w-full" />
           ) : (
             <div className="w-full h-20 flex items-center justify-center text-gray-500">
               No response recorded yet
@@ -217,11 +233,11 @@ function ScenarioEvaluationCard({
           </h4>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
-              { key: 'protocol', label: 'Protocol', weight: '20%' },
+              { key: 'protocol', label: 'Protocol', weight: '35%' },
               { key: 'interpretation', label: 'Interpretation', weight: '40%' },
-              { key: 'language', label: 'Language', weight: '20%' },
-              { key: 'service', label: 'Service', weight: '10%' },
-              { key: 'technical', label: 'Technical', weight: '10%' },
+              { key: 'language', label: 'Language', weight: '15%' },
+              { key: 'service', label: 'Service', weight: '5%' },
+              { key: 'technical', label: 'Technical', weight: '5%' },
             ].map(({ key, label, weight }) => (
               <div key={key} className="text-center">
                 <p className="text-xs text-gray-500 mb-1">{label} ({weight})</p>
@@ -236,10 +252,10 @@ function ScenarioEvaluationCard({
               <p className="text-red-400 font-bold">⚠ Critical Error Flagged</p>
             </div>
           )}
-          {response.selfScore?.selfNotes && (
+          {response.selfNotes && (
             <div className="mt-4">
               <p className="text-xs text-gray-500 mb-1">Notes:</p>
-              <p className="text-sm text-gray-300">{response.selfScore.selfNotes}</p>
+              <p className="text-sm text-gray-300">{response.selfNotes}</p>
             </div>
           )}
         </div>

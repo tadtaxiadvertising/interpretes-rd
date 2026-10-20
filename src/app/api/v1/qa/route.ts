@@ -2,19 +2,18 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { QAScoreSchema } from '@/lib/validators';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
+import { corsHeaders } from '@/lib/cors';
 
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+export async function OPTIONS(request: Request) {
+  return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
 }
 
 export async function GET(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { searchParams } = new URL(request.url);
     const interpreterId = searchParams.get('interpreterId');
     const auditor = searchParams.get('auditor');
@@ -38,9 +37,7 @@ export async function GET(request: Request) {
     });
 
     return NextResponse.json(scores, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request),
     });
   } catch (error) {
     console.error('Error fetching QA scores:', error);
@@ -51,6 +48,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const data = { ...(await parseJsonBody(request, QAScoreSchema)) };
 
     // FÓRMULA DE CALIDAD (QA Scorecard)
@@ -82,9 +82,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(newScore, { 
       status: 201,
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request),
     });
   } catch (error) {
     console.error('🔴 QA API ERROR:', error);

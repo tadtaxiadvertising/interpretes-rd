@@ -10,7 +10,6 @@ import { resolveRbacRoleByEmail } from "@/lib/admin-identity";
 
 // ---------------------------------------------------------------------------
 // Dotenv fallback — load .env.local / .env when running standalone server
-// (Identical pattern to server.ts and admin.ts)
 // ---------------------------------------------------------------------------
 if (typeof window === 'undefined' && typeof (globalThis as any).EdgeRuntime === 'undefined') {
   try {
@@ -28,23 +27,25 @@ if (typeof window === 'undefined' && typeof (globalThis as any).EdgeRuntime === 
             if (!process.env[k]) process.env[k] = parsed[k];
           }
         }
-      } catch (e) { }
+      } catch {
+        // Environment loading is best-effort; deployment variables remain authoritative.
+      }
     };
 
     loadEnv('.env.local');
     loadEnv('.env');
   } catch {
-    // silently ignore — dotenv may not be available in Edge
+    // dotenv may not be available in Edge.
   }
 }
 
-// Force Auth.js to trust the proxy host (Easypanel/Vercel)
 process.env.AUTH_TRUST_HOST = "true";
 
-// ---------------------------------------------------------------------------
-// AUTH_SECRET resolution
-// Priority: AUTH_SECRET env → derived from ENCRYPTION_KEY → random per-process secret
-// ---------------------------------------------------------------------------
+// AUTH_SECRET must be stable in production. Do not generate a production
+// secret during module evaluation: Next.js imports route modules while
+// collecting page data during `next build`, before deployment secrets are
+// necessarily injected. Runtime auth remains fail-closed when no secret is
+// configured because Auth.js receives no usable secret.
 if (!process.env.AUTH_SECRET) {
   if (process.env.ENCRYPTION_KEY) {
     process.env.AUTH_SECRET = crypto
@@ -54,44 +55,36 @@ if (!process.env.AUTH_SECRET) {
       .slice(0, 32);
     console.warn(
       '[AUTH-RBAC] AUTH_SECRET derived from ENCRYPTION_KEY. ' +
-      'Set AUTH_SECRET explicitly for stable sessions across restarts.'
+      'Set AUTH_SECRET explicitly for stable, independently managed sessions.'
     );
-  } else {
-    // Random per-process secret — sessions invalidated on restart, but not predictable
+  } else if (process.env.NODE_ENV !== 'production') {
     process.env.AUTH_SECRET = crypto.randomBytes(32).toString('hex');
-    if (process.env.NODE_ENV === 'production') {
-      console.error(
-        '[AUTH-RBAC] CRITICAL: AUTH_SECRET is not set in production! ' +
-        'Using a random per-process secret — sessions will break on every restart. ' +
-        'Set AUTH_SECRET in your Easypanel runtime environment immediately.'
-      );
-    } else {
-      console.warn(
-        '[AUTH-RBAC] AUTH_SECRET not set — using random per-process secret. ' +
-        'Sessions will be invalidated on server restart. Set AUTH_SECRET for stable sessions.'
-      );
-    }
+    console.warn('[AUTH-RBAC] AUTH_SECRET not set — using a development-only random secret.');
+  } else {
+    console.error('[AUTH-RBAC] AUTH_SECRET is not configured; production authentication will fail closed.');
   }
 }
 
 export async function requireRole(requiredRole: "ADMIN" | "HOLDER" | "INTERPRETER") {
   const session = await auth();
-  const email = session?.user?.email?.toLowerCase().trim();
   const sessionUserId = session?.user?.id;
+  const email = session?.user?.email?.toLowerCase().trim();
 
-  if (!email && !sessionUserId) {
+  if (!sessionUserId && !email) {
     throw new Error("Unauthorized");
   }
 
-  const user = await prisma.rbacUser.findFirst({
-    where: {
-      OR: [
-        ...(sessionUserId ? [{ id: sessionUserId }] : []),
-        ...(email ? [{ email }] : []),
-      ],
-    },
-    select: { id: true, email: true, name: true, role: true },
-  });
+  // Identity is keyed by immutable Auth.js user id. Email is only a legacy
+  // fallback for sessions created before ids were populated.
+  const user = sessionUserId
+    ? await prisma.rbacUser.findUnique({
+        where: { id: sessionUserId },
+        select: { id: true, email: true, name: true, role: true },
+      })
+    : await prisma.rbacUser.findUnique({
+        where: { email: email! },
+        select: { id: true, email: true, name: true, role: true },
+      });
 
   if (!user || user.role !== requiredRole) {
     throw new Error(`Unauthorized: ${requiredRole} role required`);
@@ -125,10 +118,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           id: user.id,
           email: user.email,
           role,
-          name: user.name
+          name: user.name,
         };
-      }
-    })
+      },
+    }),
   ],
   callbacks: {
     jwt({ token, user }: { token: JWT; user?: any }) {
@@ -136,31 +129,34 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return token;
     },
     async session({ session, token }: { session: Session; token: JWT }) {
-      if (session.user) {
-        const normalizedEmail = session.user.email?.toLowerCase().trim();
-        const dbUser = await prisma.rbacUser.findFirst({
-          where: {
-            OR: [
-              ...(token.sub ? [{ id: token.sub }] : []),
-              ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
-            ],
-          },
-          select: { id: true, email: true, name: true, role: true },
-        });
+      if (!session.user) return session;
 
-        if (dbUser) {
-          session.user.id = dbUser.id;
-          session.user.email = dbUser.email;
-          session.user.name = dbUser.name;
-          (session.user as any).role = resolveRbacRoleByEmail(dbUser.email, dbUser.role);
-        } else {
-          (session.user as any).role = resolveRbacRoleByEmail(session.user.email, token.role as string | undefined);
-        }
+      // Resolve the database identity by token.sub first. Do not OR-match id
+      // and email: that can bind a session to the wrong record after an email
+      // change or if stale identity data exists.
+      const dbUser = token.sub
+        ? await prisma.rbacUser.findUnique({
+            where: { id: token.sub },
+            select: { id: true, email: true, name: true, role: true },
+          })
+        : null;
+
+      if (dbUser) {
+        session.user.id = dbUser.id;
+        session.user.email = dbUser.email;
+        session.user.name = dbUser.name;
+        (session.user as any).role = resolveRbacRoleByEmail(dbUser.email, dbUser.role);
+      } else {
+        // No DB identity means no authoritative role. Preserve the session
+        // shape but do not manufacture elevated privileges from an email.
+        session.user.id = token.sub ?? session.user.id;
+        (session.user as any).role = undefined;
       }
+
       return session;
-    }
+    },
   },
   pages: {
     signIn: "/login",
-  }
+  },
 }) as any;

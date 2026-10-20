@@ -1,16 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// The Supabase admin client is created lazily on first use. Creating it (and
+// validating env) at module load time made the module crash during the
+// Next.js build's "collecting page data" phase (CI has no Supabase env).
+let supabaseAdmin: ReturnType<typeof createClient> | null = null;
 
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Supabase configuration missing for Roleplay');
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !key) {
+    throw new Error('Supabase configuration missing for Roleplay');
+  }
+
+  if (!supabaseAdmin) {
+    supabaseAdmin = createClient(url, key, { auth: { persistSession: false } });
+  }
+
+  return supabaseAdmin;
 }
-
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-  auth: { persistSession: false },
-});
 
 const BUCKET = 'roleplay-audio';
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
@@ -97,7 +106,7 @@ export async function createSignedUploadUrl(
     ? getBaseAudioPath(sessionId, validation.extension)
     : getResponseAudioPath(sessionId, validation.extension);
 
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUploadUrl(path);
 
@@ -114,7 +123,7 @@ export async function createSignedUploadUrl(
 }
 
 export async function confirmUpload(path: string): Promise<string> {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days - for base audio / admin review
 
@@ -126,7 +135,7 @@ export async function confirmUpload(path: string): Promise<string> {
 }
 
 export async function getPlaybackUrl(path: string): Promise<string> {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUrl(path, 60 * 60); // 1 hour - for candidate playback during roleplay
 
@@ -138,7 +147,7 @@ export async function getPlaybackUrl(path: string): Promise<string> {
 }
 
 export async function getValidationUrl(path: string): Promise<string> {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUrl(path, 15 * 60); // 15 minutes - for invite validation
 
@@ -150,7 +159,7 @@ export async function getValidationUrl(path: string): Promise<string> {
 }
 
 export async function getAdminReviewUrl(path: string): Promise<string> {
-  const { data, error } = await supabaseAdmin.storage
+  const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUrl(path, 60 * 60 * 24); // 24 hours - for QA review
 
@@ -162,11 +171,11 @@ export async function getAdminReviewUrl(path: string): Promise<string> {
 }
 
 export async function deleteAudio(path: string): Promise<void> {
-  await supabaseAdmin.storage.from(BUCKET).remove([path]);
+  await getSupabaseAdmin().storage.from(BUCKET).remove([path]);
 }
 
 export async function getSignedAudioUrl(path: string, expiresIn: number = 60 * 60): Promise<string> {
-  const { data, error } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, expiresIn);
+  const { data, error } = await getSupabaseAdmin().storage.from(BUCKET).createSignedUrl(path, expiresIn);
   if (error) throw new Error(`Failed to create signed URL: ${error.message}`);
   return data.signedUrl;
 }

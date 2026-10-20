@@ -2,15 +2,13 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { QAScorePatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
+import { corsHeaders } from '@/lib/cors';
 
-export async function OPTIONS() {
-  return NextResponse.json({}, {
-    headers: {
-      'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      'Access-Control-Allow-Methods': 'GET, PATCH, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    },
-  });
+const METHODS = 'GET, PATCH, DELETE, OPTIONS';
+
+export async function OPTIONS(request: Request) {
+  return NextResponse.json({}, { headers: corsHeaders(request, METHODS) });
 }
 
 export async function GET(
@@ -18,6 +16,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     const score = await prisma.qAScore.findUnique({
@@ -33,9 +34,7 @@ export async function GET(
     }
 
     return NextResponse.json(score, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
     console.error('Error fetching scorecard:', error);
@@ -49,6 +48,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     const body = await parseJsonBody(request, QAScorePatchSchema);
@@ -99,9 +101,7 @@ export async function PATCH(
     });
 
     return NextResponse.json(updatedScore, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
     console.error('🔴 QA PATCH ERROR:', error);
@@ -116,6 +116,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id } = numericIdParamSchema.parse(await params);
 
     await prisma.qAScore.delete({
@@ -123,9 +126,7 @@ export async function DELETE(
     });
 
     return NextResponse.json({ success: true, message: 'Scorecard deleted successfully' }, {
-      headers: {
-        'Access-Control-Allow-Origin': process.env.CORS_ORIGIN || '*',
-      },
+      headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
     console.error('Error deleting scorecard:', error);

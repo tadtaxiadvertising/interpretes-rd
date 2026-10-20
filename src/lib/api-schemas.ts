@@ -40,6 +40,10 @@ export const InterpreterPasswordSchema = z.object({
 
 export const PayrollRecordPatchSchema = PayrollRecordSchema.partial();
 export const QAScorePatchSchema = QAScoreSchema.partial();
+// Canonical funnel state lives on RecruitmentApplication and may only
+// transition through `advanceApplication`; the candidate record itself carries
+// no status field, so the patch endpoint cannot be used as a state-machine
+// bypass.
 export const RecruitmentCandidatePatchSchema = RecruitmentCandidateSchema.partial();
 
 

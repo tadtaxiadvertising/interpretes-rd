@@ -147,7 +147,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Marcos Peña',
       email: 'marcos@example.com',
-      status: 'Aplicante',
       pais: 'Dominican Republic',
       englishLevel: 'C1',
       fechaPostulacion: new Date('2026-04-20'),
@@ -155,7 +154,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Laura Garcia',
       email: 'laura@example.com',
-      status: 'Entrevista',
       pais: 'Argentina',
       englishLevel: 'C2',
       resultRoleplay: 85,
@@ -164,7 +162,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Ricardo Fort',
       email: 'ricardo@example.com',
-      status: 'Contratado',
       pais: 'Argentina',
       englishLevel: 'C1',
       resultRoleplay: 92,
@@ -173,7 +170,6 @@ async function seedRecruitmentCandidates(): Promise<void> {
     {
       name: 'Bad Bunny',
       email: 'benito@example.com',
-      status: 'Rechazado',
       pais: 'Puerto Rico',
       englishLevel: 'B2',
       resultRoleplay: 45,
@@ -195,39 +191,50 @@ async function seedRecruitmentCandidates(): Promise<void> {
 async function seedRbacUsers(): Promise<void> {
   console.log('🔐 Seeding RBAC users...');
 
+  // No hard-coded/default passwords: a developer must explicitly provide a
+  // secret for each local bootstrap account. This seed is blocked entirely
+  // in production because it also contains demonstration interpreters/candidates.
   const rbacUsers: Array<{
     email: string;
     name: string;
     role: 'ADMIN' | 'HOLDER' | 'INTERPRETER';
-    defaultPassword: string;
+    passwordEnv: string;
   }> = [
     {
       email: 'interpretersfree@gmail.com',
       name: 'Administrador Titular',
       role: 'ADMIN',
-      defaultPassword: 'AdminSecurePassword2026!',
+      passwordEnv: 'SEED_OWNER_ADMIN_PASSWORD',
     },
     {
       email: 'melvinramonduranmesa@gmail.com',
       name: 'Melvin Duran',
       role: 'ADMIN',
-      defaultPassword: 'Melvin123!',
+      passwordEnv: 'SEED_SECOND_ADMIN_PASSWORD',
     },
     {
       email: 'admin@freeinterpreters.com',
       name: 'Arismendy Admin',
       role: 'ADMIN',
-      defaultPassword: 'Admin123!',
+      passwordEnv: 'SEED_THIRD_ADMIN_PASSWORD',
     },
   ];
 
   for (const user of rbacUsers) {
+    const password = process.env[user.passwordEnv];
+    if (!password) {
+      console.info(
+        `ℹ️ Skipping RBAC seed for ${user.email}: set ${user.passwordEnv} explicitly to create it.`
+      );
+      continue;
+    }
+
     const existingUser = await prisma.rbacUser.findUnique({
       where: { email: user.email },
     });
 
     if (!existingUser) {
-      const hashedPassword = await bcrypt.hash(user.defaultPassword, SALT_ROUNDS);
+      const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
       await prisma.rbacUser.create({
         data: {
@@ -246,6 +253,11 @@ async function seedRbacUsers(): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'Production seed is disabled: this script contains demonstration interpreter/candidate data. Use an explicit, reviewed production provisioning process instead.'
+    );
+  }
   console.log('🌱 Seeding database...\n');
 
   await seedInterpreters();

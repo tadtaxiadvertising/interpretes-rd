@@ -51,12 +51,10 @@ async function syncUserProfileFromAuth(params: {
   const resolvedRole = resolveUserRoleByEmail(params.email, params.role);
 
   const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
-    where: {
-      OR: [
-        { emailCorporativo: params.email },
-        { name: params.displayName },
-      ],
-    },
+    // Link to an interpreter only by the authoritative corporate email.
+    // A matching display name is not proof of identity and can expose another
+    // interpreter's profile or production data when names are similar.
+    where: { emailCorporativo: params.email },
     select: { id: true },
   });
 
@@ -78,88 +76,6 @@ async function syncUserProfileFromAuth(params: {
   });
 }
 
-async function repairAuthUserAndRetry(params: {
-  supabase: Awaited<ReturnType<typeof createClient>>;
-  email: string;
-  password: string;
-  requestedRole: UserRole;
-}) {
-  const serviceKey = getSupabaseServiceRoleKey();
-  console.log(`🔧 [AUTH_REPAIR] Attempting repair for ${params.email} — serviceKey available: ${!!serviceKey}`);
-  if (!serviceKey) {
-    console.warn('⚠️ [AUTH_REPAIR] SUPABASE_SERVICE_ROLE_KEY not available — skipping repair.');
-    return null;
-  }
-
-  // repairAuthUser handles the known failure modes without creating new users:
-  //  - identities: null/empty → deletes broken user, recreates with proper identity link
-  //  - email not confirmed → updates with email_confirm: true
-  //  - user doesn't exist → returns null (no auto-creation for security)
-  try {
-    const oldProfile = await prisma.userProfile.findFirst({
-      where: { email: params.email },
-      select: { id: true, interpreterId: true },
-    });
-
-    const repairedUser = await repairAuthUser({
-      email: params.email,
-      password: params.password,
-      displayName: params.email.split('@')[0],
-    });
-    console.log(`🔧 [AUTH_REPAIR] repairAuthUser result for ${params.email}: ${repairedUser ? `id=${repairedUser.id} identities=${repairedUser.identities?.length ?? 'null'}` : 'null'}`);
-    if (!repairedUser) return null;
-
-    const retry = await params.supabase.auth.signInWithPassword({
-      email: params.email,
-      password: params.password,
-    });
-    console.log(`🔧 [AUTH_REPAIR] signInWithPassword retry for ${params.email}: ${retry.error ? `error=${retry.error.message}` : `success userId=${retry.data.user?.id}`}`);
-
-    if (retry.error || !retry.data.user) {
-      return {
-        success: false,
-        error: retry.error?.message || 'Credenciales inválidas o error de autenticación.',
-      };
-    }
-
-    // If auth user was recreated (new UUID), clean up old profile and sync new one
-    if (oldProfile && oldProfile.id !== retry.data.user.id) {
-      console.log(`🔧 [AUTH_REPAIR] Auth user recreated with new UUID (${oldProfile.id} → ${retry.data.user.id}), cleaning up old profile`);
-      // Use deleteMany to avoid P2025 error if record doesn't exist
-      await prisma.userProfile.deleteMany({ where: { id: oldProfile.id } });
-    }
-
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: retry.data.user.id },
-      select: { id: true, role: true, interpreterId: true },
-    });
-
-    if (!profile) {
-      await syncUserProfileFromAuth({
-        userId: retry.data.user.id,
-        email: params.email,
-        role: resolveUserRoleByEmail(params.email, params.requestedRole),
-        displayName: repairedUser.user_metadata?.display_name || params.email.split('@')[0],
-      });
-    } else if (oldProfile?.interpreterId && !profile.interpreterId) {
-      // Preserve interpreter link if it existed on old profile
-      await prisma.userProfile.update({
-        where: { id: profile.id },
-        data: { interpreterId: oldProfile.interpreterId },
-      });
-    }
-
-    console.log(`✅ [AUTH_REPAIR] Repair successful for ${params.email} — role=${profile?.role ?? params.requestedRole}`);
-    return {
-      success: true,
-      role: resolveUserRoleByEmail(params.email, profile?.role ?? params.requestedRole),
-    };
-  } catch (repairErr) {
-    console.error(`🔴 [AUTH_REPAIR] upsertConfirmedAuthUser threw for ${params.email}:`, repairErr);
-    return null;
-  }
-}
-
 /**
  * ACTION: User Login
  */
@@ -167,7 +83,10 @@ export async function login(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
   const requestedRole = ((formData.get('role') as string) || 'interpreter').toLowerCase() as UserRole;
-  const effectiveRequestedRole = resolveUserRoleByEmail(email, requestedRole);
+  // The selected portal is untrusted client input. Supabase users get admin
+  // privileges only from the protected identity allowlist or an existing
+  // trusted profile; selecting "admin" in the form never elevates a new account.
+  const effectiveRequestedRole = resolveUserRoleByEmail(email, 'interpreter');
 
   try {
     const validated = AuthSchema.parse({ email, password, role: effectiveRequestedRole });
@@ -180,31 +99,6 @@ export async function login(formData: FormData) {
 
     if (error) {
       console.error(`🔴 [AUTH_LOGIN] Failed for ${email}:`, error.message);
-
-      // Attempt admin API repair when the service key is available.
-      // Handles: identities:null, unconfirmed email, missing user.
-      if (getSupabaseServiceRoleKey() && canAttemptRepair(email)) {
-        try {
-          recordRepairAttempt(email);
-          const repairedLogin = await repairAuthUserAndRetry({
-            supabase,
-            email,
-            password,
-            requestedRole: effectiveRequestedRole,
-          });
-
-          // Only short-circuit on success — on failure, fall through to
-          // the local rbac_users fallback so we don't block users who
-          // have a valid password in the local table.
-          if (repairedLogin?.success) {
-            const cookieStore = await cookies();
-            cookieStore.set('user-role', repairedLogin.role || 'interpreter', { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
-            return repairedLogin;
-          }
-        } catch (repairError) {
-          console.error(`🔴 [AUTH_LOGIN] Admin API repair failed for ${email}:`, repairError);
-        }
-      }
 
       // ── LOCAL RBAC FALLBACK ─────────────────────────────────
       // Authenticate against the rbac_users table (works even without
@@ -233,7 +127,10 @@ export async function login(formData: FormData) {
           data: { role: resolveRbacRoleByEmail(email, localUser.role) },
         });
       }
-      if (effectiveRequestedRole !== localRole) {
+      // The local RBAC database role is authoritative only after its password
+      // has been verified. Compare the requested portal to that role, never use
+      // the portal selection to calculate or grant the role itself.
+      if (requestedRole !== localRole) {
         return {
           success: false,
           error: 'Estas credenciales no corresponden al portal seleccionado.',
@@ -265,22 +162,21 @@ export async function login(formData: FormData) {
               password: validated.password,
             });
             if (!retry.error && retry.data.user) {
-              // If auth user was recreated (new UUID), clean up old profile
               if (oldProfile && oldProfile.id !== retry.data.user.id) {
-                console.log(`🔧 [AUTH_LOGIN] Auth user recreated with new UUID (${oldProfile.id} → ${retry.data.user.id}), cleaning up old profile`);
-                await prisma.userProfile.deleteMany({ where: { id: oldProfile.id } });
+                // Never delete or duplicate an application profile if an Auth UUID changes unexpectedly.
+                console.error('[AUTH_LOGIN] Supabase user ID differs from the existing profile ID; profile preserved for manual reconciliation.');
+              } else {
+                await syncUserProfileFromAuth({
+                  userId: retry.data.user.id,
+                  email,
+                  role: resolveUserRoleByEmail(email, localRole),
+                  displayName,
+                });
+
+                const cookieStore = await cookies();
+                cookieStore.set('user-role', localRole, { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
+                return { success: true, role: localRole };
               }
-
-              await syncUserProfileFromAuth({
-                userId: retry.data.user.id,
-                email,
-                role: resolveUserRoleByEmail(email, localRole),
-                displayName,
-              });
-
-              const cookieStore = await cookies();
-              cookieStore.set('user-role', localRole, { path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', maxAge: 60 * 60 * 24 * 7 });
-              return { success: true, role: localRole };
             }
           }
         } catch (fallbackError) {
@@ -352,6 +248,27 @@ export async function register(formData: FormData) {
   try {
     const validated = AuthSchema.parse({ email, password, role });
     const supabase = await createClient();
+
+    // Reject duplicates in application tables before any Auth admin operation.
+    // Registration is not a password-reset mechanism and must not take over legacy RBAC accounts.
+    const [existingProfile, existingRbacUser] = await Promise.all([
+      prisma.userProfile.findUnique({
+        where: { email: validated.email },
+        select: { id: true },
+      }),
+      prisma.rbacUser.findUnique({
+        where: { email: validated.email },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingProfile || existingRbacUser) {
+      return {
+        success: false,
+        error: 'Ya existe una cuenta con este correo. Inicia sesión o utiliza la recuperación de contraseña.',
+      };
+    }
+
     let userId: string;
 
     const serviceKey = getSupabaseServiceRoleKey();
@@ -394,12 +311,8 @@ export async function register(formData: FormData) {
     const resolvedRole = resolveUserRoleByEmail(validated.email, validated.role);
 
     const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: validated.email },
-          { name: name },
-        ],
-      },
+      // Do not associate a registration with an interpreter by name alone.
+      where: { emailCorporativo: validated.email },
       select: { id: true },
     });
 
@@ -422,10 +335,8 @@ export async function register(formData: FormData) {
 
     try {
       const hashedPassword = await bcrypt.hash(validated.password, 10);
-      await (prisma as any).rbacUser.upsert({
-        where: { email: validated.email },
-        update: { password: hashedPassword, name },
-        create: {
+      await (prisma as any).rbacUser.create({
+        data: {
           email: validated.email,
           password: hashedPassword,
           name,
@@ -553,45 +464,46 @@ export async function requestPasswordReset(formData: FormData) {
   if (!email) return { success: false, error: 'Email is required' };
 
   try {
-    const headersList = await (await import('next/headers')).headers();
-    const host = headersList.get('x-forwarded-host') || headersList.get('host');
-    const proto = headersList.get('x-forwarded-proto') || 'https';
-    const origin = host ? `${proto}://${host}` : '';
+    // Use a configured origin only. Do not construct password-recovery URLs
+    // from Host / X-Forwarded-Host headers, which can be attacker-controlled.
+    const configuredOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.FRONTEND_ORIGIN ||
+      (process.env.NODE_ENV === 'production'
+        ? 'https://interpretes.rd.ibusiness.com.do'
+        : 'http://localhost:3001');
+    const siteOrigin = new URL(configuredOrigin).origin;
+    const redirectTo = new URL('/auth/callback?next=/reset-password', siteOrigin).toString();
 
-    const { supabaseAdmin } = await import('@/lib/supabase/admin');
-
-    const { data, error } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'recovery',
-      email,
-      options: {
-        redirectTo: `${origin}/auth/callback?next=/reset-password`,
-      },
+    // This sends the reset email through Supabase Auth. Never generate a
+    // recovery token solely for server logs: action links grant account access.
+    const supabase = await createClient();
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
     });
 
     if (error) {
-      console.error('🔴 [AUTH_RESET] Error generating link:', error.message);
-      return { success: false, error: error.message };
+      // Do not log the address or any token. Avoid leaking account existence.
+      console.error('[AUTH_RESET] Password reset request failed:', error.name || 'AuthError');
+      return {
+        success: false,
+        error: 'No se pudo enviar el enlace de recuperación. Inténtalo más tarde.',
+      };
     }
-
-    console.log('\n======================================================');
-    console.log('🔐 [ZERO-COST RECOVERY] PASSWORD RESET LINK GENERATED');
-    console.log(`👤 User: ${email}`);
-    console.log(`🔗 Link: ${data.properties?.action_link}`);
-    console.log('======================================================\n');
 
     return { success: true };
   } catch (err: unknown) {
-    const { isAdminUnavailableError } = await import('@/lib/supabase/admin');
-    if (
-      isAdminUnavailableError(err) ||
-      (err instanceof Error &&
-        (err.message.includes('SUPABASE_SERVICE_ROLE_KEY') || err.message.includes('NEXT_PUBLIC_SUPABASE_URL')))
-    ) {
-      console.warn('⚠️ [AUTH_RESET] Request password omitido por falta de configuración.');
+    if (isSupabaseConfigError(err)) {
       return { success: false, error: 'Servicio deshabilitado temporalmente.' };
     }
-    console.error('🔴 [AUTH_RESET] Unexpected error:', err);
-    return { success: false, error: 'Error al solicitar el reset de contraseña.' };
+    console.error(
+      '[AUTH_RESET] Unexpected recovery error:',
+      err instanceof Error ? err.name : 'UnknownError'
+    );
+    return {
+      success: false,
+      error: 'No se pudo enviar el enlace de recuperación. Inténtalo más tarde.',
+    };
   }
 }
 

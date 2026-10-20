@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { IncentiveConfigSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
+import { guardApiAuth } from '@/lib/api-auth';
 
 const db = prisma;
 
@@ -10,8 +11,11 @@ const db = prisma;
  * Lee todos los tiers de incentivos desde SystemConfig.
  * Retorna los pares key/value agrupados por tier.
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const configs = await db.systemConfig.findMany({
       where: {
         key: {
@@ -66,6 +70,9 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { tiers } = await parseJsonBody(request, IncentiveConfigSchema);
 
     // Upsert cada par hours/bonus en SystemConfig

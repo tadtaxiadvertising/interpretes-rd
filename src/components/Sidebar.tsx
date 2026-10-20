@@ -138,10 +138,10 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
         {!isCollapsed && (
           <div className="animate-in fade-in duration-500">
             <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent truncate">
-              {appName || 'Free Interpreters'}
+              {appName || 'Interpretes RD'}
             </h1>
             <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">
-              {appSubtitle || (role === 'admin' ? 'Admin OS' : 'Portal')}
+              {appSubtitle || (role === 'admin' ? 'Admin OS' : 'Portal Intérpretes')}
             </p>
           </div>
         )}

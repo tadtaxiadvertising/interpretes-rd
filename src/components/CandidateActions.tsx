@@ -11,11 +11,12 @@ import {
   Mail,
   Mic2,
   Link2,
-  Copy
+  Copy,
+  CheckCircle2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { deleteCandidate, hireCandidate } from '@/app/actions/recruitment';
+import { deleteCandidate, hireCandidate, markApplicationReadyAction } from '@/app/actions/recruitment';
 import { createRoleplaySession } from '@/app/actions/roleplay';
 
 interface CandidateActionsProps {
@@ -23,18 +24,31 @@ interface CandidateActionsProps {
     id: number;
     name: string;
     email: string;
-    status: string;
+    applicationStatus?: string | null;
   };
 }
+
+const APPLICATION_READY_STATES = ['READY_FOR_ACTIVATION', 'HIRING'];
+const APPLICATION_CLOSED_STATES = ['HIRED', 'REJECTED', 'WITHDRAWN', 'EXPIRED'];
 
 export function CandidateActions({ candidate }: CandidateActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isHiring, setIsHiring] = useState(false);
+  const [isMarkingReady, setIsMarkingReady] = useState(false);
   const [isCreatingRoleplay, setIsCreatingRoleplay] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showRoleplayCreated, setShowRoleplayCreated] = useState<{ link: string; candidateName: string } | null>(null);
   const router = useRouter();
+
+  const applicationStatus = candidate.applicationStatus ?? null;
+  const canMarkReady =
+    applicationStatus !== null &&
+    !APPLICATION_READY_STATES.includes(applicationStatus) &&
+    !APPLICATION_CLOSED_STATES.includes(applicationStatus);
+  // `hireCandidate` only accepts READY_FOR_ACTIVATION / HIRING, so the UI must
+  // not offer hiring before the application has been marked ready.
+  const canHire = applicationStatus !== null && APPLICATION_READY_STATES.includes(applicationStatus);
 
   const handleCreateRoleplay = async () => {
     setIsCreatingRoleplay(true);
@@ -106,6 +120,22 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
     }
   };
 
+  const handleMarkReady = async () => {
+    setIsMarkingReady(true);
+    try {
+      const result = await markApplicationReadyAction(candidate.id);
+      if (!result.success) throw new Error(result.error);
+
+      setIsOpen(false);
+      router.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Error marking application ready: ${message}`);
+    } finally {
+      setIsMarkingReady(false);
+    }
+  };
+
 
   return (
     <div className="relative">
@@ -145,7 +175,17 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
               {isCreatingRoleplay ? <Loader2 size={16} className="animate-spin" /> : <Mic2 size={16} />}
               Create Roleplay
             </button>
-            {candidate.status !== 'Contratado' && (
+            {canMarkReady && (
+              <button
+                disabled={isMarkingReady}
+                className="w-full px-4 py-2 text-left text-sm text-amber-400 hover:bg-amber-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
+                onClick={handleMarkReady}
+              >
+                {isMarkingReady ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Mark Ready for Hiring
+              </button>
+            )}
+            {canHire && (
               <button 
                 disabled={isHiring}
                 className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-green-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"

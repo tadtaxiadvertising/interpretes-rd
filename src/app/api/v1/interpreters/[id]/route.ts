@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { guardApiAuth } from '@/lib/api-auth';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { deleteInterpreterDatabaseRecords } from '@/lib/interpreters/delete-interpreter';
 import { InterpreterPatchSchema } from '@/lib/api-schemas';
@@ -10,6 +11,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id: interpreterId } = numericIdParamSchema.parse(await params);
 
     // Initialize Supabase admin client first, catching errors so missing environment
@@ -58,6 +62,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const denied = await guardApiAuth(request, 'admin');
+    if (denied) return denied;
+
     const { id: interpreterId } = numericIdParamSchema.parse(await params);
     const body = await parseJsonBody(request, InterpreterPatchSchema);
     const { password, ...updateData } = body;

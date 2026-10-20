@@ -13,9 +13,9 @@ import { ScenarioCard } from './ScenarioCard';
 interface Participant {
   id: number;
   name: string;
-  email?: string;
-  externalId?: string;
-  emailCorporativo?: string;
+  email?: string | null;
+  externalId?: string | null;
+  emailCorporativo?: string | null;
 }
 
 interface Scenario {
@@ -112,22 +112,19 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
     setError(null);
 
     try {
-      // First create the session with the first scenario's base audio
-      const firstScenario = scenarios[0];
-      if (!firstScenario.baseAudioFile) {
-        throw new Error('First scenario must have base audio');
-      }
-
       const formData = new FormData();
-      formData.append('baseAudio', firstScenario.baseAudioFile);
       formData.append('participantType', participantType);
       formData.append('participantId', selectedParticipantId);
       formData.append('scenarios', JSON.stringify(scenarios.map(s => ({
-        title: s.title,
+        title: s.title.trim(),
         durationLimitSec: s.durationLimitSec || 0,
         scriptPrompt: s.scriptPrompt,
-        baseAudioFile: s.baseAudioFile ? 'pending' : undefined // We'll upload separately
       }))));
+      for (const scenario of scenarios) {
+        if (scenario.baseAudioFile) {
+          formData.append('scenarioAudios', scenario.baseAudioFile);
+        }
+      }
 
       const res = await fetch('/api/admin/roleplays', {
         method: 'POST',
@@ -137,26 +134,6 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
       const data = await res.json();
 
       if (!data.success) throw new Error(data.error || 'Failed to create roleplay');
-
-      // Upload additional scenario base audios
-      for (let i = 1; i < scenarios.length; i++) {
-        const scenario = scenarios[i];
-        if (scenario.baseAudioFile) {
-          const audioFormData = new FormData();
-          audioFormData.append('baseAudio', scenario.baseAudioFile);
-          audioFormData.append('sessionId', data.data.sessionId);
-          audioFormData.append('scenarioIndex', i.toString());
-          
-          const audioRes = await fetch('/api/admin/roleplays/scenarios/audio', {
-            method: 'POST',
-            body: audioFormData,
-          });
-          
-          if (!audioRes.ok) {
-            console.warn(`Failed to upload audio for scenario ${i}`);
-          }
-        }
-      }
 
       setSuccess({ 
         link: data.data.inviteLink || `${window.location.origin}/roleplays/${data.data.sessionId}`,

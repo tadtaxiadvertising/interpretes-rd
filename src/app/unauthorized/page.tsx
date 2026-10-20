@@ -63,7 +63,7 @@ export default function UnauthorizedPage() {
         </div>
         
         <p className="text-center text-slate-700 text-[10px] mt-8 uppercase tracking-widest font-medium">
-          Free Interpreters OS · System Protection
+          Intérpretes RD · System Protection
         </p>
       </div>
     </div>

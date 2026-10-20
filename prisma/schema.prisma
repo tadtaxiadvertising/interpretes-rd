@@ -11,50 +11,51 @@ datasource db {
 
 
 model Interpreter {
-  id                 Int                      @id @default(autoincrement())
-  externalId         String                   @unique @map("external_id")
-  name               String
-  status             String?                  @default("Activo")
-  realtimeStatus     String?                  @default("Offline") @map("realtime_status")
-  statusReason       String?                  @default("initial") @map("status_reason")
-  lastHeartbeat      DateTime?                @map("last_heartbeat") @db.Timestamptz(6)
-  lastActivity       DateTime?                @map("last_activity") @db.Timestamptz(6)
-  lastOnlineAt       DateTime?                @map("last_online_at") @db.Timestamptz(6)
-  lastOfflineAt      DateTime?                @map("last_offline_at") @db.Timestamptz(6)
-  statusChangedAt    DateTime?                @map("status_changed_at") @db.Timestamptz(6)
-  browserTabId       String?                  @map("browser_tab_id")
-  clientIp           String?                  @map("client_ip")
-  campaign           String?
-  languageA          String?                  @default("Español") @map("language_a")
-  languageB          String?                  @default("Inglés") @map("language_b")
-  emailCorporativo   String?                  @unique @map("email_corporativo")
-  telefono           String?
-  pais               String?
-  metodoPago         String?                  @default("Transferencia Bancaria") @map("metodo_pago")
-  cuentaPago         String?                  @map("cuenta_pago")
-  documentosCompleto Boolean?                 @default(false) @map("documentos_completo")
-  notas              String?
-  tariffPerMinute    Decimal                  @map("tariff_per_minute") @db.Decimal(10, 2)
-  createdAt          DateTime?                @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt          DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
-  banco              String?
-  tipoCuenta         String?                  @map("tipo_cuenta")
-  cedulaRnc          String?                  @map("cedula_rnc")
-  monthlyGoal        Int                      @default(2000) @map("monthly_goal")
-  paymentFrequency   String?                  @default("Monthly") @map("payment_frequency")
-  paymentDay         String?                  @default("1") @map("payment_day")
-  shiftStart         String?                  @default("09:00") @map("shift_start")
-  shiftEnd           String?                  @default("17:00") @map("shift_end")
-  callSessions       CallSession[]
-  accountRates       InterpreterAccountRate[]
-  auditLogs          PayrateAuditLog[]
-  payrollRecords     PayrollRecord[]
-  productionLogs     ProductionLog[]
-  qaScores           QAScore[]
-  roleplaySessions   RoleplaySession[]
-  userProfile        UserProfile?
-  statusLogs         InterpreterStatusLog[]
-  monthlyMetrics     InterpreterMonthlyMetrics[]
+  id                          Int                      @id @default(autoincrement())
+  externalId                  String                   @unique @map("external_id")
+  name                        String
+  status                      String?                  @default("Activo")
+  realtimeStatus              String?                  @default("Offline") @map("realtime_status")
+  statusReason                String?                  @default("initial") @map("status_reason")
+  lastHeartbeat               DateTime?                @map("last_heartbeat") @db.Timestamptz(6)
+  lastActivity                DateTime?                @map("last_activity") @db.Timestamptz(6)
+  lastOnlineAt                DateTime?                @map("last_online_at") @db.Timestamptz(6)
+  lastOfflineAt               DateTime?                @map("last_offline_at") @db.Timestamptz(6)
+  statusChangedAt             DateTime?                @map("status_changed_at") @db.Timestamptz(6)
+  browserTabId                String?                  @map("browser_tab_id")
+  clientIp                    String?                  @map("client_ip")
+  campaign                    String?
+  languageA                   String?                  @default("Español") @map("language_a")
+  languageB                   String?                  @default("Inglés") @map("language_b")
+  emailCorporativo            String?                  @unique @map("email_corporativo")
+  telefono                    String?
+  pais                        String?
+  metodoPago                  String?                  @default("Transferencia Bancaria") @map("metodo_pago")
+  cuentaPago                  String?                  @map("cuenta_pago")
+  documentosCompleto          Boolean?                 @default(false) @map("documentos_completo")
+  notas                       String?
+  tariffPerMinute             Decimal                  @map("tariff_per_minute") @db.Decimal(10, 2)
+  createdAt                   DateTime?                @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                   DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  banco                       String?
+  tipoCuenta                  String?                  @map("tipo_cuenta")
+  cedulaRnc                   String?                  @map("cedula_rnc")
+  monthlyGoal                 Int                      @default(2000) @map("monthly_goal")
+  paymentFrequency            String?                  @default("Monthly") @map("payment_frequency")
+  paymentDay                  String?                  @default("1") @map("payment_day")
+  shiftStart                  String?                  @default("09:00") @map("shift_start")
+  shiftEnd                    String?                  @default("17:00") @map("shift_end")
+  callSessions                CallSession[]
+  accountRates                InterpreterAccountRate[]
+  auditLogs                   PayrateAuditLog[]
+  payrollRecords              PayrollRecord[]
+  productionLogs              ProductionLog[]
+  qaScores                    QAScore[]
+  roleplaySessions            RoleplaySession[]
+  userProfile                 UserProfile?
+  statusLogs                  InterpreterStatusLog[]
+  monthlyMetrics              InterpreterMonthlyMetrics[]
+  hiredRecruitmentApplication RecruitmentApplication?  @relation("HiredInterpreter")
 
   @@index([createdAt], map: "idx_interpreters_created_at")
   @@index([pais], map: "idx_interpreters_pais")
@@ -228,7 +229,6 @@ model RecruitmentCandidate {
   fuente           String?
   englishLevel     String?   @map("english_level")
   speedtestMbps    Int?      @map("speedtest_mbps")
-  status           String?   @default("Aplicante")
   fechaPostulacion DateTime  @default(now()) @map("fecha_postulacion") @db.Timestamptz(6)
   fechaEntrevista  DateTime? @map("fecha_entrevista") @db.Timestamptz(6)
   resultRoleplay   Int?      @map("result_roleplay")
@@ -239,10 +239,361 @@ model RecruitmentCandidate {
   createdAt        DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime? @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   roleplaySessions RoleplaySession[]
+  applications     RecruitmentApplication[]
 
   @@index([fechaPostulacion], map: "idx_recruitment_candidates_fecha_postulacion")
-  @@index([status], map: "idx_recruitment_candidates_status")
   @@map("recruitment_candidates")
+  @@schema("public")
+}
+
+enum RecruitmentApplicationStatus {
+  APPLIED
+  PROFILE_PENDING
+  DOCUMENTS_PENDING
+  LANGUAGE_PENDING
+  TECHNICAL_PENDING
+  INDUCTION_PENDING
+  ROLEPLAY_PENDING
+  ROLEPLAY_IN_PROGRESS
+  ROLEPLAY_REVIEW
+  INTERVIEW_PENDING
+  INTERVIEW_SCHEDULED
+  INTERVIEW_REVIEW
+  OFFER_PENDING
+  OFFER_SENT
+  OFFER_ACCEPTED
+  CONTRACT_PENDING
+  BANKING_PENDING
+  TECH_SETUP_PENDING
+  TRAINING_PENDING
+  READY_FOR_ACTIVATION
+  HIRING
+  HIRED
+  REJECTED
+  WITHDRAWN
+  EXPIRED
+
+  @@schema("public")
+}
+
+enum RecruitmentStep {
+  APPLICATION
+  PROFILE
+  DOCUMENTS
+  LANGUAGE
+  TECHNICAL
+  INDUCTION
+  ROLEPLAY
+  ROLEPLAY_REVIEW
+  INTERVIEW
+  DECISION
+  OFFER
+  CONTRACT
+  BANKING
+  TECH_SETUP
+  TRAINING
+  READY_FOR_ACTIVATION
+  HIRING
+
+  @@schema("public")
+}
+
+model RecruitmentApplication {
+  id                    String                        @id @default(cuid())
+  candidateId           Int                           @map("candidate_id")
+  status                RecruitmentApplicationStatus  @default(APPLIED)
+  currentStep           RecruitmentStep               @default(APPLICATION)
+  version               Int                           @default(0)
+  startedAt             DateTime                      @default(now()) @map("started_at") @db.Timestamptz(6)
+  lastActivityAt        DateTime?                     @map("last_activity_at") @db.Timestamptz(6)
+  completedAt           DateTime?                     @map("completed_at") @db.Timestamptz(6)
+  hiredInterpreterId    Int?                          @unique @map("hired_interpreter_id")
+  rejectionReason       String?                       @map("rejection_reason")
+  withdrawalReason      String?                       @map("withdrawal_reason")
+  lastActorId           String?                       @map("last_actor_id")
+  createdAt             DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime                      @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  candidate             RecruitmentCandidate          @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  access                RecruitmentAccess?
+  events                RecruitmentEvent[]
+  documents             RecruitmentDocument[]
+  interviews            RecruitmentInterview[]
+  offers                RecruitmentOffer[]
+  contracts             RecruitmentContract[]
+  banking               RecruitmentBanking?
+  techSetup             RecruitmentTechSetup?
+  training              RecruitmentTraining?
+  hiredInterpreter      Interpreter?                  @relation("HiredInterpreter", fields: [hiredInterpreterId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+
+  @@unique([candidateId], map: "recruitment_application_candidate_id_key")
+  @@index([status, currentStep], map: "idx_recruitment_application_status_step")
+  @@index([lastActivityAt], map: "idx_recruitment_application_last_activity")
+  @@index([createdAt], map: "idx_recruitment_application_created_at")
+  @@map("recruitment_applications")
+  @@schema("public")
+}
+
+model RecruitmentAccess {
+  id            String   @id @default(cuid())
+  applicationId String   @map("application_id")
+  tokenHash     String   @unique @map("token_hash")
+  inviteCode    String?  @unique @map("invite_code")
+  expiresAt     DateTime @map("expires_at")
+  lastUsedAt    DateTime? @map("last_used_at")
+  revokedAt     DateTime? @map("revoked_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  application   RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId], map: "recruitment_access_application_id_key")
+  @@index([tokenHash], map: "idx_recruitment_access_token_hash")
+  @@index([inviteCode], map: "idx_recruitment_access_invite_code")
+  @@index([expiresAt], map: "idx_recruitment_access_expires")
+  @@map("recruitment_access")
+  @@schema("public")
+}
+
+enum RecruitmentEventType {
+  APPLICATION_CREATED
+  PROFILE_COMPLETED
+  DOCUMENT_UPLOADED
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  LANGUAGE_APPROVED
+  LANGUAGE_REJECTED
+  TECHNICAL_COMPLETED
+  TECHNICAL_REJECTED
+  INDUCTION_COMPLETED
+  ROLEPLAY_CREATED
+  ROLEPLAY_STARTED
+  ROLEPLAY_SUBMITTED
+  ROLEPLAY_EVALUATED
+  ROLEPLAY_PASSED
+  ROLEPLAY_FAILED
+  INTERVIEW_SCHEDULED
+  INTERVIEW_COMPLETED
+  INTERVIEW_FAILED
+  OFFER_SENT
+  OFFER_ACCEPTED
+  OFFER_REJECTED
+  CONTRACT_SIGNED
+  BANKING_COMPLETED
+  TECH_SETUP_COMPLETED
+  TRAINING_COMPLETED
+  READY_FOR_ACTIVATION
+  HIRING_STARTED
+  HIRED
+  REJECTED
+  WITHDRAWN
+
+  @@schema("public")
+}
+
+model RecruitmentEvent {
+  id            String               @id @default(cuid())
+  applicationId String               @map("application_id")
+  eventType     RecruitmentEventType @map("event_type")
+  fromStatus    RecruitmentApplicationStatus? @map("from_status")
+  toStatus      RecruitmentApplicationStatus  @map("to_status")
+  actorType     String               @map("actor_type") // 'candidate', 'admin', 'system'
+  actorId       String               @map("actor_id")
+  metadata      Json?
+  createdAt     DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  application   RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, createdAt(sort: Desc)], map: "idx_recruitment_event_application_time")
+  @@index([eventType], map: "idx_recruitment_event_type")
+  @@index([actorId], map: "idx_recruitment_event_actor")
+  @@map("recruitment_events")
+  @@schema("public")
+}
+
+enum RecruitmentDocumentType {
+  CV
+  IDENTITY
+  LANGUAGE_CERTIFICATE
+  BACKGROUND_CHECK
+  PHOTO
+  CONTRACT
+  OTHER
+
+  @@schema("public")
+}
+
+enum RecruitmentDocumentStatus {
+  UPLOADED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+
+  @@schema("public")
+}
+
+model RecruitmentDocument {
+  id                String                    @id @default(cuid())
+  applicationId     String                    @map("application_id")
+  type              RecruitmentDocumentType
+  storagePath       String                    @map("storage_path")
+  mimeType          String                    @map("mime_type")
+  size              Int
+  status            RecruitmentDocumentStatus @default(UPLOADED)
+  reviewedAt        DateTime?                 @map("reviewed_at") @db.Timestamptz(6)
+  reviewedBy        String?                   @map("reviewed_by")
+  rejectionReason   String?                   @map("rejection_reason")
+  createdAt         DateTime                  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime                  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application       RecruitmentApplication    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, type], map: "idx_recruitment_document_application_type")
+  @@index([applicationId, status], map: "idx_recruitment_document_application_status")
+  @@map("recruitment_documents")
+  @@schema("public")
+}
+
+enum RecruitmentInterviewStatus {
+  PENDING
+  SCHEDULED
+  COMPLETED
+  NO_SHOW
+  CANCELLED
+
+  @@schema("public")
+}
+
+model RecruitmentInterview {
+  id              String                      @id @default(cuid())
+  applicationId   String                      @map("application_id")
+  scheduledAt     DateTime?                   @map("scheduled_at") @db.Timestamptz(6)
+  status          RecruitmentInterviewStatus  @default(PENDING)
+  meetingUrl      String?                     @map("meeting_url")
+  notes           String?
+  completedAt     DateTime?                   @map("completed_at") @db.Timestamptz(6)
+  createdAt       DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application     RecruitmentApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, status], map: "idx_recruitment_interview_application_status")
+  @@index([scheduledAt], map: "idx_recruitment_interview_scheduled_at")
+  @@map("recruitment_interviews")
+  @@schema("public")
+}
+
+enum RecruitmentOfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+
+  @@schema("public")
+}
+
+model RecruitmentOffer {
+  id              String                   @id @default(cuid())
+  applicationId   String                   @map("application_id")
+  status          RecruitmentOfferStatus   @default(DRAFT)
+  sentAt          DateTime?                @map("sent_at") @db.Timestamptz(6)
+  acceptedAt      DateTime?                @map("accepted_at") @db.Timestamptz(6)
+  rejectedAt      DateTime?                @map("rejected_at") @db.Timestamptz(6)
+  expiresAt       DateTime?                @map("expires_at") @db.Timestamptz(6)
+  termsVersion    String?                  @map("terms_version")
+  documentPath    String?                  @map("document_path")
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                 @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application     RecruitmentApplication   @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, status], map: "idx_recruitment_offer_application_status")
+  @@map("recruitment_offers")
+  @@schema("public")
+}
+
+enum RecruitmentContractStatus {
+  PENDING
+  SENT
+  SIGNED
+  REJECTED
+  EXPIRED
+
+  @@schema("public")
+}
+
+model RecruitmentContract {
+  id              String                       @id @default(cuid())
+  applicationId   String                       @map("application_id")
+  status          RecruitmentContractStatus    @default(PENDING)
+  documentPath    String?                      @map("document_path")
+  signedAt        DateTime?                    @map("signed_at") @db.Timestamptz(6)
+  createdAt       DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime                     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application     RecruitmentApplication       @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@unique([applicationId], map: "recruitment_contract_application_id_key")
+  @@map("recruitment_contracts")
+  @@schema("public")
+}
+
+model RecruitmentBanking {
+  id                String       @id @default(cuid())
+  applicationId     String       @unique @map("application_id")
+  bankName          String       @map("bank_name")
+  bankAccount       String       @map("bank_account")
+  bankAccountType   String       @map("bank_account_type")
+  bankCedula        String       @map("bank_cedula")
+  verifiedAt        DateTime?    @map("verified_at") @db.Timestamptz(6)
+  verifiedBy        String?      @map("verified_by")
+  createdAt         DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("recruitment_banking")
+  @@schema("public")
+}
+
+model RecruitmentTechSetup {
+  id                String   @id @default(cuid())
+  applicationId     String   @unique @map("application_id")
+  hardware          Json?
+  connectionType    String?  @map("connection_type")
+  ping              Int?
+  download          Int?
+  upload            Int?
+  jitter            Int?
+  packetLoss        Float?   @map("packet_loss")
+  headset           Boolean?
+  microphone        Boolean?
+  browser           String?
+  softphone         String?
+  mockCallCompleted Boolean?  @default(false) @map("mock_call_completed")
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(6)
+  completedBy       String?   @map("completed_by")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("recruitment_tech_setups")
+  @@schema("public")
+}
+
+model RecruitmentTraining {
+  id                String   @id @default(cuid())
+  applicationId     String   @unique @map("application_id")
+  blocksCompleted   Json?    @map("blocks_completed")
+  completedAt       DateTime? @map("completed_at") @db.Timestamptz(6)
+  completedBy       String?   @map("completed_by")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  application       RecruitmentApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@map("recruitment_trainings")
   @@schema("public")
 }
 
@@ -487,6 +838,7 @@ model RoleplayAccess {
   id            String   @id @default(cuid())
   sessionId     String   @map("session_id")
   tokenHash     String   @unique @map("token_hash")
+  inviteCode    String?  @unique @map("invite_code")
   expiresAt     DateTime @map("expires_at")
   usedAt        DateTime? @map("used_at")
   validatedAt   DateTime? @map("validated_at")
@@ -497,6 +849,7 @@ model RoleplayAccess {
 
   @@unique([sessionId], map: "roleplay_access_session_id_key")
   @@index([tokenHash], map: "idx_roleplay_access_token_hash")
+  @@index([inviteCode], map: "idx_roleplay_access_invite_code")
   @@index([expiresAt], map: "idx_roleplay_access_expires")
   @@map("roleplay_access")
   @@schema("public")
@@ -539,6 +892,7 @@ model RoleplayResponse {
 
   scenario           RoleplayScenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
+  @@unique([scenarioId], map: "roleplay_responses_scenario_id_key")
   @@map("roleplay_responses")
   @@schema("public")
 }

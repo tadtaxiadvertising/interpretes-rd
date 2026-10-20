@@ -30,12 +30,7 @@ async function resolveActorFromSupabase(
 
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: {
-      id: true,
-      role: true,
-      interpreterId: true,
-      email: true,
-    },
+    select: { id: true, role: true, interpreterId: true, email: true },
   });
 
   let resolvedRole: UserRole = 'interpreter';
@@ -50,12 +45,9 @@ async function resolveActorFromSupabase(
 
   if (resolvedRole !== 'admin' && !interpreterId) {
     const interpreter = await prisma.interpreter.findFirst({
-      where: {
-        OR: [
-          { emailCorporativo: email },
-          { name: supabaseUser.user_metadata?.display_name || email.split('@')[0] },
-        ],
-      },
+      // Missing profiles may be initialized later, but interpreter ownership
+      // is resolved only by exact corporate email, never a user-editable name.
+      where: { emailCorporativo: email },
       select: { id: true },
     });
     interpreterId = interpreter?.id ?? null;
@@ -74,28 +66,34 @@ async function resolveActorFromSupabase(
 async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
   try {
     const session = await auth();
-    if (!session?.user) return null;
+    if (!session?.user?.id) return null;
 
     const userId = session.user.id;
     const email = session.user.email?.toLowerCase().trim() || null;
     const role = normalizeRbacRole((session.user as any).role);
-    const interpreterId = (session.user as any).interpreterId ?? null;
+    const sessionInterpreterId = (session.user as any).interpreterId;
 
     if (!email) return null;
 
+    // Auth.js credentials use RbacUser.id, while UserProfile is keyed by the
+    // Supabase UUID. For this legacy bridge, resolve the profile by its unique
+    // normalized email. The authenticated RbacUser remains the authority for
+    // role/identity; this lookup only locates the user's application profile.
+    const profile = await prisma.userProfile.findUnique({
+      where: { email },
+      select: { id: true, interpreterId: true },
+    });
+
+    // Preserve the interpreter identity already established by Auth.js when
+    // the legacy UserProfile bridge has no matching record. This is the
+    // server-created session value, not request input.
+    let interpreterId = profile?.interpreterId ?? (typeof sessionInterpreterId === 'number' ? sessionInterpreterId : null);
     if (role !== 'admin' && !interpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
         where: { emailCorporativo: email },
         select: { id: true },
       });
-      return {
-        provider: 'authjs',
-        userId,
-        email,
-        role,
-        interpreterId: interpreter?.id ?? null,
-        profileId: null,
-      };
+      interpreterId = interpreter?.id ?? null;
     }
 
     return {
@@ -103,8 +101,8 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
       userId,
       email,
       role,
-      interpreterId,
-      profileId: null,
+      interpreterId: role === 'admin' ? null : interpreterId,
+      profileId: profile?.id ?? null,
     };
   } catch {
     return null;
@@ -127,24 +125,17 @@ export const getCurrentActor = cache(async (): Promise<CurrentActor | null> => {
 });
 
 export function requireActor(actor: CurrentActor | null): CurrentActor {
-  if (!actor) {
-    throw new Error('Not authenticated');
-  }
+  if (!actor) throw new Error('Not authenticated');
   return actor;
 }
 
 export function requireRole(actor: CurrentActor | null, requiredRoles: UserRole[]): CurrentActor {
   const a = requireActor(actor);
-  if (!requiredRoles.includes(a.role)) {
-    throw new Error('Access denied: insufficient permissions');
-  }
+  if (!requiredRoles.includes(a.role)) throw new Error('Access denied: insufficient permissions');
   return a;
 }
 
-export function requireOwnership(
-  actor: CurrentActor | null,
-  resourceInterpreterId: number | null
-): CurrentActor {
+export function requireOwnership(actor: CurrentActor | null, resourceInterpreterId: number | null): CurrentActor {
   const a = requireActor(actor);
   if (a.role !== 'admin' && a.interpreterId !== resourceInterpreterId) {
     throw new Error('Access denied: not your resource');

@@ -29,6 +29,8 @@ import type { NextRequest } from 'next/server';
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://freeinterpreters.com";
 
+// Production CORS allowlist — never include .easypanel.host or arbitrary origins
+const isProduction = process.env.NODE_ENV === "production";
 const AUTH_SESSION_COOKIE_NAMES = [
   'authjs.session-token',
   '__Secure-authjs.session-token',
@@ -44,6 +46,65 @@ function hasValidAuthSession(req: NextRequest) {
   // Edge-safe gate: only check for Auth.js session cookie presence here.
   // Server Components / Actions perform role validation with Prisma.
   return hasAuthSessionCookie(req);
+}
+
+/**
+ * Public API prefixes that do NOT require authentication.
+ * - /api/health, /api/version: liveness / build-id probes.
+ * - /api/auth/*: NextAuth handlers (must be reachable to sign in).
+ * - /api/webhooks/*: third-party webhooks (self-verify signatures).
+ * - /api/cron/*: scheduled jobs (self-verify CRON_SECRET).
+ * - /api/roleplay/*: candidate flow authenticated by one-time invite tokens.
+ *
+ * Everything else under /api/* requires a verified Supabase session OR a
+ * verified Supabase `Authorization: Bearer <token>`.
+ */
+const API_PUBLIC_PREFIXES = [
+  '/api/health',
+  '/api/version',
+  '/api/auth/',
+  '/api/webhooks/',
+  '/api/cron/',
+  '/api/roleplay/',
+] as const;
+
+function isPublicApiPath(pathname: string) {
+  return API_PUBLIC_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(prefix)
+  );
+}
+
+function extractBearer(req: NextRequest): string | null {
+  const header = req.headers.get('authorization');
+  if (!header) return null;
+  const [scheme, ...rest] = header.split(' ');
+  if (!scheme || scheme.toLowerCase() !== 'bearer') return null;
+  const token = rest.join(' ').trim();
+  return token || null;
+}
+
+/**
+ * Verify a Supabase access token in the edge runtime via the public anon key.
+ * Never requires the service-role key. Fails closed on any error.
+ */
+async function verifySupabaseAccessToken(token: string): Promise<boolean> {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || process.env.SUPABASE_URL?.trim();
+  const key =
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() ||
+    process.env.SUPABASE_ANON_KEY?.trim();
+  if (!url || !key) return false;
+
+  try {
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(url, key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const { data, error } = await supabase.auth.getUser(token);
+    return !error && !!data.user;
+  } catch {
+    return false;
+  }
 }
 
 // Pre-check logic moved inside middleware to avoid missing env vars at module load in dev mode.
@@ -74,10 +135,10 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── 1. CORS PREFLIGHT ─────────────────────────────────────
-  const isTrustedOrigin = !origin ||
-    origin === FRONTEND_ORIGIN ||
-    origin.endsWith('.easypanel.host') ||
-    origin.includes('localhost');
+  const isLocalhostOrigin = origin?.includes('localhost') || origin?.includes('127.0.0.1');
+  const isTrustedOrigin = !isProduction
+    ? origin === FRONTEND_ORIGIN || isLocalhostOrigin
+    : origin === FRONTEND_ORIGIN;
 
   const corsOrigin = isTrustedOrigin && origin ? origin : FRONTEND_ORIGIN;
 
@@ -88,7 +149,7 @@ export async function middleware(req: NextRequest) {
         'Access-Control-Allow-Origin': corsOrigin,
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With',
-        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Credentials': isTrustedOrigin ? 'true' : 'false',
         'Access-Control-Max-Age': '86400',
       },
     });
@@ -150,10 +211,40 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  // ── 3b. API AUTHENTICATION GATE ───────────────────────────
+  // Every /api/* route (except the explicit public allowlist) requires a
+  // verified Supabase session OR a verified Supabase Bearer token. Route
+  // handlers remain responsible for role / ownership authorization.
+  if (pathname.startsWith('/api/') && !isPublicApiPath(pathname)) {
+    // Coarse edge gate: a refreshed Supabase session, an Auth.js session
+    // cookie, or a verified Supabase Bearer token. Route handlers still
+    // enforce role / ownership (see src/lib/api-auth.ts).
+    let apiAuthenticated = hasActiveSupabaseSession || hasValidNextAuthSession;
+    if (!apiAuthenticated) {
+      const bearer = extractBearer(req);
+      if (bearer) {
+        apiAuthenticated = await verifySupabaseAccessToken(bearer);
+      }
+    }
+
+    if (!apiAuthenticated) {
+      const unauthorized = NextResponse.json(
+        { success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' },
+        { status: 401 }
+      );
+      unauthorized.headers.set('Access-Control-Allow-Origin', corsOrigin);
+      unauthorized.headers.set(
+        'Access-Control-Allow-Credentials',
+        isTrustedOrigin ? 'true' : 'false'
+      );
+      return unauthorized;
+    }
+  }
+
   // ── 4. API CORS HEADERS ───────────────────────────────────
   if (pathname.startsWith('/api/')) {
     response.headers.set('Access-Control-Allow-Origin', corsOrigin);
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    response.headers.set('Access-Control-Allow-Credentials', isTrustedOrigin ? 'true' : 'false');
     response.headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
     response.headers.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
   }
