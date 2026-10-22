@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
+import { z } from 'zod';
+import { randomUUID } from 'crypto';
 
 const db = prisma;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -10,9 +13,8 @@ const MAX_SCRIPT_PROMPT = 5000;
 const MAX_DURATION_SEC = 86400;
 const ALLOWED_AUDIO_TYPES = new Set([
   'audio/webm',
-  'audio/webm;codecs=opus',
   'audio/mp4',
-  'audio/ogg',
+  'audio/wav',
   'audio/mpeg',
 ]);
 
@@ -37,6 +39,12 @@ interface ScenarioInput {
   scriptPrompt: string | null;
 }
 
+const scenarioPayloadSchema = z.array(z.object({
+  title: z.string().trim().min(1).max(MAX_TITLE),
+  durationLimitSec: z.union([z.number(), z.string(), z.null()]).optional(),
+  scriptPrompt: z.string().max(MAX_SCRIPT_PROMPT).nullable().optional(),
+})).min(1).max(MAX_SCENARIOS);
+
 function parseScenarios(raw: string): ScenarioInput[] | null {
   let parsed: unknown;
   try {
@@ -44,31 +52,21 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
   } catch {
     return null;
   }
-  if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > MAX_SCENARIOS) {
-    return null;
-  }
+  const validation = scenarioPayloadSchema.safeParse(parsed);
+  if (!validation.success) return null;
 
   const scenarios: ScenarioInput[] = [];
-  for (const item of parsed) {
-    if (typeof item !== 'object' || item === null) return null;
-    const { title, durationLimitSec, scriptPrompt } = item as Record<string, unknown>;
-
-    if (typeof title !== 'string' || !title.trim() || title.trim().length > MAX_TITLE) return null;
-
+  for (const item of validation.data) {
     let duration: number | null = null;
-    if (durationLimitSec !== undefined && durationLimitSec !== null && durationLimitSec !== '') {
-      const n = Number(durationLimitSec);
+    if (item.durationLimitSec !== undefined && item.durationLimitSec !== null && item.durationLimitSec !== '') {
+      const n = Number(item.durationLimitSec);
       if (!Number.isSafeInteger(n) || n < 0 || n > MAX_DURATION_SEC) return null;
       duration = n === 0 ? null : n;
     }
-
-    let prompt: string | null = null;
-    if (typeof scriptPrompt === 'string' && scriptPrompt.trim()) {
-      if (scriptPrompt.length > MAX_SCRIPT_PROMPT) return null;
-      prompt = scriptPrompt.trim();
-    }
-
-    scenarios.push({ title: title.trim(), durationLimitSec: duration, scriptPrompt: prompt });
+    const prompt = typeof item.scriptPrompt === 'string' && item.scriptPrompt.trim()
+      ? item.scriptPrompt.trim()
+      : null;
+    scenarios.push({ title: item.title, durationLimitSec: duration, scriptPrompt: prompt });
   }
   return scenarios;
 }
@@ -76,6 +74,7 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 export async function POST(req: NextRequest) {
   let sessionId: string | null = null;
   let createdSession = false;
+  let bulkCreated = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -89,17 +88,24 @@ export async function POST(req: NextRequest) {
     const rawScenarios = formData.get('scenarios');
     const scenarioAudios = formData.getAll('scenarioAudios');
 
-    if (typeof participantType !== 'string' || typeof participantId !== 'string' || typeof rawScenarios !== 'string') {
+    if (typeof participantType !== 'string' || typeof rawScenarios !== 'string') {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (participantType !== 'interpreter' && participantType !== 'candidate') {
+    const isBulk = participantType === 'all-active-interpreters';
+    if (participantType !== 'interpreter' && participantType !== 'candidate' && !isBulk) {
       return NextResponse.json({ success: false, error: 'Invalid participant type' }, { status: 400 });
     }
 
-    const parsedParticipantId = Number.parseInt(participantId, 10);
-    if (!Number.isSafeInteger(parsedParticipantId) || parsedParticipantId <= 0) {
-      return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
+    let parsedParticipantId: number | null = null;
+    if (!isBulk) {
+      if (typeof participantId !== 'string') {
+        return NextResponse.json({ success: false, error: 'Participant is required' }, { status: 400 });
+      }
+      parsedParticipantId = Number.parseInt(participantId, 10);
+      if (!Number.isSafeInteger(parsedParticipantId) || parsedParticipantId <= 0) {
+        return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
+      }
     }
 
     const scenarios = parseScenarios(rawScenarios);
@@ -132,20 +138,114 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (participantType === 'interpreter') {
-      const interpreter = await db.interpreter.findUnique({ where: { id: parsedParticipantId }, select: { id: true } });
+    if (!isBulk && participantType === 'interpreter') {
+      const interpreter = await db.interpreter.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
       if (!interpreter) return NextResponse.json({ success: false, error: 'Interpreter not found' }, { status: 404 });
-    } else {
-      const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId }, select: { id: true } });
+    } else if (!isBulk) {
+      const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
       if (!candidate) return NextResponse.json({ success: false, error: 'Candidate not found' }, { status: 404 });
     }
 
     // Create-or-resume invariant: never create a second live/evaluated
     // session for the same participant. Checked before any upload happens.
+    if (isBulk) {
+      // Bulk creation uploads each scenario audio once, then reuses the same
+      // immutable public asset URLs for every active interpreter session.
+      const activeInterpreters = await db.interpreter.findMany({
+        where: { status: 'Activo' },
+        select: { id: true },
+        orderBy: { id: 'asc' },
+      });
+      if (activeInterpreters.length === 0) {
+        return NextResponse.json({ success: false, error: 'No active interpreters found' }, { status: 400 });
+      }
+
+      const existingSessions = await db.roleplaySession.findMany({
+        where: {
+          interpreterId: { in: activeInterpreters.map((interpreter) => interpreter.id) },
+          status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
+        },
+        select: { interpreterId: true, status: true },
+      });
+      const blockedInterpreterIds = new Set(existingSessions.map((session) => session.interpreterId).filter((id): id is number => id !== null));
+      const eligibleInterpreters = activeInterpreters.filter((interpreter) => !blockedInterpreterIds.has(interpreter.id));
+      const skippedCount = activeInterpreters.length - eligibleInterpreters.length;
+      if (eligibleInterpreters.length === 0) {
+        return NextResponse.json({
+          success: false,
+          error: 'All active interpreters already have a draft or existing roleplay session',
+          skippedCount,
+        }, { status: 409 });
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !serviceRoleKey) {
+        return NextResponse.json({ success: false, error: 'Storage is not configured' }, { status: 503 });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      const batchPath = `base/bulk-${randomUUID()}`;
+      const audioUrls: string[] = [];
+      for (let i = 0; i < scenarios.length; i++) {
+        const audio = scenarioAudios[i] as File;
+        const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
+        const path = `${batchPath}/${i}.${extension}`;
+        const { error: uploadError } = await supabaseAdmin.storage
+          .from('roleplay-audio')
+          .upload(path, audio, { contentType: audio.type, upsert: false });
+        if (uploadError) throw new Error('Failed to upload audio');
+        uploadedPaths.push(path);
+        const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
+        audioUrls.push(publicUrlData.publicUrl);
+      }
+
+      const createdSessions = await db.$transaction(async (tx) => {
+        const created: Array<{ id: string }> = [];
+        for (const interpreter of eligibleInterpreters) {
+          const session = await tx.roleplaySession.create({
+            data: {
+              interpreterId: interpreter.id,
+              recruitmentCandidateId: null,
+              baseAudioUrl: audioUrls[0],
+              status: 'INVITED',
+              scenarios: {
+                create: scenarios.map((scenario, index) => ({
+                  order: index,
+                  title: scenario.title,
+                  baseAudioUrl: audioUrls[index],
+                  durationLimitSec: scenario.durationLimitSec,
+                  scriptPrompt: scenario.scriptPrompt,
+                  expectedKeys: [],
+                })),
+              },
+            },
+            select: { id: true },
+          });
+          created.push(session);
+        }
+        return created;
+      });
+      bulkCreated = true;
+
+      revalidatePath('/admin/roleplays');
+      revalidatePath('/admin/roleplays/new');
+      return NextResponse.json({
+        success: true,
+        data: {
+          bulk: true,
+          createdCount: createdSessions.length,
+          skippedCount,
+          sessionIds: createdSessions.map((session) => session.id),
+          scenarioCount: scenarios.length,
+        },
+      });
+    }
+
     const participantWhere =
       participantType === 'interpreter'
-        ? { interpreterId: parsedParticipantId }
-        : { recruitmentCandidateId: parsedParticipantId };
+        ? { interpreterId: parsedParticipantId! }
+        : { recruitmentCandidateId: parsedParticipantId! };
 
     const blockingSession = await db.roleplaySession.findFirst({
       where: { ...participantWhere, status: { in: [...BLOCKING_SESSION_STATUSES] } },
@@ -200,8 +300,8 @@ export async function POST(req: NextRequest) {
     } else {
       session = await db.roleplaySession.create({
         data: {
-          interpreterId: participantType === 'interpreter' ? parsedParticipantId : null,
-          recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId : null,
+          interpreterId: participantType === 'interpreter' ? parsedParticipantId! : null,
+          recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId! : null,
           baseAudioUrl: '',
           status: 'DRAFT',
         },
@@ -269,6 +369,8 @@ export async function POST(req: NextRequest) {
       inviteLink = `${origin}/r/${inviteCode}`;
     }
 
+    revalidatePath('/admin/roleplays');
+    revalidatePath('/admin/roleplays/new');
     return NextResponse.json({
       success: true,
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
@@ -292,7 +394,7 @@ export async function POST(req: NextRequest) {
         console.error('Create Roleplay cleanup failed:', cleanupError);
       }
     }
-    if (supabaseAdmin && uploadedPaths.length > 0) {
+    if (!bulkCreated && supabaseAdmin && uploadedPaths.length > 0) {
       try {
         await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
       } catch (cleanupError) {
