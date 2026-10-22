@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
@@ -12,7 +13,6 @@ const MAX_SCRIPT_PROMPT = 5000;
 const MAX_DURATION_SEC = 86400;
 const ALLOWED_AUDIO_TYPES = new Set([
   'audio/webm',
-  'audio/webm;codecs=opus',
   'audio/mp4',
   'audio/wav',
   'audio/mpeg',
@@ -140,7 +140,7 @@ export async function POST(req: NextRequest) {
     if (!isBulk && participantType === 'interpreter') {
       const interpreter = await db.interpreter.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
       if (!interpreter) return NextResponse.json({ success: false, error: 'Interpreter not found' }, { status: 404 });
-    } else {
+    } else if (!isBulk) {
       const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
       if (!candidate) return NextResponse.json({ success: false, error: 'Candidate not found' }, { status: 404 });
     }
@@ -226,6 +226,8 @@ export async function POST(req: NextRequest) {
         return created;
       });
 
+      revalidatePath('/admin/roleplays');
+      revalidatePath('/admin/roleplays/new');
       return NextResponse.json({
         success: true,
         data: {
@@ -365,6 +367,8 @@ export async function POST(req: NextRequest) {
       inviteLink = `${origin}/r/${inviteCode}`;
     }
 
+    revalidatePath('/admin/roleplays');
+    revalidatePath('/admin/roleplays/new');
     return NextResponse.json({
       success: true,
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
