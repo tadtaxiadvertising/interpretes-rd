@@ -60,11 +60,21 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
   }, []);
 
   const removeScenario = useCallback((id: string) => {
-    setScenarios(prev => prev.filter(s => s.id !== id));
+    setScenarios(prev => {
+      const removed = prev.find((scenario) => scenario.id === id);
+      if (removed?.baseAudioPreview) URL.revokeObjectURL(removed.baseAudioPreview);
+      return prev.filter((scenario) => scenario.id !== id);
+    });
   }, []);
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
-    setScenarios(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    setScenarios(prev => prev.map((scenario) => {
+      if (scenario.id !== id) return scenario;
+      if (updates.baseAudioPreview && scenario.baseAudioPreview && updates.baseAudioPreview !== scenario.baseAudioPreview) {
+        URL.revokeObjectURL(scenario.baseAudioPreview);
+      }
+      return { ...scenario, ...updates };
+    }));
   }, []);
 
   const moveScenario = useCallback(function(id: string, direction: 'up' | 'down') {
@@ -164,7 +174,7 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
         </div>
         <h2 className="text-2xl font-bold text-white mb-2">{success.summary ? 'Bulk roleplays created' : 'Roleplay Created!'}</h2>
         <p className="text-gray-400 mb-6">
-          Session created for <span className="font-bold text-white">{success.participantName}</span>
+          Created for <span className="font-bold text-white">{success.participantName}</span>
         </p>
         <p className="text-gray-400 mb-6">{scenarios.length} scenario(s) configured</p>
         {success.summary && <p className="text-sm text-gray-300 mb-6">{success.summary}</p>}
@@ -284,7 +294,7 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
             <div key={scenario.id} className="group" onDragStart={() => setDraggingId(scenario.id)} onDragEnd={() => setDraggingId(null)}>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-sm font-medium text-gray-400">Scenario {index + 1}</span>
-                <span className="text-xs text-gray-500">(drag to reorder)</span>
+                <span className="text-xs text-gray-500">(use arrows to reorder)</span>
               </div>
               <ScenarioCard
                 scenario={scenario}
