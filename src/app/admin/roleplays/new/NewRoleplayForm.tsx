@@ -299,6 +299,7 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
               <ScenarioCard
                 scenario={scenario}
                 index={index}
+                scenarioCount={scenarios.length}
                 onUpdate={updateScenario}
                 onRemove={removeScenario}
                 onMoveUp={() => moveScenario(scenario.id, 'up')}
