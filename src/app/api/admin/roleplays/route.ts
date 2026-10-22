@@ -74,6 +74,7 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 export async function POST(req: NextRequest) {
   let sessionId: string | null = null;
   let createdSession = false;
+  let bulkCreated = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -225,6 +226,7 @@ export async function POST(req: NextRequest) {
         }
         return created;
       });
+      bulkCreated = true;
 
       revalidatePath('/admin/roleplays');
       revalidatePath('/admin/roleplays/new');
@@ -392,7 +394,7 @@ export async function POST(req: NextRequest) {
         console.error('Create Roleplay cleanup failed:', cleanupError);
       }
     }
-    if (supabaseAdmin && uploadedPaths.length > 0) {
+    if (!bulkCreated && supabaseAdmin && uploadedPaths.length > 0) {
       try {
         await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
       } catch (cleanupError) {
