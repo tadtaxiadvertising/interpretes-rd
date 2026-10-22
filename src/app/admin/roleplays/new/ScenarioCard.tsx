@@ -16,6 +16,7 @@ interface Scenario {
 interface ScenarioCardProps {
   scenario: Scenario;
   index: number;
+  scenarioCount: number;
   onUpdate: (id: string, updates: Partial<Scenario>) => void;
   onRemove: (id: string) => void;
   onMoveUp: (id: string) => void;
@@ -29,6 +30,7 @@ const ALLOWED_AUDIO_TYPES = new Set(['audio/mpeg', 'audio/wav', 'audio/webm', 'a
 export function ScenarioCard({
   scenario,
   index,
+  scenarioCount,
   onUpdate,
   onRemove,
   onMoveUp,
@@ -125,16 +127,16 @@ export function ScenarioCard({
           <button type="button" onClick={() => onMoveUp(scenario.id)} disabled={index === 0} aria-label={`Move scenario ${index + 1} up`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
             <ChevronUp size={18} />
           </button>
-          <button type="button" onClick={() => onMoveDown(scenario.id)} disabled={index === 9} aria-label={`Move scenario ${index + 1} down`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+          <button type="button" onClick={() => onMoveDown(scenario.id)} disabled={index === scenarioCount - 1} aria-label={`Move scenario ${index + 1} down`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
             <ChevronDown size={18} />
           </button>
           <button
-          type="button"
-          onClick={() => onRemove(scenario.id)}
-          className="p-2 hover:bg-red-500/20 rounded-xl text-red-400 hover:text-red-300 transition-colors"
-          aria-label={`Remove scenario ${index + 1}`}
-        >
-          <Trash2 size={18} />
+            type="button"
+            onClick={() => onRemove(scenario.id)}
+            className="p-2 hover:bg-red-500/20 rounded-xl text-red-400 hover:text-red-300 transition-colors"
+            aria-label={`Remove scenario ${index + 1}`}
+          >
+            <Trash2 size={18} />
           </button>
         </div>
       </div>
