@@ -2,11 +2,7 @@
 
 import React, { useState, useCallback } from 'react';
 import Link from 'next/link';
-import { 
-  Mic2, Loader2, ArrowLeft, User, UserPlus, AlertCircle, 
-  Plus, Trash2, GripVertical, Clock, FileText, 
-  ChevronUp, ChevronDown
-} from 'lucide-react';
+import { Mic2, Loader2, User, UserPlus, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScenarioCard } from './ScenarioCard';
 
@@ -310,40 +306,6 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
         </div>
       </div>
 
-      <div>
-        <h3 className="text-lg font-bold text-white mb-4">Base Audio (Legacy - First Scenario Only)</h3>
-        <div className="space-y-4">
-          <input
-            type="file"
-            accept="audio/*"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) {
-                if (file.size > 15 * 1024 * 1024) {
-                  setError('File must be less than 15 MB');
-                  return;
-                }
-                const validTypes = ['audio/mpeg', 'audio/wav', 'audio/webm', 'audio/mp4'];
-                if (!validTypes.includes(file.type)) {
-                  setError('Invalid audio format. Use MP3, WAV, WebM, or MP4');
-                  return;
-                }
-                // Update first scenario's audio
-                setScenarios(prev => prev.map((s, i) => i === 0 ? { ...s, baseAudioFile: file, baseAudioPreview: URL.createObjectURL(file) } : s));
-                setError(null);
-              }
-            }}
-            className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-blue-500 transition-colors file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-500"
-          />
-          {scenarios[0]?.baseAudioPreview && (
-            <div className="space-y-2">
-              <p className="text-sm font-bold text-gray-300">Preview:</p>
-              <audio src={scenarios[0].baseAudioPreview} controls className="w-full" />
-            </div>
-          )}
-        </div>
-      </div>
-
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3">
           <AlertCircle />
@@ -361,7 +323,7 @@ export default function NewRoleplayForm({ interpreters, candidates }: NewRolepla
             : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
         )}
       >
-        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creating...</> : <><Mic2 size={24} /> Create Roleplay</>}
+        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creating...</> : <><Mic2 size={24} /> {isBulk ? 'Create for all active interpreters' : 'Create Roleplay'}</>}
       </button>
     </div>
   );
