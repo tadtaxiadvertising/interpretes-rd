@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Mic2, Trash2, GripVertical, Clock } from 'lucide-react';
+import { Mic2, Trash2, GripVertical, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface Scenario {
@@ -31,6 +31,8 @@ export function ScenarioCard({
   index,
   onUpdate,
   onRemove,
+  onMoveUp,
+  onMoveDown,
   isDragging,
 }: ScenarioCardProps) {
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -119,14 +121,22 @@ export function ScenarioCard({
             </div>
           </div>
         </div>
-        <button
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => onMoveUp(scenario.id)} disabled={index === 0} aria-label={`Move scenario ${index + 1} up`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+            <ChevronUp size={18} />
+          </button>
+          <button type="button" onClick={() => onMoveDown(scenario.id)} disabled={index === 9} aria-label={`Move scenario ${index + 1} down`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+            <ChevronDown size={18} />
+          </button>
+          <button
           type="button"
           onClick={() => onRemove(scenario.id)}
           className="p-2 hover:bg-red-500/20 rounded-xl text-red-400 hover:text-red-300 transition-colors"
           aria-label={`Remove scenario ${index + 1}`}
         >
           <Trash2 size={18} />
-        </button>
+          </button>
+        </div>
       </div>
 
       <div className="space-y-4">
