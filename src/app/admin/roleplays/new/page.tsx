@@ -12,7 +12,7 @@ async function getInterpreters() {
   try {
     return await prisma.interpreter.findMany({
       where: { status: { in: ['Activo', 'Training', 'Probation'] } },
-      select: { id: true, name: true, externalId: true, emailCorporativo: true },
+      select: { id: true, name: true, externalId: true, emailCorporativo: true, status: true },
       orderBy: { name: 'asc' },
       take: 500,
     });
