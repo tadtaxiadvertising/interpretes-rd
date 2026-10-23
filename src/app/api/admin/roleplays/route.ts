@@ -320,7 +320,7 @@ export async function POST(req: NextRequest) {
       const { error: uploadError } = await supabaseAdmin.storage
         .from('roleplay-audio')
         .upload(path, audio, { contentType: audio.type, upsert: true });
-      if (uploadError) throw new Error('Failed to upload audio');
+      if (uploadError) throw new Error(`Failed to upload audio: ${uploadError.message}`);
       uploadedPaths.push(path);
 
       const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
@@ -402,7 +402,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const isUploadFailure = message === 'Failed to upload audio';
+    const isUploadFailure = message.startsWith('Failed to upload audio');
     return NextResponse.json(
       { success: false, error: isUploadFailure ? message : 'Failed to create roleplay' },
       { status: 500 }

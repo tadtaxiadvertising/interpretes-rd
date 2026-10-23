@@ -242,7 +242,7 @@ describe('POST /api/admin/roleplays', () => {
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(500);
-      expect((await res.json()).error).toBe('Failed to upload audio');
+      expect((await res.json()).error).toBe('Failed to upload audio: boom');
       expect(prisma.roleplaySession.delete).toHaveBeenCalledWith({ where: { id: 'sess-1' } });
       expect(prisma.roleplayScenario.create).not.toHaveBeenCalled();
     });
