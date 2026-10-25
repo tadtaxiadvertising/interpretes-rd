@@ -32,6 +32,8 @@ test.describe('Public recruitment · candidate submission', () => {
     const pageErrors: string[] = [];
     first.on('pageerror', (err) => pageErrors.push(String(err)));
     second.on('pageerror', (err) => pageErrors.push(String(err)));
+    first.on('response', (response) => { if (response.request().method() === 'POST' && response.status() >= 400) console.log('[E2E first HTTP]', response.status(), response.url()); });
+    second.on('response', (response) => { if (response.request().method() === 'POST' && response.status() >= 400) console.log('[E2E second HTTP]', response.status(), response.url()); });
 
     try {
       await Promise.all([first.goto('/postular'), second.goto('/postular')]);
@@ -49,7 +51,8 @@ test.describe('Public recruitment · candidate submission', () => {
         first.getByRole('button', { name: 'Enviar Postulación' }).click(),
         second.getByRole('button', { name: 'Enviar Postulación' }).click(),
       ]);
-      await expect.poll(async () => {
+      try {
+        await expect.poll(async () => {
         const firstHasOutcome =
           (await first.getByRole('heading', { name: SUCCESS_HEADING }).count()) > 0 ||
           (await first.getByText(RESUME_INFO_TEXT, { exact: true }).count()) > 0;
@@ -57,7 +60,12 @@ test.describe('Public recruitment · candidate submission', () => {
           (await second.getByRole('heading', { name: SUCCESS_HEADING }).count()) > 0 ||
           (await second.getByText(RESUME_INFO_TEXT, { exact: true }).count()) > 0;
         return [firstHasOutcome, secondHasOutcome];
-      }).toEqual([true, true]);
+        }).toEqual([true, true]);
+      } catch (error) {
+        console.log('[E2E first final visible response]', await first.locator('body').innerText());
+        console.log('[E2E second final visible response]', await second.locator('body').innerText());
+        throw error;
+      }
       await expect(first.getByText(ERROR_TEXT)).toHaveCount(0);
       await expect(second.getByText(ERROR_TEXT)).toHaveCount(0);
       expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
@@ -86,9 +94,12 @@ test.describe('Public recruitment · candidate submission', () => {
     page.on('pageerror', (err) => pageErrors.push(String(err)));
 
     await fillApplication(page, RESUME_EMAIL);
-    await expect(
-      page.getByRole('heading', { name: SUCCESS_HEADING }),
-    ).toBeVisible();
+    try {
+      await expect(page.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible();
+    } catch (error) {
+      console.log('[E2E sequential final visible response]', await page.locator('body').innerText());
+      throw error;
+    }
     await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
 
     await fillApplication(page, RESUME_EMAIL);
