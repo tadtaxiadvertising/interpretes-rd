@@ -85,7 +85,7 @@ test.describe('Public recruitment · candidate submission', () => {
     ).toBeVisible();
     await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
 
-    await fillApplication(page, TEST_EMAIL);
+    await fillApplication(page, RESUME_EMAIL);
     await expect(
       page.getByRole('heading', { name: SUCCESS_HEADING }),
     ).toBeVisible();
