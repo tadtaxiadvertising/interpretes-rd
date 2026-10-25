@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   findUnique: vi.fn(),
   updateMany: vi.fn(),
   accessUpdateMany: vi.fn(),
+  applicationFindUnique: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
@@ -17,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: m.findUnique, updateMany: m.updateMany },
     roleplayAccess: { updateMany: m.accessUpdateMany },
+    recruitmentApplication: { findUnique: m.applicationFindUnique },
   },
 }));
 
@@ -59,6 +61,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     m.findUnique.mockImplementation(async () => m.session);
     m.updateMany.mockResolvedValue({ count: 1 });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
+    m.applicationFindUnique.mockResolvedValue(null);
   });
 
   it('rejects unauthenticated callers before touching the database', async () => {
@@ -113,6 +116,22 @@ describe('POST /api/roleplay/session/[id]/start', () => {
 
     expect(res.status).toBe(403);
     expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale candidate session cookie when the application is no longer eligible', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.identity = {
+      role: 'interpreter',
+      interpreterId: null,
+      eligibility: { needsOnboarding: false },
+    };
+    m.applicationFindUnique.mockResolvedValue({ status: 'REJECTED' });
+
+    const res = await POST(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(409);
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
   it('transitions a pre-start session to STARTED for its owner', async () => {
