@@ -49,6 +49,19 @@ test.describe('Public recruitment · candidate submission', () => {
         first.getByRole('button', { name: 'Enviar Postulación' }).click(),
         second.getByRole('button', { name: 'Enviar Postulación' }).click(),
       ]);
+      // Keep the visible response in CI logs if the action does not advance the funnel.
+      await expect.poll(async () => {
+        const firstText = await first.locator('body').innerText();
+        const secondText = await second.locator('body').innerText();
+        if (
+          firstText.includes(SUCCESS_HEADING) || firstText.includes(RESUME_INFO_TEXT) ||
+          secondText.includes(SUCCESS_HEADING) || secondText.includes(RESUME_INFO_TEXT)
+        ) return true;
+        return false;
+      }, { message: async () => 'visible response after submit: ' + JSON.stringify({
+        first: await first.locator('body').innerText(),
+        second: await second.locator('body').innerText()
+      }) }).toBe(true);
       await expect.poll(async () => {
         const firstHasOutcome =
           (await first.getByRole('heading', { name: SUCCESS_HEADING }).count()) > 0 ||
