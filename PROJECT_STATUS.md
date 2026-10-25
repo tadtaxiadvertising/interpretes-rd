@@ -14,12 +14,14 @@
 | Tooling | El script de lint se corrigió a `eslint .`, compatible con ESLint 9 y `eslint.config.mjs`. | CI #551 y #552 pasaron lint. |
 | Pruebas de Roleplay | Se aisló `revalidatePath` con un mock de `next/cache` para ejecutar pruebas del endpoint fuera del runtime de Next.js. | CI #551 y #552 pasaron pruebas y build. |
 | Inicio de Roleplay | Se protegió la transición de inicio con compare-and-set por ID y estado previo. Una solicitud concurrente no puede regresar una sesión terminal a `STARTED`; se agregó prueba de regresión. | PR #56 integrado; GitHub Actions run #40217611657: Prisma Validate, Generate, TypeScript, ESLint, tests y Build en éxito. |
+| Propiedad de postulación | Se corrigió una vía por la que una postulación anónima sin prueba de propiedad podía crear/actualizar el registro vinculado de `interpreter` con datos enviados por el cliente. La sincronización ahora solo ocurre cuando la propiedad está verificada. | PR #59 integrado; run #40218312129: Validate & Test en éxito. Se añadió regresión en `src/app/actions/__tests__/recruitment.test.ts`. |
+| Restricción del dashboard | El layout servidor del dashboard no aplicaba la decisión de acceso derivada de onboarding/Roleplay, aunque existía un router de destino. | PR #60 abierto; pendiente de CI. La corrección aplica la redirección en el layout compartido y añade pruebas para los destinos. |
 
 ### Hallazgos activos
 
 | Prioridad | Hallazgo verificado | Estado / siguiente acción |
 |---|---|---|
-| Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. El repositorio sí contiene `scripts/audit-onboarding.ts`. | Corregir el manifiesto para quitar el comando roto y exponer explícitamente `audit:onboarding`. No crear una migración de base de datos sin definir y revisar su intención funcional. |
+| Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. | Corregido en PR #58: se eliminó el comando roto y se añadió `audit:onboarding` para ejecutar el script de auditoría existente; no se ejecutó SQL ni se tocó la base de datos. |
 | Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
 | Media | `playwright.config.ts` define `baseURL` (por defecto `http://localhost:3001`) pero no configura `webServer`. El workflow de CI ejecuta `npm test`, no `npm run test:e2e`. | E2E no está integrado en el pipeline observado. Antes de activarlo hay que proporcionar servidor, variables y base de datos de prueba aislada. |
 | Media | El test E2E `e2e/recruitment-duplicate-submit.spec.ts` envía dos postulaciones secuenciales con el mismo correo; no simula dos peticiones simultáneas. El teardown elimina candidatos cuyo email coincide con el prefijo `e2e-dupesubmit-`. | Pendiente: añadir cobertura de concurrencia y garantizar que la limpieza solo opere sobre datos de prueba de un entorno aislado. |
