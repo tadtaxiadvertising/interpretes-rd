@@ -58,11 +58,33 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 409 });
     }
 
-    const updated = await db.roleplaySession.update({
-      where: { id: session.id },
+    // Compare-and-set the state we just validated. Without the status predicate,
+    // a concurrent submit/evaluation could be overwritten back to STARTED.
+    const transition = await db.roleplaySession.updateMany({
+      where: { id: session.id, status: session.status },
       data: { status: 'STARTED' },
-      select: { id: true, status: true },
     });
+
+    if (transition.count === 0) {
+      // Another request changed the state after our initial read. Resume only
+      // if that request started the same attempt; never regress terminal states.
+      const latest = await db.roleplaySession.findUnique({
+        where: { id: session.id },
+        select: { id: true, status: true },
+      });
+
+      if (latest && RESUMABLE_STATES.includes(latest.status)) {
+        return NextResponse.json(
+          { success: true, data: { sessionId: latest.id, status: latest.status, resumed: true } },
+          { headers: createRateLimitHeaders(rateLimitResult) }
+        );
+      }
+
+      return NextResponse.json(
+        { success: false, error: 'Session no longer available' },
+        { status: 409 }
+      );
+    }
 
     await db.roleplayAccess.updateMany({
       where: { sessionId: session.id, startedAt: null },
@@ -70,7 +92,7 @@ export async function POST(
     });
 
     return NextResponse.json(
-      { success: true, data: { sessionId: updated.id, status: updated.status, resumed: false } },
+      { success: true, data: { sessionId: session.id, status: 'STARTED', resumed: false } },
       { headers: createRateLimitHeaders(rateLimitResult) }
     );
   } catch (error: unknown) {
