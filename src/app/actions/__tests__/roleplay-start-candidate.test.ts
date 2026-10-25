@@ -167,13 +167,40 @@ describe('startCandidateRoleplay', () => {
     }
   );
 
-  it('allows a retry when the application is in ROLEPLAY_REVIEW', async () => {
+  it('does not move the application back to pending while a reviewer owns the session', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({ id: 'sess-reviewing', status: 'UNDER_REVIEW' });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.advanceApplication).not.toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('creates a fresh session when retrying a reviewed attempt', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      id: 'sess-reviewed', status: 'FAILED', baseAudioUrl: 'base.mp3',
+      scenarios: [{ order: 0, title: 'Medical', baseAudioUrl: 'scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }],
+    });
+    m.sessionCreate.mockResolvedValue({ id: 'sess-retry', status: 'STARTED' });
+    m.scenarioCount.mockResolvedValue(1);
 
     const res = await startCandidateRoleplay();
 
     expect(res.success).toBe(true);
-    expect(m.sessionCreate).toHaveBeenCalledTimes(1);
+    expect(m.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        recruitmentCandidateId: 5,
+        baseAudioUrl: 'base.mp3',
+        status: 'STARTED',
+        scenarios: { create: [{ order: 0, title: 'Medical', baseAudioUrl: 'scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }] },
+      }),
+    }));
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-retry', expect.any(Object));
     expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({
       applicationId: 'app-1',
       fromStatuses: ['ROLEPLAY_REVIEW'],
