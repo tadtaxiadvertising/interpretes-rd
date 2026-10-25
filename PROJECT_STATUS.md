@@ -5,7 +5,6 @@
 **Fecha de actualización:** 2026-10-25  
 **Repositorio:** `tadtaxiadvertising/interpretes-rd`  
 **Alcance:** CI, scripts de mantenimiento, Roleplay, pruebas E2E y cobertura TypeScript.  
-**Nota:** El estado de Vercel queda fuera del alcance de esta auditoría, según la prioridad acordada.
 
 ### Cambios integrados
 
@@ -15,7 +14,9 @@
 | Pruebas de Roleplay | Se aisló `revalidatePath` con un mock de `next/cache` para ejecutar pruebas del endpoint fuera del runtime de Next.js. | CI #551 y #552 pasaron pruebas y build. |
 | Inicio de Roleplay | Se protegió la transición de inicio con compare-and-set por ID y estado previo. Una solicitud concurrente no puede regresar una sesión terminal a `STARTED`; se agregó prueba de regresión. | PR #56 integrado; GitHub Actions run #40217611657: Prisma Validate, Generate, TypeScript, ESLint, tests y Build en éxito. |
 | Propiedad de postulación | Se corrigió una vía por la que una postulación anónima sin prueba de propiedad podía crear/actualizar el registro vinculado de `interpreter` con datos enviados por el cliente. La sincronización ahora solo ocurre cuando la propiedad está verificada. | PR #59 integrado; run #40218312129: Validate & Test en éxito. Se añadió regresión en `src/app/actions/__tests__/recruitment.test.ts`. |
-| Restricción del dashboard | El layout servidor del dashboard no aplicaba la decisión de acceso derivada de onboarding/Roleplay, aunque existía un router de destino. | PR #60 integrado; GitHub Actions run #40218577020 pasó validación, pruebas y build. La redirección se aplica en el layout compartido. |
+| Restricción del dashboard | El layout servidor del dashboard no aplicaba la decisión de acceso derivada de onboarding/Roleplay, aunque existía un router de destino. | PR #60 integrado; run #40218577020 pasó validación, pruebas y build. La redirección se aplica en el layout compartido. |
+| Inicio de Roleplay de candidatos | La server action y el endpoint directo podían iniciar Roleplay sin verificar onboarding o el estado de la postulación. | PR #63 integrado; run #40219055980 pasó validación, pruebas y build. Se añadieron guardas de identidad, onboarding y estado de aplicación con pruebas de regresión. |
+| Privacidad del reporte de onboarding | El script de auditoría exponía datos personales y bancarios en logs/reporte, además de tener un contador serializado incorrectamente. | PR #62 integrado; run #40218877726 pasó Prisma Validate, Generate, TypeScript, typecheck específico del script, ESLint, pruebas y build. El reporte se limita a IDs internos y flags. |
 
 ### Hallazgos activos
 
@@ -25,15 +26,17 @@
 | Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
 | Media | `playwright.config.ts` define `baseURL` (por defecto `http://localhost:3001`) pero no configura `webServer`. El workflow de CI ejecuta `npm test`, no `npm run test:e2e`. | E2E no está integrado en el pipeline observado. Antes de activarlo hay que proporcionar servidor, variables y base de datos de prueba aislada. |
 | Media | El test E2E `e2e/recruitment-duplicate-submit.spec.ts` envía dos postulaciones secuenciales con el mismo correo; no simula dos peticiones simultáneas. El teardown elimina candidatos cuyo email coincide con el prefijo `e2e-dupesubmit-`. | Pendiente: añadir cobertura de concurrencia y garantizar que la limpieza solo opere sobre datos de prueba de un entorno aislado. |
-| Alta | `scripts/audit-onboarding.ts` antes imprimía emails, nombres y datos bancarios/documentos en logs y reporte, y el resumen usaba incorrectamente `authJsUsers.length` sobre un número. | Corrección propuesta en este PR: informe de solo lectura con flags/IDs internos, sin PII bancaria ni emails; calcula de forma separada discrepancias del perfil y del intérprete. Los scripts siguen excluidos del `tsc --noEmit`, por lo que falta validación de tipos específica. |
+
 
 ### Evidencia de CI
 
 - [x] PR #54 y run #552 sobre `main`: Prisma Validate, Prisma Generate, TypeScript, ESLint, pruebas unitarias y build en éxito.
 - [x] PR #56: protección de carrera en inicio de Roleplay integrada; run #40217611657 con todas las etapas de validación en éxito.
+- [x] PR #62: reporte de onboarding sin PII sensible y chequeo TypeScript dedicado; run #40218877726 en éxito.
+- [x] PR #63: guardas de onboarding/estado de postulación en server action y API de inicio de Roleplay; run #40219055980 en éxito.
 - [ ] Añadir pruebas de concurrencia reales para postulación duplicada.
 - [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
-- [ ] Establecer chequeo TypeScript para scripts y pruebas con configuración explícita.
+- [ ] Extender el chequeo TypeScript dedicado a los scripts de mantenimiento restantes y configurar chequeos separados para tests/E2E.
 
 ### Criterio de cierre
 
