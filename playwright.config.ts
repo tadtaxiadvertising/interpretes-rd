@@ -26,10 +26,19 @@ export default defineConfig({
   expect: { timeout: 30_000 },
   reporter: [['list']],
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3001',
+    baseURL: configuredBaseURL,
     trace: 'retain-on-failure',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
+  webServer: process.env.E2E_START_SERVER === 'true'
+    ? {
+        // This project builds with output: standalone; next start is not supported.
+        command: 'PORT=3001 node .next/standalone/server.js',
+        url: configuredBaseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }
+    : undefined,
 });
