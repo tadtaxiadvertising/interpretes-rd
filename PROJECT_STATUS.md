@@ -1,39 +1,38 @@
 # PROJECT_STATUS.md
 
-## Fase 1 — Auditoría inicial del proyecto
+## Auditoría de arquitectura y flujos críticos
 
-**Fecha:** 2026-10-25  
+**Fecha de actualización:** 2026-10-25  
 **Repositorio:** `tadtaxiadvertising/interpretes-rd`  
-**Rama de seguimiento:** `docs/update-project-status-ci-results`  
-**Estado:** Corrección de pruebas integrada y validada por CI; pendiente revisar la señal de Vercel y ampliar la auditoría de scripts/E2E.
+**Alcance:** CI, scripts de mantenimiento, Roleplay, pruebas E2E y cobertura TypeScript.  
+**Nota:** El estado de Vercel queda fuera del alcance de esta auditoría, según la prioridad acordada.
 
-### Alcance y evidencia
+### Cambios integrados
 
-Se revisaron estáticamente `package.json`, `tsconfig.json`, `next.config.ts`, `eslint.config.mjs` y `README.md` mediante GitHub. La validación ejecutable se obtuvo de GitHub Actions; no se afirma haber ejecutado comandos localmente en este entorno.
+| Área | Hallazgo / cambio | Evidencia |
+|---|---|---|
+| Tooling | El script de lint se corrigió a `eslint .`, compatible con ESLint 9 y `eslint.config.mjs`. | CI #551 y #552 pasaron lint. |
+| Pruebas de Roleplay | Se aisló `revalidatePath` con un mock de `next/cache` para ejecutar pruebas del endpoint fuera del runtime de Next.js. | CI #551 y #552 pasaron pruebas y build. |
+| Inicio de Roleplay | Se protegió la transición de inicio con compare-and-set por ID y estado previo. Una solicitud concurrente no puede regresar una sesión terminal a `STARTED`; se agregó prueba de regresión. | PR #56 integrado; GitHub Actions run #40217611657: Prisma Validate, Generate, TypeScript, ESLint, tests y Build en éxito. |
 
-### Hallazgos y acciones
+### Hallazgos activos
 
-| Prioridad | Hallazgo | Estado | Acción / evidencia |
-|---|---|---|---|
-| Media | El README describía Next.js 16 para la aplicación principal, pero `package.json` declara Next.js 15.2.6 y `eslint-config-next` 15.2.6. | Corregido | Se actualizó la fila de `interpreters-os` en el README a Next.js 15.2.6. La versión del servicio API se dejó intacta porque no se verificó su manifiesto independiente. |
-| Media | El script de lint usaba `next lint .` aunque el proyecto declara ESLint 9 y usa `eslint.config.mjs`. | Corregido y validado | Se cambió a `eslint .`. ESLint pasó en CI #551 y #552. |
-| Alta | CI #549 falló en 4 pruebas del endpoint de creación de Roleplay: devolvían HTTP 500 cuando `revalidatePath` se ejecutaba fuera del contexto de Next.js. | Corregido e integrado | Se añadió un mock de `next/cache` en `src/app/api/admin/roleplays/__tests__/route.test.ts`; no se modificó el handler de producción. CI #551 y la ejecución sobre `main` #552 pasaron las pruebas y el build. |
-| Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de pruebas del chequeo TypeScript general. | Pendiente | Revisar esos ámbitos por separado antes de ampliar el alcance; scripts y E2E pueden requerir configuración propia. |
-| Media | El estado externo de Vercel reportó fallo para el commit de merge, aunque GitHub Actions y sus tareas de despliegue finalizaron con éxito. | Pendiente de diagnóstico | La señal de Vercel asociada al commit `6887b5bef4ce9d8f957d4f04c7c2855c6b32ec5b` figura como `failure`. Revisar el detalle del despliegue en Vercel; no asumir que el sitio está desplegado correctamente por el éxito del build de CI. |
-| Baja | No existía `PROJECT_STATUS.md` en la raíz durante la auditoría inicial. | Corregido | Se añadió este registro y se actualiza para reflejar resultados verificados. |
+| Prioridad | Hallazgo verificado | Estado / siguiente acción |
+|---|---|---|
+| Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. El repositorio sí contiene `scripts/audit-onboarding.ts`. | Corregir el manifiesto para quitar el comando roto y exponer explícitamente `audit:onboarding`. No crear una migración de base de datos sin definir y revisar su intención funcional. |
+| Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
+| Media | `playwright.config.ts` define `baseURL` (por defecto `http://localhost:3001`) pero no configura `webServer`. El workflow de CI ejecuta `npm test`, no `npm run test:e2e`. | E2E no está integrado en el pipeline observado. Antes de activarlo hay que proporcionar servidor, variables y base de datos de prueba aislada. |
+| Media | El test E2E `e2e/recruitment-duplicate-submit.spec.ts` envía dos postulaciones secuenciales con el mismo correo; no simula dos peticiones simultáneas. El teardown elimina candidatos cuyo email coincide con el prefijo `e2e-dupesubmit-`. | Pendiente: añadir cobertura de concurrencia y garantizar que la limpieza solo opere sobre datos de prueba de un entorno aislado. |
+| Media | `scripts/audit-onboarding.ts` calcula el estado de onboarding y consulta perfiles e intérpretes, pero los scripts quedan fuera de `tsc --noEmit`. | Pendiente: verificar tipos y compatibilidad de aliases/configuración para scripts antes de confiar en CI como validación de ese código. |
 
-### Validaciones
+### Evidencia de CI
 
-- [x] Revisar la versión declarada de Next.js y corregir la discrepancia del README.
-- [x] Cambiar el script de lint a `eslint .`.
-- [x] Consultar CI #549 e identificar los cuatro fallos de Roleplay.
-- [x] Aislar `revalidatePath` en la suite de pruebas sin alterar el código de producción.
-- [x] CI #551 (PR #54): Prisma Validate, Prisma Generate, TypeScript, ESLint, pruebas y build finalizaron con éxito.
-- [x] CI #552 sobre `main`: Prisma Validate, Prisma Generate, TypeScript, ESLint, pruebas y build finalizaron con éxito; los pasos de webhook de despliegue de los servicios `interpreters` y `interpreters-api` también finalizaron con éxito.
-- [ ] Diagnosticar el estado `failure` de Vercel y comprobar el despliegue/URL activa.
-- [ ] Revisar por separado la cobertura TypeScript de scripts, pruebas y E2E.
-- [ ] Ejecutar/revisar E2E disponibles y documentar alcance real de cobertura.
+- [x] PR #54 y run #552 sobre `main`: Prisma Validate, Prisma Generate, TypeScript, ESLint, pruebas unitarias y build en éxito.
+- [x] PR #56: protección de carrera en inicio de Roleplay integrada; run #40217611657 con todas las etapas de validación en éxito.
+- [ ] Añadir pruebas de concurrencia reales para postulación duplicada.
+- [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
+- [ ] Establecer chequeo TypeScript para scripts y pruebas con configuración explícita.
 
-### Criterio de cierre de Fase 1
+### Criterio de cierre
 
-La corrección inicial queda integrada y validada por GitHub Actions. No se considera terminada toda la auditoría: siguen pendientes el diagnóstico del estado externo de Vercel y la revisión de scripts/E2E excluidos del chequeo TypeScript general. El éxito del build no equivale a confirmar que el despliegue público funciona.
+La auditoría sigue abierta hasta que los chequeos E2E y de scripts sean reproducibles, y los caminos críticos de postulación, onboarding y Roleplay tengan pruebas de regresión adecuadas. El éxito del build por sí solo no acredita la integridad de los flujos de negocio.
