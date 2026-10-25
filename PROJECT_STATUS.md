@@ -18,7 +18,10 @@
 | Inicio de Roleplay de candidatos | La server action y el endpoint directo podían iniciar Roleplay sin verificar onboarding o el estado de la postulación. | PR #63 integrado; run #40219055980 pasó validación, pruebas y build. Se añadieron guardas de identidad, onboarding y estado de aplicación con pruebas de regresión. |
 | Privacidad del reporte de onboarding | El script de auditoría exponía datos personales y bancarios en logs/reporte, además de tener un contador serializado incorrectamente. | PR #62 integrado; run #40218877726 pasó Prisma Validate, Generate, TypeScript, typecheck específico del script, ESLint, pruebas y build. El reporte se limita a IDs internos y flags. |
 | Cookies de Roleplay antiguas | Una cookie de sesión podía seguir intentando iniciar/reanudar Roleplay tras el cierre o avance de la postulación asociada. | PR #65 integrado; run #40219373477 pasó validación, pruebas y build. El endpoint vuelve a comprobar el estado de la postulación antes de permitir el inicio. |
-| Dependencias Next.js/React | CI detectó Next.js 15.2.6 y React/React DOM 19.0.0 dentro de versiones afectadas por avisos de seguridad de React Server Components. | PR #70 integrado; run #40221301724 pasó `npm ci`, Prisma, TypeScript, ESLint, pruebas y build. Next.js/`eslint-config-next` quedaron en 15.2.9 y React/React DOM en 19.0.3. El inventario completo de vulnerabilidades npm restantes todavía requiere auditoría explícita. |
+| Seguridad Next.js/React/Image Optimization | El árbol inicial contenía Next.js 15.2.6 y React/React DOM 19.0.0 afectados por avisos de seguridad; el primer parche 15.2.9 no cubría avisos publicados después. | PR #70 y #74 integrados. Next.js/`eslint-config-next` 15.5.28, React/React DOM 19.0.3, SWC 15.5.28 y Sharp 0.35.5. Run #40222055963 pasó `npm ci`, Prisma, TypeScript, ESLint, pruebas y build; el audit dejó de reportar una vulnerabilidad crítica de Next. |
+| PostCSS y source maps | El PostCSS anidado de Next y `source-map-js` tenían versiones vulnerables. | PR #76 integrado; run #40222588986 pasó `npm ci`, TypeScript, ESLint, pruebas y build. El override fija PostCSS 8.5.28 y `source-map-js` 1.2.2. El informe npm bajó a 11 hallazgos: 0 críticos, 7 altos, 3 moderados y 1 bajo. |
+| Seguridad de pruebas E2E | El teardown podía usar las URLs generales y borrar candidatos por prefijo; la prueba de duplicados no simulaba concurrencia real. | PR #67 integrado; exige `E2E_ALLOW_DB_CLEANUP=true` y `E2E_DATABASE_URL`, bloquea la ejecución E2E por defecto y añade un escenario con dos navegadores. Aún requiere una base aislada para ejecutarse. |
+| Reintento de Roleplay | El guard de elegibilidad bloqueaba el estado `ROLEPLAY_REVIEW` aunque el funnel permite reintentar. | PR #68 integrado; el candidato vuelve a `ROLEPLAY_PENDING` con un evento de auditoría antes de iniciar el nuevo intento. Run #40220906115 pasó validación, pruebas y build. |
 
 ### Hallazgos activos
 
@@ -39,10 +42,12 @@
 - [x] PR #65: bloquea cookies antiguas cuando la postulación ya no es elegible; run #40219373477 en éxito.
 - [x] PR #67: endurece el teardown E2E y añade un escenario de postulación concurrente; run #40220420100 pasó validación, pruebas y build.
 - [x] PR #68: permite reintentar Roleplay desde ROLEPLAY_REVIEW y devuelve la postulación a ROLEPLAY_PENDING antes de iniciar; run #40220906115 pasó validación, pruebas y build.
-- [x] PR #70: parchea Next.js/React Server Components con versiones corregidas; run #40221301724 pasó validación, pruebas y build.
+- [x] PR #70: parche inicial de Next.js/React Server Components; run #40221301724 pasó validación, pruebas y build.
+- [x] PR #74: actualiza Next.js a 15.5.28 y Sharp a 0.35.5; run #40222055963 pasó validación, pruebas y build.
+- [x] PR #76: corrige PostCSS y source-map-js; run #40222588986 pasó validación, pruebas y build. Audit: 11 vulnerabilidades sin críticas.
 - [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
 - [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
-- [ ] Ejecutar `npm audit --json` sobre el árbol actualizado, clasificar las vulnerabilidades restantes y corregir las que correspondan sin aplicar actualizaciones mayores a ciegas.
+- [ ] Reducir los 11 avisos npm residuales tras PR #76: `@prisma/config`/`deepmerge-ts`/`mysql2`, `@vitest/ui`/`vitest`, `vite`, `zod`, `undici`, `fast-uri` y `esbuild`. Priorizar actualizaciones compatibles; evitar cambios mayores sin pruebas.
 - [ ] Extender el chequeo TypeScript dedicado a los scripts de mantenimiento restantes y configurar chequeos separados para tests/E2E.
 
 ### Criterio de cierre
