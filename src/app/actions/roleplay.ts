@@ -230,6 +230,24 @@ export async function startCandidateRoleplay() {
     // application to return to ROLEPLAY_PENDING before it can become IN_PROGRESS.
     const retryingFromReview = application?.status === 'ROLEPLAY_REVIEW';
     if (retryingFromReview) {
+      // Do not move the application back to pending while an evaluator still
+      // owns the previous attempt; that would desynchronize application/session state.
+      const sessionUnderReview = await db.roleplaySession.findFirst({
+        where: {
+          recruitmentCandidateId: candidate.id,
+          status: { notIn: [...RESUME_EXCLUDED_STATUSES] },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { status: true },
+      });
+      if (sessionUnderReview?.status === 'UNDER_REVIEW') {
+        return {
+          success: false as const,
+          error: 'Tu roleplay todavía está siendo evaluado. Espera el resultado antes de reintentarlo.',
+          code: 'CONFLICT' as const,
+        };
+      }
+
       const retryTransition = await advanceApplication({
         applicationId: application.id,
         fromStatuses: ['ROLEPLAY_REVIEW'],
