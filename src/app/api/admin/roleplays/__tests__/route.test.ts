@@ -8,6 +8,10 @@ const { mockUpload, mockRemove, mockGetPublicUrl, mockList } = vi.hoisted(() => 
   mockList: vi.fn(),
 }));
 
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}));
+
 vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
