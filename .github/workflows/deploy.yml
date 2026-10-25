@@ -104,6 +104,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Prepare standalone static assets for E2E
+        run: |
+          # Next.js standalone output intentionally omits these directories.
+          # Copy them so the browser can load the client bundles and hydrate Client Components.
+          mkdir -p .next/standalone/.next
+          cp -a .next/static .next/standalone/.next/static
+          if [ -d public ]; then
+            cp -a public .next/standalone/public
+          fi
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
