@@ -246,30 +246,33 @@ export async function submitApplicationAction(data: ApplicantData) {
             });
           }
 
-          // Ensure the candidate also has a restricted interpreter record so the
-          // same account can later complete onboarding/roleplay without re-entering data.
-          const existingInterpreter = await tx.interpreter.findFirst({
-            where: { emailCorporativo: email },
-            select: { id: true, status: true },
-          });
-          if (!existingInterpreter) {
-            await tx.interpreter.create({
-              data: {
-                externalId: `recruitment-candidate-${existing.id}`,
-                name: parsed.name,
-                status: 'Candidato',
-                emailCorporativo: email,
-                telefono: parsed.phone,
-                pais: parsed.country,
-                tariffPerMinute: 0,
-                notas: JSON.stringify({ recruitmentCandidateId: existing.id, source: 'recruitment', status: 'candidate' }),
-              },
+          // A matching email is not proof of ownership. Anonymous submissions may
+          // fill empty candidate fields, but must never create or overwrite the
+          // linked interpreter record using caller-controlled values.
+          if (owned) {
+            const existingInterpreter = await tx.interpreter.findFirst({
+              where: { emailCorporativo: email },
+              select: { id: true, status: true },
             });
-          } else if (existingInterpreter.status === 'Candidato' || existingInterpreter.status === 'En proceso') {
-            await tx.interpreter.update({
-              where: { id: existingInterpreter.id },
-              data: { name: parsed.name, telefono: parsed.phone, pais: parsed.country },
-            });
+            if (!existingInterpreter) {
+              await tx.interpreter.create({
+                data: {
+                  externalId: `recruitment-candidate-${existing.id}`,
+                  name: parsed.name,
+                  status: 'Candidato',
+                  emailCorporativo: email,
+                  telefono: parsed.phone,
+                  pais: parsed.country,
+                  tariffPerMinute: 0,
+                  notas: JSON.stringify({ recruitmentCandidateId: existing.id, source: 'recruitment', status: 'candidate' }),
+                },
+              });
+            } else if (existingInterpreter.status === 'Candidato' || existingInterpreter.status === 'En proceso') {
+              await tx.interpreter.update({
+                where: { id: existingInterpreter.id },
+                data: { name: parsed.name, telefono: parsed.phone, pais: parsed.country },
+              });
+            }
           }
 
           const funnelStep = await deriveFunnelStep(tx, existing.id, application.status);
