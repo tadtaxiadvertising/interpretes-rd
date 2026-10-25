@@ -124,6 +124,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: accessCheck.error }, { status: 403 });
     }
 
+    // The session cookie proves access to the session, not to an arbitrary
+    // scenario ID supplied in multipart form data. Bind the scenario to this
+    // session before constructing a storage path or accepting an upload.
+    const scenario = await prisma.roleplayScenario.findFirst({
+      where: { id: scenarioId, sessionId },
+      select: { id: true },
+    });
+    if (!scenario) {
+      return NextResponse.json(
+        { success: false, error: 'Scenario does not belong to this Roleplay session' },
+        { status: 404 }
+      );
+    }
+
     const validation = validateAudioFile(file);
     if (!validation.valid) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
