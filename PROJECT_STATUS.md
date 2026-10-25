@@ -18,6 +18,7 @@
 | Inicio de Roleplay de candidatos | La server action y el endpoint directo podían iniciar Roleplay sin verificar onboarding o el estado de la postulación. | PR #63 integrado; run #40219055980 pasó validación, pruebas y build. Se añadieron guardas de identidad, onboarding y estado de aplicación con pruebas de regresión. |
 | Privacidad del reporte de onboarding | El script de auditoría exponía datos personales y bancarios en logs/reporte, además de tener un contador serializado incorrectamente. | PR #62 integrado; run #40218877726 pasó Prisma Validate, Generate, TypeScript, typecheck específico del script, ESLint, pruebas y build. El reporte se limita a IDs internos y flags. |
 | Cookies de Roleplay antiguas | Una cookie de sesión podía seguir intentando iniciar/reanudar Roleplay tras el cierre o avance de la postulación asociada. | PR #65 integrado; run #40219373477 pasó validación, pruebas y build. El endpoint vuelve a comprobar el estado de la postulación antes de permitir el inicio. |
+| Dependencias Next.js/React | CI detectó Next.js 15.2.6 y React/React DOM 19.0.0 dentro de versiones afectadas por avisos de seguridad de React Server Components. | PR #70 integrado; run #40221301724 pasó `npm ci`, Prisma, TypeScript, ESLint, pruebas y build. Next.js/`eslint-config-next` quedaron en 15.2.9 y React/React DOM en 19.0.3. El inventario completo de vulnerabilidades npm restantes todavía requiere auditoría explícita. |
 
 ### Hallazgos activos
 
@@ -38,8 +39,10 @@
 - [x] PR #65: bloquea cookies antiguas cuando la postulación ya no es elegible; run #40219373477 en éxito.
 - [x] PR #67: endurece el teardown E2E y añade un escenario de postulación concurrente; run #40220420100 pasó validación, pruebas y build.
 - [x] PR #68: permite reintentar Roleplay desde ROLEPLAY_REVIEW y devuelve la postulación a ROLEPLAY_PENDING antes de iniciar; run #40220906115 pasó validación, pruebas y build.
+- [x] PR #70: parchea Next.js/React Server Components con versiones corregidas; run #40221301724 pasó validación, pruebas y build.
 - [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
 - [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
+- [ ] Ejecutar `npm audit --json` sobre el árbol actualizado, clasificar las vulnerabilidades restantes y corregir las que correspondan sin aplicar actualizaciones mayores a ciegas.
 - [ ] Extender el chequeo TypeScript dedicado a los scripts de mantenimiento restantes y configurar chequeos separados para tests/E2E.
 
 ### Criterio de cierre
