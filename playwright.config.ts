@@ -32,4 +32,12 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
+  webServer: process.env.E2E_START_SERVER === 'true'
+    ? {
+        command: 'npm run start',
+        url: configuredBaseURL,
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
+      }
+    : undefined,
 });
