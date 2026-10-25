@@ -24,6 +24,11 @@ async function fillApplication(page: Page, email: string): Promise<void> {
   await page.getByRole('button', { name: 'Enviar Postulación' }).click();
 }
 
+async function assertApplicationStep(page: Page): Promise<void> {
+  await expect(page.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible();
+  await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
+}
+
 test.describe('Public recruitment · candidate submission', () => {
   test('two browsers submitting the same email concurrently do not create duplicate candidates', async ({ browser }) => {
     const first = await browser.newPage();
@@ -48,12 +53,7 @@ test.describe('Public recruitment · candidate submission', () => {
         first.getByRole('button', { name: 'Enviar Postulación' }).click(),
         second.getByRole('button', { name: 'Enviar Postulación' }).click(),
       ]);
-      await Promise.all([
-        expect(first.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible(),
-        expect(second.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible(),
-      ]);
-      await expect(first.getByText(ERROR_TEXT)).toHaveCount(0);
-      await expect(second.getByText(ERROR_TEXT)).toHaveCount(0);
+      await Promise.all([assertApplicationStep(first), assertApplicationStep(second)]);
       expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
 
       const databaseUrl = process.env.E2E_DATABASE_URL;
@@ -73,23 +73,32 @@ test.describe('Public recruitment · candidate submission', () => {
       await Promise.all([first.close(), second.close()]);
     }
   });
-  test('double submit with the same email: first creates, second resumes (no duplicate/error)', async ({
-    page,
-  }) => {
+
+  test('resubmitting the same email resumes the existing application without an error', async ({ page }) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(String(err)));
 
     await fillApplication(page, RESUME_EMAIL);
-    await expect(
-      page.getByRole('heading', { name: SUCCESS_HEADING }),
-    ).toBeVisible();
-    await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
+    await assertApplicationStep(page);
 
-    await fillApplication(page, TEST_EMAIL);
-    await expect(
-      page.getByRole('heading', { name: SUCCESS_HEADING }),
-    ).toBeVisible();
-    await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
+    // Same browser keeps the signed ownership cookie, so a second submission
+    // exercises the owned resume path rather than creating a second candidate.
+    await fillApplication(page, RESUME_EMAIL);
+    await assertApplicationStep(page);
+
+    const databaseUrl = process.env.E2E_DATABASE_URL;
+    if (!databaseUrl) throw new Error('E2E_DATABASE_URL is required for the resume assertion');
+    const client = new Client({ connectionString: databaseUrl });
+    await client.connect();
+    try {
+      const result = await client.query(
+        'SELECT COUNT(*)::int AS count FROM recruitment_candidates WHERE email = $1',
+        [RESUME_EMAIL],
+      );
+      expect(result.rows[0]?.count).toBe(1);
+    } finally {
+      await client.end();
+    }
 
     expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
   });
