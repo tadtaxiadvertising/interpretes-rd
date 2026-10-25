@@ -9,27 +9,27 @@
 
 ### Alcance y evidencia
 
-Se revisaron `package.json`, `tsconfig.json`, `next.config.ts`, `eslint.config.mjs` y `README.md` en la rama predeterminada. Esta revisión fue estática mediante los archivos disponibles en GitHub; no se ejecutaron comandos de instalación, lint, TypeScript, pruebas, build ni despliegue.
+Se revisaron `package.json`, `tsconfig.json`, `next.config.ts`, `eslint.config.mjs` y `README.md` en la rama predeterminada. La revisión fue estática mediante los archivos disponibles en GitHub; no se ejecutaron comandos de instalación, lint, TypeScript, pruebas, build ni despliegue.
 
-### Hallazgos
+### Hallazgos y acciones
 
 | Prioridad | Hallazgo | Estado | Acción |
 |---|---|---|---|
-| Media | El README describe Next.js 16, mientras que `package.json` declara Next.js 15.2.6 y `eslint-config-next` 15.2.6. La documentación no refleja las dependencias declaradas. | Pendiente | Alinear la documentación con el manifiesto o confirmar que se planifica una actualización de framework. |
-| Media | El script de lint usa `next lint .`, que delega el comando a Next.js y hace menos explícito el uso de ESLint 9 con configuración plana en `eslint.config.mjs`. | Corregido en esta rama | Cambiado a `eslint .`, invocando directamente el ejecutor instalado. Falta ejecutar el comando para confirmar compatibilidad y resolver los diagnósticos que aparezcan. |
-| Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y los archivos de pruebas del chequeo TypeScript general. Los errores de esos ámbitos podrían no aparecer en una comprobación basada únicamente en ese archivo. | Pendiente de decisión | Revisar por separado la configuración de tests/scripts antes de ampliar el alcance para evitar mezclar entornos incompatibles. |
-| Baja | No existe `PROJECT_STATUS.md` en la raíz de la rama predeterminada al momento de la consulta. | Corregido en esta rama | Se añade este registro inicial para documentar alcance, hallazgos y validaciones pendientes. |
+| Media | El README describía Next.js 16 para la aplicación principal, pero `package.json` declara Next.js 15.2.6 y `eslint-config-next` 15.2.6. | Corregido en esta rama | Se actualizó la fila de `interpreters-os` en el README a Next.js 15.2.6. La versión del servicio API se dejó intacta porque no se verificó su manifiesto independiente. |
+| Media | El script de lint delegaba en `next lint .` pese a que el proyecto declara ESLint 9 y usa `eslint.config.mjs`. | Cambio aplicado; validación pendiente | Se cambió a `eslint .` para invocar el ejecutor ESLint directamente. Debe ejecutarse para confirmar compatibilidad y detectar diagnósticos reales. |
+| Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de pruebas del chequeo TypeScript general. | Pendiente de decisión | Revisar esos ámbitos por separado antes de ampliar el alcance; los entornos de test/scripts pueden necesitar configuración propia. |
+| Baja | No existía `PROJECT_STATUS.md` en la raíz de la rama predeterminada durante la revisión. | Corregido en esta rama | Se añadió este informe inicial con alcance, hallazgos y validaciones pendientes. |
 
 ### Validaciones pendientes
 
-- [ ] Instalar dependencias con el lockfile existente.
-- [ ] Ejecutar lint y registrar los errores reales.
+- [ ] Instalar dependencias usando el lockfile del repositorio.
+- [ ] Ejecutar `npm run lint` y registrar los errores reales.
 - [ ] Ejecutar el chequeo TypeScript del proyecto.
 - [ ] Ejecutar las pruebas unitarias y E2E disponibles.
 - [ ] Ejecutar el build de producción con las variables de entorno necesarias.
 - [ ] Revisar workflows de GitHub Actions y el estado de CI.
-- [ ] Corregir los errores confirmados y repetir las validaciones.
+- [ ] Corregir errores confirmados y repetir las validaciones.
 
 ### Criterio de cierre de Fase 1
 
-La fase solo se considerará validada cuando las comprobaciones aplicables se hayan ejecutado y sus resultados queden documentados. Los cambios en esta rama no implican que el proyecto haya pasado lint, pruebas o build; esos resultados aún no se han obtenido.
+La fase solo se considerará validada cuando las comprobaciones aplicables se hayan ejecutado y sus resultados queden documentados. Los cambios de esta rama no implican que el proyecto haya pasado lint, pruebas o build; esos resultados aún no se han obtenido.
