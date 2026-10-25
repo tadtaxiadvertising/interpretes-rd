@@ -26,7 +26,7 @@
 | Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. | Corregido en PR #58: se eliminó el comando roto y se añadió `audit:onboarding` para ejecutar el script de auditoría existente; no se ejecutó SQL ni se tocó la base de datos. |
 | Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
 | Media | `playwright.config.ts` define `baseURL` (por defecto `http://localhost:3001`) pero no configura `webServer`. El workflow de CI ejecuta `npm test`, no `npm run test:e2e`. | E2E no está integrado en el pipeline observado. Antes de activarlo hay que proporcionar servidor, variables y base de datos de prueba aislada. |
-| Media | El test E2E `e2e/recruitment-duplicate-submit.spec.ts` envía dos postulaciones secuenciales con el mismo correo; no simula dos peticiones simultáneas. El teardown elimina candidatos cuyo email coincide con el prefijo `e2e-dupesubmit-`. | Pendiente: añadir cobertura de concurrencia y garantizar que la limpieza solo opere sobre datos de prueba de un entorno aislado. |
+| Alta | El teardown E2E utilizaba DIRECT_URL/DATABASE_URL como fallback y borraba candidatos por prefijo de email sin consentimiento explícito ni garantía de base aislada. | Corrección propuesta en PR: el borrado exige E2E_ALLOW_DB_CLEANUP=true y E2E_DATABASE_URL; no usa URLs generales de la aplicación. Añade escenario E2E con dos navegadores que envían la misma dirección en paralelo. La prueba sigue pendiente de ejecución contra una base E2E aislada. |
 
 
 ### Evidencia de CI
@@ -36,7 +36,7 @@
 - [x] PR #62: reporte de onboarding sin PII sensible y chequeo TypeScript dedicado; run #40218877726 en éxito.
 - [x] PR #63: guardas de onboarding/estado de postulación en server action y API de inicio de Roleplay; run #40219055980 en éxito.
 - [x] PR #65: bloquea cookies antiguas cuando la postulación ya no es elegible; run #40219373477 en éxito.
-- [ ] Añadir pruebas de concurrencia reales para postulación duplicada.
+- [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
 - [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
 - [ ] Extender el chequeo TypeScript dedicado a los scripts de mantenimiento restantes y configurar chequeos separados para tests/E2E.
 
