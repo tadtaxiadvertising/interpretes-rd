@@ -84,7 +84,7 @@ jobs:
         run: npx prisma generate
 
       - name: Prepare isolated E2E database
-        run: npx prisma db push --skip-generate
+        run: npx prisma db push
 
       - name: TypeScript Check
         run: npx tsc --noEmit
