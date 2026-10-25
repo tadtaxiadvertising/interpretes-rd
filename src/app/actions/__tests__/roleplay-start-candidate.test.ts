@@ -167,6 +167,19 @@ describe('startCandidateRoleplay', () => {
     }
   );
 
+  it('does not move the application back to pending while a reviewer owns the session', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({ id: 'sess-reviewing', status: 'UNDER_REVIEW' });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.advanceApplication).not.toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
   it('creates a fresh session when retrying a reviewed attempt', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
     m.sessionFindFirst.mockResolvedValue({
