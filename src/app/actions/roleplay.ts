@@ -228,7 +228,8 @@ export async function startCandidateRoleplay() {
 
     // Review explicitly permits a retry, but the state machine requires the
     // application to return to ROLEPLAY_PENDING before it can become IN_PROGRESS.
-    if (application?.status === 'ROLEPLAY_REVIEW') {
+    const retryingFromReview = application?.status === 'ROLEPLAY_REVIEW';
+    if (retryingFromReview) {
       const retryTransition = await advanceApplication({
         applicationId: application.id,
         fromStatuses: ['ROLEPLAY_REVIEW'],
@@ -248,16 +249,57 @@ export async function startCandidateRoleplay() {
       }
     }
 
-    let session = await db.roleplaySession.findFirst({
+    const previousSession = await db.roleplaySession.findFirst({
       where: {
         recruitmentCandidateId: candidate.id,
         status: { notIn: [...RESUME_EXCLUDED_STATUSES] },
       },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true },
+      select: {
+        id: true,
+        status: true,
+        baseAudioUrl: true,
+        scenarios: {
+          orderBy: { order: 'asc' },
+          select: {
+            order: true,
+            title: true,
+            baseAudioUrl: true,
+            durationLimitSec: true,
+            scriptPrompt: true,
+            expectedKeys: true,
+          },
+        },
+      },
     });
 
-    if (!session) {
+    // A reviewed attempt is historical evidence. Retrying must create a new
+    // session and copy only its scenario definition, never its responses or QA.
+    // Ordinary page refreshes still resume the current in-flight session.
+    const shouldCreateRetry = retryingFromReview && previousSession &&
+      ['SUBMITTED', 'EVALUATED', 'PASSED', 'FAILED'].includes(previousSession.status);
+
+    let session;
+    if (shouldCreateRetry) {
+      session = await db.roleplaySession.create({
+        data: {
+          recruitmentCandidateId: candidate.id,
+          baseAudioUrl: previousSession.baseAudioUrl,
+          status: 'STARTED',
+          scenarios: {
+            create: previousSession.scenarios.map((scenario) => ({
+              order: scenario.order,
+              title: scenario.title,
+              baseAudioUrl: scenario.baseAudioUrl,
+              durationLimitSec: scenario.durationLimitSec,
+              scriptPrompt: scenario.scriptPrompt,
+              expectedKeys: scenario.expectedKeys,
+            })),
+          },
+        },
+        select: { id: true, status: true },
+      });
+    } else if (!previousSession) {
       session = await db.roleplaySession.create({
         data: {
           recruitmentCandidateId: candidate.id,
@@ -266,13 +308,16 @@ export async function startCandidateRoleplay() {
         },
         select: { id: true, status: true },
       });
-    } else if (['DRAFT', 'INVITED', 'PENDING'].includes(session.status)) {
-      // Only pre-submit states advance to STARTED. SUBMITTED / UNDER_REVIEW /
-      // EVALUATED / PASSED / FAILED sessions must never regress on resume.
-      await db.roleplaySession.update({
-        where: { id: session.id },
-        data: { status: 'STARTED' },
-      });
+    } else {
+      session = { id: previousSession.id, status: previousSession.status };
+      if (['DRAFT', 'INVITED', 'PENDING'].includes(session.status)) {
+        // Only pre-submit states advance to STARTED. Submitted/reviewed attempts
+        // are never reset as part of a normal resume.
+        await db.roleplaySession.update({
+          where: { id: session.id },
+          data: { status: 'STARTED' },
+        });
+      }
     }
 
     const scenarioCount = await db.roleplayScenario.count({ where: { sessionId: session.id } });
