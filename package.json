@@ -13,9 +13,9 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "migrate": "tsx scripts/run-migration.ts",
-    "migrate:onboarding": "tsx scripts/migrate-onboarding.ts",
     "seed": "tsx prisma/seed.ts",
-    "anomaly:detect": "tsx scripts/detect-anomalies.ts"
+    "anomaly:detect": "tsx scripts/detect-anomalies.ts",
+    "audit:onboarding": "tsx scripts/audit-onboarding.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
