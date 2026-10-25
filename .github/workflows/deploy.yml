@@ -29,8 +29,9 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/interpreters_e2e?schema=public
-      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/interpreters_e2e?schema=public
+      # Disable TLS only for this ephemeral local PostgreSQL service in CI.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/interpreters_e2e?schema=public&sslmode=disable
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/interpreters_e2e?schema=public&sslmode=disable
       AUTH_SECRET: e2e-only-secret-for-isolated-ci-testing-2026
       ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
