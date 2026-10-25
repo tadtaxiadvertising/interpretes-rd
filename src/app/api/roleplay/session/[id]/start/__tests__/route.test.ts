@@ -5,7 +5,7 @@ const m = vi.hoisted(() => ({
   identity: null as any,
   session: null as any,
   findUnique: vi.fn(),
-  update: vi.fn(),
+  updateMany: vi.fn(),
   accessUpdateMany: vi.fn(),
 }));
 
@@ -15,7 +15,7 @@ vi.mock('@/lib/identity/resolve-user', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    roleplaySession: { findUnique: m.findUnique, update: m.update },
+    roleplaySession: { findUnique: m.findUnique, updateMany: m.updateMany },
     roleplayAccess: { updateMany: m.accessUpdateMany },
   },
 }));
@@ -57,7 +57,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     m.identity = { role: 'interpreter', interpreterId: 7 };
     m.session = INTERPRETER_SESSION;
     m.findUnique.mockImplementation(async () => m.session);
-    m.update.mockResolvedValue({ id: 'sess-1', status: 'STARTED' });
+    m.updateMany.mockResolvedValue({ count: 1 });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
   });
 
@@ -77,7 +77,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest(), { params });
 
     expect(res.status).toBe(403);
-    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects a candidate session when the cookie points at another session', async () => {
@@ -108,8 +108,11 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(body.success).toBe(true);
     expect(body.data.status).toBe('STARTED');
     expect(body.data.resumed).toBe(false);
-    expect(m.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'sess-1' }, data: { status: 'STARTED' } })
+    expect(m.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'sess-1', status: 'INVITED' },
+        data: { status: 'STARTED' },
+      })
     );
     expect(m.accessUpdateMany).toHaveBeenCalledTimes(1);
   });
@@ -123,6 +126,25 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(res.status).toBe(200);
     expect(body.data.resumed).toBe(true);
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+
+  it('does not overwrite a submitted state when it changes after the initial read', async () => {
+    m.findUnique
+      .mockResolvedValueOnce(INTERPRETER_SESSION)
+      .mockResolvedValueOnce({ id: 'sess-1', status: 'SUBMITTED' });
+    m.updateMany.mockResolvedValue({ count: 0 });
+
+    const res = await POST(makeRequest(), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.success).toBe(false);
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { id: 'sess-1', status: 'INVITED' },
+      data: { status: 'STARTED' },
+    });
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
   it('refuses to restart a submitted session', async () => {
