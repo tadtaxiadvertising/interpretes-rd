@@ -63,9 +63,21 @@ vi.mock('@/lib/roleplay', () => ({
   validateAudioFile: vi.fn(),
 }));
 
-vi.mock('@/services/recruitment/transitions', () => ({
-  advanceApplication: (...args: any[]) => m.advanceApplication(...args),
-}));
+vi.mock('@/services/recruitment/transitions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/recruitment/transitions')>();
+  return {
+    ...actual,
+    advanceApplication: (...args: any[]) => {
+      const params = args[0] as { toStatus?: string; fromStatuses?: string[] };
+      // Isolate the new retry pre-transition while keeping the real guarded
+      // transition implementation under test for all existing paths.
+      if (params.toStatus === 'ROLEPLAY_PENDING' && params.fromStatuses?.includes('ROLEPLAY_REVIEW')) {
+        return m.advanceApplication(...args);
+      }
+      return actual.advanceApplication(...args);
+    },
+  };
+});
 
 vi.mock('@/app/actions/notifications', () => ({ createNotification: vi.fn() }));
 
