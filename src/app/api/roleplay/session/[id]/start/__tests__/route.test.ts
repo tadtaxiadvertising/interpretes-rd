@@ -70,6 +70,21 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(m.findUnique).not.toHaveBeenCalled();
   });
 
+  it('rejects roleplay start before onboarding is complete', async () => {
+    m.identity = {
+      role: 'interpreter',
+      interpreterId: 7,
+      eligibility: { needsOnboarding: true },
+    };
+
+    const res = await POST(makeRequest(), { params });
+
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('rejects a candidate session when the session cookie is missing', async () => {
     m.session = CANDIDATE_SESSION;
     m.identity = { role: 'interpreter', interpreterId: null };
