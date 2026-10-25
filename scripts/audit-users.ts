@@ -98,7 +98,7 @@ async function main() {
     category: 'Orphaned UserProfiles (no interpreterId)',
     severity: orphanedProfiles.length > 0 ? 'WARNING' : 'INFO',
     count: orphanedProfiles.length,
-    details: orphanedProfiles.map(p => ({ id: p.id, role: p.role, hasDisplayName: Boolean(p.displayName), hasInterpreterLink: Boolean(p.interpreterId), createdAt: p.createdAt })),
+    details: orphanedProfiles.map(p => ({ id: p.id, role: p.role, hasDisplayName: Boolean(p.displayName), createdAt: p.createdAt })),
   });
 
   // ── 3. Orphaned Interpreters (no UserProfile linking to them) ──
