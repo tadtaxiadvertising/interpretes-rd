@@ -1,5 +1,8 @@
 import { DashboardShell } from "@/components/DashboardShell";
+import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
+import { getResolvedIdentity } from '@/lib/auth/actions';
+import { resolveDestination } from '@/lib/identity/resolve-user';
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from "@/lib/prisma";
 import HeartbeatProvider from "@/components/HeartbeatProvider";
@@ -10,6 +13,20 @@ export const dynamic = "force-dynamic";
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { userId } = await auth();
   if (!userId) return null; // Entry router handles auth, but keep guard
+
+  // Enforce the onboarding/roleplay gate on the server for every dashboard
+  // sub-route. A client-only wizard or entry router can be bypassed by opening
+  // a nested dashboard URL directly.
+  const identity = await getResolvedIdentity();
+  if (identity && identity.role !== 'admin') {
+    const destination = resolveDestination(identity);
+    if (destination.startsWith('/onboarding') || destination.startsWith('/roleplays/')) {
+      redirect(destination);
+    }
+    if (destination === '/dashboard/roleplays') {
+      redirect('/recruitment');
+    }
+  }
 
   const profile = await getCurrentProfile();
 
