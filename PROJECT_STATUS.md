@@ -30,7 +30,7 @@
 | Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. | Corregido en PR #58: se eliminó el comando roto y se añadió `audit:onboarding` para ejecutar el script de auditoría existente; no se ejecutó SQL ni se tocó la base de datos. |
 | Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
 | TypeScript de scripts operativos | Los scripts de auditoría/sincronización tenían comparaciones contra estados obsoletos de Roleplay, una selección Prisma inválida, detalles de identidad innecesarios en el reporte y una función de fecha inexistente. | PR #80 integrado; run #40224873397 pasó TypeScript general, typecheck de auditoría, typecheck de `scripts/**/*.ts`, ESLint, pruebas y build. También se alineó `mysql2` del lockfile con la dependencia exacta de Prisma. |
-| Media | `playwright.config.ts` define `baseURL` (por defecto `http://localhost:3001`) pero no configura `webServer`. El workflow de CI ejecuta `npm test`, no `npm run test:e2e`. | E2E no está integrado en el pipeline observado. Antes de activarlo hay que proporcionar servidor, variables y base de datos de prueba aislada. |
+| Media | La primera ejecución E2E aislada falló tras iniciar correctamente Next standalone: las acciones de reclutamiento no pudieron completar la postulación porque el servicio PostgreSQL local rechazó conexiones TLS (`The server does not support SSL connections`); además, el test de reanudación referenciaba `TEST_EMAIL`, que no estaba definido. | PR #82 integró la configuración E2E, pero el run #40240447755 falló en los dos escenarios. Rama de seguimiento `fix/e2e-postgres-tls-and-resume`: añade `sslmode=disable` solo a `DATABASE_URL`/`DIRECT_URL` del servicio PostgreSQL efímero de CI y reutiliza `RESUME_EMAIL` en la prueba de reanudación. Pendiente CI verde. |
 | Alta | El teardown E2E utilizaba DIRECT_URL/DATABASE_URL como fallback y borraba candidatos por prefijo de email sin consentimiento explícito ni garantía de base aislada. | PR #67 integrado; run #40220420100 pasó TypeScript, typecheck de auditoría, ESLint, pruebas unitarias y build. Playwright exige E2E_ALLOW_RUN=true; objetivos remotos exigen además E2E_ALLOW_REMOTE_TARGET=true; el borrado requiere E2E_ALLOW_DB_CLEANUP=true y E2E_DATABASE_URL, sin fallback a URLs generales. Añade escenario E2E con dos navegadores que envían la misma dirección en paralelo. La prueba aún requiere ejecución contra una base E2E aislada. |
 
 
@@ -47,10 +47,10 @@
 - [x] PR #74: actualiza Next.js a 15.5.28 y Sharp a 0.35.5; run #40222055963 pasó validación, pruebas y build.
 - [x] PR #76: corrige PostCSS y source-map-js; run #40222588986 pasó validación, pruebas y build. Audit: 11 vulnerabilidades sin críticas.
 - [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
-- [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
+- [ ] Confirmar CI verde para la corrección TLS de PostgreSQL E2E y las pruebas de postulación concurrente/reanudación. El run #40240447755 falló: el servidor local rechazó TLS; se añadió `sslmode=disable` exclusivamente a la base efímera del workflow.
 - [ ] Reducir los 11 avisos npm residuales tras PR #76: `@prisma/config`/`deepmerge-ts`/`mysql2`, `@vitest/ui`/`vitest`, `vite`, `zod`, `undici`, `fast-uri` y `esbuild`. Priorizar actualizaciones compatibles; evitar cambios mayores sin pruebas.
 - [x] Añadir un chequeo TypeScript dedicado a todos los scripts `scripts/**/*.ts`; PR #80 integrado y CI #40224873397 en éxito. Se verificó en `main` que `prisma@7.10.1` declara `mysql2@3.24.4` y que `package-lock.json` bloquea exactamente `mysql2@3.24.4`.
-- [ ] Configurar chequeos separados para tests/E2E y ejecutar Playwright contra una base aislada.
+- [x] Configurar Playwright para iniciar Next standalone y ejecutar E2E contra PostgreSQL efímero; PR #82 integrado. [ ] Cerrar la incidencia actual cuando el workflow de seguimiento pase completo.
 
 ### Criterio de cierre
 
