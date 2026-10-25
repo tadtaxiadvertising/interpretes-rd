@@ -226,6 +226,27 @@ export async function startCandidateRoleplay() {
       };
     }
 
+    // Review explicitly permits a retry, but the state machine requires the
+    // application to return to ROLEPLAY_PENDING before it can become IN_PROGRESS.
+    if (application?.status === 'ROLEPLAY_REVIEW') {
+      const retryTransition = await advanceApplication({
+        applicationId: application.id,
+        fromStatuses: ['ROLEPLAY_REVIEW'],
+        toStatus: 'ROLEPLAY_PENDING',
+        toStep: 'ROLEPLAY',
+        eventType: 'ROLEPLAY_RETRY_REQUESTED',
+        actorType: 'candidate',
+        actorId: String(candidate.id),
+      });
+      if (!retryTransition.success) {
+        return {
+          success: false as const,
+          error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
+          code: 'CONFLICT' as const,
+        };
+      }
+    }
+
     let session = await db.roleplaySession.findFirst({
       where: {
         recruitmentCandidateId: candidate.id,
