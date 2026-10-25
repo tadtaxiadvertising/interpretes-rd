@@ -16,7 +16,8 @@
     "seed": "tsx prisma/seed.ts",
     "anomaly:detect": "tsx scripts/detect-anomalies.ts",
     "audit:onboarding": "tsx scripts/audit-onboarding.ts",
-    "typecheck:audit": "tsc --noEmit -p tsconfig.audit.json"
+    "typecheck:audit": "tsc --noEmit -p tsconfig.audit.json",
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",

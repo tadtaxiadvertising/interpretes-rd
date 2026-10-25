@@ -63,6 +63,9 @@ jobs:
       - name: Audit Script TypeScript Check
         run: npm run typecheck:audit
 
+      - name: Maintenance Scripts TypeScript Check
+        run: npm run typecheck:scripts
+
       - name: ESLint
         run: npm run lint
 
