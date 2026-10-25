@@ -216,6 +216,7 @@ export async function startCandidateRoleplay() {
       'INDUCTION_PENDING',
       'ROLEPLAY_PENDING',
       'ROLEPLAY_IN_PROGRESS',
+      'ROLEPLAY_REVIEW',
     ];
     if (application && !startableApplicationStatuses.includes(application.status)) {
       return {
@@ -223,6 +224,28 @@ export async function startCandidateRoleplay() {
         error: 'Tu postulación no está habilitada para iniciar un roleplay en esta etapa.',
         code: 'CONFLICT' as const,
       };
+    }
+
+    // Review explicitly permits a retry, but the state machine requires the
+    // application to return to ROLEPLAY_PENDING before it can become IN_PROGRESS.
+    if (application?.status === 'ROLEPLAY_REVIEW') {
+      const retryTransition = await advanceApplication({
+        applicationId: application.id,
+        fromStatuses: ['ROLEPLAY_REVIEW'],
+        toStatus: 'ROLEPLAY_PENDING',
+        toStep: 'ROLEPLAY',
+        eventType: 'ROLEPLAY_CREATED',
+        actorType: 'candidate',
+        actorId: String(candidate.id),
+        metadata: { retry: true },
+      });
+      if (!retryTransition.success) {
+        return {
+          success: false as const,
+          error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
+          code: 'CONFLICT' as const,
+        };
+      }
     }
 
     let session = await db.roleplaySession.findFirst({

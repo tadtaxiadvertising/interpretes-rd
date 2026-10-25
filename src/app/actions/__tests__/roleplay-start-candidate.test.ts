@@ -15,6 +15,7 @@ const m = vi.hoisted(() => ({
   applicationFindFirst: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
+  advanceApplication: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -62,6 +63,22 @@ vi.mock('@/lib/roleplay', () => ({
   validateAudioFile: vi.fn(),
 }));
 
+vi.mock('@/services/recruitment/transitions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/services/recruitment/transitions')>();
+  return {
+    ...actual,
+    advanceApplication: (...args: any[]) => {
+      const params = args[0] as { toStatus?: string; fromStatuses?: string[] };
+      // Isolate the new retry pre-transition while keeping the real guarded
+      // transition implementation under test for all existing paths.
+      if (params.toStatus === 'ROLEPLAY_PENDING' && params.fromStatuses?.includes('ROLEPLAY_REVIEW')) {
+        return m.advanceApplication(...args);
+      }
+      return actual.advanceApplication(...args);
+    },
+  };
+});
+
 vi.mock('@/app/actions/notifications', () => ({ createNotification: vi.fn() }));
 
 import { startCandidateRoleplay } from '@/app/actions/roleplay';
@@ -86,6 +103,7 @@ describe('startCandidateRoleplay', () => {
       eligibility: { needsOnboarding: false },
     };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
+    m.advanceApplication.mockResolvedValue({ success: true });
     m.applicationFindFirst.mockResolvedValue(null);
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
@@ -134,7 +152,7 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
-  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'ROLEPLAY_REVIEW', 'INTERVIEW_PENDING'])(
+  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
     'blocks roleplay start for application status %s',
     async (status) => {
       m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status });
@@ -148,6 +166,23 @@ describe('startCandidateRoleplay', () => {
       expect(m.cookieSet).not.toHaveBeenCalled();
     }
   );
+
+  it('allows a retry when the application is in ROLEPLAY_REVIEW', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.sessionCreate).toHaveBeenCalledTimes(1);
+    expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({
+      applicationId: 'app-1',
+      fromStatuses: ['ROLEPLAY_REVIEW'],
+      toStatus: 'ROLEPLAY_PENDING',
+      eventType: 'ROLEPLAY_CREATED',
+      metadata: { retry: true },
+    }));
+    expect(m.cookieSet).toHaveBeenCalled();
+  });
 
   it('creates a session, scenario, access row and cookie for a fresh candidate', async () => {
     const res = await startCandidateRoleplay();

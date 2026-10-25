@@ -134,6 +134,22 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
+  it('allows a retry for an application in ROLEPLAY_REVIEW', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.identity = {
+      role: 'interpreter',
+      interpreterId: null,
+      eligibility: { needsOnboarding: false },
+    };
+    m.applicationFindUnique.mockResolvedValue({ status: 'ROLEPLAY_REVIEW' });
+    m.updateMany.mockResolvedValue({ count: 1 });
+
+    const res = await POST(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(200);
+    expect(m.updateMany).toHaveBeenCalled();
+  });
+
   it('transitions a pre-start session to STARTED for its owner', async () => {
     const res = await POST(makeRequest(), { params });
     const body = await res.json();
