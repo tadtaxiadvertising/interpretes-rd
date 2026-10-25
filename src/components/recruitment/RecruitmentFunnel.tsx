@@ -89,7 +89,7 @@ export default function RecruitmentFunnel() {
         // The server recomputes the reachable step from persisted state.
         await syncFromServer();
         if ("alreadyApplied" in result && result.alreadyApplied) {
-          setInfoMsg("Ya existe una postulación con este correo. Retomamos tu proceso desde donde quedó.");
+          setInfoMsg("Ya existe una postulación con este correo. Para continuar con seguridad, inicia sesión con ese correo.");
         }
       } else {
         setErrorMsg(result.error || "Ocurrió un error inesperado.");
@@ -167,6 +167,12 @@ export default function RecruitmentFunnel() {
           {errorMsg && (
             <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
               <AlertCircle className="w-4 h-4" /> {errorMsg}
+            </div>
+          )}
+
+          {infoMsg && (
+            <div role="status" className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-sm font-medium text-blue-700">
+              <CheckCircle2 className="w-4 h-4 shrink-0" /> {infoMsg}
             </div>
           )}
 
