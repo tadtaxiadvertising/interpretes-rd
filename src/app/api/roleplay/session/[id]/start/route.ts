@@ -52,6 +52,27 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
+    // A stale session cookie must not keep a rejected, withdrawn, hired or
+    // otherwise advanced candidate application eligible for new roleplay work.
+    if (session.recruitmentCandidateId && identity.role !== 'admin') {
+      const application = await db.recruitmentApplication.findUnique({
+        where: { candidateId: session.recruitmentCandidateId },
+        select: { status: true },
+      });
+      const startableApplicationStatuses: readonly string[] = [
+        'APPLIED',
+        'INDUCTION_PENDING',
+        'ROLEPLAY_PENDING',
+        'ROLEPLAY_IN_PROGRESS',
+      ];
+      if (application && !startableApplicationStatuses.includes(application.status)) {
+        return NextResponse.json(
+          { success: false, error: 'Application is not eligible for Roleplay.' },
+          { status: 409 }
+        );
+      }
+    }
+
     // Idempotent: an attempt already in progress stays in progress.
     if (RESUMABLE_STATES.includes(session.status)) {
       return NextResponse.json(
