@@ -134,7 +134,7 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
-  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'ROLEPLAY_REVIEW', 'INTERVIEW_PENDING'])(
+  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
     'blocks roleplay start for application status %s',
     async (status) => {
       m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status });
@@ -148,6 +148,16 @@ describe('startCandidateRoleplay', () => {
       expect(m.cookieSet).not.toHaveBeenCalled();
     }
   );
+
+  it('allows a retry when the application is in ROLEPLAY_REVIEW', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.sessionCreate).toHaveBeenCalledTimes(1);
+    expect(m.cookieSet).toHaveBeenCalled();
+  });
 
   it('creates a session, scenario, access row and cookie for a fresh candidate', async () => {
     const res = await startCandidateRoleplay();
