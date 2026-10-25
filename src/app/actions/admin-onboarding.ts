@@ -101,7 +101,7 @@ export async function getOnboardingDetails(userId: string): Promise<ActionResult
   }
 }
 
-// ── Admin updates banking/onboarding data for a user ──────────────
+// ── Admin edits banking data without impersonating user acceptance/completion ──
 
 export async function adminUpdateOnboardingDetails(input: unknown): Promise<ActionResult<OnboardingDetailData>> {
   const auth = await validateAction('admin');
@@ -118,7 +118,6 @@ export async function adminUpdateOnboardingDetails(input: unknown): Promise<Acti
           bankAccount: validated.bankAccount,
           bankAccountType: validated.bankAccountType,
           bankCedula: validated.bankCedula,
-          onboardingComplete: true,
         },
         select: {
           id: true,
@@ -147,7 +146,6 @@ export async function adminUpdateOnboardingDetails(input: unknown): Promise<Acti
             cuentaPago: validated.bankAccount,
             tipoCuenta: validated.bankAccountType,
             cedulaRnc: validated.bankCedula,
-            documentosCompleto: true,
             metodoPago: 'Transferencia Bancaria',
           },
           select: { id: true },
