@@ -15,6 +15,7 @@ const m = vi.hoisted(() => ({
   applicationFindFirst: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
+  advanceApplication: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -62,6 +63,10 @@ vi.mock('@/lib/roleplay', () => ({
   validateAudioFile: vi.fn(),
 }));
 
+vi.mock('@/services/recruitment/transitions', () => ({
+  advanceApplication: (...args: any[]) => m.advanceApplication(...args),
+}));
+
 vi.mock('@/app/actions/notifications', () => ({ createNotification: vi.fn() }));
 
 import { startCandidateRoleplay } from '@/app/actions/roleplay';
@@ -86,6 +91,7 @@ describe('startCandidateRoleplay', () => {
       eligibility: { needsOnboarding: false },
     };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
+    m.advanceApplication.mockResolvedValue({ success: true });
     m.applicationFindFirst.mockResolvedValue(null);
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
@@ -156,6 +162,12 @@ describe('startCandidateRoleplay', () => {
 
     expect(res.success).toBe(true);
     expect(m.sessionCreate).toHaveBeenCalledTimes(1);
+    expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({
+      applicationId: 'app-1',
+      fromStatuses: ['ROLEPLAY_REVIEW'],
+      toStatus: 'ROLEPLAY_PENDING',
+      eventType: 'ROLEPLAY_RETRY_REQUESTED',
+    }));
     expect(m.cookieSet).toHaveBeenCalled();
   });
 
