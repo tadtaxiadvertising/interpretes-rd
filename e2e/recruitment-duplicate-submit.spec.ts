@@ -32,6 +32,8 @@ test.describe('Public recruitment · candidate submission', () => {
     const pageErrors: string[] = [];
     first.on('pageerror', (err) => pageErrors.push(String(err)));
     second.on('pageerror', (err) => pageErrors.push(String(err)));
+    first.on('response', (response) => { if (response.request().method() === 'POST' && response.status() >= 400) console.log('[E2E first HTTP]', response.status(), response.url()); });
+    second.on('response', (response) => { if (response.request().method() === 'POST' && response.status() >= 400) console.log('[E2E second HTTP]', response.status(), response.url()); });
 
     try {
       await Promise.all([first.goto('/postular'), second.goto('/postular')]);
@@ -49,6 +51,10 @@ test.describe('Public recruitment · candidate submission', () => {
         first.getByRole('button', { name: 'Enviar Postulación' }).click(),
         second.getByRole('button', { name: 'Enviar Postulación' }).click(),
       ]);
+      await first.waitForTimeout(1500);
+      await second.waitForTimeout(1500);
+      console.log('[E2E first visible response]', await first.locator('body').innerText());
+      console.log('[E2E second visible response]', await second.locator('body').innerText());
       await expect.poll(async () => {
         const firstHasOutcome =
           (await first.getByRole('heading', { name: SUCCESS_HEADING }).count()) > 0 ||
@@ -86,6 +92,8 @@ test.describe('Public recruitment · candidate submission', () => {
     page.on('pageerror', (err) => pageErrors.push(String(err)));
 
     await fillApplication(page, RESUME_EMAIL);
+    await page.waitForTimeout(1500);
+    console.log('[E2E sequential visible response]', await page.locator('body').innerText());
     await expect(
       page.getByRole('heading', { name: SUCCESS_HEADING }),
     ).toBeVisible();
