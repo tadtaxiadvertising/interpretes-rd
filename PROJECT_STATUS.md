@@ -27,7 +27,7 @@
 
 | Prioridad | Hallazgo verificado | Estado / siguiente acción |
 |---|---|---|
-| Alta | La acción administrativa de edición bancaria marcaba `onboardingComplete=true` y `documentosCompleto=true` al guardar datos bancarios, aunque esa operación no demuestra que el usuario haya aceptado el acuerdo ni completado los documentos. | Corregido en el PR abierto de esta rama: la edición administrativa solo sincroniza campos bancarios; el estado de onboarding y documentos permanece bajo sus flujos explícitos. Se añadieron regresiones; CI pendiente. |
+| Alta | La acción administrativa de edición bancaria marcaba `onboardingComplete=true` y `documentosCompleto=true` al guardar datos bancarios, aunque esa operación no demuestra que el usuario haya aceptado el acuerdo ni completado los documentos. | Corregido en PR #91: la edición administrativa solo sincroniza campos bancarios y no modifica `onboardingComplete` ni `documentosCompleto`. Se añadieron regresiones; run #40245776335 de `main` está en ejecución. |
 |---|---|---|
 | Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. | Corregido en PR #58: se eliminó el comando roto y se añadió `audit:onboarding` para ejecutar el script de auditoría existente; no se ejecutó SQL ni se tocó la base de datos. |
 | Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
