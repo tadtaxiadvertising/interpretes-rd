@@ -1,7 +1,9 @@
 import { test, expect, type Page } from '@playwright/test';
+import { Client } from 'pg';
 
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-const TEST_EMAIL = `e2e-dupesubmit-${RUN_ID}@example.com`;
+const CONCURRENT_EMAIL = `e2e-dupesubmit-${RUN_ID}-concurrent@example.com`;
+const RESUME_EMAIL = `e2e-dupesubmit-${RUN_ID}-resume@example.com`;
 
 const SUCCESS_HEADING = 'Conoce más sobre Intérpretes RD';
 const ERROR_TEXT = 'No pudimos procesar tu postulación';
@@ -34,7 +36,7 @@ test.describe('Public recruitment · candidate submission', () => {
       await Promise.all([first.goto('/postular'), second.goto('/postular')]);
       const fill = async (page: Page) => {
         await page.getByPlaceholder('Nombre completo').fill('E2E Concurrent Submit');
-        await page.getByPlaceholder('Correo electrónico').fill(TEST_EMAIL);
+        await page.getByPlaceholder('Correo electrónico').fill(CONCURRENT_EMAIL);
         await page.getByPlaceholder('Teléfono (Ej: +123456789)').fill('+18095550000');
         await page.getByPlaceholder('País de residencia').fill('DO');
         await page.getByLabel('Nivel de inglés').selectOption('B2');
@@ -53,6 +55,20 @@ test.describe('Public recruitment · candidate submission', () => {
       await expect(first.getByText(ERROR_TEXT)).toHaveCount(0);
       await expect(second.getByText(ERROR_TEXT)).toHaveCount(0);
       expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+
+      const databaseUrl = process.env.E2E_DATABASE_URL;
+      if (!databaseUrl) throw new Error('E2E_DATABASE_URL is required for the duplicate-candidate assertion');
+      const client = new Client({ connectionString: databaseUrl });
+      await client.connect();
+      try {
+        const result = await client.query(
+          'SELECT COUNT(*)::int AS count FROM recruitment_candidates WHERE email = $1',
+          [CONCURRENT_EMAIL],
+        );
+        expect(result.rows[0]?.count).toBe(1);
+      } finally {
+        await client.end();
+      }
     } finally {
       await Promise.all([first.close(), second.close()]);
     }
@@ -63,7 +79,7 @@ test.describe('Public recruitment · candidate submission', () => {
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(String(err)));
 
-    await fillApplication(page, TEST_EMAIL);
+    await fillApplication(page, RESUME_EMAIL);
     await expect(
       page.getByRole('heading', { name: SUCCESS_HEADING }),
     ).toBeVisible();
