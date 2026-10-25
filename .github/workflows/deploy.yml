@@ -44,6 +44,8 @@ jobs:
                 "direct=" + item.isDirect,
                 "range=" + item.range,
                 "fixAvailable=" + JSON.stringify(item.fixAvailable),
+                "via=" + JSON.stringify(item.via || []),
+                "effects=" + JSON.stringify(item.effects || []),
                 "advisories=" + advisories.join("; ")
               ].join(" | "));
             }
