@@ -49,7 +49,7 @@
 - [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
 - [ ] Definir entorno E2E reproducible y ejecutarlo en CI sin usar datos de producción.
 - [ ] Reducir los 11 avisos npm residuales tras PR #76: `@prisma/config`/`deepmerge-ts`/`mysql2`, `@vitest/ui`/`vitest`, `vite`, `zod`, `undici`, `fast-uri` y `esbuild`. Priorizar actualizaciones compatibles; evitar cambios mayores sin pruebas.
-- [x] Añadir un chequeo TypeScript dedicado a todos los scripts `scripts/**/*.ts`; PR #80 está en validación, sin considerar cerrada la tarea hasta confirmar CI en el último commit.
+- [x] Añadir un chequeo TypeScript dedicado a todos los scripts `scripts/**/*.ts`; PR #80 integrado y CI #40224873397 en éxito. Se verificó en `main` que `prisma@7.10.1` declara `mysql2@3.24.4` y que `package-lock.json` bloquea exactamente `mysql2@3.24.4`.
 - [ ] Configurar chequeos separados para tests/E2E y ejecutar Playwright contra una base aislada.
 
 ### Criterio de cierre
