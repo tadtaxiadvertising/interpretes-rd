@@ -87,7 +87,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest('sess-other'), { params });
 
     expect(res.status).toBe(403);
-    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects an interpreter session for a different interpreter', async () => {
@@ -97,7 +97,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest(), { params });
 
     expect(res.status).toBe(403);
-    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 
   it('transitions a pre-start session to STARTED for its owner', async () => {
@@ -125,7 +125,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.resumed).toBe(true);
-    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 
 
@@ -153,6 +153,6 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest(), { params });
 
     expect(res.status).toBe(409);
-    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 });
