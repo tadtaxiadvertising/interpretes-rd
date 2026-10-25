@@ -7,6 +7,7 @@ const RESUME_EMAIL = `e2e-dupesubmit-${RUN_ID}-resume@example.com`;
 
 const SUCCESS_HEADING = 'Conoce más sobre Intérpretes RD';
 const ERROR_TEXT = 'No pudimos procesar tu postulación';
+const RESUME_INFO_TEXT = 'Ya existe una postulación con este correo. Para continuar con seguridad, inicia sesión con ese correo.';
 
 async function fillApplication(page: Page, email: string): Promise<void> {
   await page.goto('/postular');
@@ -48,10 +49,17 @@ test.describe('Public recruitment · candidate submission', () => {
         first.getByRole('button', { name: 'Enviar Postulación' }).click(),
         second.getByRole('button', { name: 'Enviar Postulación' }).click(),
       ]);
-      await Promise.all([
-        expect(first.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible(),
-        expect(second.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible(),
-      ]);
+      // Only the winning browser owns the new application cookie. The other
+      // browser must receive resume guidance instead of access to that application.
+      await expect.poll(async () => {
+        const firstHasOutcome =
+          (await first.getByRole('heading', { name: SUCCESS_HEADING }).count()) > 0 ||
+          (await first.getByText(RESUME_INFO_TEXT, { exact: true }).count()) > 0;
+        const secondHasOutcome =
+          (await second.getByRole('heading', { name: SUCCESS_HEADING }).count()) > 0 ||
+          (await second.getByText(RESUME_INFO_TEXT, { exact: true }).count()) > 0;
+        return [firstHasOutcome, secondHasOutcome];
+      }).toEqual([true, true]);
       await expect(first.getByText(ERROR_TEXT)).toHaveCount(0);
       await expect(second.getByText(ERROR_TEXT)).toHaveCount(0);
       expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
