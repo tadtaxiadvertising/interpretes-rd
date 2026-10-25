@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
+import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { revalidatePath } from 'next/cache';
 import { createSignedUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioFile } from '@/lib/roleplay';
 import { createNotification } from './notifications';
@@ -182,6 +183,20 @@ export async function startCandidateRoleplay() {
     return { success: false as const, error: 'Account has no email', code: 'VALIDATION_ERROR' as const };
   }
 
+  // Server-side eligibility is authoritative; callers can invoke this action
+  // directly without visiting the client-side onboarding gate.
+  const identity = await resolveCurrentIdentity();
+  if (!identity || identity.role !== 'interpreter' || identity.email?.toLowerCase().trim() !== email) {
+    return { success: false as const, error: 'Access denied', code: 'UNAUTHORIZED' as const };
+  }
+  if (identity.eligibility.needsOnboarding) {
+    return {
+      success: false as const,
+      error: 'Completa el onboarding antes de iniciar el roleplay.',
+      code: 'CONFLICT' as const,
+    };
+  }
+
   try {
     const candidate = await db.recruitmentCandidate.findUnique({
       where: { email },
@@ -189,6 +204,25 @@ export async function startCandidateRoleplay() {
     });
     if (!candidate) {
       return { success: false as const, error: 'No application found for this account', code: 'NOT_FOUND' as const };
+    }
+
+    const application = await db.recruitmentApplication.findFirst({
+      where: { candidateId: candidate.id },
+      orderBy: { createdAt: 'desc' },
+      select: { id: true, status: true },
+    });
+    const startableApplicationStatuses: readonly string[] = [
+      'APPLIED',
+      'INDUCTION_PENDING',
+      'ROLEPLAY_PENDING',
+      'ROLEPLAY_IN_PROGRESS',
+    ];
+    if (application && !startableApplicationStatuses.includes(application.status)) {
+      return {
+        success: false as const,
+        error: 'Tu postulación no está habilitada para iniciar un roleplay en esta etapa.',
+        code: 'CONFLICT' as const,
+      };
     }
 
     let session = await db.roleplaySession.findFirst({

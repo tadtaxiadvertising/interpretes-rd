@@ -26,6 +26,12 @@ export async function POST(
     if (!identity) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
+    if (identity.role !== 'admin' && identity.eligibility?.needsOnboarding) {
+      return NextResponse.json(
+        { success: false, error: 'Complete onboarding before starting Roleplay.' },
+        { status: 403 }
+      );
+    }
 
     const session = await db.roleplaySession.findUnique({
       where: { id },
