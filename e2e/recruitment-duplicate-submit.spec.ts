@@ -87,27 +87,43 @@ test.describe('Public recruitment · candidate submission', () => {
       await Promise.all([first.close(), second.close()]);
     }
   });
-  test('double submit with the same email: first creates, second resumes (no duplicate/error)', async ({
+  test('a repeat submission from a separate browser is safe and prompts sign-in', async ({
     page,
+    browser,
   }) => {
+    const second = await browser.newPage();
     const pageErrors: string[] = [];
     page.on('pageerror', (err) => pageErrors.push(String(err)));
+    second.on('pageerror', (err) => pageErrors.push(String(err)));
 
-    await fillApplication(page, RESUME_EMAIL);
     try {
+      await fillApplication(page, RESUME_EMAIL);
       await expect(page.getByRole('heading', { name: SUCCESS_HEADING })).toBeVisible();
-    } catch (error) {
-      console.log('[E2E sequential final visible response]', await page.locator('body').innerText());
-      throw error;
+      await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
+
+      // A separate browser has no signed ownership cookie. It must not take
+      // over the application; it should receive the safe sign-in message.
+      await fillApplication(second, RESUME_EMAIL);
+      await expect(second.getByRole('status').getByText(RESUME_INFO_TEXT, { exact: true })).toBeVisible();
+      await expect(second.getByText(ERROR_TEXT)).toHaveCount(0);
+
+      const databaseUrl = process.env.E2E_DATABASE_URL;
+      if (!databaseUrl) throw new Error('E2E_DATABASE_URL is required for the duplicate-candidate assertion');
+      const client = new Client({ connectionString: databaseUrl });
+      await client.connect();
+      try {
+        const result = await client.query(
+          'SELECT COUNT(*)::int AS count FROM recruitment_candidates WHERE email = $1',
+          [RESUME_EMAIL],
+        );
+        expect(result.rows[0]?.count).toBe(1);
+      } finally {
+        await client.end();
+      }
+
+      expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
+    } finally {
+      await second.close();
     }
-    await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
-
-    await fillApplication(page, RESUME_EMAIL);
-    await expect(
-      page.getByRole('heading', { name: SUCCESS_HEADING }),
-    ).toBeVisible();
-    await expect(page.getByText(ERROR_TEXT)).toHaveCount(0);
-
-    expect(pageErrors, `uncaught page errors: ${pageErrors.join(' | ')}`).toEqual([]);
   });
 });
