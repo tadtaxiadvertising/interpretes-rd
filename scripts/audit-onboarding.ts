@@ -1,47 +1,37 @@
 /**
- * Onboarding State Audit Script
- * 
- * Analyzes current onboarding state and maps to proposed state machine:
- * NOT_STARTED, IN_PROGRESS, COMPLETED, NEEDS_REVIEW
- * 
- * Run: npx tsx scripts/audit-onboarding.ts
+ * Read-only onboarding consistency audit.
+ *
+ * Run: npm run audit:onboarding
+ * Reads onboarding flags from UserProfile and linked Interpreter records.
+ * The report intentionally excludes email, names, bank account numbers,
+ * national IDs and raw notes to avoid writing PII into local files or CI logs.
  */
-
+import 'dotenv/config';
 import prisma from '@/lib/prisma';
 
-const db = prisma;
+type ComputedStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'NEEDS_REVIEW';
+type ComputedStep = 'legal' | 'banking' | 'tutorial' | 'complete';
 
-interface OnboardingAuditResult {
-  userId: string;
-  email: string;
-  displayName: string | null;
+interface AuditResult {
+  profileId: string;
   role: string | null;
   interpreterId: number | null;
-  // Current state
-  termsAcceptedAt: Date | null;
-  bankName: string | null;
-  bankAccount: string | null;
-  bankCedula: string | null;
-  bankAccountType: string | null;
   onboardingComplete: boolean;
-  signatureDate: Date | null;
-  // Computed state
-  computedStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'NEEDS_REVIEW';
-  computedStep: 'legal' | 'banking' | 'tutorial' | 'complete' | null;
+  computedStatus: ComputedStatus;
+  computedStep: ComputedStep;
   hasTerms: boolean;
   hasBanking: boolean;
-  hasTutorial: boolean;
-  mismatched: boolean; // onboardingComplete !== computedStatus
+  profileStateMismatch: boolean;
   interpreterDocCompleto: boolean | null;
-  interpreterBankData: { banco: string | null; cuentaPago: string | null; cedulaRnc: string | null } | null;
+  interpreterHasTermsMarker: boolean | null;
+  interpreterHasBankData: boolean | null;
+  interpreterStateMismatch: boolean | null;
 }
 
-async function main() {
-  console.log(`🔍 [Onboarding Audit] ${new Date().toISOString()}`);
-  console.log('='.repeat(60));
+async function main(): Promise<void> {
+  console.log(`[Onboarding Audit] ${new Date().toISOString()}`);
 
-  // Fetch all user profiles with related interpreter data
-  const profiles = await db.userProfile.findMany({
+  const profiles = await prisma.userProfile.findMany({
     include: {
       interpreter: {
         select: {
@@ -51,183 +41,118 @@ async function main() {
           cuentaPago: true,
           cedulaRnc: true,
           notas: true,
-        }
-      }
+        },
+      },
     },
-    orderBy: { createdAt: 'desc' }
+    orderBy: { createdAt: 'desc' },
   });
 
-  console.log(`\n📋 Total UserProfiles: ${profiles.length}`);
+  const results: AuditResult[] = profiles.map((profile) => {
+    const hasTerms = Boolean(profile.termsAcceptedAt);
+    const hasBanking = Boolean(profile.bankName && profile.bankAccount && profile.bankCedula);
+    const computedStep: ComputedStep = !hasTerms
+      ? 'legal'
+      : !hasBanking
+        ? 'banking'
+        : profile.onboardingComplete
+          ? 'complete'
+          : 'tutorial';
 
-  const results: OnboardingAuditResult[] = [];
-
-  for (const profile of profiles) {
-    const hasTerms = !!profile.termsAcceptedAt;
-    const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankCedula);
-    const hasTutorial = true; // Tutorial is auto-complete on final step
-
-    // Compute step
-    let computedStep: OnboardingAuditResult['computedStep'] = null;
-    if (!hasTerms) computedStep = 'legal';
-    else if (!hasBanking) computedStep = 'banking';
-    else if (profile.onboardingComplete) computedStep = 'complete';
-    else computedStep = 'tutorial';
-
-    // Compute status
-    let computedStatus: OnboardingAuditResult['computedStatus'] = 'NOT_STARTED';
+    let computedStatus: ComputedStatus = 'NOT_STARTED';
     if (profile.onboardingComplete) {
-      computedStatus = 'COMPLETED';
-    } else if (hasTerms && hasBanking) {
-      computedStatus = 'IN_PROGRESS'; // At tutorial step
+      computedStatus = !hasTerms || !hasBanking ? 'NEEDS_REVIEW' : 'COMPLETED';
     } else if (hasTerms) {
-      computedStatus = 'IN_PROGRESS'; // At banking step
-    } else {
-      computedStatus = 'NOT_STARTED';
+      computedStatus = 'IN_PROGRESS';
     }
 
-    // Check for NEEDS_REVIEW - completed but missing data
-    if (profile.onboardingComplete && (!hasTerms || !hasBanking)) {
-      computedStatus = 'NEEDS_REVIEW';
-    }
+    const interpreter = profile.interpreter;
+    const interpreterHasTermsMarker = interpreter
+      ? Boolean(interpreter.notas?.includes('[TERMS_ACCEPTED]'))
+      : null;
+    const interpreterHasBankData = interpreter
+      ? Boolean(interpreter.banco && interpreter.cuentaPago && interpreter.cedulaRnc)
+      : null;
+    const interpreterStateMismatch = interpreter
+      ? Boolean(
+          interpreter.documentosCompleto &&
+          (!interpreterHasTermsMarker || !interpreterHasBankData)
+        )
+      : null;
 
-    // Check interpreter side for Auth.js users
-    const interpreterDocCompleto = profile.interpreter?.documentosCompleto ?? null;
-    const interpreterBankData = profile.interpreter ? {
-      banco: profile.interpreter.banco,
-      cuentaPago: profile.interpreter.cuentaPago,
-      cedulaRnc: profile.interpreter.cedulaRnc,
-    } : null;
-
-    // Check mismatch
-    const mismatched = profile.onboardingComplete !== (computedStatus === 'COMPLETED');
-
-    results.push({
-      userId: profile.id,
-      email: profile.email,
-      displayName: profile.displayName,
+    return {
+      profileId: profile.id,
       role: profile.role,
       interpreterId: profile.interpreterId,
-      termsAcceptedAt: profile.termsAcceptedAt,
-      bankName: profile.bankName,
-      bankAccount: profile.bankAccount,
-      bankCedula: profile.bankCedula,
-      bankAccountType: profile.bankAccountType,
       onboardingComplete: profile.onboardingComplete,
-      signatureDate: profile.signatureDate,
       computedStatus,
       computedStep,
       hasTerms,
       hasBanking,
-      hasTutorial,
-      mismatched,
-      interpreterDocCompleto,
-      interpreterBankData,
-    });
-  }
+      profileStateMismatch: profile.onboardingComplete !== (computedStatus === 'COMPLETED'),
+      interpreterDocCompleto: interpreter?.documentosCompleto ?? null,
+      interpreterHasTermsMarker,
+      interpreterHasBankData,
+      interpreterStateMismatch,
+    };
+  });
 
-  // ── Statistics ──
-  const statusCounts = {
-    NOT_STARTED: results.filter(r => r.computedStatus === 'NOT_STARTED').length,
-    IN_PROGRESS: results.filter(r => r.computedStatus === 'IN_PROGRESS').length,
-    COMPLETED: results.filter(r => r.computedStatus === 'COMPLETED').length,
-    NEEDS_REVIEW: results.filter(r => r.computedStatus === 'NEEDS_REVIEW').length,
+  const statusCounts: Record<ComputedStatus, number> = {
+    NOT_STARTED: results.filter((r) => r.computedStatus === 'NOT_STARTED').length,
+    IN_PROGRESS: results.filter((r) => r.computedStatus === 'IN_PROGRESS').length,
+    COMPLETED: results.filter((r) => r.computedStatus === 'COMPLETED').length,
+    NEEDS_REVIEW: results.filter((r) => r.computedStatus === 'NEEDS_REVIEW').length,
   };
-
-  const stepCounts = {
-    legal: results.filter(r => r.computedStep === 'legal').length,
-    banking: results.filter(r => r.computedStep === 'banking').length,
-    tutorial: results.filter(r => r.computedStep === 'tutorial').length,
-    complete: results.filter(r => r.computedStep === 'complete').length,
-    null: results.filter(r => r.computedStep === null).length,
+  const stepCounts: Record<ComputedStep, number> = {
+    legal: results.filter((r) => r.computedStep === 'legal').length,
+    banking: results.filter((r) => r.computedStep === 'banking').length,
+    tutorial: results.filter((r) => r.computedStep === 'tutorial').length,
+    complete: results.filter((r) => r.computedStep === 'complete').length,
   };
+  const profileMismatchCount = results.filter((r) => r.profileStateMismatch).length;
+  const interpreterMismatchCount = results.filter((r) => r.interpreterStateMismatch).length;
 
-  const mismatchedCount = results.filter(r => r.mismatched).length;
-  const authJsUsers = results.filter(r => r.role && r.interpreterId && !r.termsAcceptedAt).length; // Auth.js users use interpreter.documentosCompleto
+  console.log('\nComputed profile status:', JSON.stringify(statusCounts));
+  console.log('Computed profile step:', JSON.stringify(stepCounts));
+  console.log(`Profile state mismatches: ${profileMismatchCount}`);
+  console.log(`Interpreter state mismatches: ${interpreterMismatchCount}`);
 
-  console.log('\n📊 Computed Status Distribution:');
-  console.log(`  NOT_STARTED:     ${statusCounts.NOT_STARTED}`);
-  console.log(`  IN_PROGRESS:     ${statusCounts.IN_PROGRESS}`);
-  console.log(`  COMPLETED:       ${statusCounts.COMPLETED}`);
-  console.log(`  NEEDS_REVIEW:    ${statusCounts.NEEDS_REVIEW}`);
-
-  console.log('\n📊 Computed Step Distribution:');
-  console.log(`  legal:       ${stepCounts.legal}`);
-  console.log(`  banking:     ${stepCounts.banking}`);
-  console.log(`  tutorial:    ${stepCounts.tutorial}`);
-  console.log(`  complete:    ${stepCounts.complete}`);
-
-  console.log(`\n⚠️  Mismatched (onboardingComplete !== computedStatus): ${mismatchedCount}`);
-  console.log(`🔐 Auth.js users (use interpreter.documentosCompleto): ${authJsUsers}`);
-
-  // ── Detailed mismatches ──
-  const mismatched = results.filter(r => r.mismatched);
-  if (mismatched.length > 0) {
-    console.log('\n🔴 MISMATCHED RECORDS:');
-    for (const r of mismatched) {
-      console.log(`  ${r.email} (${r.userId})`);
-      console.log(`    onboardingComplete: ${r.onboardingComplete}`);
-      console.log(`    computedStatus: ${r.computedStatus} (step: ${r.computedStep})`);
-      console.log(`    hasTerms: ${r.hasTerms}, hasBanking: ${r.hasBanking}`);
-      console.log(`    interpreterDocCompleto: ${r.interpreterDocCompleto}`);
-      console.log(`    interpreterBankData: banco=${r.interpreterBankData?.banco}, cuenta=${r.interpreterBankData?.cuentaPago}, cedula=${r.interpreterBankData?.cedulaRnc}`);
-      console.log('');
+  const mismatches = results.filter((r) => r.profileStateMismatch || r.interpreterStateMismatch);
+  if (mismatches.length > 0) {
+    console.log('\nRecords requiring review (internal IDs only):');
+    for (const result of mismatches) {
+      console.log(JSON.stringify({
+        profileId: result.profileId,
+        interpreterId: result.interpreterId,
+        profileStateMismatch: result.profileStateMismatch,
+        interpreterStateMismatch: result.interpreterStateMismatch,
+        computedStatus: result.computedStatus,
+        computedStep: result.computedStep,
+      }));
     }
   }
 
-  // ── Profiles with interpreter but no onboardingComplete ──
-  const withInterpreterNoComplete = results.filter(r => r.interpreterId && !r.onboardingComplete && r.computedStatus === 'COMPLETED');
-  if (withInterpreterNoComplete.length > 0) {
-    console.log('\n🟡 Profiles with interpreterId, computed COMPLETED but onboardingComplete=false:');
-    for (const r of withInterpreterNoComplete) {
-      console.log(`  ${r.email} - interpreterId: ${r.interpreterId}, interpreterDocCompleto: ${r.interpreterDocCompleto}`);
-    }
-  }
-
-  // ── Auth.js users analysis ──
-  console.log('\n🔐 Auth.js Users (interpreter-based onboarding):');
-  const authJsResults = results.filter(r => r.interpreterId && !r.termsAcceptedAt);
-  for (const r of authJsResults) {
-    const termsFromNotas = r.interpreterDocCompleto || r.interpreterBankData?.banco; // Check if terms accepted via notas
-    console.log(`  ${r.email} (interpreterId: ${r.interpreterId})`);
-    console.log(`    interpreter.documentosCompleto: ${r.interpreterDocCompleto}`);
-    console.log(`    interpreter banco: ${r.interpreterBankData?.banco}, cuenta: ${r.interpreterBankData?.cuentaPago}, cedula: ${r.interpreterBankData?.cedulaRnc}`);
-    console.log('');
-  }
-
-  // ── Export report ──
-  const fs = await import('fs');
   const report = {
     timestamp: new Date().toISOString(),
     summary: {
       total: results.length,
       statusCounts,
       stepCounts,
-      mismatchedCount,
-      authJsUsers: authJsUsers.length,
+      profileMismatchCount,
+      interpreterMismatchCount,
     },
-    results: results.map(r => ({
-      userId: r.userId,
-      email: r.email,
-      displayName: r.displayName,
-      role: r.role,
-      interpreterId: r.interpreterId,
-      onboardingComplete: r.onboardingComplete,
-      computedStatus: r.computedStatus,
-      computedStep: r.computedStep,
-      hasTerms: r.hasTerms,
-      hasBanking: r.hasBanking,
-      mismatched: r.mismatched,
-      interpreterDocCompleto: r.interpreterDocCompleto,
-      interpreterHasBankData: !!(r.interpreterBankData?.banco && r.interpreterBankData?.cuentaPago && r.interpreterBankData?.cedulaRnc),
-    })),
+    results,
   };
-  fs.writeFileSync('audit-onboarding-report.json', JSON.stringify(report, null, 2));
-  console.log('\n📄 Full report saved to: audit-onboarding-report.json');
+  const { writeFile } = await import('node:fs/promises');
+  const reportPath = process.env.AUDIT_ONBOARDING_REPORT_PATH || 'audit-onboarding-report.json';
+  await writeFile(reportPath, JSON.stringify(report, null, 2), { encoding: 'utf8', mode: 0o600 });
+  console.log(`Report saved to ${reportPath} (PII fields omitted; file mode 0600 where supported).`);
 }
 
 main()
-  .catch((err) => {
-    console.error('🔴 [Onboarding Audit] Fatal error:', err);
-    process.exit(1);
+  .catch((error: unknown) => {
+    console.error('[Onboarding Audit] Fatal error:', error instanceof Error ? error.message : 'Unknown error');
+    process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
