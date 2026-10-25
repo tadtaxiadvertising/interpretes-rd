@@ -4,7 +4,7 @@
 
 **Fecha de actualización:** 2026-10-25  
 **Repositorio:** `tadtaxiadvertising/interpretes-rd`  
-**Alcance:** CI, scripts de mantenimiento, Roleplay, pruebas E2E y cobertura TypeScript.  
+**Alcance:** CI, scripts de mantenimiento, postulación, onboarding, Roleplay, pruebas E2E y cobertura TypeScript.  
 
 ### Cambios integrados
 
@@ -27,10 +27,12 @@
 
 | Prioridad | Hallazgo verificado | Estado / siguiente acción |
 |---|---|---|
+| Alta | La acción administrativa de edición bancaria marcaba `onboardingComplete=true` y `documentosCompleto=true` al guardar datos bancarios, aunque esa operación no demuestra que el usuario haya aceptado el acuerdo ni completado los documentos. | Corrección en preparación: la edición administrativa debe sincronizar exclusivamente los campos bancarios; el estado de onboarding y documentos debe cambiar solo por sus flujos de finalización explícitos. Añadir regresiones y validar CI antes de integrar. |
+|---|---|---|
 | Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. | Corregido en PR #58: se eliminó el comando roto y se añadió `audit:onboarding` para ejecutar el script de auditoría existente; no se ejecutó SQL ni se tocó la base de datos. |
 | Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
 | TypeScript de scripts operativos | Los scripts de auditoría/sincronización tenían comparaciones contra estados obsoletos de Roleplay, una selección Prisma inválida, detalles de identidad innecesarios en el reporte y una función de fecha inexistente. | PR #80 integrado; run #40224873397 pasó TypeScript general, typecheck de auditoría, typecheck de `scripts/**/*.ts`, ESLint, pruebas y build. También se alineó `mysql2` del lockfile con la dependencia exacta de Prisma. |
-| Media | Las pruebas E2E de postulación no estaban validando correctamente la repetición del envío. | PR #89 integrado: el workflow copia `.next/static` y `public` al output standalone antes de Playwright. En run #40243755087, la prueba concurrente ya pasa; la prueba secuencial falla porque reutiliza la misma página y cookie después de que el primer envío avanza legítimamente al paso de inducción, por lo que el formulario ya no está visible. Se prepara una regresión que repite el envío desde un navegador separado sin cookie de propiedad y verifica el mensaje seguro de inicio de sesión, ausencia de error y exactamente un candidato en PostgreSQL. Pendiente CI verde de esta corrección. |
+| Media | Las pruebas E2E de postulación no validaban correctamente la repetición del envío y el servidor standalone no servía los bundles de cliente. | PR #89 integrado: el workflow copia `.next/static` y `public` al output standalone. PR #90 integrado: la repetición se prueba desde un navegador separado sin cookie de propiedad. Run #40245321299 pasó todas las etapas, incluidas TypeScript, ESLint, tests, build y Playwright contra PostgreSQL aislado. |
 | Alta | El teardown E2E utilizaba DIRECT_URL/DATABASE_URL como fallback y borraba candidatos por prefijo de email sin consentimiento explícito ni garantía de base aislada. | PR #67 integrado; run #40220420100 pasó TypeScript, typecheck de auditoría, ESLint, pruebas unitarias y build. Playwright exige E2E_ALLOW_RUN=true; objetivos remotos exigen además E2E_ALLOW_REMOTE_TARGET=true; el borrado requiere E2E_ALLOW_DB_CLEANUP=true y E2E_DATABASE_URL, sin fallback a URLs generales. Añade escenario E2E con dos navegadores que envían la misma dirección en paralelo. La prueba aún requiere ejecución contra una base E2E aislada. |
 
 
@@ -47,10 +49,10 @@
 - [x] PR #74: actualiza Next.js a 15.5.28 y Sharp a 0.35.5; run #40222055963 pasó validación, pruebas y build.
 - [x] PR #76: corrige PostCSS y source-map-js; run #40222588986 pasó validación, pruebas y build. Audit: 11 vulnerabilidades sin críticas.
 - [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
-- [ ] Confirmar CI verde para las pruebas E2E de postulación concurrente/repetición segura. PR #89 ya está integrado y run #40243755087 confirma que el caso concurrente pasa; el caso secuencial reveló que la prueba reutilizaba una página cuyo funnel ya avanzó a inducción. PR pendiente corrige el escenario para usar un navegador separado y comprobar que no se crea un duplicado ni se revela la postulación sin cookie de propiedad.
+- [x] Confirmar CI verde para las pruebas E2E de postulación concurrente/repetición segura. PR #90 integrado; run #40245321299 pasó el workflow completo, incluidas las pruebas Playwright aisladas.
 - [ ] Reducir los 11 avisos npm residuales tras PR #76: `@prisma/config`/`deepmerge-ts`/`mysql2`, `@vitest/ui`/`vitest`, `vite`, `zod`, `undici`, `fast-uri` y `esbuild`. Priorizar actualizaciones compatibles; evitar cambios mayores sin pruebas.
 - [x] Añadir un chequeo TypeScript dedicado a todos los scripts `scripts/**/*.ts`; PR #80 integrado y CI #40224873397 en éxito. Se verificó en `main` que `prisma@7.10.1` declara `mysql2@3.24.4` y que `package-lock.json` bloquea exactamente `mysql2@3.24.4`.
-- [x] Configurar Playwright para iniciar Next standalone y ejecutar E2E contra PostgreSQL efímero; PR #82 integrado. [ ] Cerrar la incidencia actual cuando el workflow de seguimiento pase completo.
+- [x] Configurar Playwright para iniciar Next standalone y ejecutar E2E contra PostgreSQL efímero; PR #82 integrado. PR #89 corrigió la copia de assets standalone y PR #90 corrigió el escenario de repetición; run #40245321299 pasó completo.
 
 ### Criterio de cierre
 
