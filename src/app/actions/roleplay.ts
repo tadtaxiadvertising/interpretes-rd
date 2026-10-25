@@ -234,9 +234,10 @@ export async function startCandidateRoleplay() {
         fromStatuses: ['ROLEPLAY_REVIEW'],
         toStatus: 'ROLEPLAY_PENDING',
         toStep: 'ROLEPLAY',
-        eventType: 'ROLEPLAY_RETRY_REQUESTED',
+        eventType: 'ROLEPLAY_CREATED',
         actorType: 'candidate',
         actorId: String(candidate.id),
+        metadata: { retry: true },
       });
       if (!retryTransition.success) {
         return {
