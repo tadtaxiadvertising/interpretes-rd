@@ -166,7 +166,8 @@ describe('startCandidateRoleplay', () => {
       applicationId: 'app-1',
       fromStatuses: ['ROLEPLAY_REVIEW'],
       toStatus: 'ROLEPLAY_PENDING',
-      eventType: 'ROLEPLAY_RETRY_REQUESTED',
+      eventType: 'ROLEPLAY_CREATED',
+      metadata: { retry: true },
     }));
     expect(m.cookieSet).toHaveBeenCalled();
   });
