@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const m = vi.hoisted(() => ({
   actor: null as any,
+  identity: null as any,
   cookieSet: vi.fn(),
   candidateFindUnique: vi.fn(),
   sessionFindFirst: vi.fn(),
@@ -11,6 +12,7 @@ const m = vi.hoisted(() => ({
   scenarioCreate: vi.fn(),
   accessUpsert: vi.fn(),
   appFindUnique: vi.fn(),
+  applicationFindFirst: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
 }));
@@ -26,6 +28,10 @@ vi.mock('@/lib/auth/actions', () => ({
     m.actor ? { user: m.actor, profile: m.actor } : { error: 'Not authenticated', code: 'UNAUTHORIZED' },
 }));
 
+vi.mock('@/lib/identity/resolve-user', () => ({
+  resolveCurrentIdentity: async () => m.identity,
+}));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     recruitmentCandidate: { findUnique: m.candidateFindUnique },
@@ -36,7 +42,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     roleplayScenario: { count: m.scenarioCount, create: m.scenarioCreate },
     roleplayAccess: { upsert: m.accessUpsert },
-    recruitmentApplication: { findUnique: m.appFindUnique },
+    recruitmentApplication: { findUnique: m.appFindUnique, findFirst: m.applicationFindFirst },
     $transaction: async (cb: any) =>
       cb({
         recruitmentApplication: {
@@ -73,7 +79,14 @@ describe('startCandidateRoleplay', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     m.actor = CANDIDATE_ACTOR;
+    m.identity = {
+      userId: 'u-1',
+      email: 'candidate@example.com',
+      role: 'interpreter',
+      eligibility: { needsOnboarding: false },
+    };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
+    m.applicationFindFirst.mockResolvedValue(null);
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
     m.sessionUpdate.mockResolvedValue({ id: 'sess-new' });
@@ -107,6 +120,34 @@ describe('startCandidateRoleplay', () => {
     );
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
+
+  it('blocks roleplay start until server-resolved onboarding is complete', async () => {
+    m.identity.eligibility.needsOnboarding = true;
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.candidateFindUnique).not.toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'ROLEPLAY_REVIEW', 'INTERVIEW_PENDING'])(
+    'blocks roleplay start for application status %s',
+    async (status) => {
+      m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status });
+
+      const res = await startCandidateRoleplay();
+
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('CONFLICT');
+      expect(m.sessionCreate).not.toHaveBeenCalled();
+      expect(m.accessUpsert).not.toHaveBeenCalled();
+      expect(m.cookieSet).not.toHaveBeenCalled();
+    }
+  );
 
   it('creates a session, scenario, access row and cookie for a fresh candidate', async () => {
     const res = await startCandidateRoleplay();
