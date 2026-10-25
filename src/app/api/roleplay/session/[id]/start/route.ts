@@ -64,6 +64,7 @@ export async function POST(
         'INDUCTION_PENDING',
         'ROLEPLAY_PENDING',
         'ROLEPLAY_IN_PROGRESS',
+        'ROLEPLAY_REVIEW',
       ];
       if (application && !startableApplicationStatuses.includes(application.status)) {
         return NextResponse.json(
