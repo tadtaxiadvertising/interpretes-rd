@@ -32,6 +32,8 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () => ({ user: m.actor, profile: m.actor }),
 }));
 
+vi.mock('@/lib/roleplay-audio-conversion', () => ({ queueMp3Conversion: vi.fn() }));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     recruitmentApplication: { findUnique: m.appFindUnique },
@@ -167,7 +169,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
       recordedAudioUrl: 'https://x/a.webm',
-      sourceAudioPath: 'responses/sess-cand/scn-1.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       durationSec: 42,
     });
 
