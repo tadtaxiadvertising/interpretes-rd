@@ -235,7 +235,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
   it('treats a retried confirm of an already-recorded response as an idempotent success', async () => {
     m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
-    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded' });
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm' });
 
     const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/first.webm' });
 
@@ -313,7 +313,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
   it('does not consume again when an already-submitted confirm is replayed', async () => {
     m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
-    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded' });
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm' });
 
     const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/first.webm' });
 
