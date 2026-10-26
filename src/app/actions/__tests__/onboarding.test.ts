@@ -86,7 +86,7 @@ describe('Onboarding Actions', () => {
         id: 'acceptance-existing',
         contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
       });
-      (prisma.$transaction as any).mockRejectedValue({ code: 'P2002' });
+      (prisma.$transaction as any).mockRejectedValue({ code: 'P2002', meta: { target: 'legal_acceptance_user_version_unique' } });
 
       const result = await acceptTerms('agreement-1');
 
