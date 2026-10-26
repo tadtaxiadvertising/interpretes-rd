@@ -50,7 +50,7 @@
 ### Revisión adicional del 2026-10-26
 
 - PR #34 cerrado sin merge: su rama tenía 347 commits de divergencia respecto de `main`, no era mergeable y proponía una implementación paralela de Roleplay. Se confirmó que `main` ya tiene una arquitectura activa de Roleplay; el PR antiguo no debe integrarse directamente. Ver [PR #34](https://github.com/tadtaxiadvertising/interpretes-rd/pull/34).
-- CI de los commits documentales más recientes: run #40357755425 (#717) terminó en éxito, incluidas pruebas unitarias, build, E2E aislado y ambos jobs de webhook de despliegue. Runs #40357598650 (#715) y #40357637180 (#716) también completaron las validaciones y E2E; run #717 valida el último estado de `main`.
+- CI de los commits documentales más recientes: run #40357755425 (#717) terminó en éxito, incluidas pruebas unitarias, build, E2E aislado y ambos jobs de webhook de despliegue. Runs #40357598650 (#715) y #40357637180 (#716) también completaron las validaciones y E2E. El run #40371062647, disparado por la actualización documental en `main`, también terminó en éxito en `Validate & Test` y ambos jobs de webhook de despliegue.
 - Auditoría npm del CI #40363781172: 3 hallazgos (0 críticos, 1 alto, 1 moderado, 1 bajo): `vite@8.3.1`, `@vitest/ui` y `esbuild`. npm indica correcciones disponibles. El lockfile actual ya alinea `mysql2@3.24.4` con `prisma@7.10.1`. No se ha regenerado el lockfile para corregir los avisos; hacerlo con acceso al registro y validar `npm ci`, tests, build y E2E.
 - En la consulta más reciente, PR #119 quedó integrado después de que CI #40359553135 pasara todas las etapas de validación, incluidas pruebas unitarias, build y E2E aislado. PR #118 también está integrado. El estado de PRs abiertos debe consultarse en vivo; el inventario previo de esta auditoría ya no es actual.
 
@@ -78,9 +78,8 @@
 - [x] Proteger la validación de invitaciones por token/código contra carreras que podían reactivar sesiones terminales; PR #118 integrado tras CI #721 en éxito (incluye pruebas unitarias, build y E2E aislado).
 - [x] Completar la protección del endpoint legado `/api/roleplay/start` contra la misma carrera; PR #119 integrado tras CI #40359553135 en éxito.
 - [x] Proteger `startCandidateRoleplay` frente a carreras de estado terminal; PR #122 integrado con CI de PR y `main` en éxito.
-- [ ] Hacer idempotente el inicio simultáneo cuando todavía no existe una sesión activa. PR #123 añadió la restricción y prueba, pero su CI falló por usar `PENDING`, que no pertenece al enum `RoleplayStatus`. PR #124 corrige el estado a `SUBMITTED`; validar el CI completo antes de considerar resuelto el hallazgo. La migración no se ha ejecutado contra producción.
+- [x] Evitar sesiones activas duplicadas cuando dos inicios de candidato ocurren sin sesión previa. PR #123 añadió el índice único parcial, manejo del conflicto `P2002` y regresión; PR #124 corrigió el predicado del índice de `PENDING` a `SUBMITTED`, valor válido del enum. CI del PR #124 (#40368766184), CI de `main` tras integración (#40368930823) y validación documental posterior (#40371062647) terminaron en éxito. La migración sigue pendiente de aplicación controlada por entorno; no se ejecutó contra producción.
 - [x] Proteger `startCandidateRoleplay` contra carreras que reactivan sesiones terminales; PR #122 integrado y CI de PR y de `main` en éxito.
-- [ ] Evitar sesiones activas duplicadas cuando dos inicios de candidato ocurren sin sesión previa. PR #123 se integró, pero su CI falló al aplicar el índice porque el predicado usaba `PENDING`, un valor inexistente en el enum `RoleplayStatus`. PR #124 corrige el predicado para usar `SUBMITTED`, estado existente, y alinea esquema y migración. No aplicar la migración a producción hasta que el CI completo pase y se revise la presencia de duplicados activos.
 
 ### Criterio de cierre
 
