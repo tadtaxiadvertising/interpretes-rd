@@ -143,14 +143,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
 
-    // Determine extension from MIME type
-    const ext = file.type.includes('webm') ? 'webm' : 
-                file.type.includes('mp4') ? 'mp4' :
-                file.type.includes('ogg') ? 'ogg' : 'webm';
-    
+    // Keep the storage suffix aligned with the normalized MIME type.
+    // In particular, MPEG audio must be stored as .mp3, never mislabeled .webm.
+    const normalizedMime = normalizeMimeType(file.type);
+    const extensionByMime: Record<string, string> = {
+      'audio/webm': 'webm',
+      'audio/mp4': 'mp4',
+      'audio/ogg': 'ogg',
+      'audio/mpeg': 'mp3',
+    };
+    const ext = extensionByMime[normalizedMime];
+    if (!ext) {
+      return NextResponse.json({ success: false, error: 'Unsupported audio format' }, { status: 400 });
+    }
+
     const sourcePath = `responses/${sessionId}/${scenarioId}.${ext}`;
-    
-    // Upload original WebM/Opus to Supabase (PRIMARY STORAGE)
+
+    // Upload original audio to Supabase (PRIMARY STORAGE)
     const { error: uploadError } = await getSupabaseAdmin().storage
       .from(BUCKET)
       .upload(sourcePath, file, { contentType: file.type, upsert: true });
