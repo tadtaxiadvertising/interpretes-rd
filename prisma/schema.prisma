@@ -827,7 +827,7 @@ model RoleplaySession {
 
   @@index([interpreterId, status], map: "idx_roleplay_interpreter_status")
   @@index([recruitmentCandidateId, status], map: "idx_roleplay_candidate_status")
-  @@unique([recruitmentCandidateId], map: "roleplay_candidate_active_session_key", where: raw("(recruitment_candidate_id IS NOT NULL AND status IN ('DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING', 'UNDER_REVIEW'))"))
+  @@unique([recruitmentCandidateId], map: "roleplay_candidate_active_session_key", where: raw("(recruitment_candidate_id IS NOT NULL AND status IN ('DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW'))"))
   @@index([status, createdAt], map: "idx_roleplay_status_created")
   @@index([status, submittedAt], map: "idx_roleplay_status_submitted")
   @@index([reviewPriority], map: "idx_roleplay_review_priority")
