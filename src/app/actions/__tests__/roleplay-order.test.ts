@@ -30,6 +30,8 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () => ({ user: m.actor, profile: m.actor }),
 }));
 
+vi.mock('@/lib/roleplay-audio-conversion', () => ({ queueMp3Conversion: vi.fn() }));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: m.findUnique, update: m.update },
