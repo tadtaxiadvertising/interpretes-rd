@@ -159,6 +159,54 @@ describe('Identity Resolver', () => {
       expect(result?.onboardingStatus).toBe('NOT_STARTED');
     });
 
+    it('should resolve the latest terminal Roleplay session instead of ignoring it', async () => {
+      const mockUser = {
+        id: 'terminal-user',
+        email: 'terminal@example.com',
+        user_metadata: {},
+      };
+      const mockSupabase = {
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: mockUser } }) },
+      };
+      mockCreateClient.mockResolvedValue(mockSupabase);
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        id: 'terminal-user',
+        email: 'terminal@example.com',
+        role: 'interpreter',
+        interpreterId: 42,
+        onboardingComplete: true,
+        termsAcceptedAt: new Date('2026-01-01T00:00:00.000Z'),
+        bankName: 'Banco Popular',
+        bankAccount: '123456',
+        bankCedula: '001-1234567-8',
+        bankAccountType: 'Ahorro',
+        signatureDate: new Date('2026-01-01T00:00:00.000Z'),
+        interpreter: null,
+      });
+      mockPrisma.roleplaySession.findFirst.mockResolvedValue({
+        id: 'latest-failed-session',
+        status: 'FAILED',
+        interpreterId: 42,
+        recruitmentCandidateId: null,
+        currentScenarioIndex: 0,
+        recordedAudioUrl: null,
+        submittedAt: new Date('2026-01-02T00:00:00.000Z'),
+        evaluatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        qaScoreId: null,
+        access: null,
+      });
+
+      const result = await resolveCurrentIdentity();
+
+      expect(result?.roleplayState).toBe('FAILED');
+      expect(result?.roleplaySessionId).toBe('latest-failed-session');
+      const query = mockPrisma.roleplaySession.findFirst.mock.calls[0][0];
+      expect(query.where.status.in).toContain('FAILED');
+      expect(query.where.status.in).toContain('PASSED');
+      expect(query.where.status.in).toContain('EXPIRED');
+      expect(query.where.status.in).toContain('CANCELLED');
+    });
+
     it('should resolve admin role correctly', async () => {
       const mockUser = { id: 'admin-1', email: 'admin@example.com', user_metadata: {} };
       const mockSupabase = { auth: { getUser: vi.fn().mockResolvedValue({ data: { user: mockUser } }) } };
