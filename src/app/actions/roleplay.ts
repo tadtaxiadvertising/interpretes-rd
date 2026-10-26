@@ -356,12 +356,31 @@ export async function startCandidateRoleplay() {
     } else {
       session = { id: previousSession.id, status: previousSession.status };
       if (['DRAFT', 'INVITED', 'PENDING'].includes(session.status)) {
-        // Only pre-submit states advance to STARTED. Submitted/reviewed attempts
-        // are never reset as part of a normal resume.
-        await db.roleplaySession.update({
-          where: { id: session.id },
+        // Compare-and-set against the state observed above. A concurrent submit
+        // or evaluation must not be overwritten by this resume request.
+        const transition = await db.roleplaySession.updateMany({
+          where: { id: session.id, status: session.status },
           data: { status: 'STARTED' },
         });
+
+        if (transition.count === 0) {
+          const latest = await db.roleplaySession.findUnique({
+            where: { id: session.id },
+            select: { id: true, status: true },
+          });
+
+          if (!latest || !['STARTED', 'IN_PROGRESS'].includes(latest.status)) {
+            return {
+              success: false as const,
+              error: 'La sesión de roleplay ya no está disponible. Actualiza la página para continuar.',
+              code: 'CONFLICT' as const,
+            };
+          }
+
+          session = { id: latest.id, status: latest.status };
+        } else {
+          session = { id: session.id, status: 'STARTED' };
+        }
       }
     }
 
