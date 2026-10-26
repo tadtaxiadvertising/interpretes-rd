@@ -41,9 +41,11 @@ vi.mock('@/lib/roleplay-audio-conversion', () => ({
 
 import { POST } from '../route';
 
-function makeRequest(options: { sessionId?: string; scenarioId?: string; cookie?: string } = {}) {
+function makeRequest(options: { sessionId?: string; scenarioId?: string; cookie?: string; mime?: string; filename?: string } = {}) {
   const form = new FormData();
-  form.append('audio', new File([new Uint8Array([1, 2, 3, 4, 5])], 'response.webm', { type: 'audio/webm' }));
+  const mime = options.mime ?? 'audio/webm';
+  const filename = options.filename ?? `response.${mime === 'audio/mpeg' ? 'mp3' : mime === 'audio/ogg' ? 'ogg' : mime === 'audio/mp4' ? 'mp4' : 'webm'}`;
+  form.append('audio', new File([new Uint8Array([1, 2, 3, 4, 5])], filename, { type: mime }));
   form.append('sessionId', options.sessionId ?? 'session-1');
   form.append('scenarioId', options.scenarioId ?? 'scenario-1');
   return new NextRequest('http://localhost/api/roleplay/convert-audio', {
@@ -99,4 +101,23 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
       'responses/session-1/scenario-1.webm',
     );
   });
+  it.each([
+    ['audio/mpeg', 'response.mp3', 'mp3'],
+    ['audio/ogg', 'response.ogg', 'ogg'],
+    ['audio/mp4', 'response.mp4', 'mp4'],
+  ])('stores %s using the matching .%s extension and does not queue WebM conversion', async (mime, filename, extension) => {
+    const response = await POST(makeRequest({ cookie: 'session-1', mime, filename }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.sourcePath).toBe(`responses/session-1/scenario-1.${extension}`);
+    expect(m.storageUpload).toHaveBeenCalledWith(
+      `responses/session-1/scenario-1.${extension}`,
+      expect.any(File),
+      expect.objectContaining({ contentType: mime, upsert: true }),
+    );
+    expect(m.queueMp3Conversion).not.toHaveBeenCalled();
+  });
+
 });
