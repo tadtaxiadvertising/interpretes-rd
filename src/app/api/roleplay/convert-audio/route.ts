@@ -138,6 +138,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Once a response has been confirmed, its storage object is immutable.
+    // This prevents a repeated or stale upload from replacing the audio that QA
+    // will evaluate. Check before any storage write.
+    const confirmedResponse = await prisma.roleplayResponse.findUnique({
+      where: { scenarioId },
+      select: { id: true },
+    });
+    if (confirmedResponse) {
+      return NextResponse.json(
+        { success: false, error: 'Audio already confirmed for this scenario' },
+        { status: 409 }
+      );
+    }
+
     const validation = validateAudioFile(file);
     if (!validation.valid) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
