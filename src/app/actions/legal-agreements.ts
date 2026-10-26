@@ -126,7 +126,7 @@ export async function publishLegalAgreementDraft(id: string) {
     const digest = hashContent(draft.content);
     if (digest !== draft.contentHash) return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
     const result = await prisma.legalAgreementVersion.updateMany({
-      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
+      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
       data: { status: 'PUBLISHED', publishedAt: new Date(), publishedBy: auth.user.email || auth.user.userId },
     });
     if (result.count !== 1) return { success: false as const, error: 'Otro proceso publicó o modificó este borrador. Recarga e inténtalo de nuevo.', code: 'CONFLICT' };
@@ -143,9 +143,9 @@ export async function hasCurrentLegalAcceptance(identity: { userId?: string | nu
   const current = await prisma.legalAgreementVersion.findFirst({
     where: { agreementKey: AGREEMENT_KEY, status: 'PUBLISHED', publishedAt: { not: null } },
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-    select: { id: true, contentHash: true },
+    select: { id: true, content: true, contentHash: true },
   });
-  if (!current) return false;
+  if (!current || hashContent(current.content) !== current.contentHash) return false;
   const where = identity.userId
     ? { agreementVersionId: current.id, userId: identity.userId }
     : identity.interpreterId

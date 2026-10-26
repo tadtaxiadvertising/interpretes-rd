@@ -82,7 +82,7 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         if (!notes.includes(`v${current.version}`)) {
           await tx.interpreter.update({
             where: { id: actor.interpreterId! },
-            data: { notas: `${notes}\\n${termsMarker(now, current.version)}`.trim() },
+            data: { notas: `${notes}\n${termsMarker(now, current.version)}`.trim() },
             select: { id: true },
           });
         }
@@ -110,7 +110,7 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
           if (!notes.includes(`v${current.version}`)) {
             await tx.interpreter.update({
               where: { id: profile.interpreterId },
-              data: { notas: `${notes}\\n${termsMarker(now, current.version)}`.trim() },
+              data: { notas: `${notes}\n${termsMarker(now, current.version)}`.trim() },
               select: { id: true },
             });
           }
@@ -122,7 +122,7 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
     return { success: true };
   } catch (error) {
     if (error instanceof Error && error.message === 'LEGAL_VERSION_CHANGED') {
-      return { success: false, error: 'El acuerdo vigente cambió mientras lo leías. Recarga la página y revisa la nueva versión antes de aceptar.', code: 'CONFLICT' };
+      return { success: false, error: 'El acuerdo vigente cambió mientras lo leías. Recarga la página y revisa la nueva versión antes de aceptar.', code: 'BAD_REQUEST' };
     }
     if (error instanceof Error && error.message.includes('No published legal agreement')) {
       return { success: false, error: 'No hay un acuerdo publicado para aceptar. Contacta al administrador.', code: 'BAD_REQUEST' };
