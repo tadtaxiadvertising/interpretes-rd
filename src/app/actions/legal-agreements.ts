@@ -143,9 +143,9 @@ export async function hasCurrentLegalAcceptance(identity: { userId?: string | nu
   const current = await prisma.legalAgreementVersion.findFirst({
     where: { agreementKey: AGREEMENT_KEY, status: 'PUBLISHED', publishedAt: { not: null } },
     orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-    select: { id: true, contentHash: true },
+    select: { id: true, content: true, contentHash: true },
   });
-  if (!current) return false;
+  if (!current || hashContent(current.content) !== current.contentHash) return false;
   const where = identity.userId
     ? { agreementVersionId: current.id, userId: identity.userId }
     : identity.interpreterId
