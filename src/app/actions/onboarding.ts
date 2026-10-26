@@ -82,7 +82,7 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         if (!notes.includes(`v${current.version}`)) {
           await tx.interpreter.update({
             where: { id: actor.interpreterId! },
-            data: { notas: `${notes}\\n${termsMarker(now, current.version)}`.trim() },
+            data: { notas: `${notes}\n${termsMarker(now, current.version)}`.trim() },
             select: { id: true },
           });
         }
@@ -110,7 +110,7 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
           if (!notes.includes(`v${current.version}`)) {
             await tx.interpreter.update({
               where: { id: profile.interpreterId },
-              data: { notas: `${notes}\\n${termsMarker(now, current.version)}`.trim() },
+              data: { notas: `${notes}\n${termsMarker(now, current.version)}`.trim() },
               select: { id: true },
             });
           }
