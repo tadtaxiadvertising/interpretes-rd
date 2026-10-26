@@ -361,8 +361,10 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     });
     profileId = profile?.id ?? null;
 
-    // If no interpreterId in session, try to find by email
-    let resolvedInterpreterId = interpreterId;
+    // Prefer the stable interpreter link on the session/profile before
+    // falling back to email matching. This keeps identity and onboarding data
+    // attached to the same interpreter record.
+    let resolvedInterpreterId = interpreterId ?? profile?.interpreterId ?? null;
     if (role !== 'admin' && !resolvedInterpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
         where: { emailCorporativo: email },
@@ -415,8 +417,27 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     }
 
     const isAuthJsUser = true;
+    // A valid Auth.js session may be linked to an Interpreter without a
+    // matching UserProfile relation. Resolve the actual linked record instead
+    // of treating that user as if onboarding data did not exist.
+    const onboardingInterpreter = resolvedInterpreterId
+      ? (profile?.interpreter?.id === resolvedInterpreterId
+        ? profile.interpreter
+        : await prisma.interpreter.findUnique({
+            where: { id: resolvedInterpreterId },
+            select: {
+              id: true,
+              documentosCompleto: true,
+              banco: true,
+              cuentaPago: true,
+              tipoCuenta: true,
+              cedulaRnc: true,
+              notas: true,
+            },
+          }))
+      : profile?.interpreter ?? null;
     const onboarding = computeOnboardingStatus(
-      { 
+      {
         onboardingComplete: profile?.onboardingComplete ?? false,
         termsAcceptedAt: profile?.termsAcceptedAt ?? null,
         bankName: profile?.bankName ?? null,
@@ -425,7 +446,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
         bankAccountType: profile?.bankAccountType ?? null,
         signatureDate: profile?.signatureDate ?? null,
       },
-      profile?.interpreter ?? null,
+      onboardingInterpreter,
       isAuthJsUser
     );
 
