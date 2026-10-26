@@ -273,7 +273,7 @@ async function resolveActorFromSupabase(
     roleplaySession = await prisma.roleplaySession.findFirst({
       where: { 
         interpreterId, 
-        status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
+        status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED'] } 
       },
       include: { access: true },
       orderBy: { createdAt: 'desc' },
@@ -283,7 +283,7 @@ async function resolveActorFromSupabase(
     roleplaySession = await prisma.roleplaySession.findFirst({
       where: { 
         recruitmentCandidateId: candidateId, 
-        status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
+        status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED'] } 
       },
       include: { access: true },
       orderBy: { createdAt: 'desc' },
@@ -397,7 +397,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
       roleplaySession = await prisma.roleplaySession.findFirst({
         where: { 
           interpreterId: resolvedInterpreterId, 
-          status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
+          status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED'] } 
         },
         include: { access: true },
         orderBy: { createdAt: 'desc' },
@@ -407,7 +407,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
       roleplaySession = await prisma.roleplaySession.findFirst({
         where: { 
           recruitmentCandidateId: candidateId, 
-          status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED'] } 
+          status: { in: ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED'] } 
         },
         include: { access: true },
         orderBy: { createdAt: 'desc' },
