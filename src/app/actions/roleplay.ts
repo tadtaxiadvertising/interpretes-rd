@@ -561,7 +561,9 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           select: { id: true, sourceAudioUrl: true, sourceAudioPath: true },
         });
         if (priorResponse) {
-          if (input.sourceAudioPath && priorResponse.sourceAudioPath === input.sourceAudioPath) {
+          if (input.sourceAudioPath
+          ? priorResponse.sourceAudioPath === input.sourceAudioPath
+          : priorResponse.sourceAudioUrl === input.recordedAudioUrl) {
             return {
               recordedAudioUrl: input.recordedAudioUrl,
               submitted: session.status === 'SUBMITTED',
