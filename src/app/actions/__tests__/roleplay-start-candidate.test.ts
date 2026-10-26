@@ -8,6 +8,8 @@ const m = vi.hoisted(() => ({
   sessionFindFirst: vi.fn(),
   sessionCreate: vi.fn(),
   sessionUpdate: vi.fn(),
+  sessionUpdateMany: vi.fn(),
+  sessionFindUnique: vi.fn(),
   scenarioCount: vi.fn(),
   scenarioCreate: vi.fn(),
   accessUpsert: vi.fn(),
@@ -40,6 +42,8 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: m.sessionFindFirst,
       create: m.sessionCreate,
       update: m.sessionUpdate,
+      updateMany: m.sessionUpdateMany,
+      findUnique: m.sessionFindUnique,
     },
     roleplayScenario: { count: m.scenarioCount, create: m.scenarioCreate },
     roleplayAccess: { upsert: m.accessUpsert },
@@ -108,6 +112,8 @@ describe('startCandidateRoleplay', () => {
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
     m.sessionUpdate.mockResolvedValue({ id: 'sess-new' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 1 });
+    m.sessionFindUnique.mockResolvedValue({ id: 'sess-draft', status: 'STARTED' });
     m.scenarioCount.mockResolvedValue(0);
     m.scenarioCreate.mockResolvedValue({ id: 'scn-1' });
     m.accessUpsert.mockResolvedValue({ id: 'acc-1' });
@@ -242,9 +248,10 @@ describe('startCandidateRoleplay', () => {
     const res = await startCandidateRoleplay();
 
     expect(res.success).toBe(true);
-    expect(m.sessionUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'sess-draft' }, data: { status: 'STARTED' } })
-    );
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'sess-draft', status: 'DRAFT' },
+      data: { status: 'STARTED' },
+    });
   });
 
   it.each(['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'])(
@@ -256,9 +263,35 @@ describe('startCandidateRoleplay', () => {
       const res = await startCandidateRoleplay();
 
       expect(res.success).toBe(true);
-      expect(m.sessionUpdate).not.toHaveBeenCalled();
+      expect(m.sessionUpdateMany).not.toHaveBeenCalled();
     }
   );
+
+  it('rejects when a concurrent request advances the draft to a terminal state', async () => {
+    m.sessionFindFirst.mockResolvedValue({ id: 'sess-draft', status: 'DRAFT' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 0 });
+    m.sessionFindUnique.mockResolvedValue({ id: 'sess-draft', status: 'EVALUATED' });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('resumes when a concurrent request already started the same session', async () => {
+    m.sessionFindFirst.mockResolvedValue({ id: 'sess-draft', status: 'DRAFT' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 0 });
+    m.sessionFindUnique.mockResolvedValue({ id: 'sess-draft', status: 'STARTED' });
+    m.scenarioCount.mockResolvedValue(1);
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.accessUpsert).toHaveBeenCalled();
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-draft', expect.any(Object));
+  });
 
   it('advances the application from ROLEPLAY_PENDING to ROLEPLAY_IN_PROGRESS with a guarded transition', async () => {
     m.appFindUnique.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_PENDING', version: 4 });
