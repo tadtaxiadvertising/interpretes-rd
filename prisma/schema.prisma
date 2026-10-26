@@ -941,7 +941,7 @@ model LegalAgreementVersion {
   acceptances LegalAgreementAcceptance[]
 
   @@unique([agreementKey, version], map: "legal_agreement_versions_key_version_key")
-  @@index([agreementKey, status, publishedAt], map: "idx_legal_agreement_versions_published")
+  @@index([agreementKey, status, publishedAt(sort: Desc)], map: "idx_legal_agreement_versions_published")
   @@map("legal_agreement_versions")
   @@schema("public")
 }
