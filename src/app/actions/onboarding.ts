@@ -128,7 +128,18 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
     // If another tab/request committed this exact acceptance first, treat the
     // uniqueness conflict as an idempotent success only when this version is
     // still current and the same stable identity has its verified acceptance.
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+    const errorTarget = typeof error === 'object' && error !== null && 'meta' in error
+      && typeof error.meta === 'object' && error.meta !== null && 'target' in error.meta
+      ? error.meta.target
+      : null;
+    const errorTargetText = Array.isArray(errorTarget)
+      ? errorTarget.join(',')
+      : typeof errorTarget === 'string' ? errorTarget : '';
+    const isAcceptanceUniqueConflict = typeof error === 'object' && error !== null
+      && 'code' in error && error.code === 'P2002'
+      && (errorTargetText.includes('legal_acceptance_user_version_unique')
+        || errorTargetText.includes('legal_acceptance_interpreter_version_unique'));
+    if (isAcceptanceUniqueConflict) {
       const current = await db.legalAgreementVersion.findFirst({
         where: { agreementKey: 'freelance-services', status: 'PUBLISHED', publishedAt: { not: null } },
         orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
