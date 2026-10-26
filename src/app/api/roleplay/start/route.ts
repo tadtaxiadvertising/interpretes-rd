@@ -8,7 +8,7 @@ const db = prisma;
 export async function POST(req: NextRequest) {
   try {
     const { token } = await req.json();
-    
+
     if (!token) {
       return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
     }
@@ -37,34 +37,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 400 });
     }
 
-    // Mark as started (not consumed yet)
+    // Compare-and-set prevents a concurrent terminal transition being overwritten.
+    const transition = await db.roleplaySession.updateMany({
+      where: { id: access.sessionId, status: access.session.status },
+      data: { status: 'STARTED' },
+    });
+
+    if (transition.count === 0) {
+      const latestSession = await db.roleplaySession.findUnique({
+        where: { id: access.sessionId },
+        select: { status: true },
+      });
+
+      // A concurrent request may have started the same session; only resume active states.
+      if (!latestSession || !['STARTED', 'IN_PROGRESS'].includes(latestSession.status)) {
+        return NextResponse.json(
+          { success: false, error: 'Session no longer available' },
+          { status: 409 },
+        );
+      }
+    }
+
+    // Mark as started (not consumed yet), only after the session transition is safe.
     await db.roleplayAccess.update({
       where: { id: access.id },
       data: { startedAt: new Date() },
     });
 
-    // Update session status to STARTED
-    await db.roleplaySession.update({
-      where: { id: access.sessionId },
-      data: { status: 'STARTED' },
-    });
-
-    // Set session cookie for continued access
     const cookieStore = await cookies();
     cookieStore.set('roleplay_session', access.session.id, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24, // 24 hours
+      maxAge: 60 * 60 * 24,
       path: '/',
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      data: { 
+    return NextResponse.json({
+      success: true,
+      data: {
         sessionId: access.session.id,
         baseAudioUrl: access.session.baseAudioUrl,
-      } 
+      },
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
