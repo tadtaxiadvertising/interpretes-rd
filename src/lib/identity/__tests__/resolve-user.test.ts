@@ -222,6 +222,31 @@ describe('Identity Resolver', () => {
     });
   });
 
+  describe('Roleplay terminal state resolution', () => {
+    it('includes terminal sessions when resolving the latest interpreter roleplay', async () => {
+      const mockUser = { id: 'user-terminal', email: 'terminal@example.com', user_metadata: {} };
+      const mockSupabase = { auth: { getUser: vi.fn().mockResolvedValue({ data: { user: mockUser } }) } };
+      mockCreateClient.mockResolvedValue(mockSupabase);
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        id: 'user-terminal', email: 'terminal@example.com', role: 'interpreter', interpreterId: 77,
+        onboardingComplete: true, termsAcceptedAt: new Date(), bankName: 'Banco', bankAccount: '123',
+        bankCedula: '001', bankAccountType: 'Ahorro', signatureDate: new Date(), interpreter: null,
+      });
+      mockPrisma.roleplaySession.findFirst.mockResolvedValue({
+        id: 'terminal-session', status: 'FAILED', interpreterId: 77, recruitmentCandidateId: null,
+        currentScenarioIndex: 0, recordedAudioUrl: null, submittedAt: null, evaluatedAt: null,
+        qaScoreId: null, access: null,
+      });
+
+      const result = await resolveCurrentIdentity();
+      expect(result?.roleplayState).toBe('FAILED');
+      expect(result?.roleplaySessionId).toBe('terminal-session');
+      const firstQuery = mockPrisma.roleplaySession.findFirst.mock.calls[0][0];
+      expect(firstQuery.where.status.in).toContain('FAILED');
+      expect(firstQuery.where.status.in).toContain('CANCELLED');
+    });
+  });
+
   describe('Onboarding Status Computation', () => {
     it('should compute COMPLETED for user with all data', async () => {
       const mockUser = { id: 'user-1', email: 'complete@example.com', user_metadata: {} };
