@@ -62,6 +62,7 @@ function computeOnboardingStatus(profile: {
   documentosCompleto: boolean | null;
   banco: string | null;
   cuentaPago: string | null;
+  tipoCuenta: string | null;
   cedulaRnc: string | null;
   notas: string | null;
 } | null, isAuthJsUser: boolean): {
@@ -73,10 +74,16 @@ function computeOnboardingStatus(profile: {
   // For Auth.js users, onboarding state lives on Interpreter
   if (isAuthJsUser && interpreter) {
     const hasTerms = !!interpreter.documentosCompleto || interpreter.notas?.includes('[TERMS_ACCEPTED]');
-    const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.cedulaRnc);
+    const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.tipoCuenta && interpreter.cedulaRnc);
     
     if (interpreter.documentosCompleto) {
-      return { status: 'COMPLETED', step: 'complete', version: 1, completedAt: new Date() }; // approximate
+      // Legacy completion flags are not proof that required banking data still
+      // exists. Never fabricate a completion timestamp when no canonical date
+      // is persisted for Auth.js identities.
+      if (!hasBanking) {
+        return { status: 'NEEDS_REVIEW', step: 'banking', version: 1, completedAt: null };
+      }
+      return { status: 'COMPLETED', step: 'complete', version: 1, completedAt: null };
     }
     if (hasTerms && hasBanking) {
       return { status: 'IN_PROGRESS', step: 'tutorial', version: 1, completedAt: null };
@@ -89,7 +96,7 @@ function computeOnboardingStatus(profile: {
 
   // For Supabase users, onboarding state lives on UserProfile
   const hasTerms = !!profile.termsAcceptedAt;
-  const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankCedula);
+  const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankAccountType && profile.bankCedula);
   
   if (profile.onboardingComplete) {
     // Check for NEEDS_REVIEW - completed flag but missing data
@@ -208,6 +215,7 @@ async function resolveActorFromSupabase(
           documentosCompleto: true,
           banco: true,
           cuentaPago: true,
+          tipoCuenta: true,
           cedulaRnc: true,
           notas: true,
         }
@@ -344,6 +352,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
             documentosCompleto: true,
             banco: true,
             cuentaPago: true,
+            tipoCuenta: true,
             cedulaRnc: true,
             notas: true,
           }
@@ -353,7 +362,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     profileId = profile?.id ?? null;
 
     // If no interpreterId in session, try to find by email
-    let resolvedInterpreterId = interpreterId;
+    let resolvedInterpreterId = interpreterId ?? profile?.interpreterId ?? null;
     if (role !== 'admin' && !resolvedInterpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
         where: { emailCorporativo: email },
@@ -406,6 +415,23 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     }
 
     const isAuthJsUser = true;
+    // Resolve linked Interpreter even when UserProfile.interpreter is absent.
+    const onboardingInterpreter = resolvedInterpreterId
+      ? (profile?.interpreter && profile.interpreter.id === resolvedInterpreterId
+        ? profile.interpreter
+        : await prisma.interpreter.findUnique({
+            where: { id: resolvedInterpreterId },
+            select: {
+              id: true,
+              documentosCompleto: true,
+              banco: true,
+              cuentaPago: true,
+              tipoCuenta: true,
+              cedulaRnc: true,
+              notas: true,
+            },
+          }))
+      : profile?.interpreter ?? null;
     const onboarding = computeOnboardingStatus(
       { 
         onboardingComplete: profile?.onboardingComplete ?? false,
@@ -416,7 +442,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
         bankAccountType: profile?.bankAccountType ?? null,
         signatureDate: profile?.signatureDate ?? null,
       },
-      profile?.interpreter ?? null,
+      onboardingInterpreter,
       isAuthJsUser
     );
 
