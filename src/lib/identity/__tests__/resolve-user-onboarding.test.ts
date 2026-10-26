@@ -64,4 +64,24 @@ describe('Auth.js onboarding state consistency', () => {
     expect(result.status).toBe('IN_PROGRESS');
     expect(result.step).toBe('banking');
   });
+  it('requires account type before considering a Supabase profile complete', () => {
+    const result = computeOnboardingStatus(
+      {
+        onboardingComplete: true,
+        termsAcceptedAt: new Date('2026-01-01T00:00:00.000Z'),
+        bankName: 'Banco de Prueba',
+        bankAccount: '123456789',
+        bankCedula: '001-1234567-8',
+        bankAccountType: null,
+        signatureDate: new Date('2026-01-01T00:00:00.000Z'),
+      },
+      null,
+      false,
+    );
+
+    expect(result.status).toBe('NEEDS_REVIEW');
+    expect(result.step).toBe('banking');
+    expect(result.completedAt).toBeNull();
+  });
+
 });
