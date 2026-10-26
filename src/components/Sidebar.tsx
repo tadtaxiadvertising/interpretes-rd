@@ -19,7 +19,8 @@ import {
   MessageSquare,
   Briefcase,
   Key,
-  Mic2
+  Mic2,
+  FileText
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/types';
@@ -42,6 +43,7 @@ export const adminMenu: MenuItem[] = [
   { icon: Users, label: 'Interpreter Roster', href: '/interpreters' },
   { icon: UserPlus, label: 'Recruitment', href: '/recruitment' },
   { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays' },
+  { icon: FileText, label: 'Acuerdos legales', href: '/admin/legal-agreements' },
   { icon: Clock, label: 'Production Logs', href: '/production' },
   { icon: Clock, label: 'Calendario de Metas', href: '/admin/calendar' },
   { icon: ShieldCheck, label: 'Quality Assurance', href: '/qa' },
