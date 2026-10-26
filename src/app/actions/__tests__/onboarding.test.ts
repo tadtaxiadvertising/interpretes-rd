@@ -73,6 +73,27 @@ describe('Onboarding Actions', () => {
       expect(result.code).toBe('CONFLICT');
     });
 
+    it('treats a concurrent duplicate acceptance as success when the same version is already accepted', async () => {
+      (validateAction as any).mockResolvedValue(mockAuthResult);
+      (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: false });
+      (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
+        id: 'agreement-1',
+        version: '2026-10-01',
+        content: 'abc',
+        contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      });
+      (prisma.legalAgreementAcceptance.findFirst as any).mockResolvedValue({
+        id: 'acceptance-existing',
+        contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      });
+      (prisma.$transaction as any).mockRejectedValue({ code: 'P2002' });
+
+      const result = await acceptTerms('agreement-1');
+
+      expect(result).toMatchObject({ success: true });
+      expect(revalidateInterpreterProfileRecords).toHaveBeenCalled();
+    });
+
     it('records terms acceptance (with version) for Supabase user', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
       (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: false });
