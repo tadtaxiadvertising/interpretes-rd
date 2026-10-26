@@ -46,6 +46,13 @@
 | Alta | El teardown E2E utilizaba DIRECT_URL/DATABASE_URL como fallback y borraba candidatos por prefijo de email sin consentimiento explícito ni garantía de base aislada. | PR #67 integrado; run #40220420100 pasó TypeScript, typecheck de auditoría, ESLint, pruebas unitarias y build. Playwright exige E2E_ALLOW_RUN=true; objetivos remotos exigen además E2E_ALLOW_REMOTE_TARGET=true; el borrado requiere E2E_ALLOW_DB_CLEANUP=true y E2E_DATABASE_URL, sin fallback a URLs generales. Añade escenario E2E con dos navegadores que envían la misma dirección en paralelo. El run #40245321299 validó los E2E contra PostgreSQL aislado. |
 
 
+### Revisión adicional del 2026-10-26
+
+- PR #34 cerrado sin merge: su rama tenía 347 commits de divergencia respecto de `main`, no era mergeable y proponía una implementación paralela de Roleplay. Se confirmó que `main` ya tiene una arquitectura activa de Roleplay; el PR antiguo no debe integrarse directamente. Ver [PR #34](https://github.com/tadtaxiadvertising/interpretes-rd/pull/34).
+- CI de los commits documentales más recientes: run #40357755425 (#717) terminó en éxito, incluidas pruebas unitarias, build, E2E aislado y ambos jobs de webhook de despliegue. Runs #40357598650 (#715) y #40357637180 (#716) también completaron las validaciones y E2E; run #717 valida el último estado de `main`.
+- Auditoría npm precisa del run #717: 4 hallazgos (0 críticos, 1 alto, 2 moderados, 1 bajo). El alto está en `vite@8.3.1` (rango afectado 8.3.0–8.3.2); `@vitest/ui` y `vitest` tienen avisos moderados, y `esbuild` uno bajo. npm indica correcciones disponibles. No se modificó el lockfile porque el entorno de esta revisión no tiene acceso al registro npm para regenerarlo de forma verificable; no ejecutar `npm audit fix` sin generar el lockfile y validar `npm ci`, tests, build y E2E en una rama.
+- No hay PRs abiertos al momento de esta consulta; PR #34 era el único PR abierto y fue cerrado tras la revisión de divergencia y arquitectura.
+
 ### Evidencia de CI
 
 - [x] PR #54 y run #552 sobre `main`: Prisma Validate, Prisma Generate, TypeScript, ESLint, pruebas unitarias y build en éxito.
