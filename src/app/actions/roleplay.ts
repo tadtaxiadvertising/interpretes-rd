@@ -109,19 +109,45 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   try {
-    const signedUrl = await confirmUpload(uploadPath);
-    
-    await db.roleplaySession.update({
+    if (!sessionId || sessionId.length > 100 || !uploadPath || uploadPath.length > 300) {
+      return { success: false, error: 'Ruta de audio base inválida', code: 'VALIDATION_ERROR' };
+    }
+
+    // Bind confirmation to the exact session and canonical base-audio object.
+    // Never sign an arbitrary bucket path supplied by the caller.
+    const session = await db.roleplaySession.findUnique({
       where: { id: sessionId },
+      select: { id: true, baseAudioUrl: true },
+    });
+    if (!session) {
+      return { success: false, error: 'Sesión de roleplay no encontrada', code: 'NOT_FOUND' };
+    }
+
+    const isCanonicalPath =
+      /^base\/[A-Za-z0-9_-]+\.(webm|mp4|ogg|mp3)$/.test(uploadPath) &&
+      uploadPath.startsWith(`base/${sessionId}.`) &&
+      session.baseAudioUrl === uploadPath;
+    if (!isCanonicalPath) {
+      return { success: false, error: 'La ruta de audio no corresponde a esta sesión', code: 'VALIDATION_ERROR' };
+    }
+
+    const signedUrl = await confirmUpload(uploadPath);
+    // Compare-and-set prevents a second confirmation from replacing an already
+    // confirmed URL or racing with another update.
+    const updated = await db.roleplaySession.updateMany({
+      where: { id: sessionId, baseAudioUrl: uploadPath },
       data: { baseAudioUrl: signedUrl },
     });
+    if (updated.count !== 1) {
+      return { success: false, error: 'El audio base ya fue confirmado o cambió durante la operación', code: 'CONFLICT' };
+    }
 
     revalidatePath('/admin/roleplays');
     return { success: true, data: { baseAudioUrl: signedUrl } };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Confirm Base Audio Error:', message);
-    return { success: false, error: message };
+    return { success: false, error: 'No se pudo confirmar el audio base', code: 'INTERNAL_ERROR' };
   }
 }
 
