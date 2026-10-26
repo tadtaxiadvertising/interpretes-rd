@@ -542,8 +542,26 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           throw new Error('Unauthorized');
         }
 
-        // Sequential binding: a targeted scenario must be the one expected at
-        // the session's current index, so a candidate cannot skip steps.
+        // A retried confirm after a successful commit may arrive after the
+        // session index has advanced. Treat only the exact same stored audio
+        // as an idempotent replay; never overwrite a confirmed response.
+        const priorResponse = await tx.roleplayResponse.findFirst({
+          where: { scenarioId: input.scenarioId },
+          select: { id: true, sourceAudioUrl: true },
+        });
+        if (priorResponse) {
+          if (priorResponse.sourceAudioUrl === input.recordedAudioUrl) {
+            return {
+              recordedAudioUrl: input.recordedAudioUrl,
+              submitted: session.status === 'SUBMITTED',
+              candidateId: session.recruitmentCandidateId,
+            };
+          }
+          throw new Error('Response already recorded for this scenario');
+        }
+
+        // Sequential binding: a new response must target the scenario expected
+        // at the session's current index, so a candidate cannot skip steps.
         const nextScenario = await tx.roleplayScenario.findFirst({
           where: { sessionId: session.id, order: session.currentScenarioIndex },
           select: { id: true },
@@ -577,39 +595,20 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         throw new Error('Session not available for submission');
       }
 
-      // Persist the per-scenario response against the real RoleplayScenario row
-      // when the client supplies a scenario id (cuid). The legacy
-      // `scenario_<index>` fallback has no row to attach to, so it is skipped.
+      // Persist a new response only once. The existing-response path above
+      // handles idempotent retries before the sequential-index check.
       if (input.scenarioId) {
-        const existingResponse = await tx.roleplayResponse.findFirst({
-          where: { scenarioId: input.scenarioId },
-          select: { id: true },
+        await tx.roleplayResponse.create({
+          data: {
+            scenarioId: input.scenarioId,
+            sourceAudioUrl: input.recordedAudioUrl,
+            sourceAudioPath: input.sourceAudioPath ?? null,
+            durationSec: input.durationSec ?? null,
+            selfScore: input.selfScore ?? undefined,
+            selfNotes: input.selfNotes ?? null,
+            submittedAt: new Date(),
+          },
         });
-        if (existingResponse) {
-          await tx.roleplayResponse.update({
-            where: { id: existingResponse.id },
-            data: {
-              sourceAudioUrl: input.recordedAudioUrl,
-              sourceAudioPath: input.sourceAudioPath ?? undefined,
-              durationSec: input.durationSec ?? undefined,
-              selfScore: input.selfScore ?? undefined,
-              selfNotes: input.selfNotes ?? null,
-              submittedAt: new Date(),
-            },
-          });
-        } else {
-          await tx.roleplayResponse.create({
-            data: {
-              scenarioId: input.scenarioId,
-              sourceAudioUrl: input.recordedAudioUrl,
-              sourceAudioPath: input.sourceAudioPath ?? null,
-              durationSec: input.durationSec ?? null,
-              selfScore: input.selfScore ?? undefined,
-              selfNotes: input.selfNotes ?? null,
-              submittedAt: new Date(),
-            },
-          });
-        }
       }
 
       // Progress is derived from persisted responses so a retried confirm
