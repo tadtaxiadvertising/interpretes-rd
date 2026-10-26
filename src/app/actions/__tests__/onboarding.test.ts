@@ -81,6 +81,8 @@ describe('Onboarding Actions', () => {
         cb({
           userProfile: { update: profileUpdate },
           interpreter: { findUnique: vi.fn(), update: vi.fn() },
+          legalAgreementVersion: { findFirst: vi.fn().mockResolvedValue({ id: 'agreement-1', version: '2026-10-01', content: 'abc', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }) },
+          legalAgreementAcceptance: { findFirst: vi.fn().mockResolvedValue({ id: 'acceptance-1', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }), create: vi.fn() },
         })
       );
 
