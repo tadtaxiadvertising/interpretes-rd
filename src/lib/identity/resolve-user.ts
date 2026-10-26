@@ -50,7 +50,7 @@ function normalizeRbacRole(role: string | null | undefined): UserRole {
   return role?.toLowerCase() === 'admin' ? 'admin' : 'interpreter';
 }
 
-export function computeOnboardingStatus(profile: {
+function computeOnboardingStatus(profile: {
   onboardingComplete: boolean;
   termsAcceptedAt: Date | null;
   bankName: string | null;
@@ -75,7 +75,7 @@ export function computeOnboardingStatus(profile: {
   if (isAuthJsUser && interpreter) {
     const hasTerms = !!interpreter.documentosCompleto || interpreter.notas?.includes('[TERMS_ACCEPTED]');
     const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.tipoCuenta && interpreter.cedulaRnc);
-
+    
     if (interpreter.documentosCompleto) {
       // Legacy completion flags are not proof that required banking data still
       // exists. Never fabricate a completion timestamp when no canonical date
@@ -361,9 +361,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     });
     profileId = profile?.id ?? null;
 
-    // Prefer the stable interpreter link on the session/profile before
-    // falling back to email matching. This keeps identity and onboarding data
-    // attached to the same interpreter record.
+    // If no interpreterId in session, try to find by email
     let resolvedInterpreterId = interpreterId ?? profile?.interpreterId ?? null;
     if (role !== 'admin' && !resolvedInterpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
@@ -417,9 +415,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     }
 
     const isAuthJsUser = true;
-    // A valid Auth.js session may be linked to an Interpreter without a
-    // matching UserProfile relation. Resolve the actual linked record instead
-    // of treating that user as if onboarding data did not exist.
+    // Resolve linked Interpreter even when UserProfile.interpreter is absent.
     const onboardingInterpreter = resolvedInterpreterId
       ? (profile?.interpreter?.id === resolvedInterpreterId
         ? profile.interpreter
@@ -437,7 +433,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
           }))
       : profile?.interpreter ?? null;
     const onboarding = computeOnboardingStatus(
-      {
+      { 
         onboardingComplete: profile?.onboardingComplete ?? false,
         termsAcceptedAt: profile?.termsAcceptedAt ?? null,
         bankName: profile?.bankName ?? null,
