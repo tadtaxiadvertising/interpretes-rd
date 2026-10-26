@@ -1,4 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Keep this pure-state test isolated from runtime services and environment config.
+vi.mock('@/lib/supabase/server', () => ({ createClient: vi.fn() }));
+vi.mock('@/lib/prisma', () => ({ default: {} }));
+vi.mock('@/lib/auth-rbac', () => ({ auth: vi.fn() }));
+vi.mock('@/lib/admin-identity', () => ({ resolveUserRoleByEmail: vi.fn() }));
+
 import { computeOnboardingStatus } from '@/lib/identity/resolve-user';
 
 const profile = {
