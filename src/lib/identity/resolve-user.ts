@@ -352,6 +352,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
             documentosCompleto: true,
             banco: true,
             cuentaPago: true,
+            tipoCuenta: true,
             cedulaRnc: true,
             notas: true,
           }
