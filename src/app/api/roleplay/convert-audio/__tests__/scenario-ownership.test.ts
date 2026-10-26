@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   identity: { role: 'candidate', interpreterId: null } as any,
   sessionFindUnique: vi.fn(),
   scenarioFindFirst: vi.fn(),
+  responseFindUnique: vi.fn(),
   storageUpload: vi.fn(),
   createSignedUrl: vi.fn(),
   queueMp3Conversion: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: m.sessionFindUnique },
     roleplayScenario: { findFirst: m.scenarioFindFirst },
+    roleplayResponse: { findUnique: m.responseFindUnique },
   },
 }));
 vi.mock('@/lib/security/rate-limit', () => ({
@@ -68,6 +70,7 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
       access: null,
     });
     m.scenarioFindFirst.mockResolvedValue({ id: 'scenario-1' });
+    m.responseFindUnique.mockResolvedValue(null);
     m.storageUpload.mockResolvedValue({ error: null });
     m.createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.test/audio' }, error: null });
   });
@@ -85,6 +88,24 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
       select: { id: true },
     });
     expect(m.storageUpload).not.toHaveBeenCalled();
+    expect(m.queueMp3Conversion).not.toHaveBeenCalled();
+  });
+
+  it('rejects uploads after a response has been confirmed, before touching storage', async () => {
+    m.responseFindUnique.mockResolvedValue({ id: 'response-1' });
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(409);
+    expect(body.success).toBe(false);
+    expect(body.error).toContain('already confirmed');
+    expect(m.responseFindUnique).toHaveBeenCalledWith({
+      where: { scenarioId: 'scenario-1' },
+      select: { id: true },
+    });
+    expect(m.storageUpload).not.toHaveBeenCalled();
+    expect(m.createSignedUrl).not.toHaveBeenCalled();
     expect(m.queueMp3Conversion).not.toHaveBeenCalled();
   });
 
