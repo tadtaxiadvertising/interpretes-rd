@@ -124,6 +124,24 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
     if (error instanceof Error && error.message === 'LEGAL_VERSION_CHANGED') {
       return { success: false, error: 'El acuerdo vigente cambió mientras lo leías. Recarga la página y revisa la nueva versión antes de aceptar.', code: 'BAD_REQUEST' };
     }
+    // The database's partial unique indexes are the final concurrency guard.
+    // If another tab/request committed this exact acceptance first, treat the
+    // uniqueness conflict as an idempotent success only when this version is
+    // still current and the same stable identity has its verified acceptance.
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+      const current = await db.legalAgreementVersion.findFirst({
+        where: { agreementKey: 'freelance-services', status: 'PUBLISHED', publishedAt: { not: null } },
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true },
+      });
+      const identity = auth.user.provider === 'authjs'
+        ? { interpreterId: auth.user.interpreterId }
+        : { userId: auth.user.userId };
+      if (current?.id === expectedAgreementId && await hasCurrentLegalAcceptance(identity)) {
+        revalidateInterpreterProfileRecords(auth.user.interpreterId ?? null);
+        return { success: true };
+      }
+    }
     if (error instanceof Error && error.message.includes('No published legal agreement')) {
       return { success: false, error: 'No hay un acuerdo publicado para aceptar. Contacta al administrador.', code: 'BAD_REQUEST' };
     }
