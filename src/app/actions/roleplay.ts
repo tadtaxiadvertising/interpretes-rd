@@ -870,14 +870,20 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  // Parse form data (dimension scores are 0..10)
+  // Parse dimension scores strictly: 0 is valid, but missing/blank or
+  // malformed values must not silently become a real score of zero.
+  const readScore = (key: string): number => {
+    const value = formData.get(key);
+    if (typeof value !== 'string' || value.trim() === '') return Number.NaN;
+    return Number(value);
+  };
   const rawInput = {
     sessionId: formData.get('sessionId') as string,
-    protocolScore: parseFloat(formData.get('protocolScore') as string) || 0,
-    interpretationScore: parseFloat(formData.get('interpretationScore') as string) || 0,
-    languageScore: parseFloat(formData.get('languageScore') as string) || 0,
-    serviceScore: parseFloat(formData.get('serviceScore') as string) || 0,
-    technicalScore: parseFloat(formData.get('technicalScore') as string) || 0,
+    protocolScore: readScore('protocolScore'),
+    interpretationScore: readScore('interpretationScore'),
+    languageScore: readScore('languageScore'),
+    serviceScore: readScore('serviceScore'),
+    technicalScore: readScore('technicalScore'),
     criticalError: formData.get('criticalError') === 'on',
     comments: formData.get('comments') as string || '',
   };
