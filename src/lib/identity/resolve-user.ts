@@ -50,7 +50,7 @@ function normalizeRbacRole(role: string | null | undefined): UserRole {
   return role?.toLowerCase() === 'admin' ? 'admin' : 'interpreter';
 }
 
-function computeOnboardingStatus(profile: {
+export function computeOnboardingStatus(profile: {
   onboardingComplete: boolean;
   termsAcceptedAt: Date | null;
   bankName: string | null;
