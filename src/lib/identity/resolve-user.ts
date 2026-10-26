@@ -50,7 +50,7 @@ function normalizeRbacRole(role: string | null | undefined): UserRole {
   return role?.toLowerCase() === 'admin' ? 'admin' : 'interpreter';
 }
 
-function computeOnboardingStatus(profile: {
+export function computeOnboardingStatus(profile: {
   onboardingComplete: boolean;
   termsAcceptedAt: Date | null;
   bankName: string | null;
@@ -62,6 +62,7 @@ function computeOnboardingStatus(profile: {
   documentosCompleto: boolean | null;
   banco: string | null;
   cuentaPago: string | null;
+  tipoCuenta: string | null;
   cedulaRnc: string | null;
   notas: string | null;
 } | null, isAuthJsUser: boolean): {
@@ -73,10 +74,16 @@ function computeOnboardingStatus(profile: {
   // For Auth.js users, onboarding state lives on Interpreter
   if (isAuthJsUser && interpreter) {
     const hasTerms = !!interpreter.documentosCompleto || interpreter.notas?.includes('[TERMS_ACCEPTED]');
-    const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.cedulaRnc);
-    
+    const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.tipoCuenta && interpreter.cedulaRnc);
+
     if (interpreter.documentosCompleto) {
-      return { status: 'COMPLETED', step: 'complete', version: 1, completedAt: new Date() }; // approximate
+      // Legacy completion flags are not proof that required banking data still
+      // exists. Never fabricate a completion timestamp when no canonical date
+      // is persisted for Auth.js identities.
+      if (!hasBanking) {
+        return { status: 'NEEDS_REVIEW', step: 'banking', version: 1, completedAt: null };
+      }
+      return { status: 'COMPLETED', step: 'complete', version: 1, completedAt: null };
     }
     if (hasTerms && hasBanking) {
       return { status: 'IN_PROGRESS', step: 'tutorial', version: 1, completedAt: null };
@@ -208,6 +215,7 @@ async function resolveActorFromSupabase(
           documentosCompleto: true,
           banco: true,
           cuentaPago: true,
+          tipoCuenta: true,
           cedulaRnc: true,
           notas: true,
         }
