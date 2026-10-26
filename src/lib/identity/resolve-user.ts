@@ -96,7 +96,7 @@ export function computeOnboardingStatus(profile: {
 
   // For Supabase users, onboarding state lives on UserProfile
   const hasTerms = !!profile.termsAcceptedAt;
-  const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankCedula);
+  const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankAccountType && profile.bankCedula);
   
   if (profile.onboardingComplete) {
     // Check for NEEDS_REVIEW - completed flag but missing data
