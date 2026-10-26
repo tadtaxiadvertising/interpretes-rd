@@ -921,3 +921,46 @@ enum RoleplayStatus {
 
   @@schema("public")
 }
+
+
+// Published agreement content is immutable by application policy. Drafts may be edited;
+// publishing snapshots the exact text and its SHA-256 digest.
+model LegalAgreementVersion {
+  id          String   @id @default(cuid())
+  agreementKey String  @map("agreement_key")
+  version     String
+  title       String
+  content     String
+  contentHash String   @map("content_hash")
+  status      String   @default("DRAFT")
+  createdBy   String?  @map("created_by")
+  publishedBy String?  @map("published_by")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  acceptances LegalAgreementAcceptance[]
+
+  @@unique([agreementKey, version], map: "legal_agreement_versions_key_version_key")
+  @@index([agreementKey, status, publishedAt], map: "idx_legal_agreement_versions_published")
+  @@map("legal_agreement_versions")
+  @@schema("public")
+}
+
+model LegalAgreementAcceptance {
+  id                String   @id @default(cuid())
+  agreementVersionId String  @map("agreement_version_id")
+  userId            String?  @map("user_id") @db.Uuid
+  interpreterId     Int?     @map("interpreter_id")
+  signerEmail       String   @map("signer_email")
+  contentHash       String   @map("content_hash")
+  acceptedAt        DateTime @default(now()) @map("accepted_at") @db.Timestamptz(6)
+  source            String   @default("onboarding")
+  userAgent         String?  @map("user_agent")
+  agreementVersion  LegalAgreementVersion @relation(fields: [agreementVersionId], references: [id], onDelete: Restrict)
+
+  @@index([agreementVersionId, acceptedAt], map: "idx_legal_acceptances_version_date")
+  @@index([userId, acceptedAt], map: "idx_legal_acceptances_user_date")
+  @@index([interpreterId, acceptedAt], map: "idx_legal_acceptances_interpreter_date")
+  @@map("legal_agreement_acceptances")
+  @@schema("public")
+}
