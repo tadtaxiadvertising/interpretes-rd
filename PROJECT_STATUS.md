@@ -78,9 +78,9 @@
 - [x] Proteger la validación de invitaciones por token/código contra carreras que podían reactivar sesiones terminales; PR #118 integrado tras CI #721 en éxito (incluye pruebas unitarias, build y E2E aislado).
 - [x] Completar la protección del endpoint legado `/api/roleplay/start` contra la misma carrera; PR #119 integrado tras CI #40359553135 en éxito.
 - [x] Proteger `startCandidateRoleplay` frente a carreras de estado terminal; PR #122 integrado con CI de PR y `main` en éxito.
-- [ ] Hacer idempotente el inicio simultáneo cuando todavía no existe una sesión activa; PR #123 incluye una restricción de base de datos y una prueba de regresión. La migración no se ha ejecutado contra producción.
+- [ ] Hacer idempotente el inicio simultáneo cuando todavía no existe una sesión activa. PR #123 añadió la restricción y prueba, pero su CI falló por usar `PENDING`, que no pertenece al enum `RoleplayStatus`. PR #124 corrige el estado a `SUBMITTED`; validar el CI completo antes de considerar resuelto el hallazgo. La migración no se ha ejecutado contra producción.
 - [x] Proteger `startCandidateRoleplay` contra carreras que reactivan sesiones terminales; PR #122 integrado y CI de PR y de `main` en éxito.
-- [ ] Evitar sesiones activas duplicadas cuando dos inicios de candidato ocurren sin sesión previa; PR #123 agrega índice único parcial y respuesta de conflicto. Validar CI y revisar/aplicar la migración de forma controlada por entorno.
+- [ ] Evitar sesiones activas duplicadas cuando dos inicios de candidato ocurren sin sesión previa. PR #123 se integró, pero su CI falló al aplicar el índice porque el predicado usaba `PENDING`, un valor inexistente en el enum `RoleplayStatus`. PR #124 corrige el predicado para usar `SUBMITTED`, estado existente, y alinea esquema y migración. No aplicar la migración a producción hasta que el CI completo pase y se revise la presencia de duplicados activos.
 
 ### Criterio de cierre
 
