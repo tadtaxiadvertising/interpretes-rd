@@ -417,7 +417,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
     const isAuthJsUser = true;
     // Resolve linked Interpreter even when UserProfile.interpreter is absent.
     const onboardingInterpreter = resolvedInterpreterId
-      ? (profile?.interpreter?.id === resolvedInterpreterId
+      ? (profile?.interpreter && profile.interpreter.id === resolvedInterpreterId
         ? profile.interpreter
         : await prisma.interpreter.findUnique({
             where: { id: resolvedInterpreterId },
