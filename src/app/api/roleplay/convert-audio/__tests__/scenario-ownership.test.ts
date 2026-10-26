@@ -116,12 +116,27 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(m.storageUpload).toHaveBeenCalledTimes(1);
-    expect(m.queueMp3Conversion).toHaveBeenCalledWith(
-      'session-1',
-      'scenario-1',
-      'responses/session-1/scenario-1.webm',
+    expect(body.data.sourcePath).toMatch(/^responses\/session-1\/scenario-1\/[0-9a-f-]{36}\.webm$/i);
+    expect(m.storageUpload).toHaveBeenCalledWith(
+      body.data.sourcePath,
+      expect.any(File),
+      expect.objectContaining({ contentType: 'audio/webm', upsert: false }),
     );
+    expect(m.queueMp3Conversion).not.toHaveBeenCalled();
   });
+  it('uses a different immutable object path for each upload attempt', async () => {
+    const first = await POST(makeRequest({ cookie: 'session-1' }));
+    const second = await POST(makeRequest({ cookie: 'session-1' }));
+    const firstBody = await first.json();
+    const secondBody = await second.json();
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(firstBody.data.sourcePath).not.toBe(secondBody.data.sourcePath);
+    expect(m.storageUpload).toHaveBeenNthCalledWith(1, firstBody.data.sourcePath, expect.any(File), expect.objectContaining({ upsert: false }));
+    expect(m.storageUpload).toHaveBeenNthCalledWith(2, secondBody.data.sourcePath, expect.any(File), expect.objectContaining({ upsert: false }));
+  });
+
   it.each([
     ['audio/mpeg', 'response.mp3', 'mp3'],
     ['audio/ogg', 'response.ogg', 'ogg'],
@@ -132,11 +147,11 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
 
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
-    expect(body.data.sourcePath).toBe(`responses/session-1/scenario-1.${extension}`);
+    expect(body.data.sourcePath).toMatch(new RegExp(`^responses/session-1/scenario-1/[0-9a-f-]{36}\\.${extension}$`, 'i'));
     expect(m.storageUpload).toHaveBeenCalledWith(
-      `responses/session-1/scenario-1.${extension}`,
+      body.data.sourcePath,
       expect.any(File),
-      expect.objectContaining({ contentType: mime, upsert: true }),
+      expect.objectContaining({ contentType: mime, upsert: false }),
     );
     expect(m.queueMp3Conversion).not.toHaveBeenCalled();
   });

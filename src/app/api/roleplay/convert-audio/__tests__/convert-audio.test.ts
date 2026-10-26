@@ -57,17 +57,18 @@ beforeEach(() => {
 });
 
 describe('convertAndStoreMp3', () => {
-  it('persists processedAudioPath on the response identified by scenarioId, not by order', async () => {
-    await convertAndStoreMp3(SESSION_ID, SCENARIO_ID, `responses/${SESSION_ID}/${SCENARIO_ID}.webm`);
+  it('persists processedAudioPath only on the response for the exact upload attempt', async () => {
+    const sourcePath = `responses/${SESSION_ID}/${SCENARIO_ID}/00000000-0000-4000-8000-000000000001.webm`;
+    await convertAndStoreMp3(SESSION_ID, SCENARIO_ID, sourcePath);
 
     expect(mockUpdateMany).toHaveBeenCalledTimes(1);
     const arg = mockUpdateMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ scenarioId: SCENARIO_ID });
+    expect(arg.where).toEqual({ scenarioId: SCENARIO_ID, sourceAudioPath: sourcePath });
     // The old bug derived `order` from a cuid (always 0); ensure no such filter.
     expect(arg.where).not.toHaveProperty('order');
     expect(arg.where).not.toHaveProperty('scenario');
     expect(arg.data).toEqual({
-      processedAudioPath: `responses/${SESSION_ID}/${SCENARIO_ID}.mp3`,
+      processedAudioPath: sourcePath.replace(/\.webm$/i, '.mp3'),
       audioStatus: 'READY',
     });
   });
@@ -81,7 +82,7 @@ describe('convertAndStoreMp3', () => {
 
     expect(mockUpdateMany).toHaveBeenCalledTimes(1);
     const arg = mockUpdateMany.mock.calls[0][0];
-    expect(arg.where).toEqual({ scenarioId: SCENARIO_ID });
+    expect(arg.where).toEqual({ scenarioId: SCENARIO_ID, sourceAudioPath: 'responses/x/y.webm' });
     expect(arg.data.audioStatus).toBe('FAILED');
     expect(typeof arg.data.processingError).toBe('string');
   });

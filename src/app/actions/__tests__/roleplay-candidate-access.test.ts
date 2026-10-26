@@ -32,6 +32,8 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () => ({ user: m.actor, profile: m.actor }),
 }));
 
+vi.mock('@/lib/roleplay-audio-conversion', () => ({ queueMp3Conversion: vi.fn() }));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     recruitmentApplication: { findUnique: m.appFindUnique },
@@ -167,13 +169,13 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
       recordedAudioUrl: 'https://x/a.webm',
-      sourceAudioPath: 'responses/sess-cand/scn-1.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       durationSec: 42,
     });
 
     expect(res.success).toBe(true);
     expect(m.responseCreate).toHaveBeenCalledTimes(1);
-    expect(m.responseCreate.mock.calls[0][0].data.sourceAudioPath).toBe('responses/sess-cand/scn-1.webm');
+    expect(m.responseCreate.mock.calls[0][0].data.sourceAudioPath).toBe('responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm');
     expect(m.responseCreate.mock.calls[0][0].data.durationSec).toBe(42);
     expect(m.update).toHaveBeenCalledTimes(1);
     expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
