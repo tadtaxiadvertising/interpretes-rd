@@ -10,7 +10,7 @@ BEGIN
     INTO duplicate_candidate_id
   FROM public.roleplay_sessions
   WHERE recruitment_candidate_id IS NOT NULL
-    AND status IN ('DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING', 'UNDER_REVIEW')
+    AND status IN ('DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW')
   GROUP BY recruitment_candidate_id
   HAVING COUNT(*) > 1
   LIMIT 1;
@@ -26,6 +26,6 @@ $preflight$;
 CREATE UNIQUE INDEX IF NOT EXISTS roleplay_candidate_active_session_key
   ON public.roleplay_sessions (recruitment_candidate_id)
   WHERE recruitment_candidate_id IS NOT NULL
-    AND status IN ('DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING', 'UNDER_REVIEW');
+    AND status IN ('DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW');
 
 COMMIT;
