@@ -22,6 +22,11 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
+vi.mock('@/app/actions/legal-agreements', () => ({
+  hasCurrentLegalAcceptance: vi.fn(),
+  recordCurrentLegalAcceptance: vi.fn(),
+}));
+
 vi.mock('@/lib/cache/revalidate-interpreter', () => ({
   revalidateInterpreterProfileRecords: vi.fn(),
 }));
@@ -29,10 +34,13 @@ vi.mock('@/lib/cache/revalidate-interpreter', () => ({
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
+import { hasCurrentLegalAcceptance, recordCurrentLegalAcceptance } from '@/app/actions/legal-agreements';
 
 describe('Onboarding Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (hasCurrentLegalAcceptance as any).mockResolvedValue(true);
+    (recordCurrentLegalAcceptance as any).mockResolvedValue({ id: 'agreement-1', version: '2026-10-01' });
   });
 
   const mockAuthUser = {
@@ -59,7 +67,7 @@ describe('Onboarding Actions', () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
       (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: true });
 
-      const result = await acceptTerms();
+      const result = await acceptTerms('agreement-1');
 
       expect(result.success).toBe(false);
       expect(result.code).toBe('CONFLICT');
@@ -157,6 +165,7 @@ describe('Onboarding Actions', () => {
 
     it('rejects completion when terms or banking are missing', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
+      (hasCurrentLegalAcceptance as any).mockResolvedValue(false);
       (prisma.userProfile.findUnique as any).mockResolvedValue({
         onboardingComplete: false,
         termsAcceptedAt: null,
@@ -219,6 +228,7 @@ describe('Onboarding Actions', () => {
 
     it('returns incomplete for user without data', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
+      (hasCurrentLegalAcceptance as any).mockResolvedValue(false);
       (prisma.userProfile.findUnique as any).mockResolvedValue({
         termsAcceptedAt: null,
         bankName: null,
