@@ -305,7 +305,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                     if (line === '---') return <hr key={i} className="border-white/10 my-8" />;
                     if (line.trim() === '') return <div key={i} className="h-2" />;
                     return <p key={i} className="mb-2">{line}</p>;
-                  })} : <p className="text-slate-400">{error || 'Cargando acuerdo vigente…'}</p>}
+                  }) : <p className="text-slate-400">{error || 'Cargando acuerdo vigente…'}</p>}
                 </div>
 
                 {!hasScrolledToBottom && (
