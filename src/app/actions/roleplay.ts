@@ -12,6 +12,7 @@ import { cookies } from 'next/headers';
 import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
 import { calculateRoleplayScore } from '@/lib/roleplay/scoring';
 import { advanceApplication } from '@/services/recruitment/transitions';
+import { queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
 
 const db = prisma;
 
@@ -486,6 +487,12 @@ const ConfirmResponseSchema = z.object({
 
 export type ConfirmResponseInput = z.infer<typeof ConfirmResponseSchema>;
 
+function isCanonicalResponseAudioPath(path: string, sessionId: string, scenarioId: string): boolean {
+  const match = path.match(/^responses\/([^/]+)\/([^/]+)\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.(webm|mp4|ogg|mp3)$/i);
+  return !!match && match[1] === sessionId && match[2] === scenarioId;
+}
+
+
 export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   const auth = await validateAction('interpreter');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
@@ -493,6 +500,10 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   const parseResult = ConfirmResponseSchema.safeParse(rawInput);
   if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
+
+  if (input.sourceAudioPath && (!input.scenarioId || !isCanonicalResponseAudioPath(input.sourceAudioPath, input.sessionId, input.scenarioId))) {
+    return { success: false, error: 'Invalid response audio path', code: 'VALIDATION_ERROR' };
+  }
 
   const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
 
@@ -547,14 +558,16 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         // as an idempotent replay; never overwrite a confirmed response.
         const priorResponse = await tx.roleplayResponse.findFirst({
           where: { scenarioId: input.scenarioId },
-          select: { id: true, sourceAudioUrl: true },
+          select: { id: true, sourceAudioUrl: true, sourceAudioPath: true },
         });
         if (priorResponse) {
-          if (priorResponse.sourceAudioUrl === input.recordedAudioUrl) {
+          if (input.sourceAudioPath && priorResponse.sourceAudioPath === input.sourceAudioPath) {
             return {
               recordedAudioUrl: input.recordedAudioUrl,
               submitted: session.status === 'SUBMITTED',
               candidateId: session.recruitmentCandidateId,
+              sourceAudioPath: priorResponse.sourceAudioPath,
+              newlyCreated: false,
             };
           }
           throw new Error('Response already recorded for this scenario');
@@ -583,7 +596,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             select: { id: true },
           });
           if (recorded) {
-            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId };
+            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, newlyCreated: false };
           }
         }
         throw new Error('Session not available for submission');
@@ -606,6 +619,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             durationSec: input.durationSec ?? null,
             selfScore: input.selfScore ?? undefined,
             selfNotes: input.selfNotes ?? null,
+            audioStatus: input.sourceAudioPath?.endsWith('.webm') ? 'UPLOADED' : 'READY',
             submittedAt: new Date(),
           },
         });
@@ -651,8 +665,15 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         });
       }
 
-      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal, candidateId: session.recruitmentCandidateId };
+      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, newlyCreated: !!input.scenarioId };
     });
+
+    // Convert only after the response row commits, and scope conversion to this
+    // exact upload attempt. This prevents a stale upload/conversion from changing
+    // the processed audio associated with the response QA will evaluate.
+    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm') && input.scenarioId) {
+      queueMp3Conversion(input.sessionId, input.scenarioId, result.sourceAudioPath);
+    }
 
     // Pipeline bookkeeping: the final submit moves the application to review.
     // Guarded + best-effort; runs after the submit transaction so a pipeline
