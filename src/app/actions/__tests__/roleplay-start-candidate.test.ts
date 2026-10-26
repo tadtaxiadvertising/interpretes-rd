@@ -217,6 +217,19 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).toHaveBeenCalled();
   });
 
+  it('rejects a concurrent fresh-session creation conflict without issuing access or a cookie', async () => {
+    m.sessionFindFirst.mockResolvedValue(null);
+    m.sessionCreate.mockRejectedValue({ code: 'P2002', meta: { target: 'roleplay_candidate_active_session_key' } });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect('code' in res && res.code).toBe('CONFLICT');
+    expect(m.scenarioCreate).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
   it('creates a session, scenario, access row and cookie for a fresh candidate', async () => {
     const res = await startCandidateRoleplay();
 

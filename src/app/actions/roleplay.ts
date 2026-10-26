@@ -16,6 +16,11 @@ import { queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
 
 const db = prisma;
 
+function isUniqueConstraintConflict(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error &&
+    (error as { code?: unknown }).code === 'P2002';
+}
+
 const CreateRoleplaySessionSchema = z.object({
   interpreterId: z.number().int().positive().optional(),
   recruitmentCandidateId: z.number().int().positive().optional(),
@@ -345,14 +350,29 @@ export async function startCandidateRoleplay() {
         select: { id: true, status: true },
       });
     } else if (!previousSession) {
-      session = await db.roleplaySession.create({
-        data: {
-          recruitmentCandidateId: candidate.id,
-          baseAudioUrl: '',
-          status: 'STARTED',
-        },
-        select: { id: true, status: true },
-      });
+      try {
+        session = await db.roleplaySession.create({
+          data: {
+            recruitmentCandidateId: candidate.id,
+            baseAudioUrl: '',
+            status: 'STARTED',
+          },
+          select: { id: true, status: true },
+        });
+      } catch (error: unknown) {
+        // A partial unique index is the final arbiter for concurrent starts.
+        // Do not continue with the winner's session in this request: the winner
+        // may still be creating its initial scenario/access row. Ask the loser
+        // to refresh, so it cannot race the winner's initialization.
+        if (isUniqueConstraintConflict(error)) {
+          return {
+            success: false as const,
+            error: 'El roleplay acaba de iniciarse en otra solicitud. Actualiza la página para continuar.',
+            code: 'CONFLICT' as const,
+          };
+        }
+        throw error;
+      }
     } else {
       session = { id: previousSession.id, status: previousSession.status };
       if (['DRAFT', 'INVITED', 'PENDING'].includes(session.status)) {
