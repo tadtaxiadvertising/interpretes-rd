@@ -8,7 +8,7 @@ This platform uses a **decoupled two-service architecture**:
 
 | Service | Description | Tech |
 | :------ | :---------- | :--- |
-| `interpreters-os` | Main application: UI, Auth, Direct Data Access | Next.js 16, Prisma 7, Tailwind v4 |
+| `interpreters-os` | Main application: UI, Auth, Direct Data Access | Next.js 15.2.6, Prisma 7, Tailwind v4 |
 | `interpreters-api` | REST Service: Webhooks, External integrations | Next.js 16 API Routes, Prisma 7 |
 
 ### Dual-Service Synchronization in Easypanel

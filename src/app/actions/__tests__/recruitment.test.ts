@@ -227,6 +227,10 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect('applicationId' in result).toBe(false);
     expect('alreadyApplied' in result && result.alreadyApplied).toBe(true);
     expect(m.cookieSet).not.toHaveBeenCalled();
+    // The unverified submission must not create or mutate the linked interpreter.
+    expect(tx.interpreter.findFirst).not.toHaveBeenCalled();
+    expect(tx.interpreter.create).not.toHaveBeenCalled();
+    expect(tx.interpreter.update).not.toHaveBeenCalled();
 
     const updateData = tx.recruitmentCandidate.update.mock.calls[0][0].data;
     expect(updateData.name).toBeUndefined();

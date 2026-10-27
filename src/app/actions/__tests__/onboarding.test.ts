@@ -11,13 +11,14 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: vi.fn(),
       update: vi.fn(),
     },
-    interpreter: {
-      findUnique: vi.fn(),
-      update: vi.fn(),
-    },
+    interpreter: { findUnique: vi.fn(), update: vi.fn() },
+    legalAgreementVersion: { findFirst: vi.fn() },
+    legalAgreementAcceptance: { findFirst: vi.fn(), create: vi.fn() },
     $transaction: vi.fn((cb) => cb({
       userProfile: { update: vi.fn(), findUnique: vi.fn() },
       interpreter: { update: vi.fn(), findUnique: vi.fn() },
+      legalAgreementVersion: { findFirst: vi.fn().mockResolvedValue({ id: 'agreement-1', version: '2026-10-01', content: 'abc', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }) },
+      legalAgreementAcceptance: { findFirst: vi.fn().mockResolvedValue({ id: 'acceptance-1', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }), create: vi.fn() },
     })),
   },
 }));
@@ -33,6 +34,13 @@ import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-inte
 describe('Onboarding Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
+      id: 'agreement-1', version: '2026-10-01', content: 'abc',
+      contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    });
+    (prisma.legalAgreementAcceptance.findFirst as any).mockResolvedValue({
+      id: 'acceptance-1', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    });
   });
 
   const mockAuthUser = {
@@ -59,10 +67,31 @@ describe('Onboarding Actions', () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
       (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: true });
 
-      const result = await acceptTerms();
+      const result = await acceptTerms('agreement-1');
 
       expect(result.success).toBe(false);
       expect(result.code).toBe('CONFLICT');
+    });
+
+    it('treats a concurrent duplicate acceptance as success when the same version is already accepted', async () => {
+      (validateAction as any).mockResolvedValue(mockAuthResult);
+      (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: false });
+      (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
+        id: 'agreement-1',
+        version: '2026-10-01',
+        content: 'abc',
+        contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      });
+      (prisma.legalAgreementAcceptance.findFirst as any).mockResolvedValue({
+        id: 'acceptance-existing',
+        contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+      });
+      (prisma.$transaction as any).mockRejectedValue({ code: 'P2002', meta: { target: 'legal_acceptance_user_version_unique' } });
+
+      const result = await acceptTerms('agreement-1');
+
+      expect(result).toMatchObject({ success: true });
+      expect(revalidateInterpreterProfileRecords).toHaveBeenCalled();
     });
 
     it('records terms acceptance (with version) for Supabase user', async () => {
@@ -73,10 +102,12 @@ describe('Onboarding Actions', () => {
         cb({
           userProfile: { update: profileUpdate },
           interpreter: { findUnique: vi.fn(), update: vi.fn() },
+          legalAgreementVersion: { findFirst: vi.fn().mockResolvedValue({ id: 'agreement-1', version: '2026-10-01', content: 'abc', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }) },
+          legalAgreementAcceptance: { findFirst: vi.fn().mockResolvedValue({ id: 'acceptance-1', contentHash: 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad' }), create: vi.fn() },
         })
       );
 
-      const result = await acceptTerms();
+      const result = await acceptTerms('agreement-1');
 
       expect(result.success).toBe(true);
       expect(profileUpdate).toHaveBeenCalledWith({
@@ -157,6 +188,7 @@ describe('Onboarding Actions', () => {
 
     it('rejects completion when terms or banking are missing', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
+      (prisma.legalAgreementAcceptance.findFirst as any).mockResolvedValue(null);
       (prisma.userProfile.findUnique as any).mockResolvedValue({
         onboardingComplete: false,
         termsAcceptedAt: null,
@@ -219,6 +251,7 @@ describe('Onboarding Actions', () => {
 
     it('returns incomplete for user without data', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
+      (prisma.legalAgreementAcceptance.findFirst as any).mockResolvedValue(null);
       (prisma.userProfile.findUnique as any).mockResolvedValue({
         termsAcceptedAt: null,
         bankName: null,

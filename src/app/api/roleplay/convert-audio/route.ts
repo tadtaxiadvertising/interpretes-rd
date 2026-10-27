@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'node:crypto';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
-import { BUCKET, getSupabaseAdmin, queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
+import { BUCKET, getSupabaseAdmin } from '@/lib/roleplay-audio-conversion';
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_MIME_TYPES = [
@@ -124,22 +125,62 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: accessCheck.error }, { status: 403 });
     }
 
+    // The session cookie proves access to the session, not to an arbitrary
+    // scenario ID supplied in multipart form data. Bind the scenario to this
+    // session before constructing a storage path or accepting an upload.
+    const scenario = await prisma.roleplayScenario.findFirst({
+      where: { id: scenarioId, sessionId },
+      select: { id: true },
+    });
+    if (!scenario) {
+      return NextResponse.json(
+        { success: false, error: 'Scenario does not belong to this Roleplay session' },
+        { status: 404 }
+      );
+    }
+
+    // Once a response has been confirmed, its storage object is immutable.
+    // This prevents a repeated or stale upload from replacing the audio that QA
+    // will evaluate. Check before any storage write.
+    const confirmedResponse = await prisma.roleplayResponse.findUnique({
+      where: { scenarioId },
+      select: { id: true },
+    });
+    if (confirmedResponse) {
+      return NextResponse.json(
+        { success: false, error: 'Audio already confirmed for this scenario' },
+        { status: 409 }
+      );
+    }
+
     const validation = validateAudioFile(file);
     if (!validation.valid) {
       return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
     }
 
-    // Determine extension from MIME type
-    const ext = file.type.includes('webm') ? 'webm' : 
-                file.type.includes('mp4') ? 'mp4' :
-                file.type.includes('ogg') ? 'ogg' : 'webm';
-    
-    const sourcePath = `responses/${sessionId}/${scenarioId}.${ext}`;
-    
-    // Upload original WebM/Opus to Supabase (PRIMARY STORAGE)
+    // Keep the storage suffix aligned with the normalized MIME type.
+    // In particular, MPEG audio must be stored as .mp3, never mislabeled .webm.
+    const normalizedMime = normalizeMimeType(file.type);
+    const extensionByMime: Record<string, string> = {
+      'audio/webm': 'webm',
+      'audio/mp4': 'mp4',
+      'audio/ogg': 'ogg',
+      'audio/mpeg': 'mp3',
+    };
+    const ext = extensionByMime[normalizedMime];
+    if (!ext) {
+      return NextResponse.json({ success: false, error: 'Unsupported audio format' }, { status: 400 });
+    }
+
+    // Each upload attempt receives its own immutable object path. Concurrent or
+    // late uploads can no longer overwrite the audio selected for QA.
+    const uploadId = randomUUID();
+    const sourcePath = `responses/${sessionId}/${scenarioId}/${uploadId}.${ext}`;
+
+    // Upload original audio to Supabase (PRIMARY STORAGE)
     const { error: uploadError } = await getSupabaseAdmin().storage
       .from(BUCKET)
-      .upload(sourcePath, file, { contentType: file.type, upsert: true });
+      .upload(sourcePath, file, { contentType: file.type, upsert: false });
 
     if (uploadError) {
       return NextResponse.json({ success: false, error: 'Failed to upload original audio' }, { status: 500 });
@@ -156,12 +197,9 @@ export async function POST(req: NextRequest) {
 
     const playbackUrl = signedUrlData.signedUrl;
 
-    // Queue async MP3 conversion (non-blocking)
-    // Only if the original is WebM and we need MP3 for compatibility
-    const needsMp3 = file.type.includes('webm');
-    if (needsMp3) {
-      queueMp3Conversion(sessionId, scenarioId, sourcePath);
-    }
+    // Conversion starts only after the response is transactionally confirmed,
+    // so a stale upload cannot race with the response selected for evaluation.
+    const needsMp3 = normalizedMime === 'audio/webm';
 
     return NextResponse.json({ 
       success: true, 

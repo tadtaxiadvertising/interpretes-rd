@@ -30,6 +30,8 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () => ({ user: m.actor, profile: m.actor }),
 }));
 
+vi.mock('@/lib/roleplay-audio-conversion', () => ({ queueMp3Conversion: vi.fn() }));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: m.findUnique, update: m.update },
@@ -169,6 +171,47 @@ describe('roleplay: no scenario skipping', () => {
     expect(res.success).toBe(true);
     expect(m.update).toHaveBeenCalledTimes(1);
   });
+  it('treats a retry of the same confirmed audio as idempotent after the index advances', async () => {
+    m.session.currentScenarioIndex = 1;
+    m.scenarioFindFirst.mockImplementation(async (args: { where: { id?: string; order?: number } }) => {
+      if (args.where.order !== undefined) return SCENARIO_1;
+      return args.where.id === 'scn-0' ? SCENARIO_0 : null;
+    });
+    m.responseFindFirst.mockResolvedValue({
+      id: 'resp-1',
+      sourceAudioUrl: 'https://x/first.webm',
+    });
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-0',
+      recordedAudioUrl: 'https://x/first.webm',
+    });
+
+    expect(res.success).toBe(true);
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to replace a confirmed response with different audio', async () => {
+    m.responseFindFirst.mockResolvedValue({
+      id: 'resp-1',
+      sourceAudioUrl: 'https://x/original.webm',
+    });
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-0',
+      recordedAudioUrl: 'https://x/replacement.webm',
+    });
+
+    expect(res.success).toBe(false);
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
 
   it('confirmRoleplayResponse forbids a candidate from re-confirming a skipped scenario once submitted', async () => {
     m.session.status = 'SUBMITTED';

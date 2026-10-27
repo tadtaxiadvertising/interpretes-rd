@@ -34,11 +34,17 @@ async function main() {
   
   const rbacUsers = await db.rbacUser.findMany({ select: { id: true, email: true, name: true, role: true } });
   const userProfiles = await db.userProfile.findMany({ select: { id: true, email: true, displayName: true, role: true, interpreterId: true, onboardingComplete: true } });
-  const interpreters = await db.interpreter.findMany({ select: { id: true, emailCorporativo: true, name: true, status: true, documentosCompleto: true } });
-  const candidates = await db.recruitmentCandidate.findMany({ select: { id: true, email: true, name: true, status: true } });
+  const interpreters = await db.interpreter.findMany({ select: { id: true, emailCorporativo: true, name: true, status: true, documentosCompleto: true, banco: true, cuentaPago: true, cedulaRnc: true } });
+  const candidates = await db.recruitmentCandidate.findMany({ select: { id: true, email: true, name: true } });
 
   // Normalize emails to lowercase for comparison
-  const allEmails = new Map<string, { rbac?: any; profile?: any; interpreter?: any; candidate?: any }>();
+  type EmailSources = {
+    rbac?: (typeof rbacUsers)[number];
+    profile?: (typeof userProfiles)[number];
+    interpreter?: (typeof interpreters)[number];
+    candidate?: (typeof candidates)[number];
+  };
+  const allEmails = new Map<string, EmailSources>();
   
   for (const u of rbacUsers) {
     const key = u.email.toLowerCase().trim();
@@ -64,7 +70,7 @@ async function main() {
   }
 
   const duplicateEmails = Array.from(allEmails.entries()).filter(([, v]) => {
-    const sources = Object.keys(v).filter(k => v[k]);
+    const sources = Object.entries(v).filter(([, value]) => Boolean(value)).map(([key]) => key);
     return sources.length > 1;
   });
 
@@ -72,9 +78,8 @@ async function main() {
     category: 'Email Duplicates Across Tables',
     severity: duplicateEmails.length > 0 ? 'CRITICAL' : 'INFO',
     count: duplicateEmails.length,
-    details: duplicateEmails.map(([email, v]) => ({
-      email,
-      sources: Object.keys(v).filter(k => v[k]),
+    details: duplicateEmails.map(([, v]) => ({
+      sources: Object.entries(v).filter(([, value]) => Boolean(value)).map(([key]) => key),
       rbac: v.rbac?.id,
       profile: v.profile?.id,
       interpreter: v.interpreter?.id,
@@ -93,7 +98,7 @@ async function main() {
     category: 'Orphaned UserProfiles (no interpreterId)',
     severity: orphanedProfiles.length > 0 ? 'WARNING' : 'INFO',
     count: orphanedProfiles.length,
-    details: orphanedProfiles,
+    details: orphanedProfiles.map(p => ({ id: p.id, role: p.role, hasDisplayName: Boolean(p.displayName), createdAt: p.createdAt })),
   });
 
   // ── 3. Orphaned Interpreters (no UserProfile linking to them) ──
@@ -105,7 +110,7 @@ async function main() {
     category: 'Orphaned Interpreters (no UserProfile link)',
     severity: orphanedInterpreters.length > 0 ? 'WARNING' : 'INFO',
     count: orphanedInterpreters.length,
-    details: orphanedInterpreters.map(i => ({ id: i.id, name: i.name, email: i.emailCorporativo, status: i.status, documentosCompleto: i.documentosCompleto })),
+    details: orphanedInterpreters.map(i => ({ id: i.id, status: i.status, documentosCompleto: i.documentosCompleto })),
   });
 
   // ── 4. rbac_users without matching UserProfile ──
@@ -117,7 +122,7 @@ async function main() {
     category: 'rbac_users without UserProfile',
     severity: rbacWithoutProfile.length > 0 ? 'WARNING' : 'INFO',
     count: rbacWithoutProfile.length,
-    details: rbacWithoutProfile.map(u => ({ id: u.id, email: u.email, name: u.name, role: u.role })),
+    details: rbacWithoutProfile.map(u => ({ id: u.id, role: u.role })),
   });
 
   // ── 5. UserProfiles without matching rbac_user ──
@@ -129,7 +134,7 @@ async function main() {
     category: 'UserProfiles without rbac_user',
     severity: profilesWithoutRbac.length > 0 ? 'INFO' : 'INFO',
     count: profilesWithoutRbac.length,
-    details: profilesWithoutRbac.map(p => ({ id: p.id, email: p.email, displayName: p.displayName, role: p.role })),
+    details: profilesWithoutRbac.map(p => ({ id: p.id, role: p.role, hasDisplayName: Boolean(p.displayName), interpreterId: p.interpreterId })),
   });
 
   // ── 6. onboardingComplete = true but missing required data ──
@@ -143,7 +148,7 @@ async function main() {
     category: 'onboardingComplete=true but missing data',
     severity: incompleteCompleted.length > 0 ? 'CRITICAL' : 'INFO',
     count: incompleteCompleted.length,
-    details: incompleteCompleted.map(p => ({ id: p.id, email: p.email, displayName: p.displayName, role: p.role, interpreterId: p.interpreterId })),
+    details: incompleteCompleted.map(p => ({ id: p.id, role: p.role, hasDisplayName: Boolean(p.displayName), interpreterId: p.interpreterId })),
   });
 
   // ── 7. Interpreters with documentosCompleto=true but missing payment info ──
@@ -157,7 +162,7 @@ async function main() {
     category: 'Interpreters documentosCompleto=true but missing payment data',
     severity: incompleteInterpreters.length > 0 ? 'WARNING' : 'INFO',
     count: incompleteInterpreters.length,
-    details: incompleteInterpreters.map(i => ({ id: i.id, name: i.name, email: i.emailCorporativo, banco: i.banco, cuentaPago: i.cuentaPago ? 'SET' : 'MISSING', cedulaRnc: i.cedulaRnc })),
+    details: incompleteInterpreters.map(i => ({ id: i.id, missingBank: !i.banco, missingAccount: !i.cuentaPago, missingTaxId: !i.cedulaRnc })),
   });
 
   // ── 8. Email case sensitivity issues ──
@@ -171,7 +176,7 @@ async function main() {
     rbacEmailCounts.set(key, (rbacEmailCounts.get(key) || 0) + 1);
   }
   for (const [email, count] of rbacEmailCounts) {
-    if (count > 1) caseIssues.push({ table: 'rbac_users', email, count });
+    if (count > 1) caseIssues.push({ table: 'rbac_users', count });
   }
   
   // Check user_profiles
@@ -181,7 +186,7 @@ async function main() {
     profileEmailCounts.set(key, (profileEmailCounts.get(key) || 0) + 1);
   }
   for (const [email, count] of profileEmailCounts) {
-    if (count > 1) caseIssues.push({ table: 'user_profiles', email, count });
+    if (count > 1) caseIssues.push({ table: 'user_profiles', count });
   }
 
   // Check interpreters
@@ -193,7 +198,7 @@ async function main() {
     }
   }
   for (const [email, count] of interpEmailCounts) {
-    if (count > 1) caseIssues.push({ table: 'interpreters', email, count });
+    if (count > 1) caseIssues.push({ table: 'interpreters', count });
   }
 
   results.push({

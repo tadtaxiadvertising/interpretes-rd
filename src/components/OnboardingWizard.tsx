@@ -4,52 +4,8 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FileText, CreditCard, Compass, ChevronRight, ChevronLeft, Check, Loader2, Sparkles, ChevronDown, AlertCircle, ShieldCheck, PartyPopper } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { acceptTerms, saveBankingDetails, completeOnboarding } from '@/app/actions/onboarding';
+import { getPublishedLegalAgreement } from '@/app/actions/legal-agreements';
 import { BankFormRD, type BankFormData, isBankFormValid } from './BankFormRD';
-
-// ── Freelance Contract content (embedded so it works offline) ──
-const LEGAL_CONTENT = `# Contrato de Prestación de Servicios Profesionales (Freelance)
-
-**ENTRE:**
-
-De una parte, **FREE INTERPRETERS**, en adelante denominada "LA AGENCIA".
-
-Y de la otra parte, **[SU NOMBRE]**, en adelante denominado "EL INTÉRPRETE".
-
-**ACUERDAN LO SIGUIENTE:**
-
-### 1. Objeto del Contrato
-LA AGENCIA contrata a EL INTÉRPRETE para prestar servicios de interpretación remota (VRI/OPI) de manera independiente y autónoma.
-
-### 2. Naturaleza de la Relación
-Las partes reconocen que este es un contrato de servicios profesionales (freelance) y **NO** crea una relación laboral de dependencia, sociedad o asociación. EL INTÉRPRETE actúa como contratista independiente.
-
-### 3. Obligaciones del Intérprete
-- Prestar servicios de interpretación con los más altos estándares de calidad, precisión y ética profesional.
-- Cumplir con los horarios y turnos acordados previamente.
-- Contar con el equipo técnico necesario (computadora, headset, conexión a internet estable y entorno silencioso).
-- Mantener la confidencialidad absoluta de toda la información tratada durante las sesiones de interpretación.
-- Seguir los Procedimientos Operativos Estándar (SOPs) y políticas de LA AGENCIA.
-
-### 4. Confidencialidad y Protección de Datos
-EL INTÉRPRETE se compromete a no divulgar, copiar ni utilizar para fines propios o de terceros ninguna información confidencial de LA AGENCIA o de sus clientes finales (incluyendo información médica, legal o financiera), cumpliendo con las normativas HIPAA y otras leyes aplicables.
-
-### 5. Honorarios y Forma de Pago
-- **Tarifa:** Se pagará una tarifa según el esquema de producción acordado.
-- **Plataformas:** Los pagos se procesarán según el SOP de Pagos vigente.
-- **Frecuencia:** Los pagos se realizarán según la validación de los reportes de producción.
-
-### 6. Vigencia y Terminación
-Este contrato tiene una vigencia indefinida a partir de la fecha de firma. Cualquiera de las partes puede terminar este contrato con aviso previo por escrito. LA AGENCIA puede terminar el contrato inmediatamente en caso de incumplimiento grave.
-
-### 7. Penalidades
-El incumplimiento de los turnos asignados, problemas recurrentes de calidad o faltas al reglamento interno estarán sujetos a penalidades conforme al "Formato de Penalidades" y "SOP de Penalidades" de LA AGENCIA.
-
-### 8. Ley Aplicable
-Este contrato se rige por las leyes vigentes en la República Dominicana.
-
----
-
-Al continuar, usted acepta todos los términos y condiciones establecidos en este documento.`;
 
 const STEPS = [
   { id: 'legal', label: 'Acuerdo', icon: FileText },
@@ -71,6 +27,15 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [agreement, setAgreement] = useState<{
+    id: string;
+    version: string;
+    title: string;
+    content: string;
+    contentHash: string;
+    publishedAt: Date | null;
+  } | null>(null);
+
 
   // Step 1 – Legal
   const [hasScrolledToBottom, setHasScrolledToBottom] = useState(false);
@@ -87,6 +52,21 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
   // Step 3 – Tutorial
   const [tutorialStep, setTutorialStep] = useState(0);
 
+  useEffect(() => {
+    let active = true;
+    getPublishedLegalAgreement().then((result) => {
+      if (!active) return;
+      if (result.success) {
+        setAgreement(result.data);
+      } else {
+        setError(result.error);
+      }
+    }).catch(() => {
+      if (active) setError('No se pudo cargar el acuerdo vigente.');
+    });
+    return () => { active = false; };
+  }, []);
+
   // ── Scroll detection for legal step ──
   const handleScroll = useCallback(() => {
     const el = scrollBoxRef.current;
@@ -97,19 +77,23 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
 
   useEffect(() => {
     const el = scrollBoxRef.current;
-    if (currentStep === 0 && el) {
+    if (currentStep === 0 && el && agreement) {
       el.addEventListener('scroll', handleScroll);
       if (el.scrollHeight <= el.clientHeight) setHasScrolledToBottom(true);
       return () => el.removeEventListener('scroll', handleScroll);
     }
-  }, [currentStep, handleScroll]);
+  }, [currentStep, handleScroll, agreement?.id]);
 
   // ── Step handlers ──
   async function handleNextLegal() {
     setError(null);
+    if (!agreement) {
+      setError('El acuerdo vigente todavía no está disponible. Recarga la página o contacta al administrador.');
+      return;
+    }
     setIsLoading(true);
     try {
-      const result = await acceptTerms();
+      const result = await acceptTerms(agreement.id);
       if (result.success) {
         setCurrentStep(1);
       } else if (result.code === 'CONFLICT') {
@@ -303,11 +287,17 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                   </p>
                 </div>
 
+                {agreement && (
+                  <div className="mb-3 flex items-center justify-between gap-3 text-xs">
+                    <span className="text-slate-300 font-semibold">{agreement.title}</span>
+                    <span className="shrink-0 rounded-full bg-blue-500/10 border border-blue-500/20 px-3 py-1 text-blue-300">Versión {agreement.version}</span>
+                  </div>
+                )}
                 <div
                   ref={scrollBoxRef}
                   className="bg-slate-950/80 border border-white/5 rounded-3xl p-8 text-slate-300 leading-relaxed text-sm prose prose-invert max-w-none h-[280px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800"
                 >
-                  {LEGAL_CONTENT.split('\n').map((line, i) => {
+                  {agreement ? agreement.content.split('\n').map((line, i) => {
                     if (line.startsWith('# ')) return <h1 key={i} className="text-2xl font-black text-white mb-6">{line.replace('# ', '')}</h1>;
                     if (line.startsWith('### ')) return <h3 key={i} className="text-lg font-bold text-blue-400 mt-8 mb-4">{line.replace('### ', '')}</h3>;
                     if (line.startsWith('**') && line.endsWith('**')) return <p key={i} className="font-bold text-slate-100 my-2">{line.replace(/\*\*/g, '')}</p>;
@@ -315,7 +305,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                     if (line === '---') return <hr key={i} className="border-white/10 my-8" />;
                     if (line.trim() === '') return <div key={i} className="h-2" />;
                     return <p key={i} className="mb-2">{line}</p>;
-                  })}
+                  }) : <p className="text-slate-400">{error || 'Cargando acuerdo vigente…'}</p>}
                 </div>
 
                 {!hasScrolledToBottom && (

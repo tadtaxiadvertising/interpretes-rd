@@ -5,7 +5,8 @@ const m = vi.hoisted(() => ({
   findUnique: vi.fn(),
   accessUpdate: vi.fn(),
   accessUpdateMany: vi.fn(),
-  sessionUpdate: vi.fn(),
+  sessionUpdateMany: vi.fn(),
+  sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
 }));
 
@@ -16,7 +17,7 @@ vi.mock('@/lib/prisma', () => ({
       update: m.accessUpdate,
       updateMany: m.accessUpdateMany,
     },
-    roleplaySession: { update: m.sessionUpdate },
+    roleplaySession: { updateMany: m.sessionUpdateMany, findUnique: m.sessionFindUnique },
   },
 }));
 
@@ -53,7 +54,8 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     m.findUnique.mockImplementation(async () => m.access);
     m.accessUpdate.mockResolvedValue({ id: 'acc-1' });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
-    m.sessionUpdate.mockResolvedValue({ id: 'sess-1', status: 'STARTED' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 1 });
+    m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
   });
 
   it('rejects an unknown or expired invitation without binding a cookie', async () => {
@@ -82,8 +84,8 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     expect(body.success).toBe(true);
     expect(body.data.sessionId).toBe('sess-1');
     expect(m.setCookie).toHaveBeenCalledWith('sess-1');
-    expect(m.sessionUpdate).toHaveBeenCalledWith({
-      where: { id: 'sess-1' },
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'sess-1', status: 'DRAFT' },
       data: { status: 'STARTED' },
     });
     // Consumption is a later step: usedAt must not be written here.
@@ -100,6 +102,37 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
 
     expect(res.status).toBe(200);
     expect(m.setCookie).toHaveBeenCalledWith('sess-1');
-    expect(m.sessionUpdate).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
   });
+  it('does not overwrite a terminal state if it changes after invitation lookup', async () => {
+    m.sessionUpdateMany.mockResolvedValue({ count: 0 });
+    m.sessionFindUnique.mockResolvedValue({ status: 'SUBMITTED' });
+
+    const res = await POST(makeRequest('ABCD1234'));
+    const body = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(body.success).toBe(false);
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'sess-1', status: 'DRAFT' },
+      data: { status: 'STARTED' },
+    });
+    expect(m.setCookie).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+  });
+
+  it('resumes if a concurrent request already started the session', async () => {
+    m.sessionUpdateMany.mockResolvedValue({ count: 0 });
+    m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+
+    const res = await POST(makeRequest('ABCD1234'));
+
+    expect(res.status).toBe(200);
+    expect(m.setCookie).toHaveBeenCalledWith('sess-1');
+    expect(m.accessUpdate).toHaveBeenCalledWith({
+      where: { id: 'acc-1' },
+      data: { validatedAt: expect.any(Date) },
+    });
+  });
+
 });

@@ -117,7 +117,7 @@ describe('Admin Onboarding Actions', () => {
   });
 
   describe('adminUpdateOnboardingDetails', () => {
-    it('drives onboarding state: mirrors banking data onto the profile and the linked interpreter', async () => {
+    it('updates banking data without fabricating onboarding or document completion', async () => {
       const tx = mockTransaction();
 
       const result = await adminUpdateOnboardingDetails({
@@ -137,7 +137,6 @@ describe('Admin Onboarding Actions', () => {
             bankAccount: '9876543210',
             bankAccountType: 'Corriente',
             bankCedula: '002-7654321-0',
-            onboardingComplete: true,
           }),
         })
       );
@@ -149,10 +148,13 @@ describe('Admin Onboarding Actions', () => {
             cuentaPago: '9876543210',
             tipoCuenta: 'Corriente',
             cedulaRnc: '002-7654321-0',
-            documentosCompleto: true,
           }),
         })
       );
+      const profileUpdateData = (tx.userProfile.update.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      const interpreterUpdateData = (tx.interpreter.update.mock.calls[0][0] as { data: Record<string, unknown> }).data;
+      expect(profileUpdateData).not.toHaveProperty('onboardingComplete');
+      expect(interpreterUpdateData).not.toHaveProperty('documentosCompleto');
     });
 
     it('revalidates every surface that renders this data', async () => {

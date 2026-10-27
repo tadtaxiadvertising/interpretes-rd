@@ -25,8 +25,8 @@ async function main() {
   // Fetch all roleplay sessions with relations
   const sessions = await db.roleplaySession.findMany({
     include: {
-      interpreter: { select: { id: true, name: true, emailCorporativo: true } },
-      recruitmentCandidate: { select: { id: true, name: true, email: true } },
+      interpreter: { select: { id: true } },
+      recruitmentCandidate: { select: { id: true } },
       access: true,
       scenarios: {
         include: { responses: true }
@@ -61,7 +61,8 @@ async function main() {
 
   const duplicateInterpreterSessions: typeof sessions = [];
   for (const [id, sess] of interpreterSessions) {
-    const active = sess.filter(s => ['PENDING', 'EVALUATED'].includes(s.status));
+    const activeStatuses: readonly string[] = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW'];
+    const active = sess.filter(s => activeStatuses.includes(s.status));
     if (active.length > 1) {
       duplicateInterpreterSessions.push(...active);
     }
@@ -69,26 +70,24 @@ async function main() {
 
   const duplicateCandidateSessions: typeof sessions = [];
   for (const [id, sess] of candidateSessions) {
-    const active = sess.filter(s => ['PENDING', 'EVALUATED'].includes(s.status));
+    const activeStatuses: readonly string[] = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW'];
+    const active = sess.filter(s => activeStatuses.includes(s.status));
     if (active.length > 1) {
       duplicateCandidateSessions.push(...active);
     }
   }
 
   // ── 3. State consistency checks ──
-  const pendingWithoutAccess = sessions.filter(s => s.status === 'PENDING' && !s.access);
-  const pendingWithUsedAccess = sessions.filter(s => s.status === 'PENDING' && s.access?.usedAt);
+  const pendingWithoutAccess = sessions.filter(s => s.status === 'INVITED' && !s.access);
+  const pendingWithUsedAccess = sessions.filter(s => s.status === 'INVITED' && s.access?.usedAt);
   const evaluatedWithoutQA = sessions.filter(s => s.status === 'EVALUATED' && !s.qaScoreId);
-  const pendingWithQA = sessions.filter(s => s.status === 'PENDING' && s.qaScoreId);
+  const invitedWithQA = sessions.filter(s => s.status === 'INVITED' && s.qaScoreId);
   const submittedWithoutRecordedAudio = sessions.filter(s => s.submittedAt && !s.recordedAudioUrl);
   const withRecordedAudioButNotSubmitted = sessions.filter(s => s.recordedAudioUrl && !s.submittedAt);
 
   // ── 4. Access token checks ──
   const expiredAccess = sessions.filter(s => s.access && s.access.expiresAt < new Date() && !s.access.usedAt);
-  const accessWithoutSession = await db.roleplayAccess.findMany({
-    where: { session: null },
-    select: { id: true, sessionId: true, expiresAt: true, usedAt: true }
-  });
+  // RoleplayAccess.session is a required FK with ON DELETE CASCADE; an orphan cannot be represented by this Prisma relation.
 
   // ── 5. Scenario/Response completeness ──
   const sessionsWithScenarios = sessions.filter(s => s.scenarios.length > 0);
@@ -97,9 +96,9 @@ async function main() {
     s.scenarios.length > 0 && s.scenarios.some(sc => !sc.responses || sc.responses.length === 0)
   );
 
-  // ── 6. Old PENDING sessions (potential abandonment) ──
+  // ── 6. Old INVITED sessions (potential abandonment) ──
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-  const oldPending = sessions.filter(s => s.status === 'PENDING' && s.createdAt < thirtyDaysAgo);
+  const oldPending = sessions.filter(s => s.status === 'INVITED' && s.createdAt < thirtyDaysAgo);
 
   // ── 7. Status distribution ──
   const statusDist: Record<string, number> = {};
@@ -129,13 +128,13 @@ async function main() {
   if (duplicateInterpreterSessions.length > 0) {
     console.log(`  Duplicate active sessions for same interpreter: ${duplicateInterpreterSessions.length}`);
     for (const s of duplicateInterpreterSessions) {
-      console.log(`    ${s.id} - interpreter: ${s.interpreterId} (${s.interpreter?.name}) - status: ${s.status}`);
+      console.log(`    ${s.id} - interpreter: ${s.interpreterId} (interpreter id ${s.interpreterId}) - status: ${s.status}`);
     }
   }
   if (duplicateCandidateSessions.length > 0) {
     console.log(`  Duplicate active sessions for same candidate: ${duplicateCandidateSessions.length}`);
     for (const s of duplicateCandidateSessions) {
-      console.log(`    ${s.id} - candidate: ${s.recruitmentCandidateId} (${s.recruitmentCandidate?.name}) - status: ${s.status}`);
+      console.log(`    ${s.id} - candidate: ${s.recruitmentCandidateId} (candidate id ${s.recruitmentCandidateId}) - status: ${s.status}`);
     }
   }
   if (evaluatedWithoutQA.length > 0) {
@@ -144,22 +143,22 @@ async function main() {
       console.log(`    ${s.id} - status: ${s.status}, qaScoreId: ${s.qaScoreId}`);
     }
   }
-  if (pendingWithQA.length > 0) {
-    console.log(`  PENDING sessions WITH QA score (inconsistent): ${pendingWithQA.length}`);
-    for (const s of pendingWithQA) {
+  if (invitedWithQA.length > 0) {
+    console.log(`  INVITED sessions WITH QA score (inconsistent): ${invitedWithQA.length}`);
+    for (const s of invitedWithQA) {
       console.log(`    ${s.id} - status: ${s.status}, qaScoreId: ${s.qaScoreId}`);
     }
   }
 
   console.log('\n🟡 WARNINGS:');
   if (pendingWithoutAccess.length > 0) {
-    console.log(`  PENDING sessions WITHOUT access token: ${pendingWithoutAccess.length}`);
+    console.log(`  INVITED sessions WITHOUT access token: ${pendingWithoutAccess.length}`);
     for (const s of pendingWithoutAccess.slice(0, 10)) {
       console.log(`    ${s.id} - target: ${s.interpreterId ? 'interp:' + s.interpreterId : 'cand:' + s.recruitmentCandidateId}`);
     }
   }
   if (pendingWithUsedAccess.length > 0) {
-    console.log(`  PENDING sessions with USED access token (should be STARTED/IN_PROGRESS): ${pendingWithUsedAccess.length}`);
+    console.log(`  INVITED sessions with USED access token (should be STARTED/IN_PROGRESS): ${pendingWithUsedAccess.length}`);
   }
   if (submittedWithoutRecordedAudio.length > 0) {
     console.log(`  Sessions with submittedAt but NO recordedAudioUrl: ${submittedWithoutRecordedAudio.length}`);
@@ -170,9 +169,6 @@ async function main() {
   if (expiredAccess.length > 0) {
     console.log(`  Sessions with EXPIRED access tokens (unused): ${expiredAccess.length}`);
   }
-  if (accessWithoutSession.length > 0) {
-    console.log(`  Orphaned RoleplayAccess records (no session): ${accessWithoutSession.length}`);
-  }
   if (sessionsWithoutScenarios.length > 0) {
     console.log(`  Sessions WITHOUT scenarios: ${sessionsWithoutScenarios.length}`);
   }
@@ -180,7 +176,7 @@ async function main() {
     console.log(`  Sessions with INCOMPLETE scenario responses: ${incompleteResponses.length}`);
   }
   if (oldPending.length > 0) {
-    console.log(`  PENDING sessions older than 30 days (potential abandonment): ${oldPending.length}`);
+    console.log(`  INVITED sessions older than 30 days (potential abandonment): ${oldPending.length}`);
   }
 
   console.log('\n🟢 INFO:');
@@ -212,7 +208,7 @@ async function main() {
         duplicateInterpreterSessions: duplicateInterpreterSessions.length,
         duplicateCandidateSessions: duplicateCandidateSessions.length,
         evaluatedWithoutQA: evaluatedWithoutQA.length,
-        pendingWithQA: pendingWithQA.length,
+        invitedWithQA: invitedWithQA.length,
       },
       warnings: {
         pendingWithoutAccess: pendingWithoutAccess.length,
@@ -220,7 +216,7 @@ async function main() {
         submittedWithoutRecordedAudio: submittedWithoutRecordedAudio.length,
         withRecordedAudioButNotSubmitted: withRecordedAudioButNotSubmitted.length,
         expiredAccess: expiredAccess.length,
-        orphanedAccess: accessWithoutSession.length,
+        
         sessionsWithoutScenarios: sessionsWithoutScenarios.length,
         incompleteResponses: incompleteResponses.length,
         oldPending: oldPending.length,
@@ -233,7 +229,7 @@ async function main() {
       duplicateCandidateSessions: duplicateCandidateSessions.map(s => ({ id: s.id, candidateId: s.recruitmentCandidateId, status: s.status })),
       pendingWithoutAccess: pendingWithoutAccess.map(s => ({ id: s.id, status: s.status })),
       evaluatedWithoutQA: evaluatedWithoutQA.map(s => ({ id: s.id, status: s.status })),
-      pendingWithQA: pendingWithQA.map(s => ({ id: s.id, status: s.status, qaScoreId: s.qaScoreId })),
+      invitedWithQA: invitedWithQA.map(s => ({ id: s.id, status: s.status, qaScoreId: s.qaScoreId })),
     },
   };
   fs.writeFileSync('audit-roleplays-report.json', JSON.stringify(report, null, 2));

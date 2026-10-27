@@ -5,6 +5,7 @@ import type { ActionResult } from '@/lib/types';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
+import { hasCurrentLegalAcceptance, recordCurrentLegalAcceptance } from '@/app/actions/legal-agreements';
 
 const db = prisma;
 
@@ -14,10 +15,8 @@ const CEDULA_REGEX = /^\d{3}-\d{7}-\d{1}$/;
  * Version of the legal agreement presented during onboarding. Bump this when
  * the contract text changes so the accepted version is traceable per user.
  */
-const TERMS_VERSION = '2026-10-01';
-
-function termsMarker(now: Date): string {
-  return `[TERMS_ACCEPTED] signed at ${now.toISOString()} (v${TERMS_VERSION})`;
+function termsMarker(now: Date, version: string): string {
+  return `[TERMS_ACCEPTED] signed at ${now.toISOString()} (v${version})`;
 }
 
 const BankingDetailsSchema = z.object({
@@ -31,7 +30,7 @@ const BankingDetailsSchema = z.object({
  * Accept legal terms — records the signatureDate on the user's profile.
  * GUARD: Rejects if onboarding is already complete (canonical state).
  */
-export async function acceptTerms(): Promise<ActionResult> {
+export async function acceptTerms(expectedAgreementId: string): Promise<ActionResult> {
   const auth = await validateAction();
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
@@ -61,49 +60,57 @@ export async function acceptTerms(): Promise<ActionResult> {
     const now = new Date();
     let changedInterpreterId = actor.interpreterId ?? null;
 
+    if (!expectedAgreementId || expectedAgreementId.length > 100) {
+      return { success: false, error: 'Actualiza la página y vuelve a revisar el acuerdo vigente.', code: 'VALIDATION_ERROR' };
+    }
+
     if (isAuthJsUser) {
-      if (actor.interpreterId) {
-        const interpreter = await db.interpreter.findUnique({
-          where: { id: actor.interpreterId }
-        });
-        if (interpreter) {
-          const currentNotas = interpreter.notas || '';
-          if (!currentNotas.includes('[TERMS_ACCEPTED]')) {
-            changedInterpreterId = interpreter.id;
-            await db.interpreter.update({
-              where: { id: interpreter.id },
-              data: {
-                notas: `${currentNotas}\n${termsMarker(now)}`.trim()
-              },
-              select: { id: true }
-            });
-          }
-        }
+      if (!actor.interpreterId) {
+        return { success: false, error: 'No hay un perfil de intérprete vinculado a esta cuenta.', code: 'NOT_FOUND' };
       }
+      await db.$transaction(async (tx) => {
+        const current = await recordCurrentLegalAcceptance(tx, {
+          interpreterId: actor.interpreterId,
+          email: actor.email || 'unknown',
+        });
+        if (current.id !== expectedAgreementId) throw new Error('LEGAL_VERSION_CHANGED');
+        const interpreter = await tx.interpreter.findUnique({
+          where: { id: actor.interpreterId! },
+          select: { notas: true },
+        });
+        const notes = interpreter?.notas || '';
+        if (!notes.includes(`v${current.version}`)) {
+          await tx.interpreter.update({
+            where: { id: actor.interpreterId! },
+            data: { notas: `${notes}\n${termsMarker(now, current.version)}`.trim() },
+            select: { id: true },
+          });
+        }
+        changedInterpreterId = actor.interpreterId;
+      });
     } else {
-      // ── Record acceptance on the profile and mirror it onto the linked
-      //    interpreter record so the accepted version is traceable. ──
       await db.$transaction(async (tx) => {
         const profile = await tx.userProfile.update({
           where: { id: actor.userId },
-          data: {
-            termsAcceptedAt: now,
-            signatureDate: now,
-          },
-          select: { interpreterId: true }
+          data: { termsAcceptedAt: now, signatureDate: now },
+          select: { interpreterId: true },
         });
-
+        const current = await recordCurrentLegalAcceptance(tx, {
+          userId: actor.userId,
+          email: actor.email || 'unknown',
+        });
+        if (current.id !== expectedAgreementId) throw new Error('LEGAL_VERSION_CHANGED');
         if (profile?.interpreterId) {
           changedInterpreterId = profile.interpreterId;
           const interpreter = await tx.interpreter.findUnique({
             where: { id: profile.interpreterId },
             select: { notas: true },
           });
-          const currentNotas = interpreter?.notas || '';
-          if (!currentNotas.includes('[TERMS_ACCEPTED]')) {
+          const notes = interpreter?.notas || '';
+          if (!notes.includes(`v${current.version}`)) {
             await tx.interpreter.update({
               where: { id: profile.interpreterId },
-              data: { notas: `${currentNotas}\n${termsMarker(now)}`.trim() },
+              data: { notas: `${notes}\n${termsMarker(now, current.version)}`.trim() },
               select: { id: true },
             });
           }
@@ -114,6 +121,41 @@ export async function acceptTerms(): Promise<ActionResult> {
     revalidateInterpreterProfileRecords(changedInterpreterId);
     return { success: true };
   } catch (error) {
+    if (error instanceof Error && error.message === 'LEGAL_VERSION_CHANGED') {
+      return { success: false, error: 'El acuerdo vigente cambió mientras lo leías. Recarga la página y revisa la nueva versión antes de aceptar.', code: 'BAD_REQUEST' };
+    }
+    // The database's partial unique indexes are the final concurrency guard.
+    // If another tab/request committed this exact acceptance first, treat the
+    // uniqueness conflict as an idempotent success only when this version is
+    // still current and the same stable identity has its verified acceptance.
+    const errorTarget = typeof error === 'object' && error !== null && 'meta' in error
+      && typeof error.meta === 'object' && error.meta !== null && 'target' in error.meta
+      ? error.meta.target
+      : null;
+    const errorTargetText = Array.isArray(errorTarget)
+      ? errorTarget.join(',')
+      : typeof errorTarget === 'string' ? errorTarget : '';
+    const isAcceptanceUniqueConflict = typeof error === 'object' && error !== null
+      && 'code' in error && error.code === 'P2002'
+      && (errorTargetText.includes('legal_acceptance_user_version_unique')
+        || errorTargetText.includes('legal_acceptance_interpreter_version_unique'));
+    if (isAcceptanceUniqueConflict) {
+      const current = await db.legalAgreementVersion.findFirst({
+        where: { agreementKey: 'freelance-services', status: 'PUBLISHED', publishedAt: { not: null } },
+        orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+        select: { id: true },
+      });
+      const identity = auth.user.provider === 'authjs'
+        ? { interpreterId: auth.user.interpreterId }
+        : { userId: auth.user.userId };
+      if (current?.id === expectedAgreementId && await hasCurrentLegalAcceptance(identity)) {
+        revalidateInterpreterProfileRecords(auth.user.interpreterId ?? null);
+        return { success: true };
+      }
+    }
+    if (error instanceof Error && error.message.includes('No published legal agreement')) {
+      return { success: false, error: 'No hay un acuerdo publicado para aceptar. Contacta al administrador.', code: 'BAD_REQUEST' };
+    }
     console.error('[ONBOARDING] acceptTerms error:', error);
     return { success: false, error: 'Error inesperado al procesar la firma', code: 'INTERNAL_ERROR' };
   }
@@ -229,6 +271,9 @@ export async function completeOnboarding(): Promise<ActionResult> {
   try {
     const actor = auth.user;
     const isAuthJsUser = actor.provider === 'authjs';
+    const hasCurrentAgreement = await hasCurrentLegalAcceptance(
+      isAuthJsUser ? { interpreterId: actor.interpreterId } : { userId: actor.userId }
+    );
     let changedInterpreterId = actor.interpreterId ?? null;
 
     // ── Guard: prevent re-submission if already complete AND verify the
@@ -247,7 +292,7 @@ export async function completeOnboarding(): Promise<ActionResult> {
       if (existingProfile?.onboardingComplete) {
         return { success: false, error: 'Onboarding ya fue completado previamente', code: 'CONFLICT' };
       }
-      const hasTerms = !!existingProfile?.termsAcceptedAt;
+      const hasTerms = hasCurrentAgreement;
       const hasBanking = !!(existingProfile?.bankName && existingProfile?.bankAccount && existingProfile?.bankCedula);
       if (!hasTerms || !hasBanking) {
         return { success: false, error: 'Completa la aceptación de términos y los datos bancarios antes de finalizar', code: 'BAD_REQUEST' };
@@ -266,7 +311,7 @@ export async function completeOnboarding(): Promise<ActionResult> {
       if (existingInterpreter?.documentosCompleto) {
         return { success: false, error: 'Onboarding ya fue completado previamente', code: 'CONFLICT' };
       }
-      const hasTerms = !!existingInterpreter?.notas?.includes('[TERMS_ACCEPTED]');
+      const hasTerms = hasCurrentAgreement;
       const hasBanking = !!(existingInterpreter?.banco && existingInterpreter?.cuentaPago && existingInterpreter?.cedulaRnc);
       if (!hasTerms || !hasBanking) {
         return { success: false, error: 'Completa la aceptación de términos y los datos bancarios antes de finalizar', code: 'BAD_REQUEST' };
@@ -337,6 +382,10 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
     const actor = auth.user;
     const isAuthJsUser = actor.provider === 'authjs';
 
+    const currentTermsAccepted = await hasCurrentLegalAcceptance(
+      isAuthJsUser ? { interpreterId: actor.interpreterId } : { userId: actor.userId }
+    );
+
     if (isAuthJsUser) {
       if (!actor.interpreterId) {
         return {
@@ -362,7 +411,7 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
 
       if (!interpreter) return { success: false, error: 'Interpreter profile not found', code: 'NOT_FOUND' };
 
-      const termsAccepted = !!(interpreter.documentosCompleto || interpreter.notas?.includes('[TERMS_ACCEPTED]'));
+      const termsAccepted = currentTermsAccepted;
       const bankingComplete = !!(interpreter.banco && interpreter.cuentaPago && interpreter.cedulaRnc);
       const onboardingComplete = !!interpreter.documentosCompleto;
 
@@ -391,7 +440,7 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
       return {
         success: true,
         data: {
-          termsAccepted: !!profile.termsAcceptedAt,
+          termsAccepted: currentTermsAccepted,
           bankingComplete: !!(profile.bankName && profile.bankAccount && profile.bankCedula),
           onboardingComplete: profile.onboardingComplete,
         },

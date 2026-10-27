@@ -19,16 +19,20 @@ async function main() {
   const grouped = new Map<string, number>(); // Key: "interpreterId_YYYY-MM-DD", Value: total minutes
   const callCount = new Map<string, number>(); // Total calls
 
-  const formatSantoDomingoDate = (d: Date) => {
-    return new Intl.DateTimeFormat('en-CA', {
+  const getLocalDateStr = (date: Date): string => {
+    const parts = new Intl.DateTimeFormat('en-US', {
       timeZone: 'America/Santo_Domingo',
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit'
-    }).format(d);
+      day: '2-digit',
+    }).formatToParts(date);
+    const part = (type: 'year' | 'month' | 'day') => parts.find(item => item.type === type)?.value;
+    const year = part('year');
+    const month = part('month');
+    const day = part('day');
+    if (!year || !month || !day) throw new Error('Unable to format Santo Domingo date');
+    return `${year}-${month}-${day}`;
   };
-
-  const formatDbDate = (d: Date) => d.toISOString().split('T')[0];
 
   for (const session of sessions) {
     if (!session.startedAt || !session.durationSeconds) continue;

@@ -4,6 +4,7 @@ import { writeFile, unlink, readFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import ffmpegPath from 'ffmpeg-static';
 import { spawn } from 'child_process';
+import { randomUUID } from 'node:crypto';
 import prisma from '@/lib/prisma';
 
 export const BUCKET = 'roleplay-audio';
@@ -61,8 +62,9 @@ export function queueMp3Conversion(sessionId: string, scenarioId: string, source
 
 export async function convertAndStoreMp3(sessionId: string, scenarioId: string, sourcePath: string): Promise<void> {
   const tempDir = tmpdir();
-  const inputPath = join(tempDir, `${sessionId}_${scenarioId}_input.webm`);
-  const outputPath = join(tempDir, `${sessionId}_${scenarioId}_output.mp3`);
+  const attemptId = randomUUID();
+  const inputPath = join(tempDir, `${attemptId}_input.webm`);
+  const outputPath = join(tempDir, `${attemptId}_output.mp3`);
 
   try {
     // Copy source file to temp
@@ -85,7 +87,8 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
     const mp3Buffer = await readFile(outputPath);
 
     // Upload MP3 to Supabase
-    const mp3Path = `responses/${sessionId}/${scenarioId}.mp3`;
+    const mp3Path = sourcePath.replace(/\.webm$/i, '.mp3');
+    if (mp3Path === sourcePath) throw new Error('MP3 conversion requires a WebM source path');
     const { error: mp3UploadError } = await supabaseAdmin.storage
       .from(BUCKET)
       .upload(mp3Path, mp3Buffer, { contentType: 'audio/mpeg', upsert: true });
@@ -97,7 +100,7 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
     // Update the response for this exact scenario (scenarioId is the FK; it is
     // a cuid, so it must never be parsed into a scenario `order`).
     await prisma.roleplayResponse.updateMany({
-      where: { scenarioId },
+      where: { scenarioId, sourceAudioPath: sourcePath },
       data: {
         processedAudioPath: mp3Path,
         audioStatus: 'READY',
@@ -107,7 +110,7 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
     console.log(`[ASYNC CONVERSION] Completed for ${sessionId}/${scenarioId}`);
   } catch (error) {
     await prisma.roleplayResponse.updateMany({
-      where: { scenarioId },
+      where: { scenarioId, sourceAudioPath: sourcePath },
       data: {
         audioStatus: 'FAILED',
         processingError: error instanceof Error ? error.message : 'Unknown error',

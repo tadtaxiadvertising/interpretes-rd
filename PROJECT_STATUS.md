@@ -1,72 +1,86 @@
-# Project Status - Interpretes RD
+# PROJECT_STATUS.md
 
-**Last Updated**: 2026-10-27
-**Branch**: main
-**Commit**: Up to date with origin/main
+## Auditoría de arquitectura y flujos críticos
 
-## Current State Summary
+**Fecha de actualización:** 2026-10-26  
+**Repositorio:** `tadtaxiadvertising/interpretes-rd`  
+**Alcance:** CI, scripts de mantenimiento, postulación, onboarding, Roleplay, pruebas E2E y cobertura TypeScript.  
 
-### Completed Security Fixes (P0 - Security & Data Protection)
+### Cambios integrados
 
-1. **Middleware Public API Exception Fixed** (`src/middleware.ts`)
-   - Removed blanket `/api/roleplay/*` public access
-   - Only explicitly public endpoints: `/api/roleplay/validate-invite`, `/api/roleplay/validate-invite-by-code`, `/api/roleplay/start`
-   - Protected endpoints now require authentication + ownership checks
+| Área | Hallazgo / cambio | Evidencia |
+|---|---|---|
+| Tooling | El script de lint se corrigió a `eslint .`, compatible con ESLint 9 y `eslint.config.mjs`. | CI #551 y #552 pasaron lint. |
+| Pruebas de Roleplay | Se aisló `revalidatePath` con un mock de `next/cache` para ejecutar pruebas del endpoint fuera del runtime de Next.js. | CI #551 y #552 pasaron pruebas y build. |
+| Inicio de Roleplay | Se protegió la transición de inicio con compare-and-set por ID y estado previo. Una solicitud concurrente no puede regresar una sesión terminal a `STARTED`; se agregó prueba de regresión. | PR #56 integrado; GitHub Actions run #40217611657: Prisma Validate, Generate, TypeScript, ESLint, tests y Build en éxito. |
+| Propiedad de postulación | Se corrigió una vía por la que una postulación anónima sin prueba de propiedad podía crear/actualizar el registro vinculado de `interpreter` con datos enviados por el cliente. La sincronización ahora solo ocurre cuando la propiedad está verificada. | PR #59 integrado; run #40218312129: Validate & Test en éxito. Se añadió regresión en `src/app/actions/__tests__/recruitment.test.ts`. |
+| Restricción del dashboard | El layout servidor del dashboard no aplicaba la decisión de acceso derivada de onboarding/Roleplay, aunque existía un router de destino. | PR #60 integrado; run #40218577020 pasó validación, pruebas y build. La redirección se aplica en el layout compartido. |
+| Inicio de Roleplay de candidatos | La server action y el endpoint directo podían iniciar Roleplay sin verificar onboarding o el estado de la postulación. | PR #63 integrado; run #40219055980 pasó validación, pruebas y build. Se añadieron guardas de identidad, onboarding y estado de aplicación con pruebas de regresión. |
+| Privacidad del reporte de onboarding | El script de auditoría exponía datos personales y bancarios en logs/reporte, además de tener un contador serializado incorrectamente. | PR #62 integrado; run #40218877726 pasó Prisma Validate, Generate, TypeScript, typecheck específico del script, ESLint, pruebas y build. El reporte se limita a IDs internos y flags. |
+| Cookies de Roleplay antiguas | Una cookie de sesión podía seguir intentando iniciar/reanudar Roleplay tras el cierre o avance de la postulación asociada. | PR #65 integrado; run #40219373477 pasó validación, pruebas y build. El endpoint vuelve a comprobar el estado de la postulación antes de permitir el inicio. |
+| Seguridad Next.js/React/Image Optimization | El árbol inicial contenía Next.js 15.2.6 y React/React DOM 19.0.0 afectados por avisos de seguridad; el primer parche 15.2.9 no cubría avisos publicados después. | PR #70 y #74 integrados. Next.js/`eslint-config-next` 15.5.28, React/React DOM 19.0.3, SWC 15.5.28 y Sharp 0.35.5. Run #40222055963 pasó `npm ci`, Prisma, TypeScript, ESLint, pruebas y build; el audit dejó de reportar una vulnerabilidad crítica de Next. |
+| PostCSS y source maps | El PostCSS anidado de Next y `source-map-js` tenían versiones vulnerables. | PR #76 integrado; run #40222588986 pasó `npm ci`, TypeScript, ESLint, pruebas y build. El override fija PostCSS 8.5.28 y `source-map-js` 1.2.2. El informe npm bajó a 11 hallazgos: 0 críticos, 7 altos, 3 moderados y 1 bajo. |
+| Seguridad de pruebas E2E | El teardown podía usar las URLs generales y borrar candidatos por prefijo; la prueba de duplicados no simulaba concurrencia real. | PR #67 integrado; exige `E2E_ALLOW_DB_CLEANUP=true` y `E2E_DATABASE_URL`, bloquea la ejecución E2E por defecto y añade un escenario con dos navegadores. Aún requiere una base aislada para ejecutarse. |
+| Reintento de Roleplay | El guard de elegibilidad bloqueaba el estado `ROLEPLAY_REVIEW` aunque el funnel permite reintentar. | PR #68 integrado; el candidato vuelve a `ROLEPLAY_PENDING` con un evento de auditoría antes de iniciar el nuevo intento. Run #40220906115 pasó validación, pruebas y build. |
 
-2. **Rate Limiting Fixed** (`src/lib/security/rate-limit.ts`)
-   - Replaced IP-only identification with IP + User-Agent hash
-   - Eliminated 'unknown' bucket sharing problem
-   - Added `simpleHash()` for User-Agent fingerprinting
+### Hallazgos activos
 
-3. **Candidate Session Access Binding** (`src/app/api/roleplay/session/[id]/route.ts`, `src/app/api/roleplay/session/[id]/start/route.ts`)
-   - Added session status verification for candidate routes
-   - GET `/session/[id]`: Only allows access for states STARTED, IN_PROGRESS, SUBMITTED, UNDER_REVIEW, EVALUATED, PASSED, FAILED
-   - POST `/session/[id]/start`: Only allows start/resume for states DRAFT, INVITED, PENDING, STARTED, IN_PROGRESS
+| Prioridad | Hallazgo verificado | Estado / siguiente acción |
+|---|---|---|
+| Alta | El resolver de identidad excluía sesiones terminales de Roleplay (`PASSED`, `FAILED`, `EXPIRED`, `CANCELLED`) al buscar el intento más reciente. | Corregido e integrado en PR #115: las cuatro consultas incluyen los 11 estados válidos y hay una prueba de regresión para una sesión `FAILED`. Los runs #40260569211 (#707) y #40260627656 (#708) fallaron en `npm test` por cinco pruebas de onboarding que importaban un helper no exportado (`computeOnboardingStatus`). PR #117 exportó el helper y fue integrado (merge commit `435b905783f0f68f3cef47705e30625c2f63fdb7`). En run #40356291111 (#712), TypeScript, chequeos de scripts, ESLint, pruebas unitarias, build y E2E aislado terminaron en éxito. El run de `main` #40356602487 (#714), para el commit de merge, terminó en éxito en todas las etapas: Prisma, TypeScript, chequeos de scripts, ESLint, pruebas, build, Playwright aislado y los dos pasos de despliegue por webhook. El run #40356369377 (#713), posterior a la actualización documental de la rama, seguía ejecutando Playwright en la última consulta. |
+| Alta | `acceptTerms` podía responder con error interno si dos solicitudes aceptaban simultáneamente la misma versión: los índices únicos de la migración evitaban duplicados, pero el conflicto `P2002` no se trataba como reintento idempotente. | PR #109 integrado: el reintento puede responder éxito si la misma identidad ya aceptó la versión vigente. PR #110 restringe el manejo a los dos índices únicos de aceptación para no ocultar otros conflictos de unicidad; GitHub Actions run #40257105727 terminó en éxito. |
+| Alta | El reintento desde `ROLEPLAY_REVIEW` devolvía la postulación a `ROLEPLAY_PENDING`, pero podía reutilizar una sesión anterior `SUBMITTED`/`FAILED` en vez de crear un nuevo intento. | Corregido en PR #93: cada reintento crea una nueva sesión y copia solo las definiciones de escenario; se bloquea mientras el evaluador mantiene la sesión en `UNDER_REVIEW`. CI del PR y de `main` en éxito. |
+| Alta | El endpoint de carga de audio verificaba la propiedad de la sesión, pero no comprobaba que `scenarioId` perteneciera a ese `sessionId` antes de crear la ruta de almacenamiento y subir el archivo. | Corregido en PR #94: verifica la relación sesión/escenario antes de validar y subir audio; CI del PR en éxito. |
+| Alta | `confirmBaseAudioUpload` aceptaba una ruta de almacenamiento sin comprobar que perteneciera a la sesión objetivo. | Corregido en `main`: verifica sesión, ruta base canónica y ruta aún registrada; usa compare-and-set para impedir carreras. Pruebas de regresión añadidas; GitHub Actions run #40258732578 (n.º 698) pasó Prisma, TypeScript, ESLint, tests, build y E2E aislado. |
+| Alta | El resolver de identidad para Auth.js y Supabase podía marcar onboarding completo sin todos los datos bancarios; Auth.js además fabricaba `completedAt` y podía ignorar el intérprete vinculado si faltaba la relación `UserProfile.interpreter`. | Corregido e integrado en PR #113: exige banco, cuenta, tipo de cuenta y cédula/RNC; devuelve `NEEDS_REVIEW` cuando faltan datos y no inventa fecha de finalización. Pruebas añadidas. Los runs #705/#706 fallaron por la importación del helper no exportado; el arreglo transversal se integró en PR #117 y el run #714 de `main` pasó las 406 pruebas unitarias, build y E2E aislado. |
+| Alta | Los endpoints de invitaciones, el endpoint legado y el inicio de Roleplay de candidato podían sobrescribir una sesión terminal con `STARTED` durante una carrera. | Corregido en PR #118, #119 y #122; el CI #40363781172 y el CI posterior a la integración #40365023222 terminaron en éxito. Nueva revisión encontró un riesgo distinto: dos inicios simultáneos sin sesión previa podían crear sesiones activas duplicadas. PR #123 añade índice único parcial, manejo de conflicto y prueba de regresión; requiere CI y aplicación explícita de migración en cada entorno. No se modificó producción. |
+| Media | `/api/roleplay/convert-audio` permitía `audio/mpeg`, pero guardaba el archivo con extensión `.webm`; la extensión no reflejaba el formato real. | Corregido en PR #98: el MIME normalizado determina `.webm`, `.mp4`, `.ogg` o `.mp3`; pruebas de regresión para MPEG, OGG y MP4 añadidas. CI del PR y de `main` en éxito (run #40249380458). |
+| Media | El contrato de onboarding estaba embebido en `OnboardingWizard.tsx` y la aceptación dependía de una constante, sin historial por versión. | Integrado en PR #103: modelos y migración `20261025_versioned_legal_agreements`, snapshot inicial del contrato, hash SHA-256, panel admin `/admin/legal-agreements` y comprobación de la versión exacta aceptada. CI de la rama #40252015965 y de `main` #40252264278 terminaron en éxito. La migración debe aplicarse antes de habilitar el flujo en otros entornos; no se ejecutó contra ninguna base de datos durante esta auditoría. |
+| Alta | La evaluación de QA convertía puntuaciones vacías o malformadas en `0` mediante `parseFloat(...) || 0`, permitiendo guardar una evaluación con datos incompletos como si fueran puntuaciones válidas. | Corregido en PR #108: parser numérico estricto para las cinco dimensiones y pruebas de regresión para valores ausentes, vacíos, malformados y cero explícito. PR integrado; no se encontró una ejecución verificable de GitHub Actions para ese commit. |
+| Alta | `confirmRoleplayResponse` podía sobrescribir una respuesta ya confirmada si el usuario reintentaba con otro audio; además, una repetición idéntica después de avanzar el índice podía rechazarse antes de comprobar la respuesta existente. | Corregido en PR #99: el reintento con el mismo audio es idempotente y no permite sustituirlo por otro. PR #100 alineó los fixtures; run #40249777848 y run de `main` #40250064586 terminaron en éxito. |
+| Alta | El endpoint de audio podía sobrescribir el objeto de un escenario si dos cargas pasaban simultáneamente la guarda previa a la confirmación; la conversión MP3 también usaba una ruta de salida compartida por escenario. | Corregido en PR #105: cada intento usa una ruta UUID propia y `upsert:false`; la conversión se vincula al intento confirmado y no sobrescribe archivos de otras cargas. CI del PR #105 (#40253152000) y CI de `main` (#40253461449) terminaron en éxito. |
+| Alta | La acción administrativa de edición bancaria marcaba `onboardingComplete=true` y `documentosCompleto=true` al guardar datos bancarios, aunque esa operación no demuestra que el usuario haya aceptado el acuerdo ni completado los documentos. | Corregido en PR #91: la edición administrativa solo sincroniza campos bancarios y no modifica `onboardingComplete` ni `documentosCompleto`. Se añadieron regresiones; run #40245776335 de `main` terminó en éxito; PR #92 sincronizó esta evidencia y documentó el contrato pendiente. |
+| Alta | `package.json` declaraba `migrate:onboarding` apuntando a `scripts/migrate-onboarding.ts`, pero ese archivo no existe en `main`. | Corregido en PR #58: se eliminó el comando roto y se añadió `audit:onboarding` para ejecutar el script de auditoría existente; no se ejecutó SQL ni se tocó la base de datos. |
+| Media | `tsconfig.json` excluye `scripts`, `tests`, `e2e` y archivos de prueba del chequeo TypeScript general. | Pendiente: diseñar chequeos separados que no incorporen indiscriminadamente scripts históricos o entornos con configuración distinta. |
+| TypeScript de scripts operativos | Los scripts de auditoría/sincronización tenían comparaciones contra estados obsoletos de Roleplay, una selección Prisma inválida, detalles de identidad innecesarios en el reporte y una función de fecha inexistente. | PR #80 integrado; run #40224873397 pasó TypeScript general, typecheck de auditoría, typecheck de `scripts/**/*.ts`, ESLint, pruebas y build. También se alineó `mysql2` del lockfile con la dependencia exacta de Prisma. |
+| Media | Las pruebas E2E de postulación no validaban correctamente la repetición del envío y el servidor standalone no servía los bundles de cliente. | PR #89 integrado: el workflow copia `.next/static` y `public` al output standalone. PR #90 integrado: la repetición se prueba desde un navegador separado sin cookie de propiedad. Run #40245321299 pasó todas las etapas, incluidas TypeScript, ESLint, tests, build y Playwright contra PostgreSQL aislado. |
+| Alta | El teardown E2E utilizaba DIRECT_URL/DATABASE_URL como fallback y borraba candidatos por prefijo de email sin consentimiento explícito ni garantía de base aislada. | PR #67 integrado; run #40220420100 pasó TypeScript, typecheck de auditoría, ESLint, pruebas unitarias y build. Playwright exige E2E_ALLOW_RUN=true; objetivos remotos exigen además E2E_ALLOW_REMOTE_TARGET=true; el borrado requiere E2E_ALLOW_DB_CLEANUP=true y E2E_DATABASE_URL, sin fallback a URLs generales. Añade escenario E2E con dos navegadores que envían la misma dirección en paralelo. El run #40245321299 validó los E2E contra PostgreSQL aislado. |
 
-### Completed Dependency Fixes (P1)
-1. **Dependency Updates**
-   - Updated `@types/node` from ^20 to ^22
-   - Updated `zod` from ^4.4.3 to ^4.6.6
-   - Ran `npm audit fix` - reduced vulnerabilities from 15 to 6
-   - Remaining: Next.js critical issues (middleware bypass, RCE in image optimization) and bundled deps - BLOCKED pending major version upgrade decision per project constraints (Next.js 15.2.6 strictly required per AGENTS.md)
 
-### Verification Results
-- ✅ All targeted tests pass (roleplay session, session start, candidate access, validate-invite, roleplay order, recruitment, admin roleplays, identity resolver, auth)
-- ✅ Build completes successfully (Next.js 15.2.6, Prisma 7.8.0)
-- ✅ Lint passes (only pre-existing React hooks warnings)
-- ✅ npm audit improved (15 → 6 vulnerabilities)
+### Revisión adicional del 2026-10-26
 
-## Pending Tasks
+- PR #34 cerrado sin merge: su rama tenía 347 commits de divergencia respecto de `main`, no era mergeable y proponía una implementación paralela de Roleplay. Se confirmó que `main` ya tiene una arquitectura activa de Roleplay; el PR antiguo no debe integrarse directamente. Ver [PR #34](https://github.com/tadtaxiadvertising/interpretes-rd/pull/34).
+- CI de los commits documentales más recientes: run #40357755425 (#717) terminó en éxito, incluidas pruebas unitarias, build, E2E aislado y ambos jobs de webhook de despliegue. Runs #40357598650 (#715) y #40357637180 (#716) también completaron las validaciones y E2E. El run #40371062647, disparado por la actualización documental en `main`, también terminó en éxito en `Validate & Test` y ambos jobs de webhook de despliegue.
+- Auditoría npm del CI #40363781172: 3 dependencias directas afectadas (`vite@8.3.1`, `@vitest/ui@5.0.3` y `esbuild@0.27.7`); el JSON de auditoría registra 4 incidencias en total (1 alta, 2 moderadas, 1 baja, 0 críticas), porque Vite agrupa varios avisos. Los avisos y versiones corregidas están confirmados: Vite `8.3.3` o superior; `vitest` y `@vitest/ui` `5.0.5` o superior; esbuild `0.28.1` o superior. El aviso de Vitest solo expone archivos cuando se inicia un servidor HTTP mediante `vitest --ui`, Browser Mode o API; el script CI `npm test` ejecuta `vitest run`, que no abre ese servidor, pero `npm run test:ui` sí activa la ruta potencialmente afectada. El aviso de esbuild afecta su servidor de desarrollo en Windows y es de severidad baja; aun así, la versión bloqueada está dentro del rango vulnerable. El lockfile actual alinea `mysql2@3.24.4` con `prisma@7.10.1`. No se ha regenerado el lockfile ni se ha aplicado ningún cambio de dependencias: hacerlo con acceso al registro y validar `npm ci`, tests, build y E2E.
+- En la consulta más reciente, PR #119 quedó integrado después de que CI #40359553135 pasara todas las etapas de validación, incluidas pruebas unitarias, build y E2E aislado. PR #118 también está integrado. El estado de PRs abiertos debe consultarse en vivo; el inventario previo de esta auditoría ya no es actual.
 
-### P1 - Dependencies & Reproducibility (BLOCKED)
-- [ ] **BLOCKED**: Next.js critical vulnerabilities require major version upgrade from 15.2.6 to 15.5.28
-  - Project states Next.js 15.2.6 is "Strictly Required (verified by Easypanel success log)" in AGENTS.md
-  - Cannot upgrade without verifying compatibility with Easypanel deployment
+### Evidencia de CI
 
-### P2 - Candidate Flow & Applications
-- [ ] Audit `/api/v1/recruitment` and `/postular` routes for security
-- [ ] Verify onboarding state machine integrity
-- [ ] Check candidate identity unification logic
-- [ ] Review roleplay invitation flow for edge cases
+- [x] PR #54 y run #552 sobre `main`: Prisma Validate, Prisma Generate, TypeScript, ESLint, pruebas unitarias y build en éxito.
+- [x] PR #56: protección de carrera en inicio de Roleplay integrada; run #40217611657 con todas las etapas de validación en éxito.
+- [x] PR #62: reporte de onboarding sin PII sensible y chequeo TypeScript dedicado; run #40218877726 en éxito.
+- [x] PR #63: guardas de onboarding/estado de postulación en server action y API de inicio de Roleplay; run #40219055980 en éxito.
+- [x] PR #65: bloquea cookies antiguas cuando la postulación ya no es elegible; run #40219373477 en éxito.
+- [x] PR #67: endurece el teardown E2E y añade un escenario de postulación concurrente; run #40220420100 pasó validación, pruebas y build.
+- [x] PR #68: permite reintentar Roleplay desde ROLEPLAY_REVIEW y devuelve la postulación a ROLEPLAY_PENDING antes de iniciar; run #40220906115 pasó validación, pruebas y build.
+- [x] PR #70: parche inicial de Next.js/React Server Components; run #40221301724 pasó validación, pruebas y build.
+- [x] PR #74: actualiza Next.js a 15.5.28 y Sharp a 0.35.5; run #40222055963 pasó validación, pruebas y build.
+- [x] PR #76: corrige PostCSS y source-map-js; run #40222588986 pasó validación, pruebas y build. Audit: 11 vulnerabilidades sin críticas.
+- [x] Añadir escenario E2E de dos navegadores que envían la misma postulación en paralelo (ejecución pendiente de entorno E2E aislado).
+- [x] Confirmar CI verde para las pruebas E2E de postulación concurrente/repetición segura. PR #90 integrado; run #40245321299 pasó el workflow completo, incluidas las pruebas Playwright aisladas.
+- [x] Reintentos de confirmación de Roleplay: PR #99 + fixtures corregidos en PR #100; run #40249777848 del PR y run #40250064586 de `main` pasaron.
+- [x] Audio de Roleplay inmutable por intento: PR #105 integrado; rutas UUID y `upsert:false`; run #40253152000 y run de `main` #40253461449 en éxito.
+- [x] Corregir el helper no exportado que hacía fallar cinco pruebas de onboarding y validar el cambio. PR #117 integrado. Runs #40356602487 (#714), #40357598650 (#715), #40357637180 (#716) y #40357755425 (#717) de `main` terminaron en éxito; #717 incluye Prisma, TypeScript, chequeos de scripts, ESLint, pruebas unitarias, build, Playwright contra PostgreSQL aislado y ambos pasos de despliegue por webhook.
+- [ ] Reducir los avisos npm restantes de forma incremental: Vite `8.3.3` o superior ([GHSA-587h-7wmj-h5pm](https://github.com/vitejs/vite/security/advisories/GHSA-587h-7wmj-h5pm)); Vitest/`@vitest/ui` `5.0.5` o superior ([GHSA-p458-7748-mcp3](https://github.com/vitest-dev/vitest/security/advisories/GHSA-p458-7748-mcp3)); esbuild `0.28.1` o superior para el aviso del servidor de desarrollo en Windows ([GHSA-g7r4-m6w7-qqqr](https://github.com/evanw/esbuild/security/advisories/GHSA-g7r4-m6w7-qqqr)). El riesgo de Vitest afecta `npm run test:ui`/servidores HTTP, no al `npm test` configurado como `vitest run`. Regenerar el lockfile con acceso al registro y validar `npm ci`, tests, build y E2E; no ejecutar `npm audit fix` a ciegas ni introducir upgrades mayores sin pruebas.
+- [x] Añadir un chequeo TypeScript dedicado a todos los scripts `scripts/**/*.ts`; PR #80 integrado y CI #40224873397 en éxito. Se verificó en `main` que `prisma@7.10.1` declara `mysql2@3.24.4` y que `package-lock.json` bloquea exactamente `mysql2@3.24.4`.
+- [x] Configurar Playwright para iniciar Next standalone y ejecutar E2E contra PostgreSQL efímero; PR #82 integrado. PR #89 corrigió la copia de assets standalone y PR #90 corrigió el escenario de repetición; run #40245321299 pasó completo.
 
-### P3 - Data Integrity & Concurrency
-- [x] Audit (read-only) executed via `scripts/audit-data-integrity.ts` against production DB:
-  - No duplicate emails across recruitment_candidates / interpreters.
-  - No orphaned roleplay sessions (interpreter or candidate).
-  - No roleplay sessions with both or neither targets (invariant holds).
-  - All roleplay session statuses canonical (CANCELLED 3, INVITED 3, STARTED 2); no PENDING/unknown.
-  - All emails lowercase across user_profiles, interpreters, recruitment_candidates.
-  - No orphaned recruitment applications.
-- [ ] **Open finding (expanded)**: `fino@gmail.com` exists as an `rbac_users` row (Auth.js) but has NO `user_profiles` row and NO `interpreters` record. Fully orphaned identity: `resolve-user.ts` cannot link it to an interpreter, so onboarding/roleplay cannot proceed. Requires manual reconciliation (create interpreter + profile, or remove the orphaned rbac_user). Do not auto-create without business data.
-- [x] Audit for duplicate users across `rbac_users`: 2 rbac_users, no duplicate emails; 1 rbac_user (fino@gmail.com) orphaned (documented above); 1 user_profile (interpretersfree@gmail.com admin) legitimately has no rbac_user (Supabase admin path).
-- [x] Migration safety reviewed: latest migrations (20261012_z_align, 20261019_drop_status, 20261019_unique_scenario) use preflight guards, idempotent DDL (IF NOT EXISTS / DROP IF EXISTS), explicit transactions, and rollback scripts where applicable. Production DB confirms no legacy PENDING rows remain.
+- [x] Proteger la validación de invitaciones por token/código contra carreras que podían reactivar sesiones terminales; PR #118 integrado tras CI #721 en éxito (incluye pruebas unitarias, build y E2E aislado).
+- [x] Completar la protección del endpoint legado `/api/roleplay/start` contra la misma carrera; PR #119 integrado tras CI #40359553135 en éxito.
+- [x] Proteger `startCandidateRoleplay` frente a carreras de estado terminal; PR #122 integrado con CI de PR y `main` en éxito.
+- [x] Evitar sesiones activas duplicadas cuando dos inicios de candidato ocurren sin sesión previa. PR #123 añadió el índice único parcial, manejo del conflicto `P2002` y regresión; PR #124 corrigió el predicado del índice de `PENDING` a `SUBMITTED`, valor válido del enum. CI del PR #124 (#40368766184), CI de `main` tras integración (#40368930823) y validación documental posterior (#40371062647) terminaron en éxito. La migración sigue pendiente de aplicación controlada por entorno; no se ejecutó contra producción.
+- [x] Proteger `startCandidateRoleplay` contra carreras que reactivan sesiones terminales; PR #122 integrado y CI de PR y de `main` en éxito.
 
-### P4 - Architecture & Quality
-- [x] Verified roleplay state machine vocabulary consistency (resolve-user.ts vs Prisma enum) — fail-fast on unknown status; removed dead 'PENDING' references from roleplay API routes (validate-invite, validate-invite-by-code, start, session/[id]/start).
-- [ ] Audit API authorization patterns
+### Criterio de cierre
 
-## Next Actions
-1. Audit recruitment API routes and candidate flow
-2. Run data integrity checks
-3. Review roleplay state machine consistency
-4. Continue with targeted tests
+La auditoría sigue abierta hasta que los chequeos E2E y de scripts sean reproducibles, y los caminos críticos de postulación, onboarding y Roleplay tengan pruebas de regresión adecuadas. El éxito del build por sí solo no acredita la integridad de los flujos de negocio.

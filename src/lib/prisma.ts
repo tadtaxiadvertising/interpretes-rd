@@ -40,12 +40,25 @@ function createPool(): pg.Pool {
     );
   }
 
+  // The pg adapter receives an explicit SSL object, which overrides `sslmode=disable`
+  // from the connection string. Keep TLS enabled for remote databases, but disable
+  // it for loopback-only databases such as the disposable PostgreSQL used by E2E.
+  const isLoopbackDatabase = (() => {
+    if (!connectionString) return false;
+    try {
+      const hostname = new URL(connectionString).hostname;
+      return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
+    } catch {
+      return false;
+    }
+  })();
+
   return new pg.Pool({
     connectionString,
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
-    ssl: { rejectUnauthorized: false },
+    ssl: isLoopbackDatabase ? false : { rejectUnauthorized: false },
     allowExitOnIdle: true,
   });
 }

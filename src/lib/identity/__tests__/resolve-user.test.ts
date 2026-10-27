@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
-import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { resolveCurrentIdentity, resolveDestination } from '@/lib/identity/resolve-user';
 
 // Mock all external dependencies BEFORE importing the module under test
 vi.mock('@/lib/supabase/server', () => ({
@@ -41,6 +41,38 @@ const mockCreateClient = createClient as vi.Mock;
 const mockPrisma = prisma as any;
 const mockResolveUserRoleByEmail = resolveUserRoleByEmail as vi.Mock;
 const mockAuth = auth as vi.Mock;
+
+describe('resolveDestination access routing', () => {
+  it('routes an incomplete interpreter to the resumable onboarding step', () => {
+    expect(resolveDestination({
+      role: 'interpreter',
+      onboardingStatus: 'IN_PROGRESS',
+      onboardingStep: 'banking',
+      roleplayState: 'NO_ROLEPLAY',
+      roleplaySessionId: null,
+    } as any)).toBe('/onboarding?resume=true');
+  });
+
+  it('routes an invited interpreter to the assigned roleplay instead of dashboard', () => {
+    expect(resolveDestination({
+      role: 'interpreter',
+      onboardingStatus: 'COMPLETED',
+      onboardingStep: 'complete',
+      roleplayState: 'INVITED',
+      roleplaySessionId: 'session-123',
+    } as any)).toBe('/roleplays/session-123');
+  });
+
+  it('keeps completed interpreters on dashboard after roleplay submission', () => {
+    expect(resolveDestination({
+      role: 'interpreter',
+      onboardingStatus: 'COMPLETED',
+      onboardingStep: 'complete',
+      roleplayState: 'SUBMITTED',
+      roleplaySessionId: 'session-123',
+    } as any)).toBe('/dashboard');
+  });
+});
 
 describe('Identity Resolver', () => {
   let mockAuthFn: ReturnType<typeof vi.fn>;
@@ -125,6 +157,54 @@ describe('Identity Resolver', () => {
       expect(result).not.toBeNull();
       expect(result?.interpreterId).toBe(99);
       expect(result?.onboardingStatus).toBe('NOT_STARTED');
+    });
+
+    it('should resolve the latest terminal Roleplay session instead of ignoring it', async () => {
+      const mockUser = {
+        id: 'terminal-user',
+        email: 'terminal@example.com',
+        user_metadata: {},
+      };
+      const mockSupabase = {
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: mockUser } }) },
+      };
+      mockCreateClient.mockResolvedValue(mockSupabase);
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        id: 'terminal-user',
+        email: 'terminal@example.com',
+        role: 'interpreter',
+        interpreterId: 42,
+        onboardingComplete: true,
+        termsAcceptedAt: new Date('2026-01-01T00:00:00.000Z'),
+        bankName: 'Banco Popular',
+        bankAccount: '123456',
+        bankCedula: '001-1234567-8',
+        bankAccountType: 'Ahorro',
+        signatureDate: new Date('2026-01-01T00:00:00.000Z'),
+        interpreter: null,
+      });
+      mockPrisma.roleplaySession.findFirst.mockResolvedValue({
+        id: 'latest-failed-session',
+        status: 'FAILED',
+        interpreterId: 42,
+        recruitmentCandidateId: null,
+        currentScenarioIndex: 0,
+        recordedAudioUrl: null,
+        submittedAt: new Date('2026-01-02T00:00:00.000Z'),
+        evaluatedAt: new Date('2026-01-02T00:00:00.000Z'),
+        qaScoreId: null,
+        access: null,
+      });
+
+      const result = await resolveCurrentIdentity();
+
+      expect(result?.roleplayState).toBe('FAILED');
+      expect(result?.roleplaySessionId).toBe('latest-failed-session');
+      const query = mockPrisma.roleplaySession.findFirst.mock.calls[0][0];
+      expect(query.where.status.in).toContain('FAILED');
+      expect(query.where.status.in).toContain('PASSED');
+      expect(query.where.status.in).toContain('EXPIRED');
+      expect(query.where.status.in).toContain('CANCELLED');
     });
 
     it('should resolve admin role correctly', async () => {
