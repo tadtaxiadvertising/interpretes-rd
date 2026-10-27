@@ -10,7 +10,7 @@ const db = prisma;
 // the browser to the session and moves it out of the pre-start states. A
 // session already in progress is resumed. Consumption (usedAt) stays a
 // separate, later step and is never triggered by validation.
-const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'PENDING', 'STARTED', 'IN_PROGRESS'];
+const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'];
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       data: { validatedAt: new Date() },
     });
 
-    if (['DRAFT', 'INVITED', 'PENDING'].includes(access.session.status)) {
+    if (['DRAFT', 'INVITED'].includes(access.session.status)) {
       await db.roleplaySession.update({
         where: { id: access.sessionId },
         data: { status: 'STARTED' },

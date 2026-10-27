@@ -71,7 +71,7 @@
 └─────────────────┘                                   └──────────────┘
 ```
 
-> **Memory Constraint**: The Easypanel VPS allocates ~457 MB to the API container. The `pg.Pool` is configured with `max: 20` connections and `connectionTimeoutMillis: 2000` to stay within budget. Always use port **6543** (transaction pooler) for `DATABASE_URL` in production.
+> **Memory Constraint**: The Easypanel VPS allocates ~457 MB to the API container. The `pg.Pool` is configured with `max: 5` connections and `connectionTimeoutMillis: 10000` to stay within budget. Always use port **6543** (transaction pooler) for `DATABASE_URL` in production.
 
 ## 3. Breaking Changes Log (Next.js 15.2.6)
 

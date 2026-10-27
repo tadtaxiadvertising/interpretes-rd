@@ -54,10 +54,16 @@ function hasValidAuthSession(req: NextRequest) {
  * - /api/auth/*: NextAuth handlers (must be reachable to sign in).
  * - /api/webhooks/*: third-party webhooks (self-verify signatures).
  * - /api/cron/*: scheduled jobs (self-verify CRON_SECRET).
- * - /api/roleplay/*: candidate flow authenticated by one-time invite tokens.
+ * - /api/roleplay/validate-invite: candidate validates invite token (binds session cookie)
+ * - /api/roleplay/validate-invite-by-code: candidate validates invite code (binds session cookie)
+ * - /api/roleplay/start: candidate starts roleplay with token (binds session cookie)
  *
  * Everything else under /api/* requires a verified Supabase session OR a
  * verified Supabase `Authorization: Bearer <token>`.
+ * 
+ * NOTE: /api/roleplay/session/[id] and /api/roleplay/session/[id]/start require
+ * authentication + ownership check (enforced in route handlers). They are NOT public.
+ * /api/roleplay/convert-audio requires authentication.
  */
 const API_PUBLIC_PREFIXES = [
   '/api/health',
@@ -65,7 +71,9 @@ const API_PUBLIC_PREFIXES = [
   '/api/auth/',
   '/api/webhooks/',
   '/api/cron/',
-  '/api/roleplay/',
+  '/api/roleplay/validate-invite',
+  '/api/roleplay/validate-invite-by-code',
+  '/api/roleplay/start',
 ] as const;
 
 function isPublicApiPath(pathname: string) {

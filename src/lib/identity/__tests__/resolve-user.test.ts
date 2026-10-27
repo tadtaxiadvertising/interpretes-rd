@@ -300,7 +300,7 @@ describe('Identity Resolver', () => {
 
       const mockSession = {
         id: 'session-123',
-        status: 'PENDING',
+        status: 'INVITED',
         interpreterId: 10,
         currentScenarioIndex: 0,
         recordedAudioUrl: null,

@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invitation expired' }, { status: 400 });
     }
 
-    const validInviteStates = ['DRAFT', 'INVITED', 'PENDING'];
+    const validInviteStates = ['DRAFT', 'INVITED'];
     if (!validInviteStates.includes(access.session.status)) {
       return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 400 });
     }

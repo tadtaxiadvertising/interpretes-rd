@@ -79,12 +79,8 @@ describe('computeRoleplayState', () => {
     expect(result.sessionId).toBe('session-1');
   });
 
-  it('treats the legacy PENDING status as an invitation', () => {
-    expect(computeRoleplayState(makeSession('PENDING') as any, 10, null).state).toBe('INVITED');
-  });
-
-  it('treats an unknown status as an invitation (fail-safe)', () => {
-    expect(computeRoleplayState(makeSession('SOMETHING_ELSE') as any, 10, null).state).toBe('INVITED');
+  it('throws on unknown status (fail-fast)', () => {
+    expect(() => computeRoleplayState(makeSession('SOMETHING_ELSE') as any, 10, null)).toThrow();
   });
 });
 

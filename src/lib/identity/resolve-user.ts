@@ -131,9 +131,6 @@ export function computeRoleplayState(session: {
   // vocabulary here MUST match the RoleplayStatus enum and the transitions
   // written by the roleplay service (DRAFT/INVITED/STARTED/IN_PROGRESS/
   // SUBMITTED/UNDER_REVIEW/EVALUATED/PASSED/FAILED/EXPIRED/CANCELLED).
-  // Collapsing every status into INVITED previously sent candidates with a
-  // submitted or evaluated session back into the roleplay instead of the
-  // dashboard.
   switch (session.status) {
     case 'DRAFT':
     case 'INVITED':
@@ -157,9 +154,10 @@ export function computeRoleplayState(session: {
     case 'CANCELLED':
       return { state: 'CANCELLED', sessionId: session.id };
     default:
-      // Legacy status ('PENDING') not present in the current enum: keep
-      // treating it as an active invitation for backward compatibility.
-      return { state: 'INVITED', sessionId: session.id };
+      // Fail-fast on unknown status: persisted data must use canonical RoleplayStatus enum.
+      // Legacy 'PENDING' was removed in v3.6.0; any unknown value indicates data corruption
+      // or a missing migration that must be fixed upstream.
+      throw new Error(`Unknown RoleplayStatus: ${session.status}`);
   }
 }
 
@@ -226,7 +224,10 @@ async function resolveActorFromSupabase(
     resolvedRole = resolveUserRoleByEmail(email, 'interpreter');
   }
 
-  // If no interpreterId linked, try to find by email (migration/repair fallback)
+  // If no interpreterId linked, try to find by email (migration/repair fallback — TEMPORARY).
+  // This fallback exists only for legacy profiles missing the interpreterId link.
+  // Once all user_profiles have interpreterId populated, this block MUST be removed.
+  // DO NOT use email as permanent identity — see AGENTS.md Identity invariant.
   if (resolvedRole !== 'admin' && !interpreterId) {
     // Resolve ownership only by the authoritative corporate email.
     // Display names may be duplicated or user-editable and are not identity proof.

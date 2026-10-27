@@ -12,6 +12,10 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
 
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     interpreter: { findUnique: vi.fn() },

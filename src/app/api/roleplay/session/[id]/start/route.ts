@@ -5,7 +5,7 @@ import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/secur
 
 const db = prisma;
 
-const STARTABLE_STATES = ['DRAFT', 'INVITED', 'PENDING'];
+const STARTABLE_STATES = ['DRAFT', 'INVITED'];
 const RESUMABLE_STATES = ['STARTED', 'IN_PROGRESS'];
 
 export async function POST(
@@ -82,12 +82,17 @@ export async function POST(
 
 function isSessionOwner(
   identity: Awaited<ReturnType<typeof resolveCurrentIdentity>>,
-  session: { id: string; interpreterId: number | null; recruitmentCandidateId: number | null },
+  session: { id: string; interpreterId: number | null; recruitmentCandidateId: number | null; status: string },
   sessionCookie: string | null
 ): boolean {
   if (!identity) return false;
   if (identity.role === 'admin') return true;
   if (session.interpreterId && identity.interpreterId === session.interpreterId) return true;
-  if (session.recruitmentCandidateId) return sessionCookie === session.id;
+  if (session.recruitmentCandidateId) {
+    if (sessionCookie !== session.id) return false;
+    // Only allow starting/resuming if session is in a valid pre-submission state
+    const startableStates = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'];
+    return startableStates.includes(session.status);
+  }
   return false;
 }

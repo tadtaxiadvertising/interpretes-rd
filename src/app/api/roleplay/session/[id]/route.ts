@@ -112,11 +112,12 @@ function checkSessionAccess(
 
   // Candidate sessions require the opaque server-issued session cookie created
   // by the invite/start flow. An authenticated user alone is not sufficient.
-  // The cookie equality is the binding credential; the session status is not
-  // re-checked here so an interrupted attempt can be resumed and a submitted
-  // attempt still resolves its own read-only data.
+  // The cookie equality is the binding credential; additionally verify the
+  // session is in a state that allows candidate access (STARTED/IN_PROGRESS).
   if (session.recruitmentCandidateId) {
-    return sessionCookie === session.id;
+    if (sessionCookie !== session.id) return false;
+    const candidateAccessibleStates = ['STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
+    return candidateAccessibleStates.includes(session.status);
   }
 
   return false;

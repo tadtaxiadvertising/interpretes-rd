@@ -98,18 +98,39 @@ export const RATE_LIMITS = {
 };
 
 /**
- * Get client IP from request
+ * Get client identifier from request for rate limiting.
+ * 
+ * Uses a combination of IP and User-Agent to reduce collision risk.
+ * In production behind a trusted proxy, the first x-forwarded-for entry
+ * is the real client IP. Falls back to a hash of available headers
+ * to avoid the 'unknown' bucket sharing problem.
  */
-export function getClientIp(req: Request): string {
+export function getClientIdentifier(req: Request): string {
   const forwarded = req.headers.get('x-forwarded-for');
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
   const realIp = req.headers.get('x-real-ip');
-  if (realIp) {
-    return realIp;
+  const userAgent = req.headers.get('user-agent') || '';
+  
+  let ip = 'unknown';
+  if (forwarded) {
+    ip = forwarded.split(',')[0].trim();
+  } else if (realIp) {
+    ip = realIp;
   }
-  return 'unknown';
+  
+  // Combine IP with a hash of User-Agent to reduce collision risk.
+  // This avoids all "unknown" requests sharing a single bucket.
+  const uaHash = simpleHash(userAgent);
+  return `${ip}:${uaHash}`;
+}
+
+function simpleHash(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return Math.abs(hash).toString(36);
 }
 
 /**
@@ -120,7 +141,7 @@ export function applyRateLimit(
   config: RateLimitConfig,
   customIdentifier?: string
 ): RateLimitResult {
-  const identifier = customIdentifier || getClientIp(req);
+  const identifier = customIdentifier || getClientIdentifier(req);
   return rateLimit(identifier, config);
 }
 
