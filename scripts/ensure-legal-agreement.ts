@@ -2,177 +2,138 @@ import 'dotenv/config';
 import { createHash } from 'node:crypto';
 import { getPrisma } from '../src/lib/prisma';
 
-/**
- * SCRIPT: Asegurar que existe un acuerdo legal publicado vigente.
- *
- * El onboarding requiere un `LegalAgreementVersion` con status 'PUBLISHED'
- * para poder cargar el acuerdo y permitir que el usuario acepte los términos.
- * Si no existe ninguno, este script crea uno publicado con el mismo contenido
- * y hash que la migración 20261025_versioned_legal_agreements.
- *
- * Idempotente: si ya existe un acuerdo publicado, no hace nada.
- *
- * Ejecutar contra producción (Easypanel):
- *   DATABASE_URL=... DIRECT_URL=... npx tsx scripts/ensure-legal-agreement.ts
- *
- * Opcionalmente establecer LEGAL_AGREEMENT_CONTENT para usar contenido
- * personalizado; de lo contrario se usa el contenido embebido de la migración.
- */
-
 const AGREEMENT_KEY = 'freelance-services';
-const DEFAULT_VERSION = '2026-10-01';
-const DEFAULT_TITLE = 'Contrato de Prestación de Servicios Profesionales (Freelance)';
-
-// Contenido embebido idéntico al de la migración 20261025_versioned_legal_agreements.
-const DEFAULT_CONTENT = `# Contrato de Prestación de Servicios Profesionales (Freelance)
-
-**ENTRE:**
-
-De una parte, **FREE INTERPRETERS**, en adelante denominada "LA AGENCIA".
-
-Y de la otra parte, **[SU NOMBRE]**, en adelante denominado "EL INTÉRPRETE".
-
-**ACUERDAN LO SIGUIENTE:**
-
-### 1. Objeto del Contrato
-LA AGENCIA contrata a EL INTÉRPRETE para prestar servicios de interpretación remota (VRI/OPI) de manera independiente y autónoma.
-
-### 2. Naturaleza de la Relación
-Las partes reconocen que este es un contrato de servicios profesionales (freelance) y **NO** crea una relación laboral de dependencia, sociedad o asociación. EL INTÉRPRETE actúa como contratista independiente.
-
-### 3. Obligaciones del Intérprete
-- Prestar servicios de interpretación con los más altos estándares de calidad, precisión y ética profesional.
-- Cumplir con los horarios y turnos acordados previamente.
-- Contar con el equipo técnico necesario (computadora, headset, conexión a internet estable y entorno silencioso).
-- Mantener la confidencialidad absoluta de toda la información tratada durante las sesiones de interpretación.
-- Seguir los Procedimientos Operativos Estándar (SOPs) y políticas de LA AGENCIA.
-
-### 4. Confidencialidad y Protección de Datos
-EL INTÉRPRETE se compromete a no divulgar, copiar ni utilizar para fines propios o de terceros ninguna información confidencial de LA AGENCIA o de sus clientes finales (incluyendo información médica, legal o financiera), cumpliendo con las normativas HIPAA y otras leyes aplicables.
-
-### 5. Honorarios y Forma de Pago
-- **Tarifa:** Se pagará una tarifa según el esquema de producción acordado.
-- **Plataformas:** Los pagos se procesarán según el SOP de Pagos vigente.
-- **Frecuencia:** Los pagos se realizarán según la validación de los reportes de producción.
-
-### 6. Vigencia y Terminación
-Este contrato tiene una vigencia indefinida a partir de la fecha de firma. Cualquiera de las partes puede terminar este contrato con aviso previo por escrito. LA AGENCIA puede terminar el contrato inmediatamente en caso de incumplimiento grave.
-
-### 7. Penalidades
-El incumplimiento de los turnos asignados, problemas recurrentes de calidad o faltas al reglamento interno estarán sujetos a penalidades conforme al "Formato de Penalidades" y "SOP de Penalidades" de LA AGENCIA.
-
-### 8. Ley Aplicable
-Este contrato se rige por las leyes vigentes en la República Dominicana.
-
----
-
-Al continuar, usted acepta todos los términos y condiciones establecidos en este documento.`;
-
-// Hash esperado según la migración (SHA-256 del contenido embebido).
-const EXPECTED_HASH =
-  '07e91899698bcba9de71fa1a8f7ddb43c0f95ccd0f9c98fe243354c1a27d79c4';
+const VERSION_PATTERN = /^[a-zA-Z0-9._-]{1,40}$/;
 
 function hashContent(content: string): string {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
+function requiredEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`Falta la variable obligatoria ${name}; no se publicará ningún acuerdo.`);
+  return value;
+}
+
 async function main(): Promise<void> {
   const prisma = getPrisma();
 
-  const content = process.env.LEGAL_AGREEMENT_CONTENT ?? DEFAULT_CONTENT;
-  const contentHash = hashContent(content);
-
-  // Verificar que el contenido embebido coincide con el hash de la migración.
-  if (!process.env.LEGAL_AGREEMENT_CONTENT && contentHash !== EXPECTED_HASH) {
-    throw new Error(
-      `Content hash mismatch: calculated ${contentHash}, expected ${EXPECTED_HASH}. ` +
-        'The embedded content may have been altered. Do not publish without review.'
-    );
-  }
-
-  // 1. Buscar si ya existe un acuerdo publicado para esta clave.
-  const published = await prisma.legalAgreementVersion.findFirst({
-    where: {
-      agreementKey: AGREEMENT_KEY,
-      status: 'PUBLISHED',
-      publishedAt: { not: null },
-    },
-    orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
-    select: { id: true, version: true, title: true, contentHash: true, publishedAt: true },
-  });
-
-  if (published) {
-    console.log(
-      `✅ Acuerdo legal ya publicado: id=${published.id} version=${published.version} publishedAt=${published.publishedAt}`
-    );
-    if (published.contentHash !== contentHash) {
-      console.warn(
-        `⚠️  Advertencia: el acuerdo publicado tiene contentHash ${published.contentHash} pero el contenido actual tiene hash ${contentHash}. ` +
-          'Si el contenido cambió, publique una nueva versión en lugar de modificar este.'
-      );
-    }
-    await prisma.\$disconnect();
-    return;
-  }
-
-  // 2. No hay acuerdo publicado. Verificar si existe un borrador con la misma versión.
-  const existingDraft = await prisma.legalAgreementVersion.findFirst({
-    where: {
-      agreementKey: AGREEMENT_KEY,
-      version: DEFAULT_VERSION,
-    },
-    select: { id: true, status: true },
-  });
-
-  if (existingDraft) {
-    // Publicar el borrador existente (compare-and-set por status).
-    const result = await prisma.legalAgreementVersion.updateMany({
+  try {
+    const published = await prisma.legalAgreementVersion.findFirst({
       where: {
-        id: existingDraft.id,
         agreementKey: AGREEMENT_KEY,
-        status: 'DRAFT',
-        contentHash,
-      },
-      data: {
         status: 'PUBLISHED',
-        publishedAt: new Date(),
-        publishedBy: 'system:ensure-legal-agreement',
+        publishedAt: { not: null },
       },
+      orderBy: [{ publishedAt: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, version: true, title: true, content: true, contentHash: true, publishedAt: true },
     });
-    if (result.count === 0) {
+
+    if (published) {
+      const actualHash = hashContent(published.content);
+      if (actualHash !== published.contentHash) {
+        throw new Error(
+          `El acuerdo publicado ${published.id} no supera la verificación SHA-256. No se modificó ningún registro.`,
+        );
+      }
+      console.log(
+        `Acuerdo publicado verificado: version=${published.version}, hash=${published.contentHash}, publishedAt=${published.publishedAt?.toISOString() ?? 'desconocido'}`,
+      );
+      return;
+    }
+
+    // Fail closed: never publish the historical placeholder contract implicitly.
+    if (process.env.LEGAL_AGREEMENT_ALLOW_PUBLISH !== 'true') {
       throw new Error(
-        `No se pudo publicar el borrador ${existingDraft.id}: ya no está en estado DRAFT o el contentHash cambió. Revise manualmente.`
+        'No existe un acuerdo publicado. Este script no publica por defecto. Para una publicación aprobada, use el panel administrativo o habilite explícitamente el procedimiento de emergencia.',
       );
     }
-    console.log(
-      `✅ Borrador publicado como acuerdo vigente: id=${existingDraft.id} version=${DEFAULT_VERSION}`
-    );
-  } else {
-    // 3. Crear un nuevo acuerdo publicado directamente.
-    const created = await prisma.legalAgreementVersion.create({
+
+    const content = requiredEnv('LEGAL_AGREEMENT_CONTENT');
+    const version = requiredEnv('LEGAL_AGREEMENT_VERSION');
+    const title = requiredEnv('LEGAL_AGREEMENT_TITLE');
+    const approvedBy = requiredEnv('LEGAL_AGREEMENT_APPROVED_BY');
+    const approvalReference = requiredEnv('LEGAL_AGREEMENT_APPROVAL_REFERENCE');
+
+    if (process.env.LEGAL_AGREEMENT_APPROVED !== 'true') {
+      throw new Error('LEGAL_AGREEMENT_APPROVED=true es obligatorio; no se publicará ningún acuerdo.');
+    }
+    if (!VERSION_PATTERN.test(version)) {
+      throw new Error('LEGAL_AGREEMENT_VERSION no cumple el formato permitido.');
+    }
+    if (title.length < 3 || title.length > 180) {
+      throw new Error('LEGAL_AGREEMENT_TITLE debe tener entre 3 y 180 caracteres.');
+    }
+    if (content.length < 100 || content.length > 100000) {
+      throw new Error('LEGAL_AGREEMENT_CONTENT debe tener entre 100 y 100000 caracteres.');
+    }
+    if (approvedBy.length > 180 || approvalReference.length > 300) {
+      throw new Error('Los datos de trazabilidad de aprobación exceden el límite permitido.');
+    }
+
+    const contentHash = hashContent(content);
+    const existingVersion = await prisma.legalAgreementVersion.findFirst({
+      where: { agreementKey: AGREEMENT_KEY, version },
+      select: { id: true, status: true, contentHash: true },
+    });
+
+    if (existingVersion) {
+      if (existingVersion.status !== 'DRAFT') {
+        throw new Error(
+          `La versión ${version} ya existe con estado ${existingVersion.status}; no se alterará ni republicará.`,
+        );
+      }
+      if (existingVersion.contentHash !== contentHash) {
+        throw new Error(
+          `El borrador ${version} no coincide con el contenido aprobado (SHA-256). Edítelo y verifíquelo en el panel administrativo antes de publicar.`,
+        );
+      }
+
+      const result = await prisma.legalAgreementVersion.updateMany({
+        where: {
+          id: existingVersion.id,
+          agreementKey: AGREEMENT_KEY,
+          version,
+          status: 'DRAFT',
+          contentHash,
+        },
+        data: {
+          status: 'PUBLISHED',
+          publishedAt: new Date(),
+          publishedBy: approvedBy,
+        },
+      });
+      if (result.count !== 1) {
+        throw new Error('El borrador cambió durante la operación; no se publicó. Vuelva a revisar el estado.');
+      }
+      console.log(
+        `Borrador aprobado publicado: version=${version}, hash=${contentHash}, referencia=${approvalReference}`,
+      );
+      return;
+    }
+
+    await prisma.legalAgreementVersion.create({
       data: {
         agreementKey: AGREEMENT_KEY,
-        version: DEFAULT_VERSION,
-        title: DEFAULT_TITLE,
+        version,
+        title,
         content,
         contentHash,
         status: 'PUBLISHED',
-        createdBy: 'system:ensure-legal-agreement',
-        publishedBy: 'system:ensure-legal-agreement',
+        createdBy: approvedBy,
+        publishedBy: approvedBy,
         publishedAt: new Date(),
       },
-      select: { id: true, version: true, status: true, publishedAt: true },
     });
     console.log(
-      `✅ Acuerdo legal creado y publicado: id=${created.id} version=${created.version} status=${created.status}`
+      `Acuerdo aprobado creado y publicado: version=${version}, hash=${contentHash}, referencia=${approvalReference}`,
     );
+  } finally {
+    await prisma.$disconnect();
   }
-
-  await prisma.\$disconnect();
 }
 
-main()
-  .catch((error: unknown) => {
-    console.error('❌ Error asegurando acuerdo legal:', error);
-    process.exit(1);
-  });
+main().catch((error: unknown) => {
+  console.error('Error en la verificación/publicación del acuerdo legal:', error);
+  process.exitCode = 1;
+});
