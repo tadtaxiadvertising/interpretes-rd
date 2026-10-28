@@ -53,4 +53,28 @@ next-env.d.ts
 
 /src/generated/prisma
 
+# vercel
 .vercel
+
+# output files from local validation (do not commit)
+*.txt
+
+# local audit / diagnostics scripts (dev-only, not part of deploy)
+scripts/audit-data-integrity.ts
+scripts/audit-rbac.ts
+
+# agent / tool working directories (not part of the repo)
+.opencode/
+.pwtest/
+.tmpauth/
+.agents/skills/project-audit-fixer/
+
+# large external directories (must NOT be cloned to Easypanel)
+"Interpreter Plastform/"
+Obsidian/
+
+# contextual docs (agent persona, not source code)
+SOUL.md
+
+# ad-hoc SQL migrations (not part of prisma/migrations/)
+migration.sql
