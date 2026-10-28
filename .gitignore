@@ -59,10 +59,6 @@ next-env.d.ts
 # output files from local validation (do not commit)
 *.txt
 
-# local audit / diagnostics scripts (dev-only, not part of deploy)
-scripts/audit-data-integrity.ts
-scripts/audit-rbac.ts
-
 # agent / tool working directories (not part of the repo)
 .opencode/
 .pwtest/
