@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Plantillas sintéticas para diseñar pruebas. No son credenciales reales ni deben sembrarse en producción.",
+  "description": "Plantillas sintéticas para diseñar pruebas. No son credenciales reales ni deben sembrarse en producción. Los únicos UserRole confirmados en src/lib/types.ts son admin e interpreter; el candidato es un contexto de reclutamiento/acceso por invitación, no un rol de cuenta confirmado.",
   "safety": {
     "environment": "isolated-e2e-only",
     "neverUseProduction": true,
@@ -25,7 +25,7 @@
     },
     {
       "fixtureId": "candidate-incomplete",
-      "role": "candidate",
+      "role": "recruitment-candidate-context-not-UserRole",
       "email": "e2e-candidate-incomplete@example.com",
       "applicationState": "IN_PROGRESS",
       "onboardingState": "INCOMPLETE",
@@ -37,11 +37,12 @@
         "other candidates",
         "restricted operations",
         "admin configuration"
-      ]
+      ],
+      "authentication": "Use the implemented recruitment ownership/invitation flow; do not seed a synthetic RBAC role."
     },
     {
       "fixtureId": "candidate-roleplay-eligible",
-      "role": "candidate",
+      "role": "recruitment-candidate-context-not-UserRole",
       "email": "e2e-candidate-roleplay@example.com",
       "applicationState": "IN_PROGRESS",
       "onboardingState": "READY_FOR_ROLEPLAY",
@@ -52,11 +53,12 @@
       "deniedAccess": [
         "other candidates",
         "QA admin actions"
-      ]
+      ],
+      "authentication": "Use the implemented recruitment ownership/invitation flow; do not seed a synthetic RBAC role."
     },
     {
       "fixtureId": "candidate-complete",
-      "role": "candidate",
+      "role": "recruitment-candidate-context-not-UserRole",
       "email": "e2e-candidate-complete@example.com",
       "applicationState": "COMPLETED",
       "onboardingState": "COMPLETE",
@@ -66,7 +68,8 @@
       "deniedAccess": [
         "other candidates",
         "admin APIs"
-      ]
+      ],
+      "authentication": "Use the implemented recruitment ownership/invitation flow; do not seed a synthetic RBAC role."
     },
     {
       "fixtureId": "interpreter-active",
@@ -84,7 +87,7 @@
     },
     {
       "fixtureId": "qa-reviewer",
-      "role": "qa-reviewer-if-supported",
+      "role": "unsupported-unless-explicitly-implemented",
       "email": "e2e-qa-reviewer@example.com",
       "expectedAccess": [
         "authorized roleplay review queue"
@@ -96,7 +99,7 @@
     },
     {
       "fixtureId": "recruiter",
-      "role": "recruiter-if-supported",
+      "role": "unsupported-unless-explicitly-implemented",
       "email": "e2e-recruiter@example.com",
       "expectedAccess": [
         "authorized candidate review"
@@ -132,7 +135,9 @@
     }
   ],
   "notes": [
-    "Confirm actual enum values and roles in Prisma schema before seeding; role labels ending in if-supported are conditional, not assertions that these roles already exist.",
+    "Verified: src/lib/types.ts currently defines UserRole as only admin | interpreter. Candidate is modeled as a recruitment context/invitation flow, not a confirmed account role.",
+    "Do not seed QA/recruiter roles unless a concrete authorization policy and supported enum/schema value are verified in code.",
+    "Confirm actual Prisma enums and required fields before seeding; lifecycle values in this file are test scenario labels unless directly mapped to persisted enum values.",
     "Do not commit passwords, session cookies, API tokens, document scans, payment data, or actual medical/legal call content.",
     "Use unique identifiers per test run and cleanup only records in the dedicated E2E database.",
     "The test harness must not automatically create privileged accounts outside a local/isolated test environment."
