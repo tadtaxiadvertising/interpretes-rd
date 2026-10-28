@@ -12,20 +12,21 @@
 - No guardar contraseñas, tokens, datos bancarios, documentos de identidad ni datos médicos reales en fixtures, logs o capturas.
 - Cada prueba de autorización debe comprobar tanto el acceso permitido como el rechazo (403/redirect/resultado equivalente) al acceder directamente a rutas y server actions.
 
-## Roles que deben verificarse
+## Roles y contextos confirmados en el código
 
-| Rol / estado | Alcance esperado | Límites críticos |
-|---|---|---|
-| Visitante no autenticado | Landing, registro/inicio de sesión y páginas públicas | No leer dashboard, expedientes, acuerdos privados ni APIs protegidas |
-| Candidato/postulante | Perfil propio, postulación persistente, onboarding y documentos/consentimientos propios, Roleplay cuando sea elegible | No ver ni modificar postulaciones ajenas; no saltar pasos bloqueantes ni iniciar Roleplay fuera de estado permitido |
-| Intérprete habilitado | Su perfil, disponibilidad, actividad y recursos asignados según estado | No acceder a expedientes de candidatos ajenos ni a funciones administrativas |
-| Intérprete con onboarding incompleto | Retomar el paso pendiente y ver su progreso | Sin acceso a áreas operativas restringidas hasta completar los requisitos |
-| Revisor de Roleplay / QA | Cola y evaluaciones autorizadas, según permisos implementados | No cambiar roles, acceder a datos innecesarios ni autoaprobar su propio caso si el producto lo prohíbe |
-| Reclutador / RR. HH. | Revisar candidatos y progresos que le correspondan | No modificar configuración global ni consultar información financiera innecesaria |
-| Administrador | Configuración, usuarios, contenido y acuerdos versionados según permiso | Acciones críticas auditadas; no alterar evidencia de aceptación histórica |
-| Cuenta deshabilitada / sesión vencida | Mensaje de estado y recuperación segura | Ningún acceso protegido; sesión revocada no debe revivir mediante cookies antiguas |
+El tipo compartido `UserRole` de `src/lib/types.ts` define actualmente solo `admin` e `interpreter`. No hay evidencia en ese contrato de tipos de roles de cuenta separados para QA o reclutamiento. Las pruebas deben mantener esa distinción y no crear usuarios con roles inventados.
 
-> Antes de implementar automatización, confirma en el código los nombres reales de roles y permisos. No inventar roles nuevos en la base de datos para que coincidan con esta matriz: adapta la matriz a los roles implementados.
+| Rol / contexto | Mecanismo observado | Alcance que debe verificarse | Límites críticos |
+|---|---|---|---|
+| Visitante no autenticado | Sin identidad autenticada | Landing, registro/inicio de sesión y páginas públicas | No leer dashboard, expedientes, acuerdos privados ni APIs protegidas |
+| Candidato/postulante | Aplicación de reclutamiento y acceso a Roleplay mediante invitación/token; no es un `UserRole` compartido confirmado | Postulación propia, onboarding y documentos/consentimientos propios, Roleplay cuando sea elegible | No ver ni modificar postulaciones ajenas; no saltar pasos bloqueantes ni iniciar Roleplay fuera de estado permitido |
+| Intérprete | `UserRole = interpreter` | Su perfil, disponibilidad, actividad y recursos asignados según estado | No acceder a expedientes de candidatos ajenos ni a funciones administrativas |
+| Intérprete con onboarding incompleto | Intérprete con estado de onboarding incompleto | Retomar el paso pendiente y ver su progreso | Sin acceso a áreas operativas restringidas hasta completar los requisitos |
+| Administrador | `UserRole = admin`; algunas acciones requieren explícitamente este rol | Configuración, usuarios, contenido y acuerdos versionados según permiso | Acciones críticas auditadas; no alterar evidencia de aceptación histórica |
+| QA / reclutamiento | No confirmado como rol de cuenta en `UserRole` | Probar únicamente si existe una política explícita en código; en caso contrario marcar como no soportado, no como aprobado | No otorgar privilegios basándose en etiquetas ficticias de fixtures |
+| Cuenta deshabilitada / sesión vencida | Estado de cuenta o sesión, a confirmar en cada proveedor de autenticación | Mensaje de estado y recuperación segura | Ningún acceso protegido; sesión revocada no debe revivir mediante cookies antiguas |
+
+> Base verificada: `src/lib/types.ts` limita `UserRole` a `admin | interpreter`; `src/app/actions/roleplay.ts` restringe la creación y confirmación del audio base a admin; `src/app/api/roleplay/start/route.ts` inicia el flujo de candidato mediante token de invitación. Los roles de QA/reclutamiento no deben tratarse como existentes sin evidencia adicional.
 
 ## Matriz de casos de aceptación
 
