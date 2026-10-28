@@ -84,3 +84,13 @@
 ### Criterio de cierre
 
 La auditoría sigue abierta hasta que los chequeos E2E y de scripts sean reproducibles, y los caminos críticos de postulación, onboarding y Roleplay tengan pruebas de regresión adecuadas. El éxito del build por sí solo no acredita la integridad de los flujos de negocio.
+
+
+### Revisión de seguridad de acuerdos legales — 2026-10-28
+
+- **Riesgo confirmado:** `scripts/ensure-legal-agreement.ts` podía crear y publicar automáticamente el contrato placeholder histórico cuando no existía una versión publicada. El contenido genérico incluye afirmaciones sobre clasificación independiente, referencia a HIPAA sin confirmar aplicabilidad y penalidades sujetas a documentos externos no incluidos.
+- **Corrección propuesta:** PR #131 cambia el script a verificación de solo lectura cuando ya existe un acuerdo publicado; si no existe, la publicación falla por defecto. La excepción requiere aprobación explícita, identidad del aprobador, referencia de aprobación, versión, título y contenido suministrados por variables de entorno. La referencia se conserva en `publishedBy`.
+- **Documentación:** `docs/legal/SAFE_PUBLISH_RUNBOOK.md` describe los controles y la reversión sin modificar aceptaciones históricas.
+- **Estado de validación:** pendiente CI y revisión del PR. No se ejecutó el script, no se modificó ninguna base de datos y no se publicó ni reemplazó un acuerdo.
+- **Contrato ampliado:** PR #130 contiene un borrador para revisión de abogado dominicano y una estrategia de pruebas por rol; permanece como borrador y no debe publicarse ni solicitar firmas hasta recibir aprobación legal.
+- **Siguiente paso:** revisar los PRs y su CI, y validar el flujo de acuerdos con una base de datos E2E aislada antes de cualquier despliegue.
