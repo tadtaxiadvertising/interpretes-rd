@@ -72,6 +72,7 @@ async function main(): Promise<void> {
     }
 
     const contentHash = hashContent(content);
+    const publishedBy = `${approvedBy} [approval:${approvalReference}]`;
     const existingVersion = await prisma.legalAgreementVersion.findFirst({
       where: { agreementKey: AGREEMENT_KEY, version },
       select: { id: true, status: true, contentHash: true },
@@ -100,7 +101,7 @@ async function main(): Promise<void> {
         data: {
           status: 'PUBLISHED',
           publishedAt: new Date(),
-          publishedBy: approvedBy,
+          publishedBy,
         },
       });
       if (result.count !== 1) {
@@ -121,7 +122,7 @@ async function main(): Promise<void> {
         contentHash,
         status: 'PUBLISHED',
         createdBy: approvedBy,
-        publishedBy: approvedBy,
+        publishedBy,
         publishedAt: new Date(),
       },
     });
