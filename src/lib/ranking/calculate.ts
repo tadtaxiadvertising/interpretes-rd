@@ -116,7 +116,8 @@ export async function getPrivateRankingSummary(
       const avgAdherence = interp.productionLogs.length > 0
         ? interp.productionLogs.reduce((sum, log) => sum + Number(log.adherence ?? 0), 0) / interp.productionLogs.length
         : null;
-      const qaScore = interp.qaScores[0]?.totalScore ? Number(interp.qaScores[0].totalScore) : null;
+      const rawQaScore = interp.qaScores[0]?.totalScore;
+      const qaScore = rawQaScore == null ? null : Number(rawQaScore);
       
       // Simple consistency: days with production / working days in month
       const workingDays = 22; // Approximate
@@ -195,7 +196,8 @@ export async function getAdminLeaderboard(): Promise<AdminRankingRow[]> {
       const avgAdherence = interp.productionLogs.length > 0
         ? interp.productionLogs.reduce((sum, log) => sum + Number(log.adherence ?? 0), 0) / interp.productionLogs.length
         : null;
-      const qaScore = interp.qaScores[0]?.totalScore ? Number(interp.qaScores[0].totalScore) : null;
+      const rawQaScore = interp.qaScores[0]?.totalScore;
+      const qaScore = rawQaScore == null ? null : Number(rawQaScore);
       
       const workingDays = 22;
       const activeDays = new Set(interp.productionLogs.map(l => l.date.toISOString().split('T')[0])).size;
