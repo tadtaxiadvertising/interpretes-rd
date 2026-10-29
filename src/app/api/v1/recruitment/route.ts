@@ -5,6 +5,7 @@ import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth, resolveApiActor } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
 import { isCanonicalStatus } from '@/lib/recruitment/status-display';
+import { z } from 'zod';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
@@ -18,30 +19,48 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const search = searchParams.get('search');
+    const limitRaw = searchParams.get('limit');
+    const offsetRaw = searchParams.get('offset');
+
+    const querySchema = z.object({
+      status: z.string().optional(),
+      search: z.string().trim().max(200).optional(),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
+      offset: z.coerce.number().int().min(0).default(0),
+    });
+    const parsed = querySchema.safeParse({
+      status: status ?? undefined,
+      search: search ?? undefined,
+      limit: limitRaw ?? undefined,
+      offset: offsetRaw ?? undefined,
+    });
+    if (!parsed.success) {
+      return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400, headers: corsHeaders(request) });
+    }
 
     const whereClause: Record<string, unknown> = {};
-    if (status) {
-      // Filters on the canonical application status. Invalid values are
-      // rejected up front instead of surfacing as a Prisma enum error.
-      if (!isCanonicalStatus(status)) {
+    if (parsed.data.status) {
+      if (!isCanonicalStatus(parsed.data.status)) {
         return NextResponse.json(
-          { success: false, error: `Unknown application status: ${status}` },
+          { success: false, error: `Unknown application status: ${parsed.data.status}` },
           { status: 400, headers: corsHeaders(request) }
         );
       }
-      whereClause.applications = { some: { status } };
+      whereClause.applications = { some: { status: parsed.data.status } };
     }
-    if (search) {
+    if (parsed.data.search) {
       whereClause.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { telefono: { contains: search, mode: 'insensitive' } },
+        { name: { contains: parsed.data.search, mode: 'insensitive' } },
+        { email: { contains: parsed.data.search, mode: 'insensitive' } },
+        { telefono: { contains: parsed.data.search, mode: 'insensitive' } },
       ];
     }
 
     const candidates = await prisma.recruitmentCandidate.findMany({
       where: whereClause,
       orderBy: { fechaPostulacion: 'desc' },
+      take: parsed.data.limit,
+      skip: parsed.data.offset,
     });
 
     return NextResponse.json(candidates, { headers: corsHeaders(request) });

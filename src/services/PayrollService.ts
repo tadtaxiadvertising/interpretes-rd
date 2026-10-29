@@ -141,6 +141,9 @@ export async function calculateUnifiedTime(
   const importedMinutes = (productionLogs || []).reduce(
     (sum: number, log: ProductionLogRecord) => {
       const effectiveMinutes = log.verifiedMinutes !== null ? log.verifiedMinutes : (log.interpretedMinutes || 0);
+      if (!Number.isFinite(effectiveMinutes) || effectiveMinutes < 0) {
+        throw new Error(`Invalid production minutes for interpreter ${interpreterId}`);
+      }
       return sum + effectiveMinutes;
     },
     0
@@ -202,6 +205,9 @@ export async function calculateFullPayroll(
 
   // Regla C: Manejo seguro de Decimal
   const baseRatePerMinute = parseFloat(interpreter.tariffPerMinute.toString());
+  if (!Number.isFinite(baseRatePerMinute) || baseRatePerMinute < 0) {
+    throw new Error(`Invalid tariff for interpreter ${interpreterId}`);
+  }
 
   // 2. Obtener logs de producción (single source of truth: incluye imports,
   //    logs manuales y llamadas sincronizadas desde el timer en vivo)
@@ -220,8 +226,15 @@ export async function calculateFullPayroll(
   // double-count minutes already present in productionLogs.
   const interpretedSum = (productionLogs || []).reduce((sum: number, log: ProductionLogRecord) => {
     const effective = log.verifiedMinutes !== null ? log.verifiedMinutes : (log.interpretedMinutes || 0);
+    if (!Number.isFinite(effective) || effective < 0) {
+      throw new Error(`Invalid production minutes for interpreter ${interpreterId}`);
+    }
     return sum + effective;
   }, 0);
+
+  if (!Number.isFinite(interpretedSum) || interpretedSum < 0) {
+    throw new Error(`Invalid interpreted minutes for interpreter ${interpreterId}`);
+  }
 
   // Minutos Totales Base
   const totalMinutes = Math.round(interpretedSum * 100) / 100;

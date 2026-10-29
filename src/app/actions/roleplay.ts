@@ -375,7 +375,7 @@ export async function startCandidateRoleplay() {
       }
     } else {
       session = { id: previousSession.id, status: previousSession.status };
-      if (['DRAFT', 'INVITED', 'PENDING'].includes(session.status)) {
+      if (['DRAFT', 'INVITED'].includes(session.status)) {
         // Compare-and-set against the state observed above. A concurrent submit
         // or evaluation must not be overwritten by this resume request.
         const transition = await db.roleplaySession.updateMany({
@@ -491,7 +491,7 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
       return { success: false, error: 'Session not found', code: 'NOT_FOUND' };
     }
 
-    const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING'];
+    const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
     if (!validSubmitStates.includes(session.status)) {
       return { success: false, error: 'Session is not in a state that allows submitting responses', code: 'INVALID_STATE' };
     }
@@ -545,6 +545,7 @@ const ConfirmResponseSchema = z.object({
   scenarioId: z.string().min(1).optional(),
   recordedAudioUrl: z.string().min(1),
   sourceAudioPath: z.string().min(1).max(1024).optional(),
+  processedAudioPath: z.string().min(1).max(1024).optional(),
   durationSec: z.number().int().min(0).max(86400).optional(),
   selfScore: z.record(z.string(), z.number()).optional(),
   selfNotes: z.string().optional(),
@@ -567,6 +568,9 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   const input = parseResult.data;
 
   if (input.sourceAudioPath && (!input.scenarioId || !isCanonicalResponseAudioPath(input.sourceAudioPath, input.sessionId, input.scenarioId))) {
+    return { success: false, error: 'Invalid response audio path', code: 'VALIDATION_ERROR' };
+  }
+  if (input.processedAudioPath && (!input.scenarioId || !isCanonicalResponseAudioPath(input.processedAudioPath, input.sessionId, input.scenarioId))) {
     return { success: false, error: 'Invalid response audio path', code: 'VALIDATION_ERROR' };
   }
 
@@ -623,7 +627,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         // as an idempotent replay; never overwrite a confirmed response.
         const priorResponse = await tx.roleplayResponse.findFirst({
           where: { scenarioId: input.scenarioId },
-          select: { id: true, sourceAudioUrl: true, sourceAudioPath: true },
+          select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
         });
         if (priorResponse) {
           if (input.sourceAudioPath
@@ -634,6 +638,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
               submitted: session.status === 'SUBMITTED',
               candidateId: session.recruitmentCandidateId,
               sourceAudioPath: priorResponse.sourceAudioPath,
+              processedAudioPath: priorResponse.processedAudioPath,
               newlyCreated: false,
             };
           }
@@ -651,7 +656,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         }
       }
 
-      const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS', 'PENDING'];
+      const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
       const canSubmit = validSubmitStates.includes(session.status);
 
       if (!canSubmit) {
@@ -663,7 +668,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             select: { id: true },
           });
           if (recorded) {
-            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, newlyCreated: false };
+            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, processedAudioPath: input.processedAudioPath ?? null, newlyCreated: false };
           }
         }
         throw new Error('Session not available for submission');
@@ -683,6 +688,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             scenarioId: input.scenarioId,
             sourceAudioUrl: input.recordedAudioUrl,
             sourceAudioPath: input.sourceAudioPath ?? null,
+            processedAudioPath: input.processedAudioPath ?? null,
             durationSec: input.durationSec ?? null,
             selfScore: input.selfScore ?? undefined,
             selfNotes: input.selfNotes ?? null,
@@ -732,7 +738,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         });
       }
 
-      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, newlyCreated: !!input.scenarioId };
+      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, processedAudioPath: input.processedAudioPath ?? null, newlyCreated: !!input.scenarioId };
     });
 
     // Convert only after the response row commits, and scope conversion to this
@@ -887,7 +893,7 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
       return { success: false, error: 'Invitation expired', code: 'TOKEN_EXPIRED' };
     }
 
-    const validInviteStates = ['DRAFT', 'INVITED', 'PENDING'];
+    const validInviteStates = ['DRAFT', 'INVITED'];
     if (!validInviteStates.includes(access.session.status)) {
       return { success: false, error: 'Session no longer available', code: 'INVALID_STATE' };
     }

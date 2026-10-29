@@ -4,6 +4,7 @@ import { QAScoreSchema } from '@/lib/validators';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
+import { z } from 'zod';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
@@ -15,15 +16,33 @@ export async function GET(request: Request) {
     if (denied) return denied;
 
     const { searchParams } = new URL(request.url);
-    const interpreterId = searchParams.get('interpreterId');
+    const interpreterIdRaw = searchParams.get('interpreterId');
     const auditor = searchParams.get('auditor');
+    const limitRaw = searchParams.get('limit');
+    const offsetRaw = searchParams.get('offset');
+
+    const querySchema = z.object({
+      interpreterId: z.coerce.number().int().positive().optional(),
+      auditor: z.string().trim().min(1).max(200).optional(),
+      limit: z.coerce.number().int().min(1).max(500).default(100),
+      offset: z.coerce.number().int().min(0).default(0),
+    });
+    const parsed = querySchema.safeParse({
+      interpreterId: interpreterIdRaw ?? undefined,
+      auditor: auditor ?? undefined,
+      limit: limitRaw ?? undefined,
+      offset: offsetRaw ?? undefined,
+    });
+    if (!parsed.success) {
+      return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400, headers: corsHeaders(request) });
+    }
 
     const whereClause: Record<string, unknown> = {};
-    if (interpreterId) {
-      whereClause.interpreterId = parseInt(interpreterId, 10);
+    if (parsed.data.interpreterId) {
+      whereClause.interpreterId = parsed.data.interpreterId;
     }
-    if (auditor) {
-      whereClause.auditor = { contains: auditor, mode: 'insensitive' };
+    if (parsed.data.auditor) {
+      whereClause.auditor = { contains: parsed.data.auditor, mode: 'insensitive' };
     }
 
     const scores = await prisma.qAScore.findMany({
@@ -34,6 +53,8 @@ export async function GET(request: Request) {
         }
       },
       orderBy: { auditDate: 'desc' },
+      take: parsed.data.limit,
+      skip: parsed.data.offset,
     });
 
     return NextResponse.json(scores, {

@@ -3,14 +3,19 @@ import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { setRoleplaySessionCookie } from '@/lib/roleplay/session-cookie';
+import { z } from 'zod';
 
 const db = prisma;
+
+const ValidateInviteSchema = z.object({
+  token: z.string().trim().min(1, 'Token required'),
+});
 
 // Invitation entry is validate + start: opening a still-available link binds
 // the browser to the session and moves it out of the pre-start states. A
 // session already in progress is resumed. Consumption (usedAt) stays a
 // separate, later step and is never triggered by validation.
-const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'PENDING', 'STARTED', 'IN_PROGRESS'];
+const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'];
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting
@@ -27,10 +32,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { token } = await req.json();
-    
-    if (!token) {
-      return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
+    let token: string;
+    try {
+      const parsed = ValidateInviteSchema.safeParse(await req.json());
+      if (!parsed.success) {
+        return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
+      }
+      token = parsed.data.token;
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
     }
 
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -58,7 +68,7 @@ export async function POST(req: NextRequest) {
 
     // Compare-and-set the transition: the session may have become terminal
     // after the invitation lookup. Never overwrite a submitted/evaluated state.
-    if (['DRAFT', 'INVITED', 'PENDING'].includes(access.session.status)) {
+    if (['DRAFT', 'INVITED'].includes(access.session.status)) {
       const transition = await db.roleplaySession.updateMany({
         where: { id: access.sessionId, status: access.session.status },
         data: { status: 'STARTED' },

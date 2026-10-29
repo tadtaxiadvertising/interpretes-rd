@@ -21,29 +21,51 @@ export const GET = withSecurity(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
   const search = searchParams.get('search');
+  const limitRaw = searchParams.get('limit');
+  const offsetRaw = searchParams.get('offset');
+
+  const querySchema = z.object({
+    status: z.string().optional(),
+    search: z.string().trim().max(200).optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
+  const parsed = querySchema.safeParse({
+    status: status ?? undefined,
+    search: search ?? undefined,
+    limit: limitRaw ?? undefined,
+    offset: offsetRaw ?? undefined,
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400 });
+  }
 
   const whereClause: Record<string, unknown> = {};
-  if (status) {
-    whereClause.status = status;
+  if (parsed.data.status) {
+    whereClause.status = parsed.data.status;
   }
-  if (search) {
+  if (parsed.data.search) {
     whereClause.OR = [
-      { name: { contains: search, mode: 'insensitive' } },
-      { externalId: { contains: search, mode: 'insensitive' } },
-      { emailCorporativo: { contains: search, mode: 'insensitive' } },
+      { name: { contains: parsed.data.search, mode: 'insensitive' } },
+      { externalId: { contains: parsed.data.search, mode: 'insensitive' } },
+      { emailCorporativo: { contains: parsed.data.search, mode: 'insensitive' } },
     ];
   }
 
   const interpreters = await prisma.interpreter.findMany({
     where: whereClause,
     orderBy: { createdAt: 'desc' },
+    take: parsed.data.limit,
+    skip: parsed.data.offset,
   });
 
   return NextResponse.json(interpreters);
 }, {
   query: z.object({
     status: z.string().optional(),
-    search: z.string().optional()
+    search: z.string().optional(),
+    limit: z.string().optional(),
+    offset: z.string().optional()
   })
 });
 

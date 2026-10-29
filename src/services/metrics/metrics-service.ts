@@ -1,7 +1,7 @@
 'use server';
 
 import prisma from '@/lib/prisma';
-import { getMonthBounds, sumEffectiveLogMinutes } from '@/lib/interpreter-metrics';
+import { getMonthBounds, getMonthBoundsForPeriod, sumEffectiveLogMinutes } from '@/lib/interpreter-metrics';
 
 const db = prisma;
 
@@ -39,6 +39,9 @@ export async function updateInterpreterMetrics(
   period?: string
 ): Promise<MetricUpdateResult | { error: string }> {
   const targetPeriod = period || getCurrentPeriod();
+  if (!/^\d{4}-\d{2}$/.test(targetPeriod)) {
+    return { error: 'Invalid period' };
+  }
 
   try {
     // Get interpreter with production logs and QA scores for the period
@@ -70,7 +73,8 @@ export async function updateInterpreterMetrics(
     }
 
     const interpretedMinutes = sumEffectiveLogMinutes(interpreter.productionLogs);
-    const qaScore = interpreter.qaScores?.[0]?.totalScore ? Number(interpreter.qaScores[0].totalScore) : null;
+    const rawQaScore = interpreter.qaScores?.[0]?.totalScore;
+    const qaScore = rawQaScore == null ? null : Number(rawQaScore);
 
     // Upsert metrics
     const metrics = await db.interpreterMonthlyMetrics.upsert({
@@ -112,6 +116,9 @@ export async function updateInterpreterMetrics(
  */
 export async function recalculateRankings(period?: string): Promise<number> {
   const targetPeriod = period || getCurrentPeriod();
+  if (!/^\d{4}-\d{2}$/.test(targetPeriod)) {
+    return 0;
+  }
 
   try {
     // Get all metrics for the period
@@ -197,6 +204,9 @@ export async function getInterpreterMetrics(
   totalInterpreters: number | null;
 } | null> {
   const targetPeriod = period || getCurrentPeriod();
+  if (!/^\d{4}-\d{2}$/.test(targetPeriod)) {
+    return null;
+  }
 
   const metrics = await db.interpreterMonthlyMetrics.findUnique({
     where: {
@@ -223,26 +233,8 @@ export async function getInterpreterMetrics(
   };
 }
 
-/**
- * Get month bounds for a specific period (YYYY-MM)
- */
-function getMonthBoundsForPeriod(period: string): { startOfMonth: Date; endOfMonth: Date } {
-  const [year, month] = period.split('-').map(Number);
-  const startOfMonth = new Date(Date.UTC(year, month - 1, 1));
-  const endOfMonth = new Date(Date.UTC(year, month, 0, 23, 59, 59));
-  return { startOfMonth, endOfMonth };
-}
-
-/**
- * Get period bounds (Santo Domingo timezone)
- */
-function getMonthBoundsForPeriodLocal(period: string): { startOfMonth: Date; endOfMonth: Date } {
-  const [year, month] = period.split('-').map(Number);
-  // Create date in Santo Domingo timezone
-  const startOfMonth = new Date(year, month - 1, 1, 0, 0, 0);
-  const endOfMonth = new Date(year, month, 0, 23, 59, 59);
-  return { startOfMonth, endOfMonth };
-}
+// Month bounds are centralized in @/lib/interpreter-metrics to keep
+// production, payroll and metrics aligned on the same period definition.
 
 /**
  * Get top interpreters for leaderboard
@@ -255,6 +247,9 @@ export async function getLeaderboard(period?: string, limit = 10): Promise<Array
   rankingPosition: number;
 }>> {
   const targetPeriod = period || getCurrentPeriod();
+  if (!/^\d{4}-\d{2}$/.test(targetPeriod)) {
+    return [];
+  }
 
   const metrics = await db.interpreterMonthlyMetrics.findMany({
     where: { period: targetPeriod },

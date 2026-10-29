@@ -15,14 +15,32 @@ export const GET = withSecurity(async (request: NextRequest) => {
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
-  const interpreterId = searchParams.get('interpreterId');
+  const interpreterIdRaw = searchParams.get('interpreterId');
+  const limitRaw = searchParams.get('limit');
+  const offsetRaw = searchParams.get('offset');
+
+  const querySchema = z.object({
+    status: z.string().optional(),
+    interpreterId: z.coerce.number().int().positive().optional(),
+    limit: z.coerce.number().int().min(1).max(500).default(100),
+    offset: z.coerce.number().int().min(0).default(0),
+  });
+  const parsed = querySchema.safeParse({
+    status: status ?? undefined,
+    interpreterId: interpreterIdRaw ?? undefined,
+    limit: limitRaw ?? undefined,
+    offset: offsetRaw ?? undefined,
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400 });
+  }
 
   const whereClause: Record<string, unknown> = {};
-  if (status) {
-    whereClause.status = status;
+  if (parsed.data.status) {
+    whereClause.status = parsed.data.status;
   }
-  if (interpreterId) {
-    whereClause.interpreterId = parseInt(interpreterId, 10);
+  if (parsed.data.interpreterId) {
+    whereClause.interpreterId = parsed.data.interpreterId;
   }
 
   const records = await prisma.payrollRecord.findMany({
@@ -33,12 +51,16 @@ export const GET = withSecurity(async (request: NextRequest) => {
       }
     },
     orderBy: { periodStart: 'desc' },
+    take: parsed.data.limit,
+    skip: parsed.data.offset,
   });
 
   return NextResponse.json(records);
 }, {
   query: z.object({
     status: z.string().optional(),
-    interpreterId: z.string().optional()
+    interpreterId: z.string().optional(),
+    limit: z.string().optional(),
+    offset: z.string().optional()
   })
 });

@@ -2,15 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
+import { z } from 'zod';
 
 const db = prisma;
 
+const StartRoleplaySchema = z.object({
+  token: z.string().trim().min(1, 'Token required'),
+});
+
 export async function POST(req: NextRequest) {
   try {
-    const { token } = await req.json();
-
-    if (!token) {
-      return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
+    let token: string;
+    try {
+      const parsed = StartRoleplaySchema.safeParse(await req.json());
+      if (!parsed.success) {
+        return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
+      }
+      token = parsed.data.token;
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
     }
 
     const tokenHash = createHash('sha256').update(token).digest('hex');

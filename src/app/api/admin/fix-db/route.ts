@@ -31,7 +31,6 @@ export async function GET(request: Request) {
     return NextResponse.json({
       success: true,
       message: "Database schema successfully patched with all missing columns!",
-      databaseUrlPrefix: process.env.DATABASE_URL?.substring(0, 30) || 'Missing',
     });
   } catch (error) {
     return apiError({ error, fallback: 'Database schema patch failed' });

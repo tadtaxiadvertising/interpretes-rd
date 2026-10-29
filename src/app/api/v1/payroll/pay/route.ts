@@ -27,15 +27,26 @@ export async function PATCH(request: Request) {
       );
     }
 
-    // Update state to PAID
-    const updatedPayroll = await prisma.payrollRecord.update({
-      where: { id: payrollRecordId },
+    // Atomic claim to avoid races/double payment.
+    const claim = await prisma.payrollRecord.updateMany({
+      where: { id: payrollRecordId, status: 'APPROVED' },
       data: {
         status: 'PAID',
         transactionReference,
         paidAt: new Date(),
         paymentDate: new Date()
       }
+    });
+
+    if (claim.count === 0) {
+      return NextResponse.json(
+        { error: 'Concurrent modification detected; payroll record is no longer APPROVED.' },
+        { status: 409 }
+      );
+    }
+
+    const updatedPayroll = await prisma.payrollRecord.findUnique({
+      where: { id: payrollRecordId },
     });
 
     return NextResponse.json({ success: true, data: updatedPayroll });

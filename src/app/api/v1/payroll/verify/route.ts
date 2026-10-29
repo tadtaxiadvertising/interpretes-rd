@@ -87,13 +87,31 @@ export async function POST(request: Request) {
     if (action === 'markPaid') {
       const now = new Date();
 
-      const updated = await db.payrollRecord.update({
-        where: { id: payrollRecordId },
+      const claim = await db.payrollRecord.updateMany({
+        where: { id: payrollRecordId, status: 'APPROVED' },
         data: {
           status: 'PAID',
           paidAt: now,
           paymentDate: now,
         },
+      });
+
+      if (claim.count === 0) {
+        const current = await db.payrollRecord.findUnique({
+          where: { id: payrollRecordId },
+          select: { id: true, status: true },
+        });
+        if (!current) {
+          return NextResponse.json({ success: false, error: `PayrollRecord ${payrollRecordId} not found` }, { status: 404 });
+        }
+        return NextResponse.json(
+          { success: false, error: `Cannot mark as paid from status ${current.status}; record must be APPROVED` },
+          { status: 409 }
+        );
+      }
+
+      const updated = await db.payrollRecord.findUnique({
+        where: { id: payrollRecordId },
         include: {
           interpreter: {
             select: { name: true, externalId: true },
@@ -118,15 +136,47 @@ export async function POST(request: Request) {
         );
       }
 
+      const current = await db.payrollRecord.findUnique({
+        where: { id: payrollRecordId },
+        select: { id: true, status: true },
+      });
+      if (!current) {
+        return NextResponse.json({ success: false, error: `PayrollRecord ${payrollRecordId} not found` }, { status: 404 });
+      }
+
+      const allowedTransitions: Record<string, string[]> = {
+        PENDING: ['APPROVED', 'REJECTED'],
+        APPROVED: ['PAID', 'REJECTED'],
+        PAID: [],
+        REJECTED: [],
+      };
+      if (!allowedTransitions[current.status as keyof typeof allowedTransitions]?.includes(status)) {
+        return NextResponse.json(
+          { success: false, error: `Invalid transition from ${current.status} to ${status}` },
+          { status: 409 }
+        );
+      }
+
       const data: Record<string, unknown> = { status };
       if (status === 'PAID') {
         data.paidAt = new Date();
         data.paymentDate = new Date();
       }
 
-      const updated = await db.payrollRecord.update({
-        where: { id: payrollRecordId },
+      const claim = await db.payrollRecord.updateMany({
+        where: { id: payrollRecordId, status: current.status },
         data,
+      });
+
+      if (claim.count === 0) {
+        return NextResponse.json(
+          { success: false, error: 'Concurrent modification detected' },
+          { status: 409 }
+        );
+      }
+
+      const updated = await db.payrollRecord.findUnique({
+        where: { id: payrollRecordId },
         include: {
           interpreter: {
             select: { name: true, externalId: true },

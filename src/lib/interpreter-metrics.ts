@@ -16,6 +16,22 @@ export function sumEffectiveLogMinutes(
   return (logs || []).reduce((sum, log) => sum + getEffectiveLogMinutes(log), 0);
 }
 
+export function getMonthBoundsForPeriod(period: string): { startOfMonth: Date; endOfMonth: Date } {
+  const match = /^(\d{4})-(\d{2})$/.exec(period.trim());
+  if (!match) {
+    throw new Error(`Invalid period: ${period}`);
+  }
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error(`Invalid period: ${period}`);
+  }
+  return {
+    startOfMonth: new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0)),
+    endOfMonth: new Date(Date.UTC(year, month, 0, 23, 59, 59, 999)),
+  };
+}
+
 export function getMonthBounds(now = new Date()) {
   // Determine the current month in America/Santo_Domingo timezone,
   // matching how ProductionLog.date values are stored.

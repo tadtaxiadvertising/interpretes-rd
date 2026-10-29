@@ -45,7 +45,7 @@ export async function GET(request: Request) {
     const callCount = new Map<string, number>();
 
     for (const session of sessions) {
-      if (!session.startedAt || !session.durationSeconds) continue;
+      if (!session.startedAt || !session.durationSeconds || session.durationSeconds < 0) continue;
 
       // startedAt is a @db.Timestamptz — timezone-aware formatting is correct
       const dayStr = formatSantoDomingoDate(session.startedAt);
@@ -66,6 +66,9 @@ export async function GET(request: Request) {
 
     // Fetch all production logs for affected interpreters in one batch
     const interpreterIds = [...new Set(Array.from(grouped.keys()).map(k => parseInt(k.split('_')[0], 10)))];
+    if (interpreterIds.length === 0) {
+      return NextResponse.json({ success: true, message: 'Sincronización completada', createdCount: 0, updatedCount: 0 });
+    }
     const allLogs = await prisma.productionLog.findMany({
       where: { interpreterId: { in: interpreterIds } }
     });

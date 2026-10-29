@@ -2,14 +2,19 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { setRoleplaySessionCookie } from '@/lib/roleplay/session-cookie';
+import { z } from 'zod';
 
 const db = prisma;
+
+const ValidateInviteByCodeSchema = z.object({
+  inviteCode: z.string().trim().min(1, 'Invite code required'),
+});
 
 // Invitation entry is validate + start: opening a still-available link binds
 // the browser to the session and moves it out of the pre-start states. A
 // session already in progress is resumed. Consumption (usedAt) stays a
 // separate, later step and is never triggered by validation.
-const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'PENDING', 'STARTED', 'IN_PROGRESS'];
+const ENTERABLE_STATES = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'];
 
 export async function POST(req: NextRequest) {
   // Apply rate limiting
@@ -26,10 +31,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { inviteCode } = await req.json();
-    
-    if (!inviteCode) {
-      return NextResponse.json({ success: false, error: 'Invite code required' }, { status: 400 });
+    let inviteCode: string;
+    try {
+      const parsed = ValidateInviteByCodeSchema.safeParse(await req.json());
+      if (!parsed.success) {
+        return NextResponse.json({ success: false, error: 'Invite code required' }, { status: 400 });
+      }
+      inviteCode = parsed.data.inviteCode;
+    } catch {
+      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
     }
 
     const access = await db.roleplayAccess.findUnique({
@@ -55,7 +65,7 @@ export async function POST(req: NextRequest) {
 
     // Compare-and-set the transition: the session may have become terminal
     // after the invitation lookup. Never overwrite a submitted/evaluated state.
-    if (['DRAFT', 'INVITED', 'PENDING'].includes(access.session.status)) {
+    if (['DRAFT', 'INVITED'].includes(access.session.status)) {
       const transition = await db.roleplaySession.updateMany({
         where: { id: access.sessionId, status: access.session.status },
         data: { status: 'STARTED' },
