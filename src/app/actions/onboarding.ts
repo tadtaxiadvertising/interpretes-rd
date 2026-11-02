@@ -5,6 +5,7 @@ import type { ActionResult } from '@/lib/types';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
+import { headers } from 'next/headers';
 import { hasCurrentLegalAcceptance, recordCurrentLegalAcceptance } from '@/app/actions/legal-agreements';
 
 const db = prisma;
@@ -58,6 +59,8 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
     }
 
     const now = new Date();
+    const requestHeaders = await headers();
+    const signerUserAgent = requestHeaders.get('user-agent');
     let changedInterpreterId = actor.interpreterId ?? null;
 
     if (!expectedAgreementId || expectedAgreementId.length > 100) {
@@ -72,6 +75,8 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         const current = await recordCurrentLegalAcceptance(tx, {
           interpreterId: actor.interpreterId,
           email: actor.email || 'unknown',
+          userAgent: signerUserAgent,
+          source: 'onboarding',
         });
         if (current.id !== expectedAgreementId) throw new Error('LEGAL_VERSION_CHANGED');
         const interpreter = await tx.interpreter.findUnique({
@@ -97,7 +102,10 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         });
         const current = await recordCurrentLegalAcceptance(tx, {
           userId: actor.userId,
+          interpreterId: actor.interpreterId ?? null,
           email: actor.email || 'unknown',
+          userAgent: signerUserAgent,
+          source: 'onboarding',
         });
         if (current.id !== expectedAgreementId) throw new Error('LEGAL_VERSION_CHANGED');
         if (profile?.interpreterId) {
@@ -152,6 +160,9 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         revalidateInterpreterProfileRecords(auth.user.interpreterId ?? null);
         return { success: true };
       }
+    }
+    if (error instanceof Error && error.message === 'LEGAL_ACCEPTANCE_INTEGRITY_ERROR') {
+      return { success: false, error: 'La aceptación registrada no coincide con el contenido vigente. Contacta al administrador para revisar la evidencia.', code: 'INTEGRITY_ERROR' };
     }
     if (error instanceof Error && error.message.includes('No published legal agreement')) {
       return { success: false, error: 'No hay un acuerdo publicado para aceptar. Contacta al administrador.', code: 'BAD_REQUEST' };
