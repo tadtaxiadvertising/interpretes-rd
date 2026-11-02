@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
-  identity: { role: 'candidate', interpreterId: null } as any,
+  identity: { role: 'candidate', interpreterId: null, candidateId: 42 } as any,
   sessionFindUnique: vi.fn(),
   scenarioFindFirst: vi.fn(),
   responseFindUnique: vi.fn(),
@@ -60,7 +60,7 @@ function makeRequest(options: { sessionId?: string; scenarioId?: string; cookie?
 describe('POST /api/roleplay/convert-audio scenario ownership', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'candidate', interpreterId: null };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 42 };
     m.rateLimit.mockReturnValue({ success: true });
     m.sessionFindUnique.mockResolvedValue({
       id: 'session-1',
