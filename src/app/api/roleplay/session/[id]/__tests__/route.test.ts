@@ -94,4 +94,13 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(403);
   });
+  it('does not let a legacy interpreterId override candidate ownership', async () => {
+    m.session = { ...candidateSession('STARTED'), interpreterId: 7 };
+    m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(403);
+  });
+
 });
