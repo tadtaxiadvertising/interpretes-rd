@@ -246,34 +246,8 @@ export async function submitApplicationAction(data: ApplicantData) {
             });
           }
 
-          // A matching email is not proof of ownership. Anonymous submissions may
-          // fill empty candidate fields, but must never create or overwrite the
-          // linked interpreter record using caller-controlled values.
-          if (owned) {
-            const existingInterpreter = await tx.interpreter.findFirst({
-              where: { emailCorporativo: email },
-              select: { id: true, status: true },
-            });
-            if (!existingInterpreter) {
-              await tx.interpreter.create({
-                data: {
-                  externalId: `recruitment-candidate-${existing.id}`,
-                  name: parsed.name,
-                  status: 'Candidato',
-                  emailCorporativo: email,
-                  telefono: parsed.phone,
-                  pais: parsed.country,
-                  tariffPerMinute: 0,
-                  notas: JSON.stringify({ recruitmentCandidateId: existing.id, source: 'recruitment', status: 'candidate' }),
-                },
-              });
-            } else if (existingInterpreter.status === 'Candidato' || existingInterpreter.status === 'En proceso') {
-              await tx.interpreter.update({
-                where: { id: existingInterpreter.id },
-                data: { name: parsed.name, telefono: parsed.phone, pais: parsed.country },
-              });
-            }
-          }
+          // Candidate records remain in recruitment only. The operational
+          // Interpreter row is created atomically after final hiring approval.
 
           const funnelStep = await deriveFunnelStep(tx, existing.id, application.status);
           return {
@@ -313,19 +287,8 @@ export async function submitApplicationAction(data: ApplicantData) {
           },
         });
 
-        // Create the restricted interpreter record for the new candidate.
-        await tx.interpreter.create({
-          data: {
-            externalId: `recruitment-candidate-${created.id}`,
-            name: parsed.name,
-            status: 'Candidato',
-            emailCorporativo: email,
-            telefono: parsed.phone,
-            pais: parsed.country,
-            tariffPerMinute: 0,
-            notas: JSON.stringify({ recruitmentCandidateId: created.id, source: 'recruitment', status: 'candidate' }),
-          },
-        });
+        // Do not create an operational Interpreter row during recruitment.
+        // Roleplay and all hiring stages are linked to RecruitmentCandidate.
 
         const funnelStep = await deriveFunnelStep(tx, created.id, application.status);
         return {
