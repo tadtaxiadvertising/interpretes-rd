@@ -55,7 +55,7 @@ vi.mock('@/lib/roleplay', () => ({
   createSignedUploadUrl: vi.fn(),
   getBaseAudioPath: vi.fn(),
   getResponseAudioPath: vi.fn(),
-  confirmUpload: vi.fn(),
+  confirmUpload: vi.fn().mockResolvedValue('https://signed.example/confirmed.webm'),
   validateAudioFile: vi.fn(),
 }));
 
@@ -160,6 +160,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/second.webm',
     });
 
@@ -181,6 +182,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/first.webm',
     });
     expect(res.success).toBe(true);
@@ -200,6 +202,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/first.webm',
     });
 
@@ -218,6 +221,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/replacement.webm',
     });
 
@@ -241,6 +245,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/again.webm',
     });
 
