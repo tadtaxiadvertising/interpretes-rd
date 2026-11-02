@@ -20,6 +20,7 @@ import {
   isApplicationTerminal,
 } from '@/services/recruitment/funnel';
 import type { RecruitmentApplicationStatus } from '@/lib/prisma-types';
+import { inviteCandidateAuthUser } from '@/lib/supabase/auth-users';
 
 const db = prisma;
 
@@ -144,6 +145,81 @@ async function resolveOwnership(): Promise<{
   });
   if (!candidate) return null;
   return { candidateId: candidate.id, applicationId: candidate.applications[0]?.id ?? null, source: 'account' };
+}
+
+type CandidateAccountAccess = 'invited' | 'existing' | 'manual';
+
+async function provisionCandidateAccess(params: {
+  candidateId: number;
+  email: string;
+  name: string;
+}): Promise<CandidateAccountAccess> {
+  try {
+    const [existingProfile, existingRbacUser] = await Promise.all([
+      db.userProfile.findUnique({
+        where: { email: params.email },
+        select: { id: true, role: true, interpreterId: true },
+      }),
+      db.rbacUser.findUnique({
+        where: { email: params.email },
+        select: { id: true },
+      }),
+    ]);
+
+    // Existing Auth.js identities remain intact. Their role is resolved from
+    // the persisted recruitment application after authentication.
+    if (existingRbacUser && !existingProfile) return 'existing';
+
+    if (existingProfile) {
+      if (existingProfile.role !== 'admin') {
+        await db.userProfile.update({
+          where: { id: existingProfile.id },
+          data: {
+            role: 'candidate',
+            interpreterId: null,
+            displayName: params.name,
+          },
+        });
+      }
+      return 'existing';
+    }
+
+    const configuredOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.FRONTEND_ORIGIN ||
+      process.env.NEXTAUTH_URL ||
+      'https://interpretes.rd.ibusiness.com.do';
+    const redirectTo = new URL('/auth/callback?next=%2Fcandidate', configuredOrigin).toString();
+    const { user, invited } = await inviteCandidateAuthUser({
+      email: params.email,
+      displayName: params.name,
+      redirectTo,
+    });
+
+    await db.userProfile.upsert({
+      where: { id: user.id },
+      update: {
+        email: params.email,
+        displayName: params.name,
+        role: 'candidate',
+        interpreterId: null,
+      },
+      create: {
+        id: user.id,
+        email: params.email,
+        displayName: params.name,
+        role: 'candidate',
+        interpreterId: null,
+      },
+    });
+
+    return invited ? 'invited' : 'existing';
+  } catch (error) {
+    // The application is already durably saved. Missing Supabase admin
+    // configuration must not erase or roll back the candidate's application.
+    console.error('[recruitment] Candidate account provisioning deferred:', error);
+    return 'manual';
+  }
 }
 
 type SubmitOutcome = {
@@ -316,6 +392,17 @@ export async function submitApplicationAction(data: ApplicantData) {
       issueApplicationRef(cookieStore, outcome.candidateId, outcome.applicationId);
     }
 
+    // The first application submission provisions a restricted candidate
+    // identity and sends an invitation link. Never invite for an unverified
+    // third-party attempt to resume someone else's existing email.
+    const accountAccess = outcome.owned
+      ? await provisionCandidateAccess({
+          candidateId: outcome.candidateId,
+          email,
+          name: parsed.name,
+        })
+      : undefined;
+
     revalidatePath('/recruitment');
 
     const response: {
@@ -324,6 +411,7 @@ export async function submitApplicationAction(data: ApplicantData) {
       funnelStep: number;
       candidateId?: number;
       applicationId?: string;
+      accountAccess?: CandidateAccountAccess;
     } = {
       success: true,
       alreadyApplied: !outcome.created,
@@ -332,6 +420,7 @@ export async function submitApplicationAction(data: ApplicantData) {
     if (outcome.owned) {
       response.candidateId = outcome.candidateId;
       response.applicationId = outcome.applicationId;
+      response.accountAccess = accountAccess;
     }
     return response;
   } catch (error) {
