@@ -117,6 +117,15 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(res.status).toBe(403);
     expect(m.updateMany).not.toHaveBeenCalled();
   });
+  it('does not let a legacy interpreter link override candidate ownership', async () => {
+    m.session = { ...CANDIDATE_SESSION, interpreterId: 7 };
+    m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+
+    const res = await POST(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(403);
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
 
   it('allows an eligible recruitment candidate to start Roleplay without interpreter onboarding', async () => {
     m.session = CANDIDATE_SESSION;

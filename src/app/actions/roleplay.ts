@@ -23,15 +23,13 @@ async function canAccessRoleplaySession(
   const identity = await resolveCurrentIdentity();
   if (!identity) return false;
 
-  // Legacy recruitment sessions may still carry both IDs from the old
-  // provisional-interpreter design. Candidate ownership takes precedence
-  // until the application is hired; never require an operational identity.
-  if (
-    session.recruitmentCandidateId !== null &&
-    identity.role === 'candidate' &&
-    identity.candidateId === session.recruitmentCandidateId
-  ) {
-    return sessionCookie === session.id;
+  // A recruitment-linked session is candidate-owned even if legacy data
+  // still contains a provisional interpreterId. Never fall through to
+  // interpreter ownership for a session attached to a candidate.
+  if (session.recruitmentCandidateId !== null) {
+    return identity.role === 'candidate'
+      && identity.candidateId === session.recruitmentCandidateId
+      && sessionCookie === session.id;
   }
 
   return session.interpreterId !== null
