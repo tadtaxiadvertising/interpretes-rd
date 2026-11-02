@@ -32,6 +32,12 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () => ({ user: m.actor, profile: m.actor }),
 }));
 
+vi.mock('@/lib/identity/resolve-user', () => ({
+  resolveCurrentIdentity: async () => m.actor?.interpreterId != null
+    ? { role: 'interpreter', interpreterId: m.actor.interpreterId, candidateId: null }
+    : { role: 'candidate', interpreterId: null, candidateId: 5 },
+}));
+
 vi.mock('@/lib/roleplay-audio-conversion', () => ({ queueMp3Conversion: vi.fn() }));
 
 vi.mock('@/lib/prisma', () => ({
