@@ -123,6 +123,8 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
       sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
@@ -135,7 +137,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'some-other-session';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/a.webm' });
 
     expect(res.success).toBe(false);
     expect(m.update).not.toHaveBeenCalled();
@@ -222,7 +224,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.actor = { interpreterId: 7 };
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/a.webm' });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
