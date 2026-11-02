@@ -41,6 +41,7 @@ describe('CurrentActor abstraction', () => {
     // but intentionally preserves implementations/return values.
     (prisma.userProfile.findUnique as any).mockResolvedValue(undefined);
     (prisma.interpreter.findFirst as any).mockResolvedValue(undefined);
+    (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue(null);
   });
 
   describe('getCurrentActor', () => {
@@ -80,6 +81,7 @@ describe('CurrentActor abstraction', () => {
         email: 'test@test.com',
         role: 'interpreter',
         interpreterId: 42,
+        candidateId: null,
         profileId: 'user-123',
       });
     });
@@ -130,6 +132,7 @@ describe('CurrentActor abstraction', () => {
         email: 'authjs@test.com',
         role: 'interpreter',
         interpreterId: 99,
+        candidateId: null,
         profileId: null,
       });
     });
@@ -147,6 +150,7 @@ describe('CurrentActor abstraction', () => {
         email: 'test@test.com',
         role: 'interpreter',
         interpreterId: 42,
+        candidateId: null,
         profileId: 'user-123',
       };
       expect(requireActor(actor)).toEqual(actor);
