@@ -15,6 +15,30 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState(initialError || '');
 
+  async function importAgreementFile(file?: File) {
+    if (!file) return;
+    const extension = file.name.toLowerCase().split('.').pop();
+    if (!['txt', 'md'].includes(extension || '')) {
+      setMessage('Formato no compatible. Por ahora puedes importar archivos .txt o .md; convierte PDF/DOCX a texto antes de importarlos.');
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      setMessage('El archivo supera el límite de 1 MB.');
+      return;
+    }
+    try {
+      const imported = await file.text();
+      if (imported.trim().length < 100) {
+        setMessage('El documento debe contener al menos 100 caracteres.');
+        return;
+      }
+      setContent(imported);
+      setMessage('Documento importado al editor. Revísalo antes de guardar el borrador.');
+    } catch {
+      setMessage('No se pudo leer el archivo seleccionado.');
+    }
+  }
+
   function editDraft(draft: Agreement) {
     setEditingId(draft.id);
     setVersion(draft.version);
@@ -122,6 +146,9 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
               <input value={title} onChange={e => setTitle(e.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-950 px-3 py-2 text-white outline-none focus:border-blue-500" />
             </label>
           </div>
+          <label className="block text-sm text-slate-300">Importar documento (.txt o .md, máximo 1 MB)
+            <input type="file" accept=".txt,.md,text/plain,text/markdown" disabled={busy} onChange={event => { void importAgreementFile(event.target.files?.[0]); event.currentTarget.value = ''; }} className="mt-2 block w-full text-sm text-slate-300 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white" />
+          </label>
           <label className="block text-sm text-slate-300">Contenido del acuerdo (Markdown sencillo)
             <textarea value={content} onChange={e => setContent(e.target.value)} rows={18} spellCheck className="mt-2 w-full resize-y rounded-xl border border-white/15 bg-slate-950 px-3 py-3 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-blue-500" placeholder="Escribe el contenido completo del acuerdo…" />
           </label>

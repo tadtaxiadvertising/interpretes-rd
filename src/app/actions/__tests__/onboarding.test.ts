@@ -198,6 +198,7 @@ describe('Onboarding Actions', () => {
         termsAcceptedAt: null,
         bankName: null,
         bankAccount: null,
+        bankAccountType: null,
         bankCedula: null,
       });
 
@@ -215,6 +216,7 @@ describe('Onboarding Actions', () => {
         termsAcceptedAt: new Date(),
         bankName: 'Banco Popular',
         bankAccount: '1234567890',
+        bankAccountType: 'Ahorro',
         bankCedula: '001-1234567-8',
       });
       (prisma.$transaction as any).mockImplementation(async (cb: any) => {
@@ -239,6 +241,7 @@ describe('Onboarding Actions', () => {
         termsAcceptedAt: new Date(),
         bankName: 'Banco Popular',
         bankAccount: '1234567890',
+        bankAccountType: 'Ahorro',
         bankCedula: '001-1234567-8',
         onboardingComplete: true,
       });
@@ -250,6 +253,27 @@ describe('Onboarding Actions', () => {
         termsAccepted: true,
         bankingComplete: true,
         onboardingComplete: true,
+      });
+    });
+
+    it('does not report banking complete when account type is missing', async () => {
+      (validateAction as any).mockResolvedValue(mockAuthResult);
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        termsAcceptedAt: new Date(),
+        bankName: 'Banco Popular',
+        bankAccount: '1234567890',
+        bankAccountType: null,
+        bankCedula: '001-1234567-8',
+        onboardingComplete: false,
+      });
+
+      const result = await getOnboardingStatus();
+
+      expect(result.success).toBe(true);
+      expect(result.data).toMatchObject({
+        termsAccepted: true,
+        bankingComplete: false,
+        onboardingComplete: false,
       });
     });
 
