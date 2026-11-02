@@ -19,7 +19,6 @@ export function Recorder({
   sessionId, 
   durationLimitSec = 300, 
   onSave, 
-  onComplete,
   isLoading 
 }: RecorderProps) {
   const [state, setState] = useState<RecordingState>('ready');
@@ -177,7 +176,6 @@ export function Recorder({
     try {
       await onSave(recordingUrl, duration, recordingBlob);
       setState('complete');
-      setTimeout(onComplete, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar la respuesta');
       setState('review');
