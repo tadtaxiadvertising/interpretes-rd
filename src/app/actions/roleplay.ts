@@ -675,7 +675,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
     // Convert only after the response row commits, and scope conversion to this
     // exact upload attempt. This prevents a stale upload/conversion from changing
     // the processed audio associated with the response QA will evaluate.
-    if (result.newlyCreated && result.sourceAudioPath.endsWith('.webm')) {
+    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm')) {
       queueMp3Conversion(input.sessionId, input.scenarioId, result.sourceAudioPath);
     }
 
