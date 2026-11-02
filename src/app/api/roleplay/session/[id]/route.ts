@@ -95,9 +95,18 @@ export async function GET(
             session.status === 'SUBMITTED' &&
             !session.evaluatorId &&
             !session.qaScoreId &&
-            session.scenarios.some((scenario) =>
-              Boolean(scenario.responses[0]?.sourceAudioUrl) && !scenario.responses[0]?.selfScore
-            ),
+            session.scenarios.some((scenario) => {
+              const response = scenario.responses[0];
+              const score = response?.selfScore;
+              const hasCompleteScore = Boolean(
+                score &&
+                typeof score === 'object' &&
+                !Array.isArray(score) &&
+                ['protocol', 'interpretation', 'language', 'service', 'technical']
+                  .every((key) => typeof (score as Record<string, unknown>)[key] === 'number')
+              );
+              return Boolean(response?.sourceAudioUrl) && !hasCompleteScore;
+            }),
           currentScenarioIndex: session.currentScenarioIndex,
           scenarios,
         },
