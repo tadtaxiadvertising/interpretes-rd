@@ -45,6 +45,14 @@ export async function GET(
             durationLimitSec: true,
             scriptPrompt: true,
             expectedKeys: true,
+            responses: {
+              select: {
+                sourceAudioUrl: true,
+                durationSec: true,
+                selfScore: true,
+                selfNotes: true,
+              },
+            },
           },
         },
       },
