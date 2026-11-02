@@ -13,7 +13,6 @@ type SelfAssessmentScores = {
 };
 
 interface SelfAssessmentProps {
-  scenarioId: string;
   scenarioTitle: string;
   onComplete: (scores: SelfAssessmentScores, criticalError: boolean, notes: string) => void;
   isLoading?: boolean;
@@ -59,7 +58,6 @@ const CRITERIA = [
 ] as const;
 
 export function SelfAssessment({ 
-  scenarioId, 
   scenarioTitle, 
   onComplete, 
   isLoading,
