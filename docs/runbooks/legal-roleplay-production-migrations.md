@@ -28,6 +28,8 @@ ORDER BY created_at DESC;
 
 Confirmar que `roleplay_session_xor_subject` existe y exige exactamente un propietario. Si no existe, detenerse y revisar el esquema antes de aplicar la migración.
 
+Si `legal_agreement_versions` o `legal_agreement_acceptances` no existen, la migración histórica `20261025_versioned_legal_agreements/migration.sql` aún no está aplicada. Tras confirmar que el esquema base es compatible, aplicar esa migración histórica una sola vez y, en la misma ventana de mantenimiento y antes de reabrir onboarding, aplicar inmediatamente las cuatro migraciones nuevas indicadas abajo. No permitir aceptaciones entre ambos pasos, porque la migración histórica inicializa un contrato genérico como `PUBLISHED` que la primera migración nueva archiva.
+
 ## Aplicar migraciones
 
 Desde el repositorio de esta versión, ejecutar cada archivo SQL en la consola PostgreSQL de EasyPanel, en este orden:
