@@ -267,6 +267,7 @@ async function resolveActorFromSupabase(
       const app = candidate.applications[0];
       candidateHired = app?.status === 'HIRED';
       if (candidateHired) {
+        if (resolvedRole === 'candidate') resolvedRole = 'interpreter';
         if (!interpreterId && app?.hiredInterpreterId) interpreterId = app.hiredInterpreterId;
       } else {
         resolvedRole = 'candidate';
@@ -396,6 +397,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
         const app = candidate.applications[0];
         candidateHired = app?.status === 'HIRED';
         if (candidateHired) {
+          if (role === 'candidate') role = 'interpreter';
           if (!resolvedInterpreterId && app?.hiredInterpreterId) resolvedInterpreterId = app.hiredInterpreterId;
         } else {
           role = 'candidate';
