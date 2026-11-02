@@ -45,7 +45,7 @@ async function resolveRecruitmentIdentity(email: string, fallbackRole: UserRole,
   }
   if (candidate && application?.status === 'HIRED') {
     return {
-      role: fallbackRole === 'admin' ? 'admin' as UserRole : 'interpreter' as UserRole,
+      role: 'interpreter' as UserRole,
       candidateId: candidate.id,
       interpreterId: application.hiredInterpreterId ?? fallbackInterpreterId,
     };
