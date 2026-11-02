@@ -38,7 +38,7 @@ async function resolveRecruitmentIdentity(email: string, fallbackRole: UserRole,
   });
   const application = candidate?.applications[0];
   if (fallbackRole === 'admin') {
-    return { role: 'admin', candidateId: candidate?.id ?? null, interpreterId: null };
+    return { role: 'admin' as UserRole, candidateId: candidate?.id ?? null, interpreterId: null };
   }
   if (candidate && application?.status !== 'HIRED') {
     return { role: 'candidate' as UserRole, candidateId: candidate.id, interpreterId: null };
