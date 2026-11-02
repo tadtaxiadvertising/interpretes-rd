@@ -410,7 +410,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
   it('does not consume again when an already-submitted confirm is replayed', async () => {
     m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
-    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm' });
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm' });
 
     const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1',
       sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/first.webm' });
