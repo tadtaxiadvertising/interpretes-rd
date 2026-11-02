@@ -30,7 +30,7 @@ export default function RegisterPage() {
       if (result?.error) {
         setError(result.error);
       } else if (result?.success) {
-        router.push(nextPath || (result.role === 'admin' ? '/admin' : '/dashboard'));
+        router.push(nextPath || (result.role === 'admin' ? '/admin' : result.role === 'candidate' ? '/candidate' : '/dashboard'));
       }
     } catch {
       setError('Registration failed. Please try again.');
