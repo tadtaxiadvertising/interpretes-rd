@@ -79,7 +79,7 @@ describe('Roleplay required stages', () => {
       qaScoreId: null,
     };
     m.scenario = { id: 'scenario-1', order: 0 };
-    m.response = { id: 'response-1' };
+    m.response = { id: 'response-1', sourceAudioUrl: 'https://audio.example/response.webm' };
     m.scenarios = [];
     m.sessionFindUnique.mockImplementation(async () => m.session);
     m.sessionUpdate.mockResolvedValue({ id: 'sess-1' });
@@ -105,6 +105,20 @@ describe('Roleplay required stages', () => {
     expect(result.success).toBe(false);
     expect(m.responseUpdate).not.toHaveBeenCalled();
     expect(m.sessionUpdate).not.toHaveBeenCalled();
+  });
+  it('rejects a response row that has no confirmed audio URL', async () => {
+    m.response = { id: 'response-1', sourceAudioUrl: null };
+
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Confirm your recording');
+    expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
   it('persists self-assessment before advancing the scenario cursor', async () => {
@@ -157,7 +171,7 @@ describe('Roleplay required stages', () => {
       evaluatorId: null,
       qaScoreId: null,
     };
-    m.response = { id: 'response-1', selfScore: { ...SCORES, criticalError: false } };
+    m.response = { id: 'response-1', sourceAudioUrl: 'https://audio.example/response.webm', selfScore: { ...SCORES, criticalError: false } };
 
     const result = await saveSelfAssessment({
       sessionId: 'sess-1',
@@ -178,7 +192,7 @@ describe('Roleplay required stages', () => {
       evaluatorId: null,
       qaScoreId: null,
     };
-    m.response = { id: 'response-1', selfScore: { fluency: 8, pronunciation: 7 } };
+    m.response = { id: 'response-1', sourceAudioUrl: 'https://audio.example/response.webm', selfScore: { fluency: 8, pronunciation: 7 } };
 
     const result = await saveSelfAssessment({
       sessionId: 'sess-1',
@@ -194,7 +208,7 @@ describe('Roleplay required stages', () => {
   it('rejects final submission while any scenario lacks a self-assessment', async () => {
     m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
     m.session = { ...m.session, recruitmentCandidateId: null, interpreterId: 7, currentScenarioIndex: 1 };
-    m.scenarios = [{ order: 0, responses: [{ selfScore: null }] }];
+    m.scenarios = [{ order: 0, responses: [{ sourceAudioUrl: 'https://audio.example/response.webm', selfScore: null }] }];
 
     const result = await submitRoleplaySession({ sessionId: 'sess-1' });
 
@@ -207,7 +221,7 @@ describe('Roleplay required stages', () => {
     m.session = { ...m.session, recruitmentCandidateId: null, interpreterId: 7, currentScenarioIndex: 1 };
     m.scenarios = [{
       order: 0,
-      responses: [{ selfScore: { ...SCORES, criticalError: false } }],
+      responses: [{ sourceAudioUrl: 'https://audio.example/response.webm', selfScore: { ...SCORES, criticalError: false } }],
     }];
 
     const result = await submitRoleplaySession({ sessionId: 'sess-1' });
