@@ -181,6 +181,22 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(res.code).toBe('VALIDATION_ERROR');
     expect(m.responseCreate).not.toHaveBeenCalled();
   });
+  it('does not confirm a client-supplied URL when the uploaded object cannot be signed', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.confirmUpload.mockRejectedValue(new Error('Object not found'));
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://attacker.example/fake-audio.webm',
+    });
+
+    expect(res.success).toBe(false);
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
 
   it('allows an interpreter session only for its owning interpreter', async () => {
     m.session = INTERPRETER_SESSION;
