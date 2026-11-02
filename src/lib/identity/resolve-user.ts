@@ -182,6 +182,11 @@ export function computeEligibility(
     };
   }
 
+  if (role === 'candidate') {
+    const activeRoleplay = roleplayState === 'INVITED' || roleplayState === 'STARTED' || roleplayState === 'IN_PROGRESS';
+    return { canAccessDashboard: false, canStartRoleplay: activeRoleplay || roleplayState === 'NO_ROLEPLAY', needsOnboarding: false, needsRoleplay: roleplayState === 'INVITED' || roleplayState === 'NO_ROLEPLAY' };
+  }
+
   const needsOnboarding = onboardingStatus !== 'COMPLETED';
   const needsRoleplay = !needsOnboarding && roleplayState === 'INVITED';
   const canStartRoleplay = !needsOnboarding && (roleplayState === 'INVITED' || roleplayState === 'STARTED' || roleplayState === 'IN_PROGRESS');
@@ -261,9 +266,11 @@ async function resolveActorFromSupabase(
       candidateId = candidate.id;
       const app = candidate.applications[0];
       candidateHired = app?.status === 'HIRED';
-      // A hired candidate should reuse the linked interpreter identity.
-      if (candidateHired && !interpreterId && app?.hiredInterpreterId) {
-        interpreterId = app.hiredInterpreterId;
+      if (candidateHired) {
+        if (!interpreterId && app?.hiredInterpreterId) interpreterId = app.hiredInterpreterId;
+      } else {
+        resolvedRole = 'candidate';
+        interpreterId = null;
       }
     }
   }
@@ -292,7 +299,9 @@ async function resolveActorFromSupabase(
   }
 
   const isAuthJsUser = false; // Supabase user
-  const onboarding = computeOnboardingStatus(
+  const onboarding = resolvedRole === 'candidate'
+    ? { status: 'COMPLETED' as const, step: 'complete' as const, version: 1, completedAt: null }
+    : computeOnboardingStatus(
     { 
       onboardingComplete: profile?.onboardingComplete ?? false,
       termsAcceptedAt: profile?.termsAcceptedAt ?? null,
@@ -335,7 +344,7 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
 
     const userId = session.user.id;
     const email = session.user.email?.toLowerCase().trim() || null;
-    const role = normalizeRbacRole((session.user as any).role);
+    let role = normalizeRbacRole((session.user as any).role);
     const interpreterId = (session.user as any).interpreterId ?? null;
 
     if (!email) return null;
@@ -386,8 +395,11 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
         candidateId = candidate.id;
         const app = candidate.applications[0];
         candidateHired = app?.status === 'HIRED';
-        if (candidateHired && !resolvedInterpreterId && app?.hiredInterpreterId) {
-          resolvedInterpreterId = app.hiredInterpreterId;
+        if (candidateHired) {
+          if (!resolvedInterpreterId && app?.hiredInterpreterId) resolvedInterpreterId = app.hiredInterpreterId;
+        } else {
+          role = 'candidate';
+          resolvedInterpreterId = null;
         }
       }
     }
@@ -433,7 +445,9 @@ async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
             },
           }))
       : profile?.interpreter ?? null;
-    const onboarding = computeOnboardingStatus(
+    const onboarding = role === 'candidate'
+      ? { status: 'COMPLETED' as const, step: 'complete' as const, version: 1, completedAt: null }
+      : computeOnboardingStatus(
       { 
         onboardingComplete: profile?.onboardingComplete ?? false,
         termsAcceptedAt: profile?.termsAcceptedAt ?? null,
@@ -534,6 +548,13 @@ export function resolveDestination(identity: ResolvedIdentity): string {
   // Admin always goes to admin panel
   if (identity.role === 'admin') {
     return '/admin';
+  }
+
+  if (identity.role === 'candidate') {
+    if (['INVITED', 'STARTED', 'IN_PROGRESS'].includes(identity.roleplayState) && identity.roleplaySessionId) {
+      return '/roleplays/' + identity.roleplaySessionId;
+    }
+    return '/candidate';
   }
 
   // Check onboarding state
