@@ -155,8 +155,9 @@ describe('POST /api/roleplay/session/[id]/start', () => {
   it('allows a retry for an application in ROLEPLAY_REVIEW', async () => {
     m.session = CANDIDATE_SESSION;
     m.identity = {
-      role: 'interpreter',
+      role: 'candidate',
       interpreterId: null,
+      candidateId: 5,
       eligibility: { needsOnboarding: false },
     };
     m.applicationFindUnique.mockResolvedValue({ status: 'ROLEPLAY_REVIEW' });
