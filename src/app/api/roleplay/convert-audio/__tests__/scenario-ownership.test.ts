@@ -124,6 +124,25 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
     );
     expect(m.queueMp3Conversion).not.toHaveBeenCalled();
   });
+  it('allows the candidate owner but not a legacy interpreter link on dual-linked sessions', async () => {
+    m.sessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      interpreterId: 7,
+      recruitmentCandidateId: 42,
+      status: 'STARTED',
+      access: null,
+    });
+
+    const candidateResponse = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(candidateResponse.status).toBe(200);
+
+    m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+    m.storageUpload.mockClear();
+    const interpreterResponse = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(interpreterResponse.status).toBe(403);
+    expect(m.storageUpload).not.toHaveBeenCalled();
+  });
+
   it('uses a different immutable object path for each upload attempt', async () => {
     const first = await POST(makeRequest({ cookie: 'session-1' }));
     const second = await POST(makeRequest({ cookie: 'session-1' }));
