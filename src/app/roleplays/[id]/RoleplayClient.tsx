@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Save, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { confirmRoleplayResponse, saveSelfAssessment, submitRoleplaySession } from '@/app/actions/roleplay';
 import { RoleplayIntro } from '@/components/roleplay/RoleplayIntro';
@@ -85,7 +85,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   }>>({});
 
   const stepLabels = ['Intro', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'];
-  const completedScenarioCount = completedScenarios.length;
 
   // Fetch session data on mount
   useEffect(() => {
