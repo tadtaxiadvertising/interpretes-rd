@@ -37,7 +37,7 @@ describe('legal agreement administration', () => {
       content: '# Acuerdo',
       contentHash: createHash('sha256').update('# Acuerdo', 'utf8').digest('hex'),
       legalReviewedAt: new Date(),
-      legalReviewedBy: 'reviewer@example.com',
+      legalReviewedBy: 'reviewer-1',
     });
 
     const result = await publishLegalAgreementDraft('draft-1');
@@ -58,7 +58,7 @@ describe('legal agreement administration', () => {
     expect(result).toMatchObject({ success: true });
     expect(prisma.legalAgreementVersion.updateMany).toHaveBeenCalledWith({
       where: { id: 'draft-1', agreementKey: 'freelance-services', status: 'DRAFT', contentHash },
-      data: { legalReviewedAt: expect.any(Date), legalReviewedBy: 'reviewer@example.com' },
+      data: { legalReviewedAt: expect.any(Date), legalReviewedBy: 'reviewer-1' },
     });
   });
 });
