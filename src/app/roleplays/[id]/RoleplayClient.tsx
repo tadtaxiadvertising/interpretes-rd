@@ -122,7 +122,15 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           setScenarioResponses(restoredResponses);
 
           const terminalStates = ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
-          if (terminalStates.includes(data.data.status)) {
+          const missingAssessmentIndex = data.data.scenarios.findIndex((scenario: Scenario) =>
+            Boolean(scenario.responses?.[0]?.sourceAudioUrl) && !scenario.responses?.[0]?.selfScore
+          );
+          if (data.data.canCompleteSelfAssessment && missingAssessmentIndex >= 0) {
+            // Recover attempts submitted by the previous client before its
+            // auto-advance bug could save the candidate's self-assessment.
+            setCurrentScenarioIndex(missingAssessmentIndex);
+            setPageState('self-assessment');
+          } else if (terminalStates.includes(data.data.status)) {
             setPageState('completion');
           } else if (currentIndex >= data.data.scenarios.length) {
             setPageState('completion');
