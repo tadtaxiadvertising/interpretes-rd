@@ -221,9 +221,9 @@ async function advanceApplicationPipeline(advance: ApplicationAdvance): Promise<
  * Start (or resume) the roleplay session for the currently authenticated
  * recruitment candidate. This is the candidate-facing entry point used by the
  * /postular funnel: it binds the request to the candidate identity (via the
- * account email), reuses any active session instead of creating duplicates,
- * guarantees at least one scenario exists, and issues the opaque
- * `roleplay_session` cookie that the candidate-facing submit paths require.
+ * account email), reuses an admin-assigned session instead of creating
+ * placeholder exercises, verifies every scenario has base audio, and issues
+ * the `roleplay_session` cookie required by candidate-facing submit paths.
  */
 export async function startCandidateRoleplay() {
   const auth = await validateAction();
