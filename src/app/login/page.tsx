@@ -47,7 +47,7 @@ export default function LoginPage() {
             return;
           }
         }
-        router.push(nextPath || (result.role === 'admin' ? '/admin' : '/dashboard'));
+        router.push(nextPath || (result.role === 'admin' ? '/admin' : result.role === 'candidate' ? '/candidate' : '/dashboard'));
       }
     } catch (err) {
       console.error('🔴 [AUTH_LOGIN_PAGE] Login submit error:', err);
