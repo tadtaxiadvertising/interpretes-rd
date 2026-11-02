@@ -86,7 +86,15 @@ export async function saveLegalAgreementDraft(raw: unknown) {
     if (input.id) {
       const updated = await prisma.legalAgreementVersion.updateMany({
         where: { id: input.id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
-        data: { version: input.version, title: input.title, content: input.content, contentHash: hashContent(input.content), updatedAt: new Date() },
+        data: {
+          version: input.version,
+          title: input.title,
+          content: input.content,
+          contentHash: hashContent(input.content),
+          legalReviewedAt: null,
+          legalReviewedBy: null,
+          updatedAt: new Date(),
+        },
       });
       if (updated.count !== 1) return { success: false as const, error: 'Solo se pueden editar borradores. Los acuerdos publicados son inmutables.', code: 'CONFLICT' };
     } else {
@@ -113,6 +121,40 @@ export async function saveLegalAgreementDraft(raw: unknown) {
   }
 }
 
+export async function approveLegalAgreementDraft(id: string) {
+  const auth = await validateAction('admin');
+  if ('error' in auth) return { success: false as const, error: auth.error, code: auth.code };
+  if (!id || id.length > 100) return { success: false as const, error: 'Borrador inválido.', code: 'VALIDATION_ERROR' };
+
+  try {
+    const draft = await prisma.legalAgreementVersion.findFirst({
+      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
+      select: { id: true, content: true, contentHash: true },
+    });
+    if (!draft) return { success: false as const, error: 'El borrador no existe o ya fue publicado.', code: 'CONFLICT' };
+
+    const digest = hashContent(draft.content);
+    if (digest !== draft.contentHash) {
+      return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
+    }
+
+    const reviewer = auth.user.email || auth.user.userId;
+    const result = await prisma.legalAgreementVersion.updateMany({
+      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
+      data: { legalReviewedAt: new Date(), legalReviewedBy: reviewer },
+    });
+    if (result.count !== 1) {
+      return { success: false as const, error: 'El borrador cambió durante la revisión. Recarga e inténtalo de nuevo.', code: 'CONFLICT' };
+    }
+
+    revalidatePath('/admin/legal-agreements');
+    return { success: true as const };
+  } catch (error) {
+    console.error('[LEGAL] approve draft failed', error);
+    return { success: false as const, error: 'No se pudo registrar la revisión jurídica.', code: 'INTERNAL_ERROR' };
+  }
+}
+
 export async function publishLegalAgreementDraft(id: string) {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false as const, error: auth.error, code: auth.code };
@@ -120,9 +162,16 @@ export async function publishLegalAgreementDraft(id: string) {
   try {
     const draft = await prisma.legalAgreementVersion.findFirst({
       where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
-      select: { id: true, content: true, contentHash: true },
+      select: { id: true, content: true, contentHash: true, legalReviewedAt: true, legalReviewedBy: true },
     });
     if (!draft) return { success: false as const, error: 'El borrador no existe o ya fue publicado.', code: 'CONFLICT' };
+    if (!draft.legalReviewedAt || !draft.legalReviewedBy) {
+      return { success: false as const, error: 'Este acuerdo requiere una revisión jurídica registrada antes de publicarse.', code: 'LEGAL_REVIEW_REQUIRED' };
+    }
+    const publisher = auth.user.email || auth.user.userId;
+    if (draft.legalReviewedBy === publisher) {
+      return { success: false as const, error: 'La aprobación jurídica y la publicación deben ser realizadas por administradores distintos.', code: 'SEPARATION_OF_DUTIES_REQUIRED' };
+    }
     const digest = hashContent(draft.content);
     if (digest !== draft.contentHash) return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
     const result = await prisma.legalAgreementVersion.updateMany({
