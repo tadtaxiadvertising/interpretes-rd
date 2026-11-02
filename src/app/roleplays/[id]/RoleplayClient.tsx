@@ -239,7 +239,13 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   }, [sessionId, currentScenarioIndex, session]);
 
   const handleSelfAssessmentComplete = useCallback(async (
-    scores: Record<string, number>,
+    scores: {
+      protocol: number;
+      interpretation: number;
+      language: number;
+      service: number;
+      technical: number;
+    },
     criticalError: boolean,
     notes: string
   ) => {
