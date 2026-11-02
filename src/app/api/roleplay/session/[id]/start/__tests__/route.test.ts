@@ -135,6 +135,23 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
+  it('does not allow a candidate to bypass induction before Roleplay', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.identity = {
+      role: 'candidate',
+      interpreterId: null,
+      candidateId: 5,
+      eligibility: { needsOnboarding: false },
+    };
+    m.applicationFindUnique.mockResolvedValue({ status: 'APPLIED' });
+
+    const res = await POST(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(409);
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('allows a retry for an application in ROLEPLAY_REVIEW', async () => {
     m.session = CANDIDATE_SESSION;
     m.identity = {
