@@ -60,7 +60,7 @@ export default async function CandidatePortalPage() {
   });
 
   const status = application?.status ?? 'APPLIED';
-  const roleplayActive = !!session && ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status);
+  const roleplayActive = !!session && ['STARTED', 'IN_PROGRESS'].includes(session.status);
   const roleplayFinished = !!session && ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status);
   const roleplayLabel = !session
     ? 'Aún no iniciado'
