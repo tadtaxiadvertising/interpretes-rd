@@ -114,7 +114,7 @@ export default async function CandidatePortalPage() {
               <Link href={`/roleplays/${session.id}`} className="mt-5 inline-flex rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-400">
                 Continuar Roleplay
               </Link>
-            ) : !roleplayFinished && ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS', 'ROLEPLAY_REVIEW'].includes(status) ? (
+            ) : !roleplayFinished && ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS', 'ROLEPLAY_REVIEW'].includes(status) ? (
               <div className="mt-5"><CandidateRoleplayAction /></div>
             ) : roleplayFinished ? (
               <p className="mt-5 text-sm text-slate-300">Tu intento quedó registrado. El equipo de evaluación actualizará aquí el resultado y los próximos pasos.</p>
