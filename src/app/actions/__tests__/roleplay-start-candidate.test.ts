@@ -91,8 +91,9 @@ const CANDIDATE_ACTOR = {
   provider: 'supabase',
   userId: 'u-1',
   email: 'Candidate@Example.com',
-  role: 'interpreter',
+  role: 'candidate',
   interpreterId: null,
+  candidateId: 5,
   profileId: 'p-1',
 };
 
@@ -103,7 +104,8 @@ describe('startCandidateRoleplay', () => {
     m.identity = {
       userId: 'u-1',
       email: 'candidate@example.com',
-      role: 'interpreter',
+      role: 'candidate',
+      candidateId: 5,
       eligibility: { needsOnboarding: false },
     };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
@@ -145,17 +147,14 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
-  it('blocks roleplay start until server-resolved onboarding is complete', async () => {
+  it('does not require interpreter onboarding for a recruitment candidate', async () => {
     m.identity.eligibility.needsOnboarding = true;
 
     const res = await startCandidateRoleplay();
 
-    expect(res.success).toBe(false);
-    expect(res.code).toBe('CONFLICT');
-    expect(m.candidateFindUnique).not.toHaveBeenCalled();
-    expect(m.sessionCreate).not.toHaveBeenCalled();
-    expect(m.accessUpsert).not.toHaveBeenCalled();
-    expect(m.cookieSet).not.toHaveBeenCalled();
+    expect(res.success).toBe(true);
+    expect(m.sessionCreate).toHaveBeenCalled();
+    expect(m.cookieSet).toHaveBeenCalled();
   });
 
   it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
