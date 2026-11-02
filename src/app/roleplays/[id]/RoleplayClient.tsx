@@ -183,7 +183,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     setPageState('recording');
   }, []);
 
-  const handleScenarioAudioSave = useCallback(async (audioUrl: string, duration: number, blob: Blob) => {
+  const handleScenarioAudioSave = useCallback(async (_audioUrl: string, duration: number, blob: Blob) => {
     if (!session) return;
     
     const scenario = session.scenarios[currentScenarioIndex];
@@ -429,7 +429,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
           {pageState === 'self-assessment' && currentScenario && (
             <SelfAssessment
-              scenarioId={currentScenario.id}
               scenarioTitle={currentScenario.title}
               onComplete={handleSelfAssessmentComplete}
               initialScores={scenarioResponses[currentScenario.id]?.scores}
