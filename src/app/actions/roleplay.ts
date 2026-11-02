@@ -23,14 +23,20 @@ async function canAccessRoleplaySession(
   const identity = await resolveCurrentIdentity();
   if (!identity) return false;
 
-  if (session.interpreterId !== null) {
-    return identity.role === 'interpreter' && identity.interpreterId === session.interpreterId;
+  // Legacy recruitment sessions may still carry both IDs from the old
+  // provisional-interpreter design. Candidate ownership takes precedence
+  // until the application is hired; never require an operational identity.
+  if (
+    session.recruitmentCandidateId !== null &&
+    identity.role === 'candidate' &&
+    identity.candidateId === session.recruitmentCandidateId
+  ) {
+    return sessionCookie === session.id;
   }
 
-  return session.recruitmentCandidateId !== null
-    && identity.role === 'candidate'
-    && identity.candidateId === session.recruitmentCandidateId
-    && sessionCookie === session.id;
+  return session.interpreterId !== null
+    && identity.role === 'interpreter'
+    && identity.interpreterId === session.interpreterId;
 }
 
 function isUniqueConstraintConflict(error: unknown): boolean {
