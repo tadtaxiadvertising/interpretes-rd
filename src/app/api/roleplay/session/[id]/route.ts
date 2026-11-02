@@ -91,7 +91,13 @@ export async function GET(
           baseAudioUrl,
           recordedAudioUrl,
           status: session.status,
-          canCompleteSelfAssessment: session.status === 'SUBMITTED' && !session.evaluatorId && !session.qaScoreId,
+          canCompleteSelfAssessment:
+            session.status === 'SUBMITTED' &&
+            !session.evaluatorId &&
+            !session.qaScoreId &&
+            session.scenarios.some((scenario) =>
+              Boolean(scenario.responses[0]?.sourceAudioUrl) && !scenario.responses[0]?.selfScore
+            ),
           currentScenarioIndex: session.currentScenarioIndex,
           scenarios,
         },
