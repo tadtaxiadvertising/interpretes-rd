@@ -215,9 +215,9 @@ describe('startCandidateRoleplay', () => {
     expect(m.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         recruitmentCandidateId: 5,
-        baseAudioUrl: 'base.mp3',
+        baseAudioUrl: 'https://audio.example/base.mp3',
         status: 'STARTED',
-        scenarios: { create: [{ order: 0, title: 'Medical', baseAudioUrl: 'scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }] },
+        scenarios: { create: [{ order: 0, title: 'Medical', baseAudioUrl: 'https://audio.example/scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }] },
       }),
     }));
     expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-retry', expect.any(Object));
