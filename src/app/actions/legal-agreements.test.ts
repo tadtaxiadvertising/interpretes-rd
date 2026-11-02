@@ -1,6 +1,67 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { recordCurrentLegalAcceptance } from './legal-agreements';
+import { approveLegalAgreementDraft, publishLegalAgreementDraft, recordCurrentLegalAcceptance } from './legal-agreements';
+
+vi.mock('@/lib/auth/actions', () => ({ validateAction: vi.fn() }));
+vi.mock('@/lib/prisma', () => ({
+  default: {
+    legalAgreementVersion: { findFirst: vi.fn(), updateMany: vi.fn() },
+  },
+}));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+
+import { validateAction } from '@/lib/auth/actions';
+import prisma from '@/lib/prisma';
+
+describe('legal agreement administration', () => {
+  it('does not publish a draft without a recorded legal review', async () => {
+    (validateAction as any).mockResolvedValue({ user: { email: 'publisher@example.com', userId: 'publisher-1' } });
+    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
+      id: 'draft-1',
+      content: '# Acuerdo',
+      contentHash: createHash('sha256').update('# Acuerdo', 'utf8').digest('hex'),
+      legalReviewedAt: null,
+      legalReviewedBy: null,
+    });
+
+    const result = await publishLegalAgreementDraft('draft-1');
+
+    expect(result).toMatchObject({ success: false, code: 'LEGAL_REVIEW_REQUIRED' });
+    expect(prisma.legalAgreementVersion.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('requires a different administrator to publish than the legal reviewer', async () => {
+    (validateAction as any).mockResolvedValue({ user: { email: 'reviewer@example.com', userId: 'reviewer-1' } });
+    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
+      id: 'draft-1',
+      content: '# Acuerdo',
+      contentHash: createHash('sha256').update('# Acuerdo', 'utf8').digest('hex'),
+      legalReviewedAt: new Date(),
+      legalReviewedBy: 'reviewer@example.com',
+    });
+
+    const result = await publishLegalAgreementDraft('draft-1');
+
+    expect(result).toMatchObject({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED' });
+    expect(prisma.legalAgreementVersion.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('records legal review only for a valid, unchanged draft', async () => {
+    (validateAction as any).mockResolvedValue({ user: { email: 'reviewer@example.com', userId: 'reviewer-1' } });
+    const content = '# Acuerdo';
+    const contentHash = createHash('sha256').update(content, 'utf8').digest('hex');
+    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({ id: 'draft-1', content, contentHash });
+    (prisma.legalAgreementVersion.updateMany as any).mockResolvedValue({ count: 1 });
+
+    const result = await approveLegalAgreementDraft('draft-1');
+
+    expect(result).toMatchObject({ success: true });
+    expect(prisma.legalAgreementVersion.updateMany).toHaveBeenCalledWith({
+      where: { id: 'draft-1', agreementKey: 'freelance-services', status: 'DRAFT', contentHash },
+      data: { legalReviewedAt: expect.any(Date), legalReviewedBy: 'reviewer@example.com' },
+    });
+  });
+});
 
 describe('recordCurrentLegalAcceptance', () => {
   it('stores both stable user and interpreter identities with signer evidence', async () => {
