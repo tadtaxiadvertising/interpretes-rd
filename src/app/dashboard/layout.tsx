@@ -18,6 +18,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // sub-route. A client-only wizard or entry router can be bypassed by opening
   // a nested dashboard URL directly.
   const identity = await getResolvedIdentity();
+  if (identity?.role === 'candidate') {
+    redirect(resolveDestination(identity));
+  }
+
   if (identity && identity.role !== 'admin') {
     const destination = resolveDestination(identity);
     if (destination.startsWith('/onboarding') || destination.startsWith('/roleplays/')) {
