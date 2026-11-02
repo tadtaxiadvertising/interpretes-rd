@@ -100,7 +100,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
     m.scenarioCount.mockResolvedValue(0);
-    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1' });
+    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1', order: 0 });
     m.responseCount.mockResolvedValue(0);
     m.responseFindFirst.mockResolvedValue(null);
     m.responseCreate.mockResolvedValue({ id: 'resp-1' });
@@ -462,7 +462,7 @@ describe('saveSelfAssessment gate', () => {
   it('rejects a candidate session when the session cookie is missing', async () => {
     m.cookie = null;
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
@@ -473,10 +473,10 @@ describe('saveSelfAssessment gate', () => {
     m.cookie = 'sess-cand';
     m.scenarioFindFirst.mockResolvedValue(null);
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain('Unauthorized');
+    expect(res.error).toContain('current step');
     expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
@@ -487,7 +487,7 @@ describe('saveSelfAssessment gate', () => {
     const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain('No confirmed response');
+    expect(res.error).toContain('Record your response');
     expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
@@ -497,7 +497,7 @@ describe('saveSelfAssessment gate', () => {
     const res = await saveSelfAssessment({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
-      scores: { fluency: 8, pronunciation: 7 },
+      scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 7 },
       criticalError: false,
       notes: 'good pacing',
     });
@@ -505,7 +505,7 @@ describe('saveSelfAssessment gate', () => {
     expect(res.success).toBe(true);
     expect(m.responseUpdate).toHaveBeenCalledTimes(1);
     expect(m.responseUpdate.mock.calls[0][0].data).toEqual({
-      selfScore: { fluency: 8, pronunciation: 7, criticalError: false },
+      selfScore: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 7, criticalError: false },
       selfNotes: 'good pacing',
     });
   });
@@ -514,7 +514,7 @@ describe('saveSelfAssessment gate', () => {
     m.session = INTERPRETER_SESSION;
     m.actor = { interpreterId: 999 };
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-int', scenarioId: 'scn-1', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-int', scenarioId: 'scn-1', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
