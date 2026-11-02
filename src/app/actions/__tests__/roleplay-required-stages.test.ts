@@ -127,6 +127,26 @@ describe('Roleplay required stages', () => {
       data: { currentScenarioIndex: 1, status: 'IN_PROGRESS' },
     });
   });
+  it('repairs a legacy submitted session only while QA has not claimed it', async () => {
+    m.session = {
+      ...m.session,
+      status: 'SUBMITTED',
+      currentScenarioIndex: 1,
+      evaluatorId: null,
+      qaScoreId: null,
+    };
+
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(m.responseUpdate).toHaveBeenCalledTimes(1);
+    expect(m.sessionUpdate).not.toHaveBeenCalled();
+  });
 
   it('rejects final submission while any scenario lacks a self-assessment', async () => {
     m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
