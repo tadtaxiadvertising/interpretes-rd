@@ -825,7 +825,15 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         select: { id: true, selfScore: true },
       });
       if (!response) throw new Error('Record your response before completing the self-assessment');
-      if (isLegacyUnclaimedSubmission && (response.selfScore ?? null) !== null) {
+      const existingScore = response.selfScore;
+      const existingScoreIsComplete = Boolean(
+        existingScore &&
+        typeof existingScore === 'object' &&
+        !Array.isArray(existingScore) &&
+        ['protocol', 'interpretation', 'language', 'service', 'technical']
+          .every((key) => typeof (existingScore as Record<string, unknown>)[key] === 'number')
+      );
+      if (isLegacyUnclaimedSubmission && existingScoreIsComplete) {
         throw new Error('This self-assessment has already been submitted');
       }
 
