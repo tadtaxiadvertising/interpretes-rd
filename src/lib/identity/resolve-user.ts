@@ -74,7 +74,9 @@ export function computeOnboardingStatus(profile: {
   // For Auth.js users, onboarding state lives on Interpreter
   if (isAuthJsUser && interpreter) {
     const hasTerms = !!interpreter.documentosCompleto || interpreter.notas?.includes('[TERMS_ACCEPTED]');
-    const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.tipoCuenta && interpreter.cedulaRnc);
+    // Keep this check aligned with getOnboardingStatus(), which is the canonical
+    // onboarding contract currently persisted by both onboarding providers.
+    const hasBanking = !!(interpreter.banco && interpreter.cuentaPago && interpreter.cedulaRnc);
     
     if (interpreter.documentosCompleto) {
       // Legacy completion flags are not proof that required banking data still
@@ -96,7 +98,8 @@ export function computeOnboardingStatus(profile: {
 
   // For Supabase users, onboarding state lives on UserProfile
   const hasTerms = !!profile.termsAcceptedAt;
-  const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankAccountType && profile.bankCedula);
+  // Keep this check aligned with getOnboardingStatus() and completeOnboarding().
+  const hasBanking = !!(profile.bankName && profile.bankAccount && profile.bankCedula);
   
   if (profile.onboardingComplete) {
     // Check for NEEDS_REVIEW - completed flag but missing data
