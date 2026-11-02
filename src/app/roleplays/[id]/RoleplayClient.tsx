@@ -132,15 +132,10 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     }
   }, [sessionId]);
 
-  const handleNextScenario = useCallback(() => {
-    const nextIndex = currentScenarioIndex + 1;
-    if (nextIndex < (session?.scenarios.length || 0)) {
-      setCurrentScenarioIndex(nextIndex);
-      setPageState('recording');
-    } else {
-      setPageState('completion');
-    }
-  }, [currentScenarioIndex, session]);
+  const handleStartRecording = useCallback(() => {
+    // Listening/review and recording are separate required stages for every scenario.
+    setPageState('recording');
+  }, []);
 
   const handleScenarioAudioSave = useCallback(async (audioUrl: string, duration: number, blob: Blob) => {
     if (!session) return;
@@ -230,7 +225,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       const nextIndex = currentScenarioIndex + 1;
       if (nextIndex < (session?.scenarios.length || 0)) {
         setCurrentScenarioIndex(nextIndex);
-        setPageState('recording');
+        setPageState('scenario');
       } else {
         setPageState('completion');
       }
@@ -357,7 +352,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
               currentIndex={currentScenarioIndex}
               totalScenarios={session.scenarios.length}
               onPlayBase={handlePlayBase}
-              onNext={handleNextScenario}
+              onNext={handleStartRecording}
               isBasePlaying={isBasePlaying}
               baseVolume={baseAudioVolume}
               onVolumeChange={handleVolumeChange}
@@ -371,7 +366,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
               sessionId={session.id}
               durationLimitSec={currentScenario.durationLimitSec}
               onSave={handleScenarioAudioSave}
-              onComplete={handleNextScenario}
               isLoading={isLoading}
             />
           )}
