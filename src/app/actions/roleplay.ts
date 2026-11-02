@@ -596,6 +596,12 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         if (!scenario) {
           throw new Error('Unauthorized');
         }
+        if (
+          !input.sourceAudioPath ||
+          !isCanonicalResponseAudioPath(input.sourceAudioPath, session.id, input.scenarioId)
+        ) {
+          throw new Error('A valid uploaded audio object is required before confirming the response');
+        }
 
         // A retried confirm after a successful commit may arrive after the
         // session index has advanced. Treat only the exact same stored audio
@@ -605,11 +611,9 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
         });
         if (priorResponse) {
-          if (input.sourceAudioPath
-          ? priorResponse.sourceAudioPath === input.sourceAudioPath
-          : priorResponse.sourceAudioUrl === input.recordedAudioUrl) {
+          if (priorResponse.sourceAudioPath === input.sourceAudioPath) {
             return {
-              recordedAudioUrl: input.recordedAudioUrl,
+              recordedAudioUrl: priorResponse.sourceAudioUrl ?? input.recordedAudioUrl,
               submitted: session.status === 'SUBMITTED',
               candidateId: session.recruitmentCandidateId,
               sourceAudioPath: priorResponse.sourceAudioPath,
@@ -655,13 +659,19 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         throw new Error('Session not available for submission');
       }
 
+      // Sign the uploaded object server-side. Never trust a client-supplied URL
+      // as proof that an audio recording exists in the roleplay bucket.
+      const confirmedAudioUrl = input.scenarioId && input.sourceAudioPath
+        ? await confirmUpload(input.sourceAudioPath)
+        : input.recordedAudioUrl;
+
       // Persist a new response only once. The existing-response path above
       // handles idempotent retries before the sequential-index check.
       if (input.scenarioId) {
         await tx.roleplayResponse.create({
           data: {
             scenarioId: input.scenarioId,
-            sourceAudioUrl: input.recordedAudioUrl,
+            sourceAudioUrl: confirmedAudioUrl,
             sourceAudioPath: input.sourceAudioPath ?? null,
             processedAudioPath: input.processedAudioPath ?? null,
             durationSec: input.durationSec ?? null,
@@ -686,7 +696,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       const updated = await tx.roleplaySession.update({
         where: { id: input.sessionId },
         data: {
-          recordedAudioUrl: input.recordedAudioUrl,
+          recordedAudioUrl: confirmedAudioUrl,
           // A scenario's index advances only after its self-assessment is saved.
           // Audio confirmation alone must never submit the entire Roleplay.
           ...(input.scenarioId
@@ -705,7 +715,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       }
 
       return {
-        recordedAudioUrl: input.recordedAudioUrl,
+        recordedAudioUrl: confirmedAudioUrl,
         submitted: input.scenarioId ? false : isFinal,
         candidateId: session.recruitmentCandidateId,
         sourceAudioPath: input.sourceAudioPath ?? null,
