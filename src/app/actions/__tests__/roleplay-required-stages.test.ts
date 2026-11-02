@@ -74,6 +74,8 @@ describe('Roleplay required stages', () => {
       recruitmentCandidateId: 5,
       status: 'IN_PROGRESS',
       currentScenarioIndex: 0,
+      evaluatorId: null,
+      qaScoreId: null,
     };
     m.scenario = { id: 'scenario-1', order: 0 };
     m.response = { id: 'response-1' };
