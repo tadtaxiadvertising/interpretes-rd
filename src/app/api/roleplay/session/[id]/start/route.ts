@@ -60,8 +60,6 @@ export async function POST(
         select: { status: true },
       });
       const startableApplicationStatuses: readonly string[] = [
-        'APPLIED',
-        'INDUCTION_PENDING',
         'ROLEPLAY_PENDING',
         'ROLEPLAY_IN_PROGRESS',
         'ROLEPLAY_REVIEW',
