@@ -101,7 +101,9 @@ describe('roleplay: no scenario skipping', () => {
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
     m.responseFindFirst.mockResolvedValue(null);
     m.accessUpsert.mockResolvedValue({ id: 'acc-1' });
-    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-0' });
+    m.scenarioFindFirst.mockImplementation(async (args: { where: { order?: number } }) =>
+      args.where.order === 1 ? SCENARIO_1 : SCENARIO_0
+    );
     m.cookieSet.mockResolvedValue(undefined);
     m.actor = { role: 'candidate', interpreterId: null, candidateId: 5, userId: 'u-1', email: 'candidate@example.com' };
   });
@@ -114,13 +116,13 @@ describe('roleplay: no scenario skipping', () => {
     const res = await submitRoleplayResponse({ sessionId: 'sess-cand' });
 
     expect(res.success).toBe(true);
-    expect(res.data.scenarioId).toBe('scenario_1');
+    expect(res.data.scenarioId).toBe('scn-1');
   });
 
   it('submitRoleplayResponse rejects a candidate that targets a future scenario (skip)', async () => {
     m.session.currentScenarioIndex = 0;
 
-    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scenario_1' });
+    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1' });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Escenario no disponible');
@@ -129,9 +131,18 @@ describe('roleplay: no scenario skipping', () => {
   it('submitRoleplayResponse allows the current scenario when explicitly given', async () => {
     m.session.currentScenarioIndex = 0;
 
-    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scenario_0' });
+    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-0' });
 
     expect(res.success).toBe(true);
+  });
+  it('submitRoleplayResponse rejects a scenario that already has a confirmed response', async () => {
+    m.session.currentScenarioIndex = 0;
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-1' });
+
+    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-0' });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('already submitted');
   });
 
   // --- confirmRoleplayResponse ------------------------------------------
