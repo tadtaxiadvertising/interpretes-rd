@@ -195,8 +195,8 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.responseCreate.mock.calls[0][0].data.sourceAudioPath).toBe('responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm');
     expect(m.responseCreate.mock.calls[0][0].data.durationSec).toBe(42);
     expect(m.update).toHaveBeenCalledTimes(1);
-    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
-    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBe(1);
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
+    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBeUndefined();
   });
 
   it('rejects a scenario id that belongs to a different session (cross-session write)', async () => {
@@ -213,11 +213,10 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('accepts a later scenario confirm after a first response was already recorded', async () => {
+  it('accepts the next scenario only after the prior self-assessment advanced the cursor', async () => {
     // Sequential binding: a supplied scenario id must match the scenario at
-    // the session's current index. With the first response already recorded
-    // the index sits at 1, so the belongs check (by id) and the sequential
-    // check (by order) must both resolve to scn-2.
+    // the session's current index. The first assessment advanced the cursor
+    // to 1, so the next recording must target scn-2.
     m.session = { ...CANDIDATE_SESSION, currentScenarioIndex: 1, recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(2);
@@ -236,7 +235,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(res.success).toBe(true);
     expect(m.responseCreate).toHaveBeenCalledTimes(1);
     expect(m.update).toHaveBeenCalledTimes(1);
-    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBe(2);
+    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBeUndefined();
   });
 
   it('rejects a stray confirm once the session has left the submit window', async () => {
