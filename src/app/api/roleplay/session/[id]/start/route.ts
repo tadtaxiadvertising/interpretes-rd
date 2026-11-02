@@ -139,6 +139,7 @@ function isSessionOwner(
   if (identity.role === 'admin') return true;
   if (session.interpreterId && identity.interpreterId === session.interpreterId) return true;
   if (session.recruitmentCandidateId) {
+    if (identity.role !== 'candidate' || identity.candidateId !== session.recruitmentCandidateId) return false;
     if (sessionCookie !== session.id) return false;
     // Only allow starting/resuming if session is in a valid pre-submission state
     const startableStates = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'];
