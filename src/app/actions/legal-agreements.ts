@@ -146,14 +146,13 @@ export async function hasCurrentLegalAcceptance(identity: { userId?: string | nu
     select: { id: true, content: true, contentHash: true },
   });
   if (!current || hashContent(current.content) !== current.contentHash) return false;
-  const where = identity.userId
-    ? { agreementVersionId: current.id, userId: identity.userId }
-    : identity.interpreterId
-      ? { agreementVersionId: current.id, interpreterId: identity.interpreterId }
-      : null;
-  if (!where) return false;
+  const identityFilters = [
+    ...(identity.userId ? [{ userId: identity.userId }] : []),
+    ...(identity.interpreterId ? [{ interpreterId: identity.interpreterId }] : []),
+  ];
+  if (identityFilters.length === 0) return false;
   const acceptance = await prisma.legalAgreementAcceptance.findFirst({
-    where,
+    where: { agreementVersionId: current.id, OR: identityFilters },
     select: { id: true, contentHash: true },
   });
   return !!acceptance && acceptance.contentHash === current.contentHash;
@@ -163,6 +162,8 @@ export async function recordCurrentLegalAcceptance(tx: any, identity: {
   userId?: string | null;
   interpreterId?: number | null;
   email: string;
+  userAgent?: string | null;
+  source?: string;
 }) {
   const current = await tx.legalAgreementVersion.findFirst({
     where: { agreementKey: AGREEMENT_KEY, status: 'PUBLISHED', publishedAt: { not: null } },
@@ -171,13 +172,18 @@ export async function recordCurrentLegalAcceptance(tx: any, identity: {
   });
   if (!current) throw new Error('No published legal agreement');
   if (hashContent(current.content) !== current.contentHash) throw new Error('Published legal agreement integrity check failed');
-  const identityWhere = identity.userId
-    ? { agreementVersionId: current.id, userId: identity.userId }
-    : identity.interpreterId
-      ? { agreementVersionId: current.id, interpreterId: identity.interpreterId }
-      : null;
-  if (!identityWhere) throw new Error('No stable signer identity');
-  const existing = await tx.legalAgreementAcceptance.findFirst({ where: identityWhere, select: { id: true } });
+  const identityFilters = [
+    ...(identity.userId ? [{ userId: identity.userId }] : []),
+    ...(identity.interpreterId ? [{ interpreterId: identity.interpreterId }] : []),
+  ];
+  if (identityFilters.length === 0) throw new Error('No stable signer identity');
+  const existing = await tx.legalAgreementAcceptance.findFirst({
+    where: { agreementVersionId: current.id, OR: identityFilters },
+    select: { id: true, contentHash: true },
+  });
+  if (existing && existing.contentHash !== current.contentHash) {
+    throw new Error('LEGAL_ACCEPTANCE_INTEGRITY_ERROR');
+  }
   if (!existing) {
     await tx.legalAgreementAcceptance.create({
       data: {
@@ -186,7 +192,8 @@ export async function recordCurrentLegalAcceptance(tx: any, identity: {
         interpreterId: identity.interpreterId ?? null,
         signerEmail: identity.email,
         contentHash: current.contentHash,
-        source: 'onboarding',
+        source: identity.source ?? 'onboarding',
+        userAgent: identity.userAgent ?? null,
       },
     });
   }
