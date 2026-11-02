@@ -7,16 +7,12 @@ import { cn } from '@/lib/utils';
 type RecordingState = 'ready' | 'recording' | 'review' | 'uploading' | 'complete';
 
 interface RecorderProps {
-  scenarioId: string;
-  sessionId: string;
   durationLimitSec?: number;
   onSave: (audioUrl: string, durationSec: number, blob: Blob) => Promise<void>;
   isLoading?: boolean;
 }
 
 export function Recorder({ 
-  scenarioId, 
-  sessionId, 
   durationLimitSec = 300, 
   onSave, 
   isLoading 
