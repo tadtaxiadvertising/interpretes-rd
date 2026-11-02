@@ -94,3 +94,13 @@ La auditoría sigue abierta hasta que los chequeos E2E y de scripts sean reprodu
 - **Estado de validación:** pendiente CI y revisión del PR. No se ejecutó el script, no se modificó ninguna base de datos y no se publicó ni reemplazó un acuerdo.
 - **Contrato ampliado:** PR #130 contiene un borrador para revisión de abogado dominicano y una estrategia de pruebas por rol; permanece como borrador y no debe publicarse ni solicitar firmas hasta recibir aprobación legal.
 - **Siguiente paso:** revisar los PRs y su CI, y validar el flujo de acuerdos con una base de datos E2E aislada antes de cualquier despliegue.
+
+
+### Auditoría de acuerdos legales y eliminación de intérpretes — 2026-11-01
+
+- **SQLSTATE 23514 confirmado en código/migraciones:** `20261001_add_roleplay_v2/migration.sql` creó `roleplay_session_xor_subject`, que exige exactamente un propietario. El modelo Prisma configura `Interpreter.roleplaySessions` con `onDelete: SetNull`; al eliminar un intérprete con sesiones, PostgreSQL intenta dejar `interpreter_id = NULL` y viola el XOR.
+- **Corrección propuesta en PR #132:** la migración `20261101_roleplay_orphaned_history_check` cambia la regla a como máximo un propietario. La sesión puede quedar sin propietario al convertirse en evidencia histórica; nunca puede pertenecer simultáneamente a candidato e intérprete. La migración hace preflight y aborta si encuentra filas con ambos propietarios o si no existe la restricción esperada.
+- **Eliminación segura:** la acción cancela las sesiones activas, desvincula las sesiones terminales y conserva sesiones, escenarios, respuestas, referencias de audio y evidencia QA. Se agregaron pruebas unitarias de regresión.
+- **Acuerdos:** la aceptación de usuarios Supabase ahora puede quedar vinculada simultáneamente al UUID de usuario y al ID interno de intérprete; se registra User-Agent y origen, y se rechaza evidencia existente cuyo hash no coincide con la versión publicada. Se agregaron pruebas de integridad.
+- **Límites de esta auditoría:** no se ha conectado ni modificado la base de datos EasyPanel; la migración no está aplicada en producción. El contenido contractual no se ha declarado jurídicamente aprobado. Requiere revisión por abogado habilitado en República Dominicana.
+- **Estado:** PR #132 abierto; validación CI pendiente. Aplicar migración únicamente después de backup, verificación del estado de migraciones y CI verde.
