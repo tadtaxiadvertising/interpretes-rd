@@ -825,7 +825,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         select: { id: true, selfScore: true },
       });
       if (!response) throw new Error('Record your response before completing the self-assessment');
-      if (isLegacyUnclaimedSubmission && response.selfScore !== null) {
+      if (isLegacyUnclaimedSubmission && (response.selfScore ?? null) !== null) {
         throw new Error('This self-assessment has already been submitted');
       }
 
