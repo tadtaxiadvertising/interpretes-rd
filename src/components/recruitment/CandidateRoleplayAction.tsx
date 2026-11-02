@@ -14,8 +14,11 @@ export function CandidateRoleplayAction() {
     setError(null);
     try {
       const result = await startCandidateRoleplay();
-      if (!result.success || !result.data?.sessionId) {
+      if (!result.success) {
         throw new Error(result.error || 'No se pudo iniciar el Roleplay.');
+      }
+      if (!result.data?.sessionId) {
+        throw new Error('La sesión no devolvió un identificador válido.');
       }
       router.push(`/roleplays/${result.data.sessionId}`);
       router.refresh();
