@@ -546,6 +546,9 @@ describe('admin activation actions (transactional state machine)', () => {
         findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ id: 42 }),
       },
+      userProfile: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
       ...overrides,
     };
   }
