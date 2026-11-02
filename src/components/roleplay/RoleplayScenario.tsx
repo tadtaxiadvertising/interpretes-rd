@@ -249,7 +249,7 @@ export function RoleplayScenario({
           </>
         ) : (
           <>
-            {currentIndex < totalScenarios - 1 ? 'Continuar a grabar' : 'Finalizar y evaluar'}
+            Grabar respuesta
             <ChevronRight size={20} />
           </>
         )}
