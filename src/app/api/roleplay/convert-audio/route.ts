@@ -44,23 +44,27 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     return { hasAccess: true, session };
   }
 
-  // Check interpreter ownership
-  if (session.interpreterId && identityResult.interpreterId === session.interpreterId) {
-    const validStates = ['STARTED', 'IN_PROGRESS'];
-    if (!validStates.includes(session.status)) {
+  // A recruitment session is candidate-owned; a historical interpreter link
+  // must never grant another actor permission to upload into it.
+  if (session.recruitmentCandidateId !== null) {
+    if (
+      identityResult.role !== 'candidate' ||
+      identityResult.candidateId !== session.recruitmentCandidateId ||
+      sessionCookie !== session.id
+    ) {
+      return { hasAccess: false, error: 'Access denied' };
+    }
+    if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
     }
     return { hasAccess: true, session };
   }
 
-  // Candidate sessions are bound to the opaque, server-issued roleplay_session
-  // cookie created by the invite/start flow. An authenticated user alone — or
-  // an unused invitation that merely exists on the session — is NOT sufficient:
-  // the caller must present the exact credential bound to this session.
-  if (session.recruitmentCandidateId) {
-    if (sessionCookie !== session.id) {
-      return { hasAccess: false, error: 'Access denied' };
-    }
+  if (
+    session.interpreterId !== null &&
+    identityResult.role === 'interpreter' &&
+    identityResult.interpreterId === session.interpreterId
+  ) {
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
     }
