@@ -523,9 +523,9 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
 
 const ConfirmResponseSchema = z.object({
   sessionId: z.string().min(1),
-  scenarioId: z.string().min(1).optional(),
+  scenarioId: z.string().min(1),
   recordedAudioUrl: z.string().min(1),
-  sourceAudioPath: z.string().min(1).max(1024).optional(),
+  sourceAudioPath: z.string().min(1).max(1024),
   processedAudioPath: z.string().min(1).max(1024).optional(),
   durationSec: z.number().int().min(0).max(86400).optional(),
 }).strict();
@@ -581,153 +581,101 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       if (!(await canAccessRoleplaySession(session, sessionCookie))) {
         throw new Error('Unauthorized');
       }
-      if (session.recruitmentCandidateId !== null && !input.scenarioId) {
-        throw new Error('Recruitment Roleplay requires a scenario response');
-      }
-
-      // A supplied scenario must belong to this session. Without this check a
+      // A response must belong to a real scenario in this session. Without this check a
       // caller could read or overwrite another session's response by passing
       // a foreign scenario id (cross-session write).
-      if (input.scenarioId) {
-        const scenario = await tx.roleplayScenario.findFirst({
-          where: { id: input.scenarioId, sessionId: session.id },
-          select: { id: true },
-        });
-        if (!scenario) {
-          throw new Error('Unauthorized');
-        }
-        if (
-          !input.sourceAudioPath ||
-          !isCanonicalResponseAudioPath(input.sourceAudioPath, session.id, input.scenarioId)
-        ) {
-          throw new Error('A valid uploaded audio object is required before confirming the response');
-        }
+      const scenario = await tx.roleplayScenario.findFirst({
+        where: { id: input.scenarioId, sessionId: session.id },
+        select: { id: true },
+      });
+      if (!scenario) throw new Error('Unauthorized');
+      if (!isCanonicalResponseAudioPath(input.sourceAudioPath, session.id, input.scenarioId)) {
+        throw new Error('A valid uploaded audio object is required before confirming the response');
+      }
 
-        // A retried confirm after a successful commit may arrive after the
-        // session index has advanced. Treat only the exact same stored audio
-        // as an idempotent replay; never overwrite a confirmed response.
-        const priorResponse = await tx.roleplayResponse.findFirst({
-          where: { scenarioId: input.scenarioId },
-          select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
-        });
-        if (priorResponse) {
-          if (priorResponse.sourceAudioPath === input.sourceAudioPath) {
-            return {
-              recordedAudioUrl: priorResponse.sourceAudioUrl ?? input.recordedAudioUrl,
-              submitted: session.status === 'SUBMITTED',
-              candidateId: session.recruitmentCandidateId,
-              sourceAudioPath: priorResponse.sourceAudioPath,
-              processedAudioPath: priorResponse.processedAudioPath,
-              newlyCreated: false,
-            };
-          }
-          throw new Error('Response already recorded for this scenario');
+      // A retried confirm after a successful commit may arrive after the
+      // session index has advanced. Treat only the exact same stored audio
+      // as an idempotent replay; never overwrite a confirmed response.
+      const priorResponse = await tx.roleplayResponse.findFirst({
+        where: { scenarioId: input.scenarioId },
+        select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
+      });
+      if (priorResponse) {
+        if (priorResponse.sourceAudioPath === input.sourceAudioPath) {
+          return {
+            recordedAudioUrl: priorResponse.sourceAudioUrl ?? input.recordedAudioUrl,
+            submitted: session.status === 'SUBMITTED',
+            candidateId: session.recruitmentCandidateId,
+            sourceAudioPath: priorResponse.sourceAudioPath,
+            processedAudioPath: priorResponse.processedAudioPath,
+            newlyCreated: false,
+          };
         }
+        throw new Error('Response already recorded for this scenario');
+      }
 
-        // Sequential binding: a new response must target the scenario expected
-        // at the session's current index, so a candidate cannot skip steps.
-        const nextScenario = await tx.roleplayScenario.findFirst({
-          where: { sessionId: session.id, order: session.currentScenarioIndex },
-          select: { id: true },
-        });
-        if (!nextScenario || nextScenario.id !== input.scenarioId) {
-          throw new Error('Unauthorized');
-        }
+      // Sequential binding: a new response must target the scenario expected
+      // at the session's current index, so a candidate cannot skip steps.
+      const nextScenario = await tx.roleplayScenario.findFirst({
+        where: { sessionId: session.id, order: session.currentScenarioIndex },
+        select: { id: true },
+      });
+      if (!nextScenario || nextScenario.id !== input.scenarioId) {
+        throw new Error('Unauthorized');
       }
 
       const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
       const canSubmit = validSubmitStates.includes(session.status);
 
       if (!canSubmit) {
-        // Idempotent replay: a retried confirm whose response is already
-        // recorded succeeds without writing; any other write is rejected.
-        if (input.scenarioId) {
-          const recorded = await tx.roleplayResponse.findFirst({
-            where: { scenarioId: input.scenarioId, sourceAudioUrl: input.recordedAudioUrl },
-            select: { id: true },
-          });
-          if (recorded) {
-            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, processedAudioPath: input.processedAudioPath ?? null, newlyCreated: false };
-          }
-        }
-        throw new Error('Session not available for submission');
-      }
-
-      // Legacy callers that do not target a scenario row keep the original
-      // single-submission semantics: one recorded response per session.
-      if (!input.scenarioId && session.recordedAudioUrl) {
         throw new Error('Session not available for submission');
       }
 
       // Sign the uploaded object server-side. Never trust a client-supplied URL
       // as proof that an audio recording exists in the roleplay bucket.
-      const confirmedAudioUrl = input.scenarioId && input.sourceAudioPath
-        ? await confirmUpload(input.sourceAudioPath)
-        : input.recordedAudioUrl;
+      const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath);
 
       // Persist a new response only once. The existing-response path above
       // handles idempotent retries before the sequential-index check.
-      if (input.scenarioId) {
-        await tx.roleplayResponse.create({
-          data: {
-            scenarioId: input.scenarioId,
-            sourceAudioUrl: confirmedAudioUrl,
-            sourceAudioPath: input.sourceAudioPath ?? null,
-            processedAudioPath: input.processedAudioPath ?? null,
-            durationSec: input.durationSec ?? null,
-            // Self-assessment is saved only by saveSelfAssessment after the
-            // recording is confirmed; audio confirmation cannot carry scores.
-            audioStatus: input.sourceAudioPath?.endsWith('.webm') ? 'UPLOADED' : 'READY',
-            submittedAt: new Date(),
-          },
-        });
-      }
-
-      // Progress is derived from persisted responses so a retried confirm
-      // cannot advance the session twice.
-      const totalScenarios = await tx.roleplayScenario.count({ where: { sessionId: session.id } });
-      const respondedCount = await tx.roleplayResponse.count({
-        where: { scenario: { sessionId: session.id } },
+      await tx.roleplayResponse.create({
+        data: {
+          scenarioId: input.scenarioId,
+          sourceAudioUrl: confirmedAudioUrl,
+          sourceAudioPath: input.sourceAudioPath,
+          processedAudioPath: input.processedAudioPath ?? null,
+          durationSec: input.durationSec ?? null,
+          // Self-assessment is saved only by saveSelfAssessment after the
+          // recording is confirmed; audio confirmation cannot carry scores.
+          audioStatus: input.sourceAudioPath.endsWith('.webm') ? 'UPLOADED' : 'READY',
+          submittedAt: new Date(),
+        },
       });
-      const isFinal = input.scenarioId
-        ? totalScenarios > 0 && respondedCount >= totalScenarios
-        : totalScenarios > 0 && session.currentScenarioIndex + 1 >= totalScenarios;
 
       const updated = await tx.roleplaySession.update({
         where: { id: input.sessionId },
         data: {
           recordedAudioUrl: confirmedAudioUrl,
-          // A scenario's index advances only after its self-assessment is saved.
-          // Audio confirmation alone must never submit the entire Roleplay.
-          ...(input.scenarioId
-            ? { status: 'IN_PROGRESS' as const }
-            : {
-                currentScenarioIndex: { increment: 1 },
-                submittedAt: isFinal ? new Date() : undefined,
-                ...(isFinal ? { status: 'SUBMITTED' as const } : {}),
-              }),
+          // Audio confirmation never advances the cursor or submits the session.
+          status: 'IN_PROGRESS',
         },
         select: { id: true },
       });
-
-      if (!updated) {
-        throw new Error('Concurrent submission detected');
-      }
+      if (!updated) throw new Error('Concurrent submission detected');
 
       return {
         recordedAudioUrl: confirmedAudioUrl,
-        submitted: input.scenarioId ? false : isFinal,
+        submitted: false,
         candidateId: session.recruitmentCandidateId,
-        sourceAudioPath: input.sourceAudioPath ?? null,
+        sourceAudioPath: input.sourceAudioPath,
         processedAudioPath: input.processedAudioPath ?? null,
-        newlyCreated: !!input.scenarioId,
+        newlyCreated: true,
       };
     });
 
     // Convert only after the response row commits, and scope conversion to this
     // exact upload attempt. This prevents a stale upload/conversion from changing
     // the processed audio associated with the response QA will evaluate.
-    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm') && input.scenarioId) {
+    if (result.newlyCreated && result.sourceAudioPath.endsWith('.webm')) {
       queueMp3Conversion(input.sessionId, input.scenarioId, result.sourceAudioPath);
     }
 
