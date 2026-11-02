@@ -162,7 +162,7 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
       }
     }
     if (error instanceof Error && error.message === 'LEGAL_ACCEPTANCE_INTEGRITY_ERROR') {
-      return { success: false, error: 'La aceptación registrada no coincide con el contenido vigente. Contacta al administrador para revisar la evidencia.', code: 'INTEGRITY_ERROR' };
+      return { success: false, error: 'La aceptación registrada no coincide con el contenido vigente. Contacta al administrador para revisar la evidencia.', code: 'INTERNAL_ERROR' };
     }
     if (error instanceof Error && error.message.includes('No published legal agreement')) {
       return { success: false, error: 'No hay un acuerdo publicado para aceptar. Contacta al administrador.', code: 'BAD_REQUEST' };
