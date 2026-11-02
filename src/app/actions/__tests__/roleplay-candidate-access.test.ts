@@ -134,14 +134,48 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('allows a candidate session when the cookie matches the session id', async () => {
+  it('allows a candidate session when the cookie and scenario ownership match', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
 
     expect(res.success).toBe(true);
     expect(m.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects candidate audio confirmation without a scenario id', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('requires a scenario');
+    expect(m.responseCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects self-assessment fields smuggled into audio confirmation', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+      selfScore: { protocol: 10, interpretation: 10, language: 10, service: 10, technical: 10 },
+    } as any);
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('VALIDATION_ERROR');
+    expect(m.responseCreate).not.toHaveBeenCalled();
   });
 
   it('allows an interpreter session only for its owning interpreter', async () => {
