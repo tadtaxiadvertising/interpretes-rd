@@ -494,11 +494,10 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
   try {
     const session = await db.roleplaySession.findUnique({
       where: { id: input.sessionId },
-      select: { 
-        id: true, 
-        recordedAudioUrl: true, 
-        interpreterId: true, 
-        recruitmentCandidateId: true, 
+      select: {
+        id: true,
+        interpreterId: true,
+        recruitmentCandidateId: true,
         status: true,
         currentScenarioIndex: true,
       },
@@ -508,39 +507,43 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
       return { success: false, error: 'Session not found', code: 'NOT_FOUND' };
     }
 
-    const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
-    if (!validSubmitStates.includes(session.status)) {
+    if (!['INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { success: false, error: 'Session is not in a state that allows submitting responses', code: 'INVALID_STATE' };
     }
 
-    if (session.recordedAudioUrl) {
-      return { success: false, error: 'Response already submitted', code: 'ALREADY_SUBMITTED' };
-    }
-
     const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
-
     if (!(await canAccessRoleplaySession(session, sessionCookie))) {
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
-    // Client will upload directly to /api/roleplay/convert-audio
-    // We just return success and the session info for the client to call the API
-    const scenarioId = input.scenarioId || `scenario_${session.currentScenarioIndex}`;
-
-    // Sequential binding: a supplied scenarioId must be the next expected one.
-    // Without this, a client could skip steps in the same session.
-    const expectedScenarioId = `scenario_${session.currentScenarioIndex}`;
-    if (input.scenarioId && input.scenarioId !== expectedScenarioId) {
+    // Resolve the real database scenario ID from the persisted cursor. Synthetic
+    // values such as "scenario_0" cannot be uploaded or confirmed against Prisma.
+    const expectedScenario = await db.roleplayScenario.findFirst({
+      where: { sessionId: session.id, order: session.currentScenarioIndex },
+      select: { id: true },
+    });
+    if (!expectedScenario) {
+      return { success: false, error: 'No scenario is available at the current step', code: 'NOT_FOUND' };
+    }
+    if (input.scenarioId && input.scenarioId !== expectedScenario.id) {
       return { success: false, error: 'Escenario no disponible', code: 'FORBIDDEN' };
     }
 
+    const existingResponse = await db.roleplayResponse.findFirst({
+      where: { scenarioId: expectedScenario.id },
+      select: { id: true },
+    });
+    if (existingResponse) {
+      return { success: false, error: 'Response already submitted for this scenario', code: 'ALREADY_SUBMITTED' };
+    }
+
     return {
-      success: true, 
-      data: { 
+      success: true,
+      data: {
         sessionId: session.id,
-        scenarioId,
+        scenarioId: expectedScenario.id,
         convertApiUrl: '/api/roleplay/convert-audio',
-      } 
+      },
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
