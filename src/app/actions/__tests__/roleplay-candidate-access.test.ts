@@ -161,7 +161,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     });
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain('requires a scenario');
+    expect(res.code).toBe('VALIDATION_ERROR');
     expect(m.responseCreate).not.toHaveBeenCalled();
   });
 
@@ -202,7 +202,12 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.session = INTERPRETER_SESSION;
     m.actor = { interpreterId: 7 };
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-int', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-int',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-int/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
 
     expect(res.success).toBe(true);
     expect(m.update).toHaveBeenCalledTimes(1);
@@ -325,13 +330,14 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('keeps single-submission semantics for legacy confirms without a scenario id', async () => {
+  it('rejects legacy confirms without a scenario id', async () => {
     m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/already.webm' };
     m.cookie = 'sess-cand';
 
     const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/again.webm' });
 
     expect(res.success).toBe(false);
+    expect(res.code).toBe('VALIDATION_ERROR');
     expect(m.update).not.toHaveBeenCalled();
   });
 
