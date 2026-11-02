@@ -60,13 +60,11 @@ export async function POST(
         select: { status: true },
       });
       const startableApplicationStatuses: readonly string[] = [
-        'APPLIED',
-        'INDUCTION_PENDING',
         'ROLEPLAY_PENDING',
         'ROLEPLAY_IN_PROGRESS',
         'ROLEPLAY_REVIEW',
       ];
-      if (application && !startableApplicationStatuses.includes(application.status)) {
+      if (!application || !startableApplicationStatuses.includes(application.status)) {
         return NextResponse.json(
           { success: false, error: 'Application is not eligible for Roleplay.' },
           { status: 409 }
@@ -139,6 +137,7 @@ function isSessionOwner(
   if (identity.role === 'admin') return true;
   if (session.interpreterId && identity.interpreterId === session.interpreterId) return true;
   if (session.recruitmentCandidateId) {
+    if (identity.role !== 'candidate' || identity.candidateId !== session.recruitmentCandidateId) return false;
     if (sessionCookie !== session.id) return false;
     // Only allow starting/resuming if session is in a valid pre-submission state
     const startableStates = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'];

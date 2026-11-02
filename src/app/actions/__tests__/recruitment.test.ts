@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   candidateFindUnique: vi.fn(),
   applicationFindUnique: vi.fn(),
   sessionFindFirst: vi.fn(),
+  inviteCandidateAuthUser: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -26,12 +27,22 @@ vi.mock('@/lib/auth/actions', () => ({
   ),
 }));
 
+vi.mock('@/lib/supabase/auth-users', () => ({
+  inviteCandidateAuthUser: (...args: any[]) => m.inviteCandidateAuthUser(...args),
+}));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     $transaction: vi.fn(),
     recruitmentCandidate: { findUnique: m.candidateFindUnique },
     recruitmentApplication: { findUnique: m.applicationFindUnique },
     roleplaySession: { findFirst: m.sessionFindFirst },
+    userProfile: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
+    },
+    rbacUser: { findUnique: vi.fn() },
   },
 }));
 
@@ -105,6 +116,10 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     vi.clearAllMocks();
     m.actor = null;
     m.cookieGet.mockReturnValue(undefined);
+    (mockPrisma.userProfile.findUnique as any).mockResolvedValue(null);
+    (mockPrisma.userProfile.upsert as any).mockResolvedValue({ id: 'auth-user-1' });
+    (mockPrisma.rbacUser.findUnique as any).mockResolvedValue(null);
+    m.inviteCandidateAuthUser.mockResolvedValue({ user: { id: 'auth-user-1' }, invited: true });
     process.env.AUTH_SECRET = 'test-secret-for-application-ref';
   });
 
@@ -123,6 +138,15 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect('applicationId' in result && result.applicationId).toBe('app-1');
     expect('alreadyApplied' in result && result.alreadyApplied).toBe(false);
     expect('funnelStep' in result && result.funnelStep).toBe(2);
+    expect(m.inviteCandidateAuthUser).toHaveBeenCalledWith(expect.objectContaining({
+      email: 'ana@example.com',
+      displayName: 'Ana Perez',
+      redirectTo: expect.stringContaining('/auth/callback?next=%2Fcandidate'),
+    }));
+    expect(mockPrisma.userProfile.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({ email: 'ana@example.com', role: 'candidate', interpreterId: null }),
+    }));
+    expect('accountAccess' in result && result.accountAccess).toBe('invited');
     expect(tx.recruitmentCandidate.create).toHaveBeenCalledTimes(1);
     expect(tx.recruitmentCandidate.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -545,6 +569,9 @@ describe('admin activation actions (transactional state machine)', () => {
       interpreter: {
         findFirst: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ id: 42 }),
+      },
+      userProfile: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       ...overrides,
     };

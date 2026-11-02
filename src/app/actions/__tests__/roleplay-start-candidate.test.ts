@@ -91,8 +91,9 @@ const CANDIDATE_ACTOR = {
   provider: 'supabase',
   userId: 'u-1',
   email: 'Candidate@Example.com',
-  role: 'interpreter',
+  role: 'candidate',
   interpreterId: null,
+  candidateId: 5,
   profileId: 'p-1',
 };
 
@@ -103,12 +104,13 @@ describe('startCandidateRoleplay', () => {
     m.identity = {
       userId: 'u-1',
       email: 'candidate@example.com',
-      role: 'interpreter',
+      role: 'candidate',
+      candidateId: 5,
       eligibility: { needsOnboarding: false },
     };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
     m.advanceApplication.mockResolvedValue({ success: true });
-    m.applicationFindFirst.mockResolvedValue(null);
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_PENDING' });
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
     m.sessionUpdate.mockResolvedValue({ id: 'sess-new' });
@@ -145,20 +147,17 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
-  it('blocks roleplay start until server-resolved onboarding is complete', async () => {
+  it('does not require interpreter onboarding for a recruitment candidate', async () => {
     m.identity.eligibility.needsOnboarding = true;
 
     const res = await startCandidateRoleplay();
 
-    expect(res.success).toBe(false);
-    expect(res.code).toBe('CONFLICT');
-    expect(m.candidateFindUnique).not.toHaveBeenCalled();
-    expect(m.sessionCreate).not.toHaveBeenCalled();
-    expect(m.accessUpsert).not.toHaveBeenCalled();
-    expect(m.cookieSet).not.toHaveBeenCalled();
+    expect(res.success).toBe(true);
+    expect(m.sessionCreate).toHaveBeenCalled();
+    expect(m.cookieSet).toHaveBeenCalled();
   });
 
-  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
+  it.each(['APPLIED', 'INDUCTION_PENDING', 'REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
     'blocks roleplay start for application status %s',
     async (status) => {
       m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status });
@@ -346,12 +345,14 @@ describe('startCandidateRoleplay', () => {
     expect(m.eventCreate).not.toHaveBeenCalled();
   });
 
-  it('skips pipeline bookkeeping when the candidate has no application row', async () => {
-    m.appFindUnique.mockResolvedValue(null);
+  it('rejects Roleplay when the candidate has no persisted application', async () => {
+    m.applicationFindFirst.mockResolvedValue(null);
 
     const res = await startCandidateRoleplay();
 
-    expect(res.success).toBe(true);
-    expect(m.appUpdateMany).not.toHaveBeenCalled();
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
   });
 });

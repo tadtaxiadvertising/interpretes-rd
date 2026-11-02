@@ -20,6 +20,7 @@ import {
   isApplicationTerminal,
 } from '@/services/recruitment/funnel';
 import type { RecruitmentApplicationStatus } from '@/lib/prisma-types';
+import { inviteCandidateAuthUser } from '@/lib/supabase/auth-users';
 
 const db = prisma;
 
@@ -146,6 +147,80 @@ async function resolveOwnership(): Promise<{
   return { candidateId: candidate.id, applicationId: candidate.applications[0]?.id ?? null, source: 'account' };
 }
 
+type CandidateAccountAccess = 'invited' | 'existing' | 'manual';
+
+async function provisionCandidateAccess(params: {
+  email: string;
+  name: string;
+}): Promise<CandidateAccountAccess> {
+  try {
+    const [existingProfile, existingRbacUser] = await Promise.all([
+      db.userProfile.findUnique({
+        where: { email: params.email },
+        select: { id: true, role: true, interpreterId: true },
+      }),
+      db.rbacUser.findUnique({
+        where: { email: params.email },
+        select: { id: true },
+      }),
+    ]);
+
+    // Existing Auth.js identities remain intact. Their role is resolved from
+    // the persisted recruitment application after authentication.
+    if (existingRbacUser && !existingProfile) return 'existing';
+
+    if (existingProfile) {
+      if (existingProfile.role !== 'admin') {
+        await db.userProfile.update({
+          where: { id: existingProfile.id },
+          data: {
+            role: 'candidate',
+            interpreterId: null,
+            displayName: params.name,
+          },
+        });
+      }
+      return 'existing';
+    }
+
+    const configuredOrigin =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      process.env.FRONTEND_ORIGIN ||
+      process.env.NEXTAUTH_URL ||
+      'https://interpretes.rd.ibusiness.com.do';
+    const redirectTo = new URL('/auth/callback?next=%2Fcandidate', configuredOrigin).toString();
+    const { user, invited } = await inviteCandidateAuthUser({
+      email: params.email,
+      displayName: params.name,
+      redirectTo,
+    });
+
+    await db.userProfile.upsert({
+      where: { id: user.id },
+      update: {
+        email: params.email,
+        displayName: params.name,
+        role: 'candidate',
+        interpreterId: null,
+      },
+      create: {
+        id: user.id,
+        email: params.email,
+        displayName: params.name,
+        role: 'candidate',
+        interpreterId: null,
+      },
+    });
+
+    return invited ? 'invited' : 'existing';
+  } catch (error) {
+    // The application is already durably saved. Missing Supabase admin
+    // configuration must not erase or roll back the candidate's application.
+    console.error('[recruitment] Candidate account provisioning deferred:', error);
+    return 'manual';
+  }
+}
+
 type SubmitOutcome = {
   candidateId: number;
   applicationId: string;
@@ -246,34 +321,8 @@ export async function submitApplicationAction(data: ApplicantData) {
             });
           }
 
-          // A matching email is not proof of ownership. Anonymous submissions may
-          // fill empty candidate fields, but must never create or overwrite the
-          // linked interpreter record using caller-controlled values.
-          if (owned) {
-            const existingInterpreter = await tx.interpreter.findFirst({
-              where: { emailCorporativo: email },
-              select: { id: true, status: true },
-            });
-            if (!existingInterpreter) {
-              await tx.interpreter.create({
-                data: {
-                  externalId: `recruitment-candidate-${existing.id}`,
-                  name: parsed.name,
-                  status: 'Candidato',
-                  emailCorporativo: email,
-                  telefono: parsed.phone,
-                  pais: parsed.country,
-                  tariffPerMinute: 0,
-                  notas: JSON.stringify({ recruitmentCandidateId: existing.id, source: 'recruitment', status: 'candidate' }),
-                },
-              });
-            } else if (existingInterpreter.status === 'Candidato' || existingInterpreter.status === 'En proceso') {
-              await tx.interpreter.update({
-                where: { id: existingInterpreter.id },
-                data: { name: parsed.name, telefono: parsed.phone, pais: parsed.country },
-              });
-            }
-          }
+          // Candidate records remain in recruitment only. The operational
+          // Interpreter row is created atomically after final hiring approval.
 
           const funnelStep = await deriveFunnelStep(tx, existing.id, application.status);
           return {
@@ -313,19 +362,8 @@ export async function submitApplicationAction(data: ApplicantData) {
           },
         });
 
-        // Create the restricted interpreter record for the new candidate.
-        await tx.interpreter.create({
-          data: {
-            externalId: `recruitment-candidate-${created.id}`,
-            name: parsed.name,
-            status: 'Candidato',
-            emailCorporativo: email,
-            telefono: parsed.phone,
-            pais: parsed.country,
-            tariffPerMinute: 0,
-            notas: JSON.stringify({ recruitmentCandidateId: created.id, source: 'recruitment', status: 'candidate' }),
-          },
-        });
+        // Do not create an operational Interpreter row during recruitment.
+        // Roleplay and all hiring stages are linked to RecruitmentCandidate.
 
         const funnelStep = await deriveFunnelStep(tx, created.id, application.status);
         return {
@@ -353,6 +391,16 @@ export async function submitApplicationAction(data: ApplicantData) {
       issueApplicationRef(cookieStore, outcome.candidateId, outcome.applicationId);
     }
 
+    // The first application submission provisions a restricted candidate
+    // identity and sends an invitation link. Never invite for an unverified
+    // third-party attempt to resume someone else's existing email.
+    const accountAccess = outcome.owned
+      ? await provisionCandidateAccess({
+          email,
+          name: parsed.name,
+        })
+      : undefined;
+
     revalidatePath('/recruitment');
 
     const response: {
@@ -361,6 +409,7 @@ export async function submitApplicationAction(data: ApplicantData) {
       funnelStep: number;
       candidateId?: number;
       applicationId?: string;
+      accountAccess?: CandidateAccountAccess;
     } = {
       success: true,
       alreadyApplied: !outcome.created,
@@ -369,6 +418,7 @@ export async function submitApplicationAction(data: ApplicantData) {
     if (outcome.owned) {
       response.candidateId = outcome.candidateId;
       response.applicationId = outcome.applicationId;
+      response.accountAccess = accountAccess;
     }
     return response;
   } catch (error) {
@@ -703,6 +753,13 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
       }
 
       const interpreter = { id: interpreterId };
+
+      // Promote the same authenticated identity only after the recruitment
+      // transaction has created/reused its operational interpreter record.
+      await tx.userProfile.updateMany({
+        where: { email: candidate.email },
+        data: { role: 'interpreter', interpreterId: interpreter.id },
+      });
 
       const advanced = await advanceApplication({
         db: tx,

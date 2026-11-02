@@ -115,6 +115,36 @@ export async function confirmAuthUserEmail(email: string): Promise<User | null> 
 }
 
 /**
+ * Invite a recruitment applicant into Supabase Auth without asking them to
+ * create an interpreter account or choosing a password before the application.
+ * Existing Auth identities are returned unchanged; this function never resets
+ * credentials or deletes/recreates a user.
+ */
+export async function inviteCandidateAuthUser(params: {
+  email: string;
+  displayName: string;
+  redirectTo: string;
+}): Promise<{ user: User; invited: boolean }> {
+  const email = normalizeAuthEmail(params.email);
+  const existingUser = await findAuthUserByEmail(supabaseAdmin, email);
+  if (existingUser) return { user: existingUser, invited: false };
+
+  const { data, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+    data: { display_name: params.displayName, account_type: 'candidate' },
+    redirectTo: params.redirectTo,
+  });
+
+  if (error) {
+    // Handle the race where a parallel submission/invite created the user.
+    const racedUser = await findAuthUserByEmail(supabaseAdmin, email).catch(() => null);
+    if (racedUser) return { user: racedUser, invited: false };
+    throw error;
+  }
+  if (!data.user) throw new Error('Supabase did not return the invited applicant identity.');
+  return { user: data.user, invited: true };
+}
+
+/**
  * Create a new Supabase Auth user with a confirmed email.
  * Existing accounts are rejected so a public registration request cannot reset
  * an existing user's password. Account recovery belongs in a verified recovery flow.

@@ -47,7 +47,7 @@ export default function LoginPage() {
             return;
           }
         }
-        router.push(nextPath || (result.role === 'admin' ? '/admin' : '/dashboard'));
+        router.push(nextPath || (result.role === 'admin' ? '/admin' : result.role === 'candidate' ? '/candidate' : '/dashboard'));
       }
     } catch (err) {
       console.error('🔴 [AUTH_LOGIN_PAGE] Login submit error:', err);
@@ -98,9 +98,14 @@ export default function LoginPage() {
             </button>
           </div>
 
-          <h2 className="text-xl font-bold text-white mb-6">
-            {role === 'admin' ? 'Portal de Administración' : 'Portal de Intérprete'}
+          <h2 className="text-xl font-bold text-white mb-2">
+            {role === 'admin' ? 'Portal de Administración' : 'Acceso a tu cuenta'}
           </h2>
+          {role !== 'admin' && (
+            <p className="mb-6 text-sm leading-6 text-gray-400">
+              Si ya enviaste una postulación, utiliza el mismo correo. El sistema te llevará automáticamente a tu portal privado de candidato, sin habilitar acceso operativo de intérprete.
+            </p>
+          )}
 
           {error && (
             <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 mb-6">

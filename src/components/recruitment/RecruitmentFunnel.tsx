@@ -88,7 +88,13 @@ export default function RecruitmentFunnel() {
       if (result.success) {
         // The server recomputes the reachable step from persisted state.
         await syncFromServer();
-        if ("alreadyApplied" in result && result.alreadyApplied) {
+        if ("accountAccess" in result && result.accountAccess === 'invited') {
+          setInfoMsg("¡Tu postulación fue guardada! Enviamos a tu correo un enlace seguro para activar tu cuenta de candidato y continuar el proceso. Revisa también la carpeta de spam.");
+        } else if ("accountAccess" in result && result.accountAccess === 'existing') {
+          setInfoMsg("Tu postulación está vinculada a tu cuenta existente. Inicia sesión con este mismo correo para continuar desde tu portal de candidato.");
+        } else if ("accountAccess" in result && result.accountAccess === 'manual') {
+          setInfoMsg("Tu postulación quedó guardada. No pudimos enviar automáticamente el acceso; utiliza «Crear cuenta» con este mismo correo para continuar como candidato.");
+        } else if ("alreadyApplied" in result && result.alreadyApplied) {
           setInfoMsg("Ya existe una postulación con este correo. Para continuar con seguridad, inicia sesión con ese correo.");
         }
       } else {
@@ -108,7 +114,7 @@ export default function RecruitmentFunnel() {
       }
       if (result.code === "UNAUTHORIZED") {
         setErrorMsg("Para continuar con el roleplay necesitas iniciar sesión con el correo de tu postulación. Redirigiendo…");
-        setTimeout(() => router.push("/login?next=/postular"), 1500);
+        setTimeout(() => router.push("/login?next=%2Fcandidate"), 1500);
         return;
       }
       setErrorMsg(result.error || "No pudimos registrar tu avance. Inténtalo de nuevo.");

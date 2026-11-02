@@ -15,7 +15,9 @@ export function resolveUserRoleByEmail(
   fallbackRole: UserRole | string | null | undefined = 'interpreter'
 ): UserRole {
   if (isProtectedAdminEmail(email)) return 'admin';
-  return fallbackRole?.toLowerCase() === 'admin' ? 'admin' : 'interpreter';
+  const normalizedFallback = fallbackRole?.toLowerCase();
+  if (normalizedFallback === 'candidate') return 'candidate';
+  return normalizedFallback === 'admin' ? 'admin' : 'interpreter';
 }
 
 export function resolveRbacRoleByEmail(

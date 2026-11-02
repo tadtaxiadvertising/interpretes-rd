@@ -13,11 +13,44 @@ export type CurrentActor = {
   email: string | null;
   role: UserRole;
   interpreterId: number | null;
+  candidateId: number | null;
   profileId: string | null;
 };
 
 function normalizeRbacRole(role: string | null | undefined): UserRole {
-  return role?.toLowerCase() === 'admin' ? 'admin' : 'interpreter';
+  const normalized = role?.toLowerCase();
+  if (normalized === 'admin') return 'admin';
+  if (normalized === 'candidate') return 'candidate';
+  return 'interpreter';
+}
+
+async function resolveRecruitmentIdentity(email: string, fallbackRole: UserRole, fallbackInterpreterId: number | null) {
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      applications: {
+        select: { status: true, hiredInterpreterId: true },
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  const application = candidate?.applications[0];
+  if (fallbackRole === 'admin') {
+    return { role: 'admin', candidateId: candidate?.id ?? null, interpreterId: null };
+  }
+  if (candidate && application?.status !== 'HIRED') {
+    return { role: 'candidate' as UserRole, candidateId: candidate.id, interpreterId: null };
+  }
+  if (candidate && application?.status === 'HIRED') {
+    return {
+      role: fallbackRole === 'admin' ? 'admin' as UserRole : 'interpreter' as UserRole,
+      candidateId: candidate.id,
+      interpreterId: application.hiredInterpreterId ?? fallbackInterpreterId,
+    };
+  }
+  return { role: fallbackRole, candidateId: null, interpreterId: fallbackInterpreterId };
 }
 
 async function resolveActorFromSupabase(
@@ -25,40 +58,30 @@ async function resolveActorFromSupabase(
 ): Promise<CurrentActor | null> {
   const userId = supabaseUser.id;
   const email = supabaseUser.email?.toLowerCase().trim() || null;
-
   if (!email) return null;
 
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
     select: { id: true, role: true, interpreterId: true, email: true },
   });
-
-  let resolvedRole: UserRole = 'interpreter';
-  let interpreterId: number | null = profile?.interpreterId ?? null;
-
-  if (profile) {
-    resolvedRole = resolveUserRoleByEmail(profile.email, profile.role);
-    interpreterId = resolvedRole === 'admin' ? null : (profile.interpreterId ?? null);
-  } else {
-    resolvedRole = resolveUserRoleByEmail(email, 'interpreter');
-  }
-
-  if (resolvedRole !== 'admin' && !interpreterId) {
+  const fallbackRole = resolveUserRoleByEmail(profile?.email ?? email, profile?.role ?? 'interpreter');
+  let interpreterId = fallbackRole === 'admin' || fallbackRole === 'candidate' ? null : (profile?.interpreterId ?? null);
+  if (fallbackRole !== 'admin' && fallbackRole !== 'candidate' && !interpreterId) {
     const interpreter = await prisma.interpreter.findFirst({
-      // Missing profiles may be initialized later, but interpreter ownership
-      // is resolved only by exact corporate email, never a user-editable name.
       where: { emailCorporativo: email },
       select: { id: true },
     });
     interpreterId = interpreter?.id ?? null;
   }
 
+  const recruitment = await resolveRecruitmentIdentity(email, fallbackRole, interpreterId);
   return {
     provider: 'supabase',
     userId,
     email,
-    role: resolvedRole,
-    interpreterId,
+    role: recruitment.role,
+    interpreterId: recruitment.interpreterId,
+    candidateId: recruitment.candidateId,
     profileId: profile?.id ?? null,
   };
 }
@@ -67,28 +90,18 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
   try {
     const session = await auth();
     if (!session?.user?.id) return null;
-
     const userId = session.user.id;
     const email = session.user.email?.toLowerCase().trim() || null;
-    const role = normalizeRbacRole((session.user as any).role);
-    const sessionInterpreterId = (session.user as any).interpreterId;
-
     if (!email) return null;
 
-    // Auth.js credentials use RbacUser.id, while UserProfile is keyed by the
-    // Supabase UUID. For this legacy bridge, resolve the profile by its unique
-    // normalized email. The authenticated RbacUser remains the authority for
-    // role/identity; this lookup only locates the user's application profile.
     const profile = await prisma.userProfile.findUnique({
       where: { email },
-      select: { id: true, interpreterId: true },
+      select: { id: true, interpreterId: true, role: true },
     });
-
-    // Preserve the interpreter identity already established by Auth.js when
-    // the legacy UserProfile bridge has no matching record. This is the
-    // server-created session value, not request input.
+    const fallbackRole = normalizeRbacRole((session.user as any).role ?? profile?.role);
+    const sessionInterpreterId = (session.user as any).interpreterId;
     let interpreterId = profile?.interpreterId ?? (typeof sessionInterpreterId === 'number' ? sessionInterpreterId : null);
-    if (role !== 'admin' && !interpreterId) {
+    if (fallbackRole !== 'admin' && fallbackRole !== 'candidate' && !interpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
         where: { emailCorporativo: email },
         select: { id: true },
@@ -96,12 +109,14 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
       interpreterId = interpreter?.id ?? null;
     }
 
+    const recruitment = await resolveRecruitmentIdentity(email, fallbackRole, interpreterId);
     return {
       provider: 'authjs',
       userId,
       email,
-      role,
-      interpreterId: role === 'admin' ? null : interpreterId,
+      role: recruitment.role,
+      interpreterId: recruitment.interpreterId,
+      candidateId: recruitment.candidateId,
       profileId: profile?.id ?? null,
     };
   } catch {
@@ -118,9 +133,8 @@ export const getCurrentActor = cache(async (): Promise<CurrentActor | null> => {
       if (actor) return actor;
     }
   } catch {
-    // Supabase not configured, fall through to Auth.js
+    // Supabase not configured, fall through to Auth.js.
   }
-
   return await resolveActorFromAuthJs();
 });
 
