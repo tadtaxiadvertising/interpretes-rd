@@ -50,15 +50,26 @@ describe('legal agreement administration', () => {
     (validateAction as any).mockResolvedValue({ user: { email: 'reviewer@example.com', userId: 'reviewer-1' } });
     const content = '# Acuerdo';
     const contentHash = createHash('sha256').update(content, 'utf8').digest('hex');
-    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({ id: 'draft-1', content, contentHash });
+    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({ id: 'draft-1', version: 'v1', title: 'Contrato', content, contentHash });
     (prisma.legalAgreementVersion.updateMany as any).mockResolvedValue({ count: 1 });
 
     const result = await approveLegalAgreementDraft('draft-1');
 
     expect(result).toMatchObject({ success: true });
     expect(prisma.legalAgreementVersion.updateMany).toHaveBeenCalledWith({
-      where: { id: 'draft-1', agreementKey: 'freelance-services', status: 'DRAFT', contentHash },
-      data: { legalReviewedAt: expect.any(Date), legalReviewedBy: 'reviewer-1' },
+      where: {
+        id: 'draft-1',
+        agreementKey: 'freelance-services',
+        status: 'DRAFT',
+        version: 'v1',
+        title: 'Contrato',
+        contentHash,
+      },
+      data: {
+        legalReviewedAt: expect.any(Date),
+        legalReviewedBy: 'reviewer-1',
+        legalReviewHash: expect.any(String),
+      },
     });
   });
 });
