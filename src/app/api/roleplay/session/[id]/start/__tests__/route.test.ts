@@ -90,7 +90,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
 
   it('rejects a candidate session when the session cookie is missing', async () => {
     m.session = CANDIDATE_SESSION;
-    m.identity = { role: 'interpreter', interpreterId: null };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 5 };
 
     const res = await POST(makeRequest(), { params });
 
@@ -121,8 +121,9 @@ describe('POST /api/roleplay/session/[id]/start', () => {
   it('rejects a stale candidate session cookie when the application is no longer eligible', async () => {
     m.session = CANDIDATE_SESSION;
     m.identity = {
-      role: 'interpreter',
+      role: 'candidate',
       interpreterId: null,
+      candidateId: 5,
       eligibility: { needsOnboarding: false },
     };
     m.applicationFindUnique.mockResolvedValue({ status: 'REJECTED' });
