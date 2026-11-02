@@ -39,24 +39,8 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
     const actor = auth.user;
     const isAuthJsUser = actor.provider === 'authjs';
 
-    // ── Guard: block if onboarding already completed (canonical state) ──
-    if (!isAuthJsUser) {
-      const profile = await db.userProfile.findUnique({
-        where: { id: actor.userId },
-        select: { onboardingComplete: true },
-      });
-      if (profile?.onboardingComplete) {
-        return { success: false, error: 'Onboarding ya fue completado — no puedes modificar los datos', code: 'CONFLICT' };
-      }
-    } else if (actor.interpreterId) {
-      const interpreter = await db.interpreter.findUnique({
-        where: { id: actor.interpreterId },
-        select: { documentosCompleto: true },
-      });
-      if (interpreter?.documentosCompleto) {
-        return { success: false, error: 'Onboarding ya fue completado — no puedes modificar los datos', code: 'CONFLICT' };
-      }
-    }
+    // Legal re-acceptance remains available after onboarding completion.
+    // A newly published version must be accepted even by active interpreters.
 
     const now = new Date();
     const requestHeaders = await headers();
