@@ -553,7 +553,7 @@ export function resolveDestination(identity: ResolvedIdentity): string {
   }
 
   if (identity.role === 'candidate') {
-    if (['INVITED', 'STARTED', 'IN_PROGRESS'].includes(identity.roleplayState) && identity.roleplaySessionId) {
+    if (['STARTED', 'IN_PROGRESS'].includes(identity.roleplayState) && identity.roleplaySessionId) {
       return '/roleplays/' + identity.roleplaySessionId;
     }
     return '/candidate';
