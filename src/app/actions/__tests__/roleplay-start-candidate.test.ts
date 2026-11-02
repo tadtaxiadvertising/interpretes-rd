@@ -110,7 +110,7 @@ describe('startCandidateRoleplay', () => {
     };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
     m.advanceApplication.mockResolvedValue({ success: true });
-    m.applicationFindFirst.mockResolvedValue(null);
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_PENDING' });
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
     m.sessionUpdate.mockResolvedValue({ id: 'sess-new' });
@@ -345,12 +345,14 @@ describe('startCandidateRoleplay', () => {
     expect(m.eventCreate).not.toHaveBeenCalled();
   });
 
-  it('skips pipeline bookkeeping when the candidate has no application row', async () => {
-    m.appFindUnique.mockResolvedValue(null);
+  it('rejects Roleplay when the candidate has no persisted application', async () => {
+    m.applicationFindFirst.mockResolvedValue(null);
 
     const res = await startCandidateRoleplay();
 
-    expect(res.success).toBe(true);
-    expect(m.appUpdateMany).not.toHaveBeenCalled();
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
   });
 });
