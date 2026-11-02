@@ -290,7 +290,7 @@ export async function completeOnboarding(): Promise<ActionResult> {
         return { success: false, error: 'Onboarding ya fue completado previamente', code: 'CONFLICT' };
       }
       const hasTerms = hasCurrentAgreement;
-      const hasBanking = !!(existingProfile?.bankName && existingProfile?.bankAccount && existingProfile?.bankCedula);
+      const hasBanking = !!(existingProfile?.bankName && existingProfile?.bankAccount && existingProfile?.bankAccountType && existingProfile?.bankCedula);
       if (!hasTerms || !hasBanking) {
         return { success: false, error: 'Completa la aceptación de términos y los datos bancarios antes de finalizar', code: 'BAD_REQUEST' };
       }
@@ -310,7 +310,7 @@ export async function completeOnboarding(): Promise<ActionResult> {
         return { success: false, error: 'Onboarding ya fue completado previamente', code: 'CONFLICT' };
       }
       const hasTerms = hasCurrentAgreement;
-      const hasBanking = !!(existingInterpreter?.banco && existingInterpreter?.cuentaPago && existingInterpreter?.cedulaRnc);
+      const hasBanking = !!(existingInterpreter?.banco && existingInterpreter?.cuentaPago && existingInterpreter?.tipoCuenta && existingInterpreter?.cedulaRnc);
       if (!hasTerms || !hasBanking) {
         return { success: false, error: 'Completa la aceptación de términos y los datos bancarios antes de finalizar', code: 'BAD_REQUEST' };
       }
@@ -402,6 +402,7 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
           documentosCompleto: true,
           banco: true,
           cuentaPago: true,
+          tipoCuenta: true,
           cedulaRnc: true,
           notas: true
         }
@@ -428,6 +429,7 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
           termsAcceptedAt: true,
           bankName: true,
           bankAccount: true,
+          bankAccountType: true,
           bankCedula: true,
           onboardingComplete: true
         }
