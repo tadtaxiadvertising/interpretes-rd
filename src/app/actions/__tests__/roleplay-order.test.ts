@@ -197,6 +197,7 @@ describe('roleplay: no scenario skipping', () => {
     m.responseFindFirst.mockResolvedValue({
       id: 'resp-1',
       sourceAudioUrl: 'https://x/first.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
     });
 
     const res = await confirmRoleplayResponse({
@@ -216,12 +217,13 @@ describe('roleplay: no scenario skipping', () => {
     m.responseFindFirst.mockResolvedValue({
       id: 'resp-1',
       sourceAudioUrl: 'https://x/original.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
     });
 
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
-      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000002.webm',
       recordedAudioUrl: 'https://x/replacement.webm',
     });
 
