@@ -803,10 +803,15 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
           recruitmentCandidateId: true,
           status: true,
           currentScenarioIndex: true,
+          evaluatorId: true,
+          qaScoreId: true,
         },
       });
 
-      if (!session || !['STARTED', 'IN_PROGRESS'].includes(session.status)) {
+      const isLegacyUnclaimedSubmission = session?.status === 'SUBMITTED'
+        && session.evaluatorId === null
+        && session.qaScoreId === null;
+      if (!session || (!['STARTED', 'IN_PROGRESS'].includes(session.status) && !isLegacyUnclaimedSubmission)) {
         throw new Error('Session not available for self-assessment');
       }
       if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
@@ -815,7 +820,9 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         where: { id: input.scenarioId, sessionId: session.id },
         select: { id: true, order: true },
       });
-      if (!scenario || scenario.order !== session.currentScenarioIndex) {
+      if (!scenario || (isLegacyUnclaimedSubmission
+        ? scenario.order >= session.currentScenarioIndex
+        : scenario.order !== session.currentScenarioIndex)) {
         throw new Error('This scenario is not the current step');
       }
 
@@ -835,10 +842,15 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
 
       // Persist the workflow cursor only after both recording and self-assessment
       // have been stored. Refreshing the page therefore resumes at the right stage.
-      await tx.roleplaySession.update({
-        where: { id: session.id },
-        data: { currentScenarioIndex: scenario.order + 1, status: 'IN_PROGRESS' },
-      });
+      // Old clients could mark the session SUBMITTED immediately after the
+      // final recording. Permit only unclaimed legacy submissions to fill in
+      // missing self-assessments, without reopening or moving the submitted cursor.
+      if (!isLegacyUnclaimedSubmission) {
+        await tx.roleplaySession.update({
+          where: { id: session.id },
+          data: { currentScenarioIndex: scenario.order + 1, status: 'IN_PROGRESS' },
+        });
+      }
     });
 
     revalidatePath('/dashboard/roleplays');
@@ -874,9 +886,14 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
           recruitmentCandidateId: true,
           status: true,
           currentScenarioIndex: true,
+          evaluatorId: true,
+          qaScoreId: true,
         },
       });
-      if (!session || !['STARTED', 'IN_PROGRESS'].includes(session.status)) {
+      const isLegacyUnclaimedSubmission = session?.status === 'SUBMITTED'
+        && session.evaluatorId === null
+        && session.qaScoreId === null;
+      if (!session || (!['STARTED', 'IN_PROGRESS'].includes(session.status) && !isLegacyUnclaimedSubmission)) {
         throw new Error('Roleplay is not ready to submit');
       }
       if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
@@ -901,15 +918,17 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
         throw new Error('Complete every recording and self-assessment before submitting');
       }
 
-      const transition = await tx.roleplaySession.updateMany({
-        where: {
-          id: sessionId,
-          status: { in: ['STARTED', 'IN_PROGRESS'] },
-          currentScenarioIndex: scenarios.length,
-        },
-        data: { status: 'SUBMITTED', submittedAt: new Date() },
-      });
-      if (transition.count !== 1) throw new Error('Roleplay was already submitted or changed');
+      if (!isLegacyUnclaimedSubmission) {
+        const transition = await tx.roleplaySession.updateMany({
+          where: {
+            id: sessionId,
+            status: { in: ['STARTED', 'IN_PROGRESS'] },
+            currentScenarioIndex: scenarios.length,
+          },
+          data: { status: 'SUBMITTED', submittedAt: new Date() },
+        });
+        if (transition.count !== 1) throw new Error('Roleplay was already submitted or changed');
+      }
 
       if (session.recruitmentCandidateId) {
         await tx.roleplayAccess.updateMany({
