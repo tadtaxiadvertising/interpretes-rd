@@ -3,7 +3,7 @@
 // Derived from the Supabase schema (migration_v2)
 // ============================================================
 
-export type UserRole = 'admin' | 'interpreter';
+export type UserRole = 'admin' | 'candidate' | 'interpreter';
 export type RealtimeStatus = 'Online' | 'Offline' | 'Busy';
 
 export interface UserProfile {
