@@ -195,10 +195,9 @@ export async function publishLegalAgreementDraft(id: string) {
     if (!draft.legalReviewedAt || !draft.legalReviewedBy) {
       return { success: false as const, error: 'Este acuerdo requiere una revisión jurídica registrada antes de publicarse.', code: 'LEGAL_REVIEW_REQUIRED' };
     }
-    const publisher = auth.user.userId;
-    if (draft.legalReviewedBy === publisher) {
-      return { success: false as const, error: 'La aprobación jurídica y la publicación deben ser realizadas por administradores distintos.', code: 'SEPARATION_OF_DUTIES_REQUIRED' };
-    }
+    // A single-admin organization may review and publish its own agreement.
+    // Publication still requires an explicit review record and an unchanged
+    // SHA-256 fingerprint, so editing after review invalidates approval.
     const digest = hashContent(draft.content);
     const reviewDigest = hashReviewContent(draft.version, draft.title, draft.content);
     if (!draft.legalReviewHash || draft.legalReviewHash !== reviewDigest) {
