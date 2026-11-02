@@ -229,7 +229,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           notes: prev[scenario.id]?.notes ?? '',
         }
       }));
-      setCompletedScenarios(prev => [...prev, currentScenarioIndex]);
       setPageState('self-assessment');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save response');
@@ -274,6 +273,10 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           notes,
         }
       }));
+
+      setCompletedScenarios(prev => prev.includes(currentScenarioIndex)
+        ? prev
+        : [...prev, currentScenarioIndex]);
 
       const nextIndex = currentScenarioIndex + 1;
       if (nextIndex < (session?.scenarios.length || 0)) {
