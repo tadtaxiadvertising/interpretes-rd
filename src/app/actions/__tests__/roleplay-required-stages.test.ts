@@ -240,7 +240,7 @@ describe('Roleplay required stages', () => {
     m.session = { ...m.session, currentScenarioIndex: 1 };
     m.scenarios = [{
       order: 0,
-      responses: [{ selfScore: { ...SCORES, criticalError: false } }],
+      responses: [{ sourceAudioUrl: 'https://audio.example/response.webm', selfScore: { ...SCORES, criticalError: false } }],
     }];
 
     const result = await submitRoleplaySession({ sessionId: 'sess-1' });
