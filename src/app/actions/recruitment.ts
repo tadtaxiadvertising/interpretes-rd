@@ -150,7 +150,6 @@ async function resolveOwnership(): Promise<{
 type CandidateAccountAccess = 'invited' | 'existing' | 'manual';
 
 async function provisionCandidateAccess(params: {
-  candidateId: number;
   email: string;
   name: string;
 }): Promise<CandidateAccountAccess> {
@@ -397,7 +396,6 @@ export async function submitApplicationAction(data: ApplicantData) {
     // third-party attempt to resume someone else's existing email.
     const accountAccess = outcome.owned
       ? await provisionCandidateAccess({
-          candidateId: outcome.candidateId,
           email,
           name: parsed.name,
         })
