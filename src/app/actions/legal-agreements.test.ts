@@ -30,20 +30,31 @@ describe('legal agreement administration', () => {
     expect(prisma.legalAgreementVersion.updateMany).not.toHaveBeenCalled();
   });
 
-  it('requires a different administrator to publish than the legal reviewer', async () => {
+  it('allows the same administrator who reviewed the draft to publish it', async () => {
+    const content = '# Acuerdo';
+    const version = 'v1';
+    const title = 'Contrato';
+    const contentHash = createHash('sha256').update(content, 'utf8').digest('hex');
+    const legalReviewHash = createHash('sha256')
+      .update(JSON.stringify([version, title, content]), 'utf8')
+      .digest('hex');
     (validateAction as any).mockResolvedValue({ user: { email: 'reviewer@example.com', userId: 'reviewer-1' } });
     (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
       id: 'draft-1',
-      content: '# Acuerdo',
-      contentHash: createHash('sha256').update('# Acuerdo', 'utf8').digest('hex'),
+      version,
+      title,
+      content,
+      contentHash,
       legalReviewedAt: new Date(),
       legalReviewedBy: 'reviewer-1',
+      legalReviewHash,
     });
+    (prisma.legalAgreementVersion.updateMany as any).mockResolvedValue({ count: 1 });
 
     const result = await publishLegalAgreementDraft('draft-1');
 
-    expect(result).toMatchObject({ success: false, code: 'SEPARATION_OF_DUTIES_REQUIRED' });
-    expect(prisma.legalAgreementVersion.updateMany).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ success: true });
+    expect(prisma.legalAgreementVersion.updateMany).toHaveBeenCalled();
   });
 
   it('blocks publication when the reviewed draft fingerprint is stale', async () => {
