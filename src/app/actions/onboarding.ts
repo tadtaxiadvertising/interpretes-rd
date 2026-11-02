@@ -282,6 +282,7 @@ export async function completeOnboarding(): Promise<ActionResult> {
           termsAcceptedAt: true,
           bankName: true,
           bankAccount: true,
+          bankAccountType: true,
           bankCedula: true,
         },
       });
@@ -300,6 +301,7 @@ export async function completeOnboarding(): Promise<ActionResult> {
           documentosCompleto: true,
           banco: true,
           cuentaPago: true,
+          tipoCuenta: true,
           cedulaRnc: true,
           notas: true,
         },
@@ -408,7 +410,7 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
       if (!interpreter) return { success: false, error: 'Interpreter profile not found', code: 'NOT_FOUND' };
 
       const termsAccepted = currentTermsAccepted;
-      const bankingComplete = !!(interpreter.banco && interpreter.cuentaPago && interpreter.cedulaRnc);
+      const bankingComplete = !!(interpreter.banco && interpreter.cuentaPago && interpreter.tipoCuenta && interpreter.cedulaRnc);
       const onboardingComplete = !!interpreter.documentosCompleto;
 
       return {
@@ -437,7 +439,7 @@ export async function getOnboardingStatus(): Promise<ActionResult<{
         success: true,
         data: {
           termsAccepted: currentTermsAccepted,
-          bankingComplete: !!(profile.bankName && profile.bankAccount && profile.bankCedula),
+          bankingComplete: !!(profile.bankName && profile.bankAccount && profile.bankAccountType && profile.bankCedula),
           onboardingComplete: profile.onboardingComplete,
         },
       };
