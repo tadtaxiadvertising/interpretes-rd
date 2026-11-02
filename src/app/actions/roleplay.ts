@@ -569,7 +569,8 @@ function isCanonicalResponseAudioPath(path: string, sessionId: string, scenarioI
 
 
 export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
-  const auth = await validateAction('interpreter');
+  // Recruitment candidates perform this step before interpreter activation.
+  const auth = await validateAction(['interpreter', 'candidate']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   const parseResult = ConfirmResponseSchema.safeParse(rawInput);
@@ -785,7 +786,8 @@ const SelfAssessmentSchema = z.object({
 export type SelfAssessmentInput = z.infer<typeof SelfAssessmentSchema>;
 
 export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
-  const auth = await validateAction('interpreter');
+  // Self-assessment is part of candidate selection, not operational onboarding.
+  const auth = await validateAction(['interpreter', 'candidate']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   const parseResult = SelfAssessmentSchema.safeParse(rawInput);
