@@ -138,7 +138,7 @@ export async function approveLegalAgreementDraft(id: string) {
       return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
     }
 
-    const reviewer = auth.user.email || auth.user.userId;
+    const reviewer = auth.user.userId;
     const result = await prisma.legalAgreementVersion.updateMany({
       where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
       data: { legalReviewedAt: new Date(), legalReviewedBy: reviewer },
@@ -168,7 +168,7 @@ export async function publishLegalAgreementDraft(id: string) {
     if (!draft.legalReviewedAt || !draft.legalReviewedBy) {
       return { success: false as const, error: 'Este acuerdo requiere una revisión jurídica registrada antes de publicarse.', code: 'LEGAL_REVIEW_REQUIRED' };
     }
-    const publisher = auth.user.email || auth.user.userId;
+    const publisher = auth.user.userId;
     if (draft.legalReviewedBy === publisher) {
       return { success: false as const, error: 'La aprobación jurídica y la publicación deben ser realizadas por administradores distintos.', code: 'SEPARATION_OF_DUTIES_REQUIRED' };
     }
