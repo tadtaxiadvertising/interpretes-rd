@@ -153,6 +153,17 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(res.success).toBe(true);
     expect(m.update).toHaveBeenCalledTimes(1);
   });
+  it('does not let a legacy interpreter link override candidate ownership', async () => {
+    m.session = { ...CANDIDATE_SESSION, interpreterId: 7 };
+    m.actor = { interpreterId: 7 };
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Unauthorized');
+    expect(m.update).not.toHaveBeenCalled();
+  });
 
   it('rejects an interpreter session for a different interpreter', async () => {
     m.session = INTERPRETER_SESSION;
