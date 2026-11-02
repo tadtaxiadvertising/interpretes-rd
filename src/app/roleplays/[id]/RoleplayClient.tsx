@@ -35,6 +35,7 @@ interface SessionData {
   status: string;
   baseAudioUrl: string;
   currentScenarioIndex: number;
+  canCompleteSelfAssessment?: boolean;
   scenarios: Scenario[];
 }
 
@@ -278,7 +279,23 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         : [...prev, currentScenarioIndex]);
 
       const nextIndex = currentScenarioIndex + 1;
-      if (nextIndex < (session?.scenarios.length || 0)) {
+      const nextLegacyAssessmentIndex = session?.canCompleteSelfAssessment
+        ? session.scenarios.findIndex((item, index) =>
+            index > currentScenarioIndex &&
+            Boolean(item.responses?.[0]?.sourceAudioUrl) &&
+            !item.responses?.[0]?.selfScore
+          )
+        : -1;
+
+      if (nextLegacyAssessmentIndex >= 0) {
+        // Older submitted attempts already contain all recordings; resume each
+        // missing self-assessment without trying to record audio into a closed session.
+        setCurrentScenarioIndex(nextLegacyAssessmentIndex);
+        setPageState('self-assessment');
+      } else if (session?.canCompleteSelfAssessment) {
+        setCurrentScenarioIndex(session.scenarios.length);
+        setPageState('completion');
+      } else if (nextIndex < (session?.scenarios.length || 0)) {
         setCurrentScenarioIndex(nextIndex);
         setPageState('scenario');
       } else {
