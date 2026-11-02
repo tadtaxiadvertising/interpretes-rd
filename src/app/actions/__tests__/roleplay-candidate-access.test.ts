@@ -451,7 +451,7 @@ describe('saveSelfAssessment gate', () => {
     vi.clearAllMocks();
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
-    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1' });
+    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1', order: 0 });
     m.responseFindFirst.mockResolvedValue({ id: 'resp-1' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
     m.cookie = null;
@@ -484,7 +484,7 @@ describe('saveSelfAssessment gate', () => {
     m.cookie = 'sess-cand';
     m.responseFindFirst.mockResolvedValue(null);
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Record your response');
