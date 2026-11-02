@@ -82,7 +82,7 @@ async function syncUserProfileFromAuth(params: {
 export async function login(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
-  const requestedRole = ((formData.get('role') as string) || 'interpreter').toLowerCase() as UserRole;
+  const selectedRole = ((formData.get('role') as string) || 'interpreter').toLowerCase() as UserRole;
   // The selected portal is untrusted client input. Supabase users get admin
   // privileges only from the protected identity allowlist or an existing
   // trusted profile; selecting "admin" in the form never elevates a new account.
@@ -91,6 +91,7 @@ export async function login(formData: FormData) {
     select: { applications: { select: { status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
   });
   const hasActiveApplication = !!candidateForLogin && candidateForLogin.applications[0]?.status !== 'HIRED';
+  const requestedRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : selectedRole);
   const effectiveRequestedRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : 'interpreter');
 
   try {
@@ -339,7 +340,7 @@ export async function register(formData: FormData) {
         email: validated.email,
         displayName: name,
         role: resolvedRole,
-        interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
+        interpreterId: resolvedRole === 'admin' || resolvedRole === 'candidate' ? null : (interpreter?.id ?? null),
       },
     });
 
