@@ -86,6 +86,9 @@ jobs:
       - name: Prepare isolated E2E database
         run: npx prisma db push
 
+      - name: Verify critical legal and Roleplay migrations
+        run: npx tsx scripts/verify-critical-migrations.ts
+
       - name: TypeScript Check
         run: npx tsc --noEmit
 
