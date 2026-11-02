@@ -667,6 +667,13 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
 
       const interpreter = { id: interpreterId };
 
+      // Promote the same authenticated identity only after the recruitment
+      // transaction has created/reused its operational interpreter record.
+      await tx.userProfile.updateMany({
+        where: { email: candidate.email },
+        data: { role: 'interpreter', interpreterId: interpreter.id },
+      });
+
       const advanced = await advanceApplication({
         db: tx,
         applicationId: application.id,
