@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
+import { CandidatePasswordSetup } from '@/components/recruitment/CandidatePasswordSetup';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,6 +103,8 @@ export default async function CandidatePortalPage() {
             Tu información y tus avances se guardan en tu expediente. Puedes cerrar sesión y regresar más tarde desde cualquier dispositivo.
           </p>
         </section>
+
+        {identity.provider === 'supabase' ? <CandidatePasswordSetup /> : null}
 
         <section className="grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border border-blue-300/20 bg-blue-300/[0.06] p-6">
