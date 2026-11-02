@@ -49,7 +49,7 @@ function candidateSession(status: string) {
 describe('GET /api/roleplay/session/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'interpreter', interpreterId: null };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 5 };
     m.session = candidateSession('STARTED');
     m.findUnique.mockImplementation(async () => m.session);
   });
