@@ -34,6 +34,7 @@ export function RoleplayScenario({
   const [showPrompt, setShowPrompt] = useState(false);
   const [showExpectedKeys, setShowExpectedKeys] = useState(false);
   const [isBasePlaying, setIsBasePlaying] = useState(false);
+  const [hasListened, setHasListened] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [duration, setDuration] = useState(0);
@@ -48,13 +49,12 @@ export function RoleplayScenario({
     const handleEnded = () => {
       setCurrentTime(0);
       setIsBasePlaying(false);
+      setHasListened(true);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('play', () => setIsBasePlaying(true));
-    audio.addEventListener('pause', () => setIsBasePlaying(false));
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
@@ -70,6 +70,7 @@ export function RoleplayScenario({
     audio.currentTime = 0;
     setCurrentTime(0);
     setIsBasePlaying(false);
+    setHasListened(false);
     setAudioError(null);
   }, [scenario.id]);
 
@@ -267,20 +268,28 @@ export function RoleplayScenario({
         </div>
       </div>
 
+      {!scenario.baseAudioUrl && (
+        <p role="alert" className="text-sm text-amber-400">
+          Este escenario no tiene un audio base asignado. Solicita a reclutamiento que complete la asignación antes de continuar.
+        </p>
+      )}
+
       <button
         onClick={onNext}
-        disabled={isLoading}
+        disabled={isLoading || !scenario.baseAudioUrl || !hasListened}
         className={cn(
           "w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
-          isLoading
+          isLoading || !scenario.baseAudioUrl || !hasListened
             ? "bg-slate-800 text-slate-500 cursor-not-allowed"
             : "bg-blue-600 text-white shadow-xl shadow-blue-600/30 hover:scale-[1.02] active:scale-95"
         )}
       >
         {isLoading ? (
-          <>
-            <span className="animate-pulse">Preparando...</span>
-          </>
+          <span className="animate-pulse">Preparando...</span>
+        ) : !scenario.baseAudioUrl ? (
+          'Audio base no disponible'
+        ) : !hasListened ? (
+          'Escucha el audio completo para continuar'
         ) : (
           <>
             Grabar respuesta
