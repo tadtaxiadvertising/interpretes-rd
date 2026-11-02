@@ -51,7 +51,10 @@ export default function RegisterPage() {
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
             Intérpretes RD
           </h1>
-          <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Create Account</p>
+          <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Crear acceso seguro</p>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-gray-400">
+            Si este correo ya tiene una postulación, tu cuenta se registrará como candidato y quedará vinculada a ese expediente automáticamente.
+          </p>
         </div>
 
         <div className="glass rounded-3xl p-8 border border-white/10">
