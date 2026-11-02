@@ -556,9 +556,7 @@ const ConfirmResponseSchema = z.object({
   sourceAudioPath: z.string().min(1).max(1024).optional(),
   processedAudioPath: z.string().min(1).max(1024).optional(),
   durationSec: z.number().int().min(0).max(86400).optional(),
-  selfScore: z.record(z.string(), z.number()).optional(),
-  selfNotes: z.string().optional(),
-});
+}).strict();
 
 export type ConfirmResponseInput = z.infer<typeof ConfirmResponseSchema>;
 
@@ -610,6 +608,9 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       // authenticated user alone is not sufficient.
       if (!(await canAccessRoleplaySession(session, sessionCookie))) {
         throw new Error('Unauthorized');
+      }
+      if (session.recruitmentCandidateId !== null && !input.scenarioId) {
+        throw new Error('Recruitment Roleplay requires a scenario response');
       }
 
       // A supplied scenario must belong to this session. Without this check a
@@ -692,8 +693,8 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             sourceAudioPath: input.sourceAudioPath ?? null,
             processedAudioPath: input.processedAudioPath ?? null,
             durationSec: input.durationSec ?? null,
-            selfScore: input.selfScore ?? undefined,
-            selfNotes: input.selfNotes ?? null,
+            // Self-assessment is saved only by saveSelfAssessment after the
+            // recording is confirmed; audio confirmation cannot carry scores.
             audioStatus: input.sourceAudioPath?.endsWith('.webm') ? 'UPLOADED' : 'READY',
             submittedAt: new Date(),
           },
