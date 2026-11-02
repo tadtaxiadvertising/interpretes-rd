@@ -64,7 +64,7 @@ export async function POST(
         'ROLEPLAY_IN_PROGRESS',
         'ROLEPLAY_REVIEW',
       ];
-      if (application && !startableApplicationStatuses.includes(application.status)) {
+      if (!application || !startableApplicationStatuses.includes(application.status)) {
         return NextResponse.json(
           { success: false, error: 'Application is not eligible for Roleplay.' },
           { status: 409 }
