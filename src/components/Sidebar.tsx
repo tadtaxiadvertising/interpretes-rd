@@ -22,7 +22,6 @@ import {
   Mic2,
   FileText,
   CalendarDays,
-  BarChart3,
   SlidersHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
