@@ -89,6 +89,60 @@ describe('CurrentActor abstraction', () => {
       });
     });
 
+    it('resolves an unapproved applicant as a candidate with no interpreter link', async () => {
+      const mockSupabase = {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 'candidate-123', email: 'candidate@test.com' } },
+          }),
+        },
+      };
+      (createClient as any).mockResolvedValue(mockSupabase);
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        id: 'candidate-123',
+        role: 'interpreter',
+        interpreterId: 42,
+        email: 'candidate@test.com',
+      });
+      (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({
+        id: 5,
+        applications: [{ status: 'ROLEPLAY_PENDING', hiredInterpreterId: null }],
+      });
+
+      const actor = await getCurrentActor();
+
+      expect(actor?.role).toBe('candidate');
+      expect(actor?.candidateId).toBe(5);
+      expect(actor?.interpreterId).toBeNull();
+    });
+
+    it('restores interpreter access only after the application is hired', async () => {
+      const mockSupabase = {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({
+            data: { user: { id: 'candidate-123', email: 'candidate@test.com' } },
+          }),
+        },
+      };
+      (createClient as any).mockResolvedValue(mockSupabase);
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        id: 'candidate-123',
+        role: 'candidate',
+        interpreterId: null,
+        email: 'candidate@test.com',
+      });
+      (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({
+        id: 5,
+        applications: [{ status: 'HIRED', hiredInterpreterId: 42 }],
+      });
+
+      const actor = await getCurrentActor();
+
+      expect(actor?.role).toBe('interpreter');
+      expect(actor?.candidateId).toBe(5);
+      expect(actor?.interpreterId).toBe(42);
+    });
+
     it('resolves admin role from email', async () => {
       const mockSupabase = {
         auth: {
