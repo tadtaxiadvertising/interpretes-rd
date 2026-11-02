@@ -108,7 +108,7 @@ export default function RecruitmentFunnel() {
       }
       if (result.code === "UNAUTHORIZED") {
         setErrorMsg("Para continuar con el roleplay necesitas iniciar sesión con el correo de tu postulación. Redirigiendo…");
-        setTimeout(() => router.push("/login?next=/postular"), 1500);
+        setTimeout(() => router.push("/login?next=%2Fcandidate"), 1500);
         return;
       }
       setErrorMsg(result.error || "No pudimos registrar tu avance. Inténtalo de nuevo.");
