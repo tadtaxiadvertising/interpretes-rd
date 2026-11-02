@@ -157,7 +157,7 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).toHaveBeenCalled();
   });
 
-  it.each(['REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
+  it.each(['APPLIED', 'INDUCTION_PENDING', 'REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
     'blocks roleplay start for application status %s',
     async (status) => {
       m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status });
