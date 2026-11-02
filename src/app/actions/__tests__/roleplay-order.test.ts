@@ -30,6 +30,10 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () => ({ user: m.actor, profile: m.actor }),
 }));
 
+vi.mock('@/lib/identity/resolve-user', () => ({
+  resolveCurrentIdentity: async () => ({ role: 'candidate', candidateId: 5, interpreterId: null }),
+}));
+
 vi.mock('@/lib/roleplay-audio-conversion', () => ({ queueMp3Conversion: vi.fn() }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -99,7 +103,7 @@ describe('roleplay: no scenario skipping', () => {
     m.accessUpsert.mockResolvedValue({ id: 'acc-1' });
     m.scenarioFindFirst.mockResolvedValue({ id: 'scn-0' });
     m.cookieSet.mockResolvedValue(undefined);
-    m.actor = { role: 'interpreter', interpreterId: null, userId: 'u-1', email: 'candidate@example.com' };
+    m.actor = { role: 'candidate', interpreterId: null, candidateId: 5, userId: 'u-1', email: 'candidate@example.com' };
   });
 
   // --- submitRoleplayResponse -------------------------------------------
