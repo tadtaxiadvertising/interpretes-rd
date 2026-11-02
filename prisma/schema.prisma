@@ -933,9 +933,11 @@ model LegalAgreementVersion {
   title       String
   content     String
   contentHash String   @map("content_hash")
-  status      String   @default("DRAFT")
-  createdBy   String?  @map("created_by")
-  publishedBy String?  @map("published_by")
+  status          String    @default("DRAFT")
+  createdBy       String?   @map("created_by")
+  legalReviewedBy String?   @map("legal_reviewed_by")
+  legalReviewedAt DateTime? @map("legal_reviewed_at") @db.Timestamptz(6)
+  publishedBy     String?   @map("published_by")
   publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
