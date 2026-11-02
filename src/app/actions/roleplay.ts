@@ -822,9 +822,12 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
 
       const response = await tx.roleplayResponse.findFirst({
         where: { scenarioId: input.scenarioId },
-        select: { id: true },
+        select: { id: true, selfScore: true },
       });
       if (!response) throw new Error('Record your response before completing the self-assessment');
+      if (isLegacyUnclaimedSubmission && response.selfScore !== null) {
+        throw new Error('This self-assessment has already been submitted');
+      }
 
       await tx.roleplayResponse.update({
         where: { id: response.id },
