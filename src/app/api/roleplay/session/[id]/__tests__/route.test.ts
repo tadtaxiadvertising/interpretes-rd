@@ -85,6 +85,28 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe('SUBMITTED');
   });
+  it('offers recovery only for a submitted attempt with missing self-assessment', async () => {
+    m.session = {
+      ...candidateSession('SUBMITTED'),
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario 1',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: [],
+        responses: [{ sourceAudioUrl: 'https://x/response.webm', durationSec: 40, selfScore: null, selfNotes: null }],
+      }],
+    };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.canCompleteSelfAssessment).toBe(true);
+  });
+
 
   it('rejects an interpreter who does not own the session', async () => {
     m.session = { ...candidateSession('STARTED'), recruitmentCandidateId: null, interpreterId: 7 };
