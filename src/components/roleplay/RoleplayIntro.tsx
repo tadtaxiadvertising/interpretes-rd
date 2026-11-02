@@ -61,11 +61,9 @@ export function RoleplayIntro({
     }
   };
 
-  React.useEffect(() => {
-    runEquipmentCheck('microphone');
-  }, []);
-
-  const allChecksPassed = Object.values(equipmentChecks).every(v => v);
+  // Do not request microphone permission on mount: browsers require a user
+  // gesture and may reject the request before the candidate can interact.
+  // Recorder requests microphone access when recording actually begins.
 
   const steps = [
     { id: 'microphone', label: 'Micrófono', icon: Mic2, description: 'Permite acceso al micrófono para grabar tus respuestas' },
@@ -164,6 +162,8 @@ export function RoleplayIntro({
 
           <audio ref={baseAudioRef} src={baseAudioUrl} preload="metadata" />
 
+          <p className="text-xs text-slate-400 mb-4">La comprobación del micrófono se realizará al comenzar la grabación. Si el navegador solicita permiso, selecciona «Permitir».</p>
+
           <div className="flex gap-4 pt-4 border-t border-white/5">
             <button
               onClick={onBack}
@@ -174,10 +174,10 @@ export function RoleplayIntro({
             </button>
             <button
               onClick={onStart}
-              disabled={!allChecksPassed || isLoading}
+              disabled={!!isLoading}
               className={cn(
                 "flex-1 py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
-                allChecksPassed && !isLoading
+                !isLoading
                   ? "bg-blue-600 text-white shadow-xl shadow-blue-600/30 hover:scale-[1.02] active:scale-95"
                   : "bg-slate-800 text-slate-500 cursor-not-allowed"
               )}
