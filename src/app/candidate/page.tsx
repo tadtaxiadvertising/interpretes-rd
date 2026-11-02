@@ -85,8 +85,8 @@ export default async function CandidatePortalPage() {
             <h1 className="mt-2 text-3xl font-bold">Hola, {candidate.name}</h1>
             <p className="mt-2 text-slate-400">Este es tu espacio privado para continuar tu postulación.</p>
           </div>
-          <Link href="/postular" className="rounded-xl border border-white/15 px-4 py-2 text-sm text-slate-200 hover:bg-white/5">
-            Ver información del proceso
+          <Link href="/postular" className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400">
+            Continuar mi postulación
           </Link>
         </header>
 
