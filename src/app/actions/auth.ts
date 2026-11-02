@@ -91,6 +91,7 @@ export async function login(formData: FormData) {
     select: { applications: { select: { status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
   });
   const hasActiveApplication = !!candidateForLogin && candidateForLogin.applications[0]?.status !== 'HIRED';
+  const hasHiredApplication = candidateForLogin?.applications[0]?.status === 'HIRED';
   const requestedRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : selectedRole);
   const effectiveRequestedRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : 'interpreter');
 
@@ -211,7 +212,7 @@ export async function login(formData: FormData) {
       });
     }
 
-    const finalRole = resolveUserRoleByEmail(validated.email, hasActiveApplication ? 'candidate' : (profile?.role ?? effectiveRequestedRole));
+    const finalRole = resolveUserRoleByEmail(validated.email, hasActiveApplication ? 'candidate' : hasHiredApplication ? 'interpreter' : (profile?.role ?? effectiveRequestedRole));
 
     if (profile?.role !== finalRole) {
       await prisma.userProfile.update({
