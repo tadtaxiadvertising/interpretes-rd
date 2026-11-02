@@ -65,7 +65,7 @@ export async function getLegalAgreementAdminData() {
       prisma.legalAgreementVersion.findMany({
         where: { agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, version: true, title: true, content: true, updatedAt: true },
+        select: { id: true, version: true, title: true, content: true, updatedAt: true, legalReviewedAt: true, legalReviewedBy: true },
       }),
       prisma.legalAgreementAcceptance.count({ where: { agreementVersion: { agreementKey: AGREEMENT_KEY } } }),
     ]);
