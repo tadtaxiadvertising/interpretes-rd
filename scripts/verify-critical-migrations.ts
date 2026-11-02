@@ -26,6 +26,7 @@ async function main() {
       '20261101_archive_unreviewed_legal_seed/migration.sql',
       '20261101_legal_agreement_review_gate/migration.sql',
       '20261101_legal_review_fingerprint/migration.sql',
+      '20261102_legal_agreement_rls/migration.sql',
       '20261101_roleplay_orphaned_history_check/migration.sql',
     ];
 
@@ -61,6 +62,20 @@ async function main() {
     `);
     if (legalColumns.rowCount !== 3) {
       throw new Error('Legal review metadata migration is incomplete.');
+    }
+
+
+    const legalRls = await pool.query(`
+      SELECT relname
+      FROM pg_class
+      WHERE oid IN (
+        'public.legal_agreement_versions'::regclass,
+        'public.legal_agreement_acceptances'::regclass
+      )
+        AND relrowsecurity = true
+    `);
+    if (legalRls.rowCount !== 2) {
+      throw new Error('Row-level security is not enabled on both legal agreement tables.');
     }
 
     console.log('Critical legal and Roleplay migrations verified successfully.');
