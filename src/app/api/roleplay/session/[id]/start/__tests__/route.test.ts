@@ -83,7 +83,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest(), { params });
 
     expect(res.status).toBe(403);
-    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.findUnique).toHaveBeenCalled();
     expect(m.updateMany).not.toHaveBeenCalled();
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
@@ -116,6 +116,25 @@ describe('POST /api/roleplay/session/[id]/start', () => {
 
     expect(res.status).toBe(403);
     expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows an eligible recruitment candidate to start Roleplay without interpreter onboarding', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.identity = {
+      role: 'candidate',
+      interpreterId: null,
+      candidateId: 5,
+      eligibility: { needsOnboarding: true },
+    };
+    m.applicationFindUnique.mockResolvedValue({ status: 'ROLEPLAY_PENDING' });
+
+    const res = await POST(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(body.data.status).toBe('STARTED');
+    expect(m.updateMany).toHaveBeenCalled();
   });
 
   it('rejects a stale candidate session cookie when the application is no longer eligible', async () => {
