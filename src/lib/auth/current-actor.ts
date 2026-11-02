@@ -125,6 +125,23 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
     // Preserve the interpreter identity already established by Auth.js when
     // the legacy UserProfile bridge has no matching record. This is the
     // server-created session value, not request input.
+    const recruitmentCandidate = await prisma.recruitmentCandidate.findUnique({
+      where: { email },
+      select: {
+        applications: {
+          select: { status: true, hiredInterpreterId: true },
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    const latestApplication = recruitmentCandidate?.applications[0];
+    if (recruitmentCandidate && latestApplication?.status !== 'HIRED') {
+      role = 'candidate';
+    } else if (latestApplication?.status === 'HIRED' && role === 'candidate') {
+      role = 'interpreter';
+    }
+
     let interpreterId = profile?.interpreterId ?? (typeof sessionInterpreterId === 'number' ? sessionInterpreterId : null);
     if (role !== 'admin' && role !== 'candidate' && !interpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
