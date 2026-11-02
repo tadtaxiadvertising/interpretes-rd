@@ -28,6 +28,12 @@ function hashContent(content: string) {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
+function hashReviewContent(version: string, title: string, content: string) {
+  return createHash('sha256')
+    .update(JSON.stringify([version, title, content]), 'utf8')
+    .digest('hex');
+}
+
 export async function getPublishedLegalAgreement(): Promise<
   { success: true; data: PublishedAgreement } | { success: false; error: string; code: string }
 > {
@@ -93,6 +99,7 @@ export async function saveLegalAgreementDraft(raw: unknown) {
           contentHash: hashContent(input.content),
           legalReviewedAt: null,
           legalReviewedBy: null,
+          legalReviewHash: null,
           updatedAt: new Date(),
         },
       });
@@ -129,7 +136,7 @@ export async function approveLegalAgreementDraft(id: string) {
   try {
     const draft = await prisma.legalAgreementVersion.findFirst({
       where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
-      select: { id: true, content: true, contentHash: true },
+      select: { id: true, version: true, title: true, content: true, contentHash: true },
     });
     if (!draft) return { success: false as const, error: 'El borrador no existe o ya fue publicado.', code: 'CONFLICT' };
 
@@ -141,7 +148,11 @@ export async function approveLegalAgreementDraft(id: string) {
     const reviewer = auth.user.userId;
     const result = await prisma.legalAgreementVersion.updateMany({
       where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
-      data: { legalReviewedAt: new Date(), legalReviewedBy: reviewer },
+      data: {
+        legalReviewedAt: new Date(),
+        legalReviewedBy: reviewer,
+        legalReviewHash: hashReviewContent(draft.version, draft.title, draft.content),
+      },
     });
     if (result.count !== 1) {
       return { success: false as const, error: 'El borrador cambió durante la revisión. Recarga e inténtalo de nuevo.', code: 'CONFLICT' };
@@ -162,7 +173,16 @@ export async function publishLegalAgreementDraft(id: string) {
   try {
     const draft = await prisma.legalAgreementVersion.findFirst({
       where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
-      select: { id: true, content: true, contentHash: true, legalReviewedAt: true, legalReviewedBy: true },
+      select: {
+        id: true,
+        version: true,
+        title: true,
+        content: true,
+        contentHash: true,
+        legalReviewedAt: true,
+        legalReviewedBy: true,
+        legalReviewHash: true,
+      },
     });
     if (!draft) return { success: false as const, error: 'El borrador no existe o ya fue publicado.', code: 'CONFLICT' };
     if (!draft.legalReviewedAt || !draft.legalReviewedBy) {
@@ -173,9 +193,21 @@ export async function publishLegalAgreementDraft(id: string) {
       return { success: false as const, error: 'La aprobación jurídica y la publicación deben ser realizadas por administradores distintos.', code: 'SEPARATION_OF_DUTIES_REQUIRED' };
     }
     const digest = hashContent(draft.content);
+    const reviewDigest = hashReviewContent(draft.version, draft.title, draft.content);
+    if (!draft.legalReviewHash || draft.legalReviewHash !== reviewDigest) {
+      return { success: false as const, error: 'El borrador cambió después de su revisión jurídica. Debe revisarse nuevamente.', code: 'LEGAL_REVIEW_REQUIRED' };
+    }
     if (digest !== draft.contentHash) return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
     const result = await prisma.legalAgreementVersion.updateMany({
-      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
+      where: {
+        id,
+        agreementKey: AGREEMENT_KEY,
+        status: 'DRAFT',
+        contentHash: digest,
+        legalReviewHash: reviewDigest,
+        legalReviewedAt: draft.legalReviewedAt,
+        legalReviewedBy: draft.legalReviewedBy,
+      },
       data: { status: 'PUBLISHED', publishedAt: new Date(), publishedBy: auth.user.email || auth.user.userId },
     });
     if (result.count !== 1) return { success: false as const, error: 'Otro proceso publicó o modificó este borrador. Recarga e inténtalo de nuevo.', code: 'CONFLICT' };
