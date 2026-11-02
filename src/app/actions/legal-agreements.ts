@@ -28,6 +28,12 @@ function hashContent(content: string) {
   return createHash('sha256').update(content, 'utf8').digest('hex');
 }
 
+function hashReviewContent(version: string, title: string, content: string) {
+  return createHash('sha256')
+    .update(JSON.stringify([version, title, content]), 'utf8')
+    .digest('hex');
+}
+
 export async function getPublishedLegalAgreement(): Promise<
   { success: true; data: PublishedAgreement } | { success: false; error: string; code: string }
 > {
@@ -65,7 +71,7 @@ export async function getLegalAgreementAdminData() {
       prisma.legalAgreementVersion.findMany({
         where: { agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
         orderBy: { updatedAt: 'desc' },
-        select: { id: true, version: true, title: true, content: true, updatedAt: true },
+        select: { id: true, version: true, title: true, content: true, updatedAt: true, legalReviewedAt: true, legalReviewedBy: true },
       }),
       prisma.legalAgreementAcceptance.count({ where: { agreementVersion: { agreementKey: AGREEMENT_KEY } } }),
     ]);
@@ -86,7 +92,16 @@ export async function saveLegalAgreementDraft(raw: unknown) {
     if (input.id) {
       const updated = await prisma.legalAgreementVersion.updateMany({
         where: { id: input.id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
-        data: { version: input.version, title: input.title, content: input.content, contentHash: hashContent(input.content), updatedAt: new Date() },
+        data: {
+          version: input.version,
+          title: input.title,
+          content: input.content,
+          contentHash: hashContent(input.content),
+          legalReviewedAt: null,
+          legalReviewedBy: null,
+          legalReviewHash: null,
+          updatedAt: new Date(),
+        },
       });
       if (updated.count !== 1) return { success: false as const, error: 'Solo se pueden editar borradores. Los acuerdos publicados son inmutables.', code: 'CONFLICT' };
     } else {
@@ -113,6 +128,51 @@ export async function saveLegalAgreementDraft(raw: unknown) {
   }
 }
 
+export async function approveLegalAgreementDraft(id: string) {
+  const auth = await validateAction('admin');
+  if ('error' in auth) return { success: false as const, error: auth.error, code: auth.code };
+  if (!id || id.length > 100) return { success: false as const, error: 'Borrador inválido.', code: 'VALIDATION_ERROR' };
+
+  try {
+    const draft = await prisma.legalAgreementVersion.findFirst({
+      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
+      select: { id: true, version: true, title: true, content: true, contentHash: true },
+    });
+    if (!draft) return { success: false as const, error: 'El borrador no existe o ya fue publicado.', code: 'CONFLICT' };
+
+    const digest = hashContent(draft.content);
+    if (digest !== draft.contentHash) {
+      return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
+    }
+
+    const reviewer = auth.user.userId;
+    const result = await prisma.legalAgreementVersion.updateMany({
+      where: {
+        id,
+        agreementKey: AGREEMENT_KEY,
+        status: 'DRAFT',
+        version: draft.version,
+        title: draft.title,
+        contentHash: digest,
+      },
+      data: {
+        legalReviewedAt: new Date(),
+        legalReviewedBy: reviewer,
+        legalReviewHash: hashReviewContent(draft.version, draft.title, draft.content),
+      },
+    });
+    if (result.count !== 1) {
+      return { success: false as const, error: 'El borrador cambió durante la revisión. Recarga e inténtalo de nuevo.', code: 'CONFLICT' };
+    }
+
+    revalidatePath('/admin/legal-agreements');
+    return { success: true as const };
+  } catch (error) {
+    console.error('[LEGAL] approve draft failed', error);
+    return { success: false as const, error: 'No se pudo registrar la revisión jurídica.', code: 'INTERNAL_ERROR' };
+  }
+}
+
 export async function publishLegalAgreementDraft(id: string) {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false as const, error: auth.error, code: auth.code };
@@ -120,13 +180,41 @@ export async function publishLegalAgreementDraft(id: string) {
   try {
     const draft = await prisma.legalAgreementVersion.findFirst({
       where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT' },
-      select: { id: true, content: true, contentHash: true },
+      select: {
+        id: true,
+        version: true,
+        title: true,
+        content: true,
+        contentHash: true,
+        legalReviewedAt: true,
+        legalReviewedBy: true,
+        legalReviewHash: true,
+      },
     });
     if (!draft) return { success: false as const, error: 'El borrador no existe o ya fue publicado.', code: 'CONFLICT' };
+    if (!draft.legalReviewedAt || !draft.legalReviewedBy) {
+      return { success: false as const, error: 'Este acuerdo requiere una revisión jurídica registrada antes de publicarse.', code: 'LEGAL_REVIEW_REQUIRED' };
+    }
+    const publisher = auth.user.userId;
+    if (draft.legalReviewedBy === publisher) {
+      return { success: false as const, error: 'La aprobación jurídica y la publicación deben ser realizadas por administradores distintos.', code: 'SEPARATION_OF_DUTIES_REQUIRED' };
+    }
     const digest = hashContent(draft.content);
+    const reviewDigest = hashReviewContent(draft.version, draft.title, draft.content);
+    if (!draft.legalReviewHash || draft.legalReviewHash !== reviewDigest) {
+      return { success: false as const, error: 'El borrador cambió después de su revisión jurídica. Debe revisarse nuevamente.', code: 'LEGAL_REVIEW_REQUIRED' };
+    }
     if (digest !== draft.contentHash) return { success: false as const, error: 'El contenido del borrador no pasó la verificación de integridad.', code: 'INTEGRITY_ERROR' };
     const result = await prisma.legalAgreementVersion.updateMany({
-      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
+      where: {
+        id,
+        agreementKey: AGREEMENT_KEY,
+        status: 'DRAFT',
+        contentHash: digest,
+        legalReviewHash: reviewDigest,
+        legalReviewedAt: draft.legalReviewedAt,
+        legalReviewedBy: draft.legalReviewedBy,
+      },
       data: { status: 'PUBLISHED', publishedAt: new Date(), publishedBy: auth.user.email || auth.user.userId },
     });
     if (result.count !== 1) return { success: false as const, error: 'Otro proceso publicó o modificó este borrador. Recarga e inténtalo de nuevo.', code: 'CONFLICT' };
@@ -146,14 +234,13 @@ export async function hasCurrentLegalAcceptance(identity: { userId?: string | nu
     select: { id: true, content: true, contentHash: true },
   });
   if (!current || hashContent(current.content) !== current.contentHash) return false;
-  const where = identity.userId
-    ? { agreementVersionId: current.id, userId: identity.userId }
-    : identity.interpreterId
-      ? { agreementVersionId: current.id, interpreterId: identity.interpreterId }
-      : null;
-  if (!where) return false;
+  const identityFilters = [
+    ...(identity.userId ? [{ userId: identity.userId }] : []),
+    ...(identity.interpreterId ? [{ interpreterId: identity.interpreterId }] : []),
+  ];
+  if (identityFilters.length === 0) return false;
   const acceptance = await prisma.legalAgreementAcceptance.findFirst({
-    where,
+    where: { agreementVersionId: current.id, OR: identityFilters },
     select: { id: true, contentHash: true },
   });
   return !!acceptance && acceptance.contentHash === current.contentHash;
@@ -163,6 +250,8 @@ export async function recordCurrentLegalAcceptance(tx: any, identity: {
   userId?: string | null;
   interpreterId?: number | null;
   email: string;
+  userAgent?: string | null;
+  source?: string;
 }) {
   const current = await tx.legalAgreementVersion.findFirst({
     where: { agreementKey: AGREEMENT_KEY, status: 'PUBLISHED', publishedAt: { not: null } },
@@ -171,13 +260,18 @@ export async function recordCurrentLegalAcceptance(tx: any, identity: {
   });
   if (!current) throw new Error('No published legal agreement');
   if (hashContent(current.content) !== current.contentHash) throw new Error('Published legal agreement integrity check failed');
-  const identityWhere = identity.userId
-    ? { agreementVersionId: current.id, userId: identity.userId }
-    : identity.interpreterId
-      ? { agreementVersionId: current.id, interpreterId: identity.interpreterId }
-      : null;
-  if (!identityWhere) throw new Error('No stable signer identity');
-  const existing = await tx.legalAgreementAcceptance.findFirst({ where: identityWhere, select: { id: true } });
+  const identityFilters = [
+    ...(identity.userId ? [{ userId: identity.userId }] : []),
+    ...(identity.interpreterId ? [{ interpreterId: identity.interpreterId }] : []),
+  ];
+  if (identityFilters.length === 0) throw new Error('No stable signer identity');
+  const existing = await tx.legalAgreementAcceptance.findFirst({
+    where: { agreementVersionId: current.id, OR: identityFilters },
+    select: { id: true, contentHash: true },
+  });
+  if (existing && existing.contentHash !== current.contentHash) {
+    throw new Error('LEGAL_ACCEPTANCE_INTEGRITY_ERROR');
+  }
   if (!existing) {
     await tx.legalAgreementAcceptance.create({
       data: {
@@ -186,7 +280,8 @@ export async function recordCurrentLegalAcceptance(tx: any, identity: {
         interpreterId: identity.interpreterId ?? null,
         signerEmail: identity.email,
         contentHash: current.contentHash,
-        source: 'onboarding',
+        source: identity.source ?? 'onboarding',
+        userAgent: identity.userAgent ?? null,
       },
     });
   }

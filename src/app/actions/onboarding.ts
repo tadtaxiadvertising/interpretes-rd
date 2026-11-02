@@ -5,6 +5,7 @@ import type { ActionResult } from '@/lib/types';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
+import { headers } from 'next/headers';
 import { hasCurrentLegalAcceptance, recordCurrentLegalAcceptance } from '@/app/actions/legal-agreements';
 
 const db = prisma;
@@ -27,8 +28,9 @@ const BankingDetailsSchema = z.object({
 });
 
 /**
- * Accept legal terms — records the signatureDate on the user's profile.
- * GUARD: Rejects if onboarding is already complete (canonical state).
+ * Accept the currently published legal terms.
+ * Re-acceptance remains available after onboarding completion so existing
+ * interpreters can consent to newly published agreement versions.
  */
 export async function acceptTerms(expectedAgreementId: string): Promise<ActionResult> {
   const auth = await validateAction();
@@ -38,26 +40,12 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
     const actor = auth.user;
     const isAuthJsUser = actor.provider === 'authjs';
 
-    // ── Guard: block if onboarding already completed (canonical state) ──
-    if (!isAuthJsUser) {
-      const profile = await db.userProfile.findUnique({
-        where: { id: actor.userId },
-        select: { onboardingComplete: true },
-      });
-      if (profile?.onboardingComplete) {
-        return { success: false, error: 'Onboarding ya fue completado — no puedes modificar los datos', code: 'CONFLICT' };
-      }
-    } else if (actor.interpreterId) {
-      const interpreter = await db.interpreter.findUnique({
-        where: { id: actor.interpreterId },
-        select: { documentosCompleto: true },
-      });
-      if (interpreter?.documentosCompleto) {
-        return { success: false, error: 'Onboarding ya fue completado — no puedes modificar los datos', code: 'CONFLICT' };
-      }
-    }
+    // Legal re-acceptance remains available after onboarding completion.
+    // A newly published version must be accepted even by active interpreters.
 
     const now = new Date();
+    const requestHeaders = await headers();
+    const signerUserAgent = requestHeaders.get('user-agent');
     let changedInterpreterId = actor.interpreterId ?? null;
 
     if (!expectedAgreementId || expectedAgreementId.length > 100) {
@@ -72,6 +60,8 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         const current = await recordCurrentLegalAcceptance(tx, {
           interpreterId: actor.interpreterId,
           email: actor.email || 'unknown',
+          userAgent: signerUserAgent,
+          source: 'onboarding',
         });
         if (current.id !== expectedAgreementId) throw new Error('LEGAL_VERSION_CHANGED');
         const interpreter = await tx.interpreter.findUnique({
@@ -97,7 +87,10 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         });
         const current = await recordCurrentLegalAcceptance(tx, {
           userId: actor.userId,
+          interpreterId: actor.interpreterId ?? null,
           email: actor.email || 'unknown',
+          userAgent: signerUserAgent,
+          source: 'onboarding',
         });
         if (current.id !== expectedAgreementId) throw new Error('LEGAL_VERSION_CHANGED');
         if (profile?.interpreterId) {
@@ -152,6 +145,9 @@ export async function acceptTerms(expectedAgreementId: string): Promise<ActionRe
         revalidateInterpreterProfileRecords(auth.user.interpreterId ?? null);
         return { success: true };
       }
+    }
+    if (error instanceof Error && error.message === 'LEGAL_ACCEPTANCE_INTEGRITY_ERROR') {
+      return { success: false, error: 'La aceptación registrada no coincide con el contenido vigente. Contacta al administrador para revisar la evidencia.', code: 'INTERNAL_ERROR' };
     }
     if (error instanceof Error && error.message.includes('No published legal agreement')) {
       return { success: false, error: 'No hay un acuerdo publicado para aceptar. Contacta al administrador.', code: 'BAD_REQUEST' };

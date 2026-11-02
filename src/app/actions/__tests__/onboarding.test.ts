@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { acceptTerms, saveBankingDetails, completeOnboarding, getOnboardingStatus } from '../onboarding';
 
+vi.mock('next/headers', () => ({
+  headers: vi.fn(async () => new Headers({ 'user-agent': 'vitest' })),
+}));
+
 vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
@@ -63,14 +67,14 @@ describe('Onboarding Actions', () => {
   };
 
   describe('acceptTerms', () => {
-    it('rejects if onboarding already complete', async () => {
+    it('allows an active interpreter to accept a newly published agreement version', async () => {
       (validateAction as any).mockResolvedValue(mockAuthResult);
       (prisma.userProfile.findUnique as any).mockResolvedValue({ onboardingComplete: true });
 
       const result = await acceptTerms('agreement-1');
 
-      expect(result.success).toBe(false);
-      expect(result.code).toBe('CONFLICT');
+      expect(result.success).toBe(true);
+      expect(prisma.$transaction).toHaveBeenCalled();
     });
 
     it('treats a concurrent duplicate acceptance as success when the same version is already accepted', async () => {

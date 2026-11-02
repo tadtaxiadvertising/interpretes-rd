@@ -1,9 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { getLegalAgreementAdminData, publishLegalAgreementDraft, saveLegalAgreementDraft } from '@/app/actions/legal-agreements';
+import { approveLegalAgreementDraft, getLegalAgreementAdminData, publishLegalAgreementDraft, saveLegalAgreementDraft } from '@/app/actions/legal-agreements';
 
-type Agreement = { id: string; version: string; title: string; content: string; contentHash?: string; publishedAt?: Date | null; updatedAt?: Date };
+type Agreement = { id: string; version: string; title: string; content: string; contentHash?: string; publishedAt?: Date | null; updatedAt?: Date; legalReviewedAt?: Date | null; legalReviewedBy?: string | null };
 type Data = { published: Agreement | null; drafts: Agreement[]; acceptances: number };
 
 export default function LegalAgreementManager({ initialData, initialError }: { initialData: Data | null; initialError?: string }) {
@@ -47,6 +47,22 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
       await refresh();
     } catch {
       setMessage('No se pudo guardar el borrador. Inténtalo de nuevo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function approve(id: string) {
+    if (!window.confirm('Confirmas que el contenido fue revisado por asesoría jurídica y está listo para publicación?')) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const result = await approveLegalAgreementDraft(id);
+      if (!result.success) { setMessage(result.error); return; }
+      setMessage('Revisión jurídica registrada. Un administrador diferente deberá publicar esta versión.');
+      await refresh();
+    } catch {
+      setMessage('No se pudo registrar la revisión jurídica. Inténtalo de nuevo.');
     } finally {
       setBusy(false);
     }
@@ -121,10 +137,14 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
           {data?.drafts.map(draft => <div key={draft.id} className="space-y-2 rounded-xl border border-white/10 p-3">
             <p className="font-medium">{draft.title}</p>
             <p className="text-xs text-slate-400">Versión {draft.version}</p>
-            <button type="button" onClick={() => editDraft(draft)} className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm hover:bg-white/5">Editar borrador</button>
-            <button type="button" disabled={busy} onClick={() => publish(draft.id)} className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">Publicar versión</button>
+            {draft.legalReviewedAt && draft.legalReviewedBy
+              ? <p className="text-xs text-emerald-300">Revisión registrada por {draft.legalReviewedBy} · {new Date(draft.legalReviewedAt).toLocaleString()}</p>
+              : <p className="text-xs text-amber-300">Pendiente de revisión jurídica independiente</p>}
+            <button type="button" disabled={busy} onClick={() => editDraft(draft)} className="w-full rounded-lg border border-white/15 px-3 py-2 text-sm hover:bg-white/5 disabled:opacity-50">Editar borrador</button>
+            <button type="button" disabled={busy} onClick={() => approve(draft.id)} className="w-full rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-blue-500/10 disabled:opacity-50">Registrar revisión jurídica</button>
+            <button type="button" disabled={busy || !draft.legalReviewedAt || !draft.legalReviewedBy} onClick={() => publish(draft.id)} className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">Publicar versión</button>
           </div>)}
-          <p className="pt-2 text-xs leading-5 text-slate-500">Antes de publicar, confirma la revisión legal del contenido. Publicar una versión no elimina ni modifica las versiones o aceptaciones anteriores.</p>
+          <p className="pt-2 text-xs leading-5 text-slate-500">La aprobación y la publicación requieren administradores distintos. Cualquier edición del borrador invalida la revisión previa. Las versiones publicadas y sus aceptaciones permanecen inmutables.</p>
         </aside>
       </section>
     </main>
