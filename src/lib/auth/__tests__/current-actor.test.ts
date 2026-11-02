@@ -191,6 +191,7 @@ describe('CurrentActor abstraction', () => {
       email: 'test@test.com',
       role: 'interpreter',
       interpreterId: 42,
+      candidateId: null,
       profileId: 'user-123',
     };
 
