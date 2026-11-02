@@ -324,6 +324,9 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       setIsLoading(false);
     }
   }, [sessionId, router, initialIdentity]);
+  const handleExit = useCallback(() => {
+    router.push(initialIdentity?.role === 'candidate' ? '/candidate' : '/dashboard/roleplays');
+  }, [router, initialIdentity]);
 
   const handleBack = useCallback(() => {
     if (pageState === 'scenario') {
@@ -458,11 +461,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           {pageState === 'completion' && (
             <RoleplayCompletion
               sessionId={session.id}
-              scenariosCompleted={session.scenarios.length}
+              scenariosCompleted={completedScenarios.length || session.scenarios.length}
               totalDuration={Object.values(scenarioResponses).reduce((sum, r) => sum + r.duration, 0)}
               onSubmit={handleFinalSubmit}
-              onBack={handleBack}
+              onBack={['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status) && !session.canCompleteSelfAssessment ? handleExit : handleBack}
               isSubmitting={isLoading}
+              isComplete={['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status) && !session.canCompleteSelfAssessment}
             />
           )}
         </div>
