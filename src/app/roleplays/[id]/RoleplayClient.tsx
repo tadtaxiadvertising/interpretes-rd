@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X, Save, RotateCcw } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { submitRoleplayResponse, confirmRoleplayResponse, saveSelfAssessment } from '@/app/actions/roleplay';
+import { confirmRoleplayResponse, saveSelfAssessment, submitRoleplaySession } from '@/app/actions/roleplay';
 import { RoleplayIntro } from '@/components/roleplay/RoleplayIntro';
 import { RoleplayScenario } from '@/components/roleplay/RoleplayScenario';
 import { Recorder } from '@/components/roleplay/Recorder';
@@ -22,6 +22,12 @@ interface Scenario {
   scriptPrompt?: string;
   durationLimitSec?: number;
   expectedKeys?: string[];
+  responses?: Array<{
+    sourceAudioUrl: string | null;
+    durationSec: number | null;
+    selfScore: Record<string, number | boolean> | null;
+    selfNotes: string | null;
+  }>;
 }
 
 interface SessionData {
@@ -29,6 +35,7 @@ interface SessionData {
   status: string;
   baseAudioUrl: string;
   currentScenarioIndex: number;
+  canCompleteSelfAssessment?: boolean;
   scenarios: Scenario[];
 }
 
@@ -66,7 +73,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   const [session, setSession] = useState<SessionData | null>(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [baseAudioVolume, setBaseAudioVolume] = useState(1);
-  const [isBasePlaying, setIsBasePlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [completedScenarios, setCompletedScenarios] = useState<number[]>([]);
@@ -79,7 +85,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   }>>({});
 
   const stepLabels = ['Intro', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'];
-  const completedScenarioCount = completedScenarios.length;
 
   // Fetch session data on mount
   useEffect(() => {
@@ -89,14 +94,61 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         const data = await res.json();
         if (data.success && data.data) {
           setSession(data.data);
-          setCurrentScenarioIndex(data.data.currentScenarioIndex || 0);
+          const currentIndex = data.data.currentScenarioIndex || 0;
+          setCurrentScenarioIndex(currentIndex);
 
-          // Mark completed scenarios based on currentScenarioIndex
-          const completed = Array.from({ length: data.data.currentScenarioIndex }, (_, i) => i);
+          const hasCompleteSelfAssessment = (score?: Record<string, number | boolean> | null) =>
+            Boolean(score) &&
+            ['protocol', 'interpretation', 'language', 'service', 'technical']
+              .every((key) => typeof score?.[key] === 'number');
+
+          const completed = data.data.scenarios
+            .map((scenario: Scenario, index: number) =>
+              hasCompleteSelfAssessment(scenario.responses?.[0]?.selfScore) ? index : -1
+            )
+            .filter((index: number) => index >= 0);
           setCompletedScenarios(completed);
 
+          const restoredResponses: Record<string, { audioUrl: string; duration: number; scores: Record<string, number>; criticalError: boolean; notes: string }> = {};
+          for (const scenario of data.data.scenarios as Scenario[]) {
+            const response = scenario.responses?.[0];
+            if (response) {
+              const score = response.selfScore ?? {};
+              restoredResponses[scenario.id] = {
+                audioUrl: response.sourceAudioUrl ?? '',
+                duration: response.durationSec ?? 0,
+                scores: Object.fromEntries(Object.entries(score).filter(([key]) => key !== 'criticalError')) as Record<string, number>,
+                criticalError: score.criticalError === true,
+                notes: response.selfNotes ?? '',
+              };
+            }
+          }
+          setScenarioResponses(restoredResponses);
+
           const terminalStates = ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
-          setPageState(terminalStates.includes(data.data.status) ? 'completion' : 'intro');
+          const missingAssessmentIndex = data.data.scenarios.findIndex((scenario: Scenario) =>
+            Boolean(scenario.responses?.[0]?.sourceAudioUrl) &&
+            !hasCompleteSelfAssessment(scenario.responses?.[0]?.selfScore)
+          );
+          if (data.data.canCompleteSelfAssessment && missingAssessmentIndex >= 0) {
+            // Recover attempts submitted by the previous client before its
+            // auto-advance bug could save the candidate's self-assessment.
+            setCurrentScenarioIndex(missingAssessmentIndex);
+            setPageState('self-assessment');
+          } else if (terminalStates.includes(data.data.status)) {
+            setPageState('completion');
+          } else if (currentIndex >= data.data.scenarios.length) {
+            setPageState('completion');
+          } else {
+            const currentResponse = data.data.scenarios[currentIndex]?.responses?.[0];
+            if (currentResponse?.sourceAudioUrl && !currentResponse.selfScore) {
+              setPageState('self-assessment');
+            } else if (['STARTED', 'IN_PROGRESS'].includes(data.data.status)) {
+              setPageState('scenario');
+            } else {
+              setPageState('intro');
+            }
+          }
         } else {
           setError(data.error || 'Failed to load session');
           setPageState('error');
@@ -108,10 +160,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     }
     fetchSession();
   }, [sessionId]);
-
-  const handlePlayBase = useCallback(() => {
-    setIsBasePlaying(!isBasePlaying);
-  }, [isBasePlaying]);
 
   const handleVolumeChange = useCallback((vol: number) => {
     setBaseAudioVolume(vol);
@@ -132,17 +180,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     }
   }, [sessionId]);
 
-  const handleNextScenario = useCallback(() => {
-    const nextIndex = currentScenarioIndex + 1;
-    if (nextIndex < (session?.scenarios.length || 0)) {
-      setCurrentScenarioIndex(nextIndex);
-      setPageState('recording');
-    } else {
-      setPageState('completion');
-    }
-  }, [currentScenarioIndex, session]);
+  const handleStartRecording = useCallback(() => {
+    // Listening/review and recording are separate required stages for every scenario.
+    setPageState('recording');
+  }, []);
 
-  const handleScenarioAudioSave = useCallback(async (audioUrl: string, duration: number, blob: Blob) => {
+  const handleScenarioAudioSave = useCallback(async (_audioUrl: string, duration: number, blob: Blob) => {
     if (!session) return;
     
     const scenario = session.scenarios[currentScenarioIndex];
@@ -187,7 +230,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           notes: prev[scenario.id]?.notes ?? '',
         }
       }));
-      setCompletedScenarios(prev => [...prev, currentScenarioIndex]);
       setPageState('self-assessment');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save response');
@@ -197,7 +239,13 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   }, [sessionId, currentScenarioIndex, session]);
 
   const handleSelfAssessmentComplete = useCallback(async (
-    scores: Record<string, number>,
+    scores: {
+      protocol: number;
+      interpretation: number;
+      language: number;
+      service: number;
+      technical: number;
+    },
     criticalError: boolean,
     notes: string
   ) => {
@@ -227,11 +275,32 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         }
       }));
 
+      setCompletedScenarios(prev => prev.includes(currentScenarioIndex)
+        ? prev
+        : [...prev, currentScenarioIndex]);
+
       const nextIndex = currentScenarioIndex + 1;
-      if (nextIndex < (session?.scenarios.length || 0)) {
+      const nextLegacyAssessmentIndex = session?.canCompleteSelfAssessment
+        ? session.scenarios.findIndex((item, index) =>
+            index > currentScenarioIndex &&
+            Boolean(item.responses?.[0]?.sourceAudioUrl) &&
+            !item.responses?.[0]?.selfScore
+          )
+        : -1;
+
+      if (nextLegacyAssessmentIndex >= 0) {
+        // Older submitted attempts already contain all recordings; resume each
+        // missing self-assessment without trying to record audio into a closed session.
+        setCurrentScenarioIndex(nextLegacyAssessmentIndex);
+        setPageState('self-assessment');
+      } else if (session?.canCompleteSelfAssessment) {
+        setCurrentScenarioIndex(session.scenarios.length);
+        setPageState('completion');
+      } else if (nextIndex < (session?.scenarios.length || 0)) {
         setCurrentScenarioIndex(nextIndex);
-        setPageState('recording');
+        setPageState('scenario');
       } else {
+        setCurrentScenarioIndex(nextIndex);
         setPageState('completion');
       }
     } catch (err) {
@@ -245,14 +314,20 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
   const handleFinalSubmit = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      setPageState('completion');
+      const result = await submitRoleplaySession({ sessionId });
+      if (!result.success) throw new Error(result.error || 'Submission failed');
+      router.push(initialIdentity?.role === 'candidate' ? '/candidate' : '/dashboard/roleplays');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Submission failed');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sessionId, router, initialIdentity]);
+  const handleExit = useCallback(() => {
+    router.push(initialIdentity?.role === 'candidate' ? '/candidate' : '/dashboard/roleplays');
+  }, [router, initialIdentity]);
 
   const handleBack = useCallback(() => {
     if (pageState === 'scenario') {
@@ -356,9 +431,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
               scenario={currentScenario}
               currentIndex={currentScenarioIndex}
               totalScenarios={session.scenarios.length}
-              onPlayBase={handlePlayBase}
-              onNext={handleNextScenario}
-              isBasePlaying={isBasePlaying}
+              onNext={handleStartRecording}
               baseVolume={baseAudioVolume}
               onVolumeChange={handleVolumeChange}
               isLoading={isLoading}
@@ -367,20 +440,19 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
           {pageState === 'recording' && currentScenario && (
             <Recorder
-              scenarioId={currentScenario.id}
-              sessionId={session.id}
               durationLimitSec={currentScenario.durationLimitSec}
               onSave={handleScenarioAudioSave}
-              onComplete={handleNextScenario}
               isLoading={isLoading}
             />
           )}
 
           {pageState === 'self-assessment' && currentScenario && (
             <SelfAssessment
-              scenarioId={currentScenario.id}
               scenarioTitle={currentScenario.title}
               onComplete={handleSelfAssessmentComplete}
+              initialScores={scenarioResponses[currentScenario.id]?.scores}
+              initialCriticalError={scenarioResponses[currentScenario.id]?.criticalError}
+              initialNotes={scenarioResponses[currentScenario.id]?.notes}
               isLoading={isLoading}
             />
           )}
@@ -388,11 +460,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           {pageState === 'completion' && (
             <RoleplayCompletion
               sessionId={session.id}
-              scenariosCompleted={session.scenarios.length}
+              scenariosCompleted={completedScenarios.length || session.scenarios.length}
               totalDuration={Object.values(scenarioResponses).reduce((sum, r) => sum + r.duration, 0)}
               onSubmit={handleFinalSubmit}
-              onBack={handleBack}
+              onBack={['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status) && !session.canCompleteSelfAssessment ? handleExit : handleBack}
               isSubmitting={isLoading}
+              isComplete={['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status) && !session.canCompleteSelfAssessment}
             />
           )}
         </div>

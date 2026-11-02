@@ -96,6 +96,19 @@ const CANDIDATE_ACTOR = {
   candidateId: 5,
   profileId: 'p-1',
 };
+const ASSIGNED_SESSION = {
+  id: 'sess-assigned',
+  status: 'INVITED',
+  baseAudioUrl: 'https://audio.example/base.mp3',
+  scenarios: [{
+    order: 0,
+    title: 'Medical',
+    baseAudioUrl: 'https://audio.example/scenario.mp3',
+    durationLimitSec: 90,
+    scriptPrompt: 'Prompt',
+    expectedKeys: ['name'],
+  }],
+};
 
 describe('startCandidateRoleplay', () => {
   beforeEach(() => {
@@ -147,14 +160,15 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
-  it('does not require interpreter onboarding for a recruitment candidate', async () => {
+  it('does not require interpreter onboarding for a recruitment candidate with an assigned exercise', async () => {
     m.identity.eligibility.needsOnboarding = true;
+    m.sessionFindFirst.mockResolvedValue(ASSIGNED_SESSION);
 
     const res = await startCandidateRoleplay();
 
     expect(res.success).toBe(true);
-    expect(m.sessionCreate).toHaveBeenCalled();
-    expect(m.cookieSet).toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-assigned', expect.any(Object));
   });
 
   it.each(['APPLIED', 'INDUCTION_PENDING', 'REJECTED', 'WITHDRAWN', 'EXPIRED', 'HIRED', 'INTERVIEW_PENDING'])(
@@ -174,7 +188,7 @@ describe('startCandidateRoleplay', () => {
 
   it('does not move the application back to pending while a reviewer owns the session', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
-    m.sessionFindFirst.mockResolvedValue({ id: 'sess-reviewing', status: 'UNDER_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-reviewing', status: 'UNDER_REVIEW' });
 
     const res = await startCandidateRoleplay();
 
@@ -188,8 +202,9 @@ describe('startCandidateRoleplay', () => {
   it('creates a fresh session when retrying a reviewed attempt', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
     m.sessionFindFirst.mockResolvedValue({
-      id: 'sess-reviewed', status: 'FAILED', baseAudioUrl: 'base.mp3',
-      scenarios: [{ order: 0, title: 'Medical', baseAudioUrl: 'scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }],
+      ...ASSIGNED_SESSION,
+      id: 'sess-reviewed',
+      status: 'FAILED',
     });
     m.sessionCreate.mockResolvedValue({ id: 'sess-retry', status: 'STARTED' });
     m.scenarioCount.mockResolvedValue(1);
@@ -200,9 +215,9 @@ describe('startCandidateRoleplay', () => {
     expect(m.sessionCreate).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         recruitmentCandidateId: 5,
-        baseAudioUrl: 'base.mp3',
+        baseAudioUrl: 'https://audio.example/base.mp3',
         status: 'STARTED',
-        scenarios: { create: [{ order: 0, title: 'Medical', baseAudioUrl: 'scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }] },
+        scenarios: { create: [{ order: 0, title: 'Medical', baseAudioUrl: 'https://audio.example/scenario.mp3', durationLimitSec: 90, scriptPrompt: 'Prompt', expectedKeys: ['name'] }] },
       }),
     }));
     expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-retry', expect.any(Object));
@@ -216,33 +231,46 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).toHaveBeenCalled();
   });
 
-  it('rejects a concurrent fresh-session creation conflict without issuing access or a cookie', async () => {
+  it('rejects when no admin-assigned roleplay session exists', async () => {
     m.sessionFindFirst.mockResolvedValue(null);
-    m.sessionCreate.mockRejectedValue({ code: 'P2002', meta: { target: 'roleplay_candidate_active_session_key' } });
 
     const res = await startCandidateRoleplay();
 
     expect(res.success).toBe(false);
-    expect('code' in res && res.code).toBe('CONFLICT');
+    expect(res.code).toBe('CONFLICT');
+    expect(res.error).toContain('no tienes un ejercicio de Roleplay asignado');
+    expect(m.sessionCreate).not.toHaveBeenCalled();
     expect(m.scenarioCreate).not.toHaveBeenCalled();
     expect(m.accessUpsert).not.toHaveBeenCalled();
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
-  it('creates a session, scenario, access row and cookie for a fresh candidate', async () => {
+  it('rejects an assigned session with missing scenario audio', async () => {
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      scenarios: [{ ...ASSIGNED_SESSION.scenarios[0], baseAudioUrl: '' }],
+    });
+
     const res = await startCandidateRoleplay();
 
-    expect(res.success).toBe(true);
-    expect(m.sessionCreate).toHaveBeenCalledTimes(1);
-    expect(m.scenarioCreate).toHaveBeenCalledTimes(1);
-    expect(m.accessUpsert).toHaveBeenCalledTimes(1);
-    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-new', expect.any(Object));
-    if (res.success) expect(res.data.sessionId).toBe('sess-new');
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('falta asignar el audio base');
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('does not fabricate a blank roleplay session for a fresh candidate', async () => {
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.scenarioCreate).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
   it('resumes an existing active session instead of creating a duplicate', async () => {
-    m.sessionFindFirst.mockResolvedValue({ id: 'sess-existing', status: 'STARTED' });
-    m.scenarioCount.mockResolvedValue(1);
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-existing', status: 'STARTED' });
 
     const res = await startCandidateRoleplay();
 
@@ -254,8 +282,7 @@ describe('startCandidateRoleplay', () => {
   });
 
   it('promotes a resumable draft session to STARTED', async () => {
-    m.sessionFindFirst.mockResolvedValue({ id: 'sess-draft', status: 'DRAFT' });
-    m.scenarioCount.mockResolvedValue(1);
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-draft', status: 'DRAFT' });
 
     const res = await startCandidateRoleplay();
 
@@ -269,8 +296,7 @@ describe('startCandidateRoleplay', () => {
   it.each(['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'])(
     'does not regress a %s session back to STARTED on resume',
     async (status) => {
-      m.sessionFindFirst.mockResolvedValue({ id: 'sess-advanced', status });
-      m.scenarioCount.mockResolvedValue(1);
+      m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-advanced', status });
 
       const res = await startCandidateRoleplay();
 
@@ -280,7 +306,7 @@ describe('startCandidateRoleplay', () => {
   );
 
   it('rejects when a concurrent request advances the draft to a terminal state', async () => {
-    m.sessionFindFirst.mockResolvedValue({ id: 'sess-draft', status: 'DRAFT' });
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-draft', status: 'DRAFT' });
     m.sessionUpdateMany.mockResolvedValue({ count: 0 });
     m.sessionFindUnique.mockResolvedValue({ id: 'sess-draft', status: 'EVALUATED' });
 
@@ -293,10 +319,9 @@ describe('startCandidateRoleplay', () => {
   });
 
   it('resumes when a concurrent request already started the same session', async () => {
-    m.sessionFindFirst.mockResolvedValue({ id: 'sess-draft', status: 'DRAFT' });
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-draft', status: 'DRAFT' });
     m.sessionUpdateMany.mockResolvedValue({ count: 0 });
     m.sessionFindUnique.mockResolvedValue({ id: 'sess-draft', status: 'STARTED' });
-    m.scenarioCount.mockResolvedValue(1);
 
     const res = await startCandidateRoleplay();
 
@@ -306,6 +331,7 @@ describe('startCandidateRoleplay', () => {
   });
 
   it('advances the application from ROLEPLAY_PENDING to ROLEPLAY_IN_PROGRESS with a guarded transition', async () => {
+    m.sessionFindFirst.mockResolvedValue(ASSIGNED_SESSION);
     m.appFindUnique.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_PENDING', version: 4 });
 
     const res = await startCandidateRoleplay();
@@ -335,8 +361,7 @@ describe('startCandidateRoleplay', () => {
 
   it('does not touch an application already in ROLEPLAY_IN_PROGRESS (idempotent resume)', async () => {
     m.appFindUnique.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_IN_PROGRESS', version: 5 });
-    m.sessionFindFirst.mockResolvedValue({ id: 'sess-existing', status: 'STARTED' });
-    m.scenarioCount.mockResolvedValue(1);
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, id: 'sess-existing', status: 'STARTED' });
 
     const res = await startCandidateRoleplay();
 

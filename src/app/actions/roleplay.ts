@@ -221,9 +221,9 @@ async function advanceApplicationPipeline(advance: ApplicationAdvance): Promise<
  * Start (or resume) the roleplay session for the currently authenticated
  * recruitment candidate. This is the candidate-facing entry point used by the
  * /postular funnel: it binds the request to the candidate identity (via the
- * account email), reuses any active session instead of creating duplicates,
- * guarantees at least one scenario exists, and issues the opaque
- * `roleplay_session` cookie that the candidate-facing submit paths require.
+ * account email), reuses an admin-assigned session instead of creating
+ * placeholder exercises, verifies every scenario has base audio, and issues
+ * the `roleplay_session` cookie required by candidate-facing submit paths.
  */
 export async function startCandidateRoleplay() {
   const auth = await validateAction();
@@ -275,47 +275,8 @@ export async function startCandidateRoleplay() {
       };
     }
 
-    // Review explicitly permits a retry, but the state machine requires the
-    // application to return to ROLEPLAY_PENDING before it can become IN_PROGRESS.
-    const retryingFromReview = application?.status === 'ROLEPLAY_REVIEW';
-    if (retryingFromReview) {
-      // Do not move the application back to pending while an evaluator still
-      // owns the previous attempt; that would desynchronize application/session state.
-      const sessionUnderReview = await db.roleplaySession.findFirst({
-        where: {
-          recruitmentCandidateId: candidate.id,
-          status: { notIn: [...RESUME_EXCLUDED_STATUSES] },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { status: true },
-      });
-      if (sessionUnderReview?.status === 'UNDER_REVIEW') {
-        return {
-          success: false as const,
-          error: 'Tu roleplay todavía está siendo evaluado. Espera el resultado antes de reintentarlo.',
-          code: 'CONFLICT' as const,
-        };
-      }
-
-      const retryTransition = await advanceApplication({
-        applicationId: application.id,
-        fromStatuses: ['ROLEPLAY_REVIEW'],
-        toStatus: 'ROLEPLAY_PENDING',
-        toStep: 'ROLEPLAY',
-        eventType: 'ROLEPLAY_CREATED',
-        actorType: 'candidate',
-        actorId: String(candidate.id),
-        metadata: { retry: true },
-      });
-      if (!retryTransition.success) {
-        return {
-          success: false as const,
-          error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
-          code: 'CONFLICT' as const,
-        };
-      }
-    }
-
+    // Reuse only an actual admin-assigned exercise. Never fabricate a blank
+    // scenario: without a base recording there is no valid selection exercise.
     const previousSession = await db.roleplaySession.findFirst({
       where: {
         recruitmentCandidateId: candidate.id,
@@ -340,10 +301,59 @@ export async function startCandidateRoleplay() {
       },
     });
 
-    // A reviewed attempt is historical evidence. Retrying must create a new
-    // session and copy only its scenario definition, never its responses or QA.
-    // Ordinary page refreshes still resume the current in-flight session.
-    const shouldCreateRetry = retryingFromReview && previousSession &&
+    if (!previousSession) {
+      return {
+        success: false as const,
+        error: 'Todavía no tienes un ejercicio de Roleplay asignado. El equipo de reclutamiento debe asignar los escenarios antes de que puedas comenzar.',
+        code: 'CONFLICT' as const,
+      };
+    }
+
+    if (
+      previousSession.scenarios.length === 0 ||
+      previousSession.scenarios.some((scenario) => !scenario.baseAudioUrl?.trim())
+    ) {
+      return {
+        success: false as const,
+        error: 'Tu ejercicio de Roleplay está incompleto: falta asignar el audio base de uno o más escenarios. Contacta al equipo de reclutamiento.',
+        code: 'CONFLICT' as const,
+      };
+    }
+
+    // A reviewed attempt may be retried only after QA releases it. Validate the
+    // prior assignment first so a failed retry cannot regress the application.
+    const retryingFromReview = application.status === 'ROLEPLAY_REVIEW';
+    if (retryingFromReview && previousSession.status === 'UNDER_REVIEW') {
+      return {
+        success: false as const,
+        error: 'Tu roleplay todavía está siendo evaluado. Espera el resultado antes de reintentarlo.',
+        code: 'CONFLICT' as const,
+      };
+    }
+
+    if (retryingFromReview) {
+      const retryTransition = await advanceApplication({
+        applicationId: application.id,
+        fromStatuses: ['ROLEPLAY_REVIEW'],
+        toStatus: 'ROLEPLAY_PENDING',
+        toStep: 'ROLEPLAY',
+        eventType: 'ROLEPLAY_CREATED',
+        actorType: 'candidate',
+        actorId: String(candidate.id),
+        metadata: { retry: true },
+      });
+      if (!retryTransition.success) {
+        return {
+          success: false as const,
+          error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
+          code: 'CONFLICT' as const,
+        };
+      }
+    }
+
+    // A reviewed attempt is historical evidence. Retrying creates a fresh
+    // session with the same scenario definitions, never prior responses or QA.
+    const shouldCreateRetry = retryingFromReview &&
       ['SUBMITTED', 'EVALUATED', 'PASSED', 'FAILED'].includes(previousSession.status);
 
     let session;
@@ -366,35 +376,9 @@ export async function startCandidateRoleplay() {
         },
         select: { id: true, status: true },
       });
-    } else if (!previousSession) {
-      try {
-        session = await db.roleplaySession.create({
-          data: {
-            recruitmentCandidateId: candidate.id,
-            baseAudioUrl: '',
-            status: 'STARTED',
-          },
-          select: { id: true, status: true },
-        });
-      } catch (error: unknown) {
-        // A partial unique index is the final arbiter for concurrent starts.
-        // Do not continue with the winner's session in this request: the winner
-        // may still be creating its initial scenario/access row. Ask the loser
-        // to refresh, so it cannot race the winner's initialization.
-        if (isUniqueConstraintConflict(error)) {
-          return {
-            success: false as const,
-            error: 'El roleplay acaba de iniciarse en otra solicitud. Actualiza la página para continuar.',
-            code: 'CONFLICT' as const,
-          };
-        }
-        throw error;
-      }
     } else {
       session = { id: previousSession.id, status: previousSession.status };
       if (['DRAFT', 'INVITED'].includes(session.status)) {
-        // Compare-and-set against the state observed above. A concurrent submit
-        // or evaluation must not be overwritten by this resume request.
         const transition = await db.roleplaySession.updateMany({
           where: { id: session.id, status: session.status },
           data: { status: 'STARTED' },
@@ -419,21 +403,6 @@ export async function startCandidateRoleplay() {
           session = { id: session.id, status: 'STARTED' };
         }
       }
-    }
-
-    const scenarioCount = await db.roleplayScenario.count({ where: { sessionId: session.id } });
-    if (scenarioCount === 0) {
-      await db.roleplayScenario.create({
-        data: {
-          sessionId: session.id,
-          order: 0,
-          title: 'Escenario 1',
-          baseAudioUrl: '',
-          durationLimitSec: null,
-          scriptPrompt: null,
-          expectedKeys: [],
-        },
-      });
     }
 
     await db.roleplayAccess.upsert({
@@ -494,11 +463,10 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
   try {
     const session = await db.roleplaySession.findUnique({
       where: { id: input.sessionId },
-      select: { 
-        id: true, 
-        recordedAudioUrl: true, 
-        interpreterId: true, 
-        recruitmentCandidateId: true, 
+      select: {
+        id: true,
+        interpreterId: true,
+        recruitmentCandidateId: true,
         status: true,
         currentScenarioIndex: true,
       },
@@ -508,39 +476,43 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
       return { success: false, error: 'Session not found', code: 'NOT_FOUND' };
     }
 
-    const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
-    if (!validSubmitStates.includes(session.status)) {
+    if (!['INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { success: false, error: 'Session is not in a state that allows submitting responses', code: 'INVALID_STATE' };
     }
 
-    if (session.recordedAudioUrl) {
-      return { success: false, error: 'Response already submitted', code: 'ALREADY_SUBMITTED' };
-    }
-
     const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
-
     if (!(await canAccessRoleplaySession(session, sessionCookie))) {
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
-    // Client will upload directly to /api/roleplay/convert-audio
-    // We just return success and the session info for the client to call the API
-    const scenarioId = input.scenarioId || `scenario_${session.currentScenarioIndex}`;
-
-    // Sequential binding: a supplied scenarioId must be the next expected one.
-    // Without this, a client could skip steps in the same session.
-    const expectedScenarioId = `scenario_${session.currentScenarioIndex}`;
-    if (input.scenarioId && input.scenarioId !== expectedScenarioId) {
+    // Resolve the real database scenario ID from the persisted cursor. Synthetic
+    // values such as "scenario_0" cannot be uploaded or confirmed against Prisma.
+    const expectedScenario = await db.roleplayScenario.findFirst({
+      where: { sessionId: session.id, order: session.currentScenarioIndex },
+      select: { id: true },
+    });
+    if (!expectedScenario) {
+      return { success: false, error: 'No scenario is available at the current step', code: 'NOT_FOUND' };
+    }
+    if (input.scenarioId && input.scenarioId !== expectedScenario.id) {
       return { success: false, error: 'Escenario no disponible', code: 'FORBIDDEN' };
     }
 
+    const existingResponse = await db.roleplayResponse.findFirst({
+      where: { scenarioId: expectedScenario.id },
+      select: { id: true },
+    });
+    if (existingResponse) {
+      return { success: false, error: 'Response already submitted for this scenario', code: 'ALREADY_SUBMITTED' };
+    }
+
     return {
-      success: true, 
-      data: { 
+      success: true,
+      data: {
         sessionId: session.id,
-        scenarioId,
+        scenarioId: expectedScenario.id,
         convertApiUrl: '/api/roleplay/convert-audio',
-      } 
+      },
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -551,14 +523,12 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
 
 const ConfirmResponseSchema = z.object({
   sessionId: z.string().min(1),
-  scenarioId: z.string().min(1).optional(),
+  scenarioId: z.string().min(1),
   recordedAudioUrl: z.string().min(1),
-  sourceAudioPath: z.string().min(1).max(1024).optional(),
+  sourceAudioPath: z.string().min(1).max(1024),
   processedAudioPath: z.string().min(1).max(1024).optional(),
   durationSec: z.number().int().min(0).max(86400).optional(),
-  selfScore: z.record(z.string(), z.number()).optional(),
-  selfNotes: z.string().optional(),
-});
+}).strict();
 
 export type ConfirmResponseInput = z.infer<typeof ConfirmResponseSchema>;
 
@@ -569,7 +539,8 @@ function isCanonicalResponseAudioPath(path: string, sessionId: string, scenarioI
 
 
 export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
-  const auth = await validateAction('interpreter');
+  // Recruitment candidates perform this step before interpreter activation.
+  const auth = await validateAction(['interpreter', 'candidate']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   const parseResult = ConfirmResponseSchema.safeParse(rawInput);
@@ -610,159 +581,106 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       if (!(await canAccessRoleplaySession(session, sessionCookie))) {
         throw new Error('Unauthorized');
       }
-
-      // A supplied scenario must belong to this session. Without this check a
+      // A response must belong to a real scenario in this session. Without this check a
       // caller could read or overwrite another session's response by passing
       // a foreign scenario id (cross-session write).
-      if (input.scenarioId) {
-        const scenario = await tx.roleplayScenario.findFirst({
-          where: { id: input.scenarioId, sessionId: session.id },
-          select: { id: true },
-        });
-        if (!scenario) {
-          throw new Error('Unauthorized');
-        }
+      const scenario = await tx.roleplayScenario.findFirst({
+        where: { id: input.scenarioId, sessionId: session.id },
+        select: { id: true },
+      });
+      if (!scenario) throw new Error('Unauthorized');
+      if (!isCanonicalResponseAudioPath(input.sourceAudioPath, session.id, input.scenarioId)) {
+        throw new Error('A valid uploaded audio object is required before confirming the response');
+      }
 
-        // A retried confirm after a successful commit may arrive after the
-        // session index has advanced. Treat only the exact same stored audio
-        // as an idempotent replay; never overwrite a confirmed response.
-        const priorResponse = await tx.roleplayResponse.findFirst({
-          where: { scenarioId: input.scenarioId },
-          select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
-        });
-        if (priorResponse) {
-          if (input.sourceAudioPath
-          ? priorResponse.sourceAudioPath === input.sourceAudioPath
-          : priorResponse.sourceAudioUrl === input.recordedAudioUrl) {
-            return {
-              recordedAudioUrl: input.recordedAudioUrl,
-              submitted: session.status === 'SUBMITTED',
-              candidateId: session.recruitmentCandidateId,
-              sourceAudioPath: priorResponse.sourceAudioPath,
-              processedAudioPath: priorResponse.processedAudioPath,
-              newlyCreated: false,
-            };
-          }
-          throw new Error('Response already recorded for this scenario');
+      // A retried confirm after a successful commit may arrive after the
+      // session index has advanced. Treat only the exact same stored audio
+      // as an idempotent replay; never overwrite a confirmed response.
+      const priorResponse = await tx.roleplayResponse.findFirst({
+        where: { scenarioId: input.scenarioId },
+        select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
+      });
+      if (priorResponse) {
+        if (priorResponse.sourceAudioPath === input.sourceAudioPath) {
+          return {
+            recordedAudioUrl: priorResponse.sourceAudioUrl ?? input.recordedAudioUrl,
+            submitted: session.status === 'SUBMITTED',
+            candidateId: session.recruitmentCandidateId,
+            sourceAudioPath: priorResponse.sourceAudioPath,
+            processedAudioPath: priorResponse.processedAudioPath,
+            newlyCreated: false,
+          };
         }
+        throw new Error('Response already recorded for this scenario');
+      }
 
-        // Sequential binding: a new response must target the scenario expected
-        // at the session's current index, so a candidate cannot skip steps.
-        const nextScenario = await tx.roleplayScenario.findFirst({
-          where: { sessionId: session.id, order: session.currentScenarioIndex },
-          select: { id: true },
-        });
-        if (!nextScenario || nextScenario.id !== input.scenarioId) {
-          throw new Error('Unauthorized');
-        }
+      // Sequential binding: a new response must target the scenario expected
+      // at the session's current index, so a candidate cannot skip steps.
+      const nextScenario = await tx.roleplayScenario.findFirst({
+        where: { sessionId: session.id, order: session.currentScenarioIndex },
+        select: { id: true },
+      });
+      if (!nextScenario || nextScenario.id !== input.scenarioId) {
+        throw new Error('Unauthorized');
       }
 
       const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
       const canSubmit = validSubmitStates.includes(session.status);
 
       if (!canSubmit) {
-        // Idempotent replay: a retried confirm whose response is already
-        // recorded succeeds without writing; any other write is rejected.
-        if (input.scenarioId) {
-          const recorded = await tx.roleplayResponse.findFirst({
-            where: { scenarioId: input.scenarioId, sourceAudioUrl: input.recordedAudioUrl },
-            select: { id: true },
-          });
-          if (recorded) {
-            return { recordedAudioUrl: input.recordedAudioUrl, submitted: true, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, processedAudioPath: input.processedAudioPath ?? null, newlyCreated: false };
-          }
-        }
         throw new Error('Session not available for submission');
       }
 
-      // Legacy callers that do not target a scenario row keep the original
-      // single-submission semantics: one recorded response per session.
-      if (!input.scenarioId && session.recordedAudioUrl) {
-        throw new Error('Session not available for submission');
-      }
+      // Sign the uploaded object server-side. Never trust a client-supplied URL
+      // as proof that an audio recording exists in the roleplay bucket.
+      const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath);
 
       // Persist a new response only once. The existing-response path above
       // handles idempotent retries before the sequential-index check.
-      if (input.scenarioId) {
-        await tx.roleplayResponse.create({
-          data: {
-            scenarioId: input.scenarioId,
-            sourceAudioUrl: input.recordedAudioUrl,
-            sourceAudioPath: input.sourceAudioPath ?? null,
-            processedAudioPath: input.processedAudioPath ?? null,
-            durationSec: input.durationSec ?? null,
-            selfScore: input.selfScore ?? undefined,
-            selfNotes: input.selfNotes ?? null,
-            audioStatus: input.sourceAudioPath?.endsWith('.webm') ? 'UPLOADED' : 'READY',
-            submittedAt: new Date(),
-          },
-        });
-      }
-
-      // Progress is derived from persisted responses so a retried confirm
-      // cannot advance the session twice.
-      const totalScenarios = await tx.roleplayScenario.count({ where: { sessionId: session.id } });
-      const respondedCount = await tx.roleplayResponse.count({
-        where: { scenario: { sessionId: session.id } },
+      await tx.roleplayResponse.create({
+        data: {
+          scenarioId: input.scenarioId,
+          sourceAudioUrl: confirmedAudioUrl,
+          sourceAudioPath: input.sourceAudioPath,
+          processedAudioPath: input.processedAudioPath ?? null,
+          durationSec: input.durationSec ?? null,
+          // Self-assessment is saved only by saveSelfAssessment after the
+          // recording is confirmed; audio confirmation cannot carry scores.
+          audioStatus: input.sourceAudioPath.endsWith('.webm') ? 'UPLOADED' : 'READY',
+          submittedAt: new Date(),
+        },
       });
-      const isFinal = input.scenarioId
-        ? totalScenarios > 0 && respondedCount >= totalScenarios
-        : totalScenarios > 0 && session.currentScenarioIndex + 1 >= totalScenarios;
 
       const updated = await tx.roleplaySession.update({
         where: { id: input.sessionId },
         data: {
-          recordedAudioUrl: input.recordedAudioUrl,
-          submittedAt: new Date(),
-          ...(input.scenarioId
-            ? { currentScenarioIndex: respondedCount }
-            : { currentScenarioIndex: { increment: 1 } }),
-          ...(isFinal ? { status: 'SUBMITTED' as const } : {}),
+          recordedAudioUrl: confirmedAudioUrl,
+          // Audio confirmation never advances the cursor or submits the session.
+          status: 'IN_PROGRESS',
         },
         select: { id: true },
       });
+      if (!updated) throw new Error('Concurrent submission detected');
 
-      if (!updated) {
-        throw new Error('Concurrent submission detected');
-      }
-
-      // Invitation lifecycle: validate -> start -> consume. Validation and
-      // start never consume; the invitation is spent exactly once here, when a
-      // candidate submits the final scenario and the session moves to
-      // SUBMITTED. The `usedAt: null` predicate makes the claim atomic and
-      // idempotent so a concurrent or retried submit cannot double-consume.
-      // Interpreter sessions have no candidate invitation and are not consumed.
-      if (isFinal && session.recruitmentCandidateId) {
-        await tx.roleplayAccess.updateMany({
-          where: { sessionId: session.id, usedAt: null },
-          data: { usedAt: new Date() },
-        });
-      }
-
-      return { recordedAudioUrl: input.recordedAudioUrl, submitted: isFinal, candidateId: session.recruitmentCandidateId, sourceAudioPath: input.sourceAudioPath ?? null, processedAudioPath: input.processedAudioPath ?? null, newlyCreated: !!input.scenarioId };
+      return {
+        recordedAudioUrl: confirmedAudioUrl,
+        submitted: false,
+        candidateId: session.recruitmentCandidateId,
+        sourceAudioPath: input.sourceAudioPath,
+        processedAudioPath: input.processedAudioPath ?? null,
+        newlyCreated: true,
+      };
     });
 
     // Convert only after the response row commits, and scope conversion to this
     // exact upload attempt. This prevents a stale upload/conversion from changing
     // the processed audio associated with the response QA will evaluate.
-    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm') && input.scenarioId) {
+    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm')) {
       queueMp3Conversion(input.sessionId, input.scenarioId, result.sourceAudioPath);
     }
 
-    // Pipeline bookkeeping: the final submit moves the application to review.
-    // Guarded + best-effort; runs after the submit transaction so a pipeline
-    // failure can never roll back a recorded submission.
-    if (result.submitted && result.candidateId) {
-      await advanceApplicationPipeline({
-        candidateId: result.candidateId,
-        fromStatuses: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'],
-        toStatus: 'ROLEPLAY_REVIEW',
-        toStep: 'ROLEPLAY_REVIEW',
-        eventType: 'ROLEPLAY_SUBMITTED',
-        actorType: 'candidate',
-        actorId: String(result.candidateId),
-      });
-    }
+    // Recruitment advances only after the explicit final submission action,
+    // which verifies every scenario has both audio and self-assessment.
 
     revalidatePath('/dashboard/roleplays');
     revalidatePath('/admin/roleplays');
@@ -777,21 +695,27 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
 const SelfAssessmentSchema = z.object({
   sessionId: z.string().min(1),
   scenarioId: z.string().min(1),
-  scores: z.record(z.string(), z.number().min(0).max(10)),
-  criticalError: z.boolean().optional(),
+  scores: z.object({
+    protocol: z.number().min(0).max(10),
+    interpretation: z.number().min(0).max(10),
+    language: z.number().min(0).max(10),
+    service: z.number().min(0).max(10),
+    technical: z.number().min(0).max(10),
+  }).strict(),
+  criticalError: z.boolean(),
   notes: z.string().max(2000).optional(),
 });
 
 export type SelfAssessmentInput = z.infer<typeof SelfAssessmentSchema>;
 
 export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
-  const auth = await validateAction('interpreter');
+  // Candidate self-assessment is a recruitment stage and precedes interpreter activation.
+  const auth = await validateAction(['interpreter', 'candidate']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   const parseResult = SelfAssessmentSchema.safeParse(rawInput);
-  if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
+  if (!parseResult.success) return { success: false, error: 'Invalid self-assessment', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
-
   const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
 
   try {
@@ -802,37 +726,69 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
           id: true,
           interpreterId: true,
           recruitmentCandidateId: true,
+          status: true,
+          currentScenarioIndex: true,
+          evaluatorId: true,
+          qaScoreId: true,
         },
       });
 
-      if (!session) throw new Error('Session not available for submission');
-
+      const isLegacyUnclaimedSubmission = session?.status === 'SUBMITTED'
+        && session.evaluatorId === null
+        && session.qaScoreId === null;
+      if (!session || (!['STARTED', 'IN_PROGRESS'].includes(session.status) && !isLegacyUnclaimedSubmission)) {
+        throw new Error('Session not available for self-assessment');
+      }
       if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
 
       const scenario = await tx.roleplayScenario.findFirst({
         where: { id: input.scenarioId, sessionId: session.id },
-        select: { id: true },
+        select: { id: true, order: true },
       });
-      if (!scenario) throw new Error('Unauthorized');
+      if (!scenario || (isLegacyUnclaimedSubmission
+        ? scenario.order >= session.currentScenarioIndex
+        : scenario.order !== session.currentScenarioIndex)) {
+        throw new Error('This scenario is not the current step');
+      }
 
-      // Self-assessment attaches to the already-confirmed response row; the
-      // audio confirm must happen first so QA always has an audio to grade.
       const response = await tx.roleplayResponse.findFirst({
         where: { scenarioId: input.scenarioId },
-        select: { id: true },
+        select: { id: true, sourceAudioUrl: true, selfScore: true },
       });
-      if (!response) throw new Error('No confirmed response to assess');
+      if (!response?.sourceAudioUrl) {
+        throw new Error('Confirm your recording before completing the self-assessment');
+      }
+      const existingScore = response.selfScore;
+      const existingScoreIsComplete = Boolean(
+        existingScore &&
+        typeof existingScore === 'object' &&
+        !Array.isArray(existingScore) &&
+        ['protocol', 'interpretation', 'language', 'service', 'technical']
+          .every((key) => typeof (existingScore as Record<string, unknown>)[key] === 'number')
+      );
+      if (isLegacyUnclaimedSubmission && existingScoreIsComplete) {
+        throw new Error('This self-assessment has already been submitted');
+      }
 
       await tx.roleplayResponse.update({
         where: { id: response.id },
         data: {
-          // Canonical shape: the five QA dimensions plus the critical-error
-          // flag, so the admin evaluation view reads exactly what the
-          // candidate submitted (see admin/roleplays/[id]/page.tsx).
-          selfScore: { ...input.scores, criticalError: input.criticalError ?? false },
+          selfScore: { ...input.scores, criticalError: input.criticalError },
           selfNotes: input.notes ?? null,
         },
       });
+
+      // Persist the workflow cursor only after both recording and self-assessment
+      // have been stored. Refreshing the page therefore resumes at the right stage.
+      // Old clients could mark the session SUBMITTED immediately after the
+      // final recording. Permit only unclaimed legacy submissions to fill in
+      // missing self-assessments, without reopening or moving the submitted cursor.
+      if (!isLegacyUnclaimedSubmission) {
+        await tx.roleplaySession.update({
+          where: { id: session.id },
+          data: { currentScenarioIndex: scenario.order + 1, status: 'IN_PROGRESS' },
+        });
+      }
     });
 
     revalidatePath('/dashboard/roleplays');
@@ -842,6 +798,105 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Save Self Assessment Error:', message);
     return { success: false, error: message, code: 'INTERNAL_ERROR' };
+  }
+}
+
+const SubmitRoleplaySessionSchema = z.object({
+  sessionId: z.string().min(1),
+});
+
+export async function submitRoleplaySession(rawInput: { sessionId: string }) {
+  const auth = await validateAction(['interpreter', 'candidate']);
+  if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+
+  const parsed = SubmitRoleplaySessionSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'Invalid session', code: 'VALIDATION_ERROR' };
+  const { sessionId } = parsed.data;
+  const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
+
+  try {
+    const candidateId = await db.$transaction(async (tx) => {
+      const session = await tx.roleplaySession.findUnique({
+        where: { id: sessionId },
+        select: {
+          id: true,
+          interpreterId: true,
+          recruitmentCandidateId: true,
+          status: true,
+          currentScenarioIndex: true,
+          evaluatorId: true,
+          qaScoreId: true,
+        },
+      });
+      const isLegacyUnclaimedSubmission = session?.status === 'SUBMITTED'
+        && session.evaluatorId === null
+        && session.qaScoreId === null;
+      if (!session || (!['STARTED', 'IN_PROGRESS'].includes(session.status) && !isLegacyUnclaimedSubmission)) {
+        throw new Error('Roleplay is not ready to submit');
+      }
+      if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
+
+      const scenarios = await tx.roleplayScenario.findMany({
+        where: { sessionId },
+        orderBy: { order: 'asc' },
+        select: {
+          order: true,
+          responses: { select: { sourceAudioUrl: true, selfScore: true } },
+        },
+      });
+      const hasCompleteAssessments = scenarios.length > 0 &&
+        scenarios.every((scenario) => {
+          const response = scenario.responses[0];
+          const score = response?.selfScore;
+          if (!response?.sourceAudioUrl || !score || typeof score !== 'object' || Array.isArray(score)) return false;
+          return ['protocol', 'interpretation', 'language', 'service', 'technical']
+            .every((key) => typeof (score as Record<string, unknown>)[key] === 'number');
+        });
+
+      if (!hasCompleteAssessments || session.currentScenarioIndex !== scenarios.length) {
+        throw new Error('Complete every recording and self-assessment before submitting');
+      }
+
+      if (!isLegacyUnclaimedSubmission) {
+        const transition = await tx.roleplaySession.updateMany({
+          where: {
+            id: sessionId,
+            status: { in: ['STARTED', 'IN_PROGRESS'] },
+            currentScenarioIndex: scenarios.length,
+          },
+          data: { status: 'SUBMITTED', submittedAt: new Date() },
+        });
+        if (transition.count !== 1) throw new Error('Roleplay was already submitted or changed');
+      }
+
+      if (session.recruitmentCandidateId) {
+        await tx.roleplayAccess.updateMany({
+          where: { sessionId, usedAt: null },
+          data: { usedAt: new Date() },
+        });
+      }
+      return session.recruitmentCandidateId;
+    });
+
+    if (candidateId) {
+      await advanceApplicationPipeline({
+        candidateId,
+        fromStatuses: ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'],
+        toStatus: 'ROLEPLAY_REVIEW',
+        toStep: 'ROLEPLAY_REVIEW',
+        eventType: 'ROLEPLAY_SUBMITTED',
+        actorType: 'candidate',
+        actorId: String(candidateId),
+      });
+    }
+
+    revalidatePath('/dashboard/roleplays');
+    revalidatePath('/admin/roleplays');
+    return { success: true };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Submit Roleplay Session Error:', message);
+    return { success: false, error: message, code: 'CONFLICT' };
   }
 }
 

@@ -16,6 +16,7 @@ const m = vi.hoisted(() => ({
   appFindUnique: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
+  confirmUpload: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -68,7 +69,7 @@ vi.mock('@/lib/roleplay', () => ({
   createSignedUploadUrl: vi.fn(),
   getBaseAudioPath: vi.fn(),
   getResponseAudioPath: vi.fn(),
-  confirmUpload: vi.fn(),
+  confirmUpload: m.confirmUpload,
   validateAudioFile: vi.fn(),
 }));
 
@@ -100,7 +101,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
     m.scenarioCount.mockResolvedValue(0);
-    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1' });
+    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1', order: 0 });
     m.responseCount.mockResolvedValue(0);
     m.responseFindFirst.mockResolvedValue(null);
     m.responseCreate.mockResolvedValue({ id: 'resp-1' });
@@ -111,13 +112,21 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.eventCreate.mockResolvedValue({ id: 'evt-1' });
     m.cookie = null;
     m.actor = { interpreterId: null };
+    m.confirmUpload.mockResolvedValue('https://signed.example/confirmed.webm');
   });
 
   it('rejects a candidate session when the session cookie is missing', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = null;
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
@@ -128,27 +137,84 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'some-other-session';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/a.webm' });
 
     expect(res.success).toBe(false);
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('allows a candidate session when the cookie matches the session id', async () => {
+  it('allows a candidate session when the cookie and scenario ownership match', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
 
     expect(res.success).toBe(true);
     expect(m.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects candidate audio confirmation without a scenario id', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      recordedAudioUrl: 'https://x/a.webm',
+    } as any);
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('VALIDATION_ERROR');
+    expect(m.responseCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects self-assessment fields smuggled into audio confirmation', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://x/a.webm',
+      selfScore: { protocol: 10, interpretation: 10, language: 10, service: 10, technical: 10 },
+    } as any);
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('VALIDATION_ERROR');
+    expect(m.responseCreate).not.toHaveBeenCalled();
+  });
+  it('does not confirm a client-supplied URL when the uploaded object cannot be signed', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.confirmUpload.mockRejectedValue(new Error('Object not found'));
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://attacker.example/fake-audio.webm',
+    });
+
+    expect(res.success).toBe(false);
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
   });
 
   it('allows an interpreter session only for its owning interpreter', async () => {
     m.session = INTERPRETER_SESSION;
     m.actor = { interpreterId: 7 };
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-int', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-int',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-int/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
 
     expect(res.success).toBe(true);
     expect(m.update).toHaveBeenCalledTimes(1);
@@ -158,7 +224,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.actor = { interpreterId: 7 };
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/a.webm' });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
@@ -169,7 +235,12 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.session = INTERPRETER_SESSION;
     m.actor = { interpreterId: 999 };
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-int', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-int',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-int/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://x/a.webm',
+    });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
@@ -195,8 +266,8 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.responseCreate.mock.calls[0][0].data.sourceAudioPath).toBe('responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm');
     expect(m.responseCreate.mock.calls[0][0].data.durationSec).toBe(42);
     expect(m.update).toHaveBeenCalledTimes(1);
-    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
-    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBe(1);
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
+    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBeUndefined();
   });
 
   it('rejects a scenario id that belongs to a different session (cross-session write)', async () => {
@@ -204,7 +275,8 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.cookie = 'sess-cand';
     m.scenarioFindFirst.mockResolvedValue(null);
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', recordedAudioUrl: 'https://x/a.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-foreign',
+      sourceAudioPath: 'responses/sess-cand/scn-foreign/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/a.webm' });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
@@ -213,11 +285,10 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('accepts a later scenario confirm after a first response was already recorded', async () => {
+  it('accepts the next scenario only after the prior self-assessment advanced the cursor', async () => {
     // Sequential binding: a supplied scenario id must match the scenario at
-    // the session's current index. With the first response already recorded
-    // the index sits at 1, so the belongs check (by id) and the sequential
-    // check (by order) must both resolve to scn-2.
+    // the session's current index. The first assessment advanced the cursor
+    // to 1, so the next recording must target scn-2.
     m.session = { ...CANDIDATE_SESSION, currentScenarioIndex: 1, recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(2);
@@ -231,19 +302,21 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
       }
     );
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-2', recordedAudioUrl: 'https://x/second.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-2',
+      sourceAudioPath: 'responses/sess-cand/scn-2/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/second.webm' });
 
     expect(res.success).toBe(true);
     expect(m.responseCreate).toHaveBeenCalledTimes(1);
     expect(m.update).toHaveBeenCalledTimes(1);
-    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBe(2);
+    expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBeUndefined();
   });
 
   it('rejects a stray confirm once the session has left the submit window', async () => {
     m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/other.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/other.webm' });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Session not available');
@@ -254,9 +327,14 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
   it('treats a retried confirm of an already-recorded response as an idempotent success', async () => {
     m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
     m.cookie = 'sess-cand';
-    m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm' });
+    m.responseFindFirst.mockResolvedValue({
+      id: 'resp-recorded',
+      sourceAudioUrl: 'https://x/first.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+    });
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/first.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/first.webm' });
 
     expect(res.success).toBe(true);
     expect(m.responseCreate).not.toHaveBeenCalled();
@@ -264,17 +342,18 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('keeps single-submission semantics for legacy confirms without a scenario id', async () => {
+  it('rejects legacy confirms without a scenario id', async () => {
     m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/already.webm' };
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/again.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/again.webm' } as any);
 
     expect(res.success).toBe(false);
+    expect(res.code).toBe('VALIDATION_ERROR');
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('consumes the candidate invitation when the final scenario is submitted', async () => {
+  it('does not consume the invitation when final audio is confirmed before self-assessment', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(1);
@@ -283,16 +362,13 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
     expect(res.success).toBe(true);
-    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
-    expect(m.accessUpdateMany).toHaveBeenCalledTimes(1);
-    expect(m.accessUpdateMany.mock.calls[0][0]).toEqual({
-      where: { sessionId: 'sess-cand', usedAt: null },
-      data: { usedAt: expect.any(Date) },
-    });
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
   it('does not consume the invitation on a non-final scenario', async () => {
@@ -304,11 +380,12 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
     expect(res.success).toBe(true);
-    expect(m.update.mock.calls[0][0].data.status).toBeUndefined();
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -321,11 +398,12 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-int',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-int/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
     expect(res.success).toBe(true);
-    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -334,43 +412,30 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.cookie = 'sess-cand';
     m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm' });
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1', recordedAudioUrl: 'https://x/first.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm', recordedAudioUrl: 'https://x/first.webm' });
 
     expect(res.success).toBe(true);
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('advances the application to ROLEPLAY_REVIEW after the final candidate submit', async () => {
+  it('does not advance the application until the final self-assessment and explicit submit', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(1);
     m.responseCount.mockResolvedValue(1);
-    m.appFindUnique.mockResolvedValue({ id: 'app-5', status: 'ROLEPLAY_IN_PROGRESS', version: 3 });
 
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
     expect(res.success).toBe(true);
-    expect(m.appFindUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { candidateId: 5 } })
-    );
-    expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
-    expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
-      where: { id: 'app-5', status: 'ROLEPLAY_IN_PROGRESS', version: 3 },
-      data: expect.objectContaining({ status: 'ROLEPLAY_REVIEW', currentStep: 'ROLEPLAY_REVIEW' }),
-    });
-    expect(m.eventCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          applicationId: 'app-5',
-          eventType: 'ROLEPLAY_SUBMITTED',
-          toStatus: 'ROLEPLAY_REVIEW',
-        }),
-      })
-    );
+    expect(m.appFindUnique).not.toHaveBeenCalled();
+    expect(m.appUpdateMany).not.toHaveBeenCalled();
+    expect(m.eventCreate).not.toHaveBeenCalled();
   });
 
   it('does not advance the application on a non-final scenario submit', async () => {
@@ -383,6 +448,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
@@ -400,6 +466,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-int',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-int/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
@@ -418,6 +485,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
@@ -437,11 +505,12 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
     });
 
     expect(res.success).toBe(true);
-    expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.appUpdateMany).not.toHaveBeenCalled();
     expect(m.eventCreate).not.toHaveBeenCalled();
   });
 });
@@ -451,8 +520,8 @@ describe('saveSelfAssessment gate', () => {
     vi.clearAllMocks();
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
-    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1' });
-    m.responseFindFirst.mockResolvedValue({ id: 'resp-1' });
+    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1', order: 0 });
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-1', sourceAudioUrl: 'https://x/response.webm' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
     m.cookie = null;
     m.actor = { interpreterId: null };
@@ -462,7 +531,7 @@ describe('saveSelfAssessment gate', () => {
   it('rejects a candidate session when the session cookie is missing', async () => {
     m.cookie = null;
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
@@ -473,10 +542,10 @@ describe('saveSelfAssessment gate', () => {
     m.cookie = 'sess-cand';
     m.scenarioFindFirst.mockResolvedValue(null);
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-foreign', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain('Unauthorized');
+    expect(res.error).toContain('current step');
     expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
@@ -484,10 +553,10 @@ describe('saveSelfAssessment gate', () => {
     m.cookie = 'sess-cand';
     m.responseFindFirst.mockResolvedValue(null);
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-cand', scenarioId: 'scn-1', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
-    expect(res.error).toContain('No confirmed response');
+    expect(res.error).toContain('Confirm your recording');
     expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
@@ -497,7 +566,7 @@ describe('saveSelfAssessment gate', () => {
     const res = await saveSelfAssessment({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
-      scores: { fluency: 8, pronunciation: 7 },
+      scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 7 },
       criticalError: false,
       notes: 'good pacing',
     });
@@ -505,7 +574,7 @@ describe('saveSelfAssessment gate', () => {
     expect(res.success).toBe(true);
     expect(m.responseUpdate).toHaveBeenCalledTimes(1);
     expect(m.responseUpdate.mock.calls[0][0].data).toEqual({
-      selfScore: { fluency: 8, pronunciation: 7, criticalError: false },
+      selfScore: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 7, criticalError: false },
       selfNotes: 'good pacing',
     });
   });
@@ -514,7 +583,7 @@ describe('saveSelfAssessment gate', () => {
     m.session = INTERPRETER_SESSION;
     m.actor = { interpreterId: 999 };
 
-    const res = await saveSelfAssessment({ sessionId: 'sess-int', scenarioId: 'scn-1', scores: { fluency: 8 } });
+    const res = await saveSelfAssessment({ sessionId: 'sess-int', scenarioId: 'scn-1', scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }, criticalError: false });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');

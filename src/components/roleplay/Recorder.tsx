@@ -7,20 +7,14 @@ import { cn } from '@/lib/utils';
 type RecordingState = 'ready' | 'recording' | 'review' | 'uploading' | 'complete';
 
 interface RecorderProps {
-  scenarioId: string;
-  sessionId: string;
   durationLimitSec?: number;
   onSave: (audioUrl: string, durationSec: number, blob: Blob) => Promise<void>;
-  onComplete: () => void;
   isLoading?: boolean;
 }
 
 export function Recorder({ 
-  scenarioId, 
-  sessionId, 
   durationLimitSec = 300, 
   onSave, 
-  onComplete,
   isLoading 
 }: RecorderProps) {
   const [state, setState] = useState<RecordingState>('ready');
@@ -178,7 +172,6 @@ export function Recorder({
     try {
       await onSave(recordingUrl, duration, recordingBlob);
       setState('complete');
-      setTimeout(onComplete, 1500);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error al guardar la respuesta');
       setState('review');

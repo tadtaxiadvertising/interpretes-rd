@@ -4,10 +4,17 @@ import React, { useState } from 'react';
 import { CheckCircle2, AlertCircle, HelpCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
+type SelfAssessmentScores = {
+  protocol: number;
+  interpretation: number;
+  language: number;
+  service: number;
+  technical: number;
+};
+
 interface SelfAssessmentProps {
-  scenarioId: string;
   scenarioTitle: string;
-  onComplete: (scores: Record<string, number>, criticalError: boolean, notes: string) => void;
+  onComplete: (scores: SelfAssessmentScores, criticalError: boolean, notes: string) => void;
   isLoading?: boolean;
   initialScores?: Record<string, number>;
   initialCriticalError?: boolean;
@@ -51,7 +58,6 @@ const CRITERIA = [
 ] as const;
 
 export function SelfAssessment({ 
-  scenarioId, 
   scenarioTitle, 
   onComplete, 
   isLoading,
@@ -189,7 +195,13 @@ export function SelfAssessment({
         </div>
 
         <button
-          onClick={() => onComplete(scores, criticalError, notes)}
+          onClick={() => onComplete({
+            protocol: scores.protocol,
+            interpretation: scores.interpretation,
+            language: scores.language,
+            service: scores.service,
+            technical: scores.technical,
+          }, criticalError, notes)}
           disabled={!isComplete || isLoading}
           className={cn(
             "w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",

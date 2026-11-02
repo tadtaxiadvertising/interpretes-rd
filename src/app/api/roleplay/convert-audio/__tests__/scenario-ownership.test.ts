@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
-  identity: { role: 'candidate', interpreterId: null } as any,
+  identity: { role: 'candidate', interpreterId: null, candidateId: 42 } as any,
   sessionFindUnique: vi.fn(),
   scenarioFindFirst: vi.fn(),
   responseFindUnique: vi.fn(),
@@ -60,7 +60,7 @@ function makeRequest(options: { sessionId?: string; scenarioId?: string; cookie?
 describe('POST /api/roleplay/convert-audio scenario ownership', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'candidate', interpreterId: null };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 42 };
     m.rateLimit.mockReturnValue({ success: true });
     m.sessionFindUnique.mockResolvedValue({
       id: 'session-1',
@@ -124,6 +124,25 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
     );
     expect(m.queueMp3Conversion).not.toHaveBeenCalled();
   });
+  it('allows the candidate owner but not a legacy interpreter link on dual-linked sessions', async () => {
+    m.sessionFindUnique.mockResolvedValue({
+      id: 'session-1',
+      interpreterId: 7,
+      recruitmentCandidateId: 42,
+      status: 'STARTED',
+      access: null,
+    });
+
+    const candidateResponse = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(candidateResponse.status).toBe(200);
+
+    m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+    m.storageUpload.mockClear();
+    const interpreterResponse = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(interpreterResponse.status).toBe(403);
+    expect(m.storageUpload).not.toHaveBeenCalled();
+  });
+
   it('uses a different immutable object path for each upload attempt', async () => {
     const first = await POST(makeRequest({ cookie: 'session-1' }));
     const second = await POST(makeRequest({ cookie: 'session-1' }));

@@ -85,6 +85,28 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe('SUBMITTED');
   });
+  it('offers recovery only for a submitted attempt with missing self-assessment', async () => {
+    m.session = {
+      ...candidateSession('SUBMITTED'),
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario 1',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: [],
+        responses: [{ sourceAudioUrl: 'https://x/response.webm', durationSec: 40, selfScore: { fluency: 8 }, selfNotes: null }],
+      }],
+    };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.canCompleteSelfAssessment).toBe(true);
+  });
+
 
   it('rejects an interpreter who does not own the session', async () => {
     m.session = { ...candidateSession('STARTED'), recruitmentCandidateId: null, interpreterId: 7 };
@@ -94,4 +116,21 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(403);
   });
+  it('does not let a legacy interpreterId override candidate ownership', async () => {
+    m.session = { ...candidateSession('STARTED'), interpreterId: 7 };
+    m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(403);
+  });
+  it('allows the candidate owner to read a dual-linked legacy session', async () => {
+    m.session = { ...candidateSession('STARTED'), interpreterId: 7 };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(200);
+  });
+
+
 });

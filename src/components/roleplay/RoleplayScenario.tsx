@@ -16,9 +16,7 @@ interface RoleplayScenarioProps {
   };
   currentIndex: number;
   totalScenarios: number;
-  onPlayBase: () => void;
   onNext: () => void;
-  isBasePlaying: boolean;
   baseVolume: number;
   onVolumeChange: (vol: number) => void;
   isLoading?: boolean;
@@ -28,15 +26,16 @@ export function RoleplayScenario({
   scenario, 
   currentIndex, 
   totalScenarios, 
-  onPlayBase, 
   onNext,
-  isBasePlaying,
   baseVolume,
   onVolumeChange,
   isLoading
 }: RoleplayScenarioProps) {
   const [showPrompt, setShowPrompt] = useState(false);
   const [showExpectedKeys, setShowExpectedKeys] = useState(false);
+  const [isBasePlaying, setIsBasePlaying] = useState(false);
+  const [hasListened, setHasListened] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
@@ -49,6 +48,8 @@ export function RoleplayScenario({
     const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
     const handleEnded = () => {
       setCurrentTime(0);
+      setIsBasePlaying(false);
+      setHasListened(true);
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
@@ -61,6 +62,36 @@ export function RoleplayScenario({
       audio.removeEventListener('ended', handleEnded);
     };
   }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.pause();
+    audio.currentTime = 0;
+    setCurrentTime(0);
+    setIsBasePlaying(false);
+    setHasListened(false);
+    setAudioError(null);
+  }, [scenario.id]);
+
+  const handleTogglePlayback = async () => {
+    const audio = audioRef.current;
+    if (!audio || !scenario.baseAudioUrl) {
+      setAudioError('El audio base de este escenario no está disponible.');
+      return;
+    }
+    setAudioError(null);
+    if (audio.paused) {
+      try {
+        await audio.play();
+      } catch {
+        setIsBasePlaying(false);
+        setAudioError('No se pudo reproducir el audio. Intenta nuevamente.');
+      }
+    } else {
+      audio.pause();
+    }
+  };
 
   // Sync volume with parent control
   useEffect(() => {
@@ -123,15 +154,15 @@ export function RoleplayScenario({
         <audio
           ref={audioRef}
           src={scenario.baseAudioUrl}
-          onPlay={onPlayBase}
-          onPause={onPlayBase}
+          onPlay={() => setIsBasePlaying(true)}
+          onPause={() => setIsBasePlaying(false)}
         />
 
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <button
-              onClick={onPlayBase}
-              disabled={isLoading}
+              onClick={handleTogglePlayback}
+              disabled={isLoading || !scenario.baseAudioUrl}
               className={cn(
                 "w-12 h-12 rounded-xl flex items-center justify-center transition-all",
                 isBasePlaying ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700"
@@ -178,6 +209,10 @@ export function RoleplayScenario({
               />
             </div>
           </div>
+
+          {audioError && (
+            <p role="alert" className="mt-3 text-sm text-red-400">{audioError}</p>
+          )}
 
           {showPrompt && scenario.scriptPrompt && (
             <div className="mt-4 p-4 bg-slate-900/50 rounded-xl border border-white/5 animate-in fade-in">
@@ -233,23 +268,31 @@ export function RoleplayScenario({
         </div>
       </div>
 
+      {!scenario.baseAudioUrl && (
+        <p role="alert" className="text-sm text-amber-400">
+          Este escenario no tiene un audio base asignado. Solicita a reclutamiento que complete la asignación antes de continuar.
+        </p>
+      )}
+
       <button
         onClick={onNext}
-        disabled={isLoading}
+        disabled={isLoading || !scenario.baseAudioUrl || !hasListened}
         className={cn(
           "w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
-          isLoading
+          isLoading || !scenario.baseAudioUrl || !hasListened
             ? "bg-slate-800 text-slate-500 cursor-not-allowed"
             : "bg-blue-600 text-white shadow-xl shadow-blue-600/30 hover:scale-[1.02] active:scale-95"
         )}
       >
         {isLoading ? (
-          <>
-            <span className="animate-pulse">Preparando...</span>
-          </>
+          <span className="animate-pulse">Preparando...</span>
+        ) : !scenario.baseAudioUrl ? (
+          'Audio base no disponible'
+        ) : !hasListened ? (
+          'Escucha el audio completo para continuar'
         ) : (
           <>
-            {currentIndex < totalScenarios - 1 ? 'Continuar a grabar' : 'Finalizar y evaluar'}
+            Grabar respuesta
             <ChevronRight size={20} />
           </>
         )}

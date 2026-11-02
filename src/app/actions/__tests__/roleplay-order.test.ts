@@ -55,7 +55,7 @@ vi.mock('@/lib/roleplay', () => ({
   createSignedUploadUrl: vi.fn(),
   getBaseAudioPath: vi.fn(),
   getResponseAudioPath: vi.fn(),
-  confirmUpload: vi.fn(),
+  confirmUpload: vi.fn().mockResolvedValue('https://signed.example/confirmed.webm'),
   validateAudioFile: vi.fn(),
 }));
 
@@ -101,7 +101,9 @@ describe('roleplay: no scenario skipping', () => {
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
     m.responseFindFirst.mockResolvedValue(null);
     m.accessUpsert.mockResolvedValue({ id: 'acc-1' });
-    m.scenarioFindFirst.mockResolvedValue({ id: 'scn-0' });
+    m.scenarioFindFirst.mockImplementation(async (args: { where: { order?: number } }) =>
+      args.where.order === 1 ? SCENARIO_1 : SCENARIO_0
+    );
     m.cookieSet.mockResolvedValue(undefined);
     m.actor = { role: 'candidate', interpreterId: null, candidateId: 5, userId: 'u-1', email: 'candidate@example.com' };
   });
@@ -114,13 +116,13 @@ describe('roleplay: no scenario skipping', () => {
     const res = await submitRoleplayResponse({ sessionId: 'sess-cand' });
 
     expect(res.success).toBe(true);
-    expect(res.data.scenarioId).toBe('scenario_1');
+    expect(res.data.scenarioId).toBe('scn-1');
   });
 
   it('submitRoleplayResponse rejects a candidate that targets a future scenario (skip)', async () => {
     m.session.currentScenarioIndex = 0;
 
-    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scenario_1' });
+    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-1' });
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Escenario no disponible');
@@ -129,9 +131,18 @@ describe('roleplay: no scenario skipping', () => {
   it('submitRoleplayResponse allows the current scenario when explicitly given', async () => {
     m.session.currentScenarioIndex = 0;
 
-    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scenario_0' });
+    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-0' });
 
     expect(res.success).toBe(true);
+  });
+  it('submitRoleplayResponse rejects a scenario that already has a confirmed response', async () => {
+    m.session.currentScenarioIndex = 0;
+    m.responseFindFirst.mockResolvedValue({ id: 'resp-1' });
+
+    const res = await submitRoleplayResponse({ sessionId: 'sess-cand', scenarioId: 'scn-0' });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('already submitted');
   });
 
   // --- confirmRoleplayResponse ------------------------------------------
@@ -149,6 +160,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/second.webm',
     });
 
@@ -170,6 +182,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/first.webm',
     });
     expect(res.success).toBe(true);
@@ -184,11 +197,13 @@ describe('roleplay: no scenario skipping', () => {
     m.responseFindFirst.mockResolvedValue({
       id: 'resp-1',
       sourceAudioUrl: 'https://x/first.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
     });
 
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/first.webm',
     });
 
@@ -202,11 +217,13 @@ describe('roleplay: no scenario skipping', () => {
     m.responseFindFirst.mockResolvedValue({
       id: 'resp-1',
       sourceAudioUrl: 'https://x/original.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
     });
 
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000002.webm',
       recordedAudioUrl: 'https://x/replacement.webm',
     });
 
@@ -230,6 +247,7 @@ describe('roleplay: no scenario skipping', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       scenarioId: 'scn-0',
+      sourceAudioPath: 'responses/sess-cand/scn-0/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/again.webm',
     });
 

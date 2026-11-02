@@ -31,6 +31,8 @@ export async function GET(
         baseAudioUrl: true,
         recordedAudioUrl: true,
         status: true,
+        evaluatorId: true,
+        qaScoreId: true,
         interpreterId: true,
         recruitmentCandidateId: true,
         currentScenarioIndex: true,
@@ -45,6 +47,14 @@ export async function GET(
             durationLimitSec: true,
             scriptPrompt: true,
             expectedKeys: true,
+            responses: {
+              select: {
+                sourceAudioUrl: true,
+                durationSec: true,
+                selfScore: true,
+                selfNotes: true,
+              },
+            },
           },
         },
       },
@@ -81,6 +91,22 @@ export async function GET(
           baseAudioUrl,
           recordedAudioUrl,
           status: session.status,
+          canCompleteSelfAssessment:
+            session.status === 'SUBMITTED' &&
+            !session.evaluatorId &&
+            !session.qaScoreId &&
+            session.scenarios.some((scenario) => {
+              const response = scenario.responses[0];
+              const score = response?.selfScore;
+              const hasCompleteScore = Boolean(
+                score &&
+                typeof score === 'object' &&
+                !Array.isArray(score) &&
+                ['protocol', 'interpretation', 'language', 'service', 'technical']
+                  .every((key) => typeof (score as Record<string, unknown>)[key] === 'number')
+              );
+              return Boolean(response?.sourceAudioUrl) && !hasCompleteScore;
+            }),
           currentScenarioIndex: session.currentScenarioIndex,
           scenarios,
         },
@@ -107,19 +133,16 @@ function checkSessionAccess(
   if (!identity) return false;
   if (identity.role === 'admin') return true;
 
-  // Interpreter sessions are strictly bound to the resolved interpreter id.
-  if (session.interpreterId && identity.interpreterId === session.interpreterId) return true;
-
-  // Candidate sessions require the opaque server-issued session cookie created
-  // by the invite/start flow. An authenticated user alone is not sufficient.
-  // The cookie equality is the binding credential; additionally verify the
-  // session is in a state that allows candidate access (STARTED/IN_PROGRESS).
-  if (session.recruitmentCandidateId) {
+  // Recruitment sessions belong exclusively to their candidate, even when
+  // legacy rows still carry a provisional interpreterId.
+  if (session.recruitmentCandidateId !== null) {
     if (identity.role !== 'candidate' || identity.candidateId !== session.recruitmentCandidateId) return false;
     if (sessionCookie !== session.id) return false;
-    const candidateAccessibleStates = ['STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
+    const candidateAccessibleStates = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
     return candidateAccessibleStates.includes(session.status);
   }
 
-  return false;
+  return session.interpreterId !== null
+    && identity.role === 'interpreter'
+    && identity.interpreterId === session.interpreterId;
 }
