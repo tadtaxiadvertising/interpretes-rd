@@ -16,6 +16,23 @@ import { queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
 
 const db = prisma;
 
+async function canAccessRoleplaySession(
+  session: { interpreterId: number | null; recruitmentCandidateId: number | null; id: string },
+  sessionCookie: string | null
+): Promise<boolean> {
+  const identity = await resolveCurrentIdentity();
+  if (!identity) return false;
+
+  if (session.interpreterId !== null) {
+    return identity.role === 'interpreter' && identity.interpreterId === session.interpreterId;
+  }
+
+  return session.recruitmentCandidateId !== null
+    && identity.role === 'candidate'
+    && identity.candidateId === session.recruitmentCandidateId
+    && sessionCookie === session.id;
+}
+
 function isUniqueConstraintConflict(error: unknown): boolean {
   return typeof error === 'object' && error !== null && 'code' in error &&
     (error as { code?: unknown }).code === 'P2002';
@@ -218,15 +235,13 @@ export async function startCandidateRoleplay() {
   // Server-side eligibility is authoritative; callers can invoke this action
   // directly without visiting the client-side onboarding gate.
   const identity = await resolveCurrentIdentity();
-  if (!identity || identity.role !== 'interpreter' || identity.email?.toLowerCase().trim() !== email) {
+  if (
+    !identity ||
+    identity.role !== 'candidate' ||
+    !identity.candidateId ||
+    identity.email?.toLowerCase().trim() !== email
+  ) {
     return { success: false as const, error: 'Access denied', code: 'UNAUTHORIZED' as const };
-  }
-  if (identity.eligibility.needsOnboarding) {
-    return {
-      success: false as const,
-      error: 'Completa el onboarding antes de iniciar el roleplay.',
-      code: 'CONFLICT' as const,
-    };
   }
 
   try {
@@ -467,7 +482,7 @@ const SubmitResponseSchema = z.object({
 export type SubmitResponseInput = z.infer<typeof SubmitResponseSchema>;
 
 export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
-  const auth = await validateAction('interpreter');
+  const auth = await validateAction();
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   const parseResult = SubmitResponseSchema.safeParse(rawInput);
@@ -502,15 +517,7 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
 
     const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
 
-    if (session.interpreterId) {
-      if (session.interpreterId !== auth.profile?.interpreterId) {
-        return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
-      }
-    } else if (session.recruitmentCandidateId) {
-      if (sessionCookie !== session.id) {
-        return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
-      }
-    } else {
+    if (!(await canAccessRoleplaySession(session, sessionCookie))) {
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
@@ -598,15 +605,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       // Candidate sessions are bound to the opaque, server-issued
       // roleplay_session cookie created by the invite/start flow: an
       // authenticated user alone is not sufficient.
-      if (session.interpreterId) {
-        if (session.interpreterId !== auth.profile?.interpreterId) {
-          throw new Error('Unauthorized');
-        }
-      } else if (session.recruitmentCandidateId) {
-        if (sessionCookie !== session.id) {
-          throw new Error('Unauthorized');
-        }
-      } else {
+      if (!(await canAccessRoleplaySession(session, sessionCookie))) {
         throw new Error('Unauthorized');
       }
 
@@ -806,13 +805,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
 
       if (!session) throw new Error('Session not available for submission');
 
-      if (session.interpreterId) {
-        if (session.interpreterId !== auth.profile?.interpreterId) throw new Error('Unauthorized');
-      } else if (session.recruitmentCandidateId) {
-        if (sessionCookie !== session.id) throw new Error('Unauthorized');
-      } else {
-        throw new Error('Unauthorized');
-      }
+      if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
 
       const scenario = await tx.roleplayScenario.findFirst({
         where: { id: input.scenarioId, sessionId: session.id },
