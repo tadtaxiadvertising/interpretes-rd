@@ -96,7 +96,7 @@ describe('GET /api/roleplay/session/[id]', () => {
         durationLimitSec: 120,
         scriptPrompt: null,
         expectedKeys: [],
-        responses: [{ sourceAudioUrl: 'https://x/response.webm', durationSec: 40, selfScore: null, selfNotes: null }],
+        responses: [{ sourceAudioUrl: 'https://x/response.webm', durationSec: 40, selfScore: { fluency: 8 }, selfNotes: null }],
       }],
     };
 
