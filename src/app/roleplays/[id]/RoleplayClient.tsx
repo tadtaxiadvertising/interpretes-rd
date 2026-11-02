@@ -418,6 +418,9 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
               scenarioId={currentScenario.id}
               scenarioTitle={currentScenario.title}
               onComplete={handleSelfAssessmentComplete}
+              initialScores={scenarioResponses[currentScenario.id]?.scores}
+              initialCriticalError={scenarioResponses[currentScenario.id]?.criticalError}
+              initialNotes={scenarioResponses[currentScenario.id]?.notes}
               isLoading={isLoading}
             />
           )}
