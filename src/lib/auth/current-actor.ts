@@ -43,7 +43,26 @@ async function resolveActorFromSupabase(
     resolvedRole = resolveUserRoleByEmail(email, 'interpreter');
   }
 
-  if (resolvedRole !== 'admin' && !interpreterId) {
+  const recruitmentCandidate = await prisma.recruitmentCandidate.findUnique({
+    where: { email },
+    select: {
+      applications: {
+        select: { status: true, hiredInterpreterId: true },
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  const latestApplication = recruitmentCandidate?.applications[0];
+  if (recruitmentCandidate && latestApplication?.status !== 'HIRED') {
+    resolvedRole = 'candidate';
+    interpreterId = null;
+  } else if (latestApplication?.status === 'HIRED') {
+    if (resolvedRole === 'candidate') resolvedRole = 'interpreter';
+    interpreterId = latestApplication.hiredInterpreterId ?? interpreterId;
+  }
+
+  if (resolvedRole !== 'admin' && resolvedRole !== 'candidate' && !interpreterId) {
     const interpreter = await prisma.interpreter.findFirst({
       // Missing profiles may be initialized later, but interpreter ownership
       // is resolved only by exact corporate email, never a user-editable name.
@@ -70,7 +89,7 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
 
     const userId = session.user.id;
     const email = session.user.email?.toLowerCase().trim() || null;
-    const role = normalizeRbacRole((session.user as any).role);
+    let role = normalizeRbacRole((session.user as any).role);
     const sessionInterpreterId = (session.user as any).interpreterId;
 
     if (!email) return null;
@@ -81,14 +100,33 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
     // role/identity; this lookup only locates the user's application profile.
     const profile = await prisma.userProfile.findUnique({
       where: { email },
-      select: { id: true, interpreterId: true },
+      select: { id: true, interpreterId: true, role: true },
     });
+
+    const recruitmentCandidate = await prisma.recruitmentCandidate.findUnique({
+      where: { email },
+      select: {
+        applications: {
+          select: { status: true, hiredInterpreterId: true },
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+    const latestApplication = recruitmentCandidate?.applications[0];
+    if (recruitmentCandidate && latestApplication?.status !== 'HIRED') {
+      role = 'candidate';
+      interpreterId = null;
+    } else if (latestApplication?.status === 'HIRED') {
+      if (role === 'candidate') role = 'interpreter';
+      interpreterId = latestApplication.hiredInterpreterId ?? interpreterId;
+    }
 
     // Preserve the interpreter identity already established by Auth.js when
     // the legacy UserProfile bridge has no matching record. This is the
     // server-created session value, not request input.
     let interpreterId = profile?.interpreterId ?? (typeof sessionInterpreterId === 'number' ? sessionInterpreterId : null);
-    if (role !== 'admin' && !interpreterId) {
+    if (role !== 'admin' && role !== 'candidate' && !interpreterId) {
       const interpreter = await prisma.interpreter.findFirst({
         where: { emailCorporativo: email },
         select: { id: true },
