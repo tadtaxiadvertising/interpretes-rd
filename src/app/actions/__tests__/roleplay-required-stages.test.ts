@@ -15,6 +15,7 @@ const m = vi.hoisted(() => ({
   responseFindFirst: vi.fn(),
   responseUpdate: vi.fn(),
   accessUpdateMany: vi.fn(),
+  advanceApplication: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -50,7 +51,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 vi.mock('@/services/recruitment/transitions', () => ({
-  advanceApplication: vi.fn().mockResolvedValue({ success: true }),
+  advanceApplication: m.advanceApplication,
 }));
 
 import { saveSelfAssessment, submitRoleplaySession } from '@/app/actions/roleplay';
@@ -88,6 +89,7 @@ describe('Roleplay required stages', () => {
     m.responseFindFirst.mockImplementation(async () => m.response);
     m.responseUpdate.mockResolvedValue({ id: 'response-1' });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
+    m.advanceApplication.mockResolvedValue({ success: true });
   });
 
   it('does not allow self-assessment before a confirmed recording exists', async () => {
@@ -177,6 +179,25 @@ describe('Roleplay required stages', () => {
         currentScenarioIndex: 1,
       },
       data: expect.objectContaining({ status: 'SUBMITTED' }),
+    }));
+  });
+  it('advances a candidate application only after every assessment and final submit', async () => {
+    m.session = { ...m.session, currentScenarioIndex: 1 };
+    m.scenarios = [{
+      order: 0,
+      responses: [{ selfScore: { ...SCORES, criticalError: false } }],
+    }];
+
+    const result = await submitRoleplaySession({ sessionId: 'sess-1' });
+
+    expect(result.success).toBe(true);
+    expect(m.sessionUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.accessUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({
+      candidateId: 5,
+      toStatus: 'ROLEPLAY_REVIEW',
+      toStep: 'ROLEPLAY_REVIEW',
+      eventType: 'ROLEPLAY_SUBMITTED',
     }));
   });
 });
