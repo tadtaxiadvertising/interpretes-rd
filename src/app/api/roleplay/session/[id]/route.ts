@@ -115,6 +115,7 @@ function checkSessionAccess(
   // The cookie equality is the binding credential; additionally verify the
   // session is in a state that allows candidate access (STARTED/IN_PROGRESS).
   if (session.recruitmentCandidateId) {
+    if (identity.role !== 'candidate' || identity.candidateId !== session.recruitmentCandidateId) return false;
     if (sessionCookie !== session.id) return false;
     const candidateAccessibleStates = ['STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
     return candidateAccessibleStates.includes(session.status);
