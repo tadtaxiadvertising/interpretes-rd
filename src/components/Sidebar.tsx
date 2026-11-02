@@ -20,7 +20,9 @@ import {
   Briefcase,
   Key,
   Mic2,
-  FileText
+  FileText,
+  CalendarDays,
+  SlidersHorizontal
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserRole } from '@/lib/types';
@@ -36,21 +38,22 @@ interface MenuItem {
   label: string;
   href: string;
   exact?: boolean;
+  section?: string;
 }
 
 export const adminMenu: MenuItem[] = [
-  { icon: LayoutDashboard, label: 'Command Center', href: '/admin', exact: true },
-  { icon: Users, label: 'Interpreter Roster', href: '/interpreters' },
-  { icon: UserPlus, label: 'Recruitment', href: '/recruitment' },
-  { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays' },
-  { icon: FileText, label: 'Acuerdos legales', href: '/admin/legal-agreements' },
-  { icon: Clock, label: 'Production Logs', href: '/production' },
-  { icon: Clock, label: 'Calendario de Metas', href: '/admin/calendar' },
-  { icon: ShieldCheck, label: 'Quality Assurance', href: '/qa' },
-  { icon: DollarSign, label: 'Payroll & Rates', href: '/payroll' },
-  { icon: Clock, label: 'Registro Manual', href: '/admin/production/manual' },
-  { icon: MessageSquare, label: 'Mensajería', href: '/admin/messages' },
-  { icon: Settings, label: 'System Settings', href: '/settings' },
+  { icon: LayoutDashboard, label: 'Command Center', href: '/admin', exact: true, section: 'Resumen' },
+  { icon: Users, label: 'Intérpretes', href: '/interpreters', section: 'Personas' },
+  { icon: UserPlus, label: 'Reclutamiento', href: '/recruitment', section: 'Personas' },
+  { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays', section: 'Operaciones' },
+  { icon: Clock, label: 'Producción', href: '/production', section: 'Operaciones' },
+  { icon: CalendarDays, label: 'Calendario de metas', href: '/admin/calendar', section: 'Operaciones' },
+  { icon: Clock, label: 'Registro manual', href: '/admin/production/manual', section: 'Operaciones' },
+  { icon: ShieldCheck, label: 'Control de calidad (QA)', href: '/qa', section: 'Calidad y cumplimiento' },
+  { icon: FileText, label: 'Acuerdos legales', href: '/admin/legal-agreements', section: 'Calidad y cumplimiento' },
+  { icon: DollarSign, label: 'Nómina y tarifas', href: '/payroll', section: 'Finanzas' },
+  { icon: MessageSquare, label: 'Mensajería', href: '/admin/messages', section: 'Comunicación' },
+  { icon: SlidersHorizontal, label: 'Configuración del sistema', href: '/settings', section: 'Administración' },
 ];
 
 export const interpreterMenu: MenuItem[] = [
@@ -136,13 +139,13 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
       "sticky top-0 h-screen glass border-r border-white/10 z-50 hidden md:flex flex-col transition-all duration-500 ease-in-out",
       isCollapsed ? "w-20" : "w-64"
     )}>
-      <div className={cn("p-6 flex items-center", isCollapsed ? "justify-center" : "justify-between")}>
+      <div className={cn("px-4 py-5 flex items-center border-b border-white/[0.06]", isCollapsed ? "justify-center" : "justify-between")}>
         {!isCollapsed && (
           <div className="animate-in fade-in duration-500">
             <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent truncate">
               {appName || 'Interpretes RD'}
             </h1>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase tracking-widest font-bold">
+            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-[0.18em] font-semibold">
               {appSubtitle || (role === 'admin' ? 'Admin OS' : 'Portal Intérpretes')}
             </p>
           </div>
@@ -158,36 +161,73 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
         </button>
       </div>
 
-      <nav className="mt-6 px-4 space-y-2 flex-1">
-        {menuItems.map((item, i) => {
-          const Icon = item.icon;
-          // Active state is 100% derived from pathname — zero residual state
-          const isActive = i === activeIndex;
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={isCollapsed ? item.label : ""}
-              className={cn(
-                "flex items-center p-3 rounded-xl transition-all duration-300 group relative",
-                isActive
-                  ? "bg-blue-600/20 text-blue-400 glow"
-                  : "text-slate-400 hover:bg-white/5 hover:text-white",
-                isCollapsed ? "justify-center" : "justify-between"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <Icon size={20} className={cn("transition-transform group-hover:scale-110", isActive && "text-blue-400")} />
-                {!isCollapsed && <span className="font-medium animate-in fade-in duration-300 truncate">{item.label}</span>}
-              </div>
-              {!isCollapsed && isActive && <ChevronRight size={16} />}
-              {isCollapsed && isActive && (
-                <div className="absolute left-0 w-1 h-6 bg-blue-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
-              )}
-            </Link>
-          );
-        })}
+      <nav aria-label={role === 'admin' ? 'Menú administrativo' : 'Menú principal'} className="mt-3 px-3 flex-1 overflow-y-auto custom-scrollbar">
+        {role === 'admin' ? (
+          (() => {
+            const sections = Array.from(new Set(menuItems.map((item) => item.section || 'General')));
+            return sections.map((section) => {
+              const sectionItems = menuItems.filter((item) => (item.section || 'General') === section);
+              return (
+                <div key={section} className="mb-5 last:mb-0">
+                  {!isCollapsed && (
+                    <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                      {section}
+                    </p>
+                  )}
+                  <div className="space-y-1">
+                    {sectionItems.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = menuItems.indexOf(item) === activeIndex;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          title={isCollapsed ? item.label : undefined}
+                          aria-current={isActive ? 'page' : undefined}
+                          className={cn(
+                            "flex items-center min-h-11 px-3 rounded-xl transition-all duration-200 group relative",
+                            isActive
+                              ? "bg-blue-500/15 text-blue-300 ring-1 ring-inset ring-blue-400/20 shadow-[inset_3px_0_0_0_rgba(96,165,250,0.95)]"
+                              : "text-slate-400 hover:bg-white/[0.06] hover:text-slate-100",
+                            isCollapsed ? "justify-center" : "gap-3"
+                          )}
+                        >
+                          <Icon size={18} strokeWidth={isActive ? 2.3 : 1.8} className="shrink-0" />
+                          {!isCollapsed && <span className="text-[13px] font-medium truncate">{item.label}</span>}
+                          {!isCollapsed && isActive && <ChevronRight size={15} className="ml-auto shrink-0 text-blue-300" />}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            });
+          })()
+        ) : (
+          <div className="space-y-1">
+            {menuItems.map((item, i) => {
+              const Icon = item.icon;
+              const isActive = i === activeIndex;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  title={isCollapsed ? item.label : undefined}
+                  aria-current={isActive ? 'page' : undefined}
+                  className={cn(
+                    "flex items-center min-h-11 px-3 rounded-xl transition-all duration-200 group relative",
+                    isActive ? "bg-blue-600/20 text-blue-300 ring-1 ring-inset ring-blue-400/20" : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                    isCollapsed ? "justify-center" : "gap-3"
+                  )}
+                >
+                  <Icon size={18} className="shrink-0" />
+                  {!isCollapsed && <span className="text-[13px] font-medium truncate">{item.label}</span>}
+                  {!isCollapsed && isActive && <ChevronRight size={15} className="ml-auto shrink-0" />}
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </nav>
 
       {/* Mi Ranking mini-card (interpreter sidebar only) */}
