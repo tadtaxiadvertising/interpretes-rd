@@ -27,7 +27,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default async function CandidatePortalPage() {
   const identity = await resolveCurrentIdentity();
-  if (!identity) redirect('/login');
+  if (!identity) redirect('/login?next=%2Fcandidate');
   if (identity.role !== 'candidate' || !identity.candidateId) {
     redirect(identity.role === 'admin' ? '/admin' : '/dashboard');
   }
