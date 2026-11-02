@@ -25,7 +25,7 @@ interface Scenario {
   responses?: Array<{
     sourceAudioUrl: string | null;
     durationSec: number | null;
-    selfScore: Record<string, number> | null;
+    selfScore: Record<string, number | boolean> | null;
     selfNotes: string | null;
   }>;
 }
