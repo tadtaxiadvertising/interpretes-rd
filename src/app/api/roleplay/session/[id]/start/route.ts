@@ -26,13 +26,6 @@ export async function POST(
     if (!identity) {
       return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
-    if (identity.role !== 'admin' && identity.eligibility?.needsOnboarding) {
-      return NextResponse.json(
-        { success: false, error: 'Complete onboarding before starting Roleplay.' },
-        { status: 403 }
-      );
-    }
-
     const session = await db.roleplaySession.findUnique({
       where: { id },
       select: {
@@ -50,6 +43,19 @@ export async function POST(
     const sessionCookie = req.cookies.get('roleplay_session')?.value ?? null;
     if (!isSessionOwner(identity, session, sessionCookie)) {
       return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
+    }
+
+    // Candidate selection Roleplay is part of recruitment and must not be
+    // blocked by the operational onboarding required after hiring.
+    if (
+      identity.role !== 'admin' &&
+      identity.role !== 'candidate' &&
+      identity.eligibility?.needsOnboarding
+    ) {
+      return NextResponse.json(
+        { success: false, error: 'Complete interpreter onboarding before starting Roleplay.' },
+        { status: 403 }
+      );
     }
 
     // A stale session cookie must not keep a rejected, withdrawn, hired or
