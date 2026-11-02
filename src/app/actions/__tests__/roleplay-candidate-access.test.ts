@@ -163,7 +163,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
       recordedAudioUrl: 'https://x/a.webm',
-    });
+    } as any);
 
     expect(res.success).toBe(false);
     expect(res.code).toBe('VALIDATION_ERROR');
@@ -344,7 +344,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/already.webm' };
     m.cookie = 'sess-cand';
 
-    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/again.webm' });
+    const res = await confirmRoleplayResponse({ sessionId: 'sess-cand', recordedAudioUrl: 'https://x/again.webm' } as any);
 
     expect(res.success).toBe(false);
     expect(res.code).toBe('VALIDATION_ERROR');
