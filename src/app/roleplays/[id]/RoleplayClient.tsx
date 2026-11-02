@@ -421,8 +421,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
           {pageState === 'recording' && currentScenario && (
             <Recorder
-              scenarioId={currentScenario.id}
-              sessionId={session.id}
               durationLimitSec={currentScenario.durationLimitSec}
               onSave={handleScenarioAudioSave}
               isLoading={isLoading}
