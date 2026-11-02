@@ -46,6 +46,26 @@ describe('legal agreement administration', () => {
     expect(prisma.legalAgreementVersion.updateMany).not.toHaveBeenCalled();
   });
 
+  it('blocks publication when the reviewed draft fingerprint is stale', async () => {
+    (validateAction as any).mockResolvedValue({ user: { email: 'publisher@example.com', userId: 'publisher-2' } });
+    const content = '# Acuerdo';
+    (prisma.legalAgreementVersion.findFirst as any).mockResolvedValue({
+      id: 'draft-1',
+      version: 'v1',
+      title: 'Contrato',
+      content,
+      contentHash: createHash('sha256').update(content, 'utf8').digest('hex'),
+      legalReviewedAt: new Date(),
+      legalReviewedBy: 'reviewer-1',
+      legalReviewHash: 'stale-fingerprint',
+    });
+
+    const result = await publishLegalAgreementDraft('draft-1');
+
+    expect(result).toMatchObject({ success: false, code: 'LEGAL_REVIEW_REQUIRED' });
+    expect(prisma.legalAgreementVersion.updateMany).not.toHaveBeenCalled();
+  });
+
   it('records legal review only for a valid, unchanged draft', async () => {
     (validateAction as any).mockResolvedValue({ user: { email: 'reviewer@example.com', userId: 'reviewer-1' } });
     const content = '# Acuerdo';
