@@ -795,9 +795,11 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
 
       const response = await tx.roleplayResponse.findFirst({
         where: { scenarioId: input.scenarioId },
-        select: { id: true, selfScore: true },
+        select: { id: true, sourceAudioUrl: true, selfScore: true },
       });
-      if (!response) throw new Error('Record your response before completing the self-assessment');
+      if (!response?.sourceAudioUrl) {
+        throw new Error('Confirm your recording before completing the self-assessment');
+      }
       const existingScore = response.selfScore;
       const existingScoreIsComplete = Boolean(
         existingScore &&
@@ -881,13 +883,14 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
         orderBy: { order: 'asc' },
         select: {
           order: true,
-          responses: { select: { selfScore: true } },
+          responses: { select: { sourceAudioUrl: true, selfScore: true } },
         },
       });
       const hasCompleteAssessments = scenarios.length > 0 &&
         scenarios.every((scenario) => {
-          const score = scenario.responses[0]?.selfScore;
-          if (!score || typeof score !== 'object' || Array.isArray(score)) return false;
+          const response = scenario.responses[0];
+          const score = response?.selfScore;
+          if (!response?.sourceAudioUrl || !score || typeof score !== 'object' || Array.isArray(score)) return false;
           return ['protocol', 'interpretation', 'language', 'service', 'technical']
             .every((key) => typeof (score as Record<string, unknown>)[key] === 'number');
         });
