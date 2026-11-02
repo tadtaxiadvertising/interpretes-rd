@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { acceptTerms, saveBankingDetails, completeOnboarding, getOnboardingStatus } from '../onboarding';
 
+vi.mock('next/headers', () => ({
+  headers: vi.fn(async () => new Headers({ 'user-agent': 'vitest' })),
+}));
+
 vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
