@@ -275,47 +275,8 @@ export async function startCandidateRoleplay() {
       };
     }
 
-    // Review explicitly permits a retry, but the state machine requires the
-    // application to return to ROLEPLAY_PENDING before it can become IN_PROGRESS.
-    const retryingFromReview = application?.status === 'ROLEPLAY_REVIEW';
-    if (retryingFromReview) {
-      // Do not move the application back to pending while an evaluator still
-      // owns the previous attempt; that would desynchronize application/session state.
-      const sessionUnderReview = await db.roleplaySession.findFirst({
-        where: {
-          recruitmentCandidateId: candidate.id,
-          status: { notIn: [...RESUME_EXCLUDED_STATUSES] },
-        },
-        orderBy: { createdAt: 'desc' },
-        select: { status: true },
-      });
-      if (sessionUnderReview?.status === 'UNDER_REVIEW') {
-        return {
-          success: false as const,
-          error: 'Tu roleplay todavía está siendo evaluado. Espera el resultado antes de reintentarlo.',
-          code: 'CONFLICT' as const,
-        };
-      }
-
-      const retryTransition = await advanceApplication({
-        applicationId: application.id,
-        fromStatuses: ['ROLEPLAY_REVIEW'],
-        toStatus: 'ROLEPLAY_PENDING',
-        toStep: 'ROLEPLAY',
-        eventType: 'ROLEPLAY_CREATED',
-        actorType: 'candidate',
-        actorId: String(candidate.id),
-        metadata: { retry: true },
-      });
-      if (!retryTransition.success) {
-        return {
-          success: false as const,
-          error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
-          code: 'CONFLICT' as const,
-        };
-      }
-    }
-
+    // Reuse only an actual admin-assigned exercise. Never fabricate a blank
+    // scenario: without a base recording there is no valid selection exercise.
     const previousSession = await db.roleplaySession.findFirst({
       where: {
         recruitmentCandidateId: candidate.id,
@@ -340,10 +301,59 @@ export async function startCandidateRoleplay() {
       },
     });
 
-    // A reviewed attempt is historical evidence. Retrying must create a new
-    // session and copy only its scenario definition, never its responses or QA.
-    // Ordinary page refreshes still resume the current in-flight session.
-    const shouldCreateRetry = retryingFromReview && previousSession &&
+    if (!previousSession) {
+      return {
+        success: false as const,
+        error: 'Todavía no tienes un ejercicio de Roleplay asignado. El equipo de reclutamiento debe asignar los escenarios antes de que puedas comenzar.',
+        code: 'CONFLICT' as const,
+      };
+    }
+
+    if (
+      previousSession.scenarios.length === 0 ||
+      previousSession.scenarios.some((scenario) => !scenario.baseAudioUrl?.trim())
+    ) {
+      return {
+        success: false as const,
+        error: 'Tu ejercicio de Roleplay está incompleto: falta asignar el audio base de uno o más escenarios. Contacta al equipo de reclutamiento.',
+        code: 'CONFLICT' as const,
+      };
+    }
+
+    // A reviewed attempt may be retried only after QA releases it. Validate the
+    // prior assignment first so a failed retry cannot regress the application.
+    const retryingFromReview = application.status === 'ROLEPLAY_REVIEW';
+    if (retryingFromReview && previousSession.status === 'UNDER_REVIEW') {
+      return {
+        success: false as const,
+        error: 'Tu roleplay todavía está siendo evaluado. Espera el resultado antes de reintentarlo.',
+        code: 'CONFLICT' as const,
+      };
+    }
+
+    if (retryingFromReview) {
+      const retryTransition = await advanceApplication({
+        applicationId: application.id,
+        fromStatuses: ['ROLEPLAY_REVIEW'],
+        toStatus: 'ROLEPLAY_PENDING',
+        toStep: 'ROLEPLAY',
+        eventType: 'ROLEPLAY_CREATED',
+        actorType: 'candidate',
+        actorId: String(candidate.id),
+        metadata: { retry: true },
+      });
+      if (!retryTransition.success) {
+        return {
+          success: false as const,
+          error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
+          code: 'CONFLICT' as const,
+        };
+      }
+    }
+
+    // A reviewed attempt is historical evidence. Retrying creates a fresh
+    // session with the same scenario definitions, never prior responses or QA.
+    const shouldCreateRetry = retryingFromReview &&
       ['SUBMITTED', 'EVALUATED', 'PASSED', 'FAILED'].includes(previousSession.status);
 
     let session;
@@ -366,35 +376,9 @@ export async function startCandidateRoleplay() {
         },
         select: { id: true, status: true },
       });
-    } else if (!previousSession) {
-      try {
-        session = await db.roleplaySession.create({
-          data: {
-            recruitmentCandidateId: candidate.id,
-            baseAudioUrl: '',
-            status: 'STARTED',
-          },
-          select: { id: true, status: true },
-        });
-      } catch (error: unknown) {
-        // A partial unique index is the final arbiter for concurrent starts.
-        // Do not continue with the winner's session in this request: the winner
-        // may still be creating its initial scenario/access row. Ask the loser
-        // to refresh, so it cannot race the winner's initialization.
-        if (isUniqueConstraintConflict(error)) {
-          return {
-            success: false as const,
-            error: 'El roleplay acaba de iniciarse en otra solicitud. Actualiza la página para continuar.',
-            code: 'CONFLICT' as const,
-          };
-        }
-        throw error;
-      }
     } else {
       session = { id: previousSession.id, status: previousSession.status };
       if (['DRAFT', 'INVITED'].includes(session.status)) {
-        // Compare-and-set against the state observed above. A concurrent submit
-        // or evaluation must not be overwritten by this resume request.
         const transition = await db.roleplaySession.updateMany({
           where: { id: session.id, status: session.status },
           data: { status: 'STARTED' },
@@ -419,21 +403,6 @@ export async function startCandidateRoleplay() {
           session = { id: session.id, status: 'STARTED' };
         }
       }
-    }
-
-    const scenarioCount = await db.roleplayScenario.count({ where: { sessionId: session.id } });
-    if (scenarioCount === 0) {
-      await db.roleplayScenario.create({
-        data: {
-          sessionId: session.id,
-          order: 0,
-          title: 'Escenario 1',
-          baseAudioUrl: '',
-          durationLimitSec: null,
-          scriptPrompt: null,
-          expectedKeys: [],
-        },
-      });
     }
 
     await db.roleplayAccess.upsert({
