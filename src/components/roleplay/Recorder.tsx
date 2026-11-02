@@ -11,7 +11,6 @@ interface RecorderProps {
   sessionId: string;
   durationLimitSec?: number;
   onSave: (audioUrl: string, durationSec: number, blob: Blob) => Promise<void>;
-  onComplete: () => void;
   isLoading?: boolean;
 }
 
