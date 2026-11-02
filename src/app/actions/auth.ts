@@ -86,7 +86,12 @@ export async function login(formData: FormData) {
   // The selected portal is untrusted client input. Supabase users get admin
   // privileges only from the protected identity allowlist or an existing
   // trusted profile; selecting "admin" in the form never elevates a new account.
-  const effectiveRequestedRole = resolveUserRoleByEmail(email, 'interpreter');
+  const candidateForLogin = await prisma.recruitmentCandidate.findUnique({
+    where: { email },
+    select: { applications: { select: { status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
+  });
+  const hasActiveApplication = !!candidateForLogin && candidateForLogin.applications[0]?.status !== 'HIRED';
+  const effectiveRequestedRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : 'interpreter');
 
   try {
     const validated = AuthSchema.parse({ email, password, role: effectiveRequestedRole });
@@ -120,7 +125,7 @@ export async function login(formData: FormData) {
         return { success: false, error: 'Credenciales inválidas o error de autenticación.' };
       }
 
-      const localRole = resolveUserRoleByEmail(email, normalizeRbacRole(localUser.role));
+      const localRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : normalizeRbacRole(localUser.role));
       if (normalizeRbacRole(localUser.role) !== localRole) {
         await prisma.rbacUser.update({
           where: { id: localUser.id },
@@ -205,12 +210,12 @@ export async function login(formData: FormData) {
       });
     }
 
-    const finalRole = resolveUserRoleByEmail(validated.email, profile?.role ?? effectiveRequestedRole);
+    const finalRole = resolveUserRoleByEmail(validated.email, hasActiveApplication ? 'candidate' : (profile?.role ?? effectiveRequestedRole));
 
     if (profile?.role !== finalRole) {
       await prisma.userProfile.update({
         where: { id: data.user.id },
-        data: { role: finalRole, interpreterId: finalRole === 'admin' ? null : undefined },
+        data: { role: finalRole, interpreterId: finalRole === 'admin' || finalRole === 'candidate' ? null : undefined },
       });
     }
     const cookieStore3 = await cookies();
@@ -327,7 +332,7 @@ export async function register(formData: FormData) {
         email: validated.email,
         displayName: name,
         role: resolvedRole,
-        interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
+        interpreterId: resolvedRole === 'admin' || resolvedRole === 'candidate' ? null : (interpreter?.id ?? null),
       },
       create: {
         id: userId,
