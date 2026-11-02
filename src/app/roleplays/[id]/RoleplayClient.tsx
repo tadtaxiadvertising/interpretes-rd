@@ -73,7 +73,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   const [session, setSession] = useState<SessionData | null>(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [baseAudioVolume, setBaseAudioVolume] = useState(1);
-  const [isBasePlaying, setIsBasePlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [completedScenarios, setCompletedScenarios] = useState<number[]>([]);
@@ -161,10 +160,6 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     }
     fetchSession();
   }, [sessionId]);
-
-  const handlePlayBase = useCallback(() => {
-    setIsBasePlaying(!isBasePlaying);
-  }, [isBasePlaying]);
 
   const handleVolumeChange = useCallback((vol: number) => {
     setBaseAudioVolume(vol);
@@ -436,9 +431,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
               scenario={currentScenario}
               currentIndex={currentScenarioIndex}
               totalScenarios={session.scenarios.length}
-              onPlayBase={handlePlayBase}
               onNext={handleStartRecording}
-              isBasePlaying={isBasePlaying}
               baseVolume={baseAudioVolume}
               onVolumeChange={handleVolumeChange}
               isLoading={isLoading}
