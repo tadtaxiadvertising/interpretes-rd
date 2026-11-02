@@ -265,13 +265,11 @@ export async function startCandidateRoleplay() {
       select: { id: true, status: true },
     });
     const startableApplicationStatuses: readonly string[] = [
-      'APPLIED',
-      'INDUCTION_PENDING',
       'ROLEPLAY_PENDING',
       'ROLEPLAY_IN_PROGRESS',
       'ROLEPLAY_REVIEW',
     ];
-    if (application && !startableApplicationStatuses.includes(application.status)) {
+    if (!application || !startableApplicationStatuses.includes(application.status)) {
       return {
         success: false as const,
         error: 'Tu postulación no está habilitada para iniciar un roleplay en esta etapa.',
