@@ -147,7 +147,14 @@ export async function approveLegalAgreementDraft(id: string) {
 
     const reviewer = auth.user.userId;
     const result = await prisma.legalAgreementVersion.updateMany({
-      where: { id, agreementKey: AGREEMENT_KEY, status: 'DRAFT', contentHash: digest },
+      where: {
+        id,
+        agreementKey: AGREEMENT_KEY,
+        status: 'DRAFT',
+        version: draft.version,
+        title: draft.title,
+        contentHash: digest,
+      },
       data: {
         legalReviewedAt: new Date(),
         legalReviewedBy: reviewer,
