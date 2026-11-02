@@ -274,7 +274,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).not.toHaveBeenCalled();
   });
 
-  it('consumes the candidate invitation when the final scenario is submitted', async () => {
+  it('does not consume the invitation when final audio is confirmed before self-assessment', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(1);
@@ -287,12 +287,8 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     });
 
     expect(res.success).toBe(true);
-    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
-    expect(m.accessUpdateMany).toHaveBeenCalledTimes(1);
-    expect(m.accessUpdateMany.mock.calls[0][0]).toEqual({
-      where: { sessionId: 'sess-cand', usedAt: null },
-      data: { usedAt: expect.any(Date) },
-    });
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
   it('does not consume the invitation on a non-final scenario', async () => {
@@ -308,7 +304,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     });
 
     expect(res.success).toBe(true);
-    expect(m.update.mock.calls[0][0].data.status).toBeUndefined();
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -325,7 +321,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     });
 
     expect(res.success).toBe(true);
-    expect(m.update.mock.calls[0][0].data.status).toBe('SUBMITTED');
+    expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -340,12 +336,11 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
-  it('advances the application to ROLEPLAY_REVIEW after the final candidate submit', async () => {
+  it('does not advance the application until the final self-assessment and explicit submit', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
     m.scenarioCount.mockResolvedValue(1);
     m.responseCount.mockResolvedValue(1);
-    m.appFindUnique.mockResolvedValue({ id: 'app-5', status: 'ROLEPLAY_IN_PROGRESS', version: 3 });
 
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
@@ -354,23 +349,9 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     });
 
     expect(res.success).toBe(true);
-    expect(m.appFindUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { candidateId: 5 } })
-    );
-    expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
-    expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
-      where: { id: 'app-5', status: 'ROLEPLAY_IN_PROGRESS', version: 3 },
-      data: expect.objectContaining({ status: 'ROLEPLAY_REVIEW', currentStep: 'ROLEPLAY_REVIEW' }),
-    });
-    expect(m.eventCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          applicationId: 'app-5',
-          eventType: 'ROLEPLAY_SUBMITTED',
-          toStatus: 'ROLEPLAY_REVIEW',
-        }),
-      })
-    );
+    expect(m.appFindUnique).not.toHaveBeenCalled();
+    expect(m.appUpdateMany).not.toHaveBeenCalled();
+    expect(m.eventCreate).not.toHaveBeenCalled();
   });
 
   it('does not advance the application on a non-final scenario submit', async () => {
@@ -441,7 +422,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     });
 
     expect(res.success).toBe(true);
-    expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.appUpdateMany).not.toHaveBeenCalled();
     expect(m.eventCreate).not.toHaveBeenCalled();
   });
 });
