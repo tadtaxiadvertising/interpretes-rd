@@ -107,19 +107,16 @@ function checkSessionAccess(
   if (!identity) return false;
   if (identity.role === 'admin') return true;
 
-  // Interpreter sessions are strictly bound to the resolved interpreter id.
-  if (session.interpreterId && identity.interpreterId === session.interpreterId) return true;
-
-  // Candidate sessions require the opaque server-issued session cookie created
-  // by the invite/start flow. An authenticated user alone is not sufficient.
-  // The cookie equality is the binding credential; additionally verify the
-  // session is in a state that allows candidate access (STARTED/IN_PROGRESS).
-  if (session.recruitmentCandidateId) {
+  // Recruitment sessions belong exclusively to their candidate, even when
+  // legacy rows still carry a provisional interpreterId.
+  if (session.recruitmentCandidateId !== null) {
     if (identity.role !== 'candidate' || identity.candidateId !== session.recruitmentCandidateId) return false;
     if (sessionCookie !== session.id) return false;
-    const candidateAccessibleStates = ['STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
+    const candidateAccessibleStates = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
     return candidateAccessibleStates.includes(session.status);
   }
 
-  return false;
+  return session.interpreterId !== null
+    && identity.role === 'interpreter'
+    && identity.interpreterId === session.interpreterId;
 }
