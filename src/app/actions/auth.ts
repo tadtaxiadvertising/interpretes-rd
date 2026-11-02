@@ -17,7 +17,7 @@ const prisma = prismaClient;
 const AuthSchema = z.object({
   email: z.string().email().transform(val => val.toLowerCase().trim()),
   password: z.string().min(6),
-  role: z.enum(['admin', 'interpreter']).default('interpreter'),
+  role: z.enum(['admin', 'candidate', 'interpreter']).default('interpreter'),
 });
 
 function normalizeRbacRole(role: string | null | undefined): UserRole {
@@ -50,7 +50,7 @@ async function syncUserProfileFromAuth(params: {
 }) {
   const resolvedRole = resolveUserRoleByEmail(params.email, params.role);
 
-  const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
+  const interpreter = resolvedRole === 'admin' || resolvedRole === 'candidate' ? null : await prisma.interpreter.findFirst({
     // Link to an interpreter only by the authoritative corporate email.
     // A matching display name is not proof of identity and can expose another
     // interpreter's profile or production data when names are similar.
@@ -64,14 +64,14 @@ async function syncUserProfileFromAuth(params: {
       email: params.email,
       displayName: params.displayName,
       role: resolvedRole,
-      interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
+      interpreterId: resolvedRole === 'admin' || resolvedRole === 'candidate' ? null : (interpreter?.id ?? null),
     },
     create: {
       id: params.userId,
       email: params.email,
       displayName: params.displayName,
       role: resolvedRole,
-      interpreterId: resolvedRole === 'admin' ? null : (interpreter?.id ?? null),
+      interpreterId: resolvedRole === 'admin' || resolvedRole === 'candidate' ? null : (interpreter?.id ?? null),
     },
   });
 }
@@ -241,9 +241,14 @@ export async function register(formData: FormData) {
   const email = ((formData.get('email') as string) || '').toLowerCase().trim();
   const password = (formData.get('password') as string) || '';
   const name = (formData.get('name') as string) || email.split('@')[0];
-  // Role is never taken from arbitrary client input. Registrations default to
-  // interpreter, except protected owner identities that must stay admin.
-  const role: UserRole = resolveUserRoleByEmail(email, 'interpreter');
+  // The account role is derived from the persisted application, never from
+  // arbitrary client input. An unapproved applicant receives candidate access.
+  const existingCandidate = await prisma.recruitmentCandidate.findUnique({
+    where: { email },
+    select: { applications: { select: { status: true }, take: 1, orderBy: { createdAt: 'desc' } } },
+  });
+  const hasActiveApplication = !!existingCandidate && existingCandidate.applications[0]?.status !== 'HIRED';
+  const role: UserRole = resolveUserRoleByEmail(email, hasActiveApplication ? 'candidate' : 'interpreter');
 
   try {
     const validated = AuthSchema.parse({ email, password, role });
@@ -310,7 +315,7 @@ export async function register(formData: FormData) {
 
     const resolvedRole = resolveUserRoleByEmail(validated.email, validated.role);
 
-    const interpreter = resolvedRole === 'admin' ? null : await prisma.interpreter.findFirst({
+    const interpreter = resolvedRole === 'admin' || resolvedRole === 'candidate' ? null : await prisma.interpreter.findFirst({
       // Do not associate a registration with an interpreter by name alone.
       where: { emailCorporativo: validated.email },
       select: { id: true },
