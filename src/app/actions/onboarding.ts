@@ -28,8 +28,9 @@ const BankingDetailsSchema = z.object({
 });
 
 /**
- * Accept legal terms — records the signatureDate on the user's profile.
- * GUARD: Rejects if onboarding is already complete (canonical state).
+ * Accept the currently published legal terms.
+ * Re-acceptance remains available after onboarding completion so existing
+ * interpreters can consent to newly published agreement versions.
  */
 export async function acceptTerms(expectedAgreementId: string): Promise<ActionResult> {
   const auth = await validateAction();
