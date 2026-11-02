@@ -170,6 +170,26 @@ describe('Roleplay required stages', () => {
     expect(result.error).toContain('already been submitted');
     expect(m.responseUpdate).not.toHaveBeenCalled();
   });
+  it('repairs legacy scores that do not match the current five-dimension rubric', async () => {
+    m.session = {
+      ...m.session,
+      status: 'SUBMITTED',
+      currentScenarioIndex: 1,
+      evaluatorId: null,
+      qaScoreId: null,
+    };
+    m.response = { id: 'response-1', selfScore: { fluency: 8, pronunciation: 7 } };
+
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(m.responseUpdate).toHaveBeenCalledTimes(1);
+  });
 
   it('rejects final submission while any scenario lacks a self-assessment', async () => {
     m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
