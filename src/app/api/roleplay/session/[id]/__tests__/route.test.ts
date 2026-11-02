@@ -102,5 +102,13 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(403);
   });
+  it('allows the candidate owner to read a dual-linked legacy session', async () => {
+    m.session = { ...candidateSession('STARTED'), interpreterId: 7 };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(200);
+  });
+
 
 });
