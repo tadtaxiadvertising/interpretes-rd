@@ -22,11 +22,17 @@ export async function recordReconciliationReview(formData: FormData) {
     if (!report) return { success: false, error: 'Reporte inexistente.' };
     const totals = await prisma.productionLog.aggregate({
       where: { accountId: report.accountId, date: { gte: report.periodStart, lte: report.periodEnd } },
-      _sum: { interpretedMinutes: true },
+      _sum: { interpretedMinutes: true, callsAttended: true },
+      _count: { _all: true },
     });
     const internalMinutes = totals._sum.interpretedMinutes ?? 0;
-    if (decision === 'MATCHED' && internalMinutes !== report.reportedMinutes) {
-      return { success: false, error: 'Los minutos difieren. Selecciona otro estado y documenta la diferencia.' };
+    const internalCalls = totals._sum.callsAttended ?? 0;
+    if (decision === 'MATCHED' && totals._count._all === 0) {
+      return { success: false, error: 'No hay registros internos. No se puede confirmar coincidencia.' };
+    }
+    if (decision === 'MATCHED' && (internalMinutes !== report.reportedMinutes ||
+      (report.reportedCalls !== null && internalCalls !== report.reportedCalls))) {
+      return { success: false, error: 'Los minutos o llamadas difieren. Selecciona otro estado y documenta la diferencia.' };
     }
     await prisma.companyReportReview.create({
       data: { reportId, reviewerId: profile.id, decision, note, internalMinutes, externalMinutes: report.reportedMinutes },
