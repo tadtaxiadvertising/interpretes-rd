@@ -76,6 +76,29 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(body.data.id).toBe('sess-1');
   });
 
+  it('does not expose evaluator expected keys to a candidate', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario 1',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120,
+        scriptPrompt: 'Candidate-facing prompt',
+        expectedKeys: ['CONFIDENTIAL QA ANSWER'],
+        responses: [],
+      }],
+    };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
+    expect(JSON.stringify(body)).not.toContain('CONFIDENTIAL QA ANSWER');
+  });
+
   it('lets the bound candidate reload a submitted attempt (read-only)', async () => {
     m.session = candidateSession('SUBMITTED');
 
@@ -85,6 +108,7 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.data.status).toBe('SUBMITTED');
   });
+
   it('offers recovery only for a submitted attempt with missing self-assessment', async () => {
     m.session = {
       ...candidateSession('SUBMITTED'),
@@ -105,8 +129,8 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.canCompleteSelfAssessment).toBe(true);
+    expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
   });
-
 
   it('rejects an interpreter who does not own the session', async () => {
     m.session = { ...candidateSession('STARTED'), recruitmentCandidateId: null, interpreterId: 7 };
@@ -116,6 +140,7 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(403);
   });
+
   it('does not let a legacy interpreterId override candidate ownership', async () => {
     m.session = { ...candidateSession('STARTED'), interpreterId: 7 };
     m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
@@ -124,6 +149,7 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(403);
   });
+
   it('allows the candidate owner to read a dual-linked legacy session', async () => {
     m.session = { ...candidateSession('STARTED'), interpreterId: 7 };
 
@@ -131,6 +157,4 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
   });
-
-
 });
