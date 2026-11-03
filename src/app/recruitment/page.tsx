@@ -31,6 +31,9 @@ interface Candidate {
   email: string;
   telefono: string | null;
   pais: string | null;
+  englishLevel: string | null;
+  speedtestMbps: number | null;
+  notas: string | null;
   resultRoleplay: number | null;
   applicationStatus: string | null;
 }
