@@ -28,7 +28,8 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
     let efsetLink = formData.get('efsetLink');
     let cvUrl = formData.get('cvUrl');
 
-    if (typeof name !== 'string') throw new Error('El nombre completo es obligatorio.');
+    try {
+      if (typeof name !== 'string') throw new Error('El nombre completo es obligatorio.');
     if (typeof email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       throw new Error('El correo electrónico no es válido.');
     }
@@ -55,7 +56,6 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
       throw new Error('El enlace del CV no es válido.');
     }
 
-    try {
       const result = await submitApplicationAction({
         name: name.trim(),
         email: email.trim().toLowerCase(),
