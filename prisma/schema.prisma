@@ -129,12 +129,31 @@ model Account {
   interpreterRates InterpreterAccountRate[]
   assignments      InterpreterAccountAssignment[]
   reports          CompanyProductionReport[]
+  platforms        AccountPlatform[]
   productionLogs   ProductionLog[]
   companyId        Int?                     @map("company_id")
   company          Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@map("accounts")
+  @@schema("public")
+}
+
+model AccountPlatform {
+  id           Int       @id @default(autoincrement())
+  accountId    Int       @map("account_id")
+  name         String
+  loginUrl     String?   @map("login_url")
+  usernameHint String?   @map("username_hint")
+  secretRef    String?   @map("secret_ref")
+  notes        String?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  account      Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, name])
+  @@map("account_platforms")
   @@schema("public")
 }
 
