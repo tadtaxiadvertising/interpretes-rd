@@ -1,0 +1,57 @@
+{
+  "schema_version": "1.0",
+  "id": "medical-interpreting-birth-consent",
+  "title": "Consentimiento informado para el parto",
+  "title_en": "Birth Consent",
+  "category": "medical",
+  "specialty": "obstetrics",
+  "language_pair": [
+    "en",
+    "es"
+  ],
+  "interpretation_mode": "consecutive",
+  "status": "DRAFT_REVIEW_REQUIRED",
+  "scenario_count": 19,
+  "original_duration_seconds": 317.328,
+  "source": {
+    "original_drive_file_id": "1AcWe9s7dz_56TaUY23sy9eOwQR_EDM64",
+    "processed_archive_drive_file_id": "1uSsgXlobNQkAwJz2zJP10dH5riwJ7Pdo",
+    "processed_archive_url": "https://drive.google.com/file/d/1uSsgXlobNQkAwJz2zJP10dH5riwJ7Pdo/view",
+    "original_sha256": "e1318de6cc11425f0ee96b6a468cd4ac269233ffe686187a1934c425ab530d54"
+  },
+  "instructions_es": "Escucha cada intervención y realiza una interpretación consecutiva fiel, completa y neutral. Solicita aclaración cuando sea necesario.",
+  "rubric": {
+    "accuracy": 40,
+    "completeness": 25,
+    "medical_terminology": 20,
+    "professionalism": 15
+  },
+  "publication_blockers": [
+    "Validar manualmente los 19 cortes y la continuidad clínica",
+    "Identificar idioma y hablante de cada intervención",
+    "Publicar archivos individuales en almacenamiento reproducible autorizado",
+    "Completar expected_keys clínicos y verificar consentimiento de uso"
+  ],
+  "integration_notes": "Este registro describe un catálogo, NO una sesión asignada. No crear RoleplaySession sin candidate/interpreter target ni utilizar el enlace ZIP como baseAudioUrl.",
+  "scenario_files": [
+    "segments/birth-consent-001.mp3",
+    "segments/birth-consent-002.mp3",
+    "segments/birth-consent-003.mp3",
+    "segments/birth-consent-004.mp3",
+    "segments/birth-consent-005.mp3",
+    "segments/birth-consent-006.mp3",
+    "segments/birth-consent-007.mp3",
+    "segments/birth-consent-008.mp3",
+    "segments/birth-consent-009.mp3",
+    "segments/birth-consent-010.mp3",
+    "segments/birth-consent-011.mp3",
+    "segments/birth-consent-012.mp3",
+    "segments/birth-consent-013.mp3",
+    "segments/birth-consent-014.mp3",
+    "segments/birth-consent-015.mp3",
+    "segments/birth-consent-016.mp3",
+    "segments/birth-consent-017.mp3",
+    "segments/birth-consent-018.mp3",
+    "segments/birth-consent-019.mp3"
+  ]
+}
