@@ -130,6 +130,14 @@ export async function createSignedUploadUrl(
 }
 
 export async function confirmUpload(path: string): Promise<string> {
+  // Signing a URL alone does not prove that the upload exists. Verify the
+  // stored object before marking a session as ready for playback.
+  const { data: objectInfo, error: infoError } = await getSupabaseAdmin().storage
+    .from(BUCKET)
+    .info(path);
+  if (infoError || !objectInfo) {
+    throw new Error('Roleplay base audio was not uploaded or is inaccessible');
+  }
   const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days - for base audio / admin review
