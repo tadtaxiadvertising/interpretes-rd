@@ -5,13 +5,24 @@ import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
+const rejectCredentialLikeText = (value: string) => !/(?:password|passwd|pwd|api[_ -]?key|access[_ -]?token|secret|bearer|authorization)\s*[:=]/i.test(value);
+
+const safeHttpsUrl = z.string().refine(value => {
+  if (!value) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password && !url.hash &&
+      ![...url.searchParams.keys()].some(key => /(?:token|secret|password|passwd|pwd|api.?key|auth|credential)/i.test(key));
+  } catch { return false; }
+}, 'URL HTTPS sin credenciales ni tokens requerida');
+
 const schema = z.object({
   accountId: z.coerce.number().int().positive(),
   name: z.string().trim().min(2).max(120),
-  loginUrl: z.union([z.literal(''), z.url().refine(v => v.startsWith('https://'), 'HTTPS requerido')]),
-  usernameHint: z.string().trim().max(150),
+  loginUrl: safeHttpsUrl,
+  usernameHint: z.string().trim().max(150).refine(rejectCredentialLikeText),
   secretRef: z.union([z.literal(''), z.string().trim().regex(/^vault:\/\/[a-zA-Z0-9/_-]{3,200}$/)]),
-  notes: z.string().trim().max(500),
+  notes: z.string().trim().max(500).refine(rejectCredentialLikeText),
 });
 
 export async function createAccountPlatform(formData: FormData) {
