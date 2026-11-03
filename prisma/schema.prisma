@@ -138,6 +138,22 @@ model Account {
   @@schema("public")
 }
 
+model CompanyReportReview {
+  id             Int       @id @default(autoincrement())
+  reportId       Int       @map("report_id")
+  reviewerId     String    @map("reviewer_id")
+  decision       String
+  note           String
+  internalMinutes Int     @map("internal_minutes")
+  externalMinutes Int     @map("external_minutes")
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  report         CompanyProductionReport @relation(fields: [reportId], references: [id], onDelete: Restrict)
+
+  @@index([reportId, createdAt])
+  @@map("company_report_reviews")
+  @@schema("public")
+}
+
 model CompanyProductionReport {
   id             Int       @id @default(autoincrement())
   accountId      Int       @map("account_id")
@@ -150,6 +166,7 @@ model CompanyProductionReport {
   notes           String?
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   account         Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  reviews         CompanyReportReview[]
 
   @@unique([accountId, sourceChecksum])
   @@index([accountId, periodStart, periodEnd])
