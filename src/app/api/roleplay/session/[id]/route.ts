@@ -46,7 +46,9 @@ export async function GET(
             baseAudioUrl: true,
             durationLimitSec: true,
             scriptPrompt: true,
-            expectedKeys: true,
+            // Expected keys are evaluator-only material. Do not even retrieve
+            // them for candidates/interpreters, not merely hide them in the UI.
+            expectedKeys: identity.role === 'admin',
             responses: {
               select: {
                 sourceAudioUrl: true,
@@ -81,6 +83,16 @@ export async function GET(
         recordedAudioUrl = null;
         scenarios = scenarios.map((s) => ({ ...s, baseAudioUrl: '' }));
       }
+    }
+
+    // Explicitly whitelist the candidate-facing scenario payload as defense in
+    // depth for mocks, legacy query adapters, and future changes to the select.
+    if (identity.role !== 'admin') {
+      scenarios = scenarios.map((scenario) => {
+        const safeScenario = { ...scenario };
+        Reflect.deleteProperty(safeScenario, 'expectedKeys');
+        return safeScenario;
+      });
     }
 
     return NextResponse.json(
