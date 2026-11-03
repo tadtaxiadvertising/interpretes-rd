@@ -99,6 +99,29 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(JSON.stringify(body)).not.toContain('CONFIDENTIAL QA ANSWER');
   });
 
+  it('keeps evaluator expected keys available to administrators', async () => {
+    m.identity = { role: 'admin', interpreterId: null, candidateId: null };
+    m.session = {
+      ...candidateSession('STARTED'),
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario 1',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120,
+        scriptPrompt: 'Candidate-facing prompt',
+        expectedKeys: ['ADMIN QA KEY'],
+        responses: [],
+      }],
+    };
+
+    const res = await GET(makeRequest(), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.scenarios[0].expectedKeys).toEqual(['ADMIN QA KEY']);
+  });
+
   it('lets the bound candidate reload a submitted attempt (read-only)', async () => {
     m.session = candidateSession('SUBMITTED');
 
