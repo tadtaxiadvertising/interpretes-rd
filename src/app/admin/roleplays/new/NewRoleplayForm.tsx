@@ -27,15 +27,16 @@ interface Scenario {
 interface NewRoleplayFormProps {
   interpreters: Participant[];
   candidates: Participant[];
+  initialCandidateId?: number;
 }
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-export default function NewRoleplayForm({ interpreters, candidates }: NewRoleplayFormProps) {
-  const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>('interpreter');
-  const [selectedParticipantId, setSelectedParticipantId] = useState<string>('');
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId }: NewRoleplayFormProps) {
+  const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [scenarios, setScenarios] = useState<Scenario[]>([
     { id: generateId(), title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);

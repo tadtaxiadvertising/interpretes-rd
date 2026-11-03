@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic2, Loader2, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
 import NewRoleplayForm from './NewRoleplayForm';
@@ -21,10 +21,12 @@ async function getInterpreters() {
   }
 }
 
-async function getCandidates() {
+async function getCandidates(candidateId?: number) {
   try {
     return await prisma.recruitmentCandidate.findMany({
-      where: { applications: { some: { status: 'APPLIED' } } },
+      where: candidateId
+        ? { OR: [{ applications: { some: { status: 'APPLIED' } } }, { id: candidateId }] }
+        : { applications: { some: { status: 'APPLIED' } } },
       select: { id: true, name: true, email: true },
       orderBy: { fechaPostulacion: 'desc' },
       take: 500,
@@ -34,9 +36,20 @@ async function getCandidates() {
   }
 }
 
-export default async function NewRoleplayPage() {
-  const [interpreters, candidates] = await Promise.all([getInterpreters(), getCandidates()]);
-  
+export default async function NewRoleplayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ candidateId?: string }>;
+}) {
+  const { candidateId } = await searchParams;
+  const parsedCandidateId = candidateId && /^\d+$/.test(candidateId) ? Number(candidateId) : undefined;
+  const [interpreters, candidates] = await Promise.all([
+    getInterpreters(),
+    getCandidates(parsedCandidateId),
+  ]);
+  const initialCandidateId = parsedCandidateId && candidates.some((candidate) => candidate.id === parsedCandidateId)
+    ? parsedCandidateId
+    : undefined;
   return (
     <div className="min-h-screen bg-slate-950 py-12 px-4">
       <div className="max-w-3xl mx-auto">
@@ -53,7 +66,7 @@ export default async function NewRoleplayPage() {
           </div>
         </div>
 
-        <NewRoleplayForm interpreters={interpreters} candidates={candidates} />
+        <NewRoleplayForm interpreters={interpreters} candidates={candidates} initialCandidateId={initialCandidateId} />
       </div>
     </div>
   );

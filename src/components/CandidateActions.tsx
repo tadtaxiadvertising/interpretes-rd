@@ -10,14 +10,11 @@ import {
   AlertTriangle,
   Mail,
   Mic2,
-  Link2,
-  Copy,
   CheckCircle2
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { deleteCandidate, hireCandidate, markApplicationReadyAction } from '@/app/actions/recruitment';
-import { createRoleplaySession } from '@/app/actions/roleplay';
 
 interface CandidateActionsProps {
   candidate: {
@@ -36,9 +33,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isHiring, setIsHiring] = useState(false);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
-  const [isCreatingRoleplay, setIsCreatingRoleplay] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showRoleplayCreated, setShowRoleplayCreated] = useState<{ link: string; candidateName: string } | null>(null);
   const router = useRouter();
 
   const applicationStatus = candidate.applicationStatus ?? null;
@@ -50,40 +45,9 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   // not offer hiring before the application has been marked ready.
   const canHire = applicationStatus !== null && APPLICATION_READY_STATES.includes(applicationStatus);
 
-  const handleCreateRoleplay = async () => {
-    setIsCreatingRoleplay(true);
+  const handleCreateRoleplay = () => {
     setIsOpen(false);
-    try {
-      const result = await createRoleplaySession({
-        recruitmentCandidateId: candidate.id,
-        baseAudioMimeType: 'audio/webm',
-        baseAudioSize: 0,
-      });
-      
-      if (!result.success) throw new Error(result.error || 'Failed to create roleplay');
-      
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const inviteLink = result.data?.inviteToken 
-        ? `${baseUrl}/roleplays/invite/${result.data.inviteToken}`
-        : `${baseUrl}/roleplays/${result.data?.sessionId}`;
-      
-      setShowRoleplayCreated({ link: inviteLink, candidateName: candidate.name });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(error);
-      alert(`Error creating roleplay: ${message}`);
-    } finally {
-      setIsCreatingRoleplay(false);
-    }
-  };
-
-  const handleCopyLink = async (link: string) => {
-    try {
-      await navigator.clipboard.writeText(link);
-      alert('Link copied to clipboard!');
-    } catch {
-      alert('Failed to copy link');
-    }
+    router.push(`/admin/roleplays/new?candidateId=${candidate.id}`);
   };
 
   const handleDelete = async () => {
@@ -168,11 +132,10 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
               Send Email
             </button>
             <button 
-              disabled={isCreatingRoleplay}
-              className="w-full px-4 py-2 text-left text-sm text-blue-400 hover:bg-blue-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
+              className="w-full px-4 py-2 text-left text-sm text-blue-400 hover:bg-blue-500/10 flex items-center gap-3 transition-colors"
               onClick={handleCreateRoleplay}
             >
-              {isCreatingRoleplay ? <Loader2 size={16} className="animate-spin" /> : <Mic2 size={16} />}
+              <Mic2 size={16} />
               Create Roleplay
             </button>
             {canMarkReady && (
@@ -208,42 +171,6 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             </button>
           </div>
         </>
-      )}
-
-      {/* Roleplay Created Modal */}
-      {showRoleplayCreated && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowRoleplayCreated(null)} />
-          <div className="relative bg-[#1a1a24] border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-            <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center text-green-500 mb-6">
-              <Mic2 size={32} />
-            </div>
-            <h3 className="text-xl font-bold text-white mb-2">Roleplay Created!</h3>
-            <p className="text-gray-400 text-sm mb-6 leading-relaxed">
-              Roleplay created for <span className="text-white font-bold">{showRoleplayCreated.candidateName}</span>. Share the link below:
-            </p>
-            <div className="flex gap-2 mb-4">
-              <input 
-                type="text" 
-                value={showRoleplayCreated.link} 
-                readOnly
-                className="flex-1 bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white text-sm"
-              />
-              <button 
-                onClick={() => handleCopyLink(showRoleplayCreated.link)}
-                className="px-4 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
-              >
-                <Copy size={18} />
-              </button>
-            </div>
-            <button 
-              onClick={() => setShowRoleplayCreated(null)}
-              className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl font-bold transition-all"
-            >
-              Close
-            </button>
-          </div>
-        </div>
       )}
 
       {/* Delete Confirmation Modal */}
