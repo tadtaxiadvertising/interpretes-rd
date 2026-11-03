@@ -76,7 +76,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
       data: {
         interpreterId: input.interpreterId ?? null,
         recruitmentCandidateId: input.recruitmentCandidateId ?? null,
-        baseAudioUrl: getBaseAudioPath('', validation.extension), // placeholder, will update after upload
+        baseAudioUrl: getBaseAudioPath(`pending-${randomBytes(16).toString('hex')}`, validation.extension), // temporary safe path; replaced with session ID
         status: 'DRAFT',
       },
       select: { id: true },
