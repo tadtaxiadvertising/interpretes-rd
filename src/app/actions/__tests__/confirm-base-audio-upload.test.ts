@@ -29,7 +29,7 @@ import { confirmBaseAudioUpload } from '@/app/actions/roleplay';
 describe('confirmBaseAudioUpload', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.findUnique.mockResolvedValue({ id: 'session-123', baseAudioUrl: 'base/session-123.webm' });
+    m.findUnique.mockResolvedValue({ id: 'session-123', baseAudioUrl: 'base/session-123.webm', status: 'DRAFT' });
     m.updateMany.mockResolvedValue({ count: 1 });
     m.confirmUpload.mockResolvedValue('signed-url');
   });
@@ -51,9 +51,17 @@ describe('confirmBaseAudioUpload', () => {
     expect(result).toMatchObject({ success: true, data: { baseAudioUrl: 'signed-url' } });
     expect(m.confirmUpload).toHaveBeenCalledWith('base/session-123.webm');
     expect(m.updateMany).toHaveBeenCalledWith({
-      where: { id: 'session-123', baseAudioUrl: 'base/session-123.webm' },
+      where: { id: 'session-123', baseAudioUrl: 'base/session-123.webm', status: 'DRAFT' },
       data: { baseAudioUrl: 'signed-url' },
     });
+  });
+
+  it('rejects confirmation after the session has started', async () => {
+    m.findUnique.mockResolvedValue({ id: 'session-123', baseAudioUrl: 'base/session-123.webm', status: 'STARTED' });
+    const result = await confirmBaseAudioUpload('session-123', 'base/session-123.webm');
+    expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+    expect(m.confirmUpload).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects if the path changed during confirmation', async () => {
