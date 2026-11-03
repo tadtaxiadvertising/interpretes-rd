@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { createHash } from 'node:crypto';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
+import { validateCompanyCsvHeaders } from '@/lib/company-csv-validation';
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_ROWS = 500;
@@ -32,11 +33,7 @@ export async function importCompanyReportsCsv(formData: FormData): Promise<Impor
   try {
     const csv = await file.text();
     records = parse(csv, {
-      columns: (headers: string[]) => {
-        const expected = ['accountId','periodStart','periodEnd','sourceName','reportedMinutes','reportedCalls','notes'];
-        if (headers.length !== expected.length || headers.some((header, index) => header !== expected[index])) throw new Error('Invalid CSV headers');
-        return headers;
-      }, bom: true, skip_empty_lines: true, trim: true,
+      columns: validateCompanyCsvHeaders, bom: true, skip_empty_lines: true, trim: true,
       relax_quotes: false, skip_records_with_error: false,
       max_record_size: 4096, relax_column_count: false,
     }) as Record<string, string>[];
