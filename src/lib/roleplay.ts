@@ -60,24 +60,6 @@ export function validateAudioFile(file: File): AudioValidationResult {
   return validateAudioMetadata(file.type, file.size);
 }
 
-function legacyValidateAudioFile(file: File): AudioValidationResult {
-  if (file.size === 0) {
-    return { valid: false, error: 'File is empty' };
-  }
-
-  if (file.size > MAX_FILE_SIZE) {
-    return { valid: false, error: 'File exceeds 15 MB limit' };
-  }
-
-  const normalizedMime = normalizeMimeType(file.type);
-  if (!ALLOWED_MIME_TYPES.includes(normalizedMime)) {
-    return { valid: false, error: `MIME type ${file.type} not allowed` };
-  }
-
-  const extension = mimeToExtension(normalizedMime);
-  return { valid: true, normalizedMime, extension };
-}
-
 function normalizeMimeType(mime: string): string {
   if (mime.startsWith('audio/webm')) return 'audio/webm';
   if (mime.startsWith('audio/mp4')) return 'audio/mp4';
