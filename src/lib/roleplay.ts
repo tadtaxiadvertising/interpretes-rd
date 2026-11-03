@@ -81,11 +81,21 @@ function mimeToExtension(mime: string): string {
   }
 }
 
+function assertStoragePathSegment(value: string, field: string): void {
+  if (!/^[a-zA-Z0-9_-]{1,100}$/.test(value)) {
+    throw new Error(`Invalid ${field} for Roleplay audio storage`);
+  }
+}
+
 export function getBaseAudioPath(sessionId: string, extension: string): string {
+  assertStoragePathSegment(sessionId, 'session ID');
+  assertStoragePathSegment(extension, 'extension');
   return `base/${sessionId}.${extension}`;
 }
 
 export function getResponseAudioPath(sessionId: string, extension: string): string {
+  assertStoragePathSegment(sessionId, 'session ID');
+  assertStoragePathSegment(extension, 'extension');
   return `responses/${sessionId}/${randomUUID()}.${extension}`;
 }
 
