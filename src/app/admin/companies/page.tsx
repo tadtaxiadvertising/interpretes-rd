@@ -10,7 +10,7 @@ export default async function CompaniesPage() {
   ]);
   return <section className="space-y-6 text-white">
     <header><p className="text-sm uppercase tracking-widest text-blue-400">Administración</p><h1 className="text-3xl font-bold">Compañías</h1><p className="text-slate-400">Una compañía puede administrar múltiples cuentas operativas. Los registros existentes se conservan.</p></header>
-    <form action={createCompany} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-5 md:grid-cols-2">
+    <form action={async (data: FormData) => { 'use server'; await createCompany(data); }} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-5 md:grid-cols-2">
       <h2 className="md:col-span-2 font-semibold">Registrar compañía</h2>
       <input name="name" required minLength={2} maxLength={150} placeholder="Nombre de compañía" aria-label="Nombre de compañía" className="rounded-lg bg-slate-900 p-3" />
       <input name="legalName" maxLength={200} placeholder="Razón social" aria-label="Razón social" className="rounded-lg bg-slate-900 p-3" />
@@ -19,7 +19,7 @@ export default async function CompaniesPage() {
       <input name="country" maxLength={100} placeholder="País" aria-label="País" className="rounded-lg bg-slate-900 p-3" />
       <button className="rounded-lg bg-[#2675ff] px-4 py-3 font-semibold">Registrar compañía</button>
     </form>
-    <form action={assignAccountToCompany} className="flex flex-wrap gap-3 rounded-2xl border border-white/10 p-5">
+    <form action={async (data: FormData) => { 'use server'; await assignAccountToCompany(data); }} className="flex flex-wrap gap-3 rounded-2xl border border-white/10 p-5">
       <select required name="accountId" aria-label="Cuenta" className="rounded-lg bg-slate-900 p-3"><option value="">Seleccionar cuenta</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
       <select required name="companyId" aria-label="Compañía" className="rounded-lg bg-slate-900 p-3"><option value="">Seleccionar compañía</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       <button className="rounded-lg bg-[#2675ff] px-4 py-3 font-semibold">Vincular cuenta</button>
