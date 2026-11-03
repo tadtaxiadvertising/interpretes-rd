@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 
 const db = prisma;
 
@@ -109,15 +110,8 @@ export async function GET(
             !session.qaScoreId &&
             session.scenarios.some((scenario) => {
               const response = scenario.responses[0];
-              const score = response?.selfScore;
-              const hasCompleteScore = Boolean(
-                score &&
-                typeof score === 'object' &&
-                !Array.isArray(score) &&
-                ['protocol', 'interpretation', 'language', 'service', 'technical']
-                  .every((key) => typeof (score as Record<string, unknown>)[key] === 'number')
-              );
-              return Boolean(response?.sourceAudioUrl) && !hasCompleteScore;
+              return Boolean(response?.sourceAudioUrl) &&
+                !hasCompleteRoleplaySelfAssessment(response?.selfScore);
             }),
           currentScenarioIndex: session.currentScenarioIndex,
           scenarios,
