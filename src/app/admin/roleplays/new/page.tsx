@@ -41,16 +41,15 @@ export default async function NewRoleplayPage({
 }: {
   searchParams: Promise<{ candidateId?: string }>;
 }) {
-  const [{ candidateId }, interpreters, candidates] = await Promise.all([
-    searchParams,
+  const { candidateId } = await searchParams;
+  const parsedCandidateId = candidateId && /^\d+$/.test(candidateId) ? Number(candidateId) : undefined;
+  const [interpreters, candidates] = await Promise.all([
     getInterpreters(),
-    getCandidates(),
+    getCandidates(parsedCandidateId),
   ]);
-  const parsedCandidateId = candidateId && /^\\d+$/.test(candidateId) ? Number(candidateId) : undefined;
   const initialCandidateId = parsedCandidateId && candidates.some((candidate) => candidate.id === parsedCandidateId)
     ? parsedCandidateId
     : undefined;
-  
   return (
     <div className="min-h-screen bg-slate-950 py-12 px-4">
       <div className="max-w-3xl mx-auto">
