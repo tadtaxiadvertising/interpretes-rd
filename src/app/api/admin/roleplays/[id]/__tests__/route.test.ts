@@ -7,7 +7,7 @@ vi.mock('@/lib/auth/actions', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    roleplaySession: { findUnique: vi.fn(), update: vi.fn() },
+    roleplaySession: { findUnique: vi.fn(), updateMany: vi.fn() },
   },
 }));
 
@@ -33,7 +33,7 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
     vi.clearAllMocks();
     (validateAction as any).mockResolvedValue(adminAuth);
     (prisma.roleplaySession.findUnique as any).mockResolvedValue({ id: 'sess-1', status: 'INVITED' });
-    (prisma.roleplaySession.update as any).mockResolvedValue({ id: 'sess-1', status: 'CANCELLED' });
+    (prisma.roleplaySession.updateMany as any).mockResolvedValue({ count: 1 });
   });
 
   it('rejects a non-admin without touching the session', async () => {
@@ -43,7 +43,7 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
 
     expect(res.status).toBe(403);
     expect(prisma.roleplaySession.findUnique).not.toHaveBeenCalled();
-    expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
+    expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects an empty id', async () => {
@@ -59,7 +59,7 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
     const res = await PATCH(request(), context());
 
     expect(res.status).toBe(404);
-    expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
+    expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
   });
 
   it('cancels a live session', async () => {
@@ -68,8 +68,8 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
 
     expect(res.status).toBe(200);
     expect(body).toEqual({ success: true, data: { sessionId: 'sess-1', status: 'CANCELLED' } });
-    expect(prisma.roleplaySession.update).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'sess-1' }, data: { status: 'CANCELLED' } })
+    expect(prisma.roleplaySession.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'sess-1', status: 'INVITED' }, data: { status: 'CANCELLED' } })
     );
   });
 
@@ -81,7 +81,7 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.status).toBe('CANCELLED');
-    expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
+    expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
   });
 
   it('refuses to cancel an expired session', async () => {
@@ -90,11 +90,17 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
     const res = await PATCH(request(), context());
 
     expect(res.status).toBe(409);
-    expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
+    expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('returns conflict if the session changes before cancellation', async () => {
+    (prisma.roleplaySession.updateMany as any).mockResolvedValue({ count: 0 });
+    const res = await PATCH(request(), context());
+    expect(res.status).toBe(409);
   });
 
   it('returns 500 without leaking internals when the update fails', async () => {
-    (prisma.roleplaySession.update as any).mockRejectedValue(new Error('db down'));
+    (prisma.roleplaySession.updateMany as any).mockRejectedValue(new Error('db down'));
 
     const res = await PATCH(request(), context());
 

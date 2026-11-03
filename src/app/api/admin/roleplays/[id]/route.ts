@@ -44,13 +44,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
     }
 
-    const updated = await db.roleplaySession.update({
-      where: { id },
+    // Compare-and-set avoids cancelling a session that changed status after
+    // the initial read (e.g. a concurrent evaluation or expiry).
+    const updated = await db.roleplaySession.updateMany({
+      where: { id, status: session.status },
       data: { status: 'CANCELLED' },
-      select: { id: true, status: true },
     });
+    if (updated.count !== 1) {
+      return NextResponse.json(
+        { success: false, error: 'Session changed during cancellation; reload and retry' },
+        { status: 409 }
+      );
+    }
 
-    return NextResponse.json({ success: true, data: { sessionId: updated.id, status: updated.status } });
+    return NextResponse.json({ success: true, data: { sessionId: id, status: 'CANCELLED' } });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Cancel Roleplay API Error:', message);
