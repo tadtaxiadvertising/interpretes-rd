@@ -21,10 +21,12 @@ async function getInterpreters() {
   }
 }
 
-async function getCandidates() {
+async function getCandidates(candidateId?: number) {
   try {
     return await prisma.recruitmentCandidate.findMany({
-      where: { applications: { some: { status: 'APPLIED' } } },
+      where: candidateId
+        ? { OR: [{ applications: { some: { status: 'APPLIED' } } }, { id: candidateId }] }
+        : { applications: { some: { status: 'APPLIED' } } },
       select: { id: true, name: true, email: true },
       orderBy: { fechaPostulacion: 'desc' },
       take: 500,
