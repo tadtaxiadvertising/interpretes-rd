@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { revalidatePath } from 'next/cache';
-import { createSignedUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioFile } from '@/lib/roleplay';
+import { createSignedUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
 import { createNotification } from './notifications';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
@@ -66,7 +66,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
     return { success: false, error: 'Cannot assign to both interpreter and candidate', code: 'VALIDATION_ERROR' };
   }
 
-  const validation = validateAudioFile(new File([], 'test', { type: input.baseAudioMimeType, }));
+  const validation = validateAudioMetadata(input.baseAudioMimeType, input.baseAudioSize);
   if (!validation.valid || !validation.extension) {
     return { success: false, error: validation.error, code: 'VALIDATION_ERROR' };
   }
