@@ -253,17 +253,19 @@ export function RoleplayScenario({
             >
               {showPrompt ? 'Ocultar guión' : 'Ver guión'}
             </button>
-            <button
-              onClick={() => setShowExpectedKeys(!showExpectedKeys)}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
-                showExpectedKeys
-                  ? "bg-amber-600 text-white"
-                  : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-              )}
-            >
-              {showExpectedKeys ? 'Ocultar claves' : 'Ver claves esperadas'}
-            </button>
+            {scenario.expectedKeys && scenario.expectedKeys.length > 0 && (
+              <button
+                onClick={() => setShowExpectedKeys(!showExpectedKeys)}
+                className={cn(
+                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
+                  showExpectedKeys
+                    ? "bg-amber-600 text-white"
+                    : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
+                )}
+              >
+                {showExpectedKeys ? 'Ocultar claves' : 'Ver claves esperadas'}
+              </button>
+            )}
           </div>
         </div>
       </div>
