@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic2, Loader2, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
 import NewRoleplayForm from './NewRoleplayForm';
@@ -34,8 +34,20 @@ async function getCandidates() {
   }
 }
 
-export default async function NewRoleplayPage() {
-  const [interpreters, candidates] = await Promise.all([getInterpreters(), getCandidates()]);
+export default async function NewRoleplayPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ candidateId?: string }>;
+}) {
+  const [{ candidateId }, interpreters, candidates] = await Promise.all([
+    searchParams,
+    getInterpreters(),
+    getCandidates(),
+  ]);
+  const parsedCandidateId = candidateId && /^\\d+$/.test(candidateId) ? Number(candidateId) : undefined;
+  const initialCandidateId = parsedCandidateId && candidates.some((candidate) => candidate.id === parsedCandidateId)
+    ? parsedCandidateId
+    : undefined;
   
   return (
     <div className="min-h-screen bg-slate-950 py-12 px-4">
@@ -53,7 +65,7 @@ export default async function NewRoleplayPage() {
           </div>
         </div>
 
-        <NewRoleplayForm interpreters={interpreters} candidates={candidates} />
+        <NewRoleplayForm interpreters={interpreters} candidates={candidates} initialCandidateId={initialCandidateId} />
       </div>
     </div>
   );
