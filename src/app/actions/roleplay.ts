@@ -82,27 +82,41 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
       select: { id: true },
     });
 
-    const baseAudioPath = getBaseAudioPath(session.id, validation.extension);
-    
-    await db.roleplaySession.update({
-      where: { id: session.id },
-      data: { baseAudioUrl: baseAudioPath },
-    });
-
-    const uploadResult = await createSignedUploadUrl(session.id, input.baseAudioMimeType, true);
-
-    if (input.recruitmentCandidateId) {
-      const rawToken = randomBytes(32).toString('hex');
-      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-
-      await db.roleplayAccess.create({
-        data: {
-          sessionId: session.id,
-          tokenHash,
-          expiresAt,
-        },
+    // If signing the upload or issuing candidate access fails, do not leave a
+    // draft session behind that blocks another active candidate session.
+    try {
+      const baseAudioPath = getBaseAudioPath(session.id, validation.extension);
+      
+      await db.roleplaySession.update({
+        where: { id: session.id },
+        data: { baseAudioUrl: baseAudioPath },
       });
+
+      const uploadResult = await createSignedUploadUrl(session.id, input.baseAudioMimeType, true);
+
+      if (input.recruitmentCandidateId) {
+        const rawToken = randomBytes(32).toString('hex');
+        const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+        const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+        await db.roleplayAccess.create({
+          data: {
+            sessionId: session.id,
+            tokenHash,
+            expiresAt,
+          },
+        });
+
+        return { 
+          success: true, 
+          data: { 
+            sessionId: session.id,
+            uploadUrl: uploadResult.uploadUrl,
+            uploadPath: uploadResult.path,
+            inviteToken: rawToken,
+          } 
+        };
+      }
 
       return { 
         success: true, 
@@ -110,19 +124,16 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
           sessionId: session.id,
           uploadUrl: uploadResult.uploadUrl,
           uploadPath: uploadResult.path,
-          inviteToken: rawToken,
         } 
       };
+    } catch (setupError) {
+      try {
+        await db.roleplaySession.delete({ where: { id: session.id } });
+      } catch (cleanupError) {
+        console.error('Failed to clean up incomplete Roleplay session:', cleanupError);
+      }
+      throw setupError;
     }
-
-    return { 
-      success: true, 
-      data: { 
-        sessionId: session.id,
-        uploadUrl: uploadResult.uploadUrl,
-        uploadPath: uploadResult.path,
-      } 
-    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Create Roleplay Session Error:', message);
