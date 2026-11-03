@@ -7,6 +7,7 @@ import { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
 import { ApplicantSchema, ApplicantData } from '@/lib/validators/recruitment';
 import type { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import {
   APPLICATION_REF_COOKIE,
   APPLICATION_REF_MAX_AGE_SEC,
@@ -540,6 +541,77 @@ export async function acknowledgeInductionAction() {
   } catch (error) {
     console.error('[Acknowledge Induction Error]:', error);
     return { success: false as const, error: 'No pudimos registrar tu avance.' };
+  }
+}
+
+const UpdateRecruitmentCandidateSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string().trim().min(2).max(120),
+  email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
+  telefono: z.string().trim().max(25).nullable(),
+  pais: z.string().trim().max(80).nullable(),
+  englishLevel: z.enum(['B1', 'B2', 'C1', 'C2']).nullable(),
+  speedtestMbps: z.number().int().min(1).max(10000).nullable(),
+  efsetLink: z.string().trim().url().refine((value) => new URL(value).protocol === 'https:').or(z.literal('')).optional(),
+  cvUrl: z.string().trim().url().refine((value) => new URL(value).protocol === 'https:').or(z.literal('')).optional(),
+});
+
+/** Update candidate profile details without bypassing the application state machine. */
+export async function updateRecruitmentCandidateAction(input: unknown): Promise<ActionResult> {
+  const auth = await validateAction('admin');
+  if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+
+  const parsed = UpdateRecruitmentCandidateSchema.safeParse(input);
+  if (!parsed.success) {
+    return { success: false, error: parsed.error.issues[0]?.message ?? 'Invalid candidate details', code: 'BAD_REQUEST' };
+  }
+
+  try {
+    const { id, efsetLink, cvUrl, ...profile } = parsed.data;
+    const existing = await db.recruitmentCandidate.findUnique({
+      where: { id },
+      select: { id: true, notas: true },
+    });
+    if (!existing) return { success: false, error: 'Candidate not found', code: 'NOT_FOUND' };
+
+    let storedNotes: Record<string, unknown> = {};
+    if (existing.notas) {
+      try {
+        const decoded: unknown = JSON.parse(existing.notas);
+        if (decoded && typeof decoded === 'object' && !Array.isArray(decoded)) {
+          storedNotes = decoded as Record<string, unknown>;
+        } else {
+          storedNotes.legacyNotes = existing.notas;
+        }
+      } catch {
+        storedNotes.legacyNotes = existing.notas;
+      }
+    }
+
+    const nextNotes = { ...storedNotes };
+    if (efsetLink !== undefined) {
+      if (efsetLink) nextNotes.efsetLink = efsetLink;
+      else delete nextNotes.efsetLink;
+    }
+    if (cvUrl !== undefined) {
+      if (cvUrl) nextNotes.cvUrl = cvUrl;
+      else delete nextNotes.cvUrl;
+    }
+
+    await db.recruitmentCandidate.update({
+      where: { id },
+      data: { ...profile, notas: JSON.stringify(nextNotes) },
+      select: { id: true },
+    });
+    revalidatePath('/recruitment');
+    return { success: true };
+  } catch (error) {
+    const isPrismaError = error && typeof error === 'object' && 'code' in error;
+    if (isPrismaError && error.code === 'P2002') {
+      return { success: false, error: 'Ese correo ya está asociado a otro candidato.', code: 'CONFLICT' };
+    }
+    console.error('[recruitment] Failed to update candidate:', error);
+    return { success: false, error: 'No se pudieron guardar los cambios del candidato.', code: 'INTERNAL_ERROR' };
   }
 }
 
