@@ -40,6 +40,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   const [isHiring, setIsHiring] = useState(false);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showHireConfirm, setShowHireConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -216,7 +217,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
               <button 
                 disabled={isHiring}
                 className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-green-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
-                onClick={handleHire}
+                onClick={() => { setShowHireConfirm(true); setIsOpen(false); }}
               >
                 {isHiring ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
                 Hire Candidate
@@ -237,6 +238,17 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
         </>
       )}
 
+
+      {showHireConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/70" onClick={() => setShowHireConfirm(false)} />
+          <div className="relative w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-[#1a1a24] p-7 shadow-2xl">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10 text-green-400"><UserPlus size={28}/></div>
+            <div><h3 className="text-xl font-bold text-white">Confirm hiring</h3><p className="mt-2 text-sm leading-relaxed text-gray-400">This will promote <strong className="text-white">{candidate.name}</strong> to an active interpreter, link their account and mark the recruitment application as hired. This action changes operational access.</p></div>
+            <div className="flex justify-end gap-3"><button onClick={() => setShowHireConfirm(false)} className="rounded-xl bg-white/5 px-4 py-2.5 text-gray-300">Cancel</button><button disabled={isHiring} onClick={async () => { await handleHire(); setShowHireConfirm(false); }} className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{isHiring && <Loader2 size={16} className="animate-spin"/>}Confirm hiring</button></div>
+          </div>
+        </div>
+      )}
 
       {showEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
