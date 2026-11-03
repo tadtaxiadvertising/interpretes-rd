@@ -101,6 +101,24 @@ model InterpreterMonthlyMetrics {
   @@schema("public")
 }
 
+model Company {
+  id           Int       @id @default(autoincrement())
+  name         String    @unique
+  legalName    String?   @map("legal_name")
+  country      String?
+  contactEmail String?   @map("contact_email")
+  billingEmail String?   @map("billing_email")
+  website      String?
+  notes        String?
+  active       Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  accounts     Account[]
+
+  @@map("companies")
+  @@schema("public")
+}
+
 model Account {
   id               Int                      @id @default(autoincrement())
   name             String                   @unique
@@ -109,7 +127,10 @@ model Account {
   updatedAt        DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   interpreterRates InterpreterAccountRate[]
   productionLogs   ProductionLog[]
+  companyId        Int?                     @map("company_id")
+  company          Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
+  @@index([companyId])
   @@map("accounts")
   @@schema("public")
 }
