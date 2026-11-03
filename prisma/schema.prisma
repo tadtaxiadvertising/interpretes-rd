@@ -47,6 +47,7 @@ model Interpreter {
   shiftEnd                    String?                  @default("17:00") @map("shift_end")
   callSessions                CallSession[]
   accountRates                InterpreterAccountRate[]
+  accountAssignments          InterpreterAccountAssignment[]
   auditLogs                   PayrateAuditLog[]
   payrollRecords              PayrollRecord[]
   productionLogs              ProductionLog[]
@@ -126,12 +127,30 @@ model Account {
   createdAt        DateTime?                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   interpreterRates InterpreterAccountRate[]
+  assignments      InterpreterAccountAssignment[]
   productionLogs   ProductionLog[]
   companyId        Int?                     @map("company_id")
   company          Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@map("accounts")
+  @@schema("public")
+}
+
+model InterpreterAccountAssignment {
+  id            Int         @id @default(autoincrement())
+  interpreterId Int         @map("interpreter_id")
+  accountId     Int         @map("account_id")
+  startsAt      DateTime    @map("starts_at") @db.Date
+  endsAt        DateTime?   @map("ends_at") @db.Date
+  notes         String?
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  interpreter   Interpreter @relation(fields: [interpreterId], references: [id], onDelete: Restrict)
+  account       Account     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, startsAt])
+  @@index([interpreterId, startsAt])
+  @@map("interpreter_account_assignments")
   @@schema("public")
 }
 
