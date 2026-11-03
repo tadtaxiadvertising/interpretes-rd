@@ -138,8 +138,8 @@ jobs:
           WEBHOOK_URL="$(printf '%s' "$WEBHOOK_URL" | tr -d '\r\n')"
           if [ -z "$WEBHOOK_URL" ]; then
             echo "::error::EASYPANEL_WEBHOOK_INTERPRETERS secret is not configured."
-            echo "Skipping deployment. To enable auto-deploy, add the webhook URL from Easypanel in GitHub Settings > Secrets > Actions."
-            exit 0
+            echo "Deployment cannot proceed without the required Easypanel webhook secret."
+            exit 1
           fi
           if ! printf '%s' "$WEBHOOK_URL" | grep -Eq '^https?://'; then
             echo "ERROR: EASYPANEL_WEBHOOK_INTERPRETERS must be a valid URL starting with http:// or https://."
@@ -165,8 +165,8 @@ jobs:
           WEBHOOK_URL="$(printf '%s' "$WEBHOOK_URL" | tr -d '\r\n')"
           if [ -z "$WEBHOOK_URL" ]; then
             echo "::error::EASYPANEL_WEBHOOK_API secret is not configured."
-            echo "Skipping deployment. To enable auto-deploy, add the webhook URL from Easypanel in GitHub Settings > Secrets > Actions."
-            exit 0
+            echo "Deployment cannot proceed without the required Easypanel webhook secret."
+            exit 1
           fi
           if ! printf '%s' "$WEBHOOK_URL" | grep -Eq '^https?://'; then
             echo "ERROR: EASYPANEL_WEBHOOK_API must be a valid URL starting with http:// or https://."
