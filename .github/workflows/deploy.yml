@@ -137,7 +137,7 @@ jobs:
           WEBHOOK_URL="${EASYPANEL_WEBHOOK_INTERPRETERS:-}"
           WEBHOOK_URL="$(printf '%s' "$WEBHOOK_URL" | tr -d '\r\n')"
           if [ -z "$WEBHOOK_URL" ]; then
-            echo "⚠️ WARNING: EASYPANEL_WEBHOOK_INTERPRETERS secret is not configured."
+            echo "::error::EASYPANEL_WEBHOOK_INTERPRETERS secret is not configured."
             echo "Skipping deployment. To enable auto-deploy, add the webhook URL from Easypanel in GitHub Settings > Secrets > Actions."
             exit 0
           fi
@@ -164,7 +164,7 @@ jobs:
           WEBHOOK_URL="${EASYPANEL_WEBHOOK_API:-}"
           WEBHOOK_URL="$(printf '%s' "$WEBHOOK_URL" | tr -d '\r\n')"
           if [ -z "$WEBHOOK_URL" ]; then
-            echo "⚠️ WARNING: EASYPANEL_WEBHOOK_API secret is not configured."
+            echo "::error::EASYPANEL_WEBHOOK_API secret is not configured."
             echo "Skipping deployment. To enable auto-deploy, add the webhook URL from Easypanel in GitHub Settings > Secrets > Actions."
             exit 0
           fi
