@@ -11,6 +11,7 @@ import { Recorder } from '@/components/roleplay/Recorder';
 import { SelfAssessment } from '@/components/roleplay/SelfAssessment';
 import { RoleplayProgress } from '@/components/roleplay/RoleplayProgress';
 import { RoleplayCompletion } from '@/components/roleplay/RoleplayCompletion';
+import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 
 type PageState = 'loading' | 'intro' | 'scenario' | 'recording' | 'review' | 'self-assessment' | 'completion' | 'error';
 
@@ -97,14 +98,9 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           const currentIndex = data.data.currentScenarioIndex || 0;
           setCurrentScenarioIndex(currentIndex);
 
-          const hasCompleteSelfAssessment = (score?: Record<string, number | boolean> | null) =>
-            Boolean(score) &&
-            ['protocol', 'interpretation', 'language', 'service', 'technical']
-              .every((key) => typeof score?.[key] === 'number');
-
           const completed = data.data.scenarios
             .map((scenario: Scenario, index: number) =>
-              hasCompleteSelfAssessment(scenario.responses?.[0]?.selfScore) ? index : -1
+              hasCompleteRoleplaySelfAssessment(scenario.responses?.[0]?.selfScore) ? index : -1
             )
             .filter((index: number) => index >= 0);
           setCompletedScenarios(completed);
@@ -128,7 +124,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           const terminalStates = ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
           const missingAssessmentIndex = data.data.scenarios.findIndex((scenario: Scenario) =>
             Boolean(scenario.responses?.[0]?.sourceAudioUrl) &&
-            !hasCompleteSelfAssessment(scenario.responses?.[0]?.selfScore)
+            !hasCompleteRoleplaySelfAssessment(scenario.responses?.[0]?.selfScore)
           );
           if (data.data.canCompleteSelfAssessment && missingAssessmentIndex >= 0) {
             // Recover attempts submitted by the previous client before its
@@ -284,7 +280,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         ? session.scenarios.findIndex((item, index) =>
             index > currentScenarioIndex &&
             Boolean(item.responses?.[0]?.sourceAudioUrl) &&
-            !item.responses?.[0]?.selfScore
+            !hasCompleteRoleplaySelfAssessment(item.responses?.[0]?.selfScore)
           )
         : -1;
 
