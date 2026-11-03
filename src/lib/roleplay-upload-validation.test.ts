@@ -23,6 +23,10 @@ describe('Roleplay base audio metadata validation', () => {
     expect(validateAudioMetadata('application/zip', 1000).valid).toBe(false);
   });
 
+  it.each(['audio/mpeg-fake', 'audio/webm-malicious', 'audio/mp4;evil=1', 'audio/ogg-extra'])('rejects spoofed MIME prefix %s', mime => {
+    expect(validateAudioMetadata(mime, 1000).valid).toBe(false);
+  });
+
   it('normalizes browser webm codec MIME types', () => {
     expect(validateAudioMetadata('audio/webm;codecs=opus', 1000)).toMatchObject({
       valid: true,
