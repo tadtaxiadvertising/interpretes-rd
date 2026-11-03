@@ -48,7 +48,19 @@ export interface AudioValidationResult {
   error?: string;
 }
 
+export function validateAudioMetadata(mimeType: string, size: number): AudioValidationResult {
+  if (!Number.isSafeInteger(size) || size <= 0) return { valid: false, error: 'File is empty or has an invalid size' };
+  if (size > MAX_FILE_SIZE) return { valid: false, error: 'File exceeds 15 MB limit' };
+  const normalizedMime = normalizeMimeType(mimeType);
+  if (!ALLOWED_MIME_TYPES.includes(normalizedMime)) return { valid: false, error: `MIME type ${mimeType} not allowed` };
+  return { valid: true, normalizedMime, extension: mimeToExtension(normalizedMime) };
+}
+
 export function validateAudioFile(file: File): AudioValidationResult {
+  return validateAudioMetadata(file.type, file.size);
+}
+
+function legacyValidateAudioFile(file: File): AudioValidationResult {
   if (file.size === 0) {
     return { valid: false, error: 'File is empty' };
   }
@@ -97,7 +109,7 @@ export async function createSignedUploadUrl(
   mimeType: string,
   isBaseAudio: boolean = false
 ): Promise<SignedUploadResponse> {
-  const validation = validateAudioFile(new File([], 'test', { type: mimeType }));
+  const validation = validateAudioMetadata(mimeType, 1);
   if (!validation.valid || !validation.extension) {
     throw new Error(validation.error || 'Invalid MIME type');
   }
