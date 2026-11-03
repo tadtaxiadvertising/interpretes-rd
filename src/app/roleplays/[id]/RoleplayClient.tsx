@@ -448,6 +448,9 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
           {pageState === 'self-assessment' && currentScenario && (
             <SelfAssessment
+              // Each scenario owns an independent assessment state. Without
+              // this key React reuses the previous scenario's selected scores.
+              key={currentScenario.id}
               scenarioTitle={currentScenario.title}
               onComplete={handleSelfAssessmentComplete}
               initialScores={scenarioResponses[currentScenario.id]?.scores}
