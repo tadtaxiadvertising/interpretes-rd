@@ -102,7 +102,12 @@ export async function POST(req: NextRequest) {
       if (typeof participantId !== 'string') {
         return NextResponse.json({ success: false, error: 'Participant is required' }, { status: 400 });
       }
-      parsedParticipantId = Number.parseInt(participantId, 10);
+      // parseInt accepts malformed identifiers such as "12abc" and "12.5".
+      // Require an exact positive decimal integer before resolving a participant.
+      if (!/^[1-9][0-9]*$/.test(participantId)) {
+        return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
+      }
+      parsedParticipantId = Number(participantId);
       if (!Number.isSafeInteger(parsedParticipantId) || parsedParticipantId <= 0) {
         return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
       }
