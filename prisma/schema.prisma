@@ -128,12 +128,32 @@ model Account {
   updatedAt        DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   interpreterRates InterpreterAccountRate[]
   assignments      InterpreterAccountAssignment[]
+  reports          CompanyProductionReport[]
   productionLogs   ProductionLog[]
   companyId        Int?                     @map("company_id")
   company          Company?                 @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@map("accounts")
+  @@schema("public")
+}
+
+model CompanyProductionReport {
+  id             Int       @id @default(autoincrement())
+  accountId      Int       @map("account_id")
+  periodStart    DateTime  @map("period_start") @db.Date
+  periodEnd      DateTime  @map("period_end") @db.Date
+  sourceName     String    @map("source_name")
+  sourceChecksum String    @map("source_checksum")
+  reportedMinutes Int      @map("reported_minutes")
+  reportedCalls   Int?     @map("reported_calls")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  account         Account   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@unique([accountId, sourceChecksum])
+  @@index([accountId, periodStart, periodEnd])
+  @@map("company_production_reports")
   @@schema("public")
 }
 
