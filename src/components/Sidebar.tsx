@@ -52,6 +52,7 @@ export const adminMenu: MenuItem[] = [
   { icon: Briefcase, label: 'Compañías', href: '/admin/companies', section: 'Operaciones' },
   { icon: Users, label: 'Asignaciones', href: '/admin/assignments', section: 'Operaciones' },
   { icon: FileText, label: 'Reportes de compañías', href: '/admin/reports', section: 'Operaciones' },
+  { icon: ShieldCheck, label: 'Conciliación', href: '/admin/reconciliation', section: 'Operaciones' },
   { icon: CalendarDays, label: 'Calendario de metas', href: '/admin/calendar', section: 'Operaciones' },
   { icon: Clock, label: 'Registro manual', href: '/admin/production/manual', section: 'Operaciones' },
   { icon: ShieldCheck, label: 'Control de calidad (QA)', href: '/qa', section: 'Calidad y cumplimiento' },
