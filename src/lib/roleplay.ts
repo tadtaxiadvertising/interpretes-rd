@@ -61,11 +61,14 @@ export function validateAudioFile(file: File): AudioValidationResult {
 }
 
 function normalizeMimeType(mime: string): string {
-  if (mime.startsWith('audio/webm')) return 'audio/webm';
-  if (mime.startsWith('audio/mp4')) return 'audio/mp4';
-  if (mime.startsWith('audio/ogg')) return 'audio/ogg';
-  if (mime.startsWith('audio/mpeg')) return 'audio/mpeg';
-  return mime;
+  const normalized = mime.trim().toLowerCase();
+  // Only explicitly supported WebM codec parameters are accepted. Prefix
+  // matching also accepted arbitrary values such as audio/webm-malicious.
+  if (normalized === 'audio/webm' || normalized === 'audio/webm;codecs=opus' || normalized === 'audio/webm;codecs=pcm') return 'audio/webm';
+  if (normalized === 'audio/mp4') return 'audio/mp4';
+  if (normalized === 'audio/ogg') return 'audio/ogg';
+  if (normalized === 'audio/mpeg') return 'audio/mpeg';
+  return normalized;
 }
 
 function mimeToExtension(mime: string): string {
