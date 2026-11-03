@@ -154,10 +154,14 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Never sign an arbitrary bucket path supplied by the caller.
     const session = await db.roleplaySession.findUnique({
       where: { id: sessionId },
-      select: { id: true, baseAudioUrl: true },
+      select: { id: true, baseAudioUrl: true, status: true },
     });
     if (!session) {
       return { success: false, error: 'Sesión de roleplay no encontrada', code: 'NOT_FOUND' };
+    }
+
+    if (session.status !== 'DRAFT') {
+      return { success: false, error: 'No se puede modificar el audio de una sesión que ya comenzó', code: 'CONFLICT' };
     }
 
     const isCanonicalPath =
@@ -172,7 +176,7 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Compare-and-set prevents a second confirmation from replacing an already
     // confirmed URL or racing with another update.
     const updated = await db.roleplaySession.updateMany({
-      where: { id: sessionId, baseAudioUrl: uploadPath },
+      where: { id: sessionId, baseAudioUrl: uploadPath, status: 'DRAFT' },
       data: { baseAudioUrl: signedUrl },
     });
     if (updated.count !== 1) {
