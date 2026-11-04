@@ -11,6 +11,7 @@ import { randomBytes, createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
 import { calculateRoleplayScore } from '@/lib/roleplay/scoring';
+import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 import { queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
 
@@ -1005,6 +1006,17 @@ export type EvaluateRoleplayInput = z.infer<typeof EvaluateRoleplaySchema>;
 export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+
+  // Apply the strict evaluation quota to the authenticated admin identity,
+  // never to client-supplied form fields or unverified proxy headers.
+  const limit = rateLimit(auth.user.userId, RATE_LIMITS.evaluationSubmit);
+  if (!limit.success) {
+    return {
+      success: false,
+      error: 'Too many evaluation attempts. Please try again later.',
+      code: 'RATE_LIMITED',
+    };
+  }
 
   // Parse dimension scores strictly: 0 is valid, but missing/blank or
   // malformed values must not silently become a real score of zero.
