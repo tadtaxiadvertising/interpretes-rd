@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { isPublicApiPath } from '@/lib/security/public-api-path';
 
 /**
  * UNIFIED MIDDLEWARE — FREE INTERPRETERS OS
@@ -49,7 +50,6 @@ function hasValidAuthSession(req: NextRequest) {
 }
 
 /** Public routes are deliberately exact for probes and Roleplay invitation flow. */
-import { isPublicApiPath } from '@/lib/security/public-api-path';
 
 function extractBearer(req: NextRequest): string | null {
   const header = req.headers.get('authorization');
