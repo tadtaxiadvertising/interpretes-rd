@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { canMatchCompanyReport } from '@/lib/reconciliation-match-policy';
 
 const schema = z.object({
   reportId: z.coerce.number().int().positive(),
@@ -27,12 +28,14 @@ export async function recordReconciliationReview(formData: FormData) {
     });
     const internalMinutes = totals._sum.interpretedMinutes ?? 0;
     const internalCalls = totals._sum.callsAttended ?? 0;
-    if (decision === 'MATCHED' && totals._count._all === 0) {
-      return { success: false, error: 'No hay registros internos. No se puede confirmar coincidencia.' };
-    }
-    if (decision === 'MATCHED' && (internalMinutes !== report.reportedMinutes ||
-      (report.reportedCalls !== null && internalCalls !== report.reportedCalls))) {
-      return { success: false, error: 'Los minutos o llamadas difieren. Selecciona otro estado y documenta la diferencia.' };
+    if (decision === 'MATCHED' && !canMatchCompanyReport({
+      logCount: totals._count._all,
+      internalMinutes,
+      externalMinutes: report.reportedMinutes,
+      internalCalls,
+      externalCalls: report.reportedCalls,
+    })) {
+      return { success: false, error: 'No existen registros internos o los minutos o llamadas difieren. Selecciona otro estado y documenta la diferencia.' };
     }
     await prisma.companyReportReview.create({
       data: { reportId, reviewerId: profile.id, decision, note, internalMinutes, externalMinutes: report.reportedMinutes },
