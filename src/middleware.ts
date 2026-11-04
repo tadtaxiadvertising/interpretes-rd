@@ -48,39 +48,8 @@ function hasValidAuthSession(req: NextRequest) {
   return hasAuthSessionCookie(req);
 }
 
-/**
- * Public API prefixes that do NOT require authentication.
- * - /api/health, /api/version: liveness / build-id probes.
- * - /api/auth/*: NextAuth handlers (must be reachable to sign in).
- * - /api/webhooks/*: third-party webhooks (self-verify signatures).
- * - /api/cron/*: scheduled jobs (self-verify CRON_SECRET).
- * - /api/roleplay/validate-invite: candidate validates invite token (binds session cookie)
- * - /api/roleplay/validate-invite-by-code: candidate validates invite code (binds session cookie)
- * - /api/roleplay/start: candidate starts roleplay with token (binds session cookie)
- *
- * Everything else under /api/* requires a verified Supabase session OR a
- * verified Supabase `Authorization: Bearer <token>`.
- * 
- * NOTE: /api/roleplay/session/[id] and /api/roleplay/session/[id]/start require
- * authentication + ownership check (enforced in route handlers). They are NOT public.
- * /api/roleplay/convert-audio requires authentication.
- */
-const API_PUBLIC_PREFIXES = [
-  '/api/health',
-  '/api/version',
-  '/api/auth/',
-  '/api/webhooks/',
-  '/api/cron/',
-  '/api/roleplay/validate-invite',
-  '/api/roleplay/validate-invite-by-code',
-  '/api/roleplay/start',
-] as const;
-
-function isPublicApiPath(pathname: string) {
-  return API_PUBLIC_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(prefix)
-  );
-}
+/** Public routes are deliberately exact for probes and Roleplay invitation flow. */
+import { isPublicApiPath } from '@/lib/security/public-api-path';
 
 function extractBearer(req: NextRequest): string | null {
   const header = req.headers.get('authorization');
