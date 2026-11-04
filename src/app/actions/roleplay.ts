@@ -60,17 +60,6 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
   if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
 
-  // Apply the strict evaluation quota to the authenticated admin identity,
-  // never to client-supplied form fields or unverified proxy headers.
-  const limit = rateLimit(auth.user.userId, RATE_LIMITS.evaluationSubmit);
-  if (!limit.success) {
-    return {
-      success: false,
-      error: 'Too many evaluation attempts. Please try again later.',
-      code: 'RATE_LIMITED',
-    };
-  }
-
   if (!input.interpreterId && !input.recruitmentCandidateId) {
     return { success: false, error: 'Must assign to either interpreter or candidate', code: 'VALIDATION_ERROR' };
   }
@@ -1039,6 +1028,17 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   const parseResult = EvaluateRoleplaySchema.safeParse(rawInput);
   if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
+
+  // Apply the strict evaluation quota to the authenticated admin identity,
+  // never to client-supplied form fields or unverified proxy headers.
+  const limit = rateLimit(auth.user.userId, RATE_LIMITS.evaluationSubmit);
+  if (!limit.success) {
+    return {
+      success: false,
+      error: 'Too many evaluation attempts. Please try again later.',
+      code: 'RATE_LIMITED',
+    };
+  }
 
   // Canonical scoring: 0..10 dimensions in, 0..100 total out; criticalError
   // forces 0. All consumers share this single function (lib/roleplay/scoring).
