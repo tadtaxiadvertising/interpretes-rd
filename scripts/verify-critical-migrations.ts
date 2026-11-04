@@ -78,6 +78,40 @@ async function main() {
       throw new Error('Row-level security is not enabled on both legal agreement tables.');
     }
 
+    // Operational tables must exist with their unique and foreign-key constraints.
+    // This verifies the schema generated in CI, not the historical migration chain.
+    const operationalTables = [
+      'companies',
+      'account_platforms',
+      'company_production_reports',
+      'company_report_reviews',
+      'interpreter_account_assignments',
+    ];
+    for (const table of operationalTables) {
+      const result = await pool.query(
+        'SELECT to_regclass($1) AS relation',
+        [`public.${table}`],
+      );
+      if (!result.rows[0]?.relation) {
+        throw new Error(`Operational table is missing: ${table}`);
+      }
+    }
+
+    const requiredConstraints = [
+      ['account_platforms', 'account_platforms_account_id_name_key', 'u'],
+      ['company_production_reports', 'company_production_reports_account_id_source_checksum_key', 'u'],
+    ] as const;
+    for (const [table, name, type] of requiredConstraints) {
+      const result = await pool.query(
+        `SELECT 1 FROM pg_constraint
+         WHERE conrelid = $1::regclass AND conname = $2 AND contype = $3`,
+        [`public.${table}`, name, type],
+      );
+      if (!result.rowCount) {
+        throw new Error(`Missing operational constraint: ${table}.${name}`);
+      }
+    }
+
     console.log('Critical legal and Roleplay migrations verified successfully.');
   } finally {
     await pool.end();
