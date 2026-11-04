@@ -11,9 +11,15 @@ const m = vi.hoisted(() => ({
   appFindUnique: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
+  rateLimit: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
+
+vi.mock('@/lib/security/rate-limit', () => ({
+  rateLimit: m.rateLimit,
+  RATE_LIMITS: { evaluationSubmit: { maxRequests: 3, windowMs: 60_000, keyPrefix: 'eval' } },
+}));
 
 vi.mock('@/lib/auth/actions', () => ({
   validateAction: async () =>
@@ -80,6 +86,7 @@ function makeForm(overrides: Record<string, string> = {}): FormData {
 describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.rateLimit.mockReturnValue({ success: true, remaining: 2, resetAt: Date.now() + 60_000 });
     m.actor = ADMIN;
     m.session = {
       id: 'sess-1',
@@ -252,6 +259,17 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
 
     expect(res.success).toBe(false);
     expect(m.sessionFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('applies the evaluation quota to the authenticated admin and stops before database writes when limited', async () => {
+    m.rateLimit.mockReturnValue({ success: false, remaining: 0, resetAt: Date.now() + 60_000, retryAfter: 60 });
+
+    const res = await evaluateRoleplay(null, makeForm());
+
+    expect(res).toMatchObject({ success: false, code: 'RATE_LIMITED' });
+    expect(m.rateLimit).toHaveBeenCalledWith('admin-1', expect.objectContaining({ keyPrefix: 'eval' }));
+    expect(m.sessionFindUnique).not.toHaveBeenCalled();
+    expect(m.qaCreate).not.toHaveBeenCalled();
   });
 
   it('requires admin authorization', async () => {
