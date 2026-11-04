@@ -97,18 +97,32 @@ async function main() {
       }
     }
 
-    const requiredConstraints = [
-      ['account_platforms', 'account_platforms_account_id_name_key', 'u'],
-      ['company_production_reports', 'company_production_reports_account_id_source_checksum_key', 'u'],
+    // Prisma represents @@unique constraints as unique indexes in PostgreSQL.
+    // They are not guaranteed to appear in pg_constraint, so inspect pg_index.
+    const requiredUniqueIndexes = [
+      ['account_platforms', 'account_platforms_account_id_name_key'],
+      ['company_production_reports', 'company_production_reports_account_id_source_checksum_key'],
     ] as const;
-    for (const [table, name, type] of requiredConstraints) {
+    for (const [table, indexName] of requiredUniqueIndexes) {
       const result = await pool.query(
-        `SELECT 1 FROM pg_constraint
-         WHERE conrelid = $1::regclass AND conname = $2 AND contype = $3`,
-        [`public.${table}`, name, type],
+        `SELECT 1
+         FROM pg_index AS index_meta
+         JOIN pg_class AS index_class
+           ON index_class.oid = index_meta.indexrelid
+         JOIN pg_class AS table_class
+           ON table_class.oid = index_meta.indrelid
+         JOIN pg_namespace AS table_schema
+           ON table_schema.oid = table_class.relnamespace
+         WHERE table_schema.nspname = 'public'
+           AND table_class.relname = $1
+           AND index_class.relname = $2
+           AND index_meta.indisunique = true
+           AND index_meta.indisvalid = true
+           AND index_meta.indisready = true`,
+        [table, indexName],
       );
       if (!result.rowCount) {
-        throw new Error(`Missing operational constraint: ${table}.${name}`);
+        throw new Error(`Missing operational unique index: ${table}.${indexName}`);
       }
     }
 
