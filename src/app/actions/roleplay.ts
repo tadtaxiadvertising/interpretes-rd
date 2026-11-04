@@ -1007,17 +1007,6 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  // Apply the strict evaluation quota to the authenticated admin identity,
-  // never to client-supplied form fields or unverified proxy headers.
-  const limit = rateLimit(auth.user.userId, RATE_LIMITS.evaluationSubmit);
-  if (!limit.success) {
-    return {
-      success: false,
-      error: 'Too many evaluation attempts. Please try again later.',
-      code: 'RATE_LIMITED',
-    };
-  }
-
   // Parse dimension scores strictly: 0 is valid, but missing/blank or
   // malformed values must not silently become a real score of zero.
   const readScore = (key: string): number => {
@@ -1039,6 +1028,17 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   const parseResult = EvaluateRoleplaySchema.safeParse(rawInput);
   if (!parseResult.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parseResult.data;
+
+  // Apply the strict evaluation quota to the authenticated admin identity,
+  // never to client-supplied form fields or unverified proxy headers.
+  const limit = rateLimit(auth.user.userId, RATE_LIMITS.evaluationSubmit);
+  if (!limit.success) {
+    return {
+      success: false,
+      error: 'Too many evaluation attempts. Please try again later.',
+      code: 'RATE_LIMITED',
+    };
+  }
 
   // Canonical scoring: 0..10 dimensions in, 0..100 total out; criticalError
   // forces 0. All consumers share this single function (lib/roleplay/scoring).
