@@ -2,6 +2,7 @@
 -- Existing account IDs and all operational foreign keys are preserved.
 ALTER TABLE "public"."accounts"
   DROP CONSTRAINT IF EXISTS "accounts_name_key";
+DROP INDEX IF EXISTS "public"."accounts_name_key";
 
 CREATE UNIQUE INDEX IF NOT EXISTS "accounts_client_id_name_key"
   ON "public"."accounts" ("client_id", "name");
