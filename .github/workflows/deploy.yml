@@ -179,7 +179,7 @@ jobs:
 
   deploy-interpreters-api:
     name: Deploy interpreters-api (Backend)
-    needs: validate
+    needs: [validate, deploy-interpreters]
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
