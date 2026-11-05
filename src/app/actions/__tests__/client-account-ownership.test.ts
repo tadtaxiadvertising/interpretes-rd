@@ -147,4 +147,37 @@ describe('client ownership actions', () => {
     expect(revalidatePath).toHaveBeenCalledWith('/admin/accounts');
     expect(revalidatePath).toHaveBeenCalledWith('/admin/clients');
   });
+
+  it('allows the same account name for different clients', async () => {
+    (prisma.client.findFirst as any).mockImplementation(({ where }: any) => Promise.resolve({ id: where.id }));
+    (prisma.account.create as any).mockResolvedValue({ id: 42 });
+
+    const first = await createOperationalAccount(makeForm({
+      clientId: '3', name: 'Shared Queue', description: '',
+    }));
+    const second = await createOperationalAccount(makeForm({
+      clientId: '4', name: 'Shared Queue', description: '',
+    }));
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(prisma.account.create).toHaveBeenNthCalledWith(1, {
+      data: { clientId: 3, name: 'Shared Queue', description: '' },
+    });
+    expect(prisma.account.create).toHaveBeenNthCalledWith(2, {
+      data: { clientId: 4, name: 'Shared Queue', description: '' },
+    });
+  });
+
+  it('returns a clear conflict when a client already owns that account name', async () => {
+    (prisma.client.findFirst as any).mockResolvedValue({ id: 3 });
+    (prisma.account.create as any).mockRejectedValue({ code: 'P2002' });
+
+    const result = await createOperationalAccount(makeForm({
+      clientId: '3', name: 'Shared Queue', description: '',
+    }));
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('para este cliente');
+  });
 });

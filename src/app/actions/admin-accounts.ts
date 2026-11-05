@@ -31,7 +31,10 @@ export async function createOperationalAccount(formData: FormData) {
     revalidatePath('/admin/clients');
     return { success: true };
   } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      return { success: false, error: 'Ya existe una cuenta con ese nombre para este cliente.' };
+    }
     console.error('[ADMIN_ACCOUNTS] Create failed', error);
-    return { success: false, error: 'No se pudo crear la cuenta. Comprueba que el nombre no exista.' };
+    return { success: false, error: 'No se pudo crear la cuenta.' };
   }
 }

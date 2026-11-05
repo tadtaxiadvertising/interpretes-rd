@@ -14,6 +14,7 @@ const migrations = [
   '20261103232000_company_report_reviews/migration.sql',
   '20261103235000_account_platforms/migration.sql',
   '20261105140000_client_directory/migration.sql',
+  '20261105150000_account_names_per_client/migration.sql',
 ] as const;
 
 async function main() {
@@ -47,6 +48,11 @@ async function main() {
     `);
     await client.query('ALTER TABLE public.accounts DROP COLUMN IF EXISTS company_id CASCADE');
     await client.query('ALTER TABLE public.accounts DROP COLUMN IF EXISTS client_id CASCADE');
+    // Recreate the previous global-name uniqueness so the new migration is
+    // tested against the exact legacy constraint it must replace.
+    await client.query('ALTER TABLE public.accounts DROP CONSTRAINT IF EXISTS accounts_client_id_name_key');
+    await client.query('DROP INDEX IF EXISTS public.accounts_client_id_name_key');
+    await client.query('CREATE UNIQUE INDEX accounts_name_key ON public.accounts (name)');
     await client.query('DROP TABLE IF EXISTS public.companies CASCADE');
     await client.query('DROP TABLE IF EXISTS public.clients CASCADE');
 
@@ -79,6 +85,7 @@ async function main() {
       'company_report_reviews_report_id_created_at_idx',
       'account_platforms_account_id_name_key',
       'accounts_client_id_idx',
+      'accounts_client_id_name_key',
     ];
     const indexes = await client.query(
       `SELECT index_class.relname AS name
@@ -128,6 +135,36 @@ async function main() {
     );
     if (ownershipCheck.rows[0]?.client_count !== 2 || ownershipCheck.rows[0]?.company_count !== 1) {
       throw new Error('The same company identifier must be reusable across different client-owned accounts.');
+    }
+
+    // Identical account labels are valid for different clients, but not twice
+    // for the same client. Verify the database, not only application checks.
+    await client.query(
+      `INSERT INTO public.accounts (name, client_id)
+       VALUES ('__ci_shared_account_name', $1), ('__ci_shared_account_name', $2)`,
+      [clientA.rows[0].id, clientB.rows[0].id],
+    );
+    await client.query('SAVEPOINT duplicate_account_name');
+    let duplicateRejected = false;
+    try {
+      await client.query(
+        `INSERT INTO public.accounts (name, client_id)
+         VALUES ('__ci_shared_account_name', $1)`,
+        [clientA.rows[0].id],
+      );
+    } catch (error) {
+      duplicateRejected = (error as { code?: string }).code === '23505';
+      await client.query('ROLLBACK TO SAVEPOINT duplicate_account_name');
+    }
+    await client.query('RELEASE SAVEPOINT duplicate_account_name');
+    if (!duplicateRejected) {
+      throw new Error('Duplicate account names must be rejected within the same client.');
+    }
+    const legacyNameIndex = await client.query(
+      `SELECT to_regclass('public.accounts_name_key') AS index_name`,
+    );
+    if (legacyNameIndex.rows[0]?.index_name) {
+      throw new Error('The legacy global account-name index was not removed.');
     }
 
     const assignmentConstraint = await client.query(

@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ActionResult } from '@/lib/types';
 import { Account, InterpreterAccountRate } from '@prisma/client';
+import { z } from 'zod';
 import { validateAction } from '@/lib/auth/actions';
 import { operationalAccountInputSchema } from '@/lib/client-validation';
 
@@ -31,7 +32,7 @@ export async function createAccount(name: string, description: string | undefine
     return { success: true, data: { ...account, clientName: client.name } };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
-      return { success: false, error: 'La cuenta ya existe', code: 'CONFLICT' };
+      return { success: false, error: 'Ya existe una cuenta con ese nombre para este cliente.', code: 'CONFLICT' };
     }
     return { success: false, error: 'Error al crear la cuenta', code: 'INTERNAL_ERROR' };
   }
@@ -41,10 +42,19 @@ export async function updateAccount(id: number, name: string, description?: stri
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
+  const parsed = z.object({
+    id: z.number().int().positive(),
+    name: z.string().trim().min(2).max(120),
+    description: z.string().trim().max(1000).optional(),
+  }).safeParse({ id, name, description: description ?? '' });
+  if (!parsed.success) {
+    return { success: false, error: 'Revisa el nombre y la descripción de la cuenta.', code: 'VALIDATION_ERROR' };
+  }
+
   try {
     const account = await db.account.update({
-      where: { id },
-      data: { name, description },
+      where: { id: parsed.data.id },
+      data: { name: parsed.data.name, description: parsed.data.description || null },
       select: { id: true, name: true, description: true, clientId: true, client: { select: { name: true } } }
     });
     revalidatePath('/admin/payrates');
@@ -52,7 +62,10 @@ export async function updateAccount(id: number, name: string, description?: stri
     revalidatePath('/admin/clients');
     revalidatePath('/settings');
     return { success: true, data: { ...account, clientName: account.client?.name ?? null } };
-  } catch {
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      return { success: false, error: 'Ya existe una cuenta con ese nombre para este cliente.', code: 'CONFLICT' };
+    }
     return { success: false, error: 'Error al actualizar la cuenta', code: 'INTERNAL_ERROR' };
   }
 }
