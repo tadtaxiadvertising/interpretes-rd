@@ -74,7 +74,7 @@ describe('deployment credential boundary', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it('uses bounded read-only schema queries, then closes the connection', async () => {
+  it('trims surrounding secret whitespace without weakening internal URL validation', () => {\n    expect(validateDeploymentSecrets({\n      ...validEnv,\n      DIRECT_URL: `\\r\\n  ${validEnv.DIRECT_URL}  \\r\\n`,\n    })).toBe(validEnv.DIRECT_URL);\n  });\n\n  it('checks connectivity before migrations without requiring the new schema', async () => {\n    const { client, createClient } = fakeConnection();\n    await runDeploymentPreflight(validEnv, createClient);\n    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([\n      'BEGIN READ ONLY',\n      'SELECT 1',\n      'ROLLBACK',\n    ]);\n    expect(client.end).toHaveBeenCalledOnce();\n  });\n\n  it('uses bounded read-only schema queries after migrations, then closes the connection', async () => {
     const { client, createClient } = fakeConnection();
     await runDeploymentPreflight(validEnv, createClient);
     expect(createClient).toHaveBeenCalledWith(expect.objectContaining({
@@ -108,12 +108,26 @@ describe('production deployment workflow', () => {
   it('checks all deployment credentials before the migration can run', () => {
     const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
     const deploy = workflow.split('  deploy-interpreters:')[1].split('  deploy-interpreters-api:')[0];
-    const beforeMigration = deploy.split('      - name: Apply account ownership migration')[0];
+    const beforeMigration = deploy.split('      - name: Apply client directory migration before ownership constraints')[0];
 
     for (const name of ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPANEL_WEBHOOK_API']) {
       expect(beforeMigration, `${name} must be checked before any migration`).toContain(`secrets.${name}`);
     }
     expect(beforeMigration).toContain('npx tsx scripts/deployment-preflight.ts');
+  });
+
+  it('applies client schema before ownership constraints and verifies it afterward', () => {
+    const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
+    const deploy = workflow.split('  deploy-interpreters:')[1].split('  deploy-interpreters-api:')[0];
+    const directoryMigration = deploy.indexOf('20261105140000_client_directory/migration.sql');
+    const ownershipMigration = deploy.indexOf('20261105150000_account_names_per_client/migration.sql');
+    const canonicalMigration = deploy.indexOf('20261105180000_client_directory/migration.sql');
+    const schemaCheck = deploy.indexOf('scripts/deployment-preflight.ts --verify-schema');
+
+    expect(directoryMigration).toBeGreaterThan(-1);
+    expect(ownershipMigration).toBeGreaterThan(directoryMigration);
+    expect(canonicalMigration).toBeGreaterThan(ownershipMigration);
+    expect(schemaCheck).toBeGreaterThan(canonicalMigration);
   });
 
   it('serializes the whole pipeline without cancelling an active migration', () => {
