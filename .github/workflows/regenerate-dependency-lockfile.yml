@@ -26,7 +26,7 @@ jobs:
       - name: Verify clean install
         run: npm ci --no-audit --no-fund
       - name: Run npm audit
-        run: npm audit
+        run: npm audit --audit-level=high
       - name: Assert patched dependency tree
         run: |
           node <<'NODE'
