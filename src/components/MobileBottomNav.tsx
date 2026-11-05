@@ -16,11 +16,12 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
   
   // Determine the correct menu based on role
   const menuItems = role === 'admin' ? adminMenu : interpreterMenu;
+  const visibleMenuItems = role === 'admin' ? menuItems : menuItems.slice(0, 5);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0f1c]/90 backdrop-blur-md border-t border-slate-800 md:hidden pb-[env(safe-area-inset-bottom)]">
-      <div className="flex justify-around items-center h-16 px-2">
-        {menuItems.slice(0, 5).map((item) => {
+    <nav aria-label={role === 'admin' ? 'Navegación administrativa' : 'Navegación principal'} className="fixed bottom-0 left-0 right-0 z-50 bg-[#0a0f1c]/90 backdrop-blur-md border-t border-slate-800 md:hidden pb-[env(safe-area-inset-bottom)]">
+      <div className="flex items-center h-16 gap-1 px-2 overflow-x-auto">
+        {visibleMenuItems.map((item) => {
           const Icon = item.icon;
           const isActive = item.exact 
             ? pathname === item.href 
@@ -31,7 +32,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center w-full h-full space-y-1 transition-all duration-300",
+                "flex shrink-0 flex-col items-center justify-center w-[76px] h-full space-y-1 transition-all duration-300",
                 isActive 
                   ? "text-blue-500 scale-110" 
                   : "text-slate-500 hover:text-slate-300"

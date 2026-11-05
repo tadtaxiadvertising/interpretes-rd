@@ -9,7 +9,7 @@ export default async function CompanyReconciliationPage() {
   const reports = await prisma.companyProductionReport.findMany({
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: 100,
-    include: { account: { select: { name: true, company: { select: { name: true } } } }, reviews: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    include: { account: { select: { name: true, client: { select: { name: true } }, company: { select: { name: true } } } }, reviews: { orderBy: { createdAt: 'desc' }, take: 1 } },
   });
 
   const accountIds = [...new Set(reports.map(report => report.accountId))];
@@ -69,16 +69,16 @@ export default async function CompanyReconciliationPage() {
     </div>
     <div className="overflow-x-auto rounded-2xl border border-white/10">
       <table className="w-full min-w-[900px] text-left text-sm">
-        <thead className="bg-white/5"><tr><th className="p-3">Compañía / cuenta</th><th className="p-3">Reporte y período</th><th className="p-3 text-right">Externo (min)</th><th className="p-3 text-right">Interno (min)</th><th className="p-3 text-right">Diferencia</th><th className="p-3">Revisión</th><th className="p-3">Registrar decisión</th></tr></thead>
+        <thead className="bg-white/5"><tr><th className="p-3">Cliente</th><th className="p-3">Compañía / cuenta</th><th className="p-3">Reporte y período</th><th className="p-3 text-right">Externo (min)</th><th className="p-3 text-right">Interno (min)</th><th className="p-3 text-right">Diferencia</th><th className="p-3">Revisión</th><th className="p-3">Registrar decisión</th></tr></thead>
         <tbody>{comparisons.map(({ report, internalMinutes, difference, logCount, callDifference }) => <tr key={report.id} className="border-t border-white/10">
-          <td className="p-3">{report.account.company?.name || 'Sin compañía'} / {report.account.name}</td>
+          <td className="p-3">{report.account.client?.name || 'Pendiente de identificar'}</td><td className="p-3">{report.account.company?.name || 'Sin compañía'} / {report.account.name}</td>
           <td className="p-3"><span className="block">{report.sourceName}</span><span className="text-xs text-slate-400">{report.periodStart.toISOString().slice(0,10)} — {report.periodEnd.toISOString().slice(0,10)}</span></td>
           <td className="p-3 text-right tabular-nums">{report.reportedMinutes.toLocaleString('es-DO')}</td>
           <td className="p-3 text-right tabular-nums">{internalMinutes.toLocaleString('es-DO')}</td>
           <td className={`p-3 text-right font-semibold tabular-nums ${difference === 0 ? 'text-emerald-300' : 'text-amber-300'}`}>{difference > 0 ? '+' : ''}{difference.toLocaleString('es-DO')}</td>
           <td className="p-3">{logCount === 0 ? <span className="text-amber-300">Sin registros internos</span> : difference !== 0 || (callDifference !== null && callDifference !== 0) ? <span className="text-amber-300">Revisar diferencias</span> : <span className="text-emerald-300">Coincidencia numérica</span>}</td><td className="p-3"><p className="mb-2 text-xs text-slate-400">Última revisión: {report.reviews[0] ? `${report.reviews[0].decision} (${report.reviews[0].createdAt.toISOString().slice(0,10)})` : "Sin revisar"}</p><ReconciliationReviewForm reportId={report.id} /></td>
         </tr>)}
-        {!comparisons.length && <tr><td colSpan={7} className="p-6 text-center text-slate-400">Registra un reporte externo para iniciar una comparación.</td></tr>}</tbody>
+        {!comparisons.length && <tr><td colSpan={8} className="p-6 text-center text-slate-400">Registra un reporte externo para iniciar una comparación.</td></tr>}</tbody>
       </table>
     </div>
     <p className="text-sm text-slate-400">Criterio: minutos interpretados y llamadas de todos los registros internos asociados a la cuenta, dentro de las fechas inclusivas. No se filtra por estado ni se sustituyen valores por minutos verificados. Una coincidencia numérica no significa aprobación. Se muestran los últimos 100 reportes; un mismo período puede aparecer en varios reportes.</p>

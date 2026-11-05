@@ -8,13 +8,16 @@ interface Account {
   id: number;
   name: string;
   description: string | null;
+  clientId: number | null;
+  clientName: string | null;
 }
 
 interface Props {
   initialAccounts: Account[];
+  clients: { id: number; name: string }[];
 }
 
-export function AccountManager({ initialAccounts }: Props) {
+export function AccountManager({ initialAccounts, clients }: Props) {
   const [accounts, setAccounts] = useState<Account[]>(initialAccounts);
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -23,16 +26,18 @@ export function AccountManager({ initialAccounts }: Props) {
   
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newClientId, setNewClientId] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
   function handleCreate() {
     if (!newName) return;
     startTransition(async () => {
-      const result = await createAccount(newName, newDesc);
-      if (result.success) {
-        setAccounts([...accounts, result.data as Account]);
+      const result = await createAccount(newName, newDesc, Number(newClientId));
+      if (result.success && result.data) {
+        setAccounts([...accounts, result.data]);
         setNewName('');
         setNewDesc('');
+        setNewClientId('');
         setShowAdd(false);
       } else {
         alert(result.error);
@@ -44,8 +49,9 @@ export function AccountManager({ initialAccounts }: Props) {
     if (!editName) return;
     startTransition(async () => {
       const result = await updateAccount(id, editName, editDesc);
-      if (result.success) {
-        setAccounts(accounts.map(a => a.id === id ? result.data as Account : a));
+      const updatedAccount = result.data;
+      if (result.success && updatedAccount) {
+        setAccounts(accounts.map(a => a.id === id ? updatedAccount : a));
         setEditingId(null);
       }
     });
@@ -88,6 +94,10 @@ export function AccountManager({ initialAccounts }: Props) {
       {showAdd && (
         <div className="bg-white/5 p-6 rounded-2xl border border-purple-500/20 space-y-4 animate-in fade-in zoom-in-95 duration-300">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <select value={newClientId} onChange={(e) => setNewClientId(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white" required>
+              <option value="">Seleccionar cliente propietario</option>
+              {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+            </select>
             <input 
               placeholder="Nombre de la cuenta (ej. CLI, Propio)"
               value={newName}
@@ -103,7 +113,7 @@ export function AccountManager({ initialAccounts }: Props) {
           </div>
           <button 
             onClick={handleCreate}
-            disabled={isPending || !newName}
+            disabled={isPending || !newName.trim() || !newClientId || !clients.length}
             className="w-full bg-purple-600 hover:bg-purple-500 text-white py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50"
           >
             {isPending ? <Loader2 size={16} className="animate-spin mx-auto" /> : 'Crear Cuenta'}
@@ -130,6 +140,7 @@ export function AccountManager({ initialAccounts }: Props) {
             ) : (
               <div>
                 <p className="text-sm font-bold text-white">{account.name}</p>
+                <p className="text-xs text-blue-300">{account.clientName || 'Cliente pendiente de identificar'}</p>
                 {account.description && <p className="text-xs text-gray-500">{account.description}</p>}
               </div>
             )}

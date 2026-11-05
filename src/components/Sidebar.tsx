@@ -48,6 +48,7 @@ export const adminMenu: MenuItem[] = [
   { icon: UserPlus, label: 'Reclutamiento', href: '/recruitment', section: 'Personas' },
   { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays', section: 'Operaciones' },
   { icon: Clock, label: 'Producción', href: '/production', section: 'Operaciones' },
+  { icon: Users, label: 'Clientes', href: '/admin/clients', section: 'Operaciones' },
   { icon: Building2, label: 'Cuentas operativas', href: '/admin/accounts', section: 'Operaciones' },
   { icon: Briefcase, label: 'Compañías', href: '/admin/companies', section: 'Operaciones' },
   { icon: Users, label: 'Asignaciones', href: '/admin/assignments', section: 'Operaciones' },
