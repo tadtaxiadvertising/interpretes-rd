@@ -8,8 +8,9 @@ import { validateAction } from '@/lib/auth/actions';
 import { operationalAccountInputSchema } from '@/lib/client-validation';
 
 const db = prisma;
+type ManagedAccount = Pick<Account, 'id' | 'name' | 'description' | 'clientId'> & { clientName: string | null };
 
-export async function createAccount(name: string, description: string | undefined, clientId: number): Promise<ActionResult<Account & { clientName: string }>> {
+export async function createAccount(name: string, description: string | undefined, clientId: number): Promise<ActionResult<ManagedAccount>> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
@@ -36,7 +37,7 @@ export async function createAccount(name: string, description: string | undefine
   }
 }
 
-export async function updateAccount(id: number, name: string, description?: string): Promise<ActionResult<Account & { clientName: string | null }>> {
+export async function updateAccount(id: number, name: string, description?: string): Promise<ActionResult<ManagedAccount>> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 

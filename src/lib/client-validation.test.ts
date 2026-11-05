@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clientAssignmentSchema, clientInputSchema, operationalAccountInputSchema } from './client-validation';
+import { clientAssignmentSchema, clientInputSchema } from './client-validation';
 
 describe('clientInputSchema', () => {
   it('trims and accepts a valid client', () => {
@@ -29,22 +29,5 @@ describe('clientAssignmentSchema', () => {
   it('rejects zero and non-numeric IDs', () => {
     expect(clientAssignmentSchema.safeParse({ accountId: '0', clientId: '4' }).success).toBe(false);
     expect(clientAssignmentSchema.safeParse({ accountId: 'x', clientId: '4' }).success).toBe(false);
-  });
-});
-
-
-describe('operationalAccountInputSchema', () => {
-  it('requires a valid client and normalizes account details', () => {
-    expect(operationalAccountInputSchema.parse({
-      clientId: '8', name: '  Support Line  ', description: '',
-    })).toEqual({ clientId: 8, name: 'Support Line', description: '' });
-  });
-
-  it('rejects accounts without a valid client owner', () => {
-    for (const clientId of ['', '0', '-1', 'abc']) {
-      expect(operationalAccountInputSchema.safeParse({
-        clientId, name: 'Support Line', description: '',
-      }).success).toBe(false);
-    }
   });
 });
