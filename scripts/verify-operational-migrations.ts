@@ -105,6 +105,31 @@ async function main() {
       throw new Error('Account-to-client foreign key is missing.');
     }
 
+    // A shared company identifier must be reusable by accounts owned by different clients.
+    const clientA = await client.query(
+      `INSERT INTO public.clients (name) VALUES ('__ci_client_a') RETURNING id`,
+    );
+    const clientB = await client.query(
+      `INSERT INTO public.clients (name) VALUES ('__ci_client_b') RETURNING id`,
+    );
+    const sharedCompany = await client.query(
+      `INSERT INTO public.companies (name) VALUES ('__ci_shared_company') RETURNING id`,
+    );
+    await client.query(
+      `INSERT INTO public.accounts (name, client_id, company_id)
+       VALUES ('__ci_account_a', $1, $3), ('__ci_account_b', $2, $3)`,
+      [clientA.rows[0].id, clientB.rows[0].id, sharedCompany.rows[0].id],
+    );
+    const ownershipCheck = await client.query(
+      `SELECT COUNT(DISTINCT client_id)::int AS client_count,
+              COUNT(DISTINCT company_id)::int AS company_count
+       FROM public.accounts
+       WHERE name IN ('__ci_account_a', '__ci_account_b')`,
+    );
+    if (ownershipCheck.rows[0]?.client_count !== 2 || ownershipCheck.rows[0]?.company_count !== 1) {
+      throw new Error('The same company identifier must be reusable across different client-owned accounts.');
+    }
+
     const assignmentConstraint = await client.query(
       `SELECT 1 FROM pg_constraint
        WHERE conrelid = 'public.interpreter_account_assignments'::regclass
