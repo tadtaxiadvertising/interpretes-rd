@@ -140,3 +140,12 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 - **Cobertura pendiente en rate limiting:** RATE_LIMITS.evaluationSubmit está definido en src/lib/security/rate-limit.ts, pero no se encontró uso en las rutas ni en src/app/actions/roleplay.ts. La evaluación está implementada como Server Action; requiere decidir si la protección apropiada debe ser por actor autenticado/rol, no aplicar automáticamente una clave IP a ciegas.
 - **Límites de infraestructura sin resolver:** el store continúa siendo un Map por proceso y la IP se obtiene del primer x-forwarded-for o x-real-ip. No se encontró en el repositorio una configuración que permita demostrar qué proxy sobrescribe esas cabeceras ni un backend distribuido aprobado. Por ello no se cambió la precedencia de IP, no se añadió Redis/Upstash y el issue #128 permanece abierto.
 - **Entorno de verificación:** la revisión de código se hizo mediante GitHub API. No se ejecutó npm localmente ni se afirma npm audit, npm ci o pruebas locales para los pendientes #127/#128.
+
+
+### Actualización de dependencias de tooling — 2026-11-05
+
+- Se preparó una actualización aislada de las dependencias de desarrollo: Vite 8.3.1 → 8.3.6, Vitest 5.0.3 → 5.1.0, `@vitest/ui` 5.0.3 → 5.1.0 y tsx 4.21.0 → 4.23.15. La actualización de tsx permite resolver esbuild 0.28.2, en lugar de 0.27.7.
+- `package-lock.json` se regeneró mediante npm en un runner limpio; `npm ci` terminó correctamente. Se verificaron todas las copias de esbuild en el lockfile y no quedaron versiones inferiores a 0.28.1.
+- La comparación del lockfile confirma que Prisma 7.10.1 y mysql2 3.24.4 no cambiaron. No se ejecutaron migraciones ni se modificaron datos.
+- `npm audit --audit-level=high` terminó correctamente: no se detectaron hallazgos de severidad alta o crítica. El informe completo sigue mostrando 6 hallazgos moderados de GHSA-g3hv-75wg-m249, concentrados en `minimatch@10.2.5` anidado bajo `@typescript-eslint/typescript-estree`. El aviso fija la corrección en minimatch 11.0.1; no se forzó un override mayor sobre consumidores transitivos sin verificar compatibilidad. Este remanente queda visible para revisión separada.
+- La regeneración del lockfile y la instalación limpia están verificadas en GitHub Actions run #42084791811. La validación completa de TypeScript, lint, pruebas, build y E2E corresponde al CI del PR, todavía pendiente de su ejecución.
