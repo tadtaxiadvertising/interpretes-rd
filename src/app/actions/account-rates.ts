@@ -28,7 +28,7 @@ export async function createAccount(name: string, description: string | undefine
     revalidatePath('/admin/accounts');
     revalidatePath('/admin/clients');
     revalidatePath('/settings');
-    return { success: true, data: { ...account, clientName: account.client.name } };
+    return { success: true, data: { ...account, clientName: client.name } };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return { success: false, error: 'La cuenta ya existe', code: 'CONFLICT' };
