@@ -49,8 +49,9 @@ export function AccountManager({ initialAccounts, clients }: Props) {
     if (!editName) return;
     startTransition(async () => {
       const result = await updateAccount(id, editName, editDesc);
-      if (result.success && result.data) {
-        setAccounts(accounts.map(a => a.id === id ? result.data! : a));
+      const updatedAccount = result.data;
+      if (result.success && updatedAccount) {
+        setAccounts(accounts.map(a => a.id === id ? updatedAccount : a));
         setEditingId(null);
       }
     });
