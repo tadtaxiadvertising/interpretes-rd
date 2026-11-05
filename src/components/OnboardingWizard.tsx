@@ -82,7 +82,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
       if (el.scrollHeight <= el.clientHeight) setHasScrolledToBottom(true);
       return () => el.removeEventListener('scroll', handleScroll);
     }
-  }, [currentStep, handleScroll, agreement?.id]);
+  }, [currentStep, handleScroll, agreement]);
 
   // ── Step handlers ──
   async function handleNextLegal() {
