@@ -6,14 +6,18 @@ import { createOperationalAccount } from '@/app/actions/admin-accounts';
 type State = { success: boolean; error?: string };
 const initialState: State = { success: false };
 
-export default function CreateAccountForm() {
-  const [state, action, pending] = useActionState(async (_previous: State, data: FormData): Promise<State> => {
-    return createOperationalAccount(data);
-  }, initialState);
+export default function CreateAccountForm({ clients }: { clients: { id: number; name: string }[] }) {
+  const [state, action, pending] = useActionState(async (_previous: State, data: FormData): Promise<State> => createOperationalAccount(data), initialState);
   return (
     <form action={action} className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 space-y-4">
       <h2 className="text-lg font-semibold text-white">Nueva cuenta operativa</h2>
-      <p className="text-sm text-slate-400">Registra una cuenta existente sin guardar contraseñas ni datos sensibles aquí.</p>
+      <p className="text-sm text-slate-400">Registra una cuenta proporcionada por un cliente. No guardes contraseñas ni datos sensibles aquí.</p>
+      <label className="block text-sm text-slate-300">Cliente propietario
+        <select name="clientId" required className="mt-1 w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-white">
+          <option value="">Seleccionar cliente</option>
+          {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
+        </select>
+      </label>
       <label className="block text-sm text-slate-300">Nombre
         <input name="name" required minLength={2} maxLength={120} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-white" />
       </label>
@@ -22,7 +26,8 @@ export default function CreateAccountForm() {
       </label>
       {state.error && <p role="alert" className="text-sm text-red-300">{state.error}</p>}
       {state.success && <p role="status" className="text-sm text-emerald-300">Cuenta registrada correctamente.</p>}
-      <button disabled={pending} className="rounded-lg bg-[#2675ff] px-4 py-2 font-semibold text-white disabled:opacity-50">{pending ? 'Guardando…' : 'Crear cuenta'}</button>
+      <button disabled={pending || !clients.length} className="rounded-lg bg-[#2675ff] px-4 py-2 font-semibold text-white disabled:opacity-50">{pending ? 'Guardando…' : 'Crear cuenta'}</button>
+      {!clients.length && <p className="text-xs text-amber-300">Registra un cliente antes de crear cuentas operativas.</p>}
     </form>
   );
 }
