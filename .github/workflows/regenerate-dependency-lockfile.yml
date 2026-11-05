@@ -25,6 +25,8 @@ jobs:
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Verify clean install
         run: npm ci --no-audit --no-fund
+      - name: Run npm audit
+        run: npm audit
       - name: Assert patched dependency tree
         run: |
           node <<'NODE'
