@@ -5,14 +5,15 @@ import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
+import { nonNegativeIntegerInput } from '@/lib/company-report-validation';
 
 const schema = z.object({
   accountId: z.coerce.number().int().positive(),
   periodStart: z.iso.date(),
   periodEnd: z.iso.date(),
   sourceName: z.string().trim().min(2).max(150),
-  reportedMinutes: z.coerce.number().int().nonnegative().max(100000000),
-  reportedCalls: z.union([z.literal(''), z.coerce.number().int().nonnegative().max(100000000)]),
+  reportedMinutes: nonNegativeIntegerInput,
+  reportedCalls: z.union([z.literal(''), nonNegativeIntegerInput]),
   notes: z.string().trim().max(1000),
 });
 

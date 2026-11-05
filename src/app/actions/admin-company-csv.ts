@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
 import { validateCompanyCsvHeaders } from '@/lib/company-csv-validation';
+import { nonNegativeIntegerInput } from '@/lib/company-report-validation';
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_ROWS = 500;
@@ -15,8 +16,8 @@ const rowSchema = z.object({
   periodStart: z.iso.date(),
   periodEnd: z.iso.date(),
   sourceName: z.string().trim().min(2).max(150),
-  reportedMinutes: z.coerce.number().int().nonnegative().max(100000000),
-  reportedCalls: z.union([z.literal(''), z.coerce.number().int().nonnegative().max(100000000)]),
+  reportedMinutes: nonNegativeIntegerInput,
+  reportedCalls: z.union([z.literal(''), nonNegativeIntegerInput]),
   notes: z.string().trim().max(1000),
 });
 
