@@ -36,7 +36,7 @@ export async function createAccount(name: string, description: string | undefine
   }
 }
 
-export async function updateAccount(id: number, name: string, description?: string): Promise<ActionResult<Account>> {
+export async function updateAccount(id: number, name: string, description?: string): Promise<ActionResult<Account & { clientName: string | null }>> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
@@ -44,11 +44,13 @@ export async function updateAccount(id: number, name: string, description?: stri
     const account = await db.account.update({
       where: { id },
       data: { name, description },
-      select: { id: true, name: true, description: true }
+      select: { id: true, name: true, description: true, clientId: true, client: { select: { name: true } } }
     });
     revalidatePath('/admin/payrates');
+    revalidatePath('/admin/accounts');
+    revalidatePath('/admin/clients');
     revalidatePath('/settings');
-    return { success: true, data: account as Account };
+    return { success: true, data: { ...account, clientName: account.client?.name ?? null } };
   } catch {
     return { success: false, error: 'Error al actualizar la cuenta', code: 'INTERNAL_ERROR' };
   }
@@ -64,6 +66,8 @@ export async function deleteAccount(id: number): Promise<ActionResult<void>> {
       select: { id: true }
     });
     revalidatePath('/admin/payrates');
+    revalidatePath('/admin/accounts');
+    revalidatePath('/admin/clients');
     revalidatePath('/settings');
     return { success: true };
   } catch {

@@ -13,9 +13,3 @@ export const clientAssignmentSchema = z.object({
   accountId: z.coerce.number().int().positive(),
   clientId: z.coerce.number().int().positive(),
 });
-
-export const operationalAccountInputSchema = z.object({
-  clientId: z.coerce.number().int().positive(),
-  name: z.string().trim().min(2).max(120),
-  description: z.string().trim().max(1000),
-});

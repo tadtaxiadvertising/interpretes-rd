@@ -34,7 +34,7 @@ export function AccountManager({ initialAccounts, clients }: Props) {
     startTransition(async () => {
       const result = await createAccount(newName, newDesc, Number(newClientId));
       if (result.success) {
-        setAccounts([...accounts, result.data as Account]);
+        setAccounts([...accounts, result.data]);
         setNewName('');
         setNewDesc('');
         setNewClientId('');
@@ -50,7 +50,7 @@ export function AccountManager({ initialAccounts, clients }: Props) {
     startTransition(async () => {
       const result = await updateAccount(id, editName, editDesc);
       if (result.success) {
-        setAccounts(accounts.map(a => a.id === id ? result.data as Account : a));
+        setAccounts(accounts.map(a => a.id === id ? result.data : a));
         setEditingId(null);
       }
     });

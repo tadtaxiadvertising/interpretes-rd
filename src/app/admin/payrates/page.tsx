@@ -17,13 +17,9 @@ export default async function PayratesPage(props: { searchParams: Promise<{ mana
 
   if (profile?.role?.toLowerCase() !== 'admin') redirect('/login');
 
-  const [accounts, clients] = await Promise.all([
-    prisma.account.findMany({
-      orderBy: [{ client: { name: 'asc' } }, { name: 'asc' }],
-      select: { id: true, name: true, description: true, clientId: true, client: { select: { name: true } } },
-    }),
-    prisma.client.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
-  ]);
+  const accounts = await (prisma as any).account.findMany({
+    orderBy: { name: 'asc' }
+  });
 
   const interpreters = await (prisma as any).interpreter.findMany({
     select: {
@@ -72,7 +68,7 @@ export default async function PayratesPage(props: { searchParams: Promise<{ mana
       </header>
 
       {showManageAccounts ? (
-        <AccountManager initialAccounts={accounts.map(account => ({ id: account.id, name: account.name, description: account.description, clientId: account.clientId, clientName: account.client?.name ?? null }))} clients={clients} />
+        <AccountManager initialAccounts={accounts as any} />
       ) : (
         <div className="glass rounded-3xl p-8">
           <div className="overflow-x-auto">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clientAssignmentSchema, clientInputSchema } from './client-validation';
+import { clientAssignmentSchema, clientInputSchema, operationalAccountInputSchema } from './client-validation';
 
 describe('clientInputSchema', () => {
   it('trims and accepts a valid client', () => {
@@ -32,7 +32,6 @@ describe('clientAssignmentSchema', () => {
   });
 });
 
-import { operationalAccountInputSchema } from './client-validation';
 
 describe('operationalAccountInputSchema', () => {
   it('requires a valid client and normalizes account details', () => {
