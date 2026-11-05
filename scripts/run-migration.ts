@@ -8,7 +8,8 @@ import { Client } from 'pg';
 async function main() {
   const args = process.argv.slice(2);
   const apply = args.includes('--apply');
-  const migrationPath = args.find((arg) => arg !== '--apply');
+  const transactional = args.includes('--transaction');
+  const migrationPath = args.find((arg) => arg !== '--apply' && arg !== '--transaction');
 
   if (!migrationPath || !migrationPath.endsWith('.sql')) {
     throw new Error(
@@ -49,15 +50,26 @@ async function main() {
 
   const client = new Client({ connectionString });
   let connected = false;
+  let transactionStarted = false;
 
   try {
     await client.connect();
     connected = true;
-    // El archivo SQL es el límite de revisión. Los scripts de migración deben
-    // administrar explícitamente su propia transacción cuando corresponda.
+    if (transactional) {
+      await client.query('BEGIN');
+      transactionStarted = true;
+    }
     await client.query(sql);
+    if (transactionStarted) {
+      await client.query('COMMIT');
+      transactionStarted = false;
+    }
     console.log('Migración ejecutada correctamente.');
   } catch (error) {
+    if (transactionStarted) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      transactionStarted = false;
+    }
     console.error('La migración falló. Revisa el error del motor SQL; no se intentó reparar ni borrar usuarios automáticamente.');
     throw error;
   } finally {

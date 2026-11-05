@@ -1,5 +1,7 @@
 -- Account names are scoped to their real owner. Company identity remains independent.
 -- Existing account IDs and all operational foreign keys are preserved.
+-- The production migration runner wraps this file in one transaction so a
+-- duplicate-name conflict cannot leave the legacy index partially removed.
 ALTER TABLE "public"."accounts"
   DROP CONSTRAINT IF EXISTS "accounts_name_key";
 DROP INDEX IF EXISTS "public"."accounts_name_key";

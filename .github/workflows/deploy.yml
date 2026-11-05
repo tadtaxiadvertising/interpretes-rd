@@ -133,6 +133,30 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install migration dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Apply account ownership migration before deployment
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${DIRECT_URL:-}" ]; then
+            echo "::error::DIRECT_URL secret is required in the production environment."
+            echo "The application deployment is blocked to prevent code/schema mismatch."
+            exit 1
+          fi
+          npm run migrate -- prisma/migrations/20261105150000_account_names_per_client/migration.sql --apply --transaction
+
       - name: Call Easypanel Webhook — interpreters
         run: |
           set -euo pipefail
