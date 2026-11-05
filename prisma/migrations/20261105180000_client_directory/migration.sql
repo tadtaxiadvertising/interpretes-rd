@@ -20,6 +20,11 @@ ALTER TABLE "public"."accounts"
 CREATE INDEX IF NOT EXISTS "accounts_client_id_idx"
   ON "public"."accounts" ("client_id");
 
+-- Match Prisma @@unique([clientId, name]); PostgreSQL permits multiple NULL
+-- client_id values, preserving legacy/unassigned accounts.
+CREATE UNIQUE INDEX IF NOT EXISTS "accounts_client_id_name_key"
+  ON "public"."accounts" ("client_id", "name");
+
 DO $$
 BEGIN
   IF NOT EXISTS (
