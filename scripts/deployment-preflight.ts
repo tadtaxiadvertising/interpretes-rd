@@ -18,7 +18,9 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
   }
 
   for (const name of requiredSecrets) {
-    const value = env[name]!;
+    // GitHub secrets are sometimes pasted with a terminal newline. Trim only
+    // surrounding whitespace; reject whitespace inside the actual URL.
+    const value = env[name]!.trim();
     let url: URL;
     try {
       if (/\s|[\u0000-\u001f\u007f]/u.test(value)) throw new Error();
@@ -47,7 +49,7 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
     }
   }
 
-  return env.DIRECT_URL!;
+  return env.DIRECT_URL!.trim();
 }
 
 function createPreflightClient(config: ClientConfig): PreflightClient {
@@ -60,6 +62,7 @@ function createPreflightClient(config: ClientConfig): PreflightClient {
 export async function runDeploymentPreflight(
   env: DeploymentEnvironment,
   createClient: (config: ClientConfig) => PreflightClient = createPreflightClient,
+  verifySchema = false,
 ): Promise<void> {
   // All three secrets must pass before even constructing a database client.
   const connectionString = validateDeploymentSecrets(env);
@@ -74,9 +77,13 @@ export async function runDeploymentPreflight(
     });
     await client.connect();
     await client.query('BEGIN READ ONLY');
-    // Validate connectivity, SELECT permission and prerequisites without reading user rows.
-    await client.query('SELECT id, client_id, name FROM public.accounts LIMIT 0');
-    await client.query('SELECT id FROM public.clients LIMIT 0');
+    // The first preflight must run before migrations, so it checks connectivity only.
+    // The schema verification mode runs after the additive migrations have completed.
+    await client.query('SELECT 1');
+    if (verifySchema) {
+      await client.query('SELECT id, client_id, name FROM public.accounts LIMIT 0');
+      await client.query('SELECT id FROM public.clients LIMIT 0');
+    }
     await client.query('ROLLBACK');
   } catch {
     throw new Error('Production preflight: DIRECT_URL connection or schema prerequisite check failed. Verify the production target, credentials, network access and client-directory migration. No deployment was triggered.');
@@ -87,7 +94,7 @@ export async function runDeploymentPreflight(
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  runDeploymentPreflight(process.env).then(() => {
+  runDeploymentPreflight(process.env, undefined, process.argv.includes('--verify-schema')).then(() => {
     console.log('Production preflight passed: required secrets and read-only database prerequisites verified.');
   }).catch((error: unknown) => {
     console.error(error instanceof Error ? error.message : 'Production preflight failed.');
