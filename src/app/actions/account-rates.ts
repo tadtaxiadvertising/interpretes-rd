@@ -136,7 +136,7 @@ export async function setInterpreterAccountRate(
         select: { tariffPerHour: true }
       });
       const rate = await tx.interpreterAccountRate.upsert({
-        where: { interpreterId_accountId: { interpreterId, accountId } },
+        where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
         update: { tariffPerHour: parsed.data.tariffPerHour },
         create: parsed.data,
         select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
