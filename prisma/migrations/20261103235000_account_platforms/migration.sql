@@ -11,3 +11,4 @@ CREATE TABLE "public"."account_platforms" (
   "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "account_platforms_account_id_name_key" UNIQUE ("account_id", "name")
 );
+ALTER TABLE "public"."account_platforms" ENABLE ROW LEVEL SECURITY;

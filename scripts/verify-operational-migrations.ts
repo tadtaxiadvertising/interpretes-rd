@@ -70,7 +70,8 @@ async function main() {
       'accounts_company_id_idx',
       'interpreter_account_assignments_account_id_starts_at_idx',
       'interpreter_account_assignments_interpreter_id_starts_at_idx',
-      'company_production_reports_account_id_period_start_period_end_idx',
+      'company_production_reports_account_id_period_start_period_end_i',
+      'reports_unique_source',
       'company_report_reviews_report_id_created_at_idx',
       'account_platforms_account_id_name_key',
     ];
@@ -106,6 +107,20 @@ async function main() {
     );
     if (reportConstraints.rowCount !== 3) {
       throw new Error('Company report integrity constraints are incomplete.');
+    }
+
+    const rlsTables = await client.query(
+      `SELECT c.relname AS name
+       FROM pg_class AS c
+       JOIN pg_namespace AS n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND c.relname = ANY($1::text[])
+         AND c.relrowsecurity = true`,
+      [expectedTables],
+    );
+    const rlsEnabled = new Set(rlsTables.rows.map((row: { name: string }) => row.name));
+    for (const table of expectedTables) {
+      if (!rlsEnabled.has(table)) throw new Error(`Row-level security is not enabled on public.${table}`);
     }
 
     console.log('All operational migrations applied and verified successfully in CI.');
