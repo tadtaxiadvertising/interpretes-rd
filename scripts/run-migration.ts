@@ -50,7 +50,7 @@ async function main() {
   if (!connectionString?.trim()) {
     throw new Error('DIRECT_URL es obligatorio para aplicar migraciones. DATABASE_URL no se acepta como alternativa.');
   }
-  if (/\\s|[\\u0000-\\u001f\\u007f]/u.test(connectionString)) {
+  if (/\s|[\u0000-\u001f\u007f]/u.test(connectionString)) {
     throw new Error('DIRECT_URL no puede contener espacios internos ni caracteres de control.');
   }
   if (!transactional) {
