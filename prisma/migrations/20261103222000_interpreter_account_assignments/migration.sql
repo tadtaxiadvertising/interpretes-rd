@@ -21,3 +21,4 @@ ALTER TABLE "public"."interpreter_account_assignments"
     "account_id" WITH =,
     daterange("starts_at", COALESCE("ends_at" + 1, 'infinity'::date), '[)') WITH &&
   );
+ALTER TABLE "public"."interpreter_account_assignments" ENABLE ROW LEVEL SECURITY;
