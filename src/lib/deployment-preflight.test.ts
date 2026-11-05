@@ -60,7 +60,7 @@ describe('deployment credential boundary', () => {
     ['DIRECT_URL', `${validEnv.DIRECT_URL}?pool_mode=transaction`],
     ['EASYPANEL_WEBHOOK_API', 'file:///private-backend-token'],
     ['EASYPANEL_WEBHOOK_INTERPRETERS', 'private-frontend-token'],
-    ['EASYPANEL_WEBHOOK_API', `${validEnv.EASYPANEL_WEBHOOK_API}\n`],
+    ['EASYPANEL_WEBHOOK_API', 'https://example.com/token with space'],
   ])('blocks invalid %s without connecting or echoing values', async (name, value) => {
     const { createClient } = fakeConnection();
     let message = '';
