@@ -4,6 +4,6 @@ import { z } from 'zod';
 export const nonNegativeIntegerInput = z
   .string()
   .trim()
-  .regex(/^\\d+$/)
+  .regex(/^\d+$/)
   .transform(Number)
   .pipe(z.number().int().nonnegative().max(100000000));
