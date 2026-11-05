@@ -10,6 +10,12 @@ on:
       - main
   workflow_dispatch:
 
+# Keep migration, frontend and backend from different main runs from interleaving.
+# Never cancel a running migration. PR validation uses its own ref/group.
+concurrency:
+  group: interpreters-cicd-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   validate:
     name: Validate & Test
@@ -92,6 +98,12 @@ jobs:
       - name: Verify operational migrations on isolated PostgreSQL
         run: npx tsx scripts/verify-operational-migrations.ts
 
+      - name: Verify deployment preflight on isolated PostgreSQL
+        env:
+          EASYPANEL_WEBHOOK_INTERPRETERS: http://127.0.0.1:9/unused-frontend
+          EASYPANEL_WEBHOOK_API: http://127.0.0.1:9/unused-backend
+        run: npx tsx scripts/deployment-preflight.ts
+
       - name: TypeScript Check
         run: npx tsc --noEmit
 
@@ -144,6 +156,13 @@ jobs:
 
       - name: Install migration dependencies
         run: npm ci --legacy-peer-deps
+
+      - name: Preflight production credentials and read-only connection
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
+          EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
+        run: npx tsx scripts/deployment-preflight.ts
 
       - name: Apply account ownership migration before deployment
         env:

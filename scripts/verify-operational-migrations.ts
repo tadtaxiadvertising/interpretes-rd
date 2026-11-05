@@ -7,6 +7,9 @@ if (!connectionString) {
   throw new Error('DATABASE_URL is required to verify operational migrations.');
 }
 
+const ownershipMigration = '20261105150000_account_names_per_client/migration.sql';
+const fixtureIds = [-19401, -19402, -19403];
+
 const migrations = [
   '20261103220000_company_directory/migration.sql',
   '20261103222000_interpreter_account_assignments/migration.sql',
@@ -14,8 +17,35 @@ const migrations = [
   '20261103232000_company_report_reviews/migration.sql',
   '20261103235000_account_platforms/migration.sql',
   '20261105140000_client_directory/migration.sql',
-  '20261105150000_account_names_per_client/migration.sql',
+  ownershipMigration,
 ] as const;
+
+async function ownershipFixtureSnapshot(client: Client) {
+  // Every lookup is bounded by the deterministic fixture primary keys. Include
+  // whole rows so a migration cannot silently change values or relationships.
+  const result = await client.query(
+    `SELECT jsonb_build_object(
+       'accounts', (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id)
+                    FROM public.accounts a WHERE a.id = ANY($1::int[])),
+       'clients', (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id)
+                   FROM public.clients c WHERE c.id = ANY($1::int[])),
+       'companies', (SELECT jsonb_agg(to_jsonb(c) ORDER BY c.id)
+                     FROM public.companies c WHERE c.id = ANY($1::int[])),
+       'rates', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id)
+                 FROM public.interpreter_account_rates r WHERE r.id = ANY($1::int[])),
+       'assignments', (SELECT jsonb_agg(to_jsonb(a) ORDER BY a.id)
+                       FROM public.interpreter_account_assignments a WHERE a.id = ANY($1::int[])),
+       'history', (SELECT jsonb_agg(to_jsonb(l) ORDER BY l.id)
+                   FROM public.production_logs l WHERE l.id = ANY($1::int[])),
+       'reports', (SELECT jsonb_agg(to_jsonb(r) ORDER BY r.id)
+                   FROM public.company_production_reports r WHERE r.id = ANY($1::int[])),
+       'platforms', (SELECT jsonb_agg(to_jsonb(p) ORDER BY p.id)
+                     FROM public.account_platforms p WHERE p.id = ANY($1::int[]))
+     ) AS snapshot`,
+    [fixtureIds],
+  );
+  return JSON.stringify(result.rows[0].snapshot);
+}
 
 async function main() {
   const client = new Client({ connectionString });
@@ -56,11 +86,71 @@ async function main() {
     await client.query('DROP TABLE IF EXISTS public.companies CASCADE');
     await client.query('DROP TABLE IF EXISTS public.clients CASCADE');
 
+    // Legacy accounts and their financial/history rows exist before either
+    // ownership column. Negative IDs avoid advancing the CI database sequences.
+    await client.query(`
+      INSERT INTO public.interpreters (id, external_id, name, tariff_per_minute)
+      VALUES (-19401, '__ci_ownership_interpreter', '__ci_ownership_interpreter', 0.25);
+      INSERT INTO public.accounts (id, name, description) VALUES
+        (-19401, '__ci_legacy_account_a', 'legacy client A'),
+        (-19402, '__ci_legacy_account_b', 'legacy client B'),
+        (-19403, '__ci_legacy_unassigned', 'ownership remains unknown');
+      INSERT INTO public.interpreter_account_rates (id, interpreter_id, account_id, tariff_per_hour) VALUES
+        (-19401, -19401, -19401, 11.25),
+        (-19402, -19401, -19402, 22.50),
+        (-19403, -19401, -19403, 33.75);
+      INSERT INTO public.production_logs
+        (id, interpreter_id, account_id, date, status, interpreted_minutes, calls_attended) VALUES
+        (-19401, -19401, -19401, '2026-10-01', 'Manual', 101, 11),
+        (-19402, -19401, -19402, '2026-10-02', 'Manual', 202, 22),
+        (-19403, -19401, -19403, '2026-10-03', 'Manual', 303, 33)
+    `);
+
+    let ownershipSnapshot: string | undefined;
+    let ownershipSql = '';
     for (const migration of migrations) {
       const sql = await readFile(resolve(process.cwd(), 'prisma/migrations', migration), 'utf8');
       if (!sql.trim()) throw new Error(`Operational migration is empty: ${migration}`);
+
+      if (migration === ownershipMigration) {
+        const legacyOwners = await client.query(
+          `SELECT COUNT(*)::int AS unassigned FROM public.accounts
+           WHERE id = ANY($1::int[]) AND client_id IS NULL AND company_id IS NULL`,
+          [fixtureIds],
+        );
+        if (legacyOwners.rows[0]?.unassigned !== fixtureIds.length) {
+          throw new Error('Directory migrations must preserve legacy account IDs without inventing ownership.');
+        }
+        await client.query(`
+          INSERT INTO public.clients (id, name) VALUES
+            (-19401, '__ci_ownership_client_a'), (-19402, '__ci_ownership_client_b');
+          INSERT INTO public.companies (id, name) VALUES (-19401, '__ci_ownership_shared_company');
+          UPDATE public.accounts SET client_id = id, company_id = -19401
+          WHERE id IN (-19401, -19402);
+          INSERT INTO public.interpreter_account_assignments
+            (id, interpreter_id, account_id, starts_at, ends_at) VALUES
+            (-19401, -19401, -19401, '2026-10-01', '2026-10-31'),
+            (-19402, -19401, -19402, '2026-10-01', '2026-10-31'),
+            (-19403, -19401, -19403, '2026-10-01', '2026-10-31');
+          INSERT INTO public.company_production_reports
+            (id, account_id, period_start, period_end, source_name, source_checksum, reported_minutes) VALUES
+            (-19401, -19401, '2026-10-01', '2026-10-31', '__ci_report_a', '__ci_checksum_a', 101),
+            (-19402, -19402, '2026-10-01', '2026-10-31', '__ci_report_b', '__ci_checksum_b', 202),
+            (-19403, -19403, '2026-10-01', '2026-10-31', '__ci_report_unassigned', '__ci_checksum_c', 303);
+          INSERT INTO public.account_platforms (id, account_id, name) VALUES
+            (-19401, -19401, '__ci_platform'),
+            (-19402, -19402, '__ci_platform'),
+            (-19403, -19403, '__ci_platform')
+        `);
+        ownershipSnapshot = await ownershipFixtureSnapshot(client);
+        ownershipSql = sql;
+      }
+
       await client.query(sql);
       console.log(`Applied in rollback-only CI transaction: ${migration}`);
+    }
+    if (!ownershipSnapshot || await ownershipFixtureSnapshot(client) !== ownershipSnapshot) {
+      throw new Error('Account ownership migration changed legacy IDs, ownership, rates, assignments or history.');
     }
 
     const expectedTables = [
@@ -166,6 +256,18 @@ async function main() {
     if (legacyNameIndex.rows[0]?.index_name) {
       throw new Error('The legacy global account-name index was not removed.');
     }
+
+    // Reuse a legacy label across two clients, then retry the actual SQL with
+    // live relationships. Neither account nor its operational data may merge.
+    await client.query(`
+      UPDATE public.accounts SET name = '__ci_legacy_account_a' WHERE id = -19402
+    `);
+    const beforeRetry = await ownershipFixtureSnapshot(client);
+    await client.query(ownershipSql);
+    if (await ownershipFixtureSnapshot(client) !== beforeRetry) {
+      throw new Error('Retrying account ownership migration changed data for same-name accounts across clients.');
+    }
+    console.log('Account ownership migration preserves legacy data and is idempotent across client-scoped names.');
 
     const assignmentConstraint = await client.query(
       `SELECT 1 FROM pg_constraint
