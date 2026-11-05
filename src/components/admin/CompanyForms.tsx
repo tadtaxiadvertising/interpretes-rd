@@ -6,7 +6,7 @@ import { createCompany, assignAccountToCompany } from '@/app/actions/admin-compa
 type Result = { success: boolean; error?: string };
 const initial: Result = { success: false };
 type CompanyOption = { id: number; name: string };
-type AccountOption = { id: number; name: string };
+type AccountOption = { id: number; name: string; clientName: string | null };
 
 export default function CompanyForms({ companies, accounts }: { companies: CompanyOption[]; accounts: AccountOption[] }) {
   const [createResult, createAction, creating] = useActionState(
@@ -24,7 +24,7 @@ export default function CompanyForms({ companies, accounts }: { companies: Compa
       <p role="status" aria-live="polite" className={createResult.error ? 'text-red-300 md:col-span-2' : 'text-emerald-300 md:col-span-2'}>{createResult.error || (createResult.success ? 'Compañía registrada correctamente.' : '')}</p>
     </form>
     <form action={assignAction} className="flex flex-wrap gap-3 rounded-2xl border border-white/10 p-5">
-      <select required name="accountId" aria-label="Cuenta" className={input}><option value="">Seleccionar cuenta</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+      <select required name="accountId" aria-label="Cuenta" className={input}><option value="">Seleccionar cuenta</option>{accounts.map(a => <option key={a.id} value={a.id}>{a.clientName || 'Cliente pendiente'} · {a.name}</option>)}</select>
       <select required name="companyId" aria-label="Compañía" className={input}><option value="">Seleccionar compañía</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
       <button disabled={assigning || !accounts.length || !companies.length} className="rounded-lg bg-[#2675ff] px-4 py-3 font-semibold disabled:opacity-50">{assigning ? 'Vinculando…' : 'Identificar compañía de la cuenta'}</button>
       <p role="status" aria-live="polite" className={assignResult.error ? 'w-full text-red-300' : 'w-full text-emerald-300'}>{assignResult.error || (assignResult.success ? 'Compañía identificada correctamente.' : '')}</p>

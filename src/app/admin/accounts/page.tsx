@@ -29,7 +29,7 @@ export default async function AdminAccountsPage() {
     <header>
       <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">Administración · Operaciones</p>
       <h1 className="mt-2 text-3xl font-bold">Cuentas operativas</h1>
-      <p className="mt-2 text-slate-400">Cada cuenta pertenece a un cliente. La compañía solo identifica la plataforma o empresa a la que pertenece la cuenta.</p>
+      <p className="mt-2 text-slate-400">Cada cuenta pertenece a un cliente. La compañía solo identifica a qué compañía corresponde la cuenta; no determina quién es su cliente propietario.</p>
     </header>
     <div className="grid gap-4 md:grid-cols-3">
       {[
