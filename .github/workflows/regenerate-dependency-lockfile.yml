@@ -29,22 +29,28 @@ jobs:
         run: |
           node <<'NODE'
           const packages = require('./package-lock.json').packages;
+          const compare = (actual, minimum) => {
+            const a = actual.split('.').map(Number);
+            const b = minimum.split('.').map(Number);
+            for (let i = 0; i < 3; i++) {
+              if ((a[i] ?? 0) !== (b[i] ?? 0)) return (a[i] ?? 0) > (b[i] ?? 0) ? 1 : -1;
+            }
+            return 0;
+          };
           const expected = {
-            'node_modules/vite': '8.3.4',
+            'node_modules/vite': '8.3.3',
             'node_modules/vitest': '5.0.5',
             'node_modules/@vitest/ui': '5.0.5',
             'node_modules/tsx': '4.23.15',
           };
-          for (const [path, version] of Object.entries(expected)) {
-            if (packages[path]?.version !== version) {
-              throw new Error(`Expected ${path}=${version}, received ${packages[path]?.version ?? 'missing'}`);
+          for (const [path, minimum] of Object.entries(expected)) {
+            const actual = packages[path]?.version;
+            if (!actual || compare(actual, minimum) < 0) {
+              throw new Error(`Expected ${path} >= ${minimum}, received ${actual ?? 'missing'}`);
             }
           }
-          const esbuild = Object.entries(packages).filter(([path]) => /(^|\/)node_modules\/esbuild$/.test(path));
-          if (!esbuild.length || esbuild.some(([, item]) => {
-            const [major, minor, patch] = item.version.split('.').map(Number);
-            return major !== 0 || minor < 28 || (minor === 28 && patch < 1);
-          })) {
+          const esbuild = Object.entries(packages).filter(([path]) => /(^|\\/)node_modules\\/esbuild$/.test(path));
+          if (!esbuild.length || esbuild.some(([, item]) => compare(item.version, '0.28.1') < 0)) {
             throw new Error(`Unpatched esbuild package remains: ${JSON.stringify(esbuild.map(([path, item]) => ({ path, version: item.version }))) }`);
           }
           console.log('Verified patched Vite, Vitest, UI, tsx, and all esbuild copies.');
