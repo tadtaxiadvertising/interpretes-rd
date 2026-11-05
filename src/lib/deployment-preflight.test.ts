@@ -74,9 +74,27 @@ describe('deployment credential boundary', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it('trims surrounding secret whitespace without weakening internal URL validation', () => {\n    expect(validateDeploymentSecrets({\n      ...validEnv,\n      DIRECT_URL: `\\r\\n  ${validEnv.DIRECT_URL}  \\r\\n`,\n    })).toBe(validEnv.DIRECT_URL);\n  });\n\n  it('checks connectivity before migrations without requiring the new schema', async () => {\n    const { client, createClient } = fakeConnection();\n    await runDeploymentPreflight(validEnv, createClient);\n    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([\n      'BEGIN READ ONLY',\n      'SELECT 1',\n      'ROLLBACK',\n    ]);\n    expect(client.end).toHaveBeenCalledOnce();\n  });\n\n  it('uses bounded read-only schema queries after migrations, then closes the connection', async () => {
+  it('trims surrounding secret whitespace without weakening internal URL validation', () => {
+    expect(validateDeploymentSecrets({
+      ...validEnv,
+      DIRECT_URL: `\r\n  ${validEnv.DIRECT_URL}  \r\n`,
+    })).toBe(validEnv.DIRECT_URL);
+  });
+
+  it('checks connectivity before migrations without requiring the new schema', async () => {
     const { client, createClient } = fakeConnection();
     await runDeploymentPreflight(validEnv, createClient);
+    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([
+      'BEGIN READ ONLY',
+      'SELECT 1',
+      'ROLLBACK',
+    ]);
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
+  it('uses bounded read-only schema queries after migrations, then closes the connection', async () => {
+    const { client, createClient } = fakeConnection();
+    await runDeploymentPreflight(validEnv, createClient, true);
     expect(createClient).toHaveBeenCalledWith(expect.objectContaining({
       connectionString: validEnv.DIRECT_URL,
       connectionTimeoutMillis: 10_000,
