@@ -13,7 +13,6 @@ const migrations = [
   '20261103224000_company_production_reports/migration.sql',
   '20261103232000_company_report_reviews/migration.sql',
   '20261103235000_account_platforms/migration.sql',
-  '20261105140000_client_directory/migration.sql',
 ] as const;
 
 async function main() {
@@ -42,12 +41,10 @@ async function main() {
         public.company_report_reviews,
         public.company_production_reports,
         public.account_platforms,
-        public.interpreter_account_assignments,
-        public.clients
+        public.interpreter_account_assignments
       CASCADE
     `);
     await client.query('ALTER TABLE public.accounts DROP COLUMN IF EXISTS company_id CASCADE');
-    await client.query('ALTER TABLE public.accounts DROP COLUMN IF EXISTS client_id CASCADE');
     await client.query('DROP TABLE IF EXISTS public.companies CASCADE');
 
     for (const migration of migrations) {
@@ -63,7 +60,6 @@ async function main() {
       'company_production_reports',
       'company_report_reviews',
       'account_platforms',
-      'clients',
     ];
     for (const table of expectedTables) {
       const result = await client.query('SELECT to_regclass($1) AS relation', [`public.${table}`]);
@@ -78,7 +74,6 @@ async function main() {
       'reports_unique_source',
       'company_report_reviews_report_id_created_at_idx',
       'account_platforms_account_id_name_key',
-      'accounts_client_id_idx',
     ];
     const indexes = await client.query(
       `SELECT index_class.relname AS name
@@ -94,40 +89,6 @@ async function main() {
     const foundIndexes = new Set(indexes.rows.map((row: { name: string }) => row.name));
     for (const indexName of requiredIndexes) {
       if (!foundIndexes.has(indexName)) throw new Error(`Operational migration index is missing: ${indexName}`);
-    }
-
-    const clientForeignKey = await client.query(
-      `SELECT 1 FROM pg_constraint
-       WHERE conrelid = 'public.accounts'::regclass
-         AND conname = 'accounts_client_id_fkey' AND contype = 'f'`,
-    );
-    if (!clientForeignKey.rowCount) {
-      throw new Error('Account-to-client foreign key is missing.');
-    }
-
-    // A shared company identifier must be reusable by accounts owned by different clients.
-    const clientA = await client.query(
-      `INSERT INTO public.clients (name) VALUES ('__ci_client_a') RETURNING id`,
-    );
-    const clientB = await client.query(
-      `INSERT INTO public.clients (name) VALUES ('__ci_client_b') RETURNING id`,
-    );
-    const sharedCompany = await client.query(
-      `INSERT INTO public.companies (name) VALUES ('__ci_shared_company') RETURNING id`,
-    );
-    await client.query(
-      `INSERT INTO public.accounts (name, client_id, company_id)
-       VALUES ('__ci_account_a', $1, $3), ('__ci_account_b', $2, $3)`,
-      [clientA.rows[0].id, clientB.rows[0].id, sharedCompany.rows[0].id],
-    );
-    const ownershipCheck = await client.query(
-      `SELECT COUNT(DISTINCT client_id)::int AS client_count,
-              COUNT(DISTINCT company_id)::int AS company_count
-       FROM public.accounts
-       WHERE name IN ('__ci_account_a', '__ci_account_b')`,
-    );
-    if (ownershipCheck.rows[0]?.client_count !== 2 || ownershipCheck.rows[0]?.company_count !== 1) {
-      throw new Error('The same company identifier must be reusable across different client-owned accounts.');
     }
 
     const assignmentConstraint = await client.query(

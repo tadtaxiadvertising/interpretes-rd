@@ -31,3 +31,21 @@ describe('clientAssignmentSchema', () => {
     expect(clientAssignmentSchema.safeParse({ accountId: 'x', clientId: '4' }).success).toBe(false);
   });
 });
+
+import { operationalAccountInputSchema } from './client-validation';
+
+describe('operationalAccountInputSchema', () => {
+  it('requires a valid client and normalizes account details', () => {
+    expect(operationalAccountInputSchema.parse({
+      clientId: '8', name: '  Support Line  ', description: '',
+    })).toEqual({ clientId: 8, name: 'Support Line', description: '' });
+  });
+
+  it('rejects accounts without a valid client owner', () => {
+    for (const clientId of ['', '0', '-1', 'abc']) {
+      expect(operationalAccountInputSchema.safeParse({
+        clientId, name: 'Support Line', description: '',
+      }).success).toBe(false);
+    }
+  });
+});

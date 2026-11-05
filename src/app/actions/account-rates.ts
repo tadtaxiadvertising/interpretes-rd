@@ -5,21 +5,29 @@ import { revalidatePath } from 'next/cache';
 import { ActionResult } from '@/lib/types';
 import { Account, InterpreterAccountRate } from '@prisma/client';
 import { validateAction } from '@/lib/auth/actions';
+import { operationalAccountInputSchema } from '@/lib/client-validation';
 
 const db = prisma;
 
-export async function createAccount(name: string, description?: string): Promise<ActionResult<Account>> {
+export async function createAccount(name: string, description: string | undefined, clientId: number): Promise<ActionResult<Account & { clientName: string }>> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
+  const parsed = operationalAccountInputSchema.safeParse({ clientId, name, description: description ?? '' });
+  if (!parsed.success) return { success: false, error: 'Selecciona un cliente y revisa los datos de la cuenta.', code: 'VALIDATION_ERROR' };
+
   try {
+    const client = await db.client.findFirst({ where: { id: parsed.data.clientId, active: true }, select: { id: true, name: true } });
+    if (!client) return { success: false, error: 'El cliente seleccionado no existe o está inactivo.', code: 'VALIDATION_ERROR' };
     const account = await db.account.create({
-      data: { name, description },
-      select: { id: true, name: true, description: true }
+      data: { name: parsed.data.name, description: parsed.data.description || null, clientId: client.id },
+      select: { id: true, name: true, description: true, clientId: true, client: { select: { name: true } } }
     });
     revalidatePath('/admin/payrates');
+    revalidatePath('/admin/accounts');
+    revalidatePath('/admin/clients');
     revalidatePath('/settings');
-    return { success: true, data: account as Account };
+    return { success: true, data: { ...account, clientName: account.client.name } };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return { success: false, error: 'La cuenta ya existe', code: 'CONFLICT' };
