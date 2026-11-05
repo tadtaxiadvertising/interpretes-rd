@@ -32,6 +32,8 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
       try {
         const data = await getAccounts();
         if (active && data.success && data.data) setAccounts(data.data);
+      } catch (error) {
+        console.error('Unable to load account directory:', error);
       } finally {
         if (active) setLoading(false);
       }
