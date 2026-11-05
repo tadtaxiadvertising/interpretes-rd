@@ -139,7 +139,7 @@ model Company {
 
 model Account {
   id               Int                      @id @default(autoincrement())
-  name             String                   @unique
+  name             String
   description      String?
   createdAt        DateTime?                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -153,6 +153,7 @@ model Account {
   clientId         Int?                     @map("client_id")
   client           Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
+  @@unique([clientId, name], map: "accounts_client_id_name_key")
   @@index([companyId])
   @@index([clientId])
   @@map("accounts")
