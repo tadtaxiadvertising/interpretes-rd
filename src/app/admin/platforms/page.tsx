@@ -5,7 +5,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function AccountPlatformsPage() {
   const [accounts, platforms] = await Promise.all([
-    prisma.account.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.account.findMany({
+      orderBy: [{ client: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }],
+      select: { id: true, name: true, client: { select: { name: true } }, company: { select: { name: true } } },
+    }),
     prisma.accountPlatform.findMany({ orderBy: [{ accountId: 'asc' }, { name: 'asc' }], take: 200, include: { account: { select: { name: true, client: { select: { name: true } }, company: { select: { name: true } } } } } }),
   ]);
   return <section className="space-y-6 text-white">
