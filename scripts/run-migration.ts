@@ -43,9 +43,14 @@ async function main() {
     return;
   }
 
-  const connectionString = process.env.DIRECT_URL || process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error('Falta DIRECT_URL o DATABASE_URL en el entorno de ejecución.');
+  // Applying schema changes through a pooled DATABASE_URL is unsafe: migrations
+  // require a direct PostgreSQL connection. Never silently fall back to it.
+  const connectionString = process.env.DIRECT_URL;
+  if (!connectionString?.trim()) {
+    throw new Error('DIRECT_URL es obligatorio para aplicar migraciones. DATABASE_URL no se acepta como alternativa.');
+  }
+  if (!transactional) {
+    throw new Error('Las migraciones aplicadas deben usar --transaction para garantizar rollback ante errores.');
   }
 
   const client = new Client({ connectionString });
@@ -55,15 +60,14 @@ async function main() {
   try {
     await client.connect();
     connected = true;
-    if (transactional) {
-      await client.query('BEGIN');
-      transactionStarted = true;
-    }
+    await client.query('BEGIN');
+    transactionStarted = true;
+    // Serialize migration runners targeting the same database, even when
+    // invoked outside the GitHub Actions concurrency group.
+    await client.query('SELECT pg_advisory_xact_lock(194, 20261105)');
     await client.query(sql);
-    if (transactionStarted) {
-      await client.query('COMMIT');
-      transactionStarted = false;
-    }
+    await client.query('COMMIT');
+    transactionStarted = false;
     console.log('Migración ejecutada correctamente.');
   } catch (error) {
     if (transactionStarted) {
