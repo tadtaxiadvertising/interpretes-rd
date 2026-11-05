@@ -103,6 +103,7 @@ describe('deployment credential boundary', () => {
     }));
     expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([
       'BEGIN READ ONLY',
+      'SELECT 1',
       'SELECT id, client_id, name FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
       'ROLLBACK',
