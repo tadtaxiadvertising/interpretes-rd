@@ -9,6 +9,11 @@ import { validateAction } from '@/lib/auth/actions';
 import { operationalAccountInputSchema } from '@/lib/client-validation';
 
 const db = prisma;
+const accountRateInputSchema = z.object({
+  interpreterId: z.number().int().positive(),
+  accountId: z.number().int().positive(),
+  tariffPerHour: z.number().finite().positive().max(99999),
+});
 type ManagedAccount = Pick<Account, 'id' | 'name' | 'description' | 'clientId'> & { clientName: string | null };
 export type AccountOption = Pick<Account, 'id' | 'name'> & {
   client: { name: string } | null;
@@ -94,7 +99,7 @@ export async function deleteAccount(id: number): Promise<ActionResult<void>> {
 }
 
 export async function getAccounts(): Promise<ActionResult<AccountOption[]>> {
-  const auth = await validateAction();
+  const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   try {
@@ -121,21 +126,23 @@ export async function setInterpreterAccountRate(
 ): Promise<ActionResult<InterpreterAccountRate>> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  const parsed = accountRateInputSchema.safeParse({ interpreterId, accountId, tariffPerHour });
+  if (!parsed.success) return { success: false, error: 'Revisa el intérprete, la cuenta y la tarifa.', code: 'VALIDATION_ERROR' };
 
   try {
     const result = await db.$transaction(async (tx) => {
       const oldRate = await tx.interpreterAccountRate.findUnique({
-        where: { interpreterId_accountId: { interpreterId, accountId } },
+        where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
         select: { tariffPerHour: true }
       });
       const rate = await tx.interpreterAccountRate.upsert({
         where: { interpreterId_accountId: { interpreterId, accountId } },
-        update: { tariffPerHour },
-        create: { interpreterId, accountId, tariffPerHour },
+        update: { tariffPerHour: parsed.data.tariffPerHour },
+        create: parsed.data,
         select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
       });
       await tx.payrateAuditLog.create({
-        data: { interpreterId, oldRate: oldRate?.tariffPerHour, newRate: tariffPerHour, changedBy: auth.user.userId },
+        data: { interpreterId: parsed.data.interpreterId, oldRate: oldRate?.tariffPerHour, newRate: parsed.data.tariffPerHour, changedBy: auth.user.userId },
         select: { id: true }
       });
       return rate;
@@ -154,10 +161,12 @@ export async function deleteInterpreterAccountRate(
 ): Promise<ActionResult<void>> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  const parsed = z.object({ interpreterId: z.number().int().positive(), accountId: z.number().int().positive() }).safeParse({ interpreterId, accountId });
+  if (!parsed.success) return { success: false, error: 'Selecciona un intérprete y una cuenta válidos.', code: 'VALIDATION_ERROR' };
 
   try {
     await db.interpreterAccountRate.delete({
-      where: { interpreterId_accountId: { interpreterId, accountId } },
+      where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
       select: { interpreterId: true }
     });
     revalidatePath('/admin/payrates');
