@@ -89,6 +89,9 @@ jobs:
       - name: Verify critical legal and Roleplay migrations
         run: npx tsx scripts/verify-critical-migrations.ts
 
+      - name: Verify operational migrations on isolated PostgreSQL
+        run: npx tsx scripts/verify-operational-migrations.ts
+
       - name: TypeScript Check
         run: npx tsc --noEmit
 
