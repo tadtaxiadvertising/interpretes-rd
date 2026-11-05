@@ -148,6 +148,13 @@ describe('production deployment workflow', () => {
     expect(schemaCheck).toBeGreaterThan(canonicalMigration);
   });
 
+  it('normalizes DIRECT_URL in the migration runner without DATABASE_URL fallback', () => {
+    const runner = readFileSync('scripts/run-migration.ts', 'utf8');
+    expect(runner).toContain('process.env.DIRECT_URL?.trim()');
+    expect(runner).toContain('DIRECT_URL no puede contener espacios internos');
+    expect(runner).not.toContain('process.env.DIRECT_URL || process.env.DATABASE_URL');
+  });
+
   it('serializes the whole pipeline without cancelling an active migration', () => {
     const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
     const beforeJobs = workflow.split('\njobs:')[0];
