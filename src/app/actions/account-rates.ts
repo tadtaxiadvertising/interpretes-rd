@@ -10,6 +10,10 @@ import { operationalAccountInputSchema } from '@/lib/client-validation';
 
 const db = prisma;
 type ManagedAccount = Pick<Account, 'id' | 'name' | 'description' | 'clientId'> & { clientName: string | null };
+export type AccountOption = Pick<Account, 'id' | 'name'> & {
+  client: { name: string } | null;
+  company: { name: string } | null;
+};
 
 export async function createAccount(name: string, description: string | undefined, clientId: number): Promise<ActionResult<ManagedAccount>> {
   const auth = await validateAction('admin');
@@ -89,16 +93,21 @@ export async function deleteAccount(id: number): Promise<ActionResult<void>> {
   }
 }
 
-export async function getAccounts(): Promise<ActionResult<Account[]>> {
+export async function getAccounts(): Promise<ActionResult<AccountOption[]>> {
   const auth = await validateAction();
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   try {
     const accounts = await db.account.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true }
+      orderBy: [{ client: { name: 'asc' } }, { name: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        client: { select: { name: true } },
+        company: { select: { name: true } },
+      }
     });
-    return { success: true, data: accounts as Account[] };
+    return { success: true, data: accounts };
   } catch (error) {
     console.error('Error fetching accounts:', error instanceof Error ? error.message : 'Unknown error');
     return { success: false, error: 'Error fetching accounts', code: 'INTERNAL_ERROR' };
@@ -114,47 +123,23 @@ export async function setInterpreterAccountRate(
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   try {
-    // ── Execute in Transaction ──────────────────────────
     const result = await db.$transaction(async (tx) => {
-      // 1. Get old rate for audit
       const oldRate = await tx.interpreterAccountRate.findUnique({
-        where: {
-          interpreterId_accountId: { interpreterId, accountId }
-        },
+        where: { interpreterId_accountId: { interpreterId, accountId } },
         select: { tariffPerHour: true }
       });
-
-      // 2. Upsert the rate
       const rate = await tx.interpreterAccountRate.upsert({
-        where: {
-          interpreterId_accountId: { interpreterId, accountId },
-        },
+        where: { interpreterId_accountId: { interpreterId, accountId } },
         update: { tariffPerHour },
         create: { interpreterId, accountId, tariffPerHour },
-        select: { 
-          id: true,
-          interpreterId: true, 
-          accountId: true, 
-          tariffPerHour: true,
-          createdAt: true,
-          updatedAt: true 
-        }
+        select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
       });
-
-      // 3. Create Audit Log
       await tx.payrateAuditLog.create({
-        data: {
-          interpreterId,
-          oldRate: oldRate?.tariffPerHour,
-          newRate: tariffPerHour,
-          changedBy: auth.user.userId
-        },
+        data: { interpreterId, oldRate: oldRate?.tariffPerHour, newRate: tariffPerHour, changedBy: auth.user.userId },
         select: { id: true }
       });
-
       return rate;
     });
-
     revalidatePath('/admin/payrates');
     return { success: true, data: result as InterpreterAccountRate };
   } catch (error) {
@@ -172,12 +157,9 @@ export async function deleteInterpreterAccountRate(
 
   try {
     await db.interpreterAccountRate.delete({
-      where: {
-        interpreterId_accountId: { interpreterId, accountId },
-      },
+      where: { interpreterId_accountId: { interpreterId, accountId } },
       select: { interpreterId: true }
     });
-
     revalidatePath('/admin/payrates');
     return { success: true };
   } catch (error) {
