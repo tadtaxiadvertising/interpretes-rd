@@ -155,7 +155,7 @@ jobs:
             echo "The application deployment is blocked to prevent code/schema mismatch."
             exit 1
           fi
-          npm run migrate -- prisma/migrations/20261105150000_account_names_per_client/migration.sql --apply
+          npm run migrate -- prisma/migrations/20261105150000_account_names_per_client/migration.sql --apply --transaction
 
       - name: Call Easypanel Webhook — interpreters
         run: |
