@@ -30,6 +30,8 @@ export function Recorder({
   const audioChunksRef = useRef<Blob[]>([]);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const timerIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const durationRef = useRef(0);
+  const recordingUrlRef = useRef('');
   const streamRef = useRef<MediaStream | null>(null);
   const playbackIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -39,25 +41,33 @@ export function Recorder({
     return `${mins}:${secs}`;
   };
 
-  const startTimer = useCallback(() => {
-    setDuration(0);
-    timerIntervalRef.current = setInterval(() => {
-      setDuration(d => {
-        const newDuration = d + 1;
-        if (durationLimitSec && newDuration >= durationLimitSec) {
-          handleStopRecording();
-        }
-        return newDuration;
-      });
-    }, 1000);
-  }, [durationLimitSec]);
-
   const stopTimer = useCallback(() => {
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
   }, []);
+
+  const handleStopRecording = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+    recorder.stop();
+    stopTimer();
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+  }, [stopTimer]);
+
+  const startTimer = useCallback(() => {
+    durationRef.current = 0;
+    setDuration(0);
+    timerIntervalRef.current = setInterval(() => {
+      const next = ++durationRef.current;
+      setDuration(next);
+      if (durationLimitSec && next >= durationLimitSec) {
+        handleStopRecording();
+      }
+    }, 1000);
+  }, [durationLimitSec, handleStopRecording]);
 
   const handleStartRecording = async () => {
     try {
@@ -87,6 +97,8 @@ export function Recorder({
         const blob = new Blob(audioChunksRef.current, { type: mimeType });
         setRecordingBlob(blob);
         const url = URL.createObjectURL(blob);
+        if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+        recordingUrlRef.current = url;
         setRecordingUrl(url);
         setState('review');
       };
@@ -97,17 +109,6 @@ export function Recorder({
     } catch (err) {
       setError('Acceso al micrófono denegado. Permite el uso del micrófono en tu navegador.');
       console.error(err);
-    }
-  };
-
-  const handleStopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      stopTimer();
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => t.stop());
-        streamRef.current = null;
-      }
     }
   };
 
@@ -155,7 +156,8 @@ export function Recorder({
   }, []);
 
   const handleReRecord = () => {
-    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+    recordingUrlRef.current = '';
     setRecordingBlob(null);
     setRecordingUrl('');
     setDuration(0);
@@ -180,14 +182,20 @@ export function Recorder({
     }
   };
 
-  const cleanup = () => {
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
-    if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-  };
-
-  useEffect(() => cleanup, []);
+  useEffect(() => {
+    return () => {
+      stopTimer();
+      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      const recorder = mediaRecorderRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.onstop = null;
+        recorder.stop();
+      }
+      streamRef.current?.getTracks().forEach(track => track.stop());
+      if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
+      recordingUrlRef.current = '';
+    };
+  }, [stopTimer]);
 
   // State 1: Ready to record
   if (state === 'ready') {
