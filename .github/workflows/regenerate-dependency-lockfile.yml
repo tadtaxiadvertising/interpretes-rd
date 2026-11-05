@@ -49,7 +49,7 @@ jobs:
               throw new Error(`Expected ${path} >= ${minimum}, received ${actual ?? 'missing'}`);
             }
           }
-          const esbuild = Object.entries(packages).filter(([path]) => /(^|\\/)node_modules\\/esbuild$/.test(path));
+          const esbuild = Object.entries(packages).filter(([path]) => path === 'node_modules/esbuild' || path.endsWith('/node_modules/esbuild'));
           if (!esbuild.length || esbuild.some(([, item]) => compare(item.version, '0.28.1') < 0)) {
             throw new Error(`Unpatched esbuild package remains: ${JSON.stringify(esbuild.map(([path, item]) => ({ path, version: item.version }))) }`);
           }
