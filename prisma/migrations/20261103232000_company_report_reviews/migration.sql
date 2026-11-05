@@ -12,3 +12,4 @@ CREATE TABLE "public"."company_report_reviews" (
   CONSTRAINT "company_report_reviews_note_check" CHECK (length(trim("note")) > 0)
 );
 CREATE INDEX "company_report_reviews_report_id_created_at_idx" ON "public"."company_report_reviews" ("report_id", "created_at");
+ALTER TABLE "public"."company_report_reviews" ENABLE ROW LEVEL SECURITY;
