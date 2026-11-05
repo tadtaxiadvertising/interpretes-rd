@@ -52,7 +52,7 @@ async function main() {
     // tested against the exact legacy constraint it must replace.
     await client.query('ALTER TABLE public.accounts DROP CONSTRAINT IF EXISTS accounts_client_id_name_key');
     await client.query('DROP INDEX IF EXISTS public.accounts_client_id_name_key');
-    await client.query('ALTER TABLE public.accounts ADD CONSTRAINT accounts_name_key UNIQUE (name)');
+    await client.query('CREATE UNIQUE INDEX accounts_name_key ON public.accounts (name)');
     await client.query('DROP TABLE IF EXISTS public.companies CASCADE');
     await client.query('DROP TABLE IF EXISTS public.clients CASCADE');
 
@@ -160,12 +160,11 @@ async function main() {
     if (!duplicateRejected) {
       throw new Error('Duplicate account names must be rejected within the same client.');
     }
-    const legacyNameConstraint = await client.query(
-      `SELECT 1 FROM pg_constraint
-       WHERE conrelid = 'public.accounts'::regclass AND conname = 'accounts_name_key'`,
+    const legacyNameIndex = await client.query(
+      `SELECT to_regclass('public.accounts_name_key') AS index_name`,
     );
-    if (legacyNameConstraint.rowCount) {
-      throw new Error('The legacy global account-name constraint was not removed.');
+    if (legacyNameIndex.rows[0]?.index_name) {
+      throw new Error('The legacy global account-name index was not removed.');
     }
 
     const assignmentConstraint = await client.query(
