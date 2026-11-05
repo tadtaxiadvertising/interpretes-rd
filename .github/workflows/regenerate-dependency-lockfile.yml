@@ -1,0 +1,62 @@
+name: Regenerate patched dependency lockfile
+
+on:
+  push:
+    branches:
+      - security/refresh-vite-vitest-esbuild
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout dependency branch
+        uses: actions/checkout@v4
+        with:
+          ref: security/refresh-vite-vitest-esbuild
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Regenerate package lock with npm
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify clean install
+        run: npm ci --no-audit --no-fund
+      - name: Assert patched dependency tree
+        run: |
+          node <<'NODE'
+          const packages = require('./package-lock.json').packages;
+          const expected = {
+            'node_modules/vite': '8.3.4',
+            'node_modules/vitest': '5.0.5',
+            'node_modules/@vitest/ui': '5.0.5',
+            'node_modules/tsx': '4.23.15',
+          };
+          for (const [path, version] of Object.entries(expected)) {
+            if (packages[path]?.version !== version) {
+              throw new Error(`Expected ${path}=${version}, received ${packages[path]?.version ?? 'missing'}`);
+            }
+          }
+          const esbuild = Object.entries(packages).filter(([path]) => /(^|\/)node_modules\/esbuild$/.test(path));
+          if (!esbuild.length || esbuild.some(([, item]) => {
+            const [major, minor, patch] = item.version.split('.').map(Number);
+            return major !== 0 || minor < 28 || (minor === 28 && patch < 1);
+          })) {
+            throw new Error(`Unpatched esbuild package remains: ${JSON.stringify(esbuild.map(([path, item]) => ({ path, version: item.version }))) }`);
+          }
+          console.log('Verified patched Vite, Vitest, UI, tsx, and all esbuild copies.');
+          NODE
+      - name: Commit regenerated lockfile
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          if git diff --cached --quiet; then
+            echo "package-lock.json already matches package.json"
+            exit 0
+          fi
+          git commit -m "chore: regenerate patched dependency lockfile"
+          git push origin HEAD:security/refresh-vite-vitest-esbuild
