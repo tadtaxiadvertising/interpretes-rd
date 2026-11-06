@@ -157,7 +157,7 @@ describe('production deployment workflow', () => {
   });
 
   it.each([
-    ['Supabase session pooler', 'postgresql://migration:private-password@region.pooler.supabase.com:5432/postgres', 'pooler'],
+    ['session pooler missing project-scoped user', 'postgresql://migration:private-password@region.pooler.supabase.com:5432/postgres', 'pooler'],
     ['transaction pooler port', 'postgresql://migration:private-password@db.example.com:6543/postgres', 'pooler'],
     ['override destination', 'postgresql://migration:private-password@db.example.com:5432/postgres?host=unsafe.example.com', 'redefinir'],
     ['internal whitespace', 'postgresql://migration:private password@db.example.com:5432/postgres', 'espacios internos'],
@@ -189,6 +189,15 @@ describe('production deployment workflow', () => {
     });
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('DRY RUN: no se conectó');
+  });
+
+  it('permits IPv4 Supabase session pooling only with project-scoped user on port 5432', () => {
+    const session = 'postgresql://postgres.abcdefghijklmnopqrst:private-password@aws-1-us-east-1.pooler.supabase.com:5432/postgres';
+    expect(normalizeDirectDatabaseUrl(session)).toBe(session);
+    expect(validateDeploymentSecrets({ ...validEnv, DIRECT_URL: session })).toBe(session);
+    expect(() => normalizeDirectDatabaseUrl(session.replace(':5432/', ':6543/'))).toThrow('pooler');
+    expect(() => normalizeDirectDatabaseUrl(session.replace('postgres.abcdefghijklmnopqrst', 'postgres'))).toThrow('pooler');
+    expect(() => normalizeDirectDatabaseUrl(session + '?pool_mode=transaction')).toThrow('transaccional');
   });
 
   it('shares direct URL validation between preflight and standalone runner', () => {
