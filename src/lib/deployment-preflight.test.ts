@@ -14,7 +14,7 @@ const validEnv = {
 function fakeConnection() {
   const client = {
     connect: vi.fn().mockResolvedValue(undefined),
-    query: vi.fn().mockResolvedValue({ rows: [] }),
+    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true }] }),
     end: vi.fn().mockResolvedValue(undefined),
   };
   return { client, createClient: vi.fn().mockReturnValue(client) };
@@ -102,13 +102,30 @@ describe('deployment credential boundary', () => {
       statement_timeout: 10_000,
       query_timeout: 10_000,
     }));
-    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([
+    const checks = client.query.mock.calls.map(([sql]) => sql);
+    expect(checks.slice(0, 4)).toEqual([
       'BEGIN READ ONLY',
       'SELECT 1',
       'SELECT id, client_id, name FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
-      'ROLLBACK',
     ]);
+    expect(checks[4]).toContain('AS account_unique');
+    expect(checks[4]).toContain('AS client_fk');
+    expect(checks[4]).toContain('AS client_rls');
+    expect(checks[5]).toBe('ROLLBACK');
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
+  it('blocks deployment if required account constraints, FK or RLS are absent', async () => {
+    const { client, createClient } = fakeConnection();
+    client.query.mockImplementation(async (sql: string) => ({
+      rows: sql.includes('AS account_unique')
+        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true }]
+        : [],
+    }));
+    await expect(runDeploymentPreflight(validEnv, createClient, true)).rejects.toThrow(
+      'Production preflight: DIRECT_URL connection or schema prerequisite check failed.',
+    );
     expect(client.end).toHaveBeenCalledOnce();
   });
 
