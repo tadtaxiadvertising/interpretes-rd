@@ -60,7 +60,7 @@ describe('deployment credential boundary', () => {
     ['DIRECT_URL', `${validEnv.DIRECT_URL}?pool_mode=transaction`],
     ['EASYPANEL_WEBHOOK_API', 'file:///private-backend-token'],
     ['EASYPANEL_WEBHOOK_INTERPRETERS', 'private-frontend-token'],
-    ['EASYPANEL_WEBHOOK_API', `${validEnv.EASYPANEL_WEBHOOK_API}\n`],
+    ['EASYPANEL_WEBHOOK_API', 'https://example.com/token with space'],
   ])('blocks invalid %s without connecting or echoing values', async (name, value) => {
     const { createClient } = fakeConnection();
     let message = '';
@@ -74,9 +74,27 @@ describe('deployment credential boundary', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
-  it('uses bounded read-only schema queries, then closes the connection', async () => {
+  it('trims surrounding secret whitespace without weakening internal URL validation', () => {
+    expect(validateDeploymentSecrets({
+      ...validEnv,
+      DIRECT_URL: `\r\n  ${validEnv.DIRECT_URL}  \r\n`,
+    })).toBe(validEnv.DIRECT_URL);
+  });
+
+  it('checks connectivity before migrations without requiring the new schema', async () => {
     const { client, createClient } = fakeConnection();
     await runDeploymentPreflight(validEnv, createClient);
+    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([
+      'BEGIN READ ONLY',
+      'SELECT 1',
+      'ROLLBACK',
+    ]);
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
+  it('uses bounded read-only schema queries after migrations, then closes the connection', async () => {
+    const { client, createClient } = fakeConnection();
+    await runDeploymentPreflight(validEnv, createClient, true);
     expect(createClient).toHaveBeenCalledWith(expect.objectContaining({
       connectionString: validEnv.DIRECT_URL,
       connectionTimeoutMillis: 10_000,
@@ -85,6 +103,7 @@ describe('deployment credential boundary', () => {
     }));
     expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([
       'BEGIN READ ONLY',
+      'SELECT 1',
       'SELECT id, client_id, name FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
       'ROLLBACK',
@@ -108,12 +127,33 @@ describe('production deployment workflow', () => {
   it('checks all deployment credentials before the migration can run', () => {
     const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
     const deploy = workflow.split('  deploy-interpreters:')[1].split('  deploy-interpreters-api:')[0];
-    const beforeMigration = deploy.split('      - name: Apply account ownership migration')[0];
+    const beforeMigration = deploy.split('      - name: Apply client directory migration before ownership constraints')[0];
 
     for (const name of ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPANEL_WEBHOOK_API']) {
       expect(beforeMigration, `${name} must be checked before any migration`).toContain(`secrets.${name}`);
     }
     expect(beforeMigration).toContain('npx tsx scripts/deployment-preflight.ts');
+  });
+
+  it('applies client schema before ownership constraints and verifies it afterward', () => {
+    const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
+    const deploy = workflow.split('  deploy-interpreters:')[1].split('  deploy-interpreters-api:')[0];
+    const directoryMigration = deploy.indexOf('20261105140000_client_directory/migration.sql');
+    const ownershipMigration = deploy.indexOf('20261105150000_account_names_per_client/migration.sql');
+    const canonicalMigration = deploy.indexOf('20261105180000_client_directory/migration.sql');
+    const schemaCheck = deploy.indexOf('scripts/deployment-preflight.ts --verify-schema');
+
+    expect(directoryMigration).toBeGreaterThan(-1);
+    expect(ownershipMigration).toBeGreaterThan(directoryMigration);
+    expect(canonicalMigration).toBeGreaterThan(ownershipMigration);
+    expect(schemaCheck).toBeGreaterThan(canonicalMigration);
+  });
+
+  it('normalizes DIRECT_URL in the migration runner without DATABASE_URL fallback', () => {
+    const runner = readFileSync('scripts/run-migration.ts', 'utf8');
+    expect(runner).toContain('process.env.DIRECT_URL?.trim()');
+    expect(runner).toContain('DIRECT_URL no puede contener espacios internos');
+    expect(runner).not.toContain('process.env.DIRECT_URL || process.env.DATABASE_URL');
   });
 
   it('serializes the whole pipeline without cancelling an active migration', () => {

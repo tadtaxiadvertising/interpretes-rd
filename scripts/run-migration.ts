@@ -45,9 +45,13 @@ async function main() {
 
   // Applying schema changes through a pooled DATABASE_URL is unsafe: migrations
   // require a direct PostgreSQL connection. Never silently fall back to it.
-  const connectionString = process.env.DIRECT_URL;
+  // Match deployment preflight: tolerate only surrounding copy/paste whitespace.
+  const connectionString = process.env.DIRECT_URL?.trim();
   if (!connectionString?.trim()) {
     throw new Error('DIRECT_URL es obligatorio para aplicar migraciones. DATABASE_URL no se acepta como alternativa.');
+  }
+  if (/\s|[\u0000-\u001f\u007f]/u.test(connectionString)) {
+    throw new Error('DIRECT_URL no puede contener espacios internos ni caracteres de control.');
   }
   if (!transactional) {
     throw new Error('Las migraciones aplicadas deben usar --transaction para garantizar rollback ante errores.');

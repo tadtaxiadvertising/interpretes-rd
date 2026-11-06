@@ -18,6 +18,7 @@ const migrations = [
   '20261103235000_account_platforms/migration.sql',
   '20261105140000_client_directory/migration.sql',
   ownershipMigration,
+  '20261105180000_client_directory/migration.sql',
 ] as const;
 
 async function ownershipFixtureSnapshot(client: Client) {
