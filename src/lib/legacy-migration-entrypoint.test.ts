@@ -25,3 +25,28 @@ describe('legacy migration entrypoint security', () => {
     expect(result.stdout + result.stderr).toContain('--apply --transaction');
   });
 });
+
+
+describe('canonical migration runner contract', () => {
+  it('checks --transaction before constructing a database client', () => {
+    const runner = readFileSync('scripts/run-migration.ts', 'utf8');
+    const transactionGuard = runner.indexOf('if (!transactional)');
+    const clientConstruction = runner.indexOf('new Client({ connectionString })');
+
+    expect(transactionGuard).toBeGreaterThan(-1);
+    expect(clientConstruction).toBeGreaterThan(-1);
+    expect(transactionGuard).toBeLessThan(clientConstruction);
+    expect(runner).toContain('normalizeDirectDatabaseUrl(process.env.DIRECT_URL)');
+    expect(runner).not.toContain('process.env.DIRECT_URL || process.env.DATABASE_URL');
+  });
+
+  it('passes --transaction to every production migration invocation', () => {
+    const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
+    const invocations = workflow.split('\\n').filter((line) => line.includes('npm run migrate --'));
+
+    expect(invocations.length).toBeGreaterThan(0);
+    for (const invocation of invocations) {
+      expect(invocation).toContain('--apply --transaction');
+    }
+  });
+});
