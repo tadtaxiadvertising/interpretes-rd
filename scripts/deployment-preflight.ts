@@ -1,6 +1,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Client, type ClientConfig } from 'pg';
+import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 
 const requiredSecrets = ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPANEL_WEBHOOK_API'] as const;
 type DeploymentEnvironment = Partial<Record<(typeof requiredSecrets)[number], string>>;
@@ -17,10 +18,19 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
     throw new Error(`Production preflight: missing secrets: ${missing.join(', ')}. Configure GitHub Settings > Environments > production > Environment secrets.`);
   }
 
+  let connectionString = '';
   for (const name of requiredSecrets) {
-    // GitHub secrets are sometimes pasted with a terminal newline. Trim only
-    // surrounding whitespace; reject whitespace inside the actual URL.
     const value = env[name]!.trim();
+    if (name === 'DIRECT_URL') {
+      try {
+        connectionString = normalizeDirectDatabaseUrl(value);
+      } catch (error) {
+        // Never include the original URL (which may contain a password).
+        throw new Error(`Production preflight: ${(error as Error).message}`);
+      }
+      continue;
+    }
+
     let url: URL;
     try {
       if (/\s|[\u0000-\u001f\u007f]/u.test(value)) throw new Error();
@@ -28,28 +38,11 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
     } catch {
       throw new Error(`Production preflight: ${name} must be a valid URL without whitespace or control characters.`);
     }
-
-    if (name === 'DIRECT_URL') {
-      if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname ||
-          !url.username || !url.password || url.pathname.length <= 1 || url.hash || url.hostname.includes('%')) {
-        throw new Error('Production preflight: DIRECT_URL must be a complete PostgreSQL connection URL.');
-      }
-      // pg query parameters can override the authority, so reject ambiguous targets.
-      if (['host', 'port', 'user', 'password', 'query_timeout', 'statement_timeout'].some((key) => url.searchParams.has(key))) {
-        throw new Error('Production preflight: DIRECT_URL must not override connection credentials, destination or timeouts through query parameters.');
-      }
-      const hostname = url.hostname.toLowerCase().replace(/\.$/u, '');
-      if (url.port === '6543' || hostname.endsWith('.pooler.supabase.com') ||
-          url.searchParams.getAll('pgbouncer').some((value) => value.toLowerCase() === 'true') ||
-          url.searchParams.getAll('pool_mode').some((value) => ['transaction', 'statement'].includes(value.toLowerCase()))) {
-        throw new Error('Production preflight: DIRECT_URL must use a direct PostgreSQL connection, not a transaction pooler.');
-      }
-    } else if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) {
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) {
       throw new Error(`Production preflight: ${name} must use HTTP or HTTPS.`);
     }
   }
-
-  return env.DIRECT_URL!.trim();
+  return connectionString;
 }
 
 function createPreflightClient(config: ClientConfig): PreflightClient {
