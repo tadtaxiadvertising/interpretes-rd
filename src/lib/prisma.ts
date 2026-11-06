@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { createDatabasePoolConfig } from '@/lib/database-pool-config';
 
 /**
  * PRISMA 7 SINGLETON — SUPABASE TRANSACTION POOLER (Port 6543)
@@ -22,6 +23,8 @@ import { PrismaPg } from '@prisma/adapter-pg';
  *
  * CONNECTION STRING FORMAT (Easypanel env):
  *   postgresql://user:pass@host:6543/db?pgbouncer=true&connection_limit=5
+ *   Remote connections require authenticated TLS; provide DATABASE_TLS_CA_PEM
+ *   if the server certificate is signed by a private CA.
  * ============================================================
  */
 
@@ -31,36 +34,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPool(): pg.Pool {
-  const connectionString = process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    console.error(
-      '[PRISMA] FATAL: DATABASE_URL is not set. ' +
-      'The application will crash on the first database query.'
-    );
-  }
-
-  // The pg adapter receives an explicit SSL object, which overrides `sslmode=disable`
-  // from the connection string. Keep TLS enabled for remote databases, but disable
-  // it for loopback-only databases such as the disposable PostgreSQL used by E2E.
-  const isLoopbackDatabase = (() => {
-    if (!connectionString) return false;
-    try {
-      const hostname = new URL(connectionString).hostname;
-      return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '[::1]';
-    } catch {
-      return false;
-    }
-  })();
-
-  return new pg.Pool({
-    connectionString,
-    max: 5,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
-    ssl: isLoopbackDatabase ? false : { rejectUnauthorized: false },
-    allowExitOnIdle: true,
-  });
+  return new pg.Pool(createDatabasePoolConfig(
+    process.env.DATABASE_URL,
+    process.env.DATABASE_TLS_CA_PEM,
+  ));
 }
 
 function createPrismaClient(): PrismaClient {
