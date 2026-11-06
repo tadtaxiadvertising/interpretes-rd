@@ -1,0 +1,38 @@
+name: Diagnose production PostgreSQL connection (read only)
+
+on:
+  workflow_dispatch:
+
+# Diagnostics never make schema changes, call deployment webhooks, or read rows.
+permissions:
+  contents: read
+
+concurrency:
+  group: interpreters-production-connection-diagnostics
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Read-only production connection preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Validate production secrets and read-only connection
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
+          EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
+        run: npx tsx scripts/deployment-preflight.ts

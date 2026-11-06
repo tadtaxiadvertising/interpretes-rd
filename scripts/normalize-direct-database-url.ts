@@ -24,10 +24,29 @@ export function normalizeDirectDatabaseUrl(raw: string | undefined): string {
   } catch {
     throw new DirectDatabaseUrlError('DIRECT_URL debe tener un formato de URL válido.');
   }
-  if (!['postgres:', 'postgresql:'].includes(url.protocol) ||
-      !url.hostname || !url.username || !url.password ||
-      url.pathname.length <= 1 || url.hash || url.hostname.includes('%')) {
-    throw new DirectDatabaseUrlError('DIRECT_URL debe ser una URL PostgreSQL completa.');
+  // Explain which *structural* requirement failed, without ever echoing a
+  // URL component. This lets production operators fix a GitHub secret using
+  // only the preflight log (even when the secret is masked).
+  if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+    throw new DirectDatabaseUrlError('DIRECT_URL debe usar protocolo PostgreSQL (postgresql:// o postgres://).');
+  }
+  if (!url.hostname) {
+    throw new DirectDatabaseUrlError('DIRECT_URL: falta el servidor PostgreSQL.');
+  }
+  if (url.hostname.includes('%')) {
+    throw new DirectDatabaseUrlError('DIRECT_URL: el servidor PostgreSQL contiene una codificación no permitida.');
+  }
+  if (!url.username) {
+    throw new DirectDatabaseUrlError('DIRECT_URL: falta el usuario PostgreSQL.');
+  }
+  if (!url.password) {
+    throw new DirectDatabaseUrlError('DIRECT_URL: falta la contraseña en la URI PostgreSQL.');
+  }
+  if (url.pathname.length <= 1) {
+    throw new DirectDatabaseUrlError('DIRECT_URL: falta el nombre de la base de datos.');
+  }
+  if (url.hash) {
+    throw new DirectDatabaseUrlError('DIRECT_URL: contiene un fragmento #. Codifica los caracteres reservados de la contraseña.');
   }
   // The pg connection-string parser may use these query parameters to override
   // parsed credentials, destination or safety timeouts.
