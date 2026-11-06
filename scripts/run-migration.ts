@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import { Client } from 'pg';
+import { DirectDatabaseUrlError, normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -43,16 +44,9 @@ async function main() {
     return;
   }
 
-  // Applying schema changes through a pooled DATABASE_URL is unsafe: migrations
-  // require a direct PostgreSQL connection. Never silently fall back to it.
-  // Match deployment preflight: tolerate only surrounding copy/paste whitespace.
-  const connectionString = process.env.DIRECT_URL?.trim();
-  if (!connectionString?.trim()) {
-    throw new Error('DIRECT_URL es obligatorio para aplicar migraciones. DATABASE_URL no se acepta como alternativa.');
-  }
-  if (/\s|[\u0000-\u001f\u007f]/u.test(connectionString)) {
-    throw new Error('DIRECT_URL no puede contener espacios internos ni caracteres de control.');
-  }
+  // The same direct-connection guard runs here as in deployment preflight:
+  // standalone migration invocations must never bypass pooler restrictions.
+  const connectionString = normalizeDirectDatabaseUrl(process.env.DIRECT_URL);
   if (!transactional) {
     throw new Error('Las migraciones aplicadas deben usar --transaction para garantizar rollback ante errores.');
   }
@@ -86,6 +80,18 @@ async function main() {
 }
 
 main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : 'Error desconocido al ejecutar la migración.');
+  // PostgreSQL and network errors can include destination/credential details.
+  // Print only a fixed message and, when available, a safe SQLSTATE code.
+  if (error instanceof DirectDatabaseUrlError) {
+    console.error(error.message);
+    process.exitCode = 1;
+    return;
+  }
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && /^[0-9A-Z]{5}$/u.test(code)) {
+    console.error(`La migración falló (SQLSTATE ${code}).`);
+  } else {
+    console.error('La migración no se completó. Comprueba DIRECT_URL, el esquema y los logs seguros.');
+  }
   process.exitCode = 1;
 });

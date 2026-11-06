@@ -1,12 +1,13 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Client, type ClientConfig } from 'pg';
+import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 
 const requiredSecrets = ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPANEL_WEBHOOK_API'] as const;
 type DeploymentEnvironment = Partial<Record<(typeof requiredSecrets)[number], string>>;
 interface PreflightClient {
   connect(): Promise<unknown>;
-  query(sql: string): Promise<unknown>;
+  query(sql: string): Promise<{ rows: Record<string, unknown>[] }>;
   end(): Promise<unknown>;
 }
 
@@ -17,10 +18,19 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
     throw new Error(`Production preflight: missing secrets: ${missing.join(', ')}. Configure GitHub Settings > Environments > production > Environment secrets.`);
   }
 
+  let connectionString = '';
   for (const name of requiredSecrets) {
-    // GitHub secrets are sometimes pasted with a terminal newline. Trim only
-    // surrounding whitespace; reject whitespace inside the actual URL.
     const value = env[name]!.trim();
+    if (name === 'DIRECT_URL') {
+      try {
+        connectionString = normalizeDirectDatabaseUrl(value);
+      } catch (error) {
+        // Never include the original URL (which may contain a password).
+        throw new Error(`Production preflight: ${(error as Error).message}`);
+      }
+      continue;
+    }
+
     let url: URL;
     try {
       if (/\s|[\u0000-\u001f\u007f]/u.test(value)) throw new Error();
@@ -28,28 +38,11 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
     } catch {
       throw new Error(`Production preflight: ${name} must be a valid URL without whitespace or control characters.`);
     }
-
-    if (name === 'DIRECT_URL') {
-      if (!['postgres:', 'postgresql:'].includes(url.protocol) || !url.hostname ||
-          !url.username || !url.password || url.pathname.length <= 1 || url.hash || url.hostname.includes('%')) {
-        throw new Error('Production preflight: DIRECT_URL must be a complete PostgreSQL connection URL.');
-      }
-      // pg query parameters can override the authority, so reject ambiguous targets.
-      if (['host', 'port', 'user', 'password', 'query_timeout', 'statement_timeout'].some((key) => url.searchParams.has(key))) {
-        throw new Error('Production preflight: DIRECT_URL must not override connection credentials, destination or timeouts through query parameters.');
-      }
-      const hostname = url.hostname.toLowerCase().replace(/\.$/u, '');
-      if (url.port === '6543' || hostname.endsWith('.pooler.supabase.com') ||
-          url.searchParams.getAll('pgbouncer').some((value) => value.toLowerCase() === 'true') ||
-          url.searchParams.getAll('pool_mode').some((value) => ['transaction', 'statement'].includes(value.toLowerCase()))) {
-        throw new Error('Production preflight: DIRECT_URL must use a direct PostgreSQL connection, not a transaction pooler.');
-      }
-    } else if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) {
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname) {
       throw new Error(`Production preflight: ${name} must use HTTP or HTTPS.`);
     }
   }
-
-  return env.DIRECT_URL!.trim();
+  return connectionString;
 }
 
 function createPreflightClient(config: ClientConfig): PreflightClient {
@@ -83,6 +76,43 @@ export async function runDeploymentPreflight(
     if (verifySchema) {
       await client.query('SELECT id, client_id, name FROM public.accounts LIMIT 0');
       await client.query('SELECT id FROM public.clients LIMIT 0');
+      // A table/column-only check can pass after a partial schema change.
+      // Confirm the client-scoped uniqueness, FK, RLS, and removal of the
+      // old global uniqueness before the deployment webhooks can run.
+      const integrity = await client.query(`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM pg_index idx
+            WHERE idx.indexrelid = to_regclass('public.accounts_client_id_name_key')
+              AND idx.indrelid = 'public.accounts'::regclass
+              AND idx.indisunique AND idx.indisvalid AND idx.indisready
+              AND idx.indnkeyatts = 2
+              AND idx.indkey[0] = (
+                SELECT attnum FROM pg_attribute
+                WHERE attrelid = 'public.accounts'::regclass AND attname = 'client_id'
+              )
+              AND idx.indkey[1] = (
+                SELECT attnum FROM pg_attribute
+                WHERE attrelid = 'public.accounts'::regclass AND attname = 'name'
+              )
+          ) AS account_unique,
+          to_regclass('public.accounts_name_key') IS NULL AS legacy_unique_absent,
+          EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'public.accounts'::regclass
+              AND confrelid = 'public.clients'::regclass
+              AND conname = 'accounts_client_id_fkey'
+              AND contype = 'f' AND convalidated
+              AND confdeltype = 'n' AND confupdtype = 'c'
+          ) AS client_fk,
+          (SELECT relrowsecurity FROM pg_class
+           WHERE oid = 'public.clients'::regclass) AS client_rls
+      `);
+      const status = integrity.rows[0];
+      if (!status || !['account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls']
+        .every((key) => status[key] === true)) {
+        throw new Error('Client-directory database constraints are incomplete.');
+      }
     }
     await client.query('ROLLBACK');
   } catch {

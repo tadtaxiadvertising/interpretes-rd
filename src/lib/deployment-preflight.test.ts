@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { runDeploymentPreflight, validateDeploymentSecrets } from '../../scripts/deployment-preflight';
+import { normalizeDirectDatabaseUrl } from '../../scripts/normalize-direct-database-url';
 
 const validEnv = {
   DIRECT_URL: 'postgresql://test:private-password@127.0.0.1:5432/isolated_test',
@@ -13,7 +14,7 @@ const validEnv = {
 function fakeConnection() {
   const client = {
     connect: vi.fn().mockResolvedValue(undefined),
-    query: vi.fn().mockResolvedValue({ rows: [] }),
+    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true }] }),
     end: vi.fn().mockResolvedValue(undefined),
   };
   return { client, createClient: vi.fn().mockReturnValue(client) };
@@ -101,13 +102,30 @@ describe('deployment credential boundary', () => {
       statement_timeout: 10_000,
       query_timeout: 10_000,
     }));
-    expect(client.query.mock.calls.map(([sql]) => sql)).toEqual([
+    const checks = client.query.mock.calls.map(([sql]) => sql);
+    expect(checks.slice(0, 4)).toEqual([
       'BEGIN READ ONLY',
       'SELECT 1',
       'SELECT id, client_id, name FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
-      'ROLLBACK',
     ]);
+    expect(checks[4]).toContain('AS account_unique');
+    expect(checks[4]).toContain('AS client_fk');
+    expect(checks[4]).toContain('AS client_rls');
+    expect(checks[5]).toBe('ROLLBACK');
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
+  it('blocks deployment if required account constraints, FK or RLS are absent', async () => {
+    const { client, createClient } = fakeConnection();
+    client.query.mockImplementation(async (sql: string) => ({
+      rows: sql.includes('AS account_unique')
+        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true }]
+        : [],
+    }));
+    await expect(runDeploymentPreflight(validEnv, createClient, true)).rejects.toThrow(
+      'Production preflight: DIRECT_URL connection or schema prerequisite check failed.',
+    );
     expect(client.end).toHaveBeenCalledOnce();
   });
 
@@ -151,9 +169,59 @@ describe('production deployment workflow', () => {
 
   it('normalizes DIRECT_URL in the migration runner without DATABASE_URL fallback', () => {
     const runner = readFileSync('scripts/run-migration.ts', 'utf8');
-    expect(runner).toContain('process.env.DIRECT_URL?.trim()');
-    expect(runner).toContain('DIRECT_URL no puede contener espacios internos');
+    expect(runner).toContain('normalizeDirectDatabaseUrl(process.env.DIRECT_URL)');
     expect(runner).not.toContain('process.env.DIRECT_URL || process.env.DATABASE_URL');
+  });
+
+  it.each([
+    ['session pooler missing project-scoped user', 'postgresql://migration:private-password@region.pooler.supabase.com:5432/postgres', 'pooler'],
+    ['transaction pooler port', 'postgresql://migration:private-password@db.example.com:6543/postgres', 'pooler'],
+    ['override destination', 'postgresql://migration:private-password@db.example.com:5432/postgres?host=unsafe.example.com', 'redefinir'],
+    ['internal whitespace', 'postgresql://migration:private password@db.example.com:5432/postgres', 'espacios internos'],
+    ['non-database protocol', 'https://migration:private-password@db.example.com/postgres', 'PostgreSQL'],
+  ])('standalone migrator rejects %s before connecting, without leaking credentials', (_scenario, url, expectedError) => {
+    const result = spawnSync(process.execPath, [
+      '--import', 'tsx', 'scripts/run-migration.ts',
+      'prisma/migrations/20261105180000_client_directory/migration.sql',
+      '--apply', '--transaction',
+    ], {
+      env: { ...process.env, DIRECT_URL: url, DATABASE_URL: validEnv.DIRECT_URL },
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(expectedError);
+    expect(result.stdout + result.stderr).not.toContain('private-password');
+    expect(result.stdout + result.stderr).not.toContain('unsafe.example.com');
+  });
+
+  it('standalone migration dry run does not open a connection or require secrets', () => {
+    const result = spawnSync(process.execPath, [
+      '--import', 'tsx', 'scripts/run-migration.ts',
+      'prisma/migrations/20261105180000_client_directory/migration.sql',
+    ], {
+      env: { ...process.env, DIRECT_URL: '', DATABASE_URL: '' },
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('DRY RUN: no se conectó');
+  });
+
+  it('permits IPv4 Supabase session pooling only with project-scoped user on port 5432', () => {
+    const session = 'postgresql://postgres.abcdefghijklmnopqrst:private-password@aws-1-us-east-1.pooler.supabase.com:5432/postgres';
+    expect(normalizeDirectDatabaseUrl(session)).toBe(session);
+    expect(validateDeploymentSecrets({ ...validEnv, DIRECT_URL: session })).toBe(session);
+    expect(() => normalizeDirectDatabaseUrl(session.replace(':5432/', ':6543/'))).toThrow('pooler');
+    expect(() => normalizeDirectDatabaseUrl(session.replace('postgres.abcdefghijklmnopqrst', 'postgres'))).toThrow('pooler');
+    expect(() => normalizeDirectDatabaseUrl(session + '?pool_mode=transaction')).toThrow('transaccional');
+  });
+
+  it('shares direct URL validation between preflight and standalone runner', () => {
+    const direct = ` \n${validEnv.DIRECT_URL}\r\n`;
+    expect(normalizeDirectDatabaseUrl(direct)).toBe(validEnv.DIRECT_URL);
+    expect(validateDeploymentSecrets({ ...validEnv, DIRECT_URL: direct })).toBe(validEnv.DIRECT_URL);
+    expect(() => normalizeDirectDatabaseUrl(`${validEnv.DIRECT_URL}?pool_mode=transaction`)).toThrow('pooler');
   });
 
   it('serializes the whole pipeline without cancelling an active migration', () => {
