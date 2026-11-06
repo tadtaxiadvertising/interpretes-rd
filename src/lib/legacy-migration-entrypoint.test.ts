@@ -26,7 +26,6 @@ describe('legacy migration entrypoint security', () => {
   });
 });
 
-
 describe('canonical migration runner contract', () => {
   it('checks --transaction before constructing a database client', () => {
     const runner = readFileSync('scripts/run-migration.ts', 'utf8');
@@ -42,7 +41,7 @@ describe('canonical migration runner contract', () => {
 
   it('passes --transaction to every production migration invocation', () => {
     const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
-    const invocations = workflow.split('\\n').filter((line) => line.includes('npm run migrate --'));
+    const invocations = workflow.match(/^.*npm run migrate --.*$/gm) ?? [];
 
     expect(invocations.length).toBeGreaterThan(0);
     for (const invocation of invocations) {
