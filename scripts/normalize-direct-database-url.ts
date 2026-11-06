@@ -42,7 +42,7 @@ export function normalizeDirectDatabaseUrl(raw: string | undefined): string {
   // pasting a direct-connection username into a session-pooler endpoint.
   if (sharedSupabasePooler &&
       (url.port !== '5432' || !/^[a-zA-Z_][a-zA-Z0-9_]*\.[a-z0-9]{20}$/u.test(url.username))) {
-    throw new DirectDatabaseUrlError('El pooler de sesión Supabase requiere puerto 5432 y usuario usuario.PROJECT_REF.');
+    throw new DirectDatabaseUrlError('DIRECT_URL: el pooler de sesión Supabase requiere puerto 5432 y usuario rol.PROJECT_REF.');
   }
   if (url.port === '6543' ||
       url.searchParams.getAll('pgbouncer').some((mode) => mode.toLowerCase() === 'true') ||
