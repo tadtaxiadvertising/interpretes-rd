@@ -1,30 +1,11 @@
-const { Client } = require('pg');
-const fs = require('fs');
-const path = require('path');
+'use strict';
 
-const DIRECT_URL = "postgresql://postgres.kzbkygppplknynrwmtmf:gjkDNBlZuVr9leTw@aws-1-us-east-1.pooler.supabase.com:5432/postgres";
-
-async function main() {
-  const client = new Client({ connectionString: DIRECT_URL });
-  
-  try {
-    await client.connect();
-    console.log('Connected to database');
-    
-    const sql = fs.readFileSync(
-      path.join(process.cwd(), 'prisma/migrations/20261001_add_roleplay_v2/migration.sql'), 
-      'utf-8'
-    );
-    
-    console.log('Running migration...');
-    await client.query(sql);
-    console.log('Migration completed successfully!');
-  } catch (error) {
-    console.error('Migration failed:', error);
-    process.exit(1);
-  } finally {
-    await client.end();
-  }
-}
-
-main();
+// This legacy one-off runner previously embedded database credentials and
+// bypassed the shared DIRECT_URL validation, transaction guard and dry-run
+// contract. Keep the entry point fail-closed so old invocations cannot mutate
+// a database outside scripts/run-migration.ts.
+console.error('Este ejecutor heredado está deshabilitado por seguridad.');
+console.error('Dry-run: npm run migrate -- <ruta/migration.sql>');
+console.error('Aplicación: npm run migrate -- <ruta/migration.sql> --apply --transaction');
+console.error('La aplicación requiere DIRECT_URL válido; DATABASE_URL no es una alternativa.');
+process.exitCode = 1;
