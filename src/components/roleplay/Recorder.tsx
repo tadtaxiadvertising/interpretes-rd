@@ -183,9 +183,14 @@ export function Recorder({
   };
 
   useEffect(() => {
+    // playbackIntervalRef es un useRef (puntero mutable, no reactivo). Se
+    // captura en un const y la limpieza del efecto usa ese valor; stopTimer es
+    // useCallback estable y el ref es un objeto inmutable que no requiere
+    // reactividad, por lo que no se requiere la regla exhaustive-deps.
+    const playbackInterval = playbackIntervalRef.current;
     return () => {
       stopTimer();
-      if (playbackIntervalRef.current) clearInterval(playbackIntervalRef.current);
+      if (playbackInterval) clearInterval(playbackInterval);
       const recorder = mediaRecorderRef.current;
       if (recorder && recorder.state !== 'inactive') {
         recorder.onstop = null;
@@ -195,7 +200,7 @@ export function Recorder({
       if (recordingUrlRef.current) URL.revokeObjectURL(recordingUrlRef.current);
       recordingUrlRef.current = '';
     };
-  }, [stopTimer]);
+  }, [stopTimer, playbackIntervalRef]);
 
   // State 1: Ready to record
   if (state === 'ready') {
