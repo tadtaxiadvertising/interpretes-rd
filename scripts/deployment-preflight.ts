@@ -7,7 +7,7 @@ const requiredSecrets = ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPA
 type DeploymentEnvironment = Partial<Record<(typeof requiredSecrets)[number], string>>;
 interface PreflightClient {
   connect(): Promise<unknown>;
-  query(sql: string): Promise<unknown>;
+  query(sql: string): Promise<{ rows: Record<string, unknown>[] }>;
   end(): Promise<unknown>;
 }
 
@@ -76,6 +76,43 @@ export async function runDeploymentPreflight(
     if (verifySchema) {
       await client.query('SELECT id, client_id, name FROM public.accounts LIMIT 0');
       await client.query('SELECT id FROM public.clients LIMIT 0');
+      // A table/column-only check can pass after a partial schema change.
+      // Confirm the client-scoped uniqueness, FK, RLS, and removal of the
+      // old global uniqueness before the deployment webhooks can run.
+      const integrity = await client.query(`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM pg_index idx
+            WHERE idx.indexrelid = to_regclass('public.accounts_client_id_name_key')
+              AND idx.indrelid = 'public.accounts'::regclass
+              AND idx.indisunique AND idx.indisvalid AND idx.indisready
+              AND idx.indnkeyatts = 2
+              AND idx.indkey[0] = (
+                SELECT attnum FROM pg_attribute
+                WHERE attrelid = 'public.accounts'::regclass AND attname = 'client_id'
+              )
+              AND idx.indkey[1] = (
+                SELECT attnum FROM pg_attribute
+                WHERE attrelid = 'public.accounts'::regclass AND attname = 'name'
+              )
+          ) AS account_unique,
+          to_regclass('public.accounts_name_key') IS NULL AS legacy_unique_absent,
+          EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'public.accounts'::regclass
+              AND confrelid = 'public.clients'::regclass
+              AND conname = 'accounts_client_id_fkey'
+              AND contype = 'f' AND convalidated
+              AND confdeltype = 'n' AND confupdtype = 'c'
+          ) AS client_fk,
+          (SELECT relrowsecurity FROM pg_class
+           WHERE oid = 'public.clients'::regclass) AS client_rls
+      `);
+      const status = integrity.rows[0];
+      if (!status || !['account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls']
+        .every((key) => status[key] === true)) {
+        throw new Error('Client-directory database constraints are incomplete.');
+      }
     }
     await client.query('ROLLBACK');
   } catch {
