@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { relative, resolve, sep } from 'node:path';
 import { Client } from 'pg';
-import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
+import { DirectDatabaseUrlError, normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 
 async function main() {
   const args = process.argv.slice(2);
@@ -82,6 +82,11 @@ async function main() {
 main().catch((error: unknown) => {
   // PostgreSQL and network errors can include destination/credential details.
   // Print only a fixed message and, when available, a safe SQLSTATE code.
+  if (error instanceof DirectDatabaseUrlError) {
+    console.error(error.message);
+    process.exitCode = 1;
+    return;
+  }
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === 'string' && /^[0-9A-Z]{5}$/u.test(code)) {
     console.error(`La migración falló (SQLSTATE ${code}).`);
