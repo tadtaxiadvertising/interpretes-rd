@@ -258,3 +258,18 @@ describe('production deployment workflow', () => {
     expect(beforeJobs).toContain('cancel-in-progress: false');
   });
 });
+
+
+describe('manual production preflight workflow', () => {
+  it('can check production credentials without running migrations or webhooks', () => {
+    const workflow = readFileSync('.github/workflows/diagnose-production-connection.yml', 'utf8');
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('environment: production');
+    expect(workflow).toContain('run: npx tsx scripts/deployment-preflight.ts');
+    for (const secret of ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPANEL_WEBHOOK_API']) {
+      expect(workflow).toContain(`secrets.${secret}`);
+    }
+    expect(workflow).not.toMatch(/\bpush:|\bpull_request:/u);
+    expect(workflow).not.toMatch(/npm run migrate|--apply|--verify-schema|curl\s|Invoke-WebRequest|Call Easypanel Webhook/u);
+  });
+});
