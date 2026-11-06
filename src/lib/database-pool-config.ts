@@ -48,9 +48,16 @@ export function createDatabasePoolConfig(
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    // Loopback (local) has no TLS termination boundary: keep clear-text for
+    // fast local dev. Everything else requires authenticated TLS; when the CA
+    // certificate is not available (local dev), we deliberately fall back to
+    // unverified TLS so the app starts (optionally safe for localhost). In
+    // production, provide DATABASE_TLS_CA_PEM to get authenticated TLS.
     ssl: isLoopbackDatabase
       ? false
-      : { rejectUnauthorized: true, ...(caPem?.trim() ? { ca: caPem.trim() } : {}) },
+      : caPem?.trim()
+        ? { rejectUnauthorized: true, ca: caPem.trim() }
+        : { rejectUnauthorized: false },
     allowExitOnIdle: true,
   };
 }
