@@ -1,7 +1,10 @@
 /**
  * Normalize and validate a PostgreSQL URL used for schema migrations.
- * Keep this guard shared between deployment preflight and the migration runner,
- * so standalone invocations cannot bypass the direct-connection requirement.
+ * Allow direct PostgreSQL or Supabase's session pooler on port 5432, which
+ * preserves a session for transaction-scoped advisory locks and DDL. GitHub
+ * hosted runners are IPv4-only; a Supabase IPv6-only direct endpoint cannot
+ * be used there without the optional IPv4 add-on. Never use transaction pooling.
+ * Keep this guard shared across preflight and standalone migration invocations.
  * Error messages intentionally contain no URL fragments or credentials.
  */
 export class DirectDatabaseUrlError extends Error {}
@@ -34,12 +37,18 @@ export function normalizeDirectDatabaseUrl(raw: string | undefined): string {
   }
 
   const hostname = url.hostname.toLowerCase().replace(/\.$/u, '');
+  const sharedSupabasePooler = hostname.endsWith('.pooler.supabase.com');
+  // Session pooling uses a project-scoped user. This catches accidentally
+  // pasting a direct-connection username into a session-pooler endpoint.
+  if (sharedSupabasePooler &&
+      (url.port !== '5432' || !/^[a-zA-Z_][a-zA-Z0-9_]*\.[a-z0-9]{20}$/u.test(url.username))) {
+    throw new DirectDatabaseUrlError('El pooler de sesión Supabase requiere puerto 5432 y usuario usuario.PROJECT_REF.');
+  }
   if (url.port === '6543' ||
-      hostname.endsWith('.pooler.supabase.com') ||
       url.searchParams.getAll('pgbouncer').some((mode) => mode.toLowerCase() === 'true') ||
       url.searchParams.getAll('pool_mode').some((mode) =>
         ['transaction', 'statement'].includes(mode.toLowerCase()))) {
-    throw new DirectDatabaseUrlError('DIRECT_URL debe usar una conexión PostgreSQL directa, no un pooler.');
+    throw new DirectDatabaseUrlError('DIRECT_URL debe usar PostgreSQL directo o pooler de sesión (5432), nunca pooler transaccional.');
   }
   return value;
 }
