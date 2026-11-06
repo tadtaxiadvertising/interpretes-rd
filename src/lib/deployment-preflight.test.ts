@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it, vi } from 'vitest';
 import { runDeploymentPreflight, validateDeploymentSecrets } from '../../scripts/deployment-preflight';
+import { normalizeDirectDatabaseUrl } from '../../scripts/normalize-direct-database-url';
 
 const validEnv = {
   DIRECT_URL: 'postgresql://test:private-password@127.0.0.1:5432/isolated_test',
@@ -151,9 +152,50 @@ describe('production deployment workflow', () => {
 
   it('normalizes DIRECT_URL in the migration runner without DATABASE_URL fallback', () => {
     const runner = readFileSync('scripts/run-migration.ts', 'utf8');
-    expect(runner).toContain('process.env.DIRECT_URL?.trim()');
-    expect(runner).toContain('DIRECT_URL no puede contener espacios internos');
+    expect(runner).toContain('normalizeDirectDatabaseUrl(process.env.DIRECT_URL)');
     expect(runner).not.toContain('process.env.DIRECT_URL || process.env.DATABASE_URL');
+  });
+
+  it.each([
+    ['Supabase session pooler', 'postgresql://migration:private-password@region.pooler.supabase.com:5432/postgres', 'pooler'],
+    ['transaction pooler port', 'postgresql://migration:private-password@db.example.com:6543/postgres', 'pooler'],
+    ['override destination', 'postgresql://migration:private-password@db.example.com:5432/postgres?host=unsafe.example.com', 'redefinir'],
+    ['internal whitespace', 'postgresql://migration:private password@db.example.com:5432/postgres', 'espacios internos'],
+    ['non-database protocol', 'https://migration:private-password@db.example.com/postgres', 'PostgreSQL'],
+  ])('standalone migrator rejects %s before connecting, without leaking credentials', (_scenario, url, expectedError) => {
+    const result = spawnSync(process.execPath, [
+      '--import', 'tsx', 'scripts/run-migration.ts',
+      'prisma/migrations/20261105180000_client_directory/migration.sql',
+      '--apply', '--transaction',
+    ], {
+      env: { ...process.env, DIRECT_URL: url, DATABASE_URL: validEnv.DIRECT_URL },
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(expectedError);
+    expect(result.stdout + result.stderr).not.toContain('private-password');
+    expect(result.stdout + result.stderr).not.toContain('unsafe.example.com');
+  });
+
+  it('standalone migration dry run does not open a connection or require secrets', () => {
+    const result = spawnSync(process.execPath, [
+      '--import', 'tsx', 'scripts/run-migration.ts',
+      'prisma/migrations/20261105180000_client_directory/migration.sql',
+    ], {
+      env: { ...process.env, DIRECT_URL: '', DATABASE_URL: '' },
+      encoding: 'utf8',
+      timeout: 10_000,
+    });
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('DRY RUN: no se conectó');
+  });
+
+  it('shares direct URL validation between preflight and standalone runner', () => {
+    const direct = ` \n${validEnv.DIRECT_URL}\r\n`;
+    expect(normalizeDirectDatabaseUrl(direct)).toBe(validEnv.DIRECT_URL);
+    expect(validateDeploymentSecrets({ ...validEnv, DIRECT_URL: direct })).toBe(validEnv.DIRECT_URL);
+    expect(() => normalizeDirectDatabaseUrl(`${validEnv.DIRECT_URL}?pool_mode=transaction`)).toThrow('pooler');
   });
 
   it('serializes the whole pipeline without cancelling an active migration', () => {
