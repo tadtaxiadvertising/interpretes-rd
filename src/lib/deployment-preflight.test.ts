@@ -75,6 +75,32 @@ describe('deployment credential boundary', () => {
     expect(createClient).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['protocol', 'https://tester:private-password@localhost:5432/testdb', 'protocolo PostgreSQL'],
+    ['user', 'postgresql://:private-password@localhost:5432/testdb', 'falta el usuario'],
+    ['password', 'postgresql://tester@localhost:5432/testdb', 'falta la contraseña'],
+    ['database', 'postgresql://tester:private-password@localhost:5432/', 'falta el nombre de la base de datos'],
+    ['fragment', 'postgresql://tester:private-password@localhost:5432/testdb#private-fragment', 'fragmento #'],
+  ])('identifies the missing DIRECT_URL %s without exposing its input', (_field, url, expectedMessage) => {
+    expect(() => validateDeploymentSecrets({ ...validEnv, DIRECT_URL: url }))
+      .toThrow('Production preflight: DIRECT_URL');
+    let message = '';
+    try {
+      validateDeploymentSecrets({ ...validEnv, DIRECT_URL: url });
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(expectedMessage);
+    expect(message).not.toContain('private-password');
+    expect(message).not.toContain('private-fragment');
+    expect(message).not.toContain('localhost');
+  });
+
+  it('accepts correctly percent-encoded reserved password characters without logging them', () => {
+    const encoded = 'postgresql://tester:private%23password%40value@localhost:5432/testdb';
+    expect(normalizeDirectDatabaseUrl(encoded)).toBe(encoded);
+  });
+
   it('trims surrounding secret whitespace without weakening internal URL validation', () => {
     expect(validateDeploymentSecrets({
       ...validEnv,
