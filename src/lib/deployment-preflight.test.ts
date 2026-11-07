@@ -112,7 +112,7 @@ describe('deployment credential boundary', () => {
     const { client, createClient } = fakeConnection();
     const remoteEnv = {
       ...validEnv,
-      DIRECT_URL: 'postgresql://postgres.projectref:private-password@aws-1-us-east-1.pooler.supabase.com:5432/postgres',
+      DIRECT_URL: 'postgresql://postgres.abcdefghijklmnopqrst:private-password@aws-1-us-east-1.pooler.supabase.com:5432/postgres',
     };
     await runDeploymentPreflight(remoteEnv, createClient);
     const config = createClient.mock.calls[0][0];
