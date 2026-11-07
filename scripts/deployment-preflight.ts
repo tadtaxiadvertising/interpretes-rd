@@ -64,28 +64,52 @@ const safeConnectionDiagnostics: Record<string, string> = {
 };
 
 function safeConnectionDiagnostic(error: unknown): string | undefined {
-  // Inspect common driver wrapper fields, but return only fixed, allowlisted descriptions.
+  // Driver and framework wrappers may expose a primitive message or a nested cause.
+  // Only fixed, allowlisted descriptions and class names can leave this process.
   const queue: unknown[] = [error];
   const visited = new Set<object>();
   const messageDiagnostics: Array<[RegExp, string]> = [
     [/self[- ]signed certificate in certificate chain/i, safeConnectionDiagnostics.SELF_SIGNED_CERT_IN_CHAIN],
     [/certificate has expired|expired certificate/i, safeConnectionDiagnostics.CERT_HAS_EXPIRED],
     [/unable to verify (?:the )?(?:first )?certificate|unable to verify leaf signature/i, safeConnectionDiagnostics.UNABLE_TO_VERIFY_LEAF_SIGNATURE],
-    [/getaddrinfo .*ENOTFOUND|\bENOTFOUND\b/i, safeConnectionDiagnostics.ENOTFOUND],
-    [/\bEAI_AGAIN\b/i, safeConnectionDiagnostics.EAI_AGAIN],
-    [/\bETIMEDOUT\b|connection timed out|timeout expired/i, safeConnectionDiagnostics.ETIMEDOUT],
-    [/\bECONNREFUSED\b/i, safeConnectionDiagnostics.ECONNREFUSED],
-    [/\bECONNRESET\b/i, safeConnectionDiagnostics.ECONNRESET],
-    [/password authentication failed|\b28P01\b/i, safeConnectionDiagnostics['28P01']],
-    [/database .* does not exist|\b3D000\b/i, safeConnectionDiagnostics['3D000']],
+    [/getaddrinfo .*ENOTFOUND|\\bENOTFOUND\\b/i, safeConnectionDiagnostics.ENOTFOUND],
+    [/\\bEAI_AGAIN\\b/i, safeConnectionDiagnostics.EAI_AGAIN],
+    [/\\bETIMEDOUT\\b|connection timed out|timeout expired/i, safeConnectionDiagnostics.ETIMEDOUT],
+    [/\\bECONNREFUSED\\b/i, safeConnectionDiagnostics.ECONNREFUSED],
+    [/\\bECONNRESET\\b/i, safeConnectionDiagnostics.ECONNRESET],
+    [/password authentication failed|\\b28P01\\b/i, safeConnectionDiagnostics['28P01']],
+    [/database .* does not exist|\\b3D000\\b/i, safeConnectionDiagnostics['3D000']],
   ];
+  const safeClassNames = new Set([
+    'Error', 'AggregateError', 'DatabaseError', 'ConnectionError',
+    'TimeoutError', 'ErrorEvent', 'PostgresError',
+  ]);
+  let safeClassName = 'Error';
+
   while (queue.length) {
     const current = queue.shift();
+    if (typeof current === 'string') {
+      for (const [pattern, diagnostic] of messageDiagnostics) {
+        if (pattern.test(current)) return diagnostic;
+      }
+      continue;
+    }
     if (!current || typeof current !== 'object' || visited.has(current)) continue;
     visited.add(current);
     const candidate = current as Record<string, unknown>;
-    if (typeof candidate.code === 'string' && safeConnectionDiagnostics[candidate.code]) {
-      return safeConnectionDiagnostics[candidate.code];
+    if (typeof candidate.name === 'string' && safeClassNames.has(candidate.name)) {
+      safeClassName = candidate.name;
+    }
+    if (typeof candidate.code === 'string') {
+      if (safeConnectionDiagnostics[candidate.code]) {
+        return safeConnectionDiagnostics[candidate.code];
+      }
+      if (candidate.code === 'ERR_TLS_CERT_ALTNAME_INVALID') {
+        return 'El certificado TLS no coincide con el nombre del servidor.';
+      }
+      if (candidate.code.startsWith('ERR_TLS_') || candidate.code.startsWith('ERR_SSL_')) {
+        return 'Falló la negociación o validación TLS con PostgreSQL.';
+      }
     }
     if (typeof candidate.message === 'string') {
       for (const [pattern, diagnostic] of messageDiagnostics) {
@@ -93,11 +117,13 @@ function safeConnectionDiagnostic(error: unknown): string | undefined {
       }
     }
     for (const key of ['cause', 'originalError', 'parent', 'error']) {
-      if (candidate[key] && typeof candidate[key] === 'object') queue.push(candidate[key]);
+      if (candidate[key] !== undefined) queue.push(candidate[key]);
     }
     if (Array.isArray(candidate.errors)) queue.push(...candidate.errors.slice(0, 8));
   }
-  return undefined;
+
+  // Keep the output actionable without ever printing arbitrary error text, codes, or URLs.
+  return `El controlador PostgreSQL devolvió un error no clasificado (tipo seguro: ${safeClassName}). Revisar endpoint, credenciales, TLS y conectividad.`;
 }
 
 function createPreflightClient(config: ClientConfig): PreflightClient {
