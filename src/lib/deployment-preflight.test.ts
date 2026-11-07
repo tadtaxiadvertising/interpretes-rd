@@ -193,6 +193,28 @@ describe('deployment credential boundary', () => {
     expect(client.end).toHaveBeenCalledOnce();
   });
 
+
+  it.each([
+    ['DNS', 'getaddrinfo ENOTFOUND private-host', 'DNS no pudo resolver el host PostgreSQL.'],
+    ['DNS temporal', 'EAI_AGAIN private-host', 'La resolución DNS de PostgreSQL falló temporalmente.'],
+    ['timeout', 'connect ETIMEDOUT private-host:5432', 'La conexión a PostgreSQL agotó el tiempo de espera.'],
+    ['conexión rechazada', 'connect ECONNREFUSED private-host:5432', 'El servidor rechazó la conexión TCP.'],
+    ['conexión reiniciada', 'read ECONNRESET', 'La conexión TCP se cerró inesperadamente.'],
+    ['TLS', 'certificate TLS validation failed', 'Falló la validación o negociación del certificado TLS con PostgreSQL.'],
+  ])('classifies raw driver message for %s without leaking endpoint details', async (_kind, driverMessage, expected) => {
+    const { client, createClient } = fakeConnection();
+    client.connect.mockRejectedValue(new Error(driverMessage));
+    let message = '';
+    try {
+      await runDeploymentPreflight(validEnv, createClient);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(expected);
+    expect(message).not.toMatch(/private-host|5432/);
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
   it.each(['connect', 'query', 'construct'] as const)('sanitizes %s failures and releases the connection', async (stage) => {
     const { client, createClient } = fakeConnection();
     const sensitiveError = new Error(Object.values(validEnv).join(' '));
