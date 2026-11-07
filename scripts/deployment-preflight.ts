@@ -146,8 +146,10 @@ export async function runDeploymentPreflight(
       }
     }
     await client.query('ROLLBACK');
-  } catch {
-    throw new Error('Production preflight: DIRECT_URL connection or schema prerequisite check failed. Verify the production target, credentials, network access and client-directory migration. No deployment was triggered.');
+  } catch (error) {
+    const diagnostic = safeConnectionDiagnostic(error);
+    const suffix = diagnostic ? ` Diagnostic: ${diagnostic}` : '';
+    throw new Error(`Production preflight: DIRECT_URL connection or schema prerequisite check failed. Verify the production target, credentials, network access and client-directory migration. No deployment was triggered.${suffix}`);
   } finally {
     // Closing also rolls back a failed read-only transaction.
     await client?.end().catch(() => undefined);
