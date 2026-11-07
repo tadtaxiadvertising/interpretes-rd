@@ -45,6 +45,37 @@ export function validateDeploymentSecrets(env: DeploymentEnvironment): string {
   return connectionString;
 }
 
+const safeConnectionDiagnostics: Record<string, string> = {
+  ENOTFOUND: 'DNS no pudo resolver el host PostgreSQL.',
+  EAI_AGAIN: 'La resolución DNS de PostgreSQL falló temporalmente.',
+  ETIMEDOUT: 'La conexión a PostgreSQL agotó el tiempo de espera.',
+  ECONNREFUSED: 'El servidor rechazó la conexión TCP.',
+  ECONNRESET: 'La conexión TCP se cerró inesperadamente.',
+  ENETUNREACH: 'La red no tiene ruta hacia el servidor PostgreSQL.',
+  EHOSTUNREACH: 'El host PostgreSQL no es alcanzable desde GitHub Actions.',
+  SELF_SIGNED_CERT_IN_CHAIN: 'La cadena TLS contiene un certificado autofirmado no confiable.',
+  CERT_HAS_EXPIRED: 'El certificado TLS del servidor ha expirado.',
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: 'No se pudo verificar la cadena del certificado TLS.',
+  '28P01': 'PostgreSQL rechazó la autenticación. Verifica usuario y contraseña.',
+  '3D000': 'La base de datos indicada no existe en el servidor.',
+  '28000': 'PostgreSQL rechazó la autorización del usuario.',
+  '08001': 'No se pudo establecer la conexión SQL con el servidor.',
+  '08006': 'La conexión SQL falló durante el establecimiento o uso.',
+};
+
+function safeConnectionDiagnostic(error: unknown): string | undefined {
+  // Only inspect fixed error codes; never expose driver messages, hosts, URLs, or credentials.
+  let current: unknown = error;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as { code?: unknown; cause?: unknown };
+    if (typeof candidate.code === 'string' && safeConnectionDiagnostics[candidate.code]) {
+      return safeConnectionDiagnostics[candidate.code];
+    }
+    current = candidate.cause;
+  }
+  return undefined;
+}
+
 function createPreflightClient(config: ClientConfig): PreflightClient {
   const client = new Client(config);
   // Query/connect promises report failures below; never print raw idle socket errors.
