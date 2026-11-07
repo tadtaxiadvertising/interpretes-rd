@@ -66,6 +66,13 @@ jobs:
             const report = require(process.env.RUNNER_TEMP + "/npm-audit.json");
             const vulnerabilities = report.vulnerabilities || {};
             console.log("Dependency audit summary:", JSON.stringify(report.metadata?.vulnerabilities || {}));
+            const severity = report.metadata?.vulnerabilities || {};
+            if ((severity.high || 0) > 0 || (severity.critical || 0) > 0) {
+              console.error("Dependency audit blocked: high/critical vulnerabilities must be resolved.");
+              process.exitCode = 1;
+            } else if ((severity.moderate || 0) > 0) {
+              console.warn("Dependency audit warning: moderate vulnerabilities remain; review and remediate.");
+            }
             for (const [name, item] of Object.entries(vulnerabilities)) {
               const advisories = (item.via || [])
                 .filter((entry) => typeof entry === "object")
