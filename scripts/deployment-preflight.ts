@@ -79,6 +79,15 @@ function safeConnectionDiagnostic(error: unknown): string | undefined {
     [/\\bECONNRESET\\b/i, safeConnectionDiagnostics.ECONNRESET],
     [/password authentication failed|\\b28P01\\b/i, safeConnectionDiagnostics['28P01']],
     [/database .* does not exist|\\b3D000\\b/i, safeConnectionDiagnostics['3D000']],
+    [/no pg_hba\\.conf entry|pg_hba\\.conf/i, 'El servidor PostgreSQL rechazó el origen de la conexión por su política de acceso.'],
+    [/connection terminated unexpectedly|server closed the connection unexpectedly/i, 'El servidor PostgreSQL cerró la conexión durante el establecimiento.'],
+    [/server does not support ssl|ssl is not enabled on the server/i, 'El servidor PostgreSQL no acepta la negociación TLS solicitada.'],
+    [/client password must be a string|SASL: SCRAM/i, 'La autenticación SCRAM no recibió una contraseña válida.'],
+    [/tenant or user not found|invalid tenant/i, 'El pooler no reconoce el usuario o proyecto configurado.'],
+    [/too many connections|remaining connection slots/i, 'PostgreSQL rechazó la conexión porque alcanzó su límite de conexiones.'],
+    [/self[- ]signed|certificate|\\bTLS\\b|\\bSSL\\b/i, 'Falló la validación o negociación del certificado TLS con PostgreSQL.'],
+    [/getaddrinfo|name or service not known|temporary failure in name resolution/i, 'Falló la resolución DNS del servidor PostgreSQL.'],
+    [/connect .* timed out|connection timeout|timeout expired/i, safeConnectionDiagnostics.ETIMEDOUT],
   ];
   const safeClassNames = new Set([
     'Error', 'AggregateError', 'DatabaseError', 'ConnectionError',
