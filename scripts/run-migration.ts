@@ -86,10 +86,10 @@ async function main() {
       // patterns and never print DETAIL, parameters, or the original error.
       const safeMessage = typeof databaseError.message === 'string'
         ? databaseError.message
-          .replace(/postgres(?:ql)?:\\/\\/[^\\s]+/giu, '[redacted database URL]')
-          .replace(/\\b(password|passwd|token|secret|authorization)\\s*[:=]\\s*[^\\s,;]+/giu, '$1=[redacted]')
-          .replace(/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/giu, '[redacted email]')
-          .replace(/[\\r\\n\\t]+/gu, ' ')
+          .replace(/postgres(?:ql)?:\/\/[^\s]+/giu, '[redacted database URL]')
+          .replace(/\b(password|passwd|token|secret|authorization)\s*[:=]\s*[^\s,;]+/giu, '$1=[redacted]')
+          .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu, '[redacted email]')
+          .replace(/[\r\n\t]+/gu, ' ')
           .slice(0, 240)
         : '';
       if (safeMessage) console.error(`Detalle PostgreSQL: ${safeMessage}`);
