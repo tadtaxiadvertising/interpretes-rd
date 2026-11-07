@@ -64,14 +64,38 @@ const safeConnectionDiagnostics: Record<string, string> = {
 };
 
 function safeConnectionDiagnostic(error: unknown): string | undefined {
-  // Only inspect fixed error codes; never expose driver messages, hosts, URLs, or credentials.
-  let current: unknown = error;
-  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
-    const candidate = current as { code?: unknown; cause?: unknown };
+  // Inspect common driver wrapper fields, but return only fixed, allowlisted descriptions.
+  const queue: unknown[] = [error];
+  const visited = new Set<object>();
+  const messageDiagnostics: Array<[RegExp, string]> = [
+    [/self[- ]signed certificate in certificate chain/i, safeConnectionDiagnostics.SELF_SIGNED_CERT_IN_CHAIN],
+    [/certificate has expired|expired certificate/i, safeConnectionDiagnostics.CERT_HAS_EXPIRED],
+    [/unable to verify (?:the )?(?:first )?certificate|unable to verify leaf signature/i, safeConnectionDiagnostics.UNABLE_TO_VERIFY_LEAF_SIGNATURE],
+    [/getaddrinfo .*ENOTFOUND|\bENOTFOUND\b/i, safeConnectionDiagnostics.ENOTFOUND],
+    [/\bEAI_AGAIN\b/i, safeConnectionDiagnostics.EAI_AGAIN],
+    [/\bETIMEDOUT\b|connection timed out|timeout expired/i, safeConnectionDiagnostics.ETIMEDOUT],
+    [/\bECONNREFUSED\b/i, safeConnectionDiagnostics.ECONNREFUSED],
+    [/\bECONNRESET\b/i, safeConnectionDiagnostics.ECONNRESET],
+    [/password authentication failed|\b28P01\b/i, safeConnectionDiagnostics['28P01']],
+    [/database .* does not exist|\b3D000\b/i, safeConnectionDiagnostics['3D000']],
+  ];
+  while (queue.length) {
+    const current = queue.shift();
+    if (!current || typeof current !== 'object' || visited.has(current)) continue;
+    visited.add(current);
+    const candidate = current as Record<string, unknown>;
     if (typeof candidate.code === 'string' && safeConnectionDiagnostics[candidate.code]) {
       return safeConnectionDiagnostics[candidate.code];
     }
-    current = candidate.cause;
+    if (typeof candidate.message === 'string') {
+      for (const [pattern, diagnostic] of messageDiagnostics) {
+        if (pattern.test(candidate.message)) return diagnostic;
+      }
+    }
+    for (const key of ['cause', 'originalError', 'parent', 'error']) {
+      if (candidate[key] && typeof candidate[key] === 'object') queue.push(candidate[key]);
+    }
+    if (Array.isArray(candidate.errors)) queue.push(...candidate.errors.slice(0, 8));
   }
   return undefined;
 }
