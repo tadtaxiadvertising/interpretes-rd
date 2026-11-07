@@ -1,7 +1,9 @@
-import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Client, type ClientConfig } from 'pg';
 import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
+import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
 
 const requiredSecrets = ['DIRECT_URL', 'EASYPANEL_WEBHOOK_INTERPRETERS', 'EASYPANEL_WEBHOOK_API'] as const;
 type DeploymentEnvironment = Partial<Record<(typeof requiredSecrets)[number], string>>;
@@ -151,8 +153,14 @@ export async function runDeploymentPreflight(
   const connectionString = validateDeploymentSecrets(env);
   let client: PreflightClient | undefined;
   try {
+    // Use the exact same fail-closed TLS policy as the Next.js runtime.
+    // Supabase's public root CA is bundled in the repository and Docker image;
+    // never disable certificate verification to make production connectivity pass.
+    const caPem = readFileSync(join(process.cwd(), 'certs', 'prod-ca-2021.crt'), 'utf8');
+    const runtimeConfig = createDatabasePoolConfig(connectionString, caPem);
     client = createClient({
-      connectionString,
+      connectionString: runtimeConfig.connectionString,
+      ssl: runtimeConfig.ssl,
       connectionTimeoutMillis: 10_000,
       statement_timeout: 10_000,
       query_timeout: 10_000,
