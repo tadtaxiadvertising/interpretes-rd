@@ -108,6 +108,20 @@ describe('deployment credential boundary', () => {
     })).toBe(validEnv.DIRECT_URL);
   });
 
+  it('uses the bundled Supabase CA with strict TLS for remote production connections', async () => {
+    const { client, createClient } = fakeConnection();
+    const remoteEnv = {
+      ...validEnv,
+      DIRECT_URL: 'postgresql://postgres.projectref:private-password@aws-1-us-east-1.pooler.supabase.com:5432/postgres',
+    };
+    await runDeploymentPreflight(remoteEnv, createClient);
+    const config = createClient.mock.calls[0][0];
+    expect(config.ssl).toEqual(expect.objectContaining({ rejectUnauthorized: true }));
+    expect(config.ssl.ca).toContain('-----BEGIN CERTIFICATE-----');
+    expect(config.connectionString).toBe(remoteEnv.DIRECT_URL);
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
   it('checks connectivity before migrations without requiring the new schema', async () => {
     const { client, createClient } = fakeConnection();
     await runDeploymentPreflight(validEnv, createClient);
