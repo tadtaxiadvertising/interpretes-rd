@@ -156,6 +156,24 @@ describe('deployment credential boundary', () => {
   });
 
   it.each([
+    ['wrapped TLS message', { cause: new Error('self-signed certificate in certificate chain') }, 'La cadena TLS contiene un certificado autofirmado no confiable.'],
+    ['wrapped DNS message', { originalError: new Error('getaddrinfo ENOTFOUND private-host') }, 'DNS no pudo resolver el host PostgreSQL.'],
+    ['authentication message', new Error('password authentication failed for user private-user'), 'PostgreSQL rechazó la autenticación. Verifica usuario y contraseña.'],
+  ])('classifies %s without exposing the underlying message', async (_kind, failure, expected) => {
+    const { client, createClient } = fakeConnection();
+    client.connect.mockRejectedValue(failure);
+    let message = '';
+    try {
+      await runDeploymentPreflight(validEnv, createClient);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(expected);
+    expect(message).not.toMatch(/private-user|private-password|private-host/);
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
+  it.each([
     ['DNS', 'ENOTFOUND', 'DNS no pudo resolver el host PostgreSQL.'],
     ['timeout', 'ETIMEDOUT', 'La conexión a PostgreSQL agotó el tiempo de espera.'],
     ['authentication', '28P01', 'PostgreSQL rechazó la autenticación. Verifica usuario y contraseña.'],
