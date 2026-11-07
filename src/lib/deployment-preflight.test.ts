@@ -155,6 +155,26 @@ describe('deployment credential boundary', () => {
     expect(client.end).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    ['DNS', 'ENOTFOUND', 'DNS no pudo resolver el host PostgreSQL.'],
+    ['timeout', 'ETIMEDOUT', 'La conexión a PostgreSQL agotó el tiempo de espera.'],
+    ['authentication', '28P01', 'PostgreSQL rechazó la autenticación. Verifica usuario y contraseña.'],
+    ['TLS', 'SELF_SIGNED_CERT_IN_CHAIN', 'La cadena TLS contiene un certificado autofirmado no confiable.'],
+  ])('reports a safe %s diagnostic without exposing driver details', async (_kind, code, expected) => {
+    const { client, createClient } = fakeConnection();
+    const sensitiveError = Object.assign(new Error('postgresql://private-user:private-password@private-host'), { code });
+    client.connect.mockRejectedValue(sensitiveError);
+    let message = '';
+    try {
+      await runDeploymentPreflight(validEnv, createClient);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain(expected);
+    expect(message).not.toMatch(/private-user|private-password|private-host/);
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
   it.each(['connect', 'query', 'construct'] as const)('sanitizes %s failures and releases the connection', async (stage) => {
     const { client, createClient } = fakeConnection();
     const sensitiveError = new Error(Object.values(validEnv).join(' '));
