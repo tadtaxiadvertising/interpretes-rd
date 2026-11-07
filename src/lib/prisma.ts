@@ -23,8 +23,8 @@ import { createDatabasePoolConfig } from '@/lib/database-pool-config';
  *
  * CONNECTION STRING FORMAT (Easypanel env):
  *   postgresql://user:pass@host:6543/db?pgbouncer=true&connection_limit=5
- *   Remote connections require authenticated TLS; provide DATABASE_TLS_CA_PEM
- *   if the server certificate is signed by a private CA.
+ *   Remote connections require authenticated TLS. Configure either
+ *   DATABASE_TLS_CA_PEM or DATABASE_TLS_CA_PEM_BASE64.
  * ============================================================
  */
 
@@ -37,6 +37,7 @@ function createPool(): pg.Pool {
   return new pg.Pool(createDatabasePoolConfig(
     process.env.DATABASE_URL,
     process.env.DATABASE_TLS_CA_PEM,
+    process.env.DATABASE_TLS_CA_PEM_BASE64,
   ));
 }
 
