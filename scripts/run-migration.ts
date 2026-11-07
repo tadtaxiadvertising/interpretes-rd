@@ -2,9 +2,19 @@ import 'dotenv/config';
 
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { relative, resolve, sep } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
 import { Client } from 'pg';
 import { DirectDatabaseUrlError, normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
+import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
+
+/**
+ * Keep migration connections on the same authenticated TLS policy as the
+ * deployment preflight and application runtime. Never fall back to plaintext.
+ */
+export function createMigrationClientConfig(connectionString: string, caPem: string) {
+  return createDatabasePoolConfig(connectionString, caPem);
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -51,7 +61,8 @@ async function main() {
     throw new Error('Las migraciones aplicadas deben usar --transaction para garantizar rollback ante errores.');
   }
 
-  const client = new Client({ connectionString });
+  const caPem = readFileSync(join(root, 'certs', 'prod-ca-2021.crt'), 'utf8');
+  const client = new Client(createMigrationClientConfig(connectionString, caPem));
   let connected = false;
   let transactionStarted = false;
 
