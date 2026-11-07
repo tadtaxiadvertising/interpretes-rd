@@ -72,7 +72,37 @@ async function main() {
       await client.query('ROLLBACK').catch(() => undefined);
       transactionStarted = false;
     }
-    console.error('La migración falló. Revisa el error del motor SQL; no se intentó reparar ni borrar usuarios automáticamente.');
+    console.error('La migración falló. No se intentó reparar ni borrar usuarios automáticamente.');
+    const databaseError = error as {
+      message?: unknown;
+      code?: unknown;
+      severity?: unknown;
+      position?: unknown;
+      routine?: unknown;
+    } | null;
+    if (databaseError && typeof databaseError === 'object') {
+      // PostgreSQL messages are useful for diagnosis, but can contain connection
+      // strings or values from failed constraints. Redact common secret/PII
+      // patterns and never print DETAIL, parameters, or the original error.
+      const safeMessage = typeof databaseError.message === 'string'
+        ? databaseError.message
+          .replace(/postgres(?:ql)?:\\/\\/[^\\s]+/giu, '[redacted database URL]')
+          .replace(/\\b(password|passwd|token|secret|authorization)\\s*[:=]\\s*[^\\s,;]+/giu, '$1=[redacted]')
+          .replace(/\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b/giu, '[redacted email]')
+          .replace(/[\\r\\n\\t]+/gu, ' ')
+          .slice(0, 240)
+        : '';
+      if (safeMessage) console.error(`Detalle PostgreSQL: ${safeMessage}`);
+      if (typeof databaseError.severity === 'string') {
+        console.error(`Severidad PostgreSQL: ${databaseError.severity.slice(0, 32)}`);
+      }
+      if (typeof databaseError.position === 'string' && /^\\d{1,6}$/u.test(databaseError.position)) {
+        console.error(`Posición SQL: ${databaseError.position}`);
+      }
+      if (typeof databaseError.routine === 'string' && /^[a-zA-Z0-9_]{1,80}$/u.test(databaseError.routine)) {
+        console.error(`Rutina PostgreSQL: ${databaseError.routine}`);
+      }
+    }
     throw error;
   } finally {
     if (connected) await client.end();
