@@ -117,7 +117,8 @@ describe('deployment credential boundary', () => {
     await runDeploymentPreflight(remoteEnv, createClient);
     const config = createClient.mock.calls[0][0];
     expect(config.ssl).toEqual(expect.objectContaining({ rejectUnauthorized: true }));
-    expect(config.ssl.ca).toContain('-----BEGIN CERTIFICATE-----');
+    const tls = config.ssl as { rejectUnauthorized: boolean; ca: string };
+    expect(tls.ca).toContain('-----BEGIN CERTIFICATE-----');
     expect(config.connectionString).toBe(remoteEnv.DIRECT_URL);
     expect(client.end).toHaveBeenCalledOnce();
   });
