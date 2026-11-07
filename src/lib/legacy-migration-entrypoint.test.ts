@@ -30,7 +30,7 @@ describe('canonical migration runner contract', () => {
   it('checks --transaction before constructing a database client', () => {
     const runner = readFileSync('scripts/run-migration.ts', 'utf8');
     const transactionGuard = runner.indexOf('if (!transactional)');
-    const clientConstruction = runner.indexOf('new Client({ connectionString })');
+    const clientConstruction = runner.indexOf('new Client(createMigrationClientConfig(connectionString, caPem))');
 
     expect(transactionGuard).toBeGreaterThan(-1);
     expect(clientConstruction).toBeGreaterThan(-1);
