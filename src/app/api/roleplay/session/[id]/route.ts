@@ -102,7 +102,7 @@ export async function GET(
     // Persist canonical Storage paths and mint short-lived playback URLs on
     // demand. The legacy sourceAudioUrl may be a seven-day signed URL and must
     // not become the permanent source of truth for candidate/admin playback.
-    scenarios = await Promise.all(scenarios.map(async (scenario) => ({
+    const playbackScenarios = await Promise.all(scenarios.map(async (scenario) => ({
       ...scenario,
       responses: await Promise.all(scenario.responses.map(async ({
         sourceAudioPath,
@@ -141,7 +141,7 @@ export async function GET(
                 !hasCompleteRoleplaySelfAssessment(response?.selfScore);
             }),
           currentScenarioIndex: session.currentScenarioIndex,
-          scenarios,
+          scenarios: playbackScenarios,
         },
       },
       { headers: createRateLimitHeaders(rateLimitResult) }
