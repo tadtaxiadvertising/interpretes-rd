@@ -129,6 +129,29 @@ export async function createSignedUploadUrl(
   };
 }
 
+export async function createSignedResponseUploadUrl(
+  sessionId: string,
+  scenarioId: string,
+  mimeType: string
+): Promise<{ token: string; path: string; expiresIn: number }> {
+  assertStoragePathSegment(sessionId, 'session ID');
+  assertStoragePathSegment(scenarioId, 'scenario ID');
+  const validation = validateAudioMetadata(mimeType, 1);
+  if (!validation.valid || !validation.extension) {
+    throw new Error(validation.error || 'Invalid MIME type');
+  }
+
+  // Each attempt gets an immutable, scenario-scoped object key. The browser
+  // uploads directly to Storage; the application server never buffers audio.
+  const path = `responses/${sessionId}/${scenarioId}/${randomUUID()}.${validation.extension}`;
+  const { data, error } = await getSupabaseAdmin().storage
+    .from(BUCKET)
+    .createSignedUploadUrl(path);
+
+  if (error) throw new Error('Unable to authorize audio upload');
+  return { token: data.token, path: data.path, expiresIn: 60 * 60 };
+}
+
 export async function confirmUpload(path: string): Promise<string> {
   // Signing a URL alone does not prove that the upload exists. Verify the
   // stored object before marking a session as ready for playback.
