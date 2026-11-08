@@ -17,6 +17,7 @@ const m = vi.hoisted(() => ({
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
   confirmUpload: vi.fn(),
+  audioJobCreate: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -56,6 +57,7 @@ vi.mock('@/lib/prisma', () => ({
           count: m.responseCount,
         },
         roleplayAccess: { updateMany: m.accessUpdateMany },
+        roleplayAudioJob: { create: m.audioJobCreate },
         recruitmentApplication: {
           findUnique: m.appFindUnique,
           updateMany: m.appUpdateMany,
@@ -113,6 +115,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     m.cookie = null;
     m.actor = { interpreterId: null };
     m.confirmUpload.mockResolvedValue('https://signed.example/confirmed.webm');
+    m.audioJobCreate.mockResolvedValue({ id: 'job-1' });
   });
 
   it('rejects a candidate session when the session cookie is missing', async () => {
@@ -121,8 +124,6 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
 
     const res = await confirmRoleplayResponse({
       sessionId: 'sess-cand',
-      scenarioId: 'scn-1',
-      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       scenarioId: 'scn-1',
       sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
       recordedAudioUrl: 'https://x/a.webm',
@@ -265,6 +266,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.responseCreate).toHaveBeenCalledTimes(1);
     expect(m.responseCreate.mock.calls[0][0].data.sourceAudioPath).toBe('responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm');
     expect(m.responseCreate.mock.calls[0][0].data.durationSec).toBe(42);
+    expect(m.audioJobCreate).toHaveBeenCalledWith({ data: { sessionId: 'sess-cand', scenarioId: 'scn-1', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm' } });
     expect(m.update).toHaveBeenCalledTimes(1);
     expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
     expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBeUndefined();

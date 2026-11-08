@@ -46,14 +46,25 @@ Easypanel requires these variables to be configured in the **Environment** tab o
 
 ---
 
-## Two Services
+## Services
 
-The project deploys **two separate services** on Easypanel:
+The project currently documents two public-facing services and adds an optional, private Roleplay worker:
 
-| Service              | Description            | Build                     |
-| :------------------- | :--------------------- | :------------------------ |
-| `interpreters`       | Next.js frontend       | Dockerfile (multi-stage)  |
-| `interpreters-api`   | Backend API            | Dockerfile (multi-stage)  |
+| Service                  | Description                                  | Build                         |
+| :----------------------- | :------------------------------------------- | :---------------------------- |
+| `interpreters`           | Next.js frontend                             | `Dockerfile`                  |
+| `interpreters-api`       | Backend API                                  | `Dockerfile.api`              |
+| `roleplay-audio-worker`  | Private, serial FFmpeg conversion worker     | `Dockerfile.worker`           |
+
+The Roleplay worker is not a public HTTP service and does not need a domain. It uses the existing Supabase Storage bucket and PostgreSQL database; it does not require Redis or a paid queue service.
+
+### Roleplay worker configuration
+
+Create this service only after applying the additive `roleplay_audio_jobs` migration. Configure the same runtime `DATABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `NEXT_PUBLIC_SUPABASE_URL` values used by the application. Do not put service-role keys or database credentials in build arguments.
+
+Start with **one worker replica**. The worker processes one conversion at a time, limits Node's heap to 256 MB, retries failed jobs with backoff, and recovers stale jobs after a worker restart. FFmpeg is a separate native process, so set a container memory limit in Easypanel and monitor the container's total RSS; the Node heap limit does not cap FFmpeg memory.
+
+Do not deploy this worker against production until the migration has been reviewed and applied through the normal release process. The worker must use the same database and Storage project as the frontend.
 
 Each service has its own **webhook URL** for triggering deployments via GitHub Actions.
 
@@ -61,7 +72,7 @@ Each service has its own **webhook URL** for triggering deployments via GitHub A
 
 ## EasyPanel Deployment Steps
 
-1. **Create Services:** Create two "App" services in Easypanel dashboard (`interpreters` + `interpreters-api`).
+1. **Create Services:** Create the frontend and API services. Add `roleplay-audio-worker` as a private worker service when the Roleplay queue migration is deployed.
 2. **Source:** Connect the `free-interpreters-os` GitHub repository to each service.
 3. **Build:** Use `Dockerfile` at root with context `.`.
 4. **Env:** Copy variables from the tables above to the **Environment** tab. Mark sensitive vars as runtime-only.

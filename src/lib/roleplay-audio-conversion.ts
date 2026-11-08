@@ -5,7 +5,6 @@ import { tmpdir } from 'os';
 import ffmpegPath from 'ffmpeg-static';
 import { spawn } from 'child_process';
 import { randomUUID } from 'node:crypto';
-import prisma from '@/lib/prisma';
 
 export const BUCKET = 'roleplay-audio';
 
@@ -18,49 +17,60 @@ export function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
+const MAX_SOURCE_AUDIO_BYTES = 15 * 1024 * 1024;
+const FFMPEG_TIMEOUT_MS = 3 * 60 * 1000;
+
 function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
+  const ffmpegBinary = ffmpegPath;
+  if (!ffmpegBinary) return Promise.reject(new Error('FFmpeg binary is not available in this runtime'));
+
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn(ffmpegPath!, [
+    const ffmpeg = spawn(ffmpegBinary, [
+      '-nostdin',
+      '-threads', '1',
       '-i', inputPath,
+      '-t', '300',
       '-vn',
       '-ar', '44100',
       '-ac', '2',
       '-b:a', '128k',
       '-f', 'mp3',
       outputPath,
-    ]);
+    ], { stdio: 'pipe' });
 
     let stderr = '';
-    ffmpeg.stderr.on('data', (data) => {
-      stderr += data.toString();
-    });
+    let settled = false;
+    const timeout = setTimeout(() => {
+      ffmpeg.kill('SIGKILL');
+      if (!settled) {
+        settled = true;
+        reject(new Error('FFmpeg conversion exceeded the 180-second time limit'));
+      }
+    }, FFMPEG_TIMEOUT_MS);
 
-    ffmpeg.on('error', (err) => {
-      reject(new Error(`FFmpeg error: ${err.message}`));
-    });
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve();
+    };
 
-    ffmpeg.on('close', (code) => {
-      if (code === 0) {
-        resolve();
-      } else {
-        reject(new Error(`FFmpeg exited with code ${code}: ${stderr}`));
+    ffmpeg.stderr.on('data', (data: Buffer) => {
+      if (stderr.length < 8_192) {
+        stderr += data.toString().slice(0, 8_192 - stderr.length);
       }
     });
+
+    ffmpeg.on('error', (error) => finish(new Error(`FFmpeg process error: ${error.message}`)));
+    ffmpeg.on('close', (code) => {
+      if (code === 0) finish();
+      else finish(new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-2_000)}`));
+    });
   });
 }
 
-/**
- * Queue async MP3 conversion job.
- * Fire-and-forget with basic error logging; the response record is updated
- * transactionally via the Prisma singleton when conversion completes.
- */
-export function queueMp3Conversion(sessionId: string, scenarioId: string, sourcePath: string): void {
-  convertAndStoreMp3(sessionId, scenarioId, sourcePath).catch(err => {
-    console.error(`[ASYNC CONVERSION] Failed for ${sessionId}/${scenarioId}:`, err);
-  });
-}
-
-export async function convertAndStoreMp3(sessionId: string, scenarioId: string, sourcePath: string): Promise<void> {
+export async function convertAndStoreMp3(sessionId: string, scenarioId: string, sourcePath: string): Promise<string> {
   const tempDir = tmpdir();
   const attemptId = randomUUID();
   const inputPath = join(tempDir, `${attemptId}_input.webm`);
@@ -75,6 +85,9 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
 
     if (downloadError || !fileData) {
       throw new Error(`Failed to download source audio: ${downloadError?.message}`);
+    }
+    if (fileData.size <= 0 || fileData.size > MAX_SOURCE_AUDIO_BYTES) {
+      throw new Error('Source audio is empty or exceeds the 15 MB processing limit');
     }
 
     const buffer = Buffer.from(await fileData.arrayBuffer());
@@ -97,25 +110,11 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
       throw new Error(`Failed to upload MP3: ${mp3UploadError.message}`);
     }
 
-    // Update the response for this exact scenario (scenarioId is the FK; it is
-    // a cuid, so it must never be parsed into a scenario `order`).
-    await prisma.roleplayResponse.updateMany({
-      where: { scenarioId, sourceAudioPath: sourcePath },
-      data: {
-        processedAudioPath: mp3Path,
-        audioStatus: 'READY',
-      },
-    });
-
-    console.log(`[ASYNC CONVERSION] Completed for ${sessionId}/${scenarioId}`);
+    // Storage writes are idempotent for this deterministic object path. The
+    // worker commits the response path only after its queue lease is verified.
+    console.log(`[ASYNC CONVERSION] Uploaded MP3 for ${sessionId}/${scenarioId}`);
+    return mp3Path;
   } catch (error) {
-    await prisma.roleplayResponse.updateMany({
-      where: { scenarioId, sourceAudioPath: sourcePath },
-      data: {
-        audioStatus: 'FAILED',
-        processingError: error instanceof Error ? error.message : 'Unknown error',
-      },
-    });
     throw error;
   } finally {
     // Cleanup temp files

@@ -925,6 +925,7 @@ model RoleplaySession {
   interpreterId           Int?      @map("interpreter_id")
   recruitmentCandidateId  Int?      @map("recruitment_candidate_id")
   baseAudioUrl            String    @map("base_audio_url")
+  baseAudioPath           String?   @map("base_audio_path")
   recordedAudioUrl        String?   @map("recorded_audio_url")
   status                  RoleplayStatus @default(DRAFT)
   evaluatorId             String?   @map("evaluator_id")
@@ -943,6 +944,7 @@ model RoleplaySession {
   qaScore                 QAScore?             @relation(fields: [qaScoreId], references: [id], onDelete: SetNull, onUpdate: NoAction)
   access                  RoleplayAccess?
   scenarios               RoleplayScenario[]
+  audioJobs               RoleplayAudioJob[]
 
   @@index([interpreterId, status], map: "idx_roleplay_interpreter_status")
   @@index([recruitmentCandidateId, status], map: "idx_roleplay_candidate_status")
@@ -989,6 +991,7 @@ model RoleplayScenario {
 
   session           RoleplaySession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   responses         RoleplayResponse[]
+  audioJobs         RoleplayAudioJob[]
 
   @@index([sessionId, order])
   @@map("roleplay_scenarios")
@@ -1025,6 +1028,43 @@ enum AudioStatus {
 
   @@schema("public")
 }
+
+enum RoleplayAudioJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+
+  @@schema("public")
+}
+
+model RoleplayAudioJob {
+  id             String                 @id @default(cuid())
+  sessionId      String                 @map("session_id")
+  scenarioId     String                 @map("scenario_id")
+  sourceAudioPath String                @unique @map("source_audio_path")
+  status         RoleplayAudioJobStatus @default(PENDING)
+  attempts       Int                    @default(0)
+  maxAttempts    Int                    @default(5) @map("max_attempts")
+  availableAt    DateTime               @default(now()) @map("available_at") @db.Timestamptz(6)
+  lockedAt       DateTime?              @map("locked_at") @db.Timestamptz(6)
+  lockedBy       String?                @map("locked_by")
+  lastError      String?                @map("last_error")
+  completedAt    DateTime?              @map("completed_at") @db.Timestamptz(6)
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  session        RoleplaySession        @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  scenario       RoleplayScenario       @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt, createdAt], map: "idx_roleplay_audio_jobs_claim")
+  @@index([status, lockedAt], map: "idx_roleplay_audio_jobs_lease")
+  @@index([sessionId], map: "idx_roleplay_audio_jobs_session")
+  @@index([scenarioId], map: "idx_roleplay_audio_jobs_scenario")
+  @@map("roleplay_audio_jobs")
+  @@schema("public")
+}
+
 
 enum RoleplayStatus {
   DRAFT

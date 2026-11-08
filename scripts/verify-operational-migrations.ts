@@ -59,6 +59,12 @@ async function main() {
 
     // These are disposable CI database changes only. The transaction is
     // always rolled back, preserving the Prisma db-push schema for E2E tests.
+    // Reset only the additive Roleplay queue objects in this isolated CI
+    // transaction so the actual SQL migration is exercised rather than relying
+    // on Prisma db push to have created an equivalent schema.
+    await client.query('DROP TABLE IF EXISTS public.roleplay_audio_jobs CASCADE');
+    await client.query('DROP TYPE IF EXISTS public."RoleplayAudioJobStatus" CASCADE');
+
     const baseTables = await client.query(
       `SELECT to_regclass('public.accounts') AS accounts,
               to_regclass('public.interpreters') AS interpreters,
@@ -301,6 +307,70 @@ async function main() {
     for (const table of expectedTables) {
       if (!rlsEnabled.has(table)) throw new Error(`Row-level security is not enabled on public.${table}`);
     }
+
+    const roleplayQueueMigration = await readFile(
+      resolve(process.cwd(), 'prisma/migrations/20261108143000_roleplay_audio_job_queue/migration.sql'),
+      'utf8',
+    );
+    if (!roleplayQueueMigration.trim()) {
+      throw new Error('Roleplay audio queue migration is empty.');
+    }
+    await client.query(roleplayQueueMigration);
+
+    const queueTable = await client.query(
+      `SELECT to_regclass('public.roleplay_audio_jobs') AS relation`,
+    );
+    if (!queueTable.rows[0]?.relation) {
+      throw new Error('Roleplay audio queue migration did not create its table.');
+    }
+
+    const queueForeignKeys = await client.query(
+      `SELECT conname
+       FROM pg_constraint
+       WHERE conrelid = 'public.roleplay_audio_jobs'::regclass
+         AND contype = 'f'`,
+    );
+    const queueForeignKeyNames = new Set(queueForeignKeys.rows.map((row: { conname: string }) => row.conname));
+    for (const name of [
+      'roleplay_audio_jobs_session_id_fkey',
+      'roleplay_audio_jobs_scenario_id_fkey',
+    ]) {
+      if (!queueForeignKeyNames.has(name)) {
+        throw new Error(`Roleplay audio queue foreign key is missing: ${name}`);
+      }
+    }
+
+    const queueIndexes = await client.query(
+      `SELECT index_class.relname AS name
+       FROM pg_class AS index_class
+       JOIN pg_index AS index_meta ON index_meta.indexrelid = index_class.oid
+       JOIN pg_namespace AS index_schema ON index_schema.oid = index_class.relnamespace
+       WHERE index_schema.nspname = 'public'
+         AND index_class.relname = ANY($1::text[])
+         AND index_meta.indisvalid = true
+         AND index_meta.indisready = true`,
+      [[
+        'idx_roleplay_audio_jobs_claim',
+        'idx_roleplay_audio_jobs_lease',
+        'idx_roleplay_audio_jobs_session',
+        'idx_roleplay_audio_jobs_scenario',
+      ]],
+    );
+    const foundQueueIndexes = new Set(queueIndexes.rows.map((row: { name: string }) => row.name));
+    for (const name of [
+      'idx_roleplay_audio_jobs_claim',
+      'idx_roleplay_audio_jobs_lease',
+      'idx_roleplay_audio_jobs_session',
+      'idx_roleplay_audio_jobs_scenario',
+    ]) {
+      if (!foundQueueIndexes.has(name)) {
+        throw new Error(`Roleplay audio queue index is missing: ${name}`);
+      }
+    }
+
+    // The migration is safe to retry after an interrupted deployment.
+    await client.query(roleplayQueueMigration);
+    console.log('Roleplay audio queue migration creates its constraints and indexes and is idempotent in CI.');
 
     console.log('All operational migrations applied and verified successfully in CI.');
   } finally {

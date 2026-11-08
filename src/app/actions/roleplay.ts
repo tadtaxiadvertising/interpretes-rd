@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { revalidatePath } from 'next/cache';
-import { createSignedUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
+import { createSignedUploadUrl, createSignedResponseUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
 import { createNotification } from './notifications';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
@@ -13,7 +13,6 @@ import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventTyp
 import { calculateRoleplayScore } from '@/lib/roleplay/scoring';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
-import { queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
 
 const db = prisma;
 
@@ -78,6 +77,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
         interpreterId: input.interpreterId ?? null,
         recruitmentCandidateId: input.recruitmentCandidateId ?? null,
         baseAudioUrl: getBaseAudioPath(`pending-${randomBytes(16).toString('hex')}`, validation.extension), // temporary safe path; replaced with session ID
+        baseAudioPath: null,
         status: 'DRAFT',
       },
       select: { id: true },
@@ -90,7 +90,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
       
       await db.roleplaySession.update({
         where: { id: session.id },
-        data: { baseAudioUrl: baseAudioPath },
+        data: { baseAudioUrl: baseAudioPath, baseAudioPath },
       });
 
       const uploadResult = await createSignedUploadUrl(session.id, input.baseAudioMimeType, true);
@@ -155,7 +155,7 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Never sign an arbitrary bucket path supplied by the caller.
     const session = await db.roleplaySession.findUnique({
       where: { id: sessionId },
-      select: { id: true, baseAudioUrl: true, status: true },
+      select: { id: true, baseAudioUrl: true, baseAudioPath: true, status: true },
     });
     if (!session) {
       return { success: false, error: 'Sesión de roleplay no encontrada', code: 'NOT_FOUND' };
@@ -168,7 +168,7 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     const isCanonicalPath =
       /^base\/[A-Za-z0-9_-]+\.(webm|mp4|ogg|mp3)$/.test(uploadPath) &&
       uploadPath.startsWith(`base/${sessionId}.`) &&
-      session.baseAudioUrl === uploadPath;
+      (session.baseAudioPath === uploadPath || session.baseAudioUrl === uploadPath);
     if (!isCanonicalPath) {
       return { success: false, error: 'La ruta de audio no corresponde a esta sesión', code: 'VALIDATION_ERROR' };
     }
@@ -177,8 +177,15 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Compare-and-set prevents a second confirmation from replacing an already
     // confirmed URL or racing with another update.
     const updated = await db.roleplaySession.updateMany({
-      where: { id: sessionId, baseAudioUrl: uploadPath, status: 'DRAFT' },
-      data: { baseAudioUrl: signedUrl },
+      where: {
+        id: sessionId,
+        status: 'DRAFT',
+        OR: [
+          { baseAudioPath: uploadPath },
+          { baseAudioPath: null, baseAudioUrl: uploadPath },
+        ],
+      },
+      data: { baseAudioUrl: signedUrl, baseAudioPath: uploadPath },
     });
     if (updated.count !== 1) {
       return { success: false, error: 'El audio base ya fue confirmado o cambió durante la operación', code: 'CONFLICT' };
@@ -537,6 +544,70 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
   }
 }
 
+const CreateResponseUploadSchema = z.object({
+  sessionId: z.string().min(1).max(100),
+  scenarioId: z.string().min(1).max(100),
+  mimeType: z.string().min(1).max(100),
+  size: z.number().int().positive().max(15 * 1024 * 1024),
+}).strict();
+
+/** Authorize a direct browser-to-Supabase upload for the current scenario. */
+export async function createRoleplayResponseUpload(rawInput: z.input<typeof CreateResponseUploadSchema>) {
+  const auth = await validateAction(['interpreter', 'candidate']);
+  if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+
+  const parsed = CreateResponseUploadSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'Invalid audio upload metadata', code: 'VALIDATION_ERROR' };
+  const input = parsed.data;
+  const validation = validateAudioMetadata(input.mimeType, input.size);
+  if (!validation.valid) return { success: false, error: validation.error ?? 'Invalid audio file', code: 'VALIDATION_ERROR' };
+
+  const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
+  try {
+    const session = await db.roleplaySession.findUnique({
+      where: { id: input.sessionId },
+      select: {
+        id: true,
+        interpreterId: true,
+        recruitmentCandidateId: true,
+        status: true,
+        currentScenarioIndex: true,
+      },
+    });
+    if (!session) return { success: false, error: 'Session not found', code: 'NOT_FOUND' };
+    if (!['INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status)) {
+      return { success: false, error: 'Session is not accepting recordings', code: 'INVALID_STATE' };
+    }
+    if (!(await canAccessRoleplaySession(session, sessionCookie))) {
+      return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
+    }
+
+    const scenario = await db.roleplayScenario.findFirst({
+      where: { id: input.scenarioId, sessionId: session.id, order: session.currentScenarioIndex },
+      select: { id: true },
+    });
+    if (!scenario) return { success: false, error: 'Scenario is not the current session step', code: 'FORBIDDEN' };
+
+    const existingResponse = await db.roleplayResponse.findUnique({
+      where: { scenarioId: scenario.id },
+      select: { id: true },
+    });
+    if (existingResponse) return { success: false, error: 'Audio already confirmed for this scenario', code: 'CONFLICT' };
+
+    const limit = rateLimit(
+      `${session.id}:${scenario.id}`,
+      { ...RATE_LIMITS.audioUpload, keyPrefix: 'roleplay-signed-upload' }
+    );
+    if (!limit.success) return { success: false, error: 'Too many upload attempts. Please try again later.', code: 'RATE_LIMITED' };
+
+    const signedUpload = await createSignedResponseUploadUrl(session.id, scenario.id, input.mimeType);
+    return { success: true, data: signedUpload };
+  } catch (error) {
+    console.error('Create Roleplay Response Upload Error:', error instanceof Error ? error.message : 'Unknown error');
+    return { success: false, error: 'Unable to authorize audio upload', code: 'INTERNAL_ERROR' };
+  }
+}
+
 const ConfirmResponseSchema = z.object({
   sessionId: z.string().min(1),
   scenarioId: z.string().min(1),
@@ -649,7 +720,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
 
       // Sign the uploaded object server-side. Never trust a client-supplied URL
       // as proof that an audio recording exists in the roleplay bucket.
-      const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath);
+      const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath, 15 * 1024 * 1024);
 
       // Persist a new response only once. The existing-response path above
       // handles idempotent retries before the sequential-index check.
@@ -666,6 +737,18 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           submittedAt: new Date(),
         },
       });
+
+      // Persist the conversion job in the same transaction as the response.
+      // A process restart after confirmation can no longer lose the work.
+      if (input.sourceAudioPath.endsWith('.webm')) {
+        await tx.roleplayAudioJob.create({
+          data: {
+            sessionId: session.id,
+            scenarioId: input.scenarioId,
+            sourceAudioPath: input.sourceAudioPath,
+          },
+        });
+      }
 
       const updated = await tx.roleplaySession.update({
         where: { id: input.sessionId },
@@ -687,13 +770,6 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         newlyCreated: true,
       };
     });
-
-    // Convert only after the response row commits, and scope conversion to this
-    // exact upload attempt. This prevents a stale upload/conversion from changing
-    // the processed audio associated with the response QA will evaluate.
-    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm')) {
-      queueMp3Conversion(input.sessionId, input.scenarioId, result.sourceAudioPath);
-    }
 
     // Recruitment advances only after the explicit final submission action,
     // which verifies every scenario has both audio and self-assessment.

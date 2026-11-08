@@ -129,14 +129,54 @@ export async function createSignedUploadUrl(
   };
 }
 
-export async function confirmUpload(path: string): Promise<string> {
+export async function createSignedResponseUploadUrl(
+  sessionId: string,
+  scenarioId: string,
+  mimeType: string
+): Promise<{ token: string; path: string; expiresIn: number }> {
+  assertStoragePathSegment(sessionId, 'session ID');
+  assertStoragePathSegment(scenarioId, 'scenario ID');
+  const validation = validateAudioMetadata(mimeType, 1);
+  if (!validation.valid || !validation.extension) {
+    throw new Error(validation.error || 'Invalid MIME type');
+  }
+
+  // Each attempt gets an immutable, scenario-scoped object key. The browser
+  // uploads directly to Storage; the application server never buffers audio.
+  const path = `responses/${sessionId}/${scenarioId}/${randomUUID()}.${validation.extension}`;
+  const { data, error } = await getSupabaseAdmin().storage
+    .from(BUCKET)
+    .createSignedUploadUrl(path);
+
+  if (error) throw new Error('Unable to authorize audio upload');
+  return { token: data.token, path: data.path, expiresIn: 60 * 60 };
+}
+
+export async function confirmUpload(path: string, maxSizeBytes?: number): Promise<string> {
   // Signing a URL alone does not prove that the upload exists. Verify the
   // stored object before marking a session as ready for playback.
   const { data: objectInfo, error: infoError } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .info(path);
   if (infoError || !objectInfo) {
-    throw new Error('Roleplay base audio was not uploaded or is inaccessible');
+    throw new Error('Roleplay audio object was not uploaded or is inaccessible');
+  }
+  if (maxSizeBytes !== undefined) {
+    const metadata = objectInfo.metadata;
+    const rawSize = metadata?.size ?? metadata?.contentLength;
+    const actualSize = typeof rawSize === 'number' ? rawSize : Number(rawSize);
+    if (!Number.isFinite(actualSize) || actualSize <= 0 || actualSize > maxSizeBytes) {
+      // A signed upload token cannot enforce the application's declared size.
+      // Remove rejected objects immediately so oversized uploads do not linger
+      // in the Free-tier bucket or become accidental orphaned recordings.
+      const { error: cleanupError } = await getSupabaseAdmin().storage
+        .from(BUCKET)
+        .remove([path]);
+      if (cleanupError) {
+        console.error('Failed to remove rejected Roleplay audio object:', cleanupError.message);
+      }
+      throw new Error('Uploaded audio size is invalid or exceeds the allowed limit');
+    }
   }
   const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
