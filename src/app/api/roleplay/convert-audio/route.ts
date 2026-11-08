@@ -68,7 +68,7 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
     }
-    return { hasAccess: true, session };
+    return { hasAccess: true };
   }
 
   return { hasAccess: false, error: 'Access denied' };
