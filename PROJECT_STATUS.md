@@ -149,3 +149,38 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 - La comparación del lockfile confirma que Prisma 7.10.1 y mysql2 3.24.4 no cambiaron. No se ejecutaron migraciones ni se modificaron datos.
 - `npm audit --audit-level=high` terminó correctamente: no se detectaron hallazgos de severidad alta o crítica. El informe completo sigue mostrando 6 hallazgos moderados de GHSA-g3hv-75wg-m249 en la ruta anidada `@typescript-eslint/typescript-estree/node_modules/minimatch` (el lockfile resuelve 10.2.5). Hay una discrepancia que no debe ocultarse: npm audit informa el rango 7.0.0–11.0.0, mientras que la página actual del advisory del publicador identifica 10.2.6 como afectada y 11.0.1 como corregida. Por tanto, 10.2.5 no aparece en el rango concreto publicado allí. No se forzó un override mayor sobre consumidores transitivos sin verificar compatibilidad; el hallazgo queda abierto para reconciliar el advisory y el reporte npm.
 - La regeneración del lockfile y la instalación limpia están verificadas en GitHub Actions run #42084791811. La validación completa de TypeScript, lint, pruebas, build y E2E corresponde al CI del PR, todavía pendiente de su ejecución.
+
+---
+
+## Auditoría operativa y seguridad — 2026-11-08
+
+### Cambios integrados y evidencia actual
+
+| Área | Estado verificado | Evidencia |
+|---|---|---|
+| Worker Roleplay — aislamiento de archivos | Integrado | PR #229: cada intento genera una ruta MP3 independiente y la subida no sobrescribe objetos existentes. |
+| Worker Roleplay — propiedad del lease | Integrado | PR #230: el worker renueva y comprueba el lease antes de cambiar la respuesta a `PROCESSING`; la actualización se realiza en transacción. |
+| Worker Roleplay — imagen Docker | Integrado | PR #231: incluye el módulo de lease y comprueba su importación durante el build. El Dockerfile también empaqueta la CA usada por Prisma. |
+| Worker Roleplay — despliegue Easypanel | Integrado, opt-in | PR #232: job `deploy-roleplay-audio-worker`, condicionado a `vars.ENABLE_ROLEPLAY_AUDIO_WORKER == 'true'` y al secreto `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER`. |
+| Validación de main | Correcta en el último run observado | Actions #42525565740: TypeScript, ESLint, tests, build, Docker worker y E2E aislado aprobados. |
+| Despliegue frontend | Webhook aceptado; Vercel completado | Run #42525565740 y estado Vercel success para el commit `d66dcb6e47fdc1de4d373d8e24f1b2592f35ee2c`. |
+| Despliegue API | Webhook aceptado | Run #42525565740. La respuesta del webhook confirma aceptación, no una prueba funcional de la API. |
+| Migraciones de producción | Ejecutadas y verificadas por workflow | Run #42525565740: directorio de clientes, unicidad de cuentas por cliente, cola de audio y ruta de audio base. |
+| Worker en producción | **No verificado / no desplegado por CI** | El job opcional fue omitido porque la variable `ENABLE_ROLEPLAY_AUDIO_WORKER` no estaba habilitada. No se afirma que el contenedor esté activo. |
+
+### Incidencias de seguridad pendientes
+
+| Incidencia | Hallazgo actual | Bloqueo / acción requerida |
+|---|---|---|
+| #128 — Rate limiting distribuido | `src/lib/security/rate-limit.ts` mantiene un `Map` local por proceso y toma IP de `x-forwarded-for`/ `x-real-ip` sin proxy de confianza configurado. Puntos de llamada confirmados: conversión de audio, validación de invitaciones y acceso a sesión Roleplay. | Elegir un backend compartido atómico y confirmar la topología/normalización de IP en Vercel y Easypanel. No añadir Redis/Upstash ni confiar en cabeceras sin aprobación y evidencia de infraestructura. |
+| #198 — Clave de Server Actions | Los Dockerfiles actualmente versionados no contienen `ARG` ni `ENV NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`. | Confirmar en Easypanel el Dockerfile/contexto real y que no siga inyectándose como build arg. Diseñar BuildKit secret solo después de verificar soporte del builder y probar Server Actions en build/despliegue real. |
+| #202 — TLS runtime PostgreSQL | El código exige CA remota y `rejectUnauthorized: true`; hay pruebas unitarias para overrides TLS. | Falta handshake read-only desde el contenedor real con el `DATABASE_URL` de runtime. El preflight con `DIRECT_URL` no sustituye esta prueba. |
+| #204 — Protección de main | La rama `main` reportó `protected: false` en la consulta de GitHub. | Requiere intervención de un administrador con permisos de rulesets/branch protection para exigir `Validate & Test` en verde antes del merge. La conexión de auditoría no tiene permiso administrativo para cambiarlo. |
+
+### Límites de verificación
+
+- Un build Docker correcto no prueba que el worker esté ejecutándose en Easypanel.
+- Un webhook HTTP exitoso confirma que Easypanel aceptó la solicitud; no demuestra que el contenedor esté saludable.
+- El estado Vercel success se refiere al deployment del commit indicado, no a la salud de los servicios privados de Easypanel.
+- No se ejecutaron operaciones manuales sobre la base de datos ni se modificaron secretos desde esta auditoría.
+- La activación del worker debe esperar a que el administrador cree y pruebe el servicio privado con `Dockerfile.worker`, variables runtime correctas, una réplica y sin dominio público.
