@@ -137,6 +137,17 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 
+  it('returns a generic error when storage or persistence throws an internal exception', async () => {
+    mocks.confirm.mockRejectedValue(new Error('database-password-or-storage-internals'));
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    const body = await response.json();
+
+    expect(response.status).toBe(500);
+    expect(body).toEqual({ success: false, error: 'Unable to process audio upload' });
+    expect(JSON.stringify(body)).not.toContain('database-password-or-storage-internals');
+  });
+
   it('does not allow administrators to create participant response recordings', async () => {
     mocks.identity = { role: 'admin', candidateId: null, interpreterId: null };
 
