@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "roleplay:audio-worker": "tsx scripts/roleplay-audio-worker.ts",
     "migrate": "tsx scripts/run-migration.ts",
     "seed": "tsx prisma/seed.ts",
     "anomaly:detect": "tsx scripts/detect-anomalies.ts",
