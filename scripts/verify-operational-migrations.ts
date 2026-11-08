@@ -344,7 +344,7 @@ async function main() {
       `SELECT index_class.relname AS name
        FROM pg_class AS index_class
        JOIN pg_index AS index_meta ON index_meta.indexrelid = index_class.oid
-       JOIN pg_namespace AS index_schema ON index_schema.oid = index_schema.relnamespace
+       JOIN pg_namespace AS index_schema ON index_schema.oid = index_class.relnamespace
        WHERE index_schema.nspname = 'public'
          AND index_class.relname = ANY($1::text[])
          AND index_meta.indisvalid = true
