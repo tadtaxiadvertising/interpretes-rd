@@ -46,7 +46,7 @@ export async function createOperationalAccount(formData: FormData) {
     await prisma.account.create({
       data: {
         ...accountData,
-        company: companyId ? { connect: { id: Number(companyId) } } : undefined,
+        companyId: companyId ? Number(companyId) : null,
         platforms: {
           create: {
             name: 'Plataforma principal',
