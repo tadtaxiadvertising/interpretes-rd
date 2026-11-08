@@ -78,7 +78,8 @@ Each service has its own **webhook URL** for triggering deployments via GitHub A
 4. **Env:** Copy variables from the tables above to the **Environment** tab. Mark sensitive vars as runtime-only.
 5. **Domains:** Map your public domain (e.g., `interpreters.rewvid.easypanel.host`) or configure custom domains later.
 6. **Webhooks:** Copy webhook URLs from each service's Settings → Webhook section. Store them as GitHub Secrets (see below).
-7. **Deploy:** Execute initial deployment. For the worker, set its build file to `Dockerfile.worker` (context `.`), configure runtime `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`, set one replica, and keep it private with no domain.\n8. Enable automatic worker deployment only after the service has started successfully once and the production migrations are confirmed applied.
+7. **Deploy:** Execute initial deployment. For the worker, set its build file to `Dockerfile.worker` (context `.`), configure runtime `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`, set one replica, and keep it private with no domain.
+8. Enable automatic worker deployment only after the service has started successfully once and the production migrations are confirmed applied.
 
 ---
 
@@ -89,7 +90,8 @@ The `.github/workflows/deploy.yml` workflow requires the two application secrets
 | Secret Name                      | Value                                                       | How to get it                                            |
 | :------------------------------- | :---------------------------------------------------------- | :------------------------------------------------------- |
 | `EASYPANEL_WEBHOOK_INTERPRETERS` | Webhook URL for `interpreters` service                      | Easypanel → `interpreters` service → Settings → Webhook  |
-| `EASYPANEL_WEBHOOK_API`          | Webhook URL for `interpreters-api` service                  | Easypanel → `interpreters-api` service → Settings → Webhook |\n| `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` | Webhook URL for `roleplay-audio-worker` service (optional) | Easypanel → `roleplay-audio-worker` service → Settings → Webhook |
+| `EASYPANEL_WEBHOOK_API`          | Webhook URL for `interpreters-api` service                  | Easypanel → `interpreters-api` service → Settings → Webhook |
+| `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` | Webhook URL for `roleplay-audio-worker` service (optional) | Easypanel → `roleplay-audio-worker` service → Settings → Webhook |
 
 ### Setting Secrets via `gh` CLI
 
@@ -98,8 +100,10 @@ The `.github/workflows/deploy.yml` workflow requires the two application secrets
 gh auth login
 
 # 2. Set each secret (paste the webhook URL when prompted):
-gh secret set EASYPANEL_WEBHOOK_INTERPRETERS -R tadtaxiadvertising/free-interpreters-os
-gh secret set EASYPANEL_WEBHOOK_API -R tadtaxiadvertising/interpretes-rd\n# Only after creating and configuring the private worker service:\ngh secret set EASYPANEL_WEBHOOK_ROLEPLAY_WORKER -R tadtaxiadvertising/interpretes-rd
+gh secret set EASYPANEL_WEBHOOK_INTERPRETERS -R tadtaxiadvertising/interpretes-rd
+gh secret set EASYPANEL_WEBHOOK_API -R tadtaxiadvertising/interpretes-rd
+# Only after creating and configuring the private worker service:
+gh secret set EASYPANEL_WEBHOOK_ROLEPLAY_WORKER -R tadtaxiadvertising/interpretes-rd
 
 # 3. Verify secrets exist:
 gh secret list -R tadtaxiadvertising/interpretes-rd
@@ -110,7 +114,8 @@ gh secret list -R tadtaxiadvertising/interpretes-rd
 1. Go to `github.com/tadtaxiadvertising/interpretes-rd` → **Settings** → **Secrets and variables** → **Actions**.
 2. Click **New repository secret**.
 3. Add `EASYPANEL_WEBHOOK_INTERPRETERS` with the interpreters webhook URL.
-4. Add `EASYPANEL_WEBHOOK_API` with the interpreters-api webhook URL.\n5. If enabling the worker, add `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` with the private worker webhook URL and set **Settings → Environments → production → Environment variables**: `ENABLE_ROLEPLAY_AUDIO_WORKER=true`.
+4. Add `EASYPANEL_WEBHOOK_API` with the interpreters-api webhook URL.
+5. If enabling the worker, add `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` with the private worker webhook URL and set **Settings → Environments → production → Environment variables**: `ENABLE_ROLEPLAY_AUDIO_WORKER=true`.
 
 > Webhook URL format: `https://rewvid.easypanel.host/api/deploy/webhook/<PROJECT_ID>/<SERVICE_ID>`
 
