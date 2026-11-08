@@ -22,15 +22,24 @@ function sleep(ms: number): Promise<void> {
 
 async function failExhaustedStaleJobs(): Promise<void> {
   await prisma.$executeRaw`
-    UPDATE public.roleplay_audio_jobs
-    SET status = 'FAILED',
-        locked_at = NULL,
-        locked_by = NULL,
-        last_error = COALESCE(last_error, 'Worker lease expired after maximum attempts'),
-        updated_at = NOW()
-    WHERE status = 'PROCESSING'
-      AND locked_at < NOW() - INTERVAL '10 minutes'
-      AND attempts >= max_attempts
+    WITH exhausted AS (
+      UPDATE public.roleplay_audio_jobs
+      SET status = 'FAILED',
+          locked_at = NULL,
+          locked_by = NULL,
+          last_error = COALESCE(last_error, 'Worker lease expired after maximum attempts'),
+          updated_at = NOW()
+      WHERE status = 'PROCESSING'
+        AND locked_at < NOW() - INTERVAL '10 minutes'
+        AND attempts >= max_attempts
+      RETURNING scenario_id, source_audio_path, last_error
+    )
+    UPDATE public.roleplay_responses AS response
+    SET audio_status = 'FAILED',
+        processing_error = LEFT(exhausted.last_error, 500)
+    FROM exhausted
+    WHERE response.scenario_id = exhausted.scenario_id
+      AND response.source_audio_path = exhausted.source_audio_path
   `;
 }
 
