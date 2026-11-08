@@ -713,7 +713,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
 
       // Sign the uploaded object server-side. Never trust a client-supplied URL
       // as proof that an audio recording exists in the roleplay bucket.
-      const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath);
+      const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath, 15 * 1024 * 1024);
 
       // Persist a new response only once. The existing-response path above
       // handles idempotent retries before the sequential-index check.
