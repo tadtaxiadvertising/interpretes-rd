@@ -8,6 +8,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --legacy-peer-deps && npm cache clean --force
 
 COPY prisma/schema.prisma ./prisma/schema.prisma
+COPY prisma.config.ts ./prisma.config.ts
 RUN npx prisma generate --schema=prisma/schema.prisma
 
 COPY tsconfig.json ./tsconfig.json
