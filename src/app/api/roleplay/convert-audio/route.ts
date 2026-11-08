@@ -4,6 +4,7 @@ import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { BUCKET, getSupabaseAdmin } from '@/lib/roleplay-audio-conversion';
+import { confirmRoleplayResponse } from '@/app/actions/roleplay';
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_MIME_TYPES = [
@@ -14,9 +15,6 @@ const ALLOWED_MIME_TYPES = [
   'audio/ogg',
   'audio/mpeg',
 ];
-
-// Signed URL durations (short-lived for security)
-const PLAYBACK_URL_DURATION = 60 * 60; // 1 hour - for playback during roleplay
 
 async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurrentIdentity>>, sessionId: string, sessionCookie: string | null): Promise<{ hasAccess: boolean; session?: any; error?: string }> {
   const identityResult = identity;
@@ -114,11 +112,11 @@ export async function POST(req: NextRequest) {
     }
 
     const formData = await req.formData();
-    const file = formData.get('audio') as File;
-    const sessionId = formData.get('sessionId') as string;
-    const scenarioId = formData.get('scenarioId') as string;
+    const file = formData.get('audio');
+    const sessionId = formData.get('sessionId');
+    const scenarioId = formData.get('scenarioId');
 
-    if (!file || !sessionId || !scenarioId) {
+    if (!(file instanceof File) || typeof sessionId !== 'string' || typeof scenarioId !== 'string' || !sessionId || !scenarioId) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -190,31 +188,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Failed to upload original audio' }, { status: 500 });
     }
 
-    // Get short-lived signed URL for immediate playback (1 hour for playback)
-    const { data: signedUrlData } = await getSupabaseAdmin().storage
-      .from(BUCKET)
-      .createSignedUrl(sourcePath, PLAYBACK_URL_DURATION);
+    // Confirm through the canonical transactional path. This verifies the
+    // stored object, persists the response, and enqueues WebM conversion in
+    // the same transaction. Previously this endpoint returned a URL/path only,
+    // leaving an uploaded object with no response row and no worker job.
+    const confirmation = await confirmRoleplayResponse({
+      sessionId,
+      scenarioId,
+      recordedAudioUrl: sourcePath,
+      sourceAudioPath: sourcePath,
+    });
 
-    if (!signedUrlData?.signedUrl) {
-      return NextResponse.json({ success: false, error: 'Failed to create signed URL' }, { status: 500 });
+    if (!confirmation.success || !confirmation.data) {
+      const { error: cleanupError } = await getSupabaseAdmin().storage
+        .from(BUCKET)
+        .remove([sourcePath]);
+      if (cleanupError) {
+        console.error('Failed to clean up unconfirmed Roleplay audio:', cleanupError.message);
+      }
+      const status = confirmation.code === 'CONFLICT' ? 409
+        : confirmation.code === 'FORBIDDEN' || confirmation.code === 'UNAUTHORIZED' ? 403
+        : 400;
+      return NextResponse.json(
+        { success: false, error: confirmation.error || 'Unable to confirm uploaded audio' },
+        { status }
+      );
     }
 
-    const playbackUrl = signedUrlData.signedUrl;
-
-    // Conversion starts only after the response is transactionally confirmed,
-    // so a stale upload cannot race with the response selected for evaluation.
     const needsMp3 = normalizedMime === 'audio/webm';
-
-    return NextResponse.json({ 
-      success: true, 
-      data: { 
-        sourceUrl: playbackUrl,
+    return NextResponse.json({
+      success: true,
+      data: {
+        sourceUrl: confirmation.data.recordedAudioUrl,
         sourcePath,
         audioStatus: needsMp3 ? 'UPLOADED' : 'READY',
-        // Include MP3 URL if already available (will be populated after async conversion)
         processedUrl: null,
         processedPath: null,
-      } 
+      },
     });
   } catch (error) {
     console.error('Audio upload error:', error);
