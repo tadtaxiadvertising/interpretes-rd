@@ -16,7 +16,7 @@ const ALLOWED_MIME_TYPES = [
   'audio/mpeg',
 ];
 
-async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurrentIdentity>>, sessionId: string, sessionCookie: string | null): Promise<{ hasAccess: boolean; session?: any; error?: string }> {
+async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurrentIdentity>>, sessionId: string, sessionCookie: string | null): Promise<{ hasAccess: boolean; error?: string }> {
   const identityResult = identity;
   if (!identityResult) {
     return { hasAccess: false, error: 'Not authenticated' };
@@ -57,7 +57,7 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
     }
-    return { hasAccess: true, session };
+    return { hasAccess: true };
   }
 
   if (
@@ -68,7 +68,7 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
     }
-    return { hasAccess: true, session };
+    return { hasAccess: true };
   }
 
   return { hasAccess: false, error: 'Access denied' };
@@ -233,7 +233,7 @@ export async function POST(req: NextRequest) {
     console.error('Audio upload error:', error);
     return NextResponse.json({ 
       success: false, 
-      error: error instanceof Error ? error.message : 'Internal server error' 
+      error: 'Unable to process audio upload' 
     }, { status: 500 });
   }
 }
