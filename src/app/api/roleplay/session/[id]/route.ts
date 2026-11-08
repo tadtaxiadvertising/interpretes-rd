@@ -104,8 +104,12 @@ export async function GET(
     // not become the permanent source of truth for candidate/admin playback.
     scenarios = await Promise.all(scenarios.map(async (scenario) => ({
       ...scenario,
-      responses: await Promise.all(scenario.responses.map(async (response) => {
-        const playbackPath = response.processedAudioPath ?? response.sourceAudioPath;
+      responses: await Promise.all(scenario.responses.map(async ({
+        sourceAudioPath,
+        processedAudioPath,
+        ...response
+      }) => {
+        const playbackPath = processedAudioPath ?? sourceAudioPath;
         if (!playbackPath) return response;
         try {
           return { ...response, sourceAudioUrl: await getSignedAudioUrl(playbackPath, 60 * 60) };
