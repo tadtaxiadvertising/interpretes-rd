@@ -174,6 +174,10 @@ export async function runDeploymentPreflight(
     if (verifySchema) {
       await client.query('SELECT id, client_id, name FROM public.accounts LIMIT 0');
       await client.query('SELECT id FROM public.clients LIMIT 0');
+      // Roleplay application code now writes queue rows for WebM recordings and
+      // reads the canonical base-audio path. Validate both before deployment.
+      await client.query('SELECT id, session_id, scenario_id, source_audio_path, status FROM public.roleplay_audio_jobs LIMIT 0');
+      await client.query('SELECT base_audio_path FROM public.roleplay_sessions LIMIT 0');
       // A table/column-only check can pass after a partial schema change.
       // Confirm the client-scoped uniqueness, FK, RLS, and removal of the
       // old global uniqueness before the deployment webhooks can run.
@@ -204,12 +208,44 @@ export async function runDeploymentPreflight(
               AND confdeltype = 'n' AND confupdtype = 'c'
           ) AS client_fk,
           (SELECT relrowsecurity FROM pg_class
-           WHERE oid = 'public.clients'::regclass) AS client_rls
+           WHERE oid = 'public.clients'::regclass) AS client_rls,
+          to_regclass('public.roleplay_audio_jobs') IS NOT NULL AS roleplay_queue_table,
+          EXISTS (
+            SELECT 1 FROM pg_type t
+            JOIN pg_namespace n ON n.oid = t.typnamespace
+            WHERE n.nspname = 'public'
+              AND t.typname = 'RoleplayAudioJobStatus'
+              AND t.typtype = 'e'
+          ) AS roleplay_queue_enum,
+          EXISTS (
+            SELECT 1 FROM pg_index idx
+            WHERE idx.indexrelid = to_regclass('public.roleplay_audio_jobs_source_audio_path_key')
+              AND idx.indisunique AND idx.indisvalid AND idx.indisready
+          ) AS roleplay_queue_unique,
+          (
+            SELECT COUNT(*) = 2
+            FROM pg_constraint
+            WHERE conrelid = 'public.roleplay_audio_jobs'::regclass
+              AND contype = 'f' AND convalidated
+              AND conname IN (
+                'roleplay_audio_jobs_session_id_fkey',
+                'roleplay_audio_jobs_scenario_id_fkey'
+              )
+          ) AS roleplay_queue_foreign_keys,
+          EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'roleplay_sessions'
+              AND column_name = 'base_audio_path'
+          ) AS roleplay_base_audio_path
       `);
       const status = integrity.rows[0];
-      if (!status || !['account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls']
-        .every((key) => status[key] === true)) {
-        throw new Error('Client-directory database constraints are incomplete.');
+      if (!status || ![
+        'account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls',
+        'roleplay_queue_table', 'roleplay_queue_enum', 'roleplay_queue_unique',
+        'roleplay_queue_foreign_keys', 'roleplay_base_audio_path',
+      ].every((key) => status[key] === true)) {
+        throw new Error('Client-directory or Roleplay audio database constraints are incomplete.');
       }
     }
     await client.query('ROLLBACK');
