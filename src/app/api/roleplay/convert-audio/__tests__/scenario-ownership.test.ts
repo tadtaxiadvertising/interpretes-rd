@@ -8,7 +8,9 @@ const m = vi.hoisted(() => ({
   scenarioFindFirst: vi.fn(),
   responseFindUnique: vi.fn(),
   storageUpload: vi.fn(),
+  storageRemove: vi.fn(),
   createSignedUrl: vi.fn(),
+  confirmResponse: vi.fn(),
   queueMp3Conversion: vi.fn(),
   rateLimit: vi.fn(),
 }));
@@ -34,11 +36,16 @@ vi.mock('@/lib/roleplay-audio-conversion', () => ({
     storage: {
       from: () => ({
         upload: m.storageUpload,
+        remove: m.storageRemove,
         createSignedUrl: m.createSignedUrl,
       }),
     },
   }),
   queueMp3Conversion: m.queueMp3Conversion,
+}));
+
+vi.mock('@/app/actions/roleplay', () => ({
+  confirmRoleplayResponse: m.confirmResponse,
 }));
 
 import { POST } from '../route';
@@ -72,7 +79,9 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
     m.scenarioFindFirst.mockResolvedValue({ id: 'scenario-1' });
     m.responseFindUnique.mockResolvedValue(null);
     m.storageUpload.mockResolvedValue({ error: null });
+    m.storageRemove.mockResolvedValue({ error: null });
     m.createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.test/audio' }, error: null });
+    m.confirmResponse.mockResolvedValue({ success: true, data: { recordedAudioUrl: 'https://signed.test/audio' } });
   });
 
   it('rejects a scenario that does not belong to the supplied session before storage upload', async () => {
@@ -123,6 +132,7 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
       expect.objectContaining({ contentType: 'audio/webm', upsert: false }),
     );
     expect(m.queueMp3Conversion).not.toHaveBeenCalled();
+    expect(m.confirmResponse).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'session-1', scenarioId: 'scenario-1' }));
   });
   it('allows the candidate owner but not a legacy interpreter link on dual-linked sessions', async () => {
     m.sessionFindUnique.mockResolvedValue({
