@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS "public"."roleplay_audio_jobs" (
 CREATE INDEX IF NOT EXISTS "idx_roleplay_audio_jobs_claim"
   ON "public"."roleplay_audio_jobs" ("status", "available_at", "created_at");
 
+CREATE INDEX IF NOT EXISTS "idx_roleplay_audio_jobs_lease"
+  ON "public"."roleplay_audio_jobs" ("status", "locked_at");
+
 CREATE INDEX IF NOT EXISTS "idx_roleplay_audio_jobs_session"
   ON "public"."roleplay_audio_jobs" ("session_id");
 
