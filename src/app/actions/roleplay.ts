@@ -77,6 +77,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
         interpreterId: input.interpreterId ?? null,
         recruitmentCandidateId: input.recruitmentCandidateId ?? null,
         baseAudioUrl: getBaseAudioPath(`pending-${randomBytes(16).toString('hex')}`, validation.extension), // temporary safe path; replaced with session ID
+        baseAudioPath: null,
         status: 'DRAFT',
       },
       select: { id: true },
@@ -89,7 +90,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
       
       await db.roleplaySession.update({
         where: { id: session.id },
-        data: { baseAudioUrl: baseAudioPath },
+        data: { baseAudioUrl: baseAudioPath, baseAudioPath },
       });
 
       const uploadResult = await createSignedUploadUrl(session.id, input.baseAudioMimeType, true);
@@ -154,7 +155,7 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Never sign an arbitrary bucket path supplied by the caller.
     const session = await db.roleplaySession.findUnique({
       where: { id: sessionId },
-      select: { id: true, baseAudioUrl: true, status: true },
+      select: { id: true, baseAudioUrl: true, baseAudioPath: true, status: true },
     });
     if (!session) {
       return { success: false, error: 'Sesión de roleplay no encontrada', code: 'NOT_FOUND' };
@@ -167,7 +168,7 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     const isCanonicalPath =
       /^base\/[A-Za-z0-9_-]+\.(webm|mp4|ogg|mp3)$/.test(uploadPath) &&
       uploadPath.startsWith(`base/${sessionId}.`) &&
-      session.baseAudioUrl === uploadPath;
+      (session.baseAudioPath === uploadPath || session.baseAudioUrl === uploadPath);
     if (!isCanonicalPath) {
       return { success: false, error: 'La ruta de audio no corresponde a esta sesión', code: 'VALIDATION_ERROR' };
     }
@@ -176,8 +177,8 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Compare-and-set prevents a second confirmation from replacing an already
     // confirmed URL or racing with another update.
     const updated = await db.roleplaySession.updateMany({
-      where: { id: sessionId, baseAudioUrl: uploadPath, status: 'DRAFT' },
-      data: { baseAudioUrl: signedUrl },
+      where: { id: sessionId, baseAudioPath: uploadPath, status: 'DRAFT' },
+      data: { baseAudioUrl: signedUrl, baseAudioPath: uploadPath },
     });
     if (updated.count !== 1) {
       return { success: false, error: 'El audio base ya fue confirmado o cambió durante la operación', code: 'CONFLICT' };
