@@ -83,28 +83,58 @@ async function claimNextJob(): Promise<ClaimedAudioJob | null> {
 }
 
 async function processJob(job: ClaimedAudioJob): Promise<void> {
-  const response = await prisma.roleplayResponse.updateMany({
-    where: { scenarioId: job.scenarioId, sourceAudioPath: job.sourceAudioPath },
-    data: { audioStatus: 'PROCESSING', processingError: null },
-  });
-  if (response.count !== 1) {
-    throw new Error('The source response no longer exists for this conversion job');
+  let leaseLost = false;
+  let heartbeatInFlight = false;
+  const heartbeat = setInterval(async () => {
+    if (heartbeatInFlight || leaseLost) return;
+    heartbeatInFlight = true;
+    try {
+      const renewed = await prisma.roleplayAudioJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
+        data: { lockedAt: new Date() },
+      });
+      if (renewed.count !== 1) leaseLost = true;
+    } catch (error) {
+      console.error(
+        `[ROLEPLAY AUDIO WORKER] Lease renewal failed for job ${job.id}:`,
+        error instanceof Error ? error.message : 'Unknown database error',
+      );
+    } finally {
+      heartbeatInFlight = false;
+    }
+  }, 60_000);
+  heartbeat.unref();
+
+  try {
+    const response = await prisma.roleplayResponse.updateMany({
+      where: { scenarioId: job.scenarioId, sourceAudioPath: job.sourceAudioPath },
+      data: { audioStatus: 'PROCESSING', processingError: null },
+    });
+    if (response.count !== 1) {
+      throw new Error('The source response no longer exists for this conversion job');
+    }
+
+    await convertAndStoreMp3(job.sessionId, job.scenarioId, job.sourceAudioPath);
+    if (leaseLost) throw new Error('Audio conversion lease was lost before completion');
+
+    const completed = await prisma.roleplayAudioJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
+      data: {
+        status: 'COMPLETED',
+        completedAt: new Date(),
+        lockedAt: null,
+        lockedBy: null,
+        lastError: null,
+      },
+    });
+    if (completed.count !== 1) {
+      throw new Error('Audio conversion lease was lost before the job could be committed');
+    }
+
+    console.info(`[ROLEPLAY AUDIO WORKER] Completed job ${job.id}`);
+  } finally {
+    clearInterval(heartbeat);
   }
-
-  await convertAndStoreMp3(job.sessionId, job.scenarioId, job.sourceAudioPath);
-
-  await prisma.roleplayAudioJob.update({
-    where: { id: job.id },
-    data: {
-      status: 'COMPLETED',
-      completedAt: new Date(),
-      lockedAt: null,
-      lockedBy: null,
-      lastError: null,
-    },
-  });
-
-  console.info(`[ROLEPLAY AUDIO WORKER] Completed job ${job.id}`);
 }
 
 async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<void> {
@@ -112,8 +142,8 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
   const shouldRetry = job.attempts < job.maxAttempts;
   const backoffSeconds = Math.min(300, 15 * (2 ** Math.max(0, job.attempts - 1)));
 
-  await prisma.roleplayAudioJob.update({
-    where: { id: job.id },
+  const updated = await prisma.roleplayAudioJob.updateMany({
+    where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
     data: {
       status: shouldRetry ? 'PENDING' : 'FAILED',
       availableAt: shouldRetry ? new Date(Date.now() + backoffSeconds * 1_000) : undefined,
@@ -122,6 +152,10 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
       lastError: message,
     },
   });
+  if (updated.count !== 1) {
+    console.warn(`[ROLEPLAY AUDIO WORKER] Skipped failure update for job ${job.id}; its lease is no longer owned by this worker`);
+    return;
+  }
 
   console.error(
     `[ROLEPLAY AUDIO WORKER] Job ${job.id} failed (attempt ${job.attempts}/${job.maxAttempts}); ${shouldRetry ? `retry in ${backoffSeconds}s` : 'retries exhausted'}:`,
