@@ -199,9 +199,10 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
         mimeType: blob.type || 'audio/webm',
         size: blob.size,
       });
-      if (!uploadAuthorization.success) {
+      if (!uploadAuthorization.success || !uploadAuthorization.data) {
         throw new Error(uploadAuthorization.error || 'No se pudo autorizar la grabación');
       }
+      const uploadData = uploadAuthorization.data;
 
       const supabase = createSupabaseBrowserClient();
       if (!supabase) throw new Error('El servicio de almacenamiento no está configurado en este navegador');
@@ -209,8 +210,8 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       const { error: uploadError } = await supabase.storage
         .from('roleplay-audio')
         .uploadToSignedUrl(
-          uploadAuthorization.data.path,
-          uploadAuthorization.data.token,
+          uploadData.path,
+          uploadData.token,
           blob,
           { contentType: blob.type || 'audio/webm', upsert: false }
         );
@@ -221,11 +222,13 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       const confirmResult = await confirmRoleplayResponse({
         sessionId,
         scenarioId: scenario.id,
-        recordedAudioUrl: uploadAuthorization.data.path,
-        sourceAudioPath: uploadAuthorization.data.path,
+        recordedAudioUrl: uploadData.path,
+        sourceAudioPath: uploadData.path,
         durationSec: Math.max(0, Math.round(duration)),
       });
-      if (!confirmResult.success) throw new Error(confirmResult.error || 'No se pudo confirmar la grabación');
+      if (!confirmResult.success || !confirmResult.data) {
+        throw new Error(confirmResult.error || 'No se pudo confirmar la grabación');
+      }
 
       const recordedUrl = confirmResult.data.recordedAudioUrl;
       setScenarioResponses(prev => ({
