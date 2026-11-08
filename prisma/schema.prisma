@@ -140,6 +140,8 @@ model Company {
 model Account {
   id               Int                      @id @default(autoincrement())
   name             String
+  holderName       String?                  @map("holder_name")
+  email            String?
   description      String?
   createdAt        DateTime?                @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt        DateTime?                @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
