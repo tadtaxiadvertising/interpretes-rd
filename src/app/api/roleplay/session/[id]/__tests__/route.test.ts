@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   identity: null as any,
   session: null as any,
   findUnique: vi.fn(),
+  getSignedAudioUrl: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
@@ -20,6 +21,8 @@ vi.mock('@/lib/security/rate-limit', () => ({
   createRateLimitHeaders: () => ({}),
   RATE_LIMITS: { sessionAccess: {} },
 }));
+
+vi.mock('@/lib/roleplay', () => ({ getSignedAudioUrl: m.getSignedAudioUrl }));
 
 import { GET } from '@/app/api/roleplay/session/[id]/route';
 
@@ -52,6 +55,7 @@ describe('GET /api/roleplay/session/[id]', () => {
     m.identity = { role: 'candidate', interpreterId: null, candidateId: 5 };
     m.session = candidateSession('STARTED');
     m.findUnique.mockImplementation(async () => m.session);
+    m.getSignedAudioUrl.mockImplementation(async (path: string) => `https://signed.test/${path}`);
   });
 
   it('rejects a candidate without the bound session cookie', async () => {
@@ -97,6 +101,42 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
     expect(JSON.stringify(body)).not.toContain('CONFIDENTIAL QA ANSWER');
+  });
+
+  it('refreshes playback URLs from canonical paths and prefers the processed MP3', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario 1',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: [],
+        responses: [{
+          sourceAudioUrl: 'https://expired.example/old.webm',
+          sourceAudioPath: 'responses/sess-1/scenario-1/source.webm',
+          processedAudioPath: 'responses/sess-1/scenario-1/source.mp3',
+          durationSec: 40,
+          selfScore: null,
+          selfNotes: null,
+        }],
+      }],
+    };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(m.getSignedAudioUrl).toHaveBeenCalledWith(
+      'responses/sess-1/scenario-1/source.mp3',
+      60 * 60,
+    );
+    expect(body.data.scenarios[0].responses[0].sourceAudioUrl)
+      .toBe('https://signed.test/responses/sess-1/scenario-1/source.mp3');
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('sourceAudioPath');
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('processedAudioPath');
   });
 
   it('keeps evaluator expected keys available to administrators', async () => {
