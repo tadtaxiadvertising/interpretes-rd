@@ -152,7 +152,7 @@ export async function createSignedResponseUploadUrl(
   return { token: data.token, path: data.path, expiresIn: 60 * 60 };
 }
 
-export async function confirmUpload(path: string): Promise<string> {
+export async function confirmUpload(path: string, maxSizeBytes?: number): Promise<string> {
   // Signing a URL alone does not prove that the upload exists. Verify the
   // stored object before marking a session as ready for playback.
   const { data: objectInfo, error: infoError } = await getSupabaseAdmin().storage
@@ -160,6 +160,14 @@ export async function confirmUpload(path: string): Promise<string> {
     .info(path);
   if (infoError || !objectInfo) {
     throw new Error('Roleplay base audio was not uploaded or is inaccessible');
+  }
+  if (maxSizeBytes !== undefined) {
+    const metadata = objectInfo.metadata;
+    const rawSize = metadata?.size ?? metadata?.contentLength;
+    const actualSize = typeof rawSize === 'number' ? rawSize : Number(rawSize);
+    if (!Number.isFinite(actualSize) || actualSize <= 0 || actualSize > maxSizeBytes) {
+      throw new Error('Uploaded audio size is invalid or exceeds the allowed limit');
+    }
   }
   const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
