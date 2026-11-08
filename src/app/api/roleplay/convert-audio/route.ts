@@ -89,11 +89,12 @@ function validateAudioFile(file: File): { valid: boolean; error?: string } {
 }
 
 function normalizeMimeType(mime: string): string {
-  if (mime.startsWith('audio/webm')) return 'audio/webm';
-  if (mime.startsWith('audio/mp4')) return 'audio/mp4';
-  if (mime.startsWith('audio/ogg')) return 'audio/ogg';
-  if (mime.startsWith('audio/mpeg')) return 'audio/mpeg';
-  return mime;
+  const normalized = mime.trim().toLowerCase();
+  if (['audio/webm', 'audio/webm;codecs=opus', 'audio/webm;codecs=pcm'].includes(normalized)) return 'audio/webm';
+  if (normalized === 'audio/mp4') return 'audio/mp4';
+  if (normalized === 'audio/ogg') return 'audio/ogg';
+  if (normalized === 'audio/mpeg') return 'audio/mpeg';
+  return normalized;
 }
 
 export async function POST(req: NextRequest) {
