@@ -925,6 +925,7 @@ model RoleplaySession {
   interpreterId           Int?      @map("interpreter_id")
   recruitmentCandidateId  Int?      @map("recruitment_candidate_id")
   baseAudioUrl            String    @map("base_audio_url")
+  baseAudioPath           String?   @map("base_audio_path")
   recordedAudioUrl        String?   @map("recorded_audio_url")
   status                  RoleplayStatus @default(DRAFT)
   evaluatorId             String?   @map("evaluator_id")
