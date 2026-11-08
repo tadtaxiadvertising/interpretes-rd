@@ -14,7 +14,7 @@ const validEnv = {
 function fakeConnection() {
   const client = {
     connect: vi.fn().mockResolvedValue(undefined),
-    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true }] }),
+    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true }] }),
     end: vi.fn().mockResolvedValue(undefined),
   };
   return { client, createClient: vi.fn().mockReturnValue(client) };
@@ -144,16 +144,20 @@ describe('deployment credential boundary', () => {
       query_timeout: 10_000,
     }));
     const checks = client.query.mock.calls.map(([sql]) => sql);
-    expect(checks.slice(0, 4)).toEqual([
+    expect(checks.slice(0, 6)).toEqual([
       'BEGIN READ ONLY',
       'SELECT 1',
       'SELECT id, client_id, name FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
+      'SELECT id, session_id, scenario_id, source_audio_path, status FROM public.roleplay_audio_jobs LIMIT 0',
+      'SELECT base_audio_path FROM public.roleplay_sessions LIMIT 0',
     ]);
-    expect(checks[4]).toContain('AS account_unique');
-    expect(checks[4]).toContain('AS client_fk');
-    expect(checks[4]).toContain('AS client_rls');
-    expect(checks[5]).toBe('ROLLBACK');
+    expect(checks[6]).toContain('AS account_unique');
+    expect(checks[6]).toContain('AS client_fk');
+    expect(checks[6]).toContain('AS client_rls');
+    expect(checks[6]).toContain('AS roleplay_queue_table');
+    expect(checks[6]).toContain('AS roleplay_queue_foreign_keys');
+    expect(checks[7]).toBe('ROLLBACK');
     expect(client.end).toHaveBeenCalledOnce();
   });
 
@@ -161,7 +165,7 @@ describe('deployment credential boundary', () => {
     const { client, createClient } = fakeConnection();
     client.query.mockImplementation(async (sql: string) => ({
       rows: sql.includes('AS account_unique')
-        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true }]
+        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true }]
         : [],
     }));
     await expect(runDeploymentPreflight(validEnv, createClient, true)).rejects.toThrow(
@@ -266,6 +270,20 @@ describe('production deployment workflow', () => {
     expect(ownershipMigration).toBeGreaterThan(directoryMigration);
     expect(canonicalMigration).toBeGreaterThan(ownershipMigration);
     expect(schemaCheck).toBeGreaterThan(canonicalMigration);
+  });
+
+  it('applies both Roleplay audio migrations before schema verification and deployment webhooks', () => {
+    const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
+    const deploy = workflow.split('  deploy-interpreters:')[1].split('  deploy-interpreters-api:')[0];
+    const queueMigration = deploy.indexOf('20261108143000_roleplay_audio_job_queue/migration.sql');
+    const basePathMigration = deploy.indexOf('20261108170000_roleplay_base_audio_path/migration.sql');
+    const schemaCheck = deploy.indexOf('scripts/deployment-preflight.ts --verify-schema');
+    const frontendWebhook = deploy.indexOf('Call Easypanel Webhook — interpreters');
+
+    expect(queueMigration).toBeGreaterThan(-1);
+    expect(basePathMigration).toBeGreaterThan(queueMigration);
+    expect(schemaCheck).toBeGreaterThan(basePathMigration);
+    expect(frontendWebhook).toBeGreaterThan(schemaCheck);
   });
 
   it('normalizes DIRECT_URL in the migration runner without DATABASE_URL fallback', () => {
