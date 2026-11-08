@@ -13,7 +13,7 @@ export default async function AdminAccountsPage() {
         id: true, name: true, holderName: true, email: true, description: true,
         client: { select: { name: true } },
         company: { select: { name: true } },
-        platforms: { where: { active: true }, select: { name: true, loginUrl: true } },
+        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true } },
         assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { interpreter: { select: { id: true, name: true } } } },
         _count: { select: { assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] } } } },
       },
@@ -49,7 +49,7 @@ export default async function AdminAccountsPage() {
         </tr></thead>
         <tbody>{accounts.map(account => {
           const totals = productionByAccount.get(account.id);
-          const platform = account.platforms[0];
+          const platform = account.platforms.find(item => item.name === 'Plataforma principal') ?? account.platforms[0];
           return <tr key={account.id} className="border-t border-white/10 align-top">
             <td className="p-4"><strong className="text-white">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-slate-400">{account.name}</p>{account.description && <p className="mt-1 text-xs text-slate-500">{account.description}</p>}</td>
             <td className="p-4">{account.email || 'Pendiente'}</td>
