@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import prisma from '@/lib/prisma';
 import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
+import { markResponseProcessingIfLeaseOwned } from '@/lib/roleplay-audio-worker-lease';
 
 interface ClaimedAudioJob {
   id: string;
@@ -112,12 +113,26 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
   heartbeat.unref();
 
   try {
-    const response = await prisma.roleplayResponse.updateMany({
-      where: { scenarioId: job.scenarioId, sourceAudioPath: job.sourceAudioPath },
-      data: { audioStatus: 'PROCESSING', processingError: null },
-    });
-    if (response.count !== 1) {
-      throw new Error('The source response no longer exists for this conversion job');
+    const responsePrepared = await prisma.$transaction((tx) =>
+      markResponseProcessingIfLeaseOwned({
+        renewOwnedLease: async () => {
+          const renewed = await tx.roleplayAudioJob.updateMany({
+            where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
+            data: { lockedAt: new Date() },
+          });
+          return renewed.count === 1;
+        },
+        markResponseProcessing: async () => {
+          const response = await tx.roleplayResponse.updateMany({
+            where: { scenarioId: job.scenarioId, sourceAudioPath: job.sourceAudioPath },
+            data: { audioStatus: 'PROCESSING', processingError: null },
+          });
+          return response.count;
+        },
+      }),
+    );
+    if (!responsePrepared) {
+      throw new Error('Audio conversion lease was lost before processing started');
     }
 
     const processedAudioPath = await convertAndStoreMp3(
