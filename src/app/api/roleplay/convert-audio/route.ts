@@ -37,9 +37,11 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     return { hasAccess: false, error: 'Session not found' };
   }
 
-  // Admin has access to all
+  // Response recordings are restricted to the participant roles accepted by
+  // the canonical confirmation action; administrators manage scenarios, not
+  // candidate/interpreter response recordings.
   if (identityResult.role === 'admin') {
-    return { hasAccess: true, session };
+    return { hasAccess: false, error: 'Access denied' };
   }
 
   // A recruitment session is candidate-owned; a historical interpreter link
@@ -199,7 +201,7 @@ export async function POST(req: NextRequest) {
       sourceAudioPath: sourcePath,
     });
 
-    if (!confirmation.success || !confirmation.data) {
+    if (!confirmation.success) {
       const { error: cleanupError } = await getSupabaseAdmin().storage
         .from(BUCKET)
         .remove([sourcePath]);
