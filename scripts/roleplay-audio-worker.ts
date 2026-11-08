@@ -95,6 +95,9 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
       });
       if (renewed.count !== 1) leaseLost = true;
     } catch (error) {
+      // A failed heartbeat means ownership can no longer be proven. Do not
+      // commit output from this worker; a later claim may safely retry it.
+      leaseLost = true;
       console.error(
         `[ROLEPLAY AUDIO WORKER] Lease renewal failed for job ${job.id}:`,
         error instanceof Error ? error.message : 'Unknown database error',
@@ -114,20 +117,42 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
       throw new Error('The source response no longer exists for this conversion job');
     }
 
-    await convertAndStoreMp3(job.sessionId, job.scenarioId, job.sourceAudioPath);
+    const processedAudioPath = await convertAndStoreMp3(
+      job.sessionId,
+      job.scenarioId,
+      job.sourceAudioPath,
+    );
     if (leaseLost) throw new Error('Audio conversion lease was lost before completion');
 
-    const completed = await prisma.roleplayAudioJob.updateMany({
-      where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
-      data: {
-        status: 'COMPLETED',
-        completedAt: new Date(),
-        lockedAt: null,
-        lockedBy: null,
-        lastError: null,
-      },
+    // The job lease and response become complete atomically. A stale worker
+    // cannot publish READY after another worker has reclaimed its job.
+    const committed = await prisma.$transaction(async (tx) => {
+      const completed = await tx.roleplayAudioJob.updateMany({
+        where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
+        data: {
+          status: 'COMPLETED',
+          completedAt: new Date(),
+          lockedAt: null,
+          lockedBy: null,
+          lastError: null,
+        },
+      });
+      if (completed.count !== 1) return false;
+
+      const response = await tx.roleplayResponse.updateMany({
+        where: { scenarioId: job.scenarioId, sourceAudioPath: job.sourceAudioPath },
+        data: {
+          processedAudioPath,
+          audioStatus: 'READY',
+          processingError: null,
+        },
+      });
+      if (response.count !== 1) {
+        throw new Error('The source response disappeared before conversion could be committed');
+      }
+      return true;
     });
-    if (completed.count !== 1) {
+    if (!committed) {
       throw new Error('Audio conversion lease was lost before the job could be committed');
     }
 
@@ -142,17 +167,30 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
   const shouldRetry = job.attempts < job.maxAttempts;
   const backoffSeconds = Math.min(300, 15 * (2 ** Math.max(0, job.attempts - 1)));
 
-  const updated = await prisma.roleplayAudioJob.updateMany({
-    where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
-    data: {
-      status: shouldRetry ? 'PENDING' : 'FAILED',
-      availableAt: shouldRetry ? new Date(Date.now() + backoffSeconds * 1_000) : undefined,
-      lockedAt: null,
-      lockedBy: null,
-      lastError: message,
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    const jobUpdate = await tx.roleplayAudioJob.updateMany({
+      where: { id: job.id, status: 'PROCESSING', lockedBy: workerId },
+      data: {
+        status: shouldRetry ? 'PENDING' : 'FAILED',
+        availableAt: shouldRetry ? new Date(Date.now() + backoffSeconds * 1_000) : undefined,
+        lockedAt: null,
+        lockedBy: null,
+        lastError: message,
+      },
+    });
+    if (jobUpdate.count !== 1) return false;
+
+    // A response remains PROCESSING while a retry is pending. Mark it FAILED
+    // only when the final attempt is exhausted and this worker still owns the job.
+    if (!shouldRetry) {
+      await tx.roleplayResponse.updateMany({
+        where: { scenarioId: job.scenarioId, sourceAudioPath: job.sourceAudioPath },
+        data: { audioStatus: 'FAILED', processingError: message.slice(0, 500) },
+      });
+    }
+    return true;
   });
-  if (updated.count !== 1) {
+  if (!updated) {
     console.warn(`[ROLEPLAY AUDIO WORKER] Skipped failure update for job ${job.id}; its lease is no longer owned by this worker`);
     return;
   }
