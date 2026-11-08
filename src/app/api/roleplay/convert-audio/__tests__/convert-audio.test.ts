@@ -1,77 +1,148 @@
 // @vitest-environment node
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventEmitter } from 'node:events';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { NextRequest } from 'next/server';
 
-const { mockDownload, mockUpload } = vi.hoisted(() => ({
-  mockDownload: vi.fn(),
-  mockUpload: vi.fn(),
+const mocks = vi.hoisted(() => ({
+  identity: { role: 'candidate', candidateId: 5, interpreterId: null } as any,
+  findSession: vi.fn(),
+  findScenario: vi.fn(),
+  findResponse: vi.fn(),
+  upload: vi.fn(),
+  remove: vi.fn(),
+  confirm: vi.fn(),
 }));
 
-vi.mock('ffmpeg-static', () => ({ default: '/fake/ffmpeg' }));
-
-vi.mock('child_process', () => ({
-  spawn: vi.fn(() => {
-    const proc: any = new EventEmitter();
-    proc.stderr = new EventEmitter();
-    queueMicrotask(() => proc.emit('close', 0));
-    return proc;
+vi.mock('@/lib/identity/resolve-user', () => ({
+  resolveCurrentIdentity: async () => mocks.identity,
+}));
+vi.mock('@/lib/prisma', () => ({
+  default: {
+    roleplaySession: { findUnique: mocks.findSession },
+    roleplayScenario: { findFirst: mocks.findScenario },
+    roleplayResponse: { findUnique: mocks.findResponse },
+  },
+}));
+vi.mock('@/lib/security/rate-limit', () => ({
+  applyRateLimit: () => ({ success: true }),
+  createRateLimitHeaders: () => ({}),
+  RATE_LIMITS: { audioUpload: {} },
+}));
+vi.mock('@/lib/roleplay-audio-conversion', () => ({
+  BUCKET: 'roleplay-audio',
+  getSupabaseAdmin: () => ({
+    storage: {
+      from: () => ({ upload: mocks.upload, remove: mocks.remove }),
+    },
   }),
 }));
-
-vi.mock('fs/promises', () => ({
-  writeFile: vi.fn(async () => {}),
-  readFile: vi.fn(async () => Buffer.from('mp3-bytes')),
-  unlink: vi.fn(async () => {}),
+vi.mock('@/app/actions/roleplay', () => ({
+  confirmRoleplayResponse: mocks.confirm,
 }));
 
-vi.mock('@supabase/supabase-js', () => ({
-  createClient: vi.fn(() => ({
-    storage: {
-      from: vi.fn(() => ({ download: mockDownload, upload: mockUpload })),
-    },
-  })),
-}));
+import { POST } from '../route';
 
-vi.mock('@/lib/identity/resolve-user', () => ({ resolveCurrentIdentity: vi.fn() }));
-
-import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
-
-const SESSION_ID = 'clsession123';
-const SCENARIO_ID = 'clscenariocuid999';
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  process.env.NEXT_PUBLIC_SUPABASE_URL = 'http://localhost:54321';
-  process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role-key';
-  mockDownload.mockResolvedValue({
-    data: { arrayBuffer: async () => new ArrayBuffer(8) },
-    error: null,
+function makeRequest(options: {
+  mimeType?: string;
+  cookie?: string;
+  scenarioId?: string;
+} = {}) {
+  const form = new FormData();
+  form.set('audio', new File([new Uint8Array([1, 2, 3, 4])], 'response.webm', {
+    type: options.mimeType ?? 'audio/webm',
+  }));
+  form.set('sessionId', 'session-1');
+  form.set('scenarioId', options.scenarioId ?? 'scenario-1');
+  return new NextRequest('http://localhost/api/roleplay/convert-audio', {
+    method: 'POST',
+    body: form,
+    headers: options.cookie ? { cookie: `roleplay_session=${options.cookie}` } : {},
   });
-  mockUpload.mockResolvedValue({ error: null });
-});
+}
 
-describe('convertAndStoreMp3', () => {
-  it('returns the deterministic MP3 path without publishing response state', async () => {
-    const sourcePath = `responses/${SESSION_ID}/${SCENARIO_ID}/00000000-0000-4000-8000-000000000001.webm`;
-    const processedPath = await convertAndStoreMp3(SESSION_ID, SCENARIO_ID, sourcePath);
-
-    expect(processedPath).toBe(sourcePath.replace(/\.webm$/i, '.mp3'));
-    expect(mockUpload).toHaveBeenCalledWith(
-      processedPath,
-      Buffer.from('mp3-bytes'),
-      { contentType: 'audio/mpeg', upsert: true },
-    );
-    // The worker, not this storage helper, atomically publishes READY with
-    // completion of the queue job after verifying its lease.
+describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+    mocks.findSession.mockResolvedValue({
+      id: 'session-1',
+      interpreterId: null,
+      recruitmentCandidateId: 5,
+      status: 'IN_PROGRESS',
+      access: { usedAt: null, validatedAt: new Date(), startedAt: new Date() },
+    });
+    mocks.findScenario.mockResolvedValue({ id: 'scenario-1' });
+    mocks.findResponse.mockResolvedValue(null);
+    mocks.upload.mockResolvedValue({ error: null });
+    mocks.remove.mockResolvedValue({ error: null });
+    mocks.confirm.mockResolvedValue({
+      success: true,
+      data: { recordedAudioUrl: 'https://signed.test/response', sourceAudioPath: 'responses/session-1/scenario-1/00000000-0000-4000-8000-000000000001.webm' },
+    });
   });
 
-  it('does not publish response state when the source download fails', async () => {
-    mockDownload.mockResolvedValue({ data: null, error: { message: 'not found' } });
+  it('persists a legacy multipart upload through the canonical confirmation action', async () => {
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    const body = await response.json();
 
-    await expect(
-      convertAndStoreMp3(SESSION_ID, SCENARIO_ID, 'responses/x/y.webm')
-    ).rejects.toThrow();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      success: true,
+      data: { sourceUrl: 'https://signed.test/response', audioStatus: 'UPLOADED' },
+    });
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(mocks.confirm).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-1',
+      scenarioId: 'scenario-1',
+      sourceAudioPath: expect.stringMatching(/^responses\/session-1\/scenario-1\/.+\.webm$/),
+    }));
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
 
-    expect(mockUpload).not.toHaveBeenCalled();
+  it('removes the uploaded object when transactional confirmation fails', async () => {
+    mocks.confirm.mockResolvedValue({
+      success: false,
+      error: 'Response already recorded for this scenario',
+      code: 'INTERNAL_ERROR',
+    });
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+
+    expect(response.status).toBe(400);
+    expect(mocks.remove).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.stringMatching(/^responses\/session-1\/scenario-1\//),
+    ]));
+  });
+
+  it('rejects a scenario outside the supplied session before uploading', async () => {
+    mocks.findScenario.mockResolvedValue(null);
+
+    const response = await POST(makeRequest({ cookie: 'session-1', scenarioId: 'foreign-scenario' }));
+
+    expect(response.status).toBe(404);
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it('rejects candidate uploads without the session-bound cookie', async () => {
+    const response = await POST(makeRequest());
+
+    expect(response.status).toBe(403);
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported WebM codec parameters', async () => {
+    const response = await POST(makeRequest({ cookie: 'session-1', mimeType: 'audio/webm;codecs=unknown' }));
+
+    expect(response.status).toBe(400);
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('does not allow administrators to create participant response recordings', async () => {
+    mocks.identity = { role: 'admin', candidateId: null, interpreterId: null };
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+
+    expect(response.status).toBe(403);
+    expect(mocks.upload).not.toHaveBeenCalled();
   });
 });
