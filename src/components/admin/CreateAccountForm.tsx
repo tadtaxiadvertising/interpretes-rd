@@ -12,7 +12,7 @@ export default function CreateAccountForm({ clients, companies }: { clients: { i
   return (
     <form action={action} className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 space-y-4">
       <h2 className="text-lg font-semibold text-white">Nueva cuenta operativa</h2>
-      <p className="text-sm text-slate-400">Registra titular, acceso a la plataforma y cliente propietario. La contraseña se guarda fuera de la base de datos mediante una referencia segura.</p>
+      <p className="text-sm text-slate-400">Registra titular, acceso a la plataforma y cliente propietario. La aplicación solo registra una referencia al gestor de secretos; no guarda ni recupera la contraseña.</p>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="block text-sm text-slate-300">Cliente propietario
           <select name="clientId" required className={field}>

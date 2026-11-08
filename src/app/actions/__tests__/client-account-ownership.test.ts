@@ -18,6 +18,9 @@ vi.mock('@/lib/prisma', () => ({
       create: vi.fn(),
       updateMany: vi.fn(),
     },
+    company: {
+      findFirst: vi.fn(),
+    },
   },
 }));
 
@@ -54,7 +57,7 @@ describe('client ownership actions', () => {
     const clientResult = await createClient(makeForm({ name: 'Client A' }));
     const assignmentResult = await assignAccountToClient(makeForm({ accountId: '42', clientId: '3' }));
     const accountResult = await createOperationalAccount(makeForm({
-      clientId: '3', name: 'Support Account', description: '',
+      clientId: '3', companyId: '', name: 'Support Account', holderName: 'Account Holder', email: 'holder@example.com', loginUrl: 'https://portal.example.com/login', secretRef: 'vault://org/account/main', description: '',
     }));
 
     expect(clientResult.success).toBe(false);
@@ -125,7 +128,7 @@ describe('client ownership actions', () => {
     (prisma.client.findFirst as any).mockResolvedValue(null);
 
     const result = await createOperationalAccount(makeForm({
-      clientId: '3', name: 'Support Account', description: '',
+      clientId: '3', companyId: '', name: 'Support Account', holderName: 'Account Holder', email: 'holder@example.com', loginUrl: 'https://portal.example.com/login', secretRef: 'vault://org/account/main', description: '',
     }));
 
     expect(result.success).toBe(false);
@@ -137,12 +140,12 @@ describe('client ownership actions', () => {
     (prisma.account.create as any).mockResolvedValue({ id: 42 });
 
     const result = await createOperationalAccount(makeForm({
-      clientId: '3', name: ' Support Account ', description: '  Support queue  ',
+      clientId: '3', companyId: '', name: ' Support Account ', holderName: 'Account Holder', email: 'holder@example.com', loginUrl: 'https://portal.example.com/login', secretRef: 'vault://org/account/main', description: '  Support queue  ',
     }));
 
     expect(result.success).toBe(true);
     expect(prisma.account.create).toHaveBeenCalledWith({
-      data: { clientId: 3, name: 'Support Account', description: 'Support queue' },
+      data: { clientId: 3, name: 'Support Account', holderName: 'Account Holder', email: 'holder@example.com', description: 'Support queue', companyId: null, platforms: { create: { name: 'Plataforma principal', loginUrl: 'https://portal.example.com/login', usernameHint: 'holder@example.com', secretRef: 'vault://org/account/main' } } },
     });
     expect(revalidatePath).toHaveBeenCalledWith('/admin/accounts');
     expect(revalidatePath).toHaveBeenCalledWith('/admin/clients');
@@ -153,19 +156,19 @@ describe('client ownership actions', () => {
     (prisma.account.create as any).mockResolvedValue({ id: 42 });
 
     const first = await createOperationalAccount(makeForm({
-      clientId: '3', name: 'Shared Queue', description: '',
+      clientId: '3', companyId: '', name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', loginUrl: 'https://portal.example.com/login', secretRef: 'vault://org/account/main', description: '',
     }));
     const second = await createOperationalAccount(makeForm({
-      clientId: '4', name: 'Shared Queue', description: '',
+      clientId: '4', companyId: '', name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', loginUrl: 'https://portal.example.com/login', secretRef: 'vault://org/account/main', description: '',
     }));
 
     expect(first.success).toBe(true);
     expect(second.success).toBe(true);
     expect(prisma.account.create).toHaveBeenNthCalledWith(1, {
-      data: { clientId: 3, name: 'Shared Queue', description: '' },
+      data: { clientId: 3, name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', description: '', companyId: null, platforms: { create: { name: 'Plataforma principal', loginUrl: 'https://portal.example.com/login', usernameHint: 'holder@example.com', secretRef: 'vault://org/account/main' } } },
     });
     expect(prisma.account.create).toHaveBeenNthCalledWith(2, {
-      data: { clientId: 4, name: 'Shared Queue', description: '' },
+      data: { clientId: 4, name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', description: '', companyId: null, platforms: { create: { name: 'Plataforma principal', loginUrl: 'https://portal.example.com/login', usernameHint: 'holder@example.com', secretRef: 'vault://org/account/main' } } },
     });
   });
 
@@ -174,7 +177,7 @@ describe('client ownership actions', () => {
     (prisma.account.create as any).mockRejectedValue({ code: 'P2002' });
 
     const result = await createOperationalAccount(makeForm({
-      clientId: '3', name: 'Shared Queue', description: '',
+      clientId: '3', companyId: '', name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', loginUrl: 'https://portal.example.com/login', secretRef: 'vault://org/account/main', description: '',
     }));
 
     expect(result.success).toBe(false);
