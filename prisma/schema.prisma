@@ -1057,6 +1057,7 @@ model RoleplayAudioJob {
   scenario       RoleplayScenario       @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
 
   @@index([status, availableAt, createdAt], map: "idx_roleplay_audio_jobs_claim")
+  @@index([status, lockedAt], map: "idx_roleplay_audio_jobs_lease")
   @@index([sessionId], map: "idx_roleplay_audio_jobs_session")
   @@index([scenarioId], map: "idx_roleplay_audio_jobs_scenario")
   @@map("roleplay_audio_jobs")
