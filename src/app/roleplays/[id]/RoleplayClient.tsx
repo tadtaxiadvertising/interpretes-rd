@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { confirmRoleplayResponse, saveSelfAssessment, submitRoleplaySession } from '@/app/actions/roleplay';
+import { createRoleplayResponseUpload } from '@/app/actions/roleplay';
+import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { RoleplayIntro } from '@/components/roleplay/RoleplayIntro';
 import { RoleplayScenario } from '@/components/roleplay/RoleplayScenario';
 import { Recorder } from '@/components/roleplay/Recorder';
@@ -183,38 +185,50 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
   const handleScenarioAudioSave = useCallback(async (_audioUrl: string, duration: number, blob: Blob) => {
     if (!session) return;
-    
+
     const scenario = session.scenarios[currentScenarioIndex];
     if (!scenario) return;
 
     setIsLoading(true);
+    setError(null);
     try {
-      const formData = new FormData();
-      formData.append('audio', blob);
-      formData.append('sessionId', sessionId);
-      formData.append('scenarioId', scenario.id);
-
-      const convertRes = await fetch('/api/roleplay/convert-audio', {
-        method: 'POST',
-        body: formData,
+      // Ask the server to authorize this exact candidate/session/scenario and
+      // issue a one-object upload token. Audio bytes never pass through Next.js.
+      const uploadAuthorization = await createRoleplayResponseUpload({
+        sessionId,
+        scenarioId: scenario.id,
+        mimeType: blob.type || 'audio/webm',
+        size: blob.size,
       });
+      if (!uploadAuthorization.success) {
+        throw new Error(uploadAuthorization.error || 'No se pudo autorizar la grabación');
+      }
 
-      const convertResult = await convertRes.json();
-      
-      if (!convertResult.success) throw new Error(convertResult.error || 'Conversion failed');
+      const supabase = createSupabaseBrowserClient();
+      if (!supabase) throw new Error('El servicio de almacenamiento no está configurado en este navegador');
 
-      const recordedUrl = convertResult.data.sourceUrl || convertResult.data.mp3Url;
+      const { error: uploadError } = await supabase.storage
+        .from('roleplay-audio')
+        .uploadToSignedUrl(
+          uploadAuthorization.data.path,
+          uploadAuthorization.data.token,
+          blob,
+          { contentType: blob.type || 'audio/webm', upsert: false }
+        );
+      if (uploadError) throw new Error('No se pudo subir la grabación. Comprueba tu conexión e inténtalo de nuevo.');
 
+      // Confirmation re-checks ownership, scenario order, and object existence
+      // before the response becomes immutable and eligible for evaluation.
       const confirmResult = await confirmRoleplayResponse({
         sessionId,
         scenarioId: scenario.id,
-        recordedAudioUrl: recordedUrl,
-        sourceAudioPath: convertResult.data.sourcePath || undefined,
+        recordedAudioUrl: uploadAuthorization.data.path,
+        sourceAudioPath: uploadAuthorization.data.path,
         durationSec: Math.max(0, Math.round(duration)),
       });
+      if (!confirmResult.success) throw new Error(confirmResult.error || 'No se pudo confirmar la grabación');
 
-      if (!confirmResult.success) throw new Error(confirmResult.error);
-
+      const recordedUrl = confirmResult.data.recordedAudioUrl;
       setScenarioResponses(prev => ({
         ...prev,
         [scenario.id]: {
@@ -229,6 +243,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       setPageState('self-assessment');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save response');
+      throw err;
     } finally {
       setIsLoading(false);
     }
