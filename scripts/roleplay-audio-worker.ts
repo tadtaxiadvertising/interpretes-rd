@@ -58,7 +58,7 @@ async function claimNextJob(): Promise<ClaimedAudioJob | null> {
           OR (
             status = 'PROCESSING'
             AND locked_at IS NOT NULL
-            AND locked_at < NOW() - INTERVAL '10 minutes'
+            AND locked_at < NOW() - (${STALE_LOCK_MINUTES} * INTERVAL '1 minute')
           )
         )
       ORDER BY available_at ASC, created_at ASC
