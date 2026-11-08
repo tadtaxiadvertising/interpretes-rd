@@ -15,6 +15,7 @@ const m = vi.hoisted(() => ({
   accessUpsert: vi.fn(),
   accessCreate: vi.fn(),
   roleplayResponseCount: vi.fn(),
+  audioJobCreate: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
@@ -46,6 +47,7 @@ vi.mock('@/lib/prisma', () => ({
       roleplaySession: { findUnique: m.findUnique, update: m.update },
       roleplayScenario: { count: m.scenarioCount, findFirst: m.scenarioFindFirst, create: m.scenarioCreate },
       roleplayResponse: { count: m.roleplayResponseCount, create: m.responseCreate, update: m.responseUpdate, findFirst: m.responseFindFirst },
+      roleplayAudioJob: { create: m.audioJobCreate },
       roleplayAccess: { upsert: m.accessUpsert, create: m.accessCreate, updateMany: m.accessUpdateMany },
     }),
   },
@@ -100,6 +102,7 @@ describe('roleplay: no scenario skipping', () => {
     m.responseCreate.mockResolvedValue({ id: 'resp-1' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
     m.responseFindFirst.mockResolvedValue(null);
+    m.audioJobCreate.mockResolvedValue({ id: 'job-1' });
     m.accessUpsert.mockResolvedValue({ id: 'acc-1' });
     m.scenarioFindFirst.mockImplementation(async (args: { where: { order?: number } }) =>
       args.where.order === 1 ? SCENARIO_1 : SCENARIO_0
