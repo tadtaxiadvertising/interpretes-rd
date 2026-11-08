@@ -31,6 +31,7 @@ export async function GET(
       select: {
         id: true,
         baseAudioUrl: true,
+        baseAudioPath: true,
         recordedAudioUrl: true,
         status: true,
         evaluatorId: true,
@@ -86,6 +87,18 @@ export async function GET(
         baseAudioUrl = null;
         recordedAudioUrl = null;
         scenarios = scenarios.map((s) => ({ ...s, baseAudioUrl: '' }));
+      }
+    }
+
+    // New sessions retain the canonical Storage path separately from the legacy URL.
+    // Mint a fresh short-lived URL on every authorized read so recordings do not
+    // stop playing when the original seven-day confirmation URL expires.
+    if (baseAudioUrl && session.baseAudioPath) {
+      try {
+        baseAudioUrl = await getSignedAudioUrl(session.baseAudioPath, 60 * 60);
+      } catch (error) {
+        console.error('Roleplay base audio playback URL could not be refreshed:', error instanceof Error ? error.message : 'Unknown storage error');
+        baseAudioUrl = null;
       }
     }
 
