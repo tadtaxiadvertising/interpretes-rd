@@ -201,7 +201,7 @@ export async function POST(req: NextRequest) {
       sourceAudioPath: sourcePath,
     });
 
-    if (!confirmation.success) {
+    if (!confirmation.success || !confirmation.data) {
       const { error: cleanupError } = await getSupabaseAdmin().storage
         .from(BUCKET)
         .remove([sourcePath]);
