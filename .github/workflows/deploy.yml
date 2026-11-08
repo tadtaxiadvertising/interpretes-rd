@@ -189,6 +189,16 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261105180000_client_directory/migration.sql --apply --transaction
 
+      - name: Apply Roleplay audio conversion queue migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run migrate -- prisma/migrations/20261108143000_roleplay_audio_job_queue/migration.sql --apply --transaction
+
+      - name: Apply Roleplay base audio path migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run migrate -- prisma/migrations/20261108170000_roleplay_base_audio_path/migration.sql --apply --transaction
+
       - name: Verify production client directory schema after migrations
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}

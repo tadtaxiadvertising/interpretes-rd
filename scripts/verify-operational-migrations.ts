@@ -372,7 +372,28 @@ async function main() {
     await client.query(roleplayQueueMigration);
     console.log('Roleplay audio queue migration creates its constraints and indexes and is idempotent in CI.');
 
-    console.log('All operational migrations applied and verified successfully in CI.');
+    const roleplayBaseAudioMigration = await readFile(
+      resolve(process.cwd(), 'prisma/migrations/20261108170000_roleplay_base_audio_path/migration.sql'),
+      'utf8',
+    );
+    if (!roleplayBaseAudioMigration.trim()) {
+      throw new Error('Roleplay base audio path migration is empty.');
+    }
+    await client.query(roleplayBaseAudioMigration);
+    await client.query(roleplayBaseAudioMigration);
+    const baseAudioPathColumn = await client.query(
+      `SELECT 1
+       FROM information_schema.columns
+       WHERE table_schema = 'public'
+         AND table_name = 'roleplay_sessions'
+         AND column_name = 'base_audio_path'`,
+    );
+    if (!baseAudioPathColumn.rowCount) {
+      throw new Error('Roleplay base audio path migration did not create its column.');
+    }
+    console.log('Roleplay base audio path migration creates its column and is idempotent in CI.');
+
+    console.log('All operational and Roleplay audio migrations applied and verified successfully in CI.');
   } finally {
     if (transactionStarted) await client.query('ROLLBACK');
     await client.end();
