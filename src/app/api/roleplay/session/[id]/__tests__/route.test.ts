@@ -103,6 +103,21 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(JSON.stringify(body)).not.toContain('CONFIDENTIAL QA ANSWER');
   });
 
+  it('refreshes base audio playback URLs from the canonical Storage path', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      baseAudioUrl: 'https://expired.example/base.webm',
+      baseAudioPath: 'base/sess-1.webm',
+    };
+
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(m.getSignedAudioUrl).toHaveBeenCalledWith('base/sess-1.webm', 60 * 60);
+    expect(body.data.baseAudioUrl).toBe('https://signed.test/base/sess-1.webm');
+  });
+
   it('refreshes playback URLs from canonical paths and prefers the processed MP3', async () => {
     m.session = {
       ...candidateSession('STARTED'),
