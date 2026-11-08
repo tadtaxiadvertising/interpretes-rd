@@ -159,13 +159,22 @@ export async function confirmUpload(path: string, maxSizeBytes?: number): Promis
     .from(BUCKET)
     .info(path);
   if (infoError || !objectInfo) {
-    throw new Error('Roleplay base audio was not uploaded or is inaccessible');
+    throw new Error('Roleplay audio object was not uploaded or is inaccessible');
   }
   if (maxSizeBytes !== undefined) {
     const metadata = objectInfo.metadata;
     const rawSize = metadata?.size ?? metadata?.contentLength;
     const actualSize = typeof rawSize === 'number' ? rawSize : Number(rawSize);
     if (!Number.isFinite(actualSize) || actualSize <= 0 || actualSize > maxSizeBytes) {
+      // A signed upload token cannot enforce the application's declared size.
+      // Remove rejected objects immediately so oversized uploads do not linger
+      // in the Free-tier bucket or become accidental orphaned recordings.
+      const { error: cleanupError } = await getSupabaseAdmin().storage
+        .from(BUCKET)
+        .remove([path]);
+      if (cleanupError) {
+        console.error('Failed to remove rejected Roleplay audio object:', cleanupError.message);
+      }
       throw new Error('Uploaded audio size is invalid or exceeds the allowed limit');
     }
   }
