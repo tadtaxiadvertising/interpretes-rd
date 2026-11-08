@@ -20,6 +20,21 @@ export function getSupabaseAdmin() {
 const MAX_SOURCE_AUDIO_BYTES = 15 * 1024 * 1024;
 const FFMPEG_TIMEOUT_MS = 3 * 60 * 1000;
 
+/**
+ * Give every conversion attempt its own immutable object path. A worker that
+ * loses its database lease may still finish an in-flight upload; unique paths
+ * prevent that stale process from overwriting the current owner's MP3.
+ */
+export function buildProcessedAudioPath(sourcePath: string, attemptId: string): string {
+  if (!/\.webm$/i.test(sourcePath)) {
+    throw new Error('MP3 conversion requires a WebM source path');
+  }
+  if (!/^[a-zA-Z0-9-]{1,64}$/.test(attemptId)) {
+    throw new Error('Invalid audio conversion attempt identifier');
+  }
+  return sourcePath.replace(/\.webm$/i, '.' + attemptId + '.mp3');
+}
+
 function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
   const ffmpegBinary = ffmpegPath;
   if (!ffmpegBinary) return Promise.reject(new Error('FFmpeg binary is not available in this runtime'));
@@ -100,18 +115,18 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
     const mp3Buffer = await readFile(outputPath);
 
     // Upload MP3 to Supabase
-    const mp3Path = sourcePath.replace(/\.webm$/i, '.mp3');
-    if (mp3Path === sourcePath) throw new Error('MP3 conversion requires a WebM source path');
+    const mp3Path = buildProcessedAudioPath(sourcePath, attemptId);
     const { error: mp3UploadError } = await supabaseAdmin.storage
       .from(BUCKET)
-      .upload(mp3Path, mp3Buffer, { contentType: 'audio/mpeg', upsert: true });
+      .upload(mp3Path, mp3Buffer, { contentType: 'audio/mpeg', upsert: false });
 
     if (mp3UploadError) {
       throw new Error(`Failed to upload MP3: ${mp3UploadError.message}`);
     }
 
-    // Storage writes are idempotent for this deterministic object path. The
-    // worker commits the response path only after its queue lease is verified.
+    // Each attempt has an immutable path: a stale worker cannot overwrite the
+    // current owner's object. The worker publishes only its own path after its
+    // database lease is verified; orphan cleanup can run independently.
     console.log(`[ASYNC CONVERSION] Uploaded MP3 for ${sessionId}/${scenarioId}`);
     return mp3Path;
   } catch (error) {
