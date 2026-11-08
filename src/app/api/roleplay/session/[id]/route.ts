@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
+import { getSignedAudioUrl } from '@/lib/roleplay';
 
 const db = prisma;
 
@@ -53,6 +54,8 @@ export async function GET(
             responses: {
               select: {
                 sourceAudioUrl: true,
+                sourceAudioPath: true,
+                processedAudioPath: true,
                 durationSec: true,
                 selfScore: true,
                 selfNotes: true,
@@ -95,6 +98,26 @@ export async function GET(
         return safeScenario;
       });
     }
+
+    // Persist canonical Storage paths and mint short-lived playback URLs on
+    // demand. The legacy sourceAudioUrl may be a seven-day signed URL and must
+    // not become the permanent source of truth for candidate/admin playback.
+    scenarios = await Promise.all(scenarios.map(async (scenario) => ({
+      ...scenario,
+      responses: await Promise.all(scenario.responses.map(async (response) => {
+        const playbackPath = response.processedAudioPath ?? response.sourceAudioPath;
+        if (!playbackPath) return response;
+        try {
+          return { ...response, sourceAudioUrl: await getSignedAudioUrl(playbackPath, 60 * 60) };
+        } catch (error) {
+          console.error(
+            'Roleplay response playback URL could not be refreshed:',
+            error instanceof Error ? error.message : 'Unknown storage error',
+          );
+          return { ...response, sourceAudioUrl: null };
+        }
+      })),
+    })));
 
     return NextResponse.json(
       {
