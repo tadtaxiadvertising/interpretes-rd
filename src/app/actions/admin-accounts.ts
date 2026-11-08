@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { safeHttpsUrl } from '@/lib/platform-input-security';
 
 const AccountInput = z.object({
   clientId: z.coerce.number().int().positive(),
@@ -11,8 +12,8 @@ const AccountInput = z.object({
   name: z.string().trim().min(2).max(120),
   holderName: z.string().trim().min(2).max(160),
   email: z.string().trim().email().max(254),
-  loginUrl: z.string().trim().url().refine(value => {
-    try { return new URL(value).protocol === 'https:'; } catch { return false; }
+  loginUrl: z.string().trim().url().refine(value => safeHttpsUrl.safeParse(value).success, {
+    message: 'La URL debe ser HTTPS y no contener credenciales, tokens ni fragmentos.',
   }),
   secretRef: z.string().trim().regex(/^vault:\/\/[a-zA-Z0-9/_-]{3,200}$/),
   description: z.string().trim().max(1000),
