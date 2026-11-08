@@ -7,6 +7,7 @@ import { z } from 'zod';
 
 const AccountInput = z.object({
   clientId: z.coerce.number().int().positive(),
+  companyId: z.union([z.literal(''), z.coerce.number().int().positive()]),
   name: z.string().trim().min(2).max(120),
   holderName: z.string().trim().min(2).max(160),
   email: z.string().trim().email().max(254),
@@ -22,6 +23,7 @@ export async function createOperationalAccount(formData: FormData) {
   if (!profile || profile.role !== 'admin') return { success: false, error: 'Acceso no autorizado.' };
   const parsed = AccountInput.safeParse({
     clientId: formData.get('clientId'),
+    companyId: formData.get('companyId') || '',
     name: formData.get('name'),
     holderName: formData.get('holderName'),
     email: formData.get('email'),
@@ -36,10 +38,15 @@ export async function createOperationalAccount(formData: FormData) {
       select: { id: true },
     });
     if (!client) return { success: false, error: 'El cliente seleccionado no existe o está inactivo.' };
-    const { loginUrl, secretRef, ...accountData } = parsed.data;
+    const { loginUrl, secretRef, companyId, ...accountData } = parsed.data;
+    if (companyId) {
+      const company = await prisma.company.findFirst({ where: { id: Number(companyId), active: true }, select: { id: true } });
+      if (!company) return { success: false, error: 'La compañía seleccionada no existe o está inactiva.' };
+    }
     await prisma.account.create({
       data: {
         ...accountData,
+        company: companyId ? { connect: { id: Number(companyId) } } : undefined,
         platforms: {
           create: {
             name: 'Plataforma principal',

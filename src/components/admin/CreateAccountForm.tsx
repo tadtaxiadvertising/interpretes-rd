@@ -6,7 +6,7 @@ import { createOperationalAccount } from '@/app/actions/admin-accounts';
 type State = { success: boolean; error?: string };
 const initialState: State = { success: false };
 
-export default function CreateAccountForm({ clients }: { clients: { id: number; name: string }[] }) {
+export default function CreateAccountForm({ clients, companies }: { clients: { id: number; name: string }[]; companies: { id: number; name: string }[] }) {
   const [state, action, pending] = useActionState(async (_previous: State, data: FormData): Promise<State> => createOperationalAccount(data), initialState);
   const field = 'mt-1 w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-white';
   return (
@@ -19,6 +19,9 @@ export default function CreateAccountForm({ clients }: { clients: { id: number; 
             <option value="">Seleccionar cliente</option>
             {clients.map(client => <option key={client.id} value={client.id}>{client.name}</option>)}
           </select>
+        </label>
+        <label className="block text-sm text-slate-300">Compañía asociada (opcional)
+          <select name="companyId" className={field}><option value="">Sin compañía asignada</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select>
         </label>
         <label className="block text-sm text-slate-300">Identificador de cuenta
           <input name="name" required minLength={2} maxLength={120} placeholder="Ej. Cuenta principal" className={field} />

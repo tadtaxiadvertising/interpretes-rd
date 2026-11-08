@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminAccountsPage() {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  const [accounts, production, clients] = await Promise.all([
+  const [accounts, production, clients, companies] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ client: { name: 'asc' } }, { name: 'asc' }],
       select: {
@@ -14,6 +14,7 @@ export default async function AdminAccountsPage() {
         client: { select: { name: true } },
         company: { select: { name: true } },
         platforms: { where: { active: true }, select: { name: true, loginUrl: true } },
+        assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { interpreter: { select: { id: true, name: true } } } },
         _count: { select: { assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] } } } },
       },
     }),
@@ -22,6 +23,7 @@ export default async function AdminAccountsPage() {
       _sum: { interpretedMinutes: true, connectedHours: true },
     }),
     prisma.client.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.company.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ]);
   const productionByAccount = new Map(production.map(row => [row.accountId, row._sum]));
   const totalMinutes = production.reduce((sum, row) => sum + (row._sum.interpretedMinutes ?? 0), 0);
@@ -39,7 +41,7 @@ export default async function AdminAccountsPage() {
         ['Minutos históricos', totalMinutes.toLocaleString('es-DO')],
       ].map(([label, value]) => <div key={label} className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}
     </div>
-    <CreateAccountForm clients={clients} />
+    <CreateAccountForm clients={clients} companies={companies} />
     <div className="overflow-x-auto rounded-2xl border border-white/10">
       <table className="w-full min-w-[1250px] text-left text-sm">
         <thead className="bg-white/[0.06] text-slate-300"><tr>
@@ -54,7 +56,7 @@ export default async function AdminAccountsPage() {
             <td className="p-4">{platform?.loginUrl ? <a href={platform.loginUrl} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">{platform.name} ↗</a> : 'Sin página registrada'}</td>
             <td className="p-4">{account.client?.name || <span className="text-amber-300">Pendiente de identificar</span>}</td>
             <td className="p-4">{account.company?.name || 'Sin compañía'}</td>
-            <td className="p-4">{account._count.assignments}</td>
+            <td className="p-4"><span>{account._count.assignments}</span>{account.assignments.length > 0 && <ul className="mt-1 space-y-1 text-xs text-slate-400">{account.assignments.map(({ interpreter }) => <li key={interpreter.id}>{interpreter.name}</li>)}</ul>}</td>
             <td className="p-4 tabular-nums">{(totals?.interpretedMinutes ?? 0).toLocaleString('es-DO')}</td>
             <td className="p-4 tabular-nums">{Number(totals?.connectedHours ?? 0).toLocaleString('es-DO', { maximumFractionDigits: 2 })}</td>
           </tr>;
