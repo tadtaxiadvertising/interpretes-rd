@@ -177,7 +177,14 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     // Compare-and-set prevents a second confirmation from replacing an already
     // confirmed URL or racing with another update.
     const updated = await db.roleplaySession.updateMany({
-      where: { id: sessionId, baseAudioPath: uploadPath, status: 'DRAFT' },
+      where: {
+        id: sessionId,
+        status: 'DRAFT',
+        OR: [
+          { baseAudioPath: uploadPath },
+          { baseAudioPath: null, baseAudioUrl: uploadPath },
+        ],
+      },
       data: { baseAudioUrl: signedUrl, baseAudioPath: uploadPath },
     });
     if (updated.count !== 1) {
