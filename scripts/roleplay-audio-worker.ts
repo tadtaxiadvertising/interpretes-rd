@@ -11,7 +11,10 @@ interface ClaimedAudioJob {
   maxAttempts: number;
 }
 
-const workerId = (process.env.ROLEPLAY_AUDIO_WORKER_ID || `roleplay-audio-${randomUUID()}`).slice(0, 100);
+// Always include a process-unique suffix. A shared configured prefix must never
+// let two replicas impersonate one another when fencing a reclaimed lease.
+const workerPrefix = (process.env.ROLEPLAY_AUDIO_WORKER_ID || 'roleplay-audio').slice(0, 60);
+const workerId = `${workerPrefix}-${randomUUID()}`;
 // A modest poll interval avoids unnecessary database churn on Supabase Free.
 const POLL_INTERVAL_MS = 10_000;
 const STALE_LOCK_MINUTES = 10;
@@ -31,7 +34,7 @@ async function failExhaustedStaleJobs(): Promise<void> {
           last_error = COALESCE(last_error, 'Worker lease expired after maximum attempts'),
           updated_at = NOW()
       WHERE status = 'PROCESSING'
-        AND locked_at < NOW() - INTERVAL '10 minutes'
+        AND locked_at < NOW() - (${STALE_LOCK_MINUTES} * INTERVAL '1 minute')
         AND attempts >= max_attempts
       RETURNING scenario_id, source_audio_path, last_error
     )
