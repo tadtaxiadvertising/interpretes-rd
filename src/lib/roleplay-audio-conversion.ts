@@ -22,10 +22,11 @@ const MAX_SOURCE_AUDIO_BYTES = 15 * 1024 * 1024;
 const FFMPEG_TIMEOUT_MS = 3 * 60 * 1000;
 
 function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
-  if (!ffmpegPath) return Promise.reject(new Error('FFmpeg binary is not available in this runtime'));
+  const ffmpegBinary = ffmpegPath;
+  if (!ffmpegBinary) return Promise.reject(new Error('FFmpeg binary is not available in this runtime'));
 
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn(ffmpegPath, [
+    const ffmpeg = spawn(ffmpegBinary, [
       '-nostdin',
       '-threads', '1',
       '-i', inputPath,
@@ -36,7 +37,7 @@ function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
       '-b:a', '128k',
       '-f', 'mp3',
       outputPath,
-    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    ], { stdio: 'pipe' });
 
     let stderr = '';
     let settled = false;
