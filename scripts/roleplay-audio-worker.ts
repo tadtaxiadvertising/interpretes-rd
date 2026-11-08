@@ -12,7 +12,8 @@ interface ClaimedAudioJob {
 }
 
 const workerId = (process.env.ROLEPLAY_AUDIO_WORKER_ID || `roleplay-audio-${randomUUID()}`).slice(0, 100);
-const POLL_INTERVAL_MS = 5_000;
+// A modest poll interval avoids unnecessary database churn on Supabase Free.
+const POLL_INTERVAL_MS = 10_000;
 const STALE_LOCK_MINUTES = 10;
 let stopping = false;
 
