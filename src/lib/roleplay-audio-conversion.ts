@@ -5,7 +5,6 @@ import { tmpdir } from 'os';
 import ffmpegPath from 'ffmpeg-static';
 import { spawn } from 'child_process';
 import { randomUUID } from 'node:crypto';
-import prisma from '@/lib/prisma';
 
 export const BUCKET = 'roleplay-audio';
 
@@ -71,7 +70,7 @@ function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
   });
 }
 
-export async function convertAndStoreMp3(sessionId: string, scenarioId: string, sourcePath: string): Promise<void> {
+export async function convertAndStoreMp3(sessionId: string, scenarioId: string, sourcePath: string): Promise<string> {
   const tempDir = tmpdir();
   const attemptId = randomUUID();
   const inputPath = join(tempDir, `${attemptId}_input.webm`);
@@ -111,25 +110,11 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
       throw new Error(`Failed to upload MP3: ${mp3UploadError.message}`);
     }
 
-    // Update the response for this exact scenario (scenarioId is the FK; it is
-    // a cuid, so it must never be parsed into a scenario `order`).
-    await prisma.roleplayResponse.updateMany({
-      where: { scenarioId, sourceAudioPath: sourcePath },
-      data: {
-        processedAudioPath: mp3Path,
-        audioStatus: 'READY',
-      },
-    });
-
-    console.log(`[ASYNC CONVERSION] Completed for ${sessionId}/${scenarioId}`);
+    // Storage writes are idempotent for this deterministic object path. The
+    // worker commits the response path only after its queue lease is verified.
+    console.log(`[ASYNC CONVERSION] Uploaded MP3 for ${sessionId}/${scenarioId}`);
+    return mp3Path;
   } catch (error) {
-    await prisma.roleplayResponse.updateMany({
-      where: { scenarioId, sourceAudioPath: sourcePath },
-      data: {
-        audioStatus: 'FAILED',
-        processingError: (error instanceof Error ? error.message : 'Unknown error').slice(0, 500),
-      },
-    });
     throw error;
   } finally {
     // Cleanup temp files
