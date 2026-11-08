@@ -13,7 +13,6 @@ import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventTyp
 import { calculateRoleplayScore } from '@/lib/roleplay/scoring';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
-import { queueMp3Conversion } from '@/lib/roleplay-audio-conversion';
 
 const db = prisma;
 
@@ -731,6 +730,18 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         },
       });
 
+      // Persist the conversion job in the same transaction as the response.
+      // A process restart after confirmation can no longer lose the work.
+      if (input.sourceAudioPath.endsWith('.webm')) {
+        await tx.roleplayAudioJob.create({
+          data: {
+            sessionId: session.id,
+            scenarioId: input.scenarioId,
+            sourceAudioPath: input.sourceAudioPath,
+          },
+        });
+      }
+
       const updated = await tx.roleplaySession.update({
         where: { id: input.sessionId },
         data: {
@@ -751,13 +762,6 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         newlyCreated: true,
       };
     });
-
-    // Convert only after the response row commits, and scope conversion to this
-    // exact upload attempt. This prevents a stale upload/conversion from changing
-    // the processed audio associated with the response QA will evaluate.
-    if (result.newlyCreated && result.sourceAudioPath?.endsWith('.webm')) {
-      queueMp3Conversion(input.sessionId, input.scenarioId, result.sourceAudioPath);
-    }
 
     // Recruitment advances only after the explicit final submission action,
     // which verifies every scenario has both audio and self-assessment.
