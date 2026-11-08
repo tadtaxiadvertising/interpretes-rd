@@ -4,7 +4,7 @@ import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { revalidatePath } from 'next/cache';
-import { createSignedUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
+import { createSignedUploadUrl, createSignedResponseUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
 import { createNotification } from './notifications';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
@@ -534,6 +534,70 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Submit Response Error:', message);
     return { success: false, error: message, code: 'INTERNAL_ERROR' };
+  }
+}
+
+const CreateResponseUploadSchema = z.object({
+  sessionId: z.string().min(1).max(100),
+  scenarioId: z.string().min(1).max(100),
+  mimeType: z.string().min(1).max(100),
+  size: z.number().int().positive().max(15 * 1024 * 1024),
+}).strict();
+
+/** Authorize a direct browser-to-Supabase upload for the current scenario. */
+export async function createRoleplayResponseUpload(rawInput: z.input<typeof CreateResponseUploadSchema>) {
+  const auth = await validateAction(['interpreter', 'candidate']);
+  if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+
+  const parsed = CreateResponseUploadSchema.safeParse(rawInput);
+  if (!parsed.success) return { success: false, error: 'Invalid audio upload metadata', code: 'VALIDATION_ERROR' };
+  const input = parsed.data;
+  const validation = validateAudioMetadata(input.mimeType, input.size);
+  if (!validation.valid) return { success: false, error: validation.error ?? 'Invalid audio file', code: 'VALIDATION_ERROR' };
+
+  const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
+  try {
+    const session = await db.roleplaySession.findUnique({
+      where: { id: input.sessionId },
+      select: {
+        id: true,
+        interpreterId: true,
+        recruitmentCandidateId: true,
+        status: true,
+        currentScenarioIndex: true,
+      },
+    });
+    if (!session) return { success: false, error: 'Session not found', code: 'NOT_FOUND' };
+    if (!['INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status)) {
+      return { success: false, error: 'Session is not accepting recordings', code: 'INVALID_STATE' };
+    }
+    if (!(await canAccessRoleplaySession(session, sessionCookie))) {
+      return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
+    }
+
+    const scenario = await db.roleplayScenario.findFirst({
+      where: { id: input.scenarioId, sessionId: session.id, order: session.currentScenarioIndex },
+      select: { id: true },
+    });
+    if (!scenario) return { success: false, error: 'Scenario is not the current session step', code: 'FORBIDDEN' };
+
+    const existingResponse = await db.roleplayResponse.findUnique({
+      where: { scenarioId: scenario.id },
+      select: { id: true },
+    });
+    if (existingResponse) return { success: false, error: 'Audio already confirmed for this scenario', code: 'CONFLICT' };
+
+    const limit = rateLimit(
+      `${session.id}:${scenario.id}`,
+      { ...RATE_LIMITS.audioUpload, keyPrefix: 'roleplay-signed-upload' }
+    );
+    if (!limit.success) return { success: false, error: 'Too many upload attempts. Please try again later.', code: 'RATE_LIMITED' };
+
+    const signedUpload = await createSignedResponseUploadUrl(session.id, scenario.id, input.mimeType);
+    return { success: true, data: signedUpload };
+  } catch (error) {
+    console.error('Create Roleplay Response Upload Error:', error instanceof Error ? error.message : 'Unknown error');
+    return { success: false, error: 'Unable to authorize audio upload', code: 'INTERNAL_ERROR' };
   }
 }
 
