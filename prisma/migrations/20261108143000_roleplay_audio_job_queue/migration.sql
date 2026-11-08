@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS "public"."roleplay_audio_jobs" (
   "last_error" TEXT,
   "completed_at" TIMESTAMPTZ(6),
   "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updated_at" TIMESTAMPTZ(6) NOT NULL,
   CONSTRAINT "roleplay_audio_jobs_pkey" PRIMARY KEY ("id"),
   CONSTRAINT "roleplay_audio_jobs_source_audio_path_key" UNIQUE ("source_audio_path"),
   CONSTRAINT "roleplay_audio_jobs_session_id_fkey"
