@@ -226,6 +226,31 @@ jobs:
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
 
+  deploy-roleplay-audio-worker:
+    name: Deploy Roleplay audio worker (optional)
+    needs: [validate, deploy-interpreters]
+    if: github.ref == 'refs/heads/main' && vars.ENABLE_ROLEPLAY_AUDIO_WORKER == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Call Easypanel Webhook — Roleplay audio worker
+        env:
+          EASYPANEL_WEBHOOK_ROLEPLAY_WORKER: ${{ secrets.EASYPANEL_WEBHOOK_ROLEPLAY_WORKER }}
+        run: |
+          set -euo pipefail
+          echo "Deploying Roleplay audio worker to Easypanel..."
+          WEBHOOK_URL="$(printf '%s' "${EASYPANEL_WEBHOOK_ROLEPLAY_WORKER:-}" | tr -d '\r\n')"
+          if [ -z "$WEBHOOK_URL" ]; then
+            echo "::error::EASYPANEL_WEBHOOK_ROLEPLAY_WORKER is required when ENABLE_ROLEPLAY_AUDIO_WORKER=true."
+            exit 1
+          fi
+          if ! printf '%s' "$WEBHOOK_URL" | grep -Eq '^https?://'; then
+            echo "::error::EASYPANEL_WEBHOOK_ROLEPLAY_WORKER must be a valid HTTP(S) URL."
+            exit 78
+          fi
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
+          case "$HTTP_CODE" in 200|201|202|204) echo "OK: Roleplay worker deploy triggered (HTTP $HTTP_CODE)";; *) echo "FAIL: Roleplay worker webhook returned HTTP $HTTP_CODE"; exit 1;; esac
+
   deploy-interpreters-api:
     name: Deploy interpreters-api (Backend)
     needs: [validate, deploy-interpreters]
