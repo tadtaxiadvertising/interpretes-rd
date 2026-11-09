@@ -20,6 +20,21 @@ export function getSupabaseAdmin() {
 const MAX_SOURCE_AUDIO_BYTES = 15 * 1024 * 1024;
 const FFMPEG_TIMEOUT_MS = 3 * 60 * 1000;
 
+// FFmpeg prints its version/configuration banner before the actual error. The
+// worker persists a truncated copy of this message, so keeping the banner would
+// hide the real cause (for example "Invalid data found when processing input").
+const FFMPEG_BANNER_LINE = /^(ffmpeg version|built with|configuration:|lib(?:av|sw|postproc)\w*|copyright|--enable-)/i;
+
+export function summarizeFfmpegStderr(stderr: string): string {
+  const lines = stderr
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(Boolean);
+  const meaningful = lines.filter(line => !FFMPEG_BANNER_LINE.test(line));
+  const selected = (meaningful.length > 0 ? meaningful : lines).slice(-8);
+  return selected.join(' ').slice(-800);
+}
+
 /**
  * Give every conversion attempt its own immutable object path. A worker that
  * loses its database lease may still finish an in-flight upload; unique paths
@@ -80,7 +95,7 @@ function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
     ffmpeg.on('error', (error) => finish(new Error(`FFmpeg process error: ${error.message}`)));
     ffmpeg.on('close', (code) => {
       if (code === 0) finish();
-      else finish(new Error(`FFmpeg exited with code ${code}: ${stderr.slice(-2_000)}`));
+      else finish(new Error(`FFmpeg exited with code ${code}: ${summarizeFfmpegStderr(stderr) || 'no stderr output'}`));
     });
   });
 }

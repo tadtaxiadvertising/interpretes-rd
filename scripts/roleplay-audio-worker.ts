@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import prisma from '@/lib/prisma';
 import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
+import { findMissingWorkerEnvVars } from '@/lib/roleplay-audio-worker-config';
 import { markResponseProcessingIfLeaseOwned } from '@/lib/roleplay-audio-worker-lease';
 
 interface ClaimedAudioJob {
@@ -244,6 +245,14 @@ async function run(): Promise<void> {
       await sleep(POLL_INTERVAL_MS);
     }
   }
+}
+
+const missingEnvVars = findMissingWorkerEnvVars();
+if (missingEnvVars.length > 0) {
+  console.error(
+    `[ROLEPLAY AUDIO WORKER] Missing required environment variables: ${missingEnvVars.join(', ')}`,
+  );
+  process.exit(1);
 }
 
 process.on('SIGTERM', () => {

@@ -613,7 +613,6 @@ const ConfirmResponseSchema = z.object({
   scenarioId: z.string().min(1),
   recordedAudioUrl: z.string().min(1),
   sourceAudioPath: z.string().min(1).max(1024),
-  processedAudioPath: z.string().min(1).max(1024).optional(),
   durationSec: z.number().int().min(0).max(86400).optional(),
 }).strict();
 
@@ -637,10 +636,6 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   if (input.sourceAudioPath && (!input.scenarioId || !isCanonicalResponseAudioPath(input.sourceAudioPath, input.sessionId, input.scenarioId))) {
     return { success: false, error: 'Invalid response audio path', code: 'VALIDATION_ERROR' };
   }
-  if (input.processedAudioPath && (!input.scenarioId || !isCanonicalResponseAudioPath(input.processedAudioPath, input.sessionId, input.scenarioId))) {
-    return { success: false, error: 'Invalid response audio path', code: 'VALIDATION_ERROR' };
-  }
-
   const sessionCookie = (await cookies()).get('roleplay_session')?.value ?? null;
 
   try {
@@ -729,7 +724,6 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           scenarioId: input.scenarioId,
           sourceAudioUrl: confirmedAudioUrl,
           sourceAudioPath: input.sourceAudioPath,
-          processedAudioPath: input.processedAudioPath ?? null,
           durationSec: input.durationSec ?? null,
           // Self-assessment is saved only by saveSelfAssessment after the
           // recording is confirmed; audio confirmation cannot carry scores.
@@ -766,7 +760,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         submitted: false,
         candidateId: session.recruitmentCandidateId,
         sourceAudioPath: input.sourceAudioPath,
-        processedAudioPath: input.processedAudioPath ?? null,
+        processedAudioPath: null,
         newlyCreated: true,
       };
     });
