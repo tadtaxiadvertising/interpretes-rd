@@ -162,6 +162,8 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 | Worker Roleplay — propiedad del lease | Integrado | PR #230: el worker renueva y comprueba el lease antes de cambiar la respuesta a `PROCESSING`; la actualización se realiza en transacción. |
 | Worker Roleplay — imagen Docker | Integrado | PR #231: incluye el módulo de lease y comprueba su importación durante el build. El Dockerfile también empaqueta la CA usada por Prisma. |
 | Worker Roleplay — despliegue Easypanel | Integrado, opt-in (habilitado el 2026-11-09) | PR #232: job `deploy-roleplay-audio-worker`, condicionado a la variable **de repositorio** `ENABLE_ROLEPLAY_AUDIO_WORKER == 'true'` y al secreto `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER`. La variable de entorno (`production`) no es visible para el `if:` del job; debe ser de repositorio. |
+| Worker Roleplay — límite de duración | Integrado (2026-11-09) | Límite canónico de 5 min aplicado en admin, recorder, confirmación y worker; el worker rechaza grabaciones más largas con mensaje accionable en lugar de truncar silenciosamente. |
+| Worker Roleplay — requeue | Integrado (2026-11-09) | `POST /api/admin/roleplay-audio-jobs/[id]/requeue` (admin) reencola un job `FAILED` con compare-and-set; la respuesta vuelve a `UPLOADED`. |
 | Validación de main | Correcta en el último run observado | Actions #42525565740: TypeScript, ESLint, tests, build, Docker worker y E2E aislado aprobados. |
 | Despliegue frontend | Webhook aceptado; Vercel completado | Run #42525565740 y estado Vercel success para el commit `d66dcb6e47fdc1de4d373d8e24f1b2592f35ee2c`. |
 | Despliegue API | Webhook aceptado | Run #42525565740. La respuesta del webhook confirma aceptación, no una prueba funcional de la API. |
