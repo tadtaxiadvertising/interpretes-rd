@@ -19,7 +19,10 @@ const workerPrefix = (process.env.ROLEPLAY_AUDIO_WORKER_ID || 'roleplay-audio').
 const workerId = `${workerPrefix}-${randomUUID()}`;
 // A modest poll interval avoids unnecessary database churn on Supabase Free.
 const POLL_INTERVAL_MS = 10_000;
-const STALE_LOCK_MINUTES = 10;
+// A worker that disappears mid-conversion is considered stale after this many
+// minutes. Five minutes is safely above the 300-second conversion ceiling while
+// still recovering a crashed worker within a single deploy window.
+const STALE_LOCK_MINUTES = 5;
 let stopping = false;
 
 function sleep(ms: number): Promise<void> {
