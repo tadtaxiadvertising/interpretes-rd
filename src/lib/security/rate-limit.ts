@@ -1,8 +1,9 @@
 /**
- * Rate Limiting Utility
- * 
- * In-memory rate limiter for API endpoints.
- * For production, consider using Redis-based solution (e.g., @upstash/ratelimit)
+ * Rate limiting utility.
+ *
+ * This process-local fallback is intentionally bounded. It is not a
+ * distributed limiter: multi-instance deployments must use a shared store
+ * (for example Redis) for a global quota.
  */
 
 interface RateLimitEntry {
@@ -11,16 +12,9 @@ interface RateLimitEntry {
 }
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
-
-// Clean up expired entries periodically
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (entry.resetAt < now) {
-      rateLimitStore.delete(key);
-    }
-  }
-}, 60 * 1000); // Every minute
+const MAX_RATE_LIMIT_ENTRIES = 10_000;
+const CLEANUP_INTERVAL_OPERATIONS = 256;
+let operationsSinceCleanup = 0;
 
 export interface RateLimitConfig {
   maxRequests: number;
@@ -35,119 +29,122 @@ export interface RateLimitResult {
   retryAfter?: number;
 }
 
-/**
- * Check and increment rate limit for a given key
- */
+function validateRateLimitInput(identifier: string, config: RateLimitConfig): void {
+  if (!identifier || identifier.length > 256) {
+    throw new Error('Rate limit identifier must contain between 1 and 256 characters.');
+  }
+  if (!Number.isSafeInteger(config.maxRequests) || config.maxRequests < 1) {
+    throw new Error('Rate limit maxRequests must be a positive safe integer.');
+  }
+  if (!Number.isFinite(config.windowMs) || config.windowMs <= 0) {
+    throw new Error('Rate limit windowMs must be a positive finite number.');
+  }
+}
+
+function removeExpiredEntries(now: number): void {
+  for (const [key, entry] of rateLimitStore) {
+    if (entry.resetAt <= now) rateLimitStore.delete(key);
+  }
+}
+
+function makeRoom(now: number): void {
+  if (rateLimitStore.size < MAX_RATE_LIMIT_ENTRIES) return;
+
+  // Opportunistic cleanup avoids a process-lifetime timer in serverless and
+  // constrained runtimes. If still full, evict oldest inserted entries.
+  removeExpiredEntries(now);
+  while (rateLimitStore.size >= MAX_RATE_LIMIT_ENTRIES) {
+    const oldestKey = rateLimitStore.keys().next().value;
+    if (oldestKey === undefined) break;
+    rateLimitStore.delete(oldestKey);
+  }
+}
+
+/** Check and increment a process-local rate limit bucket. */
 export function rateLimit(
   identifier: string,
   config: RateLimitConfig
 ): RateLimitResult {
-  const key = `${config.keyPrefix || 'ratelimit'}:${identifier}`;
+  validateRateLimitInput(identifier, config);
+
+  const prefix = config.keyPrefix || 'ratelimit';
+  if (prefix.length > 64) {
+    throw new Error('Rate limit keyPrefix must not exceed 64 characters.');
+  }
+
+  const key = `${prefix}:${identifier}`;
   const now = Date.now();
-  const windowStart = now - config.windowMs;
+
+  operationsSinceCleanup += 1;
+  if (operationsSinceCleanup >= CLEANUP_INTERVAL_OPERATIONS) {
+    removeExpiredEntries(now);
+    operationsSinceCleanup = 0;
+  }
 
   const entry = rateLimitStore.get(key);
 
-  if (!entry || entry.resetAt < now) {
-    // First request or window expired
-    rateLimitStore.set(key, {
-      count: 1,
-      resetAt: now + config.windowMs,
-    });
+  if (!entry || entry.resetAt <= now) {
+    makeRoom(now);
+    const resetAt = now + config.windowMs;
+    rateLimitStore.set(key, { count: 1, resetAt });
     return {
       success: true,
-      remaining: config.maxRequests - 1,
-      resetAt: now + config.windowMs,
+      remaining: Math.max(0, config.maxRequests - 1),
+      resetAt,
     };
   }
 
   if (entry.count >= config.maxRequests) {
-    // Rate limited
     return {
       success: false,
       remaining: 0,
       resetAt: entry.resetAt,
-      retryAfter: Math.ceil((entry.resetAt - now) / 1000),
+      retryAfter: Math.max(1, Math.ceil((entry.resetAt - now) / 1000)),
     };
   }
 
-  // Increment count
-  entry.count++;
+  entry.count += 1;
   return {
     success: true,
-    remaining: config.maxRequests - entry.count,
+    remaining: Math.max(0, config.maxRequests - entry.count),
     resetAt: entry.resetAt,
   };
 }
 
-/**
- * Predefined rate limit configs for different endpoints
- */
+/** Predefined rate limits for different endpoints. */
 export const RATE_LIMITS = {
-  // Invite validation - strict limit
   inviteValidation: { maxRequests: 5, windowMs: 60 * 1000, keyPrefix: 'invite' } as RateLimitConfig,
-  
-  // Audio upload - moderate limit
   audioUpload: { maxRequests: 10, windowMs: 60 * 1000, keyPrefix: 'audio' } as RateLimitConfig,
-  
-  // Session access - lenient
   sessionAccess: { maxRequests: 30, windowMs: 60 * 1000, keyPrefix: 'session' } as RateLimitConfig,
-  
-  // Evaluation submission - strict
   evaluationSubmit: { maxRequests: 3, windowMs: 60 * 1000, keyPrefix: 'eval' } as RateLimitConfig,
 };
 
 /**
- * Get client identifier from request for rate limiting.
- * 
- * Uses a combination of IP and User-Agent to reduce collision risk.
- * In production behind a trusted proxy, the first x-forwarded-for entry
- * is the real client IP. Falls back to a hash of available headers
- * to avoid the 'unknown' bucket sharing problem.
+ * Get the client identifier from headers normalized by the trusted ingress.
+ *
+ * The reverse proxy must overwrite (not append to) the selected client-IP
+ * header. Never expose this helper directly to an untrusted proxy topology.
+ * User-Agent is deliberately excluded: it is attacker-controlled and easy to
+ * rotate, so it is not a security boundary or a useful IP substitute.
  */
 export function getClientIdentifier(req: Request): string {
-  const forwarded = req.headers.get('x-forwarded-for');
-  const realIp = req.headers.get('x-real-ip');
-  const userAgent = req.headers.get('user-agent') || '';
-  
-  let ip = 'unknown';
-  if (forwarded) {
-    ip = forwarded.split(',')[0].trim();
-  } else if (realIp) {
-    ip = realIp;
-  }
-  
-  // Combine IP with a hash of User-Agent to reduce collision risk.
-  // This avoids all "unknown" requests sharing a single bucket.
-  const uaHash = simpleHash(userAgent);
-  return `${ip}:${uaHash}`;
+  const realIp = req.headers.get('x-real-ip')?.trim();
+  const forwarded = req.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim();
+  const ip = realIp || forwarded || 'unknown';
+  return ip.slice(0, 128);
 }
 
-function simpleHash(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
-}
-
-/**
- * Apply rate limit and return appropriate response if limited
- */
+/** Apply a rate limit and return its result. */
 export function applyRateLimit(
   req: Request,
   config: RateLimitConfig,
   customIdentifier?: string
 ): RateLimitResult {
-  const identifier = customIdentifier || getClientIdentifier(req);
+  const identifier = customIdentifier?.trim() || getClientIdentifier(req);
   return rateLimit(identifier, config);
 }
 
-/**
- * Create rate limit headers for response
- */
+/** Create standard rate-limit response headers. */
 export function createRateLimitHeaders(result: RateLimitResult): HeadersInit {
   return {
     'X-RateLimit-Remaining': result.remaining.toString(),
