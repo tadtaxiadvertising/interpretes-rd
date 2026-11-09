@@ -161,12 +161,12 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 | Worker Roleplay — aislamiento de archivos | Integrado | PR #229: cada intento genera una ruta MP3 independiente y la subida no sobrescribe objetos existentes. |
 | Worker Roleplay — propiedad del lease | Integrado | PR #230: el worker renueva y comprueba el lease antes de cambiar la respuesta a `PROCESSING`; la actualización se realiza en transacción. |
 | Worker Roleplay — imagen Docker | Integrado | PR #231: incluye el módulo de lease y comprueba su importación durante el build. El Dockerfile también empaqueta la CA usada por Prisma. |
-| Worker Roleplay — despliegue Easypanel | Integrado, opt-in | PR #232: job `deploy-roleplay-audio-worker`, condicionado a `vars.ENABLE_ROLEPLAY_AUDIO_WORKER == 'true'` y al secreto `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER`. |
+| Worker Roleplay — despliegue Easypanel | Integrado, opt-in (habilitado el 2026-11-09) | PR #232: job `deploy-roleplay-audio-worker`, condicionado a la variable **de repositorio** `ENABLE_ROLEPLAY_AUDIO_WORKER == 'true'` y al secreto `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER`. La variable de entorno (`production`) no es visible para el `if:` del job; debe ser de repositorio. |
 | Validación de main | Correcta en el último run observado | Actions #42525565740: TypeScript, ESLint, tests, build, Docker worker y E2E aislado aprobados. |
 | Despliegue frontend | Webhook aceptado; Vercel completado | Run #42525565740 y estado Vercel success para el commit `d66dcb6e47fdc1de4d373d8e24f1b2592f35ee2c`. |
 | Despliegue API | Webhook aceptado | Run #42525565740. La respuesta del webhook confirma aceptación, no una prueba funcional de la API. |
 | Migraciones de producción | Ejecutadas y verificadas por workflow | Run #42525565740: directorio de clientes, unicidad de cuentas por cliente, cola de audio y ruta de audio base. |
-| Worker en producción | **No verificado / no desplegado por CI** | El job opcional fue omitido porque la variable `ENABLE_ROLEPLAY_AUDIO_WORKER` no estaba habilitada. No se afirma que el contenedor esté activo. |
+| Worker en producción | **Verificado el 2026-11-09** | Contenedor reconstruido con `Dockerfile.worker`: comando `tsx scripts/roleplay-audio-worker.ts`, sin puertos ni dominio, 1 réplica. Prueba controlada en producción: job reclamado y `COMPLETED` en <5 s, WebM convertido a MP3 (33.061 bytes, cabecera ID3, decodificación FFmpeg correcta), `audioStatus=READY`, sin reprocesamiento tras 15 s; filas y objetos de prueba eliminados. |
 
 ### Incidencias de seguridad pendientes
 

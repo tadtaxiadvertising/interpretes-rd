@@ -56,7 +56,7 @@ The project currently documents two public-facing services and adds an optional,
 | `interpreters-api`       | Backend API                                  | `Dockerfile.api`              |
 | `roleplay-audio-worker`  | Private, serial FFmpeg conversion worker     | `Dockerfile.worker`           |
 
-The Roleplay worker is not a public HTTP service and does not need a domain. It uses the existing Supabase Storage bucket and PostgreSQL database; it does not require Redis or a paid queue service. The image is built by CI on every main push, but production deployment is opt-in and only runs when the GitHub production environment variable `ENABLE_ROLEPLAY_AUDIO_WORKER` is set to `true` and the `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` secret is configured. Until enabled, the worker is not automatically deployed.
+The Roleplay worker is not a public HTTP service and does not need a domain. It uses the existing Supabase Storage bucket and PostgreSQL database; it does not require Redis or a paid queue service. The image is built by CI on every main push, but production deployment is opt-in and only runs when the **repository-scoped** GitHub Actions variable `ENABLE_ROLEPLAY_AUDIO_WORKER` is set to `true` (**Settings → Secrets and variables → Actions → Variables**) and the `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` secret is configured. The variable must be repository-scoped: environment-scoped variables are not visible to a job-level `if:` expression, so an environment variable alone leaves the job silently skipped. Until enabled, the worker is not automatically deployed.
 
 ### Roleplay worker configuration
 
@@ -115,7 +115,7 @@ gh secret list -R tadtaxiadvertising/interpretes-rd
 2. Click **New repository secret**.
 3. Add `EASYPANEL_WEBHOOK_INTERPRETERS` with the interpreters webhook URL.
 4. Add `EASYPANEL_WEBHOOK_API` with the interpreters-api webhook URL.
-5. If enabling the worker, add `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` with the private worker webhook URL and set **Settings → Environments → production → Environment variables**: `ENABLE_ROLEPLAY_AUDIO_WORKER=true`.
+5. If enabling the worker, add `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` with the private worker webhook URL and set the repository variable `ENABLE_ROLEPLAY_AUDIO_WORKER=true` under **Settings → Secrets and variables → Actions → Variables → New repository variable**. Do not set it only under **Settings → Environments → production → Environment variables**: environment-scoped variables are not available to the job-level `if:` that gates `deploy-roleplay-audio-worker`, and the job will be skipped.
 
 > Webhook URL format: `https://rewvid.easypanel.host/api/deploy/webhook/<PROJECT_ID>/<SERVICE_ID>`
 
