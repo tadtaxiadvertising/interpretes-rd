@@ -4,13 +4,14 @@ import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 const db = prisma;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
 const MAX_SCENARIOS = 10;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
-const MAX_DURATION_SEC = 86400;
+const MAX_DURATION_SEC = ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
 const ALLOWED_AUDIO_TYPES = new Set([
   'audio/webm',
   'audio/mp4',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildProcessedAudioPath, summarizeFfmpegStderr } from './roleplay-audio-conversion';
+import { buildProcessedAudioPath, parseFfmpegDurationSeconds, summarizeFfmpegStderr } from './roleplay-audio-conversion';
 
 describe('buildProcessedAudioPath', () => {
   it('creates an immutable MP3 object path for each conversion attempt', () => {
@@ -58,5 +58,28 @@ describe('summarizeFfmpegStderr', () => {
   it('bounds the persisted message length', () => {
     const stderr = Array.from({ length: 40 }, (_, index) => `error line ${index} ${'x'.repeat(100)}`).join('\n');
     expect(summarizeFfmpegStderr(stderr).length).toBeLessThanOrEqual(800);
+  });
+});
+
+describe('parseFfmpegDurationSeconds', () => {
+  it('parses the Duration line from FFmpeg input metadata', () => {
+    const stderr = [
+      'Input #0, matroska,webm, from \'source.webm\':',
+      '  Duration: 00:04:12.34, start: 0.000000, bitrate: 32 kb/s',
+    ].join('\n');
+    expect(parseFfmpegDurationSeconds(stderr)).toBeCloseTo(252.34, 2);
+  });
+
+  it('supports durations longer than an hour', () => {
+    expect(parseFfmpegDurationSeconds('Duration: 01:02:03.5, start: 0')).toBeCloseTo(3723.5, 2);
+  });
+
+  it('returns null when no duration is present', () => {
+    expect(parseFfmpegDurationSeconds('Invalid data found when processing input')).toBeNull();
+  });
+
+  it('exposes the platform maximum as five minutes', async () => {
+    const { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } = await import('./roleplay-limits');
+    expect(ROLEPLAY_RESPONSE_MAX_DURATION_SEC).toBe(300);
   });
 });

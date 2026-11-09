@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 // The Supabase admin client is created lazily on first use. Creating it (and
 // validating env) at module load time made the module crash during the
@@ -32,7 +33,7 @@ const ALLOWED_MIME_TYPES = [
   'audio/mpeg',
 ];
 
-const DURATION_LIMIT_SECONDS = 300; // 5 minutes
+const DURATION_LIMIT_SECONDS = ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
 
 export interface SignedUploadResponse {
   uploadUrl: string;

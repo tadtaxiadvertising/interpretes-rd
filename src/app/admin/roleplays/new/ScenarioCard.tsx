@@ -3,6 +3,7 @@
 import React, { useRef, useState } from 'react';
 import { Mic2, Trash2, GripVertical, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 interface Scenario {
   id: string;
@@ -69,7 +70,7 @@ export function ScenarioCard({
   const handleDurationChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = event.target.value;
     const value = rawValue === '' ? 0 : Number(rawValue);
-    if (Number.isSafeInteger(value) && value >= 0 && value <= 86400) {
+    if (Number.isSafeInteger(value) && value >= 0 && value <= ROLEPLAY_RESPONSE_MAX_DURATION_SEC) {
       onUpdate(scenario.id, { durationLimitSec: value });
     }
   };
@@ -112,7 +113,7 @@ export function ScenarioCard({
                 <Clock size={12} />
                 {scenario.durationLimitSec
                   ? `${Math.floor(scenario.durationLimitSec / 60)}:${(scenario.durationLimitSec % 60).toString().padStart(2, '0')}`
-                  : 'No limit'}
+                  : 'Default (5:00 max)'}
               </span>
               {scenario.baseAudioFile && (
                 <span className="flex items-center gap-1 text-green-400">
@@ -145,7 +146,7 @@ export function ScenarioCard({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1" htmlFor={`scenario-duration-${scenario.id}`}>
-              Duration limit (seconds)
+              Duration limit (seconds, max {ROLEPLAY_RESPONSE_MAX_DURATION_SEC})
             </label>
             <input
               id={`scenario-duration-${scenario.id}`}
@@ -154,7 +155,7 @@ export function ScenarioCard({
               onChange={handleDurationChange}
               placeholder="e.g., 120"
               min="0"
-              max="86400"
+              max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC}
               step="1"
               className="w-full bg-slate-950 border border-white/10 rounded-xl py-2 px-3 text-white focus:border-blue-500 transition-colors"
             />

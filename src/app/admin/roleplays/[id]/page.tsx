@@ -166,7 +166,7 @@ function ScenarioEvaluationCard({
           <div>
             <h3 className="text-lg font-bold text-white">{scenario.title || `Scenario ${scenarioIndex}`}</h3>
             <p className="text-sm text-gray-400">
-              {scenario.durationLimitSec ? `Time limit: ${Math.floor(scenario.durationLimitSec / 60)}:${(scenario.durationLimitSec % 60).toString().padStart(2, '0')}` : 'No time limit'}
+              {scenario.durationLimitSec ? `Time limit: ${Math.floor(scenario.durationLimitSec / 60)}:${(scenario.durationLimitSec % 60).toString().padStart(2, '0')}` : 'Default limit (5:00 max)'}
             </p>
           </div>
         </div>

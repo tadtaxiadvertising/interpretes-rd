@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import ffmpegPath from 'ffmpeg-static';
 import { spawn } from 'child_process';
 import { randomUUID } from 'node:crypto';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 export const BUCKET = 'roleplay-audio';
 
@@ -19,6 +20,13 @@ export function getSupabaseAdmin() {
 
 const MAX_SOURCE_AUDIO_BYTES = 15 * 1024 * 1024;
 const FFMPEG_TIMEOUT_MS = 3 * 60 * 1000;
+// Probing the container metadata is cheap; keep it well below the conversion
+// timeout so a malformed file cannot stall the worker.
+const FFMPEG_PROBE_TIMEOUT_MS = 15 * 1000;
+// Allow a small tolerance for container-level duration rounding. Anything
+// beyond this is a real over-length recording and must fail instead of being
+// silently truncated by `-t`.
+const DURATION_TOLERANCE_SEC = 1;
 
 // FFmpeg prints its version/configuration banner before the actual error. The
 // worker persists a truncated copy of this message, so keeping the banner would
@@ -36,6 +44,55 @@ export function summarizeFfmpegStderr(stderr: string): string {
 }
 
 /**
+ * Parse the `Duration: HH:MM:SS.ss` line that FFmpeg prints for an input.
+ * Exported for tests; the worker uses it to reject over-length recordings
+ * before conversion instead of silently truncating them.
+ */
+export function parseFfmpegDurationSeconds(stderr: string): number | null {
+  const match = stderr.match(/Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/);
+  if (!match) return null;
+  const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+  if (!Number.isFinite(seconds)) return null;
+  return Math.round(seconds * 1000) / 1000;
+}
+
+function probeAudioDurationSeconds(inputPath: string): Promise<number | null> {
+  const ffmpegBinary = ffmpegPath;
+  if (!ffmpegBinary) return Promise.resolve(null);
+
+  return new Promise((resolve) => {
+    const ffmpeg = spawn(ffmpegBinary, ['-hide_banner', '-nostdin', '-i', inputPath], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    let settled = false;
+
+    const finish = (value: number | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(value);
+    };
+
+    const timeout = setTimeout(() => {
+      ffmpeg.kill('SIGKILL');
+      finish(null);
+    }, FFMPEG_PROBE_TIMEOUT_MS);
+
+    ffmpeg.stderr.on('data', (data: Buffer) => {
+      if (stderr.length < 16_384) {
+        stderr += data.toString().slice(0, 16_384 - stderr.length);
+      }
+    });
+
+    ffmpeg.on('error', () => finish(null));
+    // `ffmpeg -i` without an output exits non-zero by design; the duration is
+    // already in stderr, so the exit code is irrelevant here.
+    ffmpeg.on('close', () => finish(parseFfmpegDurationSeconds(stderr)));
+  });
+}
+
+/**
  * Give every conversion attempt its own immutable object path. A worker that
  * loses its database lease may still finish an in-flight upload; unique paths
  * prevent that stale process from overwriting the current owner's MP3.
@@ -50,16 +107,32 @@ export function buildProcessedAudioPath(sourcePath: string, attemptId: string): 
   return sourcePath.replace(/\.webm$/i, '.' + attemptId + '.mp3');
 }
 
-function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
+async function convertToMp3(inputPath: string, outputPath: string): Promise<void> {
   const ffmpegBinary = ffmpegPath;
-  if (!ffmpegBinary) return Promise.reject(new Error('FFmpeg binary is not available in this runtime'));
+  if (!ffmpegBinary) throw new Error('FFmpeg binary is not available in this runtime');
+
+  // Never silently truncate. If the recorded container is longer than the
+  // platform maximum, fail with an actionable message; the `-t` below remains
+  // only as a defensive ceiling for inputs whose duration cannot be probed.
+  const sourceDurationSec = await probeAudioDurationSeconds(inputPath);
+  if (
+    sourceDurationSec !== null &&
+    sourceDurationSec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC + DURATION_TOLERANCE_SEC
+  ) {
+    throw new Error(
+      `Recording is ${Math.ceil(sourceDurationSec)} seconds long; the maximum is ${ROLEPLAY_RESPONSE_MAX_DURATION_SEC} seconds`,
+    );
+  }
+  if (sourceDurationSec === null) {
+    console.warn('[ASYNC CONVERSION] Could not determine source duration; applying the safety cap');
+  }
 
   return new Promise((resolve, reject) => {
     const ffmpeg = spawn(ffmpegBinary, [
       '-nostdin',
       '-threads', '1',
       '-i', inputPath,
-      '-t', '300',
+      '-t', String(ROLEPLAY_RESPONSE_MAX_DURATION_SEC),
       '-vn',
       '-ar', '44100',
       '-ac', '2',

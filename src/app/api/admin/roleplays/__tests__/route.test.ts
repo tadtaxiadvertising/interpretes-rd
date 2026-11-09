@@ -142,6 +142,13 @@ describe('POST /api/admin/roleplays', () => {
       expect(res.status).toBe(400);
     });
 
+    it('rejects a scenario duration above the platform maximum', async () => {
+      const overLimit = JSON.stringify([{ title: 'Escenario 1', durationLimitSec: 301, scriptPrompt: '' }]);
+      const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: overLimit, audios: [audioFile()] }) as any);
+      expect(res.status).toBe(400);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+    });
+
     it('rejects an empty scenarios array', async () => {
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: '[]', audios: [] }) as any);
       expect(res.status).toBe(400);

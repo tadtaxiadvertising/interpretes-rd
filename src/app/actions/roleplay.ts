@@ -5,6 +5,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { revalidatePath } from 'next/cache';
 import { createSignedUploadUrl, createSignedResponseUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { createNotification } from './notifications';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
@@ -613,7 +614,7 @@ const ConfirmResponseSchema = z.object({
   scenarioId: z.string().min(1),
   recordedAudioUrl: z.string().min(1),
   sourceAudioPath: z.string().min(1).max(1024),
-  durationSec: z.number().int().min(0).max(86400).optional(),
+  durationSec: z.number().int().min(0).max(ROLEPLAY_RESPONSE_MAX_DURATION_SEC).optional(),
 }).strict();
 
 export type ConfirmResponseInput = z.infer<typeof ConfirmResponseSchema>;

@@ -19,13 +19,14 @@ COPY tsconfig.json ./tsconfig.json
 COPY certs/prod-ca-2021.crt ./certs/prod-ca-2021.crt
 COPY src/lib/prisma.ts ./src/lib/prisma.ts
 COPY src/lib/database-pool-config.ts ./src/lib/database-pool-config.ts
+COPY src/lib/roleplay-limits.ts ./src/lib/roleplay-limits.ts
 COPY src/lib/roleplay-audio-conversion.ts ./src/lib/roleplay-audio-conversion.ts
 COPY src/lib/roleplay-audio-worker-lease.ts ./src/lib/roleplay-audio-worker-lease.ts
 COPY src/lib/roleplay-audio-worker-config.ts ./src/lib/roleplay-audio-worker-config.ts
 COPY scripts/roleplay-audio-worker.ts ./scripts/roleplay-audio-worker.ts
 
 # Catch missing local runtime modules during image build, not only at container startup.
-RUN node --import tsx --input-type=module -e "await import('./src/lib/roleplay-audio-worker-lease.ts'); await import('./src/lib/roleplay-audio-worker-config.ts')"
+RUN node --import tsx --input-type=module -e "await import('./src/lib/roleplay-audio-worker-lease.ts'); await import('./src/lib/roleplay-audio-worker-config.ts'); await import('./src/lib/roleplay-limits.ts')"
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=256"

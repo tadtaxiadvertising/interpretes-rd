@@ -3,20 +3,28 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, MicOff, Play, Pause, Square, CheckCircle2, AlertCircle, Loader2, Trash2, RotateCcw, Volume2, VolumeX, Clock, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 type RecordingState = 'ready' | 'recording' | 'review' | 'uploading' | 'complete';
 
 interface RecorderProps {
-  durationLimitSec?: number;
+  durationLimitSec?: number | null;
   onSave: (audioUrl: string, durationSec: number, blob: Blob) => Promise<void>;
   isLoading?: boolean;
 }
 
 export function Recorder({ 
-  durationLimitSec = 300, 
+  durationLimitSec, 
   onSave, 
   isLoading 
 }: RecorderProps) {
+  // A scenario without an explicit per-scenario limit still has the platform
+  // maximum. Clamp here so the UI can never record more than the worker and
+  // the confirmation action accept.
+  const effectiveDurationLimitSec =
+    typeof durationLimitSec === 'number' && durationLimitSec > 0
+      ? Math.min(durationLimitSec, ROLEPLAY_RESPONSE_MAX_DURATION_SEC)
+      : ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
   const [state, setState] = useState<RecordingState>('ready');
   const [recordingBlob, setRecordingBlob] = useState<Blob | null>(null);
   const [recordingUrl, setRecordingUrl] = useState<string>('');
@@ -63,11 +71,11 @@ export function Recorder({
     timerIntervalRef.current = setInterval(() => {
       const next = ++durationRef.current;
       setDuration(next);
-      if (durationLimitSec && next >= durationLimitSec) {
+      if (next >= effectiveDurationLimitSec) {
         handleStopRecording();
       }
     }, 1000);
-  }, [durationLimitSec, handleStopRecording]);
+  }, [effectiveDurationLimitSec, handleStopRecording]);
 
   const handleStartRecording = async () => {
     try {
@@ -212,7 +220,7 @@ export function Recorder({
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Grabar tu respuesta</h2>
           <p className="text-slate-400 mb-6 max-w-md mx-auto">
-            Presiona el botón para comenzar. Tienes hasta {Math.floor(durationLimitSec / 60)} minutos.
+            Presiona el botón para comenzar. Tienes hasta {formatTime(effectiveDurationLimitSec)}.
           </p>
 
           <button
@@ -229,9 +237,9 @@ export function Recorder({
             <span>Comenzar Grabación</span>
           </button>
 
-          {durationLimitSec && (
+          {effectiveDurationLimitSec > 0 && (
             <p className="text-xs text-slate-500 mt-4">
-              Tiempo máximo: {formatTime(durationLimitSec)}
+              Tiempo máximo: {formatTime(effectiveDurationLimitSec)}
             </p>
           )}
 
@@ -248,7 +256,7 @@ export function Recorder({
 
   // State 2: Recording
   if (state === 'recording') {
-    const progress = durationLimitSec ? (duration / durationLimitSec) * 100 : 0;
+    const progress = (duration / effectiveDurationLimitSec) * 100;
     
     return (
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -259,7 +267,7 @@ export function Recorder({
           <div className="text-7xl font-mono font-bold text-white mb-2" style={{ fontFamily: 'monospace' }}>
             {formatTime(duration)}
           </div>
-          {durationLimitSec && (
+          {effectiveDurationLimitSec > 0 && (
             <div className="w-full max-w-md mx-auto h-2 bg-slate-800 rounded-full overflow-hidden mb-4">
               <div
                 className="h-full bg-red-500 rounded-full transition-all duration-1000"

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 const m = vi.hoisted(() => ({
   cookie: null as string | null,
@@ -270,6 +271,23 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.update).toHaveBeenCalledTimes(1);
     expect(m.update.mock.calls[0][0].data.status).toBe('IN_PROGRESS');
     expect(m.update.mock.calls[0][0].data.currentScenarioIndex).toBeUndefined();
+  });
+
+  it('rejects a reported duration above the platform maximum', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      recordedAudioUrl: 'https://x/a.webm',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      durationSec: ROLEPLAY_RESPONSE_MAX_DURATION_SEC + 1,
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('VALIDATION_ERROR');
+    expect(m.responseCreate).not.toHaveBeenCalled();
   });
 
   it('rejects a scenario id that belongs to a different session (cross-session write)', async () => {
