@@ -2,7 +2,7 @@
 
 export const dynamic = "force-dynamic";
 
-import { useState, useEffect, useMemo, use } from "react";
+import { useState, useEffect, useMemo, use, useRef } from "react";
 import { getInterpretersForSelect, createManualLog } from "@/app/actions/manual-logs";
 import { Clock, Calendar, CheckCircle2, AlertCircle, Search, Loader2, User } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -30,6 +30,8 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
   const params = use(props.params);
   
   const [interpreters, setInterpreters] = useState<{ id: number; name: string; externalId: string }[]>([]);
+  const [selectedInterpreter, setSelectedInterpreter] = useState<{ id: number; name: string; externalId: string } | null>(null);
+  const searchRequestRef = useRef(0);
   const [search, setSearch] = useState("");
   const [loadingInitial, setLoadingInitial] = useState(true);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
@@ -57,27 +59,23 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
   const watchEndTime = watch("endTime");
 
   useEffect(() => {
-    async function load() {
-      const res = await getInterpretersForSelect();
-      if (res.success && res.data) {
-        setInterpreters(res.data);
+    const requestId = ++searchRequestRef.current;
+    const timeout = setTimeout(async () => {
+      setLoadingInitial(true);
+      try {
+        const res = await getInterpretersForSelect(search.trim());
+        if (requestId === searchRequestRef.current && res.success && res.data) {
+          setInterpreters(res.data);
+        }
+      } finally {
+        if (requestId === searchRequestRef.current) setLoadingInitial(false);
       }
-      setLoadingInitial(false);
-    }
-    load();
-  }, []);
+    }, 200);
 
-  const filteredInterpreters = useMemo(() => {
-    if (!search) return interpreters.slice(0, 50);
-    const lower = search.toLowerCase();
-    return interpreters
-      .filter((i) => i.name.toLowerCase().includes(lower) || i.externalId.toLowerCase().includes(lower))
-      .slice(0, 50);
-  }, [search, interpreters]);
+    return () => clearTimeout(timeout);
+  }, [search]);
 
-  const selectedInterpreter = useMemo(() => {
-    return interpreters.find((i) => i.externalId === watchInterpreterId) || null;
-  }, [watchInterpreterId, interpreters]);
+  const filteredInterpreters = useMemo(() => interpreters.slice(0, 100), [interpreters]);
 
   const livePreviewMinutes = useMemo(() => {
     if (!watchDate || !watchStartTime || !watchEndTime) return 0;
@@ -107,6 +105,7 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
       setMessage({ type: "success", text: "Registro manual creado exitosamente." });
       reset();
       setSearch("");
+      setSelectedInterpreter(null);
     } catch (error: any) {
       console.error(error);
       setMessage({ type: "error", text: error.message || "Ocurrió un error inesperado." });
@@ -147,6 +146,7 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
                 <Loader2 className="w-4 h-4 animate-spin" /> Cargando intérpretes...
               </div>
             ) : (
+              <p className="text-xs text-slate-500">Mostrando hasta 100 coincidencias; escribe el nombre o ID completo para localizar cualquier intérprete.</p>
               <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-lg bg-slate-950 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                 {filteredInterpreters.length === 0 ? (
                   <div className="p-4 text-sm text-slate-400 text-center">No se encontraron resultados.</div>
@@ -155,7 +155,10 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
                     <button
                       type="button"
                       key={int.id}
-                      onClick={() => setValue("interpreterExternalId", int.externalId, { shouldValidate: true })}
+                      onClick={() => {
+                        setSelectedInterpreter(int);
+                        setValue("interpreterExternalId", int.externalId, { shouldValidate: true });
+                      }}
                       className={`w-full text-left px-4 py-3 hover:bg-slate-800 transition-colors flex items-center justify-between border-b border-slate-800/50 last:border-0 ${
                         watchInterpreterId === int.externalId ? "bg-slate-800 border-l-4 border-l-blue-500" : ""
                       }`}
