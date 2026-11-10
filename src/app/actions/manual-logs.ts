@@ -107,7 +107,7 @@ export async function createManualLog(data: unknown): Promise<ActionResult<{ id:
         },
         select: { id: true },
       });
-    });
+    }, { isolationLevel: "Serializable" });
 
     if (!result) {
       return { success: false, error: "El período de nómina ya fue pagado y no puede modificarse.", code: "CONFLICT" };
@@ -119,6 +119,9 @@ export async function createManualLog(data: unknown): Promise<ActionResult<{ id:
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
       return { success: false, error: "Datos de entrada inválidos", code: "VALIDATION_ERROR" };
+    }
+    if (typeof error === "object" && error !== null && "code" in error && error.code === "P2034") {
+      return { success: false, error: "El período de nómina cambió durante el registro. Recarga e inténtalo de nuevo.", code: "CONFLICT" };
     }
     console.error("createManualLog failed:", error instanceof Error ? error.message : "Unknown error");
     return { success: false, error: "Error interno al crear el log manual.", code: "INTERNAL_ERROR" };
