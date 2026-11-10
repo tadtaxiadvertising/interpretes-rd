@@ -211,3 +211,26 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 
 - No se ejecutaron pruebas localmente: esta revisión se realizó mediante GitHub API y no dispone de checkout ni runtime del proyecto.
 - No se cambiaron secretos, variables privadas de Easypanel, datos de producción ni reglas de protección de ramas.
+
+
+### Revisión transversal de autorización y datos — 2026-11-10
+
+Se ampliaron las comprobaciones desde el rate limiter hacia las acciones del servidor que modifican datos financieros, producción, mensajería y QA. Los cambios permanecen en PR separados y no están desplegados en producción.
+
+| PR | Área | Hallazgo y control propuesto |
+|---|---|---|
+| #237 | Notificaciones y tarifas | Evita crear notificaciones para terceros desde una sesión de intérprete, limita el marcado de lectura al propietario y restringe el historial de tarifas al administrador o al propio intérprete. |
+| #238 | Nómina | Valida importes y minutos, limita importes al rango de Decimal(10,2), bloquea estados cerrados, y hace condicionales las transiciones de aprobación/pago para reducir carreras y pagos duplicados. Incluye pruebas de validadores. |
+| #239 | Importación de producción CSV | Limita chunks a 500 filas/2 MB, acota registros/columnas y valida minutos y adherencia; conserva valores porcentuales como \`93%\`. |
+| #240 | Registros de producción | Valida registros manuales y rápidos, impide nuevas entradas en períodos pagados, protege el recálculo de nómina contra carreras con el pago y habilita búsqueda de intérpretes en servidor sin truncar el directorio. |
+| #241 | Mensajería | Aplica la política de roles en cada Server Action, limita contenido, pagina el historial, marca como leídos solo los mensajes recuperados y habilita búsqueda server-side de contactos. |
+| #242 | QA | Comprueba que el registro de producción seleccionado pertenece al intérprete evaluado y valida identificadores, puntuaciones y comentarios. |
+
+#### Límites de verificación de esta revisión
+
+- #238, #239 y #242 completaron una ejecución CI satisfactoria en los commits revisados; #238 recibió después una actualización adicional de estados de nómina que requiere volver a validar.
+- #240 y #241 incorporaron correcciones posteriores a observaciones de revisión automática; sus últimas ejecuciones CI/revisiones deben finalizar antes de considerar los cambios aptos para integrar.
+- #237 tiene CI satisfactorio en el commit revisado, pero no se debe asumir que eso cubre los nuevos PR de nómina, CSV, producción, mensajería o QA.
+- La revisión automática de código no sustituye una revisión de seguridad ni pruebas funcionales con identidades reales de cada rol.
+- Ningún PR de esta tabla se ha fusionado ni desplegado. Los jobs de despliegue permanecen omitidos.
+- Las verificaciones se realizaron mediante GitHub y sus ejecuciones CI; no se afirma haber ejecutado pruebas localmente.
