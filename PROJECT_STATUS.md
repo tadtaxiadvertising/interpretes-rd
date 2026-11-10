@@ -186,3 +186,28 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 - El estado Vercel success se refiere al deployment del commit indicado, no a la salud de los servicios privados de Easypanel.
 - No se ejecutaron operaciones manuales sobre la base de datos ni se modificaron secretos desde esta auditoría.
 - La activación del worker debe esperar a que el administrador cree y pruebe el servicio privado con `Dockerfile.worker`, variables runtime correctas, una réplica y sin dominio público.
+
+
+---
+
+## Seguimiento de seguridad — 2026-11-10
+
+### Rate limiting: revisión complementaria
+
+- **PR #234:** introduce un límite de cardinalidad de 10.000 buckets, limpieza oportunista, validación de entradas y elimina el uso de User-Agent como parte de la identidad. El CI de ese PR pasó las etapas de validación, pruebas, build y E2E aislado; los jobs de despliegue fueron omitidos.
+- **Hallazgo de revisión automática en #234:** expulsar buckets todavía activos permite reiniciar cuotas antes de su expiración. **PR #235** corrige este comportamiento: solo elimina buckets vencidos y, si el almacén sigue lleno, rechaza identificadores nuevos hasta que haya capacidad. La prueba de regresión llena el almacén y verifica que la cuota de un cliente existente no se reinicia.
+- **Estado de #235 al redactar esta actualización:** abierto, Preview Vercel en estado Ready y revisión de Codex completada sin observaciones. La consulta de GitHub Actions no devolvió ejecuciones asociadas al SHA del PR; por tanto, la prueba añadida aún no tiene evidencia de ejecución CI en ese PR. No se declara merge ni despliegue.
+- **Puntos de llamada revisados en `main`:**
+  - `POST /api/roleplay/validate-invite` y `POST /api/roleplay/validate-invite-by-code`: límite de validación de invitaciones, identidad derivada de cabeceras de la petición.
+  - `POST /api/roleplay/convert-audio`: límite de conversión de audio, identidad derivada de cabeceras.
+  - `GET /api/roleplay/session/[id]` y `POST /api/roleplay/session/[id]/start`: límite de acceso a sesión, identidad derivada de cabeceras.
+  - Server Action de generación de URL firmada de subida: clave por combinación de sesión y escenario; protege intentos para ese recurso, no constituye una cuota global por usuario.
+  - Server Action `evaluateRoleplay`: cuota estricta por `auth.user.userId`, después de autenticar el rol admin y antes de las consultas/escrituras de evaluación (PR #183 integrado).
+- **Limitación que permanece:** el almacén es un `Map` por proceso. Las cuotas no son globales entre instancias/serverless ni sobreviven a reinicios. No se añade Redis/Upstash sin aprobación y configuración de infraestructura.
+- **Confianza en IP:** la versión propuesta en #234/#235 prioriza `x-real-ip` y usa como alternativa el último elemento de `x-forwarded-for`; elimina User-Agent. Esto solo es seguro si el ingress de cada entorno sobrescribe/normaliza esas cabeceras y no permite que el cliente las controle. Esa topología aún debe verificarse en Vercel y Easypanel antes de cerrar #128.
+- **Acción requerida para cerrar #128:** aprobar un almacén compartido con operación atómica, confirmar el contrato de identidad IP en cada ingress y probar concurrencia/falsificación de cabeceras. Hasta entonces, considerar el limitador actual una defensa local de mejor esfuerzo, no un control global contra abuso distribuido.
+
+### Estado de verificación
+
+- No se ejecutaron pruebas localmente: esta revisión se realizó mediante GitHub API y no dispone de checkout ni runtime del proyecto.
+- No se cambiaron secretos, variables privadas de Easypanel, datos de producción ni reglas de protección de ramas.
