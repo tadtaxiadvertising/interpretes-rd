@@ -1,0 +1,45 @@
+name: 🧹 Orphan audio cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * 0' # Weekly, Sunday 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: 'Remove orphaned MP3 objects (default: dry-run only)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+jobs:
+  audit:
+    name: Audit orphaned Roleplay MP3s
+    runs-on: ubuntu-latest
+    if: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+    env:
+      DATABASE_URL: ${{ secrets.DIRECT_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run orphan audit (dry-run)
+        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.delete != 'true' }}
+        run: npx tsx scripts/audit_orphan_audio.ts
+
+      - name: Run orphan cleanup (delete)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.delete == 'true' }}
+        run: npx tsx scripts/audit_orphan_audio.ts --delete

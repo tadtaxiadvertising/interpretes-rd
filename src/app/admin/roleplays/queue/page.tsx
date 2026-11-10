@@ -131,6 +131,12 @@ export default async function AdminRoleplayQueuePage({
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
+            href="/admin/roleplay-audio-jobs"
+            className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium transition-colors border border-white/10"
+          >
+            Cola de audio
+          </Link>
+          <Link
             href="/admin/roleplays"
             className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl font-medium transition-colors border border-white/10"
           >
