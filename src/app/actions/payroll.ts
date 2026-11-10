@@ -11,8 +11,8 @@ import { z } from 'zod';
 const db = prisma;
 
 const ReconcileSchema = z.object({
-  logId: z.coerce.number(),
-  verifiedMinutes: z.coerce.number().nonnegative(),
+  logId: z.coerce.number().int().positive(),
+  verifiedMinutes: z.coerce.number().int().min(0).max(100_000),
 });
 
 const PeriodSchema = z.object({
@@ -32,6 +32,10 @@ export async function generatePayrollPeriod(
     const now = new Date();
     const periodStart = validated.startDate || new Date(now.getFullYear(), now.getMonth(), 1);
     const periodEnd = validated.endDate || new Date(now.getFullYear(), now.getMonth(), 15);
+    const periodLength = periodEnd.getTime() - periodStart.getTime();
+    if (periodLength < 0 || periodLength > 366 * 24 * 60 * 60 * 1000) {
+      return { success: false, error: 'El período de nómina debe ser válido y no superar 366 días.', code: 'VALIDATION_ERROR' };
+    }
 
     // Obtener todos los intérpretes activos via Prisma
     const interpreters = await db.interpreter.findMany({
@@ -89,39 +93,50 @@ export async function reconcileMinutes(
   try {
     const validated = ReconcileSchema.parse({ logId, verifiedMinutes });
 
-    const log = await db.productionLog.findUnique({
-      where: { id: validated.logId },
-      select: { id: true, interpreterId: true, date: true }
-    });
+    const reconciliation = await db.$transaction(async (tx) => {
+      const log = await tx.productionLog.findUnique({
+        where: { id: validated.logId },
+        select: { id: true, interpreterId: true, date: true, isSettled: true },
+      });
 
-    if (!log) {
-      return { success: false, error: 'Production log not found', code: 'NOT_FOUND' };
+      if (!log) return { kind: 'NOT_FOUND' as const };
+      if (!log.interpreterId) return { kind: 'INVALID_LOG' as const };
+      if (log.isSettled) return { kind: 'SETTLED' as const };
+
+      const linkedPaidPayroll = await tx.payrollRecord.findFirst({
+        where: {
+          interpreterId: log.interpreterId,
+          status: { in: ['PAID', 'Paid'] },
+          periodStart: { lte: log.date },
+          periodEnd: { gte: log.date },
+        },
+        select: { id: true },
+      });
+
+      if (linkedPaidPayroll) return { kind: 'PAID_PAYROLL' as const };
+
+      const updated = await tx.productionLog.updateMany({
+        where: { id: validated.logId, isSettled: false },
+        data: { verifiedMinutes: validated.verifiedMinutes },
+      });
+
+      if (updated.count !== 1) return { kind: 'CONFLICT' as const };
+      return { kind: 'UPDATED' as const, interpreterId: log.interpreterId, date: log.date };
+    }, { isolationLevel: 'Serializable' });
+
+    if (reconciliation.kind !== 'UPDATED') {
+      const errors = {
+        NOT_FOUND: ['Production log not found', 'NOT_FOUND'],
+        INVALID_LOG: ['Production log is not linked to an interpreter', 'VALIDATION_ERROR'],
+        SETTLED: ['Cannot modify: Log is already settled', 'CONFLICT'],
+        PAID_PAYROLL: ['Cannot modify: Log is linked to a paid payroll record', 'CONFLICT'],
+        CONFLICT: ['The production log changed during reconciliation; reload and retry', 'CONFLICT'],
+      } as const;
+      const [error, code] = errors[reconciliation.kind];
+      return { success: false, error, code };
     }
 
-    const linkedPaidPayroll = await db.payrollRecord.findFirst({
-      where: {
-        interpreterId: log.interpreterId,
-        status: 'PAID',
-        periodStart: { lte: log.date },
-        periodEnd: { gte: log.date }
-      },
-      select: { id: true }
-    });
-
-    if (linkedPaidPayroll) {
-      return { success: false, error: 'Cannot modify: Log is linked to a PAID payroll record', code: 'UNAUTHORIZED' };
-    }
-
-    await db.productionLog.update({
-      where: { id: validated.logId },
-      data: { verifiedMinutes: validated.verifiedMinutes },
-      select: { id: true }
-    });
-
-    // Automatically refresh the payroll record if it exists and is pending
-    if (log.interpreterId) {
-      await refreshPayrollRecord(log.interpreterId, log.date);
-    }
+    await refreshPayrollRecord(reconciliation.interpreterId, reconciliation.date);
 
     revalidatePath('/payroll');
     revalidatePath('/dashboard');

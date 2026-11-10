@@ -56,7 +56,7 @@ export const PayrollVerifySchema = z.discriminatedUnion('action', [
   z.object({
     payrollRecordId: z.string().trim().min(1),
     action: z.literal('verify'),
-    verifiedMinutes: z.number().nonnegative(),
+    verifiedMinutes: z.number().int().min(0).max(100_000),
   }),
   z.object({
     payrollRecordId: z.string().trim().min(1),
