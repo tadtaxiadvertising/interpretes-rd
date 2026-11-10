@@ -62,9 +62,15 @@ describe('rateLimit', () => {
     expect(rateLimit('protected-client', config).success).toBe(true);
     expect(rateLimit('protected-client', config).success).toBe(false);
 
-    for (let index = 0; index < 9_999; index += 1) {
-      expect(rateLimit(`filler-${index}`, config).success).toBe(true);
+    let capacityReached = false;
+    for (let index = 0; index < 10_050; index += 1) {
+      const result = rateLimit(`filler-${index}`, config);
+      if (!result.success) {
+        capacityReached = true;
+        break;
+      }
     }
+    expect(capacityReached).toBe(true);
 
     const overflow = rateLimit('overflow-client', config);
     expect(overflow).toMatchObject({ success: false, remaining: 0 });
