@@ -431,8 +431,14 @@ export async function refreshPayrollRecord(
 
   if (record) {
     const calc = await calculateFullPayroll(interpreterId, record.periodStart, record.periodEnd);
-    await db.payrollRecord.update({
-      where: { id: record.id },
+    // Recheck the pending state in the write itself. A payment may be marked
+    // paid after the initial read while this calculation is in progress.
+    await db.payrollRecord.updateMany({
+      where: {
+        id: record.id,
+        status: { in: ['Pendiente', 'PENDING'] },
+        paidAt: null,
+      },
       data: {
         totalMinutes: calc.totalMinutes,
         grossTotal: calc.grossTotal,
@@ -441,8 +447,8 @@ export async function refreshPayrollRecord(
         penalidades: calc.penalidades,
         transferDeduction: calc.transferDeduction,
         netTotal: calc.netTotal,
-        verifiedMinutes: calc.totalMinutes
-      }
+        verifiedMinutes: calc.totalMinutes,
+      },
     });
   }
 }
