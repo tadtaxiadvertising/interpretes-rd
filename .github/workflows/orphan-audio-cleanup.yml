@@ -18,28 +18,44 @@ jobs:
   audit:
     name: Audit orphaned Roleplay MP3s
     runs-on: ubuntu-latest
-    if: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
     env:
       DATABASE_URL: ${{ secrets.DIRECT_URL }}
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
+      # The secrets context is not available in a job-level "if" expression.
+      # Resolve optional credentials in a step and skip all work when absent.
+      - name: Check cleanup credentials
+        id: credentials
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Orphan audio cleanup skipped: SUPABASE_SERVICE_ROLE_KEY is not configured."
+          fi
+
       - name: Checkout code
+        if: steps.credentials.outputs.enabled == 'true'
         uses: actions/checkout@v4
 
       - name: Setup Node.js
+        if: steps.credentials.outputs.enabled == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install dependencies
+        if: steps.credentials.outputs.enabled == 'true'
         run: npm ci --legacy-peer-deps
 
       - name: Run orphan audit (dry-run)
-        if: ${{ github.event_name != 'workflow_dispatch' || github.event.inputs.delete != 'true' }}
+        if: steps.credentials.outputs.enabled == 'true' && (github.event_name != 'workflow_dispatch' || github.event.inputs.delete != 'true')
         run: npx tsx scripts/audit_orphan_audio.ts
 
       - name: Run orphan cleanup (delete)
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.delete == 'true' }}
+        if: steps.credentials.outputs.enabled == 'true' && github.event_name == 'workflow_dispatch' && github.event.inputs.delete == 'true'
         run: npx tsx scripts/audit_orphan_audio.ts --delete
