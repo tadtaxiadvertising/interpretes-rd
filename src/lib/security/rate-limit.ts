@@ -47,17 +47,19 @@ function removeExpiredEntries(now: number): void {
   }
 }
 
-function makeRoom(now: number): void {
-  if (rateLimitStore.size < MAX_RATE_LIMIT_ENTRIES) return;
+function makeRoom(now: number): number | null {
+  if (rateLimitStore.size < MAX_RATE_LIMIT_ENTRIES) return null;
 
-  // Opportunistic cleanup avoids a process-lifetime timer in serverless and
-  // constrained runtimes. If still full, evict oldest inserted entries.
+  // Expired buckets are safe to remove. Never evict an unexpired bucket:
+  // doing so would reset that client's quota before its advertised window.
   removeExpiredEntries(now);
-  while (rateLimitStore.size >= MAX_RATE_LIMIT_ENTRIES) {
-    const oldestKey = rateLimitStore.keys().next().value;
-    if (oldestKey === undefined) break;
-    rateLimitStore.delete(oldestKey);
+  if (rateLimitStore.size < MAX_RATE_LIMIT_ENTRIES) return null;
+
+  let earliestResetAt = Number.POSITIVE_INFINITY;
+  for (const entry of rateLimitStore.values()) {
+    earliestResetAt = Math.min(earliestResetAt, entry.resetAt);
   }
+  return Number.isFinite(earliestResetAt) ? earliestResetAt : now + 1_000;
 }
 
 /** Check and increment a process-local rate limit bucket. */
@@ -84,7 +86,15 @@ export function rateLimit(
   const entry = rateLimitStore.get(key);
 
   if (!entry || entry.resetAt <= now) {
-    makeRoom(now);
+    const capacityResetAt = makeRoom(now);
+    if (capacityResetAt !== null) {
+      return {
+        success: false,
+        remaining: 0,
+        resetAt: capacityResetAt,
+        retryAfter: Math.max(1, Math.ceil((capacityResetAt - now) / 1000)),
+      };
+    }
     const resetAt = now + config.windowMs;
     rateLimitStore.set(key, { count: 1, resetAt });
     return {
