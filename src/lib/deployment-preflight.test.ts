@@ -147,7 +147,7 @@ describe('deployment credential boundary', () => {
     expect(checks.slice(0, 6)).toEqual([
       'BEGIN READ ONLY',
       'SELECT 1',
-      'SELECT id, client_id, name FROM public.accounts LIMIT 0',
+      'SELECT id, client_id, name, holder_name, email FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
       'SELECT id, session_id, scenario_id, source_audio_path, status FROM public.roleplay_audio_jobs LIMIT 0',
       'SELECT base_audio_path FROM public.roleplay_sessions LIMIT 0',
@@ -270,6 +270,18 @@ describe('production deployment workflow', () => {
     expect(ownershipMigration).toBeGreaterThan(directoryMigration);
     expect(canonicalMigration).toBeGreaterThan(ownershipMigration);
     expect(schemaCheck).toBeGreaterThan(canonicalMigration);
+  });
+
+  it('applies operational account holder details before schema verification and deployment webhooks', () => {
+    const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
+    const deploy = workflow.split('  deploy-interpreters:')[1].split('  deploy-interpreters-api:')[0];
+    const holderMigration = deploy.indexOf('20261108120000_operational_account_holder_details/migration.sql');
+    const schemaCheck = deploy.indexOf('scripts/deployment-preflight.ts --verify-schema');
+    const frontendWebhook = deploy.indexOf('Call Easypanel Webhook — interpreters');
+
+    expect(holderMigration).toBeGreaterThan(-1);
+    expect(schemaCheck).toBeGreaterThan(holderMigration);
+    expect(frontendWebhook).toBeGreaterThan(schemaCheck);
   });
 
   it('applies both Roleplay audio migrations before schema verification and deployment webhooks', () => {
