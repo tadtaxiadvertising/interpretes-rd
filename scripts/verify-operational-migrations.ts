@@ -160,9 +160,16 @@ async function main() {
 
       await client.query(sql);
       console.log(`Applied in rollback-only CI transaction: ${migration}`);
-    }
-    if (!ownershipSnapshot || await ownershipFixtureSnapshot(client) !== ownershipSnapshot) {
-      throw new Error('Account ownership migration changed legacy IDs, ownership, rates, assignments or history.');
+
+      // Compare immediately after the ownership migration. Later migrations
+      // legitimately add columns (for example holder_name/email), so comparing
+      // whole-row JSON after the entire migration sequence would mistake those
+      // additive schema changes for mutations to legacy operational data.
+      if (migration === ownershipMigration) {
+        if (!ownershipSnapshot || await ownershipFixtureSnapshot(client) !== ownershipSnapshot) {
+          throw new Error('Account ownership migration changed legacy IDs, ownership, rates, assignments or history.');
+        }
+      }
     }
 
     const accountHolderColumns = await client.query(
