@@ -186,3 +186,51 @@ Las tres rutas públicas de invitación/start son excepciones deliberadas y no c
 - El estado Vercel success se refiere al deployment del commit indicado, no a la salud de los servicios privados de Easypanel.
 - No se ejecutaron operaciones manuales sobre la base de datos ni se modificaron secretos desde esta auditoría.
 - La activación del worker debe esperar a que el administrador cree y pruebe el servicio privado con `Dockerfile.worker`, variables runtime correctas, una réplica y sin dominio público.
+
+
+---
+
+## Seguimiento de seguridad — 2026-11-10
+
+### Rate limiting: revisión complementaria
+
+- **PR #234:** introduce un límite de cardinalidad de 10.000 buckets, limpieza oportunista, validación de entradas y elimina el uso de User-Agent como parte de la identidad. El CI de ese PR pasó las etapas de validación, pruebas, build y E2E aislado; los jobs de despliegue fueron omitidos.
+- **Hallazgo de revisión automática en #234:** expulsar buckets todavía activos permite reiniciar cuotas antes de su expiración. **PR #235** corrige este comportamiento: solo elimina buckets vencidos y, si el almacén sigue lleno, rechaza identificadores nuevos hasta que haya capacidad. La prueba de regresión llena el almacén y verifica que la cuota de un cliente existente no se reinicia.
+- **Estado de #235 al redactar esta actualización:** abierto, Preview Vercel en estado Ready y revisión de Codex completada sin observaciones. La consulta de GitHub Actions no devolvió ejecuciones asociadas al SHA del PR; por tanto, la prueba añadida aún no tiene evidencia de ejecución CI en ese PR. No se declara merge ni despliegue.
+- **Puntos de llamada revisados en `main`:**
+  - `POST /api/roleplay/validate-invite` y `POST /api/roleplay/validate-invite-by-code`: límite de validación de invitaciones, identidad derivada de cabeceras de la petición.
+  - `POST /api/roleplay/convert-audio`: límite de conversión de audio, identidad derivada de cabeceras.
+  - `GET /api/roleplay/session/[id]` y `POST /api/roleplay/session/[id]/start`: límite de acceso a sesión, identidad derivada de cabeceras.
+  - Server Action de generación de URL firmada de subida: clave por combinación de sesión y escenario; protege intentos para ese recurso, no constituye una cuota global por usuario.
+  - Server Action `evaluateRoleplay`: cuota estricta por `auth.user.userId`, después de autenticar el rol admin y antes de las consultas/escrituras de evaluación (PR #183 integrado).
+- **Limitación que permanece:** el almacén es un `Map` por proceso. Las cuotas no son globales entre instancias/serverless ni sobreviven a reinicios. No se añade Redis/Upstash sin aprobación y configuración de infraestructura.
+- **Confianza en IP:** la versión propuesta en #234/#235 prioriza `x-real-ip` y usa como alternativa el último elemento de `x-forwarded-for`; elimina User-Agent. Esto solo es seguro si el ingress de cada entorno sobrescribe/normaliza esas cabeceras y no permite que el cliente las controle. Esa topología aún debe verificarse en Vercel y Easypanel antes de cerrar #128.
+- **Acción requerida para cerrar #128:** aprobar un almacén compartido con operación atómica, confirmar el contrato de identidad IP en cada ingress y probar concurrencia/falsificación de cabeceras. Hasta entonces, considerar el limitador actual una defensa local de mejor esfuerzo, no un control global contra abuso distribuido.
+
+### Estado de verificación
+
+- No se ejecutaron pruebas localmente: esta revisión se realizó mediante GitHub API y no dispone de checkout ni runtime del proyecto.
+- No se cambiaron secretos, variables privadas de Easypanel, datos de producción ni reglas de protección de ramas.
+
+
+### Revisión transversal de autorización y datos — 2026-11-10
+
+Se ampliaron las comprobaciones desde el rate limiter hacia las acciones del servidor que modifican datos financieros, producción, mensajería y QA. Los cambios permanecen en PR separados y no están desplegados en producción.
+
+| PR | Área | Hallazgo y control propuesto |
+|---|---|---|
+| #237 | Notificaciones y tarifas | Evita crear notificaciones para terceros desde una sesión de intérprete, limita el marcado de lectura al propietario y restringe el historial de tarifas al administrador o al propio intérprete. |
+| #238 | Nómina | Valida importes y minutos, limita importes al rango de Decimal(10,2), bloquea estados cerrados, y hace condicionales las transiciones de aprobación/pago para reducir carreras y pagos duplicados. Incluye pruebas de validadores. |
+| #239 | Importación de producción CSV | Limita chunks a 500 filas/2 MB, acota registros/columnas y valida minutos y adherencia; conserva valores porcentuales como \`93%\`. |
+| #240 | Registros de producción | Valida registros manuales y rápidos, impide nuevas entradas en períodos pagados, protege el recálculo de nómina contra carreras con el pago y habilita búsqueda de intérpretes en servidor sin truncar el directorio. |
+| #241 | Mensajería | Aplica la política de roles en cada Server Action, limita contenido, pagina el historial, marca como leídos solo los mensajes recuperados y habilita búsqueda server-side de contactos. |
+| #242 | QA | Comprueba que el registro de producción seleccionado pertenece al intérprete evaluado y valida identificadores, puntuaciones y comentarios. |
+
+#### Límites de verificación de esta revisión
+
+- #238, #239 y #242 completaron una ejecución CI satisfactoria en los commits revisados; #238 recibió después una actualización adicional de estados de nómina que requiere volver a validar.
+- #240 y #241 incorporaron correcciones posteriores a observaciones de revisión automática; sus últimas ejecuciones CI/revisiones deben finalizar antes de considerar los cambios aptos para integrar.
+- #237 tiene CI satisfactorio en el commit revisado, pero no se debe asumir que eso cubre los nuevos PR de nómina, CSV, producción, mensajería o QA.
+- La revisión automática de código no sustituye una revisión de seguridad ni pruebas funcionales con identidades reales de cada rol.
+- Ningún PR de esta tabla se ha fusionado ni desplegado. Los jobs de despliegue permanecen omitidos.
+- Las verificaciones se realizaron mediante GitHub y sus ejecuciones CI; no se afirma haber ejecutado pruebas localmente.
