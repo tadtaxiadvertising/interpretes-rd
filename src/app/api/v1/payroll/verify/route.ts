@@ -4,6 +4,7 @@ import { recalculateWithVerifiedMinutes } from '@/services/PayrollService';
 import { PayrollVerifySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
+import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus } from '@/lib/payroll-validation';
 
 const db = prisma;
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
     // Verificar que el registro existe
     const existing = await db.payrollRecord.findUnique({
       where: { id: payrollRecordId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, paidAt: true },
     });
 
     if (!existing) {
@@ -49,31 +50,40 @@ export async function POST(request: Request) {
 
     // ── ACTION: VERIFY ──
     if (action === 'verify') {
-      if (verifiedMinutes == null || typeof verifiedMinutes !== 'number' || verifiedMinutes < 0) {
+      if (verifiedMinutes == null || !Number.isSafeInteger(verifiedMinutes) || verifiedMinutes < 0 || verifiedMinutes > 100_000) {
         return NextResponse.json(
-          { success: false, error: 'verifiedMinutes must be a non-negative number' },
+          { success: false, error: 'verifiedMinutes must be an integer between 0 and 100000' },
           { status: 400 }
         );
       }
+      if (existing.paidAt || isPaidPayrollStatus(existing.status)) {
+        return NextResponse.json({ success: false, error: 'Paid payroll records are immutable' }, { status: 409 });
+      }
+      if (!isEditablePayrollStatus(existing.status)) {
+        return NextResponse.json({ success: false, error: `Cannot verify payroll from status ${existing.status}` }, { status: 409 });
+      }
 
-      // Recalcular con los minutos verificados
+      // Recalculation is side-effect free; the conditional write is the
+      // concurrency guard against a payment being committed in parallel.
       const recalc = await recalculateWithVerifiedMinutes(payrollRecordId, verifiedMinutes);
-
-      const updated = await db.payrollRecord.update({
-        where: { id: payrollRecordId },
+      const claim = await db.payrollRecord.updateMany({
+        where: { id: payrollRecordId, status: existing.status, paidAt: null },
         data: {
-          verifiedMinutes: verifiedMinutes,
+          verifiedMinutes,
           grossTotal: recalc.grossTotal,
           incentivesTotal: recalc.incentivesTotal,
           transferDeduction: recalc.transferDeduction,
           netTotal: recalc.netTotal,
           status: 'APPROVED',
         },
-        include: {
-          interpreter: {
-            select: { name: true, externalId: true },
-          },
-        },
+      });
+      if (claim.count !== 1) {
+        return NextResponse.json({ success: false, error: 'Payroll changed during verification; reload and retry' }, { status: 409 });
+      }
+
+      const updated = await db.payrollRecord.findUnique({
+        where: { id: payrollRecordId },
+        include: { interpreter: { select: { name: true, externalId: true } } },
       });
 
       return NextResponse.json({
@@ -85,10 +95,13 @@ export async function POST(request: Request) {
 
     // ── ACTION: MARK PAID ──
     if (action === 'markPaid') {
+      if (!isApprovedPayrollStatus(existing.status) || existing.paidAt) {
+        return NextResponse.json({ success: false, error: `Cannot mark as paid from status ${existing.status}; record must be APPROVED` }, { status: 409 });
+      }
       const now = new Date();
 
       const claim = await db.payrollRecord.updateMany({
-        where: { id: payrollRecordId, status: 'APPROVED' },
+        where: { id: payrollRecordId, status: existing.status, paidAt: null },
         data: {
           status: 'PAID',
           paidAt: now,
