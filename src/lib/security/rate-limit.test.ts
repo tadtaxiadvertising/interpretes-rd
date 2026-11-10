@@ -56,6 +56,24 @@ describe('rateLimit', () => {
     }).success).toBe(true);
   });
 
+  it('preserves active quotas when capacity is exhausted', () => {
+    const config = { maxRequests: 1, windowMs: 60_000, keyPrefix: 'test-capacity' };
+
+    expect(rateLimit('protected-client', config).success).toBe(true);
+    expect(rateLimit('protected-client', config).success).toBe(false);
+
+    for (let index = 0; index < 9_999; index += 1) {
+      expect(rateLimit(`filler-${index}`, config).success).toBe(true);
+    }
+
+    const overflow = rateLimit('overflow-client', config);
+    expect(overflow).toMatchObject({ success: false, remaining: 0 });
+    expect(overflow.retryAfter).toBeGreaterThan(0);
+
+    // An unrelated identifier cannot evict/reset the protected client's quota.
+    expect(rateLimit('protected-client', config).success).toBe(false);
+  });
+
   it('emits retry headers only when a request is limited', () => {
     expect(createRateLimitHeaders({
       success: false,
