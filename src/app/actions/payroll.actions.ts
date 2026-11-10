@@ -3,7 +3,7 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
-import { isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
+import { isEditablePayrollStatus, isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
 
 const prisma = prismaClient;
 
@@ -38,6 +38,7 @@ export async function updatePayrollAdjustments(_prevState: unknown, formData: Fo
       });
       if (!record) return 'NOT_FOUND' as const;
       if (isPaidPayrollStatus(record.status)) return 'PAID' as const;
+      if (!isEditablePayrollStatus(record.status)) return 'INVALID_STATUS' as const;
 
       const netTotal = Math.round(Math.max(
         0,
@@ -57,6 +58,7 @@ export async function updatePayrollAdjustments(_prevState: unknown, formData: Fo
       const errors = {
         NOT_FOUND: ['Registro de nómina no encontrado', 'NOT_FOUND'],
         PAID: ['La nómina ya fue pagada y no puede modificarse', 'CONFLICT'],
+        INVALID_STATUS: ['El estado actual de la nómina no permite modificaciones', 'CONFLICT'],
         INVALID_TOTAL: ['El total calculado excede el límite permitido', 'VALIDATION_ERROR'],
         CONFLICT: ['La nómina cambió durante la operación; vuelve a cargarla', 'CONFLICT'],
       } as const;
@@ -93,6 +95,7 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
       });
       if (!record || !record.interpreter) return 'NOT_FOUND' as const;
       if (isPaidPayrollStatus(record.status) || record.paidAt) return 'PAID' as const;
+      if (!isEditablePayrollStatus(record.status)) return 'INVALID_STATUS' as const;
 
       const tariff = Number(record.interpreter.tariffPerMinute);
       const grossTotal = Math.round(verifiedMinutes * tariff * 100) / 100;
@@ -120,6 +123,7 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
       const errors = {
         NOT_FOUND: ['Nómina o intérprete no encontrado', 'NOT_FOUND'],
         PAID: ['La nómina ya fue pagada y no puede modificarse', 'CONFLICT'],
+        INVALID_STATUS: ['El estado actual de la nómina no permite verificaciones', 'CONFLICT'],
         INVALID_TOTAL: ['El total calculado excede el límite permitido', 'VALIDATION_ERROR'],
         CONFLICT: ['La nómina cambió durante la operación; vuelve a cargarla', 'CONFLICT'],
       } as const;
