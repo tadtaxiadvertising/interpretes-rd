@@ -24,5 +24,9 @@ export function isPaidPayrollStatus(status: string | null): boolean {
 }
 
 export function isEditablePayrollStatus(status: string | null): boolean {
-  return status === 'Pendiente' || status === 'PENDING' || status === 'Approved';
+  return status === 'Draft' || status === 'Pendiente' || status === 'PENDING' || status === 'Approved' || status === 'APPROVED';
+}
+
+export function isApprovedPayrollStatus(status: string | null): boolean {
+  return status === 'Approved' || status === 'APPROVED';
 }
