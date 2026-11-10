@@ -146,8 +146,9 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
                 <Loader2 className="w-4 h-4 animate-spin" /> Cargando intérpretes...
               </div>
             ) : (
-              <p className="text-xs text-slate-500">Mostrando hasta 100 coincidencias; escribe el nombre o ID completo para localizar cualquier intérprete.</p>
-              <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-lg bg-slate-950 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+              <>
+                <p className="text-xs text-slate-500">Mostrando hasta 100 coincidencias; escribe el nombre o ID completo para localizar cualquier intérprete.</p>
+                <div className="max-h-60 overflow-y-auto border border-slate-700 rounded-lg bg-slate-950 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
                 {filteredInterpreters.length === 0 ? (
                   <div className="p-4 text-sm text-slate-400 text-center">No se encontraron resultados.</div>
                 ) : (
@@ -171,7 +172,8 @@ export default function ManualLogPage(props: { params: Promise<any> }) {
                     </button>
                   ))
                 )}
-              </div>
+                </div>
+              </>
             )}
           </div>
 
