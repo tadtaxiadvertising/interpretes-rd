@@ -126,15 +126,27 @@ export async function createManualLog(data: unknown): Promise<ActionResult<{ id:
 }
 
 /** Returns interpreter choices only to administrators. */
-export async function getInterpretersForSelect(): Promise<ActionResult<{ id: number; name: string; externalId: string }[]>> {
+export async function getInterpretersForSelect(searchQuery = ''): Promise<ActionResult<{ id: number; name: string; externalId: string }[]>> {
   const auth = await validateAction("admin");
   if ("error" in auth) return { success: false, error: auth.error, code: auth.code };
 
+  const parsedSearch = z.string().trim().max(100).safeParse(searchQuery);
+  if (!parsedSearch.success) {
+    return { success: false, error: "Búsqueda inválida.", code: "VALIDATION_ERROR" };
+  }
+
   try {
+    const query = parsedSearch.data;
     const interpreters = await db.interpreter.findMany({
+      where: query ? {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { externalId: { contains: query, mode: "insensitive" } },
+        ],
+      } : undefined,
       select: { id: true, name: true, externalId: true },
       orderBy: { name: "asc" },
-      take: 500,
+      take: 100,
     });
     return { success: true, data: interpreters };
   } catch (error: unknown) {
