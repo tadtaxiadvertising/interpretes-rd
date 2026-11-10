@@ -186,18 +186,19 @@ export async function markPayrollAsPaid(_prevState: unknown, formData: FormData)
         select: { id: true, status: true, paidAt: true, interpreter: { select: { metodoPago: true } } },
       });
       if (!record) return 'NOT_FOUND' as const;
-      if (isPaid(record.status) || record.paidAt) return 'PAID' as const;
+      if (isPaid(record.status) || record.paidAt) return 'ALREADY_PAID' as const;
       if (record.status !== 'Approved') return 'NOT_APPROVED' as const;
 
       const method = (record.interpreter?.metodoPago || 'Unknown')
         .replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toUpperCase() || 'UNKNOWN';
       const reconciliationHash = `PAY-${id.slice(0, 12)}-${method}-${transactionReference}`;
+      const paidAt = new Date();
       const updated = await tx.payrollRecord.updateMany({
         where: { id, status: 'Approved', paidAt: null },
         data: {
           status: 'Paid',
-          paidAt: new Date(),
-          paymentDate: new Date(),
+          paidAt,
+          paymentDate: paidAt,
           transactionReference,
           reconciliationHash,
         },
@@ -208,7 +209,7 @@ export async function markPayrollAsPaid(_prevState: unknown, formData: FormData)
     if (result !== 'PAID') {
       const errors = {
         NOT_FOUND: ['Registro de nómina no encontrado', 'NOT_FOUND'],
-        PAID: ['La nómina ya fue pagada', 'CONFLICT'],
+        ALREADY_PAID: ['La nómina ya fue pagada', 'CONFLICT'],
         NOT_APPROVED: ['La nómina debe estar aprobada antes de pagar', 'CONFLICT'],
         CONFLICT: ['La nómina cambió durante la operación; vuelve a cargarla', 'CONFLICT'],
       } as const;
