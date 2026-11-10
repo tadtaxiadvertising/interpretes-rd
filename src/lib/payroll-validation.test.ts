@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isValidPayrollAmount,
+  isPaidPayrollStatus,
   parsePayrollMoney,
   parseVerifiedPayrollMinutes,
 } from './payroll-validation';
@@ -33,5 +34,15 @@ describe('payroll input validation', () => {
     expect(isValidPayrollAmount(Number.POSITIVE_INFINITY)).toBe(false);
     expect(isValidPayrollAmount(-0.01)).toBe(false);
     expect(isValidPayrollAmount(100_000_000)).toBe(false);
+  });
+});
+
+describe('paid payroll status normalization', () => {
+  it.each(['Paid', 'PAID'])('treats %s as paid', (status) => {
+    expect(isPaidPayrollStatus(status)).toBe(true);
+  });
+
+  it.each([null, 'Approved', 'Pendiente', 'PENDING'])('does not treat %s as paid', (status) => {
+    expect(isPaidPayrollStatus(status)).toBe(false);
   });
 });
