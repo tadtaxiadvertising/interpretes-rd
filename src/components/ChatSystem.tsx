@@ -152,6 +152,10 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
   }, [activeContact, currentUserId, hasMoreMessages, loadingOlderMessages, messages, loadContacts]);
 
   const selectContact = (contact: Contact) => {
+    if (activeContactIdRef.current === contact.id) {
+      void loadMessages(contact.id);
+      return;
+    }
     activeContactIdRef.current = contact.id;
     olderRequestRef.current += 1;
     loadedOlderMessagesRef.current = false;
