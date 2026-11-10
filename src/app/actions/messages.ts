@@ -59,7 +59,7 @@ export async function sendMessage(receiverId: string, content: string) {
 }
 
 /** Returns only the authenticated user's conversation with an authorized contact. */
-export async function getMessages(otherUserId: string) {
+export async function getMessages(otherUserId: string, beforeMessageId?: string) {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
@@ -74,6 +74,26 @@ export async function getMessages(otherUserId: string) {
       return { success: false, error: 'Conversation is not available', code: 'UNAUTHORIZED' };
     }
 
+    let cursor: { id: string } | undefined;
+    if (beforeMessageId) {
+      const parsedCursor = UserIdSchema.safeParse(beforeMessageId);
+      if (!parsedCursor.success) {
+        return { success: false, error: 'Invalid message cursor', code: 'VALIDATION_ERROR' };
+      }
+      const cursorMessage = await db.message.findUnique({
+        where: { id: parsedCursor.data },
+        select: { id: true, senderId: true, receiverId: true },
+      });
+      const belongsToConversation = cursorMessage && (
+        (cursorMessage.senderId === auth.user.userId && cursorMessage.receiverId === contact.id) ||
+        (cursorMessage.senderId === contact.id && cursorMessage.receiverId === auth.user.userId)
+      );
+      if (!belongsToConversation) {
+        return { success: false, error: 'Message cursor is not part of this conversation', code: 'VALIDATION_ERROR' };
+      }
+      cursor = { id: cursorMessage.id };
+    }
+
     const messages = await db.message.findMany({
       where: {
         OR: [
@@ -81,12 +101,14 @@ export async function getMessages(otherUserId: string) {
           { senderId: contact.id, receiverId: auth.user.userId },
         ],
       },
-      orderBy: { createdAt: 'desc' },
-      take: 100,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: 101,
+      ...(cursor ? { cursor, skip: 1 } : {}),
       select: { id: true, senderId: true, receiverId: true, content: true, isRead: true, createdAt: true },
     });
 
-    return { success: true, data: messages.reverse() };
+    const hasMore = messages.length > 100;
+    return { success: true, data: messages.slice(0, 100).reverse(), hasMore };
   } catch (error) {
     console.error('getMessages failed:', error instanceof Error ? error.message : 'Unknown error');
     return { success: false, error: 'Unable to load messages', code: 'INTERNAL_ERROR' };
@@ -94,23 +116,25 @@ export async function getMessages(otherUserId: string) {
 }
 
 /** Marks unread messages from an authorized contact to the current user as read. */
-export async function markMessagesAsRead(senderId: string) {
+export async function markMessagesAsRead(senderId: string, messageIds: string[]) {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  const parsedId = UserIdSchema.safeParse(senderId);
-  if (!parsedId.success) {
-    return { success: false, error: 'Invalid sender', code: 'VALIDATION_ERROR' };
+  const parsedSender = UserIdSchema.safeParse(senderId);
+  const parsedIds = z.array(UserIdSchema).min(1).max(100).safeParse(messageIds);
+  if (!parsedSender.success || !parsedIds.success) {
+    return { success: false, error: 'Invalid read receipt data', code: 'VALIDATION_ERROR' };
   }
 
   try {
-    const sender = await getAllowedContact(auth.user.userId, parsedId.data, auth.user.role);
+    const sender = await getAllowedContact(auth.user.userId, parsedSender.data, auth.user.role);
     if (!sender) {
       return { success: false, error: 'Conversation is not available', code: 'UNAUTHORIZED' };
     }
 
     await db.message.updateMany({
       where: {
+        id: { in: parsedIds.data },
         senderId: sender.id,
         receiverId: auth.user.userId,
         isRead: false,
@@ -128,22 +152,21 @@ export async function markMessagesAsRead(senderId: string) {
 }
 
 /** Builds the contact list from bounded recent activity, avoiding per-contact queries. */
-export async function getChatList() {
+export async function getChatList(searchQuery = '') {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  try {
-    const isAdmin = auth.user.role === 'admin';
-    const usersWithProfiles = await db.userProfile.findMany({
-      where: isAdmin
-        ? { id: { not: auth.user.userId }, role: { in: ['admin', 'ADMIN', 'interpreter', 'INTERPRETER'] } }
-        : { role: { in: ['admin', 'ADMIN'] } },
-      select: { id: true, displayName: true, role: true, email: true },
-      orderBy: { displayName: 'asc' },
-      take: 500,
-    });
+  const parsedSearch = z.string().trim().max(100).safeParse(searchQuery);
+  if (!parsedSearch.success) {
+    return { success: false, error: 'Invalid contact search', code: 'VALIDATION_ERROR' };
+  }
 
-    const [recentMessages, unreadGroups] = await Promise.all([
+  try {
+    const allowedRoles = auth.user.role === 'admin'
+      ? ['admin', 'ADMIN', 'interpreter', 'INTERPRETER']
+      : ['admin', 'ADMIN'];
+
+    const [recentMessages, unreadGroups, directoryUsers] = await Promise.all([
       db.message.findMany({
         where: {
           OR: [
@@ -151,8 +174,8 @@ export async function getChatList() {
             { receiverId: auth.user.userId },
           ],
         },
-        orderBy: { createdAt: 'desc' },
-        take: 1_000,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 2_000,
         select: { senderId: true, receiverId: true, content: true, createdAt: true },
       }),
       db.message.groupBy({
@@ -160,7 +183,41 @@ export async function getChatList() {
         where: { receiverId: auth.user.userId, isRead: false },
         _count: { _all: true },
       }),
+      db.userProfile.findMany({
+        where: {
+          id: { not: auth.user.userId },
+          role: { in: allowedRoles },
+          ...(parsedSearch.data ? {
+            OR: [
+              { displayName: { contains: parsedSearch.data, mode: 'insensitive' } },
+              { email: { contains: parsedSearch.data, mode: 'insensitive' } },
+            ],
+          } : {}),
+        },
+        select: { id: true, displayName: true, role: true, email: true },
+        orderBy: { displayName: 'asc' },
+        take: 100,
+      }),
     ]);
+
+    const activeContactIds = Array.from(new Set([
+      ...recentMessages.map((message) =>
+        message.senderId === auth.user.userId ? message.receiverId : message.senderId,
+      ),
+      ...unreadGroups.map((group) => group.senderId),
+    ])).filter((id) => id !== auth.user.userId);
+
+    const activeProfiles = activeContactIds.length
+      ? await db.userProfile.findMany({
+          where: { id: { in: activeContactIds }, role: { in: allowedRoles } },
+          select: { id: true, displayName: true, role: true, email: true },
+        })
+      : [];
+
+    const profileById = new Map<string, typeof directoryUsers[number]>();
+    for (const profile of [...activeProfiles, ...directoryUsers]) {
+      profileById.set(profile.id, profile);
+    }
 
     const lastMessageByContact = new Map<string, {
       content: string;
@@ -179,14 +236,19 @@ export async function getChatList() {
     }
 
     const unreadCountBySender = new Map(unreadGroups.map((group) => [group.senderId, group._count._all]));
-    const chatList = usersWithProfiles.map((user) => ({
-      id: user.id,
-      name: user.displayName || user.email.split('@')[0],
-      email: user.email,
-      role: user.role,
-      lastMessage: lastMessageByContact.get(user.id) ?? null,
-      unreadCount: unreadCountBySender.get(user.id) ?? 0,
-    }));
+    const chatList = Array.from(profileById.values())
+      .filter((user) => !parsedSearch.data || (
+        user.displayName?.toLowerCase().includes(parsedSearch.data.toLowerCase()) ||
+        user.email.toLowerCase().includes(parsedSearch.data.toLowerCase())
+      ))
+      .map((user) => ({
+        id: user.id,
+        name: user.displayName || user.email.split('@')[0],
+        email: user.email,
+        role: user.role,
+        lastMessage: lastMessageByContact.get(user.id) ?? null,
+        unreadCount: unreadCountBySender.get(user.id) ?? 0,
+      }));
 
     chatList.sort((a, b) => {
       if (!a.lastMessage) return 1;
