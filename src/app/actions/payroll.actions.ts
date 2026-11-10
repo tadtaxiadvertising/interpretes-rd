@@ -3,7 +3,7 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
-import { isEditablePayrollStatus, isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
+import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
 
 const prisma = prismaClient;
 
@@ -167,14 +167,14 @@ export async function markPayrollAsPaid(_prevState: unknown, formData: FormData)
       });
       if (!record) return 'NOT_FOUND' as const;
       if (isPaidPayrollStatus(record.status) || record.paidAt) return 'ALREADY_PAID' as const;
-      if (record.status !== 'Approved') return 'NOT_APPROVED' as const;
+      if (!isApprovedPayrollStatus(record.status)) return 'NOT_APPROVED' as const;
 
       const method = (record.interpreter?.metodoPago || 'Unknown')
         .replace(/[^a-zA-Z0-9]/g, '').slice(0, 12).toUpperCase() || 'UNKNOWN';
       const reconciliationHash = `PAY-${id.slice(0, 12)}-${method}-${transactionReference}`;
       const paidAt = new Date();
       const updated = await tx.payrollRecord.updateMany({
-        where: { id, status: 'Approved', paidAt: null },
+        where: { id, status: record.status, paidAt: null },
         data: {
           status: 'Paid',
           paidAt,
