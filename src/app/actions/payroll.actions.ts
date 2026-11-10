@@ -3,38 +3,19 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
+import { isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
 
 const prisma = prismaClient;
-
-const MAX_DB_AMOUNT = 99_999_999.99;
-const MAX_VERIFIED_MINUTES = 100_000;
 
 function readText(formData: FormData, key: string): string | null {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : null;
 }
 
-function parseMoney(value: string | null): number | null {
-  if (value === null || !/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(value)) return null;
-  const amount = Number(value);
-  return Number.isFinite(amount) && amount >= 0 && amount <= MAX_DB_AMOUNT
-    ? Math.round(amount * 100) / 100
-    : null;
-}
-
-function parseMinutes(value: string | null): number | null {
-  if (value === null || !/^[1-9]\d{0,5}$/.test(value)) return null;
-  const minutes = Number(value);
-  return Number.isSafeInteger(minutes) && minutes <= MAX_VERIFIED_MINUTES ? minutes : null;
-}
-
 function isPaid(status: string | null): boolean {
   return status === 'Paid' || status === 'PAID';
 }
 
-function isValidAmount(value: number): boolean {
-  return Number.isFinite(value) && value >= 0 && value <= MAX_DB_AMOUNT;
-}
 
 // Add incentives and penalties. Values are parsed strictly (no partial parseFloat,
 // exponent notation, negative adjustments, NaN, or database-overflow amounts).
@@ -45,8 +26,8 @@ export async function updatePayrollAdjustments(_prevState: unknown, formData: Fo
   }
 
   const id = readText(formData, 'id');
-  const incentives = parseMoney(readText(formData, 'incentives'));
-  const penalties = parseMoney(readText(formData, 'penalties'));
+  const incentives = parsePayrollMoney(readText(formData, 'incentives'));
+  const penalties = parsePayrollMoney(readText(formData, 'penalties'));
 
   if (!id || id.length > 128 || incentives === null || penalties === null) {
     return { success: false, error: 'Importe o identificador de nómina inválido', code: 'VALIDATION_ERROR' };
@@ -63,12 +44,12 @@ export async function updatePayrollAdjustments(_prevState: unknown, formData: Fo
       if (!record) return 'NOT_FOUND' as const;
       if (isPaid(record.status)) return 'PAID' as const;
 
-      const netTotal = Math.max(
+      const netTotal = Math.round(Math.max(
         0,
         Number(record.grossTotal) + Number(record.qualityBonus ?? 0) +
           incentives - penalties - Number(record.transferDeduction ?? 0),
-      );
-      if (!isValidAmount(netTotal)) return 'INVALID_TOTAL' as const;
+      ) * 100) / 100;
+      if (!isValidPayrollAmount(Math.round(netTotal * 100) / 100)) return 'INVALID_TOTAL' as const;
 
       const result = await tx.payrollRecord.updateMany({
         where: { id, status: record.status, paidAt: null },
@@ -104,7 +85,7 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
   }
 
   const id = readText(formData, 'id');
-  const verifiedMinutes = parseMinutes(readText(formData, 'verifiedMinutes'));
+  const verifiedMinutes = parseVerifiedPayrollMinutes(readText(formData, 'verifiedMinutes'));
   if (!id || id.length > 128 || verifiedMinutes === null) {
     return { success: false, error: 'Minutos o identificador de nómina inválido', code: 'VALIDATION_ERROR' };
   }
@@ -120,13 +101,13 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
 
       const tariff = Number(record.interpreter.tariffPerMinute);
       const grossTotal = Math.round(verifiedMinutes * tariff * 100) / 100;
-      const netTotal = Math.max(
+      const netTotal = Math.round(Math.max(
         0,
         grossTotal + Number(record.qualityBonus ?? 0) +
           Number(record.incentivesTotal ?? 0) - Number(record.penalidades ?? 0) -
           Number(record.transferDeduction ?? 0),
-      );
-      if (!isValidAmount(grossTotal) || !isValidAmount(netTotal)) return 'INVALID_TOTAL' as const;
+      ) * 100) / 100;
+      if (!isValidPayrollAmount(grossTotal) || !isValidPayrollAmount(Math.round(netTotal * 100) / 100)) return 'INVALID_TOTAL' as const;
 
       const updated = await tx.payrollRecord.updateMany({
         where: { id, status: record.status, paidAt: null },
