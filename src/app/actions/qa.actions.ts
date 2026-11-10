@@ -1,99 +1,110 @@
 'use server';
 
-import prismaClient from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import { auth } from '@/lib/auth';
+import { validateAction } from '@/lib/auth/actions';
 
-const prisma = prismaClient;
+const prismaClient = prisma;
 
-// Zod Schema para validación estricta Server-Side
 const QAEvaluationSchema = z.object({
-  interpreterId: z.number().positive(),
-  productionLogId: z.number().positive().optional().nullable(),
-  protocolScore: z.number().min(0).max(100),
-  interpretationScore: z.number().min(0).max(100),
-  languageScore: z.number().min(0).max(100),
-  serviceScore: z.number().min(0).max(100),
-  technicalScore: z.number().min(0).max(100),
+  interpreterId: z.coerce.number().int().positive(),
+  productionLogId: z.preprocess(
+    (value) => value === '' || value === null ? null : value,
+    z.coerce.number().int().positive().nullable(),
+  ),
+  protocolScore: z.coerce.number().finite().min(0).max(100),
+  interpretationScore: z.coerce.number().finite().min(0).max(100),
+  languageScore: z.coerce.number().finite().min(0).max(100),
+  serviceScore: z.coerce.number().finite().min(0).max(100),
+  technicalScore: z.coerce.number().finite().min(0).max(100),
   criticalError: z.boolean(),
-  comments: z.string().optional(),
+  comments: z.string().trim().max(2_000),
 });
 
-export async function submitQAEvaluation(prevState: any, formData: FormData) {
+export async function submitQAEvaluation(_prevState: unknown, formData: FormData) {
+  const auth = await validateAction('admin');
+  if ('error' in auth) {
+    return { success: false, error: 'Unauthorized access. Permisos de Administrador requeridos.', code: auth.code };
+  }
+
+  const parsed = QAEvaluationSchema.safeParse({
+    interpreterId: formData.get('interpreterId'),
+    productionLogId: formData.get('productionLogId'),
+    protocolScore: formData.get('protocolScore'),
+    interpretationScore: formData.get('interpretationScore'),
+    languageScore: formData.get('languageScore'),
+    serviceScore: formData.get('serviceScore'),
+    technicalScore: formData.get('technicalScore'),
+    criticalError: formData.get('criticalError') === 'on' || formData.get('criticalError') === 'true',
+    comments: formData.get('comments') ?? '',
+  });
+  if (!parsed.success) {
+    return { success: false, error: 'Validación fallida: revisa el intérprete, el log y los scores.', code: 'VALIDATION_ERROR' };
+  }
+
+  const data = parsed.data;
   try {
-    const session = await auth();
-    // Protección de acceso estricta
-    if (!session || session.user?.role !== 'admin') {
-      return { success: false, error: 'Unauthorized access. Permisos de Administrador requeridos.' };
+    const interpreter = await prismaClient.interpreter.findUnique({
+      where: { id: data.interpreterId },
+      select: { id: true },
+    });
+    if (!interpreter) {
+      return { success: false, error: 'Intérprete no encontrado.', code: 'NOT_FOUND' };
     }
 
-    const auditorEmail = session.user?.email || 'System Admin';
-
-    // Extracción de FormData compatible con React 19 useActionState
-    const rawData = {
-      interpreterId: parseInt(formData.get('interpreterId') as string) || 0,
-      productionLogId: formData.get('productionLogId') ? parseInt(formData.get('productionLogId') as string) : null,
-      protocolScore: parseFloat(formData.get('protocolScore') as string) || 0,
-      interpretationScore: parseFloat(formData.get('interpretationScore') as string) || 0,
-      languageScore: parseFloat(formData.get('languageScore') as string) || 0,
-      serviceScore: parseFloat(formData.get('serviceScore') as string) || 0,
-      technicalScore: parseFloat(formData.get('technicalScore') as string) || 0,
-      criticalError: formData.get('criticalError') === 'on' || formData.get('criticalError') === 'true',
-      comments: formData.get('comments') as string || '',
-    };
-
-    const parsed = QAEvaluationSchema.safeParse(rawData);
-    if (!parsed.success) {
-      return { success: false, error: 'Validación fallida: Todos los scores deben estar entre 0 y 100.' };
+    if (data.productionLogId !== null) {
+      const productionLog = await prismaClient.productionLog.findUnique({
+        where: { id: data.productionLogId },
+        select: { id: true, interpreterId: true },
+      });
+      if (!productionLog) {
+        return { success: false, error: 'Registro de producción no encontrado.', code: 'NOT_FOUND' };
+      }
+      if (productionLog.interpreterId !== data.interpreterId) {
+        return { success: false, error: 'El registro de producción no pertenece al intérprete seleccionado.', code: 'VALIDATION_ERROR' };
+      }
     }
 
-    const data = parsed.data;
+    const totalScore = data.criticalError
+      ? 0
+      : data.protocolScore * 0.20 +
+        data.interpretationScore * 0.40 +
+        data.languageScore * 0.20 +
+        data.serviceScore * 0.10 +
+        data.technicalScore * 0.10;
 
-    // Regla de Negocio Crítica: Bloqueo de Score por Error Crítico
-    let totalScore = 0;
-    if (data.criticalError) {
-      totalScore = 0; // Lock absoluto a 0.00
-    } else {
-      // Fórmula de Ponderación Estándar
-      totalScore = 
-        (data.protocolScore * 0.20) +
-        (data.interpretationScore * 0.40) +
-        (data.languageScore * 0.20) +
-        (data.serviceScore * 0.10) +
-        (data.technicalScore * 0.10);
-    }
+    const actionRequired = data.criticalError || totalScore < 70
+      ? 'Advertencia / Coaching'
+      : totalScore < 85 ? 'Feedback Requerido' : 'Ninguna';
 
-    let actionRequired = 'Ninguna';
-    if (data.criticalError || totalScore < 70) actionRequired = 'Advertencia / Coaching';
-    else if (totalScore < 85) actionRequired = 'Feedback Requerido';
-
-    // Inserción Atómica
-    await prisma.qAScore.create({
+    await prismaClient.qAScore.create({
       data: {
         interpreterId: data.interpreterId,
-        productionLogId: data.productionLogId || null,
+        productionLogId: data.productionLogId,
         auditDate: new Date(),
-        auditor: auditorEmail,
+        auditor: auth.user.email || 'System Admin',
         protocolScore: data.protocolScore,
         interpretationScore: data.interpretationScore,
         languageScore: data.languageScore,
         serviceScore: data.serviceScore,
         technicalScore: data.technicalScore,
-        totalScore, // Guardado directo validado en el servidor
+        totalScore,
         criticalError: data.criticalError,
         comentarios: data.comments,
-        accionRequerida: actionRequired
-      }
+        accionRequerida: actionRequired,
+      },
+      select: { id: true },
     });
 
-    // Invalidate ISR caches
     revalidatePath('/qa');
     revalidatePath('/admin');
-    
     return { success: true, message: `Evaluación guardada con éxito. (Score: ${totalScore.toFixed(2)}%)` };
-  } catch (error: any) {
-    console.error('❌ QA Server Action Error:', error);
-    return { success: false, error: error.message || 'Error catastrófico en la base de datos' };
+  } catch (error) {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+      return { success: false, error: 'Este registro de producción ya tiene una evaluación QA.', code: 'CONFLICT' };
+    }
+    console.error('QA evaluation failed:', error instanceof Error ? error.message : 'Unknown error');
+    return { success: false, error: 'No fue posible guardar la evaluación QA.', code: 'INTERNAL_ERROR' };
   }
 }
