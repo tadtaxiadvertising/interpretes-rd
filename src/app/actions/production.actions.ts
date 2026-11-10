@@ -12,7 +12,7 @@ import {
   parseProductionMinutes,
 } from '@/lib/production-csv-validation';
 
-const prisma = prisma;
+const prisma = prismaClient;
 
 const LogChunkSchema = z.object({
   headers: z.string().min(1).max(16_384),
