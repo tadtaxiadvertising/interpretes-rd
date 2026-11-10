@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   isValidPayrollAmount,
   isPaidPayrollStatus,
+  isEditablePayrollStatus,
   parsePayrollMoney,
   parseVerifiedPayrollMinutes,
 } from './payroll-validation';
@@ -44,5 +45,15 @@ describe('paid payroll status normalization', () => {
 
   it.each([null, 'Approved', 'Pendiente', 'PENDING'])('does not treat %s as paid', (status) => {
     expect(isPaidPayrollStatus(status)).toBe(false);
+  });
+});
+
+describe('editable payroll status policy', () => {
+  it.each(['Pendiente', 'PENDING', 'Approved'])('allows edits while status is %s', (status) => {
+    expect(isEditablePayrollStatus(status)).toBe(true);
+  });
+
+  it.each(['Paid', 'PAID', 'Rejected', 'Cancelled', null])('blocks edits while status is %s', (status) => {
+    expect(isEditablePayrollStatus(status)).toBe(false);
   });
 });
