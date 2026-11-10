@@ -19,6 +19,7 @@ const migrations = [
   '20261105140000_client_directory/migration.sql',
   ownershipMigration,
   '20261105180000_client_directory/migration.sql',
+  '20261108120000_operational_account_holder_details/migration.sql',
 ] as const;
 
 async function ownershipFixtureSnapshot(client: Client) {
@@ -93,6 +94,10 @@ async function main() {
     await client.query('DROP TABLE IF EXISTS public.companies CASCADE');
     await client.query('DROP TABLE IF EXISTS public.clients CASCADE');
 
+    // Simulate the production schema before the holder-details migration:
+    // Prisma db push has created these fields in CI, so remove them before replay.
+    await client.query('ALTER TABLE public.accounts DROP COLUMN IF EXISTS holder_name, DROP COLUMN IF EXISTS email');
+
     // Legacy accounts and their financial/history rows exist before either
     // ownership column. Negative IDs avoid advancing the CI database sequences.
     await client.query(`
@@ -155,9 +160,28 @@ async function main() {
 
       await client.query(sql);
       console.log(`Applied in rollback-only CI transaction: ${migration}`);
+
+      // Compare immediately after the ownership migration. Later migrations
+      // legitimately add columns (for example holder_name/email), so comparing
+      // whole-row JSON after the entire migration sequence would mistake those
+      // additive schema changes for mutations to legacy operational data.
+      if (migration === ownershipMigration) {
+        if (!ownershipSnapshot || await ownershipFixtureSnapshot(client) !== ownershipSnapshot) {
+          throw new Error('Account ownership migration changed legacy IDs, ownership, rates, assignments or history.');
+        }
+      }
     }
-    if (!ownershipSnapshot || await ownershipFixtureSnapshot(client) !== ownershipSnapshot) {
-      throw new Error('Account ownership migration changed legacy IDs, ownership, rates, assignments or history.');
+
+    const accountHolderColumns = await client.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'accounts'
+         AND column_name IN ('holder_name', 'email')`,
+    );
+    const accountHolderColumnNames = new Set(accountHolderColumns.rows.map((row: { column_name: string }) => row.column_name));
+    for (const column of ['holder_name', 'email']) {
+      if (!accountHolderColumnNames.has(column)) {
+        throw new Error(`Operational account holder migration did not create accounts.${column}`);
+      }
     }
 
     const expectedTables = [

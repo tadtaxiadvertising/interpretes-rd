@@ -172,7 +172,9 @@ export async function runDeploymentPreflight(
     // The schema verification mode runs after the additive migrations have completed.
     await client.query('SELECT 1');
     if (verifySchema) {
-      await client.query('SELECT id, client_id, name FROM public.accounts LIMIT 0');
+      // The admin operational-accounts page selects both holder identity fields.
+      // Fail deployment before the app is released if the additive migration is missing.
+      await client.query('SELECT id, client_id, name, holder_name, email FROM public.accounts LIMIT 0');
       await client.query('SELECT id FROM public.clients LIMIT 0');
       // Roleplay application code now writes queue rows for WebM recordings and
       // reads the canonical base-audio path. Validate both before deployment.
