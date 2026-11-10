@@ -71,6 +71,17 @@ export async function createManualLog(data: unknown): Promise<ActionResult<{ id:
     }
 
     const result = await db.$transaction(async (tx) => {
+      const paidPayroll = await tx.payrollRecord.findFirst({
+        where: {
+          interpreterId,
+          status: { in: ["PAID", "Paid"] },
+          periodStart: { lte: new Date(`${date}T12:00:00Z`) },
+          periodEnd: { gte: new Date(`${date}T12:00:00Z`) },
+        },
+        select: { id: true },
+      });
+      if (paidPayroll) return null;
+
       await tx.callSession.create({
         data: {
           interpreterId,
@@ -97,6 +108,10 @@ export async function createManualLog(data: unknown): Promise<ActionResult<{ id:
         select: { id: true },
       });
     });
+
+    if (!result) {
+      return { success: false, error: "El período de nómina ya fue pagado y no puede modificarse.", code: "CONFLICT" };
+    }
 
     revalidatePath("/admin/production");
     revalidateInterpreterProfileRecords(interpreter.id);
