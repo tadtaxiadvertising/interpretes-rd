@@ -41,32 +41,45 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
   const [loadingContacts, setLoadingContacts] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const preserveScrollRef = useRef(false);
+  const loadedOlderMessagesRef = useRef(false);
+  const previousScrollHeightRef = useRef(0);
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
+  const activeContactIdRef = useRef<string | null>(null);
+  const searchQueryRef = useRef('');
+  const olderRequestRef = useRef(0);
+  const contactsRequestRef = useRef(0);
 
   // Load Contacts list initially
-  const loadContacts = useCallback(async (showLoading = true) => {
+  const loadContacts = useCallback(async (showLoading = true, query = '') => {
+    const requestId = ++contactsRequestRef.current;
+    const requestedQuery = query.trim();
     if (showLoading) setLoadingContacts(true);
-    const res = await getChatList();
-    if (res.success && res.data) {
-      setContacts(res.data as Contact[]);
-
-      // Update active contact details if already selected
-      if (activeContact) {
-        const updated = (res.data as Contact[]).find((c) => c.id === activeContact.id);
-        if (updated) setActiveContact(updated);
+    try {
+      const res = await getChatList(requestedQuery);
+      if (
+        requestId === contactsRequestRef.current &&
+        searchQueryRef.current.trim() === requestedQuery &&
+        res.success && res.data
+      ) {
+        setContacts(res.data as Contact[]);
       }
+    } finally {
+      if (showLoading && requestId === contactsRequestRef.current) setLoadingContacts(false);
     }
-    if (showLoading) setLoadingContacts(false);
-  }, [activeContact]);
+  }, []);
 
   useEffect(() => {
-    loadContacts();
+    loadContacts(true, searchQueryRef.current);
 
     // Refresh contacts every 8 seconds
     const interval = setInterval(() => {
-      loadContacts(false);
+      loadContacts(false, searchQueryRef.current);
     }, 8000);
 
     return () => clearInterval(interval);
@@ -75,42 +88,128 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
   // Fetch messages for selected contact
   const loadMessages = useCallback(async (contactId: string, silent = false) => {
     if (!silent) setLoadingMessages(true);
-    const res = await getMessages(contactId);
-    if (res.success && res.data) {
-      setMessages(res.data as Message[]);
+    try {
+      const res = await getMessages(contactId);
+      if (!res.success || !res.data || activeContactIdRef.current !== contactId) return;
 
-      // Mark as read
-      await markMessagesAsRead(contactId);
-      // Quietly reload contacts count
-      await loadContacts(false);
+      const retrievedMessages = res.data as Message[];
+      setMessages((current) => {
+        if (!loadedOlderMessagesRef.current) return retrievedMessages;
+        const merged = new Map([...current, ...retrievedMessages].map((message) => [message.id, message]));
+        return Array.from(merged.values()).sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aTime - bTime;
+        });
+      });
+      setHasMoreMessages(Boolean(res.hasMore));
+
+      const unreadIds = retrievedMessages
+        .filter((message) => message.senderId === contactId && message.receiverId === currentUserId && !message.isRead)
+        .map((message) => message.id);
+      if (unreadIds.length > 0) await markMessagesAsRead(contactId, unreadIds);
+      if (activeContactIdRef.current === contactId) {
+        await loadContacts(false, searchQueryRef.current);
+      }
+    } finally {
+      if (!silent && activeContactIdRef.current === contactId) setLoadingMessages(false);
     }
-    if (!silent) setLoadingMessages(false);
-  }, [loadContacts]);
+  }, [loadContacts, currentUserId]);
+
+  const loadOlderMessages = useCallback(async () => {
+    const requestedContactId = activeContact?.id;
+    if (!requestedContactId || activeContactIdRef.current !== requestedContactId ||
+        !hasMoreMessages || loadingOlderMessages || messages.length === 0) return;
+
+    const oldestMessage = messages[0];
+    const requestId = ++olderRequestRef.current;
+    const container = messagesContainerRef.current;
+    previousScrollHeightRef.current = container?.scrollHeight ?? 0;
+    setLoadingOlderMessages(true);
+
+    try {
+      const res = await getMessages(requestedContactId, oldestMessage.id);
+      if (
+        activeContactIdRef.current !== requestedContactId ||
+        olderRequestRef.current !== requestId ||
+        !res.success || !res.data
+      ) return;
+
+      const olderMessages = res.data as Message[];
+      preserveScrollRef.current = true;
+      loadedOlderMessagesRef.current = true;
+      setMessages((current) => {
+        const merged = new Map([...olderMessages, ...current].map((message) => [message.id, message]));
+        return Array.from(merged.values()).sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aTime - bTime;
+        });
+      });
+      setHasMoreMessages(Boolean(res.hasMore));
+
+      const unreadIds = olderMessages
+        .filter((message) => message.senderId === requestedContactId && message.receiverId === currentUserId && !message.isRead)
+        .map((message) => message.id);
+      if (unreadIds.length > 0) await markMessagesAsRead(requestedContactId, unreadIds);
+      if (activeContactIdRef.current === requestedContactId) {
+        await loadContacts(false, searchQueryRef.current);
+      }
+    } finally {
+      if (olderRequestRef.current === requestId) setLoadingOlderMessages(false);
+    }
+  }, [activeContact, currentUserId, hasMoreMessages, loadingOlderMessages, messages, loadContacts]);
+
+  const selectContact = (contact: Contact) => {
+    if (activeContactIdRef.current === contact.id) {
+      void loadMessages(contact.id);
+      return;
+    }
+    activeContactIdRef.current = contact.id;
+    olderRequestRef.current += 1;
+    loadedOlderMessagesRef.current = false;
+    preserveScrollRef.current = false;
+    setMessages([]);
+    setHasMoreMessages(false);
+    setLoadingOlderMessages(false);
+    setLoadingMessages(true);
+    setActiveContact(contact);
+  };
 
   // Poll for new messages if chat is open
   useEffect(() => {
     if (pollingInterval.current) clearInterval(pollingInterval.current);
 
     const activeContactId = activeContact?.id;
-
     if (activeContactId) {
+      activeContactIdRef.current = activeContactId;
+      setMessages([]);
+      setHasMoreMessages(false);
+      loadedOlderMessagesRef.current = false;
       loadMessages(activeContactId);
-      
-      // Poll messages every 4 seconds for a fast, responsive chat feel
+
       pollingInterval.current = setInterval(() => {
         loadMessages(activeContactId, true);
       }, 4000);
     } else {
+      activeContactIdRef.current = null;
       setMessages([]);
+      setHasMoreMessages(false);
     }
 
     return () => {
       if (pollingInterval.current) clearInterval(pollingInterval.current);
     };
-  }, [activeContact, loadMessages]);
+  }, [activeContact?.id, loadMessages]);
 
   // Scroll to bottom of chat when messages change
   useEffect(() => {
+    if (preserveScrollRef.current && messagesContainerRef.current) {
+      const container = messagesContainerRef.current;
+      container.scrollTop += container.scrollHeight - previousScrollHeightRef.current;
+      preserveScrollRef.current = false;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -147,10 +246,7 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
     setIsSending(false);
   };
 
-  const filteredContacts = contacts.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    c.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredContacts = contacts;
 
   return (
     <div className="flex h-[calc(100vh-12rem)] min-h-[500px] border border-white/10 rounded-2xl overflow-hidden glass shadow-2xl">
@@ -167,7 +263,12 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
               type="text"
               placeholder="Buscar chat..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                const query = e.target.value;
+                searchQueryRef.current = query;
+                setSearchQuery(query);
+                loadContacts(false, query);
+              }}
               className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-700/50 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
             />
           </div>
@@ -189,7 +290,7 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
               return (
                 <button
                   key={contact.id}
-                  onClick={() => setActiveContact(contact)}
+                  onClick={() => selectContact(contact)}
                   className={cn(
                     "w-full text-left p-4 flex gap-3 hover:bg-white/5 transition-all relative border-l-4",
                     isActive ? "bg-blue-600/10 border-l-blue-500" : "border-l-transparent",
@@ -268,7 +369,19 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
             </div>
 
             {/* Message Area */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+              {hasMoreMessages && !loadingMessages && (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    onClick={loadOlderMessages}
+                    disabled={loadingOlderMessages}
+                    className="px-4 py-2 text-xs font-semibold text-blue-300 hover:text-white disabled:opacity-50"
+                  >
+                    {loadingOlderMessages ? 'Cargando mensajes...' : 'Cargar mensajes anteriores'}
+                  </button>
+                </div>
+              )}
               {loadingMessages ? (
                 <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
