@@ -47,6 +47,7 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const preserveScrollRef = useRef(false);
+  const loadedOlderMessagesRef = useRef(false);
   const previousScrollHeightRef = useRef(0);
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
 
@@ -83,7 +84,12 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
     const res = await getMessages(contactId);
     if (res.success && res.data) {
       const retrievedMessages = res.data as Message[];
-      setMessages(retrievedMessages);
+      setMessages((current) => {
+        if (!loadedOlderMessagesRef.current) return retrievedMessages;
+        const latestIds = new Set(retrievedMessages.map((message) => message.id));
+        const preservedOlder = current.filter((message) => !latestIds.has(message.id));
+        return [...preservedOlder, ...retrievedMessages];
+      });
       setHasMoreMessages(Boolean(res.hasMore));
 
       // Mark only incoming messages actually retrieved in this page as read.
@@ -107,6 +113,7 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
     if (res.success && res.data) {
       const olderMessages = res.data as Message[];
       preserveScrollRef.current = true;
+      loadedOlderMessagesRef.current = true;
       setMessages((current) => [...olderMessages, ...current]);
       setHasMoreMessages(Boolean(res.hasMore));
 
@@ -126,6 +133,9 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
     const activeContactId = activeContact?.id;
 
     if (activeContactId) {
+      setMessages([]);
+      setHasMoreMessages(false);
+      loadedOlderMessagesRef.current = false;
       loadMessages(activeContactId);
       
       // Poll messages every 4 seconds for a fast, responsive chat feel
