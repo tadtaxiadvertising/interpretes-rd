@@ -199,6 +199,11 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261108170000_roleplay_base_audio_path/migration.sql --apply --transaction
 
+      - name: Apply operational account holder details migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run migrate -- prisma/migrations/20261108120000_operational_account_holder_details/migration.sql --apply --transaction
+
       - name: Verify production client directory schema after migrations
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
