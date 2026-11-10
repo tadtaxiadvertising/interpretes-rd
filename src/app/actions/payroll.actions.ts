@@ -3,7 +3,7 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
-import { isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
+import { isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
 
 const prisma = prismaClient;
 
@@ -11,11 +11,6 @@ function readText(formData: FormData, key: string): string | null {
   const value = formData.get(key);
   return typeof value === 'string' ? value.trim() : null;
 }
-
-function isPaid(status: string | null): boolean {
-  return status === 'Paid' || status === 'PAID';
-}
-
 
 // Add incentives and penalties. Values are parsed strictly (no partial parseFloat,
 // exponent notation, negative adjustments, NaN, or database-overflow amounts).
@@ -42,7 +37,7 @@ export async function updatePayrollAdjustments(_prevState: unknown, formData: Fo
         },
       });
       if (!record) return 'NOT_FOUND' as const;
-      if (isPaid(record.status)) return 'PAID' as const;
+      if (isPaidPayrollStatus(record.status)) return 'PAID' as const;
 
       const netTotal = Math.round(Math.max(
         0,
@@ -97,7 +92,7 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
         include: { interpreter: { select: { tariffPerMinute: true } } },
       });
       if (!record || !record.interpreter) return 'NOT_FOUND' as const;
-      if (isPaid(record.status) || record.paidAt) return 'PAID' as const;
+      if (isPaidPayrollStatus(record.status) || record.paidAt) return 'PAID' as const;
 
       const tariff = Number(record.interpreter.tariffPerMinute);
       const grossTotal = Math.round(verifiedMinutes * tariff * 100) / 100;
@@ -167,7 +162,7 @@ export async function markPayrollAsPaid(_prevState: unknown, formData: FormData)
         select: { id: true, status: true, paidAt: true, interpreter: { select: { metodoPago: true } } },
       });
       if (!record) return 'NOT_FOUND' as const;
-      if (isPaid(record.status) || record.paidAt) return 'ALREADY_PAID' as const;
+      if (isPaidPayrollStatus(record.status) || record.paidAt) return 'ALREADY_PAID' as const;
       if (record.status !== 'Approved') return 'NOT_APPROVED' as const;
 
       const method = (record.interpreter?.metodoPago || 'Unknown')
