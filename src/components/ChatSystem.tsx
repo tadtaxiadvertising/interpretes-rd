@@ -53,15 +53,24 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
   const activeContactIdRef = useRef<string | null>(null);
   const searchQueryRef = useRef('');
   const olderRequestRef = useRef(0);
+  const contactsRequestRef = useRef(0);
 
   // Load Contacts list initially
   const loadContacts = useCallback(async (showLoading = true, query = '') => {
+    const requestId = ++contactsRequestRef.current;
+    const requestedQuery = query.trim();
     if (showLoading) setLoadingContacts(true);
     try {
-      const res = await getChatList(query);
-      if (res.success && res.data) setContacts(res.data as Contact[]);
+      const res = await getChatList(requestedQuery);
+      if (
+        requestId === contactsRequestRef.current &&
+        searchQueryRef.current.trim() === requestedQuery &&
+        res.success && res.data
+      ) {
+        setContacts(res.data as Contact[]);
+      }
     } finally {
-      if (showLoading) setLoadingContacts(false);
+      if (showLoading && requestId === contactsRequestRef.current) setLoadingContacts(false);
     }
   }, []);
 
