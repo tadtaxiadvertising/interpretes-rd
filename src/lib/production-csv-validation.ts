@@ -10,8 +10,9 @@ export function parseProductionMinutes(value: string | undefined): number | null
 }
 
 export function parseProductionAdherence(value: string | undefined): number | null {
-  const normalized = value?.trim() ?? '';
-  if (!normalized) return 0;
+  const raw = value?.trim() ?? '';
+  if (!raw) return 0;
+  const normalized = raw.endsWith('%') ? raw.slice(0, -1).trim() : raw;
   if (!/^(?:100(?:\.0{1,2})?|(?:\d|[1-9]\d)(?:\.\d{1,2})?)$/.test(normalized)) return null;
   const adherence = Number(normalized);
   return Number.isFinite(adherence) && adherence >= 0 && adherence <= 100
