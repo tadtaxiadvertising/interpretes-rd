@@ -183,7 +183,9 @@ export async function deleteInterpreter(id: number): Promise<ActionResult> {
  * ACTION: Reset/Set Interpreter Password
  */
 export async function getInterpretersForSelect(): Promise<ActionResult<{ id: number; name: string; externalId: string }[]>> {
-  const auth = await validateAction();
+  // The full interpreter roster is administrative data; authenticated
+  // interpreters and candidates must not enumerate the operational directory.
+  const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   try {
