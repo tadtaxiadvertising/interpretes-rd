@@ -86,9 +86,12 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
       const retrievedMessages = res.data as Message[];
       setMessages((current) => {
         if (!loadedOlderMessagesRef.current) return retrievedMessages;
-        const latestIds = new Set(retrievedMessages.map((message) => message.id));
-        const preservedOlder = current.filter((message) => !latestIds.has(message.id));
-        return [...preservedOlder, ...retrievedMessages];
+        const merged = new Map([...current, ...retrievedMessages].map((message) => [message.id, message]));
+        return Array.from(merged.values()).sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+          return aTime - bTime;
+        });
       });
       setHasMoreMessages(Boolean(res.hasMore));
 
