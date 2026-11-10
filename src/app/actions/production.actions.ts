@@ -82,7 +82,7 @@ export async function uploadLogChunk(_prevState: unknown, data: { headers: strin
 
     const externalIds = Array.from(
       new Set(records.map((record) => record[externalIdKey]?.trim()).filter(
-        (value): value is string => Boolean(value) && value.length <= 256,
+        (value): value is string => typeof value === 'string' && value.length <= 256,
       )),
     );
 
