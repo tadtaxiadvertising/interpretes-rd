@@ -95,17 +95,23 @@ export async function reconcileMinutes(
 
     const log = await db.productionLog.findUnique({
       where: { id: validated.logId },
-      select: { id: true, interpreterId: true, date: true }
+      select: { id: true, interpreterId: true, date: true, isSettled: true }
     });
 
     if (!log) {
       return { success: false, error: 'Production log not found', code: 'NOT_FOUND' };
     }
+    if (!log.interpreterId) {
+      return { success: false, error: 'Production log is not linked to an interpreter', code: 'VALIDATION_ERROR' };
+    }
+    if (log.isSettled) {
+      return { success: false, error: 'Cannot modify: Log is already settled', code: 'CONFLICT' };
+    }
 
     const linkedPaidPayroll = await db.payrollRecord.findFirst({
       where: {
         interpreterId: log.interpreterId,
-        status: 'PAID',
+        status: { in: ['PAID', 'Paid'] },
         periodStart: { lte: log.date },
         periodEnd: { gte: log.date }
       },
@@ -123,9 +129,7 @@ export async function reconcileMinutes(
     });
 
     // Automatically refresh the payroll record if it exists and is pending
-    if (log.interpreterId) {
-      await refreshPayrollRecord(log.interpreterId, log.date);
-    }
+    await refreshPayrollRecord(log.interpreterId, log.date);
 
     revalidatePath('/payroll');
     revalidatePath('/dashboard');
