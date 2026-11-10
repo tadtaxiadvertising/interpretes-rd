@@ -18,3 +18,7 @@ export function parseVerifiedPayrollMinutes(value: string | null): number | null
 export function isValidPayrollAmount(value: number): boolean {
   return Number.isFinite(value) && value >= 0 && value <= MAX_PAYROLL_DB_AMOUNT;
 }
+
+export function isPaidPayrollStatus(status: string | null): boolean {
+  return status === 'Paid' || status === 'PAID';
+}
