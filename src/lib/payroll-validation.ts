@@ -22,3 +22,7 @@ export function isValidPayrollAmount(value: number): boolean {
 export function isPaidPayrollStatus(status: string | null): boolean {
   return status === 'Paid' || status === 'PAID';
 }
+
+export function isEditablePayrollStatus(status: string | null): boolean {
+  return status === 'Pendiente' || status === 'PENDING' || status === 'Approved';
+}
