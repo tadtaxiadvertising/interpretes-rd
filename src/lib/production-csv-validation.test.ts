@@ -12,7 +12,7 @@ describe('production CSV numeric fields', () => {
     (value) => expect(parseProductionMinutes(value)).toBeNull(),
   );
 
-  it.each([['', 0], ['0', 0], ['98.5', 98.5], ['100', 100], ['100.00', 100]])(
+  it.each([['', 0], ['0', 0], ['98.5', 98.5], ['100', 100], ['100.00', 100], ['100%', 100], ['93%', 93], ['98.5%', 98.5]])(
     'accepts valid adherence %s',
     (value, expected) => expect(parseProductionAdherence(value)).toBe(expected),
   );
