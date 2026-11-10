@@ -12,7 +12,7 @@ const db = prisma;
 
 const ReconcileSchema = z.object({
   logId: z.coerce.number().int().positive(),
-  verifiedMinutes: z.coerce.number().int().min(1).max(100_000),
+  verifiedMinutes: z.coerce.number().int().min(0).max(100_000),
 });
 
 const PeriodSchema = z.object({
