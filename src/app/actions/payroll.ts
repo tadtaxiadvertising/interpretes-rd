@@ -11,8 +11,8 @@ import { z } from 'zod';
 const db = prisma;
 
 const ReconcileSchema = z.object({
-  logId: z.coerce.number(),
-  verifiedMinutes: z.coerce.number().nonnegative(),
+  logId: z.coerce.number().int().positive(),
+  verifiedMinutes: z.coerce.number().int().min(1).max(100_000),
 });
 
 const PeriodSchema = z.object({
@@ -32,6 +32,10 @@ export async function generatePayrollPeriod(
     const now = new Date();
     const periodStart = validated.startDate || new Date(now.getFullYear(), now.getMonth(), 1);
     const periodEnd = validated.endDate || new Date(now.getFullYear(), now.getMonth(), 15);
+    const periodLength = periodEnd.getTime() - periodStart.getTime();
+    if (periodLength < 0 || periodLength > 366 * 24 * 60 * 60 * 1000) {
+      return { success: false, error: 'El período de nómina debe ser válido y no superar 366 días.', code: 'VALIDATION_ERROR' };
+    }
 
     // Obtener todos los intérpretes activos via Prisma
     const interpreters = await db.interpreter.findMany({
