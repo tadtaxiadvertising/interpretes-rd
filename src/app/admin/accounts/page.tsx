@@ -1,13 +1,14 @@
 import prisma from '@/lib/prisma';
 import CreateAccountForm from '@/components/admin/CreateAccountForm';
 import EditOperationalAccountForm from '@/components/admin/EditOperationalAccountForm';
+import AccountAssignmentManager from '@/components/admin/AccountAssignmentManager';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminAccountsPage() {
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
-  const [accounts, production, clients, companies] = await Promise.all([
+  const [accounts, production, clients, companies, interpreters] = await Promise.all([
     prisma.account.findMany({
       orderBy: [{ client: { name: 'asc' } }, { name: 'asc' }],
       select: {
@@ -25,6 +26,7 @@ export default async function AdminAccountsPage() {
     }),
     prisma.client.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.company.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.interpreter.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ]);
   const productionByAccount = new Map(production.map(row => [row.accountId, row._sum]));
   const totalMinutes = production.reduce((sum, row) => sum + (row._sum.interpretedMinutes ?? 0), 0);
@@ -57,7 +59,7 @@ export default async function AdminAccountsPage() {
             <td className="p-4">{platform?.loginUrl ? <a href={platform.loginUrl} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">{platform.name} ↗</a> : 'Sin página registrada'}</td>
             <td className="p-4">{account.client?.name || <span className="text-amber-300">Pendiente de identificar</span>}</td>
             <td className="p-4">{account.company?.name || 'Sin compañía'}</td>
-            <td className="p-4"><span>{account._count.assignments}</span>{account.assignments.length > 0 && <ul className="mt-1 space-y-1 text-xs text-slate-400">{account.assignments.map(({ interpreter }) => <li key={interpreter.id}>{interpreter.name}</li>)}</ul>}</td>
+            <td className="p-4"><span>{account._count.assignments}</span><AccountAssignmentManager accountId={account.id} interpreters={interpreters} today={today.toISOString().slice(0, 10)} assignments={account.assignments.map(item => ({ id: item.id, interpreterId: item.interpreterId, interpreterName: item.interpreter.name, startsAt: item.startsAt.toISOString().slice(0, 10), endsAt: item.endsAt?.toISOString().slice(0, 10) ?? null }))} /></td>
             <td className="p-4 tabular-nums">{(totals?.interpretedMinutes ?? 0).toLocaleString('es-DO')}</td>
             <td className="p-4 tabular-nums">{Number(totals?.connectedHours ?? 0).toLocaleString('es-DO', { maximumFractionDigits: 2 })}</td>
           </tr>;
