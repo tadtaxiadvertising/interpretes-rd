@@ -46,6 +46,7 @@ export async function assignInterpreterToAccount(formData: FormData) {
 
       const overlap = await tx.interpreterAccountAssignment.findFirst({
         where: {
+          accountId,
           interpreterId,
           startsAt: { lte: endsAt ?? new Date('9999-12-31T00:00:00.000Z') },
           OR: [{ endsAt: null }, { endsAt: { gte: startsAt } }],
@@ -65,7 +66,7 @@ export async function assignInterpreterToAccount(formData: FormData) {
     const code = error instanceof Error ? error.message : '';
     if (code === 'ACCOUNT_NOT_FOUND') return { success: false, error: 'La cuenta seleccionada no existe.' };
     if (code === 'INTERPRETER_NOT_FOUND') return { success: false, error: 'El intérprete seleccionado no existe.' };
-    if (code === 'ASSIGNMENT_OVERLAP') return { success: false, error: 'Este intérprete ya tiene una asignación que coincide con ese período.' };
+    if (code === 'ASSIGNMENT_OVERLAP') return { success: false, error: 'Este intérprete ya está asignado a esta cuenta durante ese período.' };
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2034') {
       return { success: false, error: 'La asignación coincidió con otra operación simultánea. Actualiza e inténtalo de nuevo.' };
     }
