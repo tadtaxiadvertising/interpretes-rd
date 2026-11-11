@@ -5,6 +5,9 @@ import bcrypt from 'bcryptjs';
 const RUN_ID = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const ADMIN_EMAIL = 'interpretersfree@gmail.com';
 const INTERPRETER_EMAIL = `e2e-interpreter-${RUN_ID}@example.com`;
+const CLIENT_NAME = `E2E Client ${RUN_ID}`;
+const LEGACY_ACCOUNT_EMAIL = `e2e-legacy-${RUN_ID}@example.com`;
+const OPERATIONAL_ACCOUNT_EMAIL = `e2e-operational-${RUN_ID}@example.com`;
 const PASSWORD = 'E2E-Only-Password-2026!';
 
 async function withDatabase<T>(callback: (client: Client) => Promise<T>): Promise<T> {
@@ -78,6 +81,12 @@ test.describe('Browser authentication and role isolation', () => {
     await withDatabase(async (client) => {
       await client.query('DELETE FROM public.user_profiles WHERE email IN ($1, $2)', [ADMIN_EMAIL, INTERPRETER_EMAIL]);
       await client.query('DELETE FROM public.rbac_users WHERE email IN ($1, $2)', [ADMIN_EMAIL, INTERPRETER_EMAIL]);
+      await client.query(
+        'DELETE FROM public.account_platforms WHERE account_id IN (SELECT id FROM public.accounts WHERE email IN ($1, $2))',
+        [LEGACY_ACCOUNT_EMAIL, OPERATIONAL_ACCOUNT_EMAIL],
+      );
+      await client.query('DELETE FROM public.accounts WHERE email IN ($1, $2)', [LEGACY_ACCOUNT_EMAIL, OPERATIONAL_ACCOUNT_EMAIL]);
+      await client.query('DELETE FROM public.clients WHERE name = $1', [CLIENT_NAME]);
       await client.query('DELETE FROM public.interpreters WHERE email_corporativo = $1', [INTERPRETER_EMAIL]);
     });
   });
@@ -95,6 +104,44 @@ test.describe('Browser authentication and role isolation', () => {
 
     await expect(page).toHaveURL(/\/admin(?:\/)?(?:\?.*)?$/);
     await expect(page.getByRole('heading', { name: 'Telemetría Central' })).toBeVisible();
+
+    // Exercise the real administrator workflow: create a client, assign a
+    // legacy unowned account, then create a new operational account.
+    await page.goto('/admin/clients');
+    await page.getByLabel('Nombre del cliente').fill(CLIENT_NAME);
+    await page.getByLabel('Razón social').fill(`E2E Legal ${RUN_ID}`);
+    await page.getByLabel('Persona de contacto').fill('E2E Operations');
+    await page.getByLabel('Correo de contacto').fill(`e2e-contact-${RUN_ID}@example.com`);
+    await page.getByLabel('Teléfono').fill('+1 555 0100');
+    await page.getByLabel('Notas').fill('Isolated browser workflow test');
+    await page.getByRole('button', { name: 'Registrar cliente' }).click();
+    await expect(page.getByText('Cliente registrado correctamente.')).toBeVisible();
+
+    await withDatabase(async (client) => {
+      await client.query(
+        `INSERT INTO public.accounts (name, holder_name, email, description)
+         VALUES ('E2E Legacy Account', 'E2E Legacy Holder', $1, 'Legacy unowned account')`,
+        [LEGACY_ACCOUNT_EMAIL],
+      );
+    });
+    await page.reload();
+    await page.getByLabel('Cuenta sin cliente').selectOption({ label: 'E2E Legacy Account' });
+    await page.getByLabel('Cliente').selectOption({ label: CLIENT_NAME });
+    await page.getByRole('button', { name: 'Asignar cuenta al cliente' }).click();
+    await expect(page.getByText('Cuenta asignada correctamente.')).toBeVisible();
+
+    await page.goto('/admin/accounts');
+    await page.getByLabel('Cliente propietario').selectOption({ label: CLIENT_NAME });
+    await page.getByLabel('Identificador de cuenta').fill('E2E Operational Account');
+    await page.getByLabel('Nombre del titular').fill('E2E Account Holder');
+    await page.getByLabel('Correo de acceso').fill(OPERATIONAL_ACCOUNT_EMAIL);
+    await page.getByLabel('Página donde se trabaja (HTTPS)').fill('https://portal.example.com/login');
+    await page.getByLabel('Referencia de contraseña en gestor seguro').fill(`vault://e2e/${RUN_ID}/account`);
+    await page.getByLabel('Descripción (opcional)').fill('Created by isolated Playwright test');
+    await page.getByRole('button', { name: 'Crear cuenta' }).click();
+    await expect(page.getByText('Cuenta registrada correctamente.')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'E2E Operational Account' })).toContainText('E2E Account Holder');
+    await expect(page.getByRole('row').filter({ hasText: 'E2E Operational Account' })).toContainText(CLIENT_NAME);
 
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/admin(?:\/)?(?:\?.*)?$/);
