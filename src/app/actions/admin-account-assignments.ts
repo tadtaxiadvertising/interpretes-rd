@@ -93,6 +93,7 @@ export async function endInterpreterAccountAssignment(formData: FormData) {
     const result = await prisma.interpreterAccountAssignment.updateMany({
       where: {
         id: parsed.data.assignmentId,
+        startsAt: { lte: parsed.data.endsAt },
         OR: [{ endsAt: null }, { endsAt: { gt: parsed.data.endsAt } }],
       },
       data: { endsAt: parsed.data.endsAt },
