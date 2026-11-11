@@ -77,7 +77,7 @@ describe('getCurrentProfile identity consistency', () => {
     prismaMock.userProfile.findUnique.mockResolvedValue({
       id: 'profile-uuid',
       email: 'candidate@example.com',
-      role: 'candidate',
+      role: 'interpreter',
       interpreterId: 42,
       displayName: 'Test Candidate',
       termsAcceptedAt: null,
