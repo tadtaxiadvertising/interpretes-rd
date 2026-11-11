@@ -103,7 +103,7 @@ async function actorFromSupabaseUser(user: {
   });
   const latestApplication = candidate?.applications[0];
 
-  let candidateId: number | null = null;
+  let candidateId: number | null = role === 'admin' ? (candidate?.id ?? null) : null;
   if (role !== 'admin' && candidate && latestApplication?.status !== 'HIRED') {
     role = 'candidate';
     candidateId = candidate.id;
