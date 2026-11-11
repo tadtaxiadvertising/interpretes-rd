@@ -43,7 +43,7 @@ export default function AccountAssignmentManager({
                   <form action={endAction} className="mt-2 flex items-end gap-2">
                     <input type="hidden" name="assignmentId" value={item.id} />
                     <label className="flex-1 text-[11px] text-slate-400">Finalizar el
-                      <input name="endsAt" type="date" required min={item.startsAt} defaultValue={today} className={field} />
+                      <input name="endsAt" type="date" required min={item.startsAt} defaultValue={today < item.startsAt ? item.startsAt : today} className={field} />
                     </label>
                     <button disabled={ending} className="rounded-md border border-amber-400/30 px-2 py-2 text-[11px] text-amber-200 disabled:opacity-50">
                       {ending ? '…' : 'Finalizar'}
