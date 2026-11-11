@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { getCurrentActor } from '@/lib/auth/current-actor';
 
 /**
  * POST /api/calls/sync
@@ -15,22 +15,17 @@ import { auth } from '@/lib/auth';
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, user } = await auth();
-    if (!userId || !user) {
+    const actor = await getCurrentActor();
+    if (!actor) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Get user profile to find interpreterId
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { interpreterId: true, role: true },
-    });
-
-    if (!profile?.interpreterId) {
+    if (actor.role !== 'interpreter') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!actor.interpreterId) {
       return NextResponse.json({ error: 'Interpreter profile not found' }, { status: 404 });
     }
-
-    const { interpreterId } = profile;
+    const interpreterId = actor.interpreterId;
 
     // Use Santo Domingo timezone for date calculation
     const getLocalDateStr = (d: Date) => {
@@ -144,19 +139,17 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const { userId, user } = await auth();
-    if (!userId || !user) {
+    const actor = await getCurrentActor();
+    if (!actor) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { interpreterId: true, role: true },
-    });
-
-    if (!profile?.interpreterId) {
+    if (actor.role !== 'interpreter') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!actor.interpreterId) {
       return NextResponse.json({ error: 'Interpreter profile not found' }, { status: 404 });
     }
+    const interpreterId = actor.interpreterId;
 
     const orphanedCount = await prisma.callSession.count({
       where: {
