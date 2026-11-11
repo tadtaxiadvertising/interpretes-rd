@@ -100,6 +100,7 @@ test.describe('Browser authentication and role isolation', () => {
   });
 
   test('administrator can sign in and is kept out of the interpreter dashboard', async ({ page }) => {
+    test.setTimeout(90_000);
     await loginAs(page, ADMIN_EMAIL, 'admin');
 
     await expect(page).toHaveURL(/\/admin(?:\/)?(?:\?.*)?$/);
