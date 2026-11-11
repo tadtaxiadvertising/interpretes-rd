@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import CreateAccountForm from '@/components/admin/CreateAccountForm';
+import EditOperationalAccountForm from '@/components/admin/EditOperationalAccountForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,10 +11,10 @@ export default async function AdminAccountsPage() {
     prisma.account.findMany({
       orderBy: [{ client: { name: 'asc' } }, { name: 'asc' }],
       select: {
-        id: true, name: true, holderName: true, email: true, description: true,
+        id: true, name: true, holderName: true, email: true, description: true, clientId: true, companyId: true,
         client: { select: { name: true } },
         company: { select: { name: true } },
-        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true } },
+        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true, secretRef: true } },
         assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { interpreter: { select: { id: true, name: true } } } },
         _count: { select: { assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] } } } },
       },
@@ -51,7 +52,7 @@ export default async function AdminAccountsPage() {
           const totals = productionByAccount.get(account.id);
           const platform = account.platforms.find(item => item.name === 'Plataforma principal') ?? account.platforms[0];
           return <tr key={account.id} className="border-t border-white/10 align-top">
-            <td className="p-4"><strong className="text-white">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-slate-400">{account.name}</p>{account.description && <p className="mt-1 text-xs text-slate-500">{account.description}</p>}</td>
+            <td className="p-4"><strong className="text-white">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-slate-400">{account.name}</p>{account.description && <p className="mt-1 text-xs text-slate-500">{account.description}</p>}<EditOperationalAccountForm account={{ id: account.id, name: account.name, holderName: account.holderName, email: account.email, description: account.description, clientId: account.clientId, companyId: account.companyId, platform: platform ? { loginUrl: platform.loginUrl, secretRef: platform.secretRef } : null }} clients={clients} companies={companies} /></td>
             <td className="p-4">{account.email || 'Pendiente'}</td>
             <td className="p-4">{platform?.loginUrl ? <a href={platform.loginUrl} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">{platform.name} ↗</a> : 'Sin página registrada'}</td>
             <td className="p-4">{account.client?.name || <span className="text-amber-300">Pendiente de identificar</span>}</td>
