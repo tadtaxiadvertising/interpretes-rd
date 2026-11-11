@@ -63,7 +63,7 @@ export async function POST(request: Request) {
     let skippedCount = 0;
 
     for (const session of sessions) {
-      if (!session.startedAt || !session.endedAt || session.tariffSnapshot === null) {
+      if (!session.startedAt || !session.endedAt || session.tariffSnapshot === null || !session.interpreterId) {
         skippedCount++;
         continue;
       }
@@ -88,8 +88,6 @@ export async function POST(request: Request) {
           data: { isSettled: true, durationSeconds, callCost },
         });
         if (claim.count !== 1) return 'skipped' as const;
-        if (!session.interpreterId) return 'skipped' as const;
-
         // Calls shorter than one full minute do not add payroll minutes, but
         // are settled so the reconciliation does not retry them indefinitely.
         if (minutes <= 0) return 'skipped' as const;
