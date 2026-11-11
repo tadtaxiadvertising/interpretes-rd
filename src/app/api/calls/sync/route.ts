@@ -46,7 +46,6 @@ export async function POST(req: NextRequest) {
       where: {
         interpreterId,
         endedAt: { not: null },
-        durationSeconds: { gt: 0 },
         isSettled: false,
       },
       select: {
@@ -54,6 +53,7 @@ export async function POST(req: NextRequest) {
         startedAt: true,
         endedAt: true,
         durationSeconds: true,
+        tariffSnapshot: true,
       },
       orderBy: {
         startedAt: 'asc',
@@ -64,21 +64,29 @@ export async function POST(req: NextRequest) {
     const skipped: number[] = [];
 
     for (const session of orphanedSessions) {
-      if (!session.endedAt || !session.durationSeconds) continue;
-      if (!session.startedAt) {
-        // Without the original timestamp we cannot safely assign a payroll day.
-        // Leave the call unsettled for explicit data repair rather than using now.
+      if (!session.endedAt || !session.startedAt || session.tariffSnapshot === null) {
+        // Missing source timestamps or tariff require explicit repair. Never
+        // assign an unknown call to today's payroll date or invent its cost.
         skipped.push(session.id);
         continue;
       }
 
-      const minutes = Math.floor(session.durationSeconds / 60);
+      const durationSeconds = session.durationSeconds && session.durationSeconds > 0
+        ? session.durationSeconds
+        : Math.max(0, Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 1000));
+      const tariffSnapshot = Number(session.tariffSnapshot);
+      if (!Number.isFinite(tariffSnapshot) || tariffSnapshot < 0) {
+        skipped.push(session.id);
+        continue;
+      }
+      const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
+      const minutes = Math.floor(durationSeconds / 60);
       if (minutes <= 0) {
         // Sub-minute calls do not contribute production minutes. Mark them
         // settled so the same immutable call is not retried on every request.
         await prisma.callSession.updateMany({
           where: { id: session.id, isSettled: false },
-          data: { isSettled: true },
+          data: { isSettled: true, durationSeconds, callCost },
         });
         skipped.push(session.id);
         continue;
@@ -93,7 +101,7 @@ export async function POST(req: NextRequest) {
       const wasSynced = await prisma.$transaction(async (tx) => {
         const claim = await tx.callSession.updateMany({
           where: { id: session.id, isSettled: false },
-          data: { isSettled: true },
+          data: { isSettled: true, durationSeconds, callCost },
         });
         if (claim.count !== 1) return false;
 
