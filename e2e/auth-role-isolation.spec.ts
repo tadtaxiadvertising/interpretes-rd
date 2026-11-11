@@ -42,8 +42,8 @@ test.describe('Browser authentication and role isolation', () => {
       await client.query('DELETE FROM public.interpreters WHERE email_corporativo = $1', [INTERPRETER_EMAIL]);
 
       await client.query(
-        `INSERT INTO public.rbac_users (id, email, password, name, role)
-         VALUES ($1, $2, $3, $4, 'ADMIN')`,
+        `INSERT INTO public.rbac_users (id, email, password, name, role, "updatedAt")
+         VALUES ($1, $2, $3, $4, 'ADMIN', NOW())`,
         [`e2e-admin-${RUN_ID}`, ADMIN_EMAIL, passwordHash, 'E2E Administrator'],
       );
       await client.query(
@@ -62,8 +62,8 @@ test.describe('Browser authentication and role isolation', () => {
       if (!interpreterId) throw new Error('Could not seed E2E interpreter');
 
       await client.query(
-        `INSERT INTO public.rbac_users (id, email, password, name, role)
-         VALUES ($1, $2, $3, $4, 'INTERPRETER')`,
+        `INSERT INTO public.rbac_users (id, email, password, name, role, "updatedAt")
+         VALUES ($1, $2, $3, $4, 'INTERPRETER', NOW())`,
         [`e2e-interpreter-${RUN_ID}`, INTERPRETER_EMAIL, passwordHash, 'E2E Interpreter'],
       );
       await client.query(
