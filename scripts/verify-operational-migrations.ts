@@ -21,6 +21,7 @@ const migrations = [
   '20261105180000_client_directory/migration.sql',
   '20261108120000_operational_account_holder_details/migration.sql',
   '20261108143000_roleplay_audio_job_queue/migration.sql',
+  '20261111100000_roleplay_audio_jobs_rls/migration.sql',
   '20261108170000_roleplay_base_audio_path/migration.sql',
 ] as const;
 
@@ -192,6 +193,10 @@ async function main() {
     const roleplayQueue = await client.query(`
       SELECT
         to_regclass('public.roleplay_audio_jobs') IS NOT NULL AS table_exists,
+        (
+          SELECT relrowsecurity FROM pg_class
+          WHERE oid = 'public.roleplay_audio_jobs'::regclass
+        ) AS rls_enabled,
         EXISTS (
           SELECT 1 FROM pg_type t
           JOIN pg_namespace n ON n.oid = t.typnamespace
