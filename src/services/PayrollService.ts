@@ -185,8 +185,15 @@ export async function calculateIncentive(totalHours: number): Promise<IncentiveR
 export async function calculateFullPayroll(
   interpreterId: number,
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  verifiedMinutesOverride?: number,
 ): Promise<PayrollCalculationResult> {
+  if (
+    verifiedMinutesOverride !== undefined &&
+    (!Number.isSafeInteger(verifiedMinutesOverride) || verifiedMinutesOverride < 0 || verifiedMinutesOverride > 100_000)
+  ) {
+    throw new Error('Verified minutes must be an integer between 0 and 100000.');
+  }
   // 1. Obtener intérprete con sus metadatos financieros
   const interpreter = await db.interpreter.findUnique({
     where: { id: interpreterId },
@@ -211,20 +218,22 @@ export async function calculateFullPayroll(
 
   // 2. Obtener logs de producción (single source of truth: incluye imports,
   //    logs manuales y llamadas sincronizadas desde el timer en vivo)
-  const productionLogs = await db.productionLog.findMany({
-    where: {
-      interpreterId,
-      date: { gte: periodStart, lte: periodEnd },
-    },
-    select: { interpretedMinutes: true, verifiedMinutes: true },
-  }) as ProductionLogRecord[];
+  const productionLogs = verifiedMinutesOverride === undefined
+    ? await db.productionLog.findMany({
+        where: {
+          interpreterId,
+          date: { gte: periodStart, lte: periodEnd },
+        },
+        select: { interpretedMinutes: true, verifiedMinutes: true },
+      }) as ProductionLogRecord[]
+    : [];
 
   // 4. Cálculos de Minutos
   // ProductionLogs is the single source of truth.
   // endCall() syncs live calls into ProductionLog, and the /api/v1/sync
   // route backfills older sessions. Adding callSessions here would
   // double-count minutes already present in productionLogs.
-  const interpretedSum = (productionLogs || []).reduce((sum: number, log: ProductionLogRecord) => {
+  const interpretedSum = verifiedMinutesOverride ?? (productionLogs || []).reduce((sum: number, log: ProductionLogRecord) => {
     const effective = log.verifiedMinutes !== null ? log.verifiedMinutes : (log.interpretedMinutes || 0);
     if (!Number.isFinite(effective) || effective < 0) {
       throw new Error(`Invalid production minutes for interpreter ${interpreterId}`);
@@ -301,10 +310,10 @@ export async function calculateFullPayroll(
         periodStart: { gte: firstDayOfMonth },
         periodEnd: { lte: fifteenthDay },
       },
-      select: { totalMinutes: true }
+      select: { totalMinutes: true, verifiedMinutes: true }
     });
     
-    const q1Minutes = q1Record?.totalMinutes || 0;
+    const q1Minutes = q1Record?.verifiedMinutes ?? q1Record?.totalMinutes ?? 0;
     const accumulatedMinutes = q1Minutes + totalMinutes;
     
     if (accumulatedMinutes >= interpreter.monthlyGoal) {
@@ -368,16 +377,18 @@ export async function recalculateWithVerifiedMinutes(
   verifiedMinutes: number
 ): Promise<{
   grossTotal: number;
+  qualityBonus: number;
   incentivesTotal: number;
+  penalidades: number;
   transferDeduction: number;
   netTotal: number;
 }> {
   const record = await db.payrollRecord.findUnique({
     where: { id: payrollRecordId },
-    include: {
-      interpreter: {
-        select: { tariffPerMinute: true, metodoPago: true },
-      },
+    select: {
+      interpreterId: true,
+      periodStart: true,
+      periodEnd: true,
     },
   });
 
@@ -385,31 +396,22 @@ export async function recalculateWithVerifiedMinutes(
     throw new Error(`PayrollRecord ${payrollRecordId} not found`);
   }
 
-  const baseRatePerMinute = record.interpreter ? parseFloat(record.interpreter.tariffPerMinute.toString()) : 0;
-  const grossTotal = Math.round(verifiedMinutes * baseRatePerMinute * 100) / 100;
-
-  const verifiedHours = Math.round((verifiedMinutes / 60) * 100) / 100;
-  const incentive = await calculateIncentive(verifiedHours);
-
-  const qualityBonus = record.qualityBonus ? parseFloat(record.qualityBonus.toString()) : 0;
-  const penalidades = record.penalidades ? parseFloat(record.penalidades.toString()) : 0;
-
-  // Regla de Pasarela: PayPal 5%, Local 0%
-  let transferDeduction = 0;
-  if (record.interpreter?.metodoPago === 'PayPal') {
-    transferDeduction = Math.round(grossTotal * 0.05 * 100) / 100;
-  }
-
-  const netTotal = Math.max(
-      0,
-      Math.round(((grossTotal + qualityBonus + incentive.totalIncentive) - (penalidades + transferDeduction)) * 100) / 100
-    );
+  // Reuse the canonical calculation so changing verified minutes also
+  // recalculates QA bonuses, goal adjustments, incentive tiers and fees.
+  const calculation = await calculateFullPayroll(
+    record.interpreterId,
+    record.periodStart,
+    record.periodEnd,
+    verifiedMinutes,
+  );
 
   return {
-    grossTotal,
-    incentivesTotal: incentive.totalIncentive,
-    transferDeduction,
-    netTotal,
+    grossTotal: calculation.grossTotal,
+    qualityBonus: calculation.qualityBonus,
+    incentivesTotal: calculation.incentivesTotal,
+    penalidades: calculation.penalidades,
+    transferDeduction: calculation.transferDeduction,
+    netTotal: calculation.netTotal,
   };
 }
 
