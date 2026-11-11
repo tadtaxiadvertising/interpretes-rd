@@ -418,13 +418,29 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
 
     if (!profile) return null;
 
-    let resolvedRole = resolveUserRoleByEmail(profile.email, profile.role);
-    if (profile.role !== resolvedRole) {
+    const resolvedRole = resolveUserRoleByEmail(profile.email, profile.role);
+    // CurrentActor can safely resolve a missing interpreter link by the
+    // interpreter's unique corporate email. Persist that same resolution so
+    // pages using getCurrentProfile do not disagree with API/Server Action RBAC.
+    const resolvedInterpreterId = resolvedRole === 'interpreter'
+      ? (profile.interpreterId ?? actor.interpreterId)
+      : null;
+    if (profile.role !== resolvedRole || profile.interpreterId !== resolvedInterpreterId) {
       await prisma.userProfile.update({
         where: { id: profile.id },
-        data: { role: resolvedRole, interpreterId: resolvedRole === 'admin' ? null : undefined },
+        data: {
+          role: resolvedRole,
+          interpreterId: resolvedInterpreterId,
+        },
       });
-      profile = { ...profile, role: resolvedRole, interpreterId: resolvedRole === 'admin' ? null : profile.interpreterId, interpreter: resolvedRole === 'admin' ? null : profile.interpreter };
+      profile = {
+        ...profile,
+        role: resolvedRole,
+        interpreterId: resolvedInterpreterId,
+        interpreter: resolvedInterpreterId === profile.interpreterId
+          ? profile.interpreter
+          : null,
+      };
     }
 
     return {
