@@ -141,7 +141,13 @@ export async function reconcileMinutes(
       });
 
       if (updated.count !== 1) return { kind: 'CONFLICT' as const };
-      return { kind: 'UPDATED' as const, interpreterId: log.interpreterId, date: log.date };
+
+      // Keep the production-log correction and pending payroll totals atomic.
+      // Every calculation query uses this transaction client, never the global
+      // Prisma singleton, so a failed refresh rolls the log update back too.
+      await refreshPayrollRecord(log.interpreterId, log.date, tx);
+
+      return { kind: 'UPDATED' as const };
     }, { isolationLevel: 'Serializable' });
 
     if (reconciliation.kind !== 'UPDATED') {
@@ -155,8 +161,6 @@ export async function reconcileMinutes(
       const [error, code] = errors[reconciliation.kind];
       return { success: false, error, code };
     }
-
-    await refreshPayrollRecord(reconciliation.interpreterId, reconciliation.date);
 
     revalidatePath('/payroll');
     revalidatePath('/dashboard');
