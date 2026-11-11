@@ -90,6 +90,7 @@ export async function createManualLog(data: unknown): Promise<ActionResult<{ id:
           durationSeconds,
           tariffSnapshot,
           callCost,
+          isSettled: true,
           notes: "Manual entry via Admin Server Action",
         },
       });
