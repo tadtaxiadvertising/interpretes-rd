@@ -70,6 +70,12 @@ export async function POST(req: NextRequest) {
 
       const minutes = Math.floor(session.durationSeconds / 60);
       if (minutes <= 0) {
+        // Sub-minute calls do not contribute production minutes. Mark them
+        // settled so the same immutable call is not retried on every request.
+        await prisma.callSession.updateMany({
+          where: { id: session.id, isSettled: false },
+          data: { isSettled: true },
+        });
         skipped.push(session.id);
         continue;
       }
