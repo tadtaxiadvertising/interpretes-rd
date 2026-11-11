@@ -194,6 +194,11 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261108143000_roleplay_audio_job_queue/migration.sql --apply --transaction
 
+      - name: Enable RLS on internal Roleplay audio queue
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run migrate -- prisma/migrations/20261111100000_roleplay_audio_jobs_rls/migration.sql --apply --transaction
+
       - name: Apply Roleplay base audio path migration
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
