@@ -178,7 +178,6 @@ export async function GET(req: NextRequest) {
       where: {
         interpreterId,
         endedAt: { not: null },
-        durationSeconds: { gt: 0 },
         isSettled: false,
       },
     });
