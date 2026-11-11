@@ -395,6 +395,9 @@ export async function recalculateWithVerifiedMinutes(
   if (!record) {
     throw new Error(`PayrollRecord ${payrollRecordId} not found`);
   }
+  if (record.interpreterId === null) {
+    throw new Error(`PayrollRecord ${payrollRecordId} has no linked interpreter`);
+  }
 
   // Reuse the canonical calculation so changing verified minutes also
   // recalculates QA bonuses, goal adjustments, incentive tiers and fees.
