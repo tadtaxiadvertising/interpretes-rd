@@ -83,60 +83,96 @@ export const POST = withSecurity(async (request: NextRequest) => {
     );
   }
 
-  console.log(`[API_INTERPRETERS_POST] Step 1: Creating interpreter record for ${interpreterData.emailCorporativo}`);
-  const newInterpreter = await prisma.interpreter.create({
-    data: interpreterData as never,
-  });
-  console.log(`[API_INTERPRETERS_POST] Interpreter created with ID: ${newInterpreter.id}`);
-
-  // 2. If password provided, create Auth user and UserProfile
+  // Create the Auth identity first. If this fails, no orphan interpreter
+  // record is written to PostgreSQL.
+  let authUser: { id: string } | null = null;
   if (password) {
-    console.log(`[API_INTERPRETERS_POST] Step 2: Creating Auth user for ${interpreterData.emailCorporativo}`);
-    const { upsertConfirmedAuthUser } = await import('@/lib/supabase/auth-users');
-    let authUser = null;
-
     try {
+      const { upsertConfirmedAuthUser } = await import('@/lib/supabase/auth-users');
       authUser = await upsertConfirmedAuthUser({
         email: interpreterData.emailCorporativo!,
         password,
         displayName: interpreterData.name,
       });
-    } catch (authError) {
-      const message = authError instanceof Error ? authError.message : 'Unknown auth error';
-      console.error(`[API_INTERPRETERS_POST] ❌ Auth creation failed: ${message}`);
-      return NextResponse.json(
-        { success: false, error: `Interpreter record created (ID: ${newInterpreter.id}), but Auth creation failed: ${message}` },
-        { status: 400 }
-      );
-    }
-
-    if (!authUser) {
-      console.error('[API_INTERPRETERS_POST] ❌ Auth creation failed: no user returned');
-      return NextResponse.json(
-        { success: false, error: `Interpreter record created (ID: ${newInterpreter.id}), but Auth creation failed.` },
-        { status: 400 }
-      );
-    }
-
-    console.log(`[API_INTERPRETERS_POST] Step 3: Upserting UserProfile for Auth ID: ${authUser.id}`);
-    await prisma.userProfile.upsert({
-      where: { id: authUser.id },
-      update: {
-        email: interpreterData.emailCorporativo!,
-        displayName: interpreterData.name,
-        interpreterId: newInterpreter.id
-      },
-      create: {
-        id: authUser.id,
-        email: interpreterData.emailCorporativo!,
-        displayName: interpreterData.name,
-        role: 'interpreter',
-        interpreterId: newInterpreter.id
+      if (!authUser) {
+        return NextResponse.json(
+          { success: false, error: 'No se pudo crear la identidad de autenticación.' },
+          { status: 503 }
+        );
       }
-    });
-    console.log('[API_INTERPRETERS_POST] ✅ UserProfile upserted successfully');
+    } catch (authError) {
+      console.error(
+        '[API_INTERPRETERS_POST] Auth creation failed:',
+        authError instanceof Error ? authError.message : 'Unknown auth error',
+      );
+      return NextResponse.json(
+        { success: false, error: 'No se pudo crear la identidad de autenticación.' },
+        { status: 400 }
+      );
+    }
   }
 
+  let newInterpreter;
+  try {
+    // Keep the interpreter and its profile atomic. A failed profile write
+    // rolls back the interpreter row instead of leaving an unusable account.
+    newInterpreter = await prisma.$transaction(async (tx) => {
+      const interpreter = await tx.interpreter.create({
+        data: interpreterData as never,
+      });
+
+      if (authUser) {
+        await tx.userProfile.upsert({
+          where: { id: authUser.id },
+          update: {
+            email: interpreterData.emailCorporativo!,
+            displayName: interpreterData.name,
+            interpreterId: interpreter.id,
+          },
+          create: {
+            id: authUser.id,
+            email: interpreterData.emailCorporativo!,
+            displayName: interpreterData.name,
+            role: 'interpreter',
+            interpreterId: interpreter.id,
+          },
+        });
+      }
+
+      return interpreter;
+    });
+  } catch (databaseError) {
+    // upsertConfirmedAuthUser rejects existing identities, so authUser is
+    // guaranteed to be newly created by this request and safe to compensate.
+    if (authUser) {
+      try {
+        const { supabaseAdmin } = await import('@/lib/supabase/admin');
+        const { error: cleanupError } = await supabaseAdmin.auth.admin.deleteUser(authUser.id);
+        if (cleanupError) {
+          console.error(
+            '[API_INTERPRETERS_POST] Auth compensation failed for identity:',
+            authUser.id,
+            cleanupError.message,
+          );
+        }
+      } catch (cleanupError) {
+        console.error(
+          '[API_INTERPRETERS_POST] Auth compensation could not run for identity:',
+          authUser.id,
+          cleanupError instanceof Error ? cleanupError.message : 'Unknown cleanup error',
+        );
+      }
+    }
+
+    console.error(
+      '[API_INTERPRETERS_POST] Database transaction failed:',
+      databaseError instanceof Error ? databaseError.message : 'Unknown database error',
+    );
+    return NextResponse.json(
+      { success: false, error: 'No se pudo crear el intérprete. No se guardaron cambios parciales.' },
+      { status: 500 }
+    );
+  }
   return NextResponse.json({ success: true, data: newInterpreter }, { status: 201 });
 }, {
   body: InterpreterSchema
