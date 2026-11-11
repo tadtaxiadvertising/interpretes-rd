@@ -71,7 +71,9 @@ export async function POST(request: Request) {
         data: {
           verifiedMinutes,
           grossTotal: recalc.grossTotal,
+          qualityBonus: recalc.qualityBonus,
           incentivesTotal: recalc.incentivesTotal,
+          penalidades: recalc.penalidades,
           transferDeduction: recalc.transferDeduction,
           netTotal: recalc.netTotal,
           status: 'APPROVED',
