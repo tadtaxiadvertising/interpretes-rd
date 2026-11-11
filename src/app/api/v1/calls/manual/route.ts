@@ -21,8 +21,14 @@ function formatSantoDomingoDate(d: Date): string {
 export async function POST(req: Request) {
   try {
     const userData = await getCurrentUser();
-    if (!userData || !userData.profile || !userData.profile.interpreterId) {
-      return NextResponse.json({ success: false, error: 'Unauthorized or no interpreter profile' }, { status: 401 });
+    if (!userData) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+    if (userData.profile.role !== 'interpreter') {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+    if (!userData.profile.interpreterId) {
+      return NextResponse.json({ success: false, error: 'Interpreter profile not found' }, { status: 404 });
     }
 
     const interpreter = await prisma.interpreter.findUnique({
