@@ -42,8 +42,11 @@ export async function POST(request: Request) {
       ],
     };
 
+    const processableWhere = { ...where, startedAt: { not: null } };
+    const invalidTimestampWhere = { ...where, startedAt: null };
+
     const sessions = await prisma.callSession.findMany({
-      where,
+      where: processableWhere,
       select: {
         id: true,
         interpreterId: true,
@@ -124,7 +127,10 @@ export async function POST(request: Request) {
       else skippedCount++;
     }
 
-    const remainingCount = await prisma.callSession.count({ where });
+    const [remainingCount, invalidTimestampCount] = await Promise.all([
+      prisma.callSession.count({ where: processableWhere }),
+      prisma.callSession.count({ where: invalidTimestampWhere }),
+    ]);
 
     return NextResponse.json({
       success: true,
@@ -133,6 +139,7 @@ export async function POST(request: Request) {
       updatedCount,
       skippedCount,
       remainingCount,
+      invalidTimestampCount,
       hasMore: remainingCount > 0,
       batchSize: MAX_BATCH_SIZE,
     });
