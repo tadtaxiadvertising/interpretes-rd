@@ -57,8 +57,8 @@ test.describe('Browser authentication and role isolation', () => {
       );
 
       const interpreter = await client.query(
-        `INSERT INTO public.interpreters (external_id, name, email_corporativo, tariff_per_minute)
-         VALUES ($1, $2, $3, 0.50)
+        `INSERT INTO public.interpreters (external_id, name, email_corporativo, tariff_per_minute, status)
+         VALUES ($1, $2, $3, 0.50, 'Activo')
          RETURNING id`,
         [`E2E-${RUN_ID}`, 'E2E Interpreter', INTERPRETER_EMAIL],
       );
