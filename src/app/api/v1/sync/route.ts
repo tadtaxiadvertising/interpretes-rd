@@ -40,7 +40,7 @@ export async function POST(request: Request) {
         { notes: null },
         { notes: { notIn: MANUAL_CALL_NOTES } },
       ],
-    } as const;
+    };
 
     const sessions = await prisma.callSession.findMany({
       where,
