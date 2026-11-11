@@ -58,6 +58,7 @@ export async function POST(req: NextRequest) {
       orderBy: {
         startedAt: 'asc',
       },
+      take: 500,
     });
 
     const synced: number[] = [];
@@ -141,12 +142,22 @@ export async function POST(req: NextRequest) {
       else skipped.push(session.id);
     }
 
+    const remainingCount = await prisma.callSession.count({
+      where: {
+        interpreterId,
+        endedAt: { not: null },
+        isSettled: false,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       synced,
       skipped,
       totalSynced: synced.length,
       totalSkipped: skipped.length,
+      remainingCount,
+      hasMore: remainingCount > 0,
     });
   } catch (error) {
     console.error(' ERROR [/api/calls/sync]:', error);
