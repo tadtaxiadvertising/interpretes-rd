@@ -123,9 +123,12 @@ export async function reconcileMinutes(
       const linkedPaidPayroll = await tx.payrollRecord.findFirst({
         where: {
           interpreterId: log.interpreterId,
-          status: { in: ['PAID', 'Paid'] },
           periodStart: { lte: log.date },
           periodEnd: { gte: log.date },
+          OR: [
+            { status: { in: ['PAID', 'Paid'] } },
+            { paidAt: { not: null } },
+          ],
         },
         select: { id: true },
       });
