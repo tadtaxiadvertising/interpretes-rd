@@ -77,45 +77,50 @@ export async function POST(req: NextRequest) {
       const dayStr = getLocalDateStr(session.startedAt || new Date());
       const logDate = new Date(`${dayStr}T12:00:00Z`);
 
-      // Check if ProductionLog exists for this date
-      const existingLog = await prisma.productionLog.findFirst({
-        where: {
-          interpreterId,
-          date: logDate,
-        },
-      });
-
-      if (existingLog) {
-        // Update existing log
-        await prisma.productionLog.update({
-          where: { id: existingLog.id },
-          data: {
-            interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
-            callsAttended: (existingLog.callsAttended || 0) + 1,
-          },
+      // Claim, aggregate and settle the source call in one transaction. A
+      // failed write rolls back the claim, while concurrent requests cannot
+      // add the same CallSession minutes twice.
+      const wasSynced = await prisma.$transaction(async (tx) => {
+        const claim = await tx.callSession.updateMany({
+          where: { id: session.id, isSettled: false },
+          data: { isSettled: true },
         });
-      } else {
-        // Create new log
-        await prisma.productionLog.create({
-          data: {
+        if (claim.count !== 1) return false;
+
+        const existingLog = await tx.productionLog.findFirst({
+          where: {
             interpreterId,
             date: logDate,
-            interpretedMinutes: minutes,
-            callsAttended: 1,
-            status: 'Completed',
-            observaciones: 'Synced from orphaned CallSession',
-            adherence: 100,
           },
         });
-      }
 
-      // Mark session as settled to avoid double-syncing
-      await prisma.callSession.update({
-        where: { id: session.id },
-        data: { isSettled: true },
+        if (existingLog) {
+          await tx.productionLog.update({
+            where: { id: existingLog.id },
+            data: {
+              interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
+              callsAttended: (existingLog.callsAttended || 0) + 1,
+            },
+          });
+        } else {
+          await tx.productionLog.create({
+            data: {
+              interpreterId,
+              date: logDate,
+              interpretedMinutes: minutes,
+              callsAttended: 1,
+              status: 'Completed',
+              observaciones: 'Synced from orphaned CallSession',
+              adherence: 100,
+            },
+          });
+        }
+
+        return true;
       });
 
-      synced.push(session.id);
+      if (wasSynced) synced.push(session.id);
+      else skipped.push(session.id);
     }
 
     return NextResponse.json({
