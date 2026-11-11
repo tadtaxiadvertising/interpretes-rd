@@ -64,9 +64,9 @@ describe('API bearer identity resolution', () => {
       data: { user: { id: 'candidate-auth-id', email: 'candidate@example.com' } },
       error: null,
     });
-    (prisma.userProfile.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (prisma.interpreter.findFirst as ReturnType<typeof vi.fn>).mockResolvedValue(null);
-    (prisma.recruitmentCandidate.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (prisma.userProfile.findUnique as any).mockResolvedValue(null);
+    (prisma.interpreter.findFirst as any).mockResolvedValue(null);
+    (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({
       id: 27,
       applications: [{ status: 'ROLEPLAY_PENDING', hiredInterpreterId: null }],
     });
@@ -93,13 +93,13 @@ describe('API bearer identity resolution', () => {
   });
 
   it('restores interpreter identity only after recruitment marks the applicant hired', async () => {
-    (prisma.userProfile.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (prisma.userProfile.findUnique as any).mockResolvedValue({
       id: 'candidate-auth-id',
       role: 'candidate',
       interpreterId: null,
       email: 'candidate@example.com',
     });
-    (prisma.recruitmentCandidate.findUnique as ReturnType<typeof vi.fn>).mockResolvedValue({
+    (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({
       id: 27,
       applications: [{ status: 'HIRED', hiredInterpreterId: 91 }],
     });
