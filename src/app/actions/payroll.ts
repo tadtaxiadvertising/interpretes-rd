@@ -48,15 +48,17 @@ export async function generatePayrollPeriod(
     }
 
     let successCount = 0;
+    let failureCount = 0;
     
     for (const interpreter of interpreters) {
       try {
-        // Check if payroll already generated for this period via Prisma
+        // The unique database constraint is the final idempotency guard.
+        // The lookup avoids unnecessary calculations on normal repeated runs.
         const existing = await db.payrollRecord.findFirst({
           where: {
             interpreterId: interpreter.id,
-            periodStart: periodStart,
-            periodEnd: periodEnd
+            periodStart,
+            periodEnd,
           },
           select: { id: true }
         });
@@ -66,15 +68,30 @@ export async function generatePayrollPeriod(
           successCount++;
         }
       } catch (err: unknown) {
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error(`Error generating payroll for interpreter ${interpreter.id}:`, errorMsg);
+        // A concurrent request may have inserted the unique period record
+        // after our lookup. Treat that race as an idempotent no-op.
+        if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
+          continue;
+        }
+        failureCount++;
+        console.error(
+          `[PAYROLL] Generation failed for interpreter ${interpreter.id}:`,
+          err instanceof Error ? err.message : 'Unknown error'
+        );
       }
     }
 
     revalidatePath('/payroll');
-    return { 
-      success: true, 
-      data: { message: `Successfully generated ${successCount} payroll records.` }
+    if (failureCount > 0) {
+      return {
+        success: false,
+        error: `Nómina parcialmente procesada: ${successCount} registros creados y ${failureCount} fallidos. Revisa los registros del servidor antes de reintentar.`,
+        code: 'INTERNAL_ERROR',
+      };
+    }
+    return {
+      success: true,
+      data: { message: `Se generaron ${successCount} registros de nómina nuevos; los registros existentes se conservaron.` }
     };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';

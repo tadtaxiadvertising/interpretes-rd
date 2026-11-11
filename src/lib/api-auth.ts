@@ -25,6 +25,7 @@ export type ApiActor = {
   email: string | null;
   role: UserRole;
   interpreterId: number | null;
+  candidateId: number | null;
   profileId: string | null;
 };
 
@@ -78,7 +79,7 @@ async function actorFromSupabaseUser(user: {
     role = resolveUserRoleByEmail(email, 'interpreter');
   }
 
-  if (role !== 'admin' && !interpreterId) {
+  if (role !== 'admin' && role !== 'candidate' && !interpreterId) {
     const interpreter = await prisma.interpreter.findFirst({
       where: { emailCorporativo: email },
       select: { id: true },
@@ -86,11 +87,39 @@ async function actorFromSupabaseUser(user: {
     interpreterId = interpreter?.id ?? null;
   }
 
+  // Keep Bearer-token identity resolution aligned with the browser session:
+  // an active recruitment candidate must never be silently treated as an
+  // interpreter merely because no user_profile row exists yet.
+  const candidate = await prisma.recruitmentCandidate.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      applications: {
+        select: { status: true, hiredInterpreterId: true },
+        take: 1,
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  const latestApplication = candidate?.applications[0];
+
+  let candidateId: number | null = role === 'admin' ? (candidate?.id ?? null) : null;
+  if (role !== 'admin' && candidate && latestApplication?.status !== 'HIRED') {
+    role = 'candidate';
+    candidateId = candidate.id;
+    interpreterId = null;
+  } else if (role !== 'admin' && candidate && latestApplication?.status === 'HIRED') {
+    candidateId = candidate.id;
+    interpreterId = latestApplication.hiredInterpreterId ?? interpreterId;
+    role = 'interpreter';
+  }
+
   return {
     userId,
     email,
     role,
     interpreterId,
+    candidateId,
     profileId: profile?.id ?? null,
   };
 }
@@ -125,6 +154,7 @@ function actorFromCurrentActor(actor: CurrentActor): ApiActor {
     email: actor.email,
     role: actor.role,
     interpreterId: actor.interpreterId,
+    candidateId: actor.candidateId,
     profileId: actor.profileId,
   };
 }

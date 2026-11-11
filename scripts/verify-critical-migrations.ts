@@ -1,25 +1,43 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
+import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error('DATABASE_URL is required to verify critical SQL migrations.');
 }
 
-const pool = new Pool({ connectionString });
+const caPath = join(process.cwd(), 'certs', 'prod-ca-2021.crt');
+const caPem = readFileSync(caPath, 'utf8');
+const pool = new Pool(createDatabasePoolConfig(connectionString, caPem));
 
 async function main() {
   try {
     // Simulate the legacy production CHECK that caused SQLSTATE 23514.
     // Prisma db push does not model this hand-written CHECK constraint.
     await pool.query(`
-      ALTER TABLE public.roleplay_sessions
-      ADD CONSTRAINT roleplay_session_xor_subject
-      CHECK (
-        ((interpreter_id IS NOT NULL)::integer
-          + (recruitment_candidate_id IS NOT NULL)::integer) = 1
-      )
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'public.roleplay_sessions'::regclass
+            AND conname IN (
+              'roleplay_session_xor_subject',
+              'roleplay_session_at_most_one_subject'
+            )
+        ) THEN
+          ALTER TABLE public.roleplay_sessions
+          ADD CONSTRAINT roleplay_session_xor_subject
+          CHECK (
+            ((interpreter_id IS NOT NULL)::integer
+              + (recruitment_candidate_id IS NOT NULL)::integer) = 1
+          );
+        END IF;
+      END
+      $migration$;
     `);
 
     const migrations = [
@@ -31,6 +49,23 @@ async function main() {
     ];
 
     for (const migration of migrations) {
+      // The orphan-history migration replaces the legacy XOR constraint and
+      // is intentionally a one-time schema transition. Do not replay it after
+      // its replacement constraint is already present.
+      if (migration === '20261101_roleplay_orphaned_history_check/migration.sql') {
+        const replacement = await pool.query(`
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'public.roleplay_sessions'::regclass
+            AND conname = 'roleplay_session_at_most_one_subject'
+            AND contype = 'c'
+        `);
+        if (replacement.rowCount) {
+          console.log(`Already applied migration: ${migration}`);
+          continue;
+        }
+      }
+
       const sql = await readFile(
         resolve(process.cwd(), 'prisma/migrations', migration),
         'utf8',
