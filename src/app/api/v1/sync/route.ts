@@ -36,7 +36,10 @@ export async function POST(request: Request) {
       endedAt: { not: null },
       durationSeconds: { gt: 0 },
       isSettled: false,
-      notes: { notIn: MANUAL_CALL_NOTES },
+      OR: [
+        { notes: null },
+        { notes: { notIn: MANUAL_CALL_NOTES } },
+      ],
     } as const;
 
     const sessions = await prisma.callSession.findMany({
@@ -73,6 +76,7 @@ export async function POST(request: Request) {
           data: { isSettled: true },
         });
         if (claim.count !== 1) return 'skipped' as const;
+        if (!session.interpreterId) return 'skipped' as const;
 
         // Calls shorter than one full minute do not add payroll minutes, but
         // are settled so the reconciliation does not retry them indefinitely.
