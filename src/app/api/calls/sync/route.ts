@@ -9,8 +9,8 @@ import { getCurrentActor } from '@/lib/auth/current-actor';
  * This fixes the issue where calls ended but metrics weren't updated.
  * 
  * Can be called:
- * 1. Manually by admin to fix historical data
- * 2. Automatically on dashboard load to catch any missed syncs
+ * 1. Called by the authenticated interpreter to reconcile their own calls
+ * 2. Automatically on dashboard load to catch missed syncs
  * 3. After a call ends as a safety net
  */
 export async function POST(req: NextRequest) {
@@ -54,8 +54,6 @@ export async function POST(req: NextRequest) {
         startedAt: true,
         endedAt: true,
         durationSeconds: true,
-        tariffSnapshot: true,
-        callCost: true,
       },
       orderBy: {
         startedAt: 'asc',
@@ -164,7 +162,7 @@ export async function GET(req: NextRequest) {
 
     const orphanedCount = await prisma.callSession.count({
       where: {
-        interpreterId: profile.interpreterId,
+        interpreterId,
         endedAt: { not: null },
         durationSeconds: { gt: 0 },
         isSettled: false,
