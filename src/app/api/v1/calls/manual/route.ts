@@ -55,6 +55,7 @@ export async function POST(req: Request) {
           durationSeconds: totalSeconds,
           tariffSnapshot: tariffSnapshot,
           callCost: callCost,
+          isSettled: true,
           notes: 'Manual entry via Quick Log'
         }
       });
