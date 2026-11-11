@@ -112,7 +112,7 @@ export const POST = withSecurity(async (request: NextRequest) => {
     }
   }
 
-  let newInterpreter;
+  let newInterpreter: Awaited<ReturnType<typeof prisma.interpreter.create>>;
   try {
     // Keep the interpreter and its profile atomic. A failed profile write
     // rolls back the interpreter row instead of leaving an unusable account.
