@@ -20,6 +20,8 @@ const migrations = [
   ownershipMigration,
   '20261105180000_client_directory/migration.sql',
   '20261108120000_operational_account_holder_details/migration.sql',
+  '20261108143000_roleplay_audio_job_queue/migration.sql',
+  '20261108170000_roleplay_base_audio_path/migration.sql',
 ] as const;
 
 async function ownershipFixtureSnapshot(client: Client) {
@@ -182,6 +184,47 @@ async function main() {
       if (!accountHolderColumnNames.has(column)) {
         throw new Error(`Operational account holder migration did not create accounts.${column}`);
       }
+    }
+
+    // The Roleplay audio queue is a production-critical migration. The
+    // isolated database deliberately dropped its Prisma db-push equivalent
+    // above, so this assertion proves the SQL migration itself recreates it.
+    const roleplayQueue = await client.query(`
+      SELECT
+        to_regclass('public.roleplay_audio_jobs') IS NOT NULL AS table_exists,
+        EXISTS (
+          SELECT 1 FROM pg_type t
+          JOIN pg_namespace n ON n.oid = t.typnamespace
+          WHERE n.nspname = 'public'
+            AND t.typname = 'RoleplayAudioJobStatus'
+            AND t.typtype = 'e'
+        ) AS enum_exists,
+        EXISTS (
+          SELECT 1 FROM pg_index i
+          JOIN pg_class idx ON idx.oid = i.indexrelid
+          WHERE i.indrelid = 'public.roleplay_audio_jobs'::regclass
+            AND idx.relname = 'roleplay_audio_jobs_source_audio_path_key'
+            AND i.indisunique AND i.indisvalid AND i.indisready
+        ) AS source_path_unique,
+        (
+          SELECT COUNT(*) = 2 FROM pg_constraint
+          WHERE conrelid = 'public.roleplay_audio_jobs'::regclass
+            AND contype = 'f' AND convalidated
+            AND conname IN (
+              'roleplay_audio_jobs_session_id_fkey',
+              'roleplay_audio_jobs_scenario_id_fkey'
+            )
+        ) AS foreign_keys_valid,
+        EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'roleplay_sessions'
+            AND column_name = 'base_audio_path'
+        ) AS base_audio_path_exists
+    `);
+    const queueStatus = roleplayQueue.rows[0];
+    if (!queueStatus || Object.values(queueStatus).some((value) => value !== true)) {
+      throw new Error('Roleplay audio queue or canonical base-audio migration is incomplete.');
     }
 
     const expectedTables = [
