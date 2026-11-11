@@ -24,7 +24,7 @@ function normalizeRbacRole(role: string | null | undefined): UserRole {
   return 'interpreter';
 }
 
-async function resolveRecruitmentIdentity(email: string, fallbackRole: UserRole, fallbackInterpreterId: number | null) {
+export async function resolveRecruitmentIdentity(email: string, fallbackRole: UserRole, fallbackInterpreterId: number | null) {
   const candidate = await prisma.recruitmentCandidate.findUnique({
     where: { email },
     select: {

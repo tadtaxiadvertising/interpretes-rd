@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { auth } from '@/lib/auth';
+import { getCurrentActor } from '@/lib/auth/current-actor';
 
 /**
  * POST /api/calls/sync
@@ -9,28 +9,23 @@ import { auth } from '@/lib/auth';
  * This fixes the issue where calls ended but metrics weren't updated.
  * 
  * Can be called:
- * 1. Manually by admin to fix historical data
- * 2. Automatically on dashboard load to catch any missed syncs
+ * 1. Called by the authenticated interpreter to reconcile their own calls
+ * 2. Automatically on dashboard load to catch missed syncs
  * 3. After a call ends as a safety net
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, user } = await auth();
-    if (!userId || !user) {
+    const actor = await getCurrentActor();
+    if (!actor) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    // Get user profile to find interpreterId
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { interpreterId: true, role: true },
-    });
-
-    if (!profile?.interpreterId) {
+    if (actor.role !== 'interpreter') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!actor.interpreterId) {
       return NextResponse.json({ error: 'Interpreter profile not found' }, { status: 404 });
     }
-
-    const { interpreterId } = profile;
+    const interpreterId = actor.interpreterId;
 
     // Use Santo Domingo timezone for date calculation
     const getLocalDateStr = (d: Date) => {
@@ -51,7 +46,6 @@ export async function POST(req: NextRequest) {
       where: {
         interpreterId,
         endedAt: { not: null },
-        durationSeconds: { gt: 0 },
         isSettled: false,
       },
       select: {
@@ -60,68 +54,101 @@ export async function POST(req: NextRequest) {
         endedAt: true,
         durationSeconds: true,
         tariffSnapshot: true,
-        callCost: true,
       },
       orderBy: {
         startedAt: 'asc',
       },
+      take: 500,
     });
 
     const synced: number[] = [];
     const skipped: number[] = [];
 
     for (const session of orphanedSessions) {
-      if (!session.endedAt || !session.durationSeconds) continue;
-
-      const minutes = Math.floor(session.durationSeconds / 60);
-      if (minutes <= 0) {
+      if (!session.endedAt || !session.startedAt || session.tariffSnapshot === null) {
+        // Missing source timestamps or tariff require explicit repair. Never
+        // assign an unknown call to today's payroll date or invent its cost.
         skipped.push(session.id);
         continue;
       }
 
-      const dayStr = getLocalDateStr(session.startedAt || new Date());
-      const logDate = new Date(`${dayStr}T12:00:00Z`);
-
-      // Check if ProductionLog exists for this date
-      const existingLog = await prisma.productionLog.findFirst({
-        where: {
-          interpreterId,
-          date: logDate,
-        },
-      });
-
-      if (existingLog) {
-        // Update existing log
-        await prisma.productionLog.update({
-          where: { id: existingLog.id },
-          data: {
-            interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
-            callsAttended: (existingLog.callsAttended || 0) + 1,
-          },
+      const durationSeconds = session.durationSeconds && session.durationSeconds > 0
+        ? session.durationSeconds
+        : Math.max(0, Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 1000));
+      const tariffSnapshot = Number(session.tariffSnapshot);
+      if (!Number.isFinite(tariffSnapshot) || tariffSnapshot < 0) {
+        skipped.push(session.id);
+        continue;
+      }
+      const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
+      const minutes = Math.floor(durationSeconds / 60);
+      if (minutes <= 0) {
+        // Sub-minute calls do not contribute production minutes. Mark them
+        // settled so the same immutable call is not retried on every request.
+        await prisma.callSession.updateMany({
+          where: { id: session.id, isSettled: false },
+          data: { isSettled: true, durationSeconds, callCost },
         });
-      } else {
-        // Create new log
-        await prisma.productionLog.create({
-          data: {
-            interpreterId,
-            date: logDate,
-            interpretedMinutes: minutes,
-            callsAttended: 1,
-            status: 'Completed',
-            observaciones: 'Synced from orphaned CallSession',
-            adherence: 100,
-          },
-        });
+        skipped.push(session.id);
+        continue;
       }
 
-      // Mark session as settled to avoid double-syncing
-      await prisma.callSession.update({
-        where: { id: session.id },
-        data: { isSettled: true },
+      const dayStr = getLocalDateStr(session.startedAt);
+      const logDate = new Date(`${dayStr}T12:00:00Z`);
+
+      // Claim, aggregate and settle the source call in one transaction. A
+      // failed write rolls back the claim, while concurrent requests cannot
+      // add the same CallSession minutes twice.
+      const wasSynced = await prisma.$transaction(async (tx) => {
+        const claim = await tx.callSession.updateMany({
+          where: { id: session.id, isSettled: false },
+          data: { isSettled: true, durationSeconds, callCost },
+        });
+        if (claim.count !== 1) return false;
+
+        const existingLog = await tx.productionLog.findFirst({
+          where: {
+            interpreterId,
+            date: logDate,
+          },
+        });
+
+        if (existingLog) {
+          await tx.productionLog.update({
+            where: { id: existingLog.id },
+            data: {
+              interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
+              callsAttended: (existingLog.callsAttended || 0) + 1,
+            },
+          });
+        } else {
+          await tx.productionLog.create({
+            data: {
+              interpreterId,
+              date: logDate,
+              interpretedMinutes: minutes,
+              callsAttended: 1,
+              status: 'Completed',
+              observaciones: 'Synced from orphaned CallSession',
+              adherence: 100,
+            },
+          });
+        }
+
+        return true;
       });
 
-      synced.push(session.id);
+      if (wasSynced) synced.push(session.id);
+      else skipped.push(session.id);
     }
+
+    const remainingCount = await prisma.callSession.count({
+      where: {
+        interpreterId,
+        endedAt: { not: null },
+        isSettled: false,
+      },
+    });
 
     return NextResponse.json({
       success: true,
@@ -129,6 +156,8 @@ export async function POST(req: NextRequest) {
       skipped,
       totalSynced: synced.length,
       totalSkipped: skipped.length,
+      remainingCount,
+      hasMore: remainingCount > 0,
     });
   } catch (error) {
     console.error(' ERROR [/api/calls/sync]:', error);
@@ -144,25 +173,22 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const { userId, user } = await auth();
-    if (!userId || !user) {
+    const actor = await getCurrentActor();
+    if (!actor) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { interpreterId: true, role: true },
-    });
-
-    if (!profile?.interpreterId) {
+    if (actor.role !== 'interpreter') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (!actor.interpreterId) {
       return NextResponse.json({ error: 'Interpreter profile not found' }, { status: 404 });
     }
+    const interpreterId = actor.interpreterId;
 
     const orphanedCount = await prisma.callSession.count({
       where: {
-        interpreterId: profile.interpreterId,
+        interpreterId,
         endedAt: { not: null },
-        durationSeconds: { gt: 0 },
         isSettled: false,
       },
     });

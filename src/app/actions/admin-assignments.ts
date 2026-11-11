@@ -21,6 +21,14 @@ export async function createInterpreterAssignment(formData: FormData) {
   const { interpreterId, accountId, startsAt, endsAt, notes } = parsed.data;
   if (endsAt && endsAt < startsAt) return { success: false, error: 'La fecha final no puede ser anterior al inicio.' };
   try {
+    const interpreter = await prisma.interpreter.findFirst({
+      where: { id: interpreterId, status: 'Activo' },
+      select: { id: true },
+    });
+    if (!interpreter) {
+      return { success: false, error: 'Solo se pueden asignar intérpretes activos. Los candidatos aún no están habilitados para producción.' };
+    }
+
     await prisma.interpreterAccountAssignment.create({
       data: {
         interpreterId, accountId,

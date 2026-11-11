@@ -2,137 +2,162 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 
+const MAX_BATCH_SIZE = 500;
+const MANUAL_CALL_NOTES = [
+  'Manual entry via Admin Server Action',
+  'Manual entry by Administrator',
+];
+
 /**
- * Format a Santo_Domingo timestamp (from @db.Timestamptz) to "YYYY-MM-DD".
- * Works correctly for full timestamps with timezone info.
+ * Format a Timestamptz value to the operational Santo Domingo calendar date.
  */
-function formatSantoDomingoDate(d: Date): string {
+function formatSantoDomingoDate(date: Date): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Santo_Domingo',
     year: 'numeric',
     month: '2-digit',
-    day: '2-digit'
-  }).format(d);
+    day: '2-digit',
+  }).format(date);
 }
 
 /**
- * Format a @db.Date column value to "YYYY-MM-DD".
- * Prisma reads DATE as midnight UTC — toISOString gives the stored date.
+ * Admin-only reconciliation of completed live CallSessions.
+ *
+ * This is intentionally POST-only: it writes production and settlement data.
+ * Each source call is claimed and aggregated in one transaction, so retries
+ * and concurrent requests cannot count the same call twice.
  */
-function formatDbDate(d: Date): string {
-  return d.toISOString().split('T')[0];
-}
-
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   const denied = await guardApiAuth(request, 'admin');
   if (denied) return denied;
 
-  console.log('--- Iniciando sincronización de CallSessions a ProductionLogs ---');
-
   try {
+    const where = {
+      endedAt: { not: null },
+      isSettled: false,
+      OR: [
+        { notes: null },
+        { notes: { notIn: MANUAL_CALL_NOTES } },
+      ],
+    };
+
+    const processableWhere = { ...where, startedAt: { not: null } };
+    const invalidTimestampWhere = { ...where, startedAt: null };
+
     const sessions = await prisma.callSession.findMany({
-      where: {
-        endedAt: { not: null },
-        notes: {
-          notIn: ['Manual entry via Admin Server Action', 'Manual entry by Administrator']
-        }
-      }
+      where: processableWhere,
+      select: {
+        id: true,
+        interpreterId: true,
+        startedAt: true,
+        endedAt: true,
+        durationSeconds: true,
+        tariffSnapshot: true,
+      },
+      orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
+      take: MAX_BATCH_SIZE,
     });
-
-    console.log(`Se encontraron ${sessions.length} sesiones en vivo completadas.`);
-
-    const grouped = new Map<string, number>();
-    const callCount = new Map<string, number>();
-
-    for (const session of sessions) {
-      if (!session.startedAt || !session.durationSeconds || session.durationSeconds < 0) continue;
-
-      // startedAt is a @db.Timestamptz — timezone-aware formatting is correct
-      const dayStr = formatSantoDomingoDate(session.startedAt);
-      const key = `${session.interpreterId}_${dayStr}`;
-      const minutes = Math.floor(session.durationSeconds / 60);
-
-      if (minutes > 0) {
-        const existing = grouped.get(key) || 0;
-        grouped.set(key, existing + minutes);
-
-        const existingCalls = callCount.get(key) || 0;
-        callCount.set(key, existingCalls + 1);
-      }
-    }
 
     let createdCount = 0;
     let updatedCount = 0;
+    let skippedCount = 0;
 
-    // Fetch all production logs for affected interpreters in one batch
-    const interpreterIds = [...new Set(Array.from(grouped.keys()).map(k => parseInt(k.split('_')[0], 10)))];
-    if (interpreterIds.length === 0) {
-      return NextResponse.json({ success: true, message: 'Sincronización completada', createdCount: 0, updatedCount: 0 });
-    }
-    const allLogs = await prisma.productionLog.findMany({
-      where: { interpreterId: { in: interpreterIds } }
-    });
-
-    // Index logs by interpreterId → date string for fast lookup
-    const logsByInt = new Map<number, Map<string, typeof allLogs[number]>>();
-    allLogs.forEach(log => {
-      if (log.interpreterId == null) return;
-      if (!logsByInt.has(log.interpreterId)) {
-        logsByInt.set(log.interpreterId, new Map());
+    for (const session of sessions) {
+      if (!session.startedAt || !session.endedAt || session.tariffSnapshot === null || !session.interpreterId) {
+        skippedCount++;
+        continue;
       }
-      // Use formatDbDate for @db.Date column values
-      logsByInt.get(log.interpreterId)!.set(formatDbDate(log.date), log);
-    });
+      const durationSeconds = session.durationSeconds && session.durationSeconds > 0
+        ? session.durationSeconds
+        : Math.max(0, Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 1000));
+      const tariffSnapshot = Number(session.tariffSnapshot);
+      if (!Number.isFinite(tariffSnapshot) || tariffSnapshot < 0) {
+        skippedCount++;
+        continue;
+      }
+      const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
+      const minutes = Math.floor(durationSeconds / 60);
+      const day = formatSantoDomingoDate(session.startedAt);
+      const logDate = new Date(`${day}T12:00:00.000Z`);
 
-    for (const [key, extraMinutes] of grouped.entries()) {
-      const [interpreterIdStr, dayStr] = key.split('_');
-      const interpreterId = parseInt(interpreterIdStr, 10);
-      const calls = callCount.get(key) || 0;
+      const result = await prisma.$transaction(async (tx) => {
+        // Claim first inside the transaction. If the aggregate write fails,
+        // the claim rolls back; another request cannot claim the same row.
+        const claim = await tx.callSession.updateMany({
+          where: { id: session.id, isSettled: false },
+          data: { isSettled: true, durationSeconds, callCost },
+        });
+        if (claim.count !== 1) return 'skipped' as const;
+        // Calls shorter than one full minute do not add payroll minutes, but
+        // are settled so the reconciliation does not retry them indefinitely.
+        if (minutes <= 0) return 'skipped' as const;
 
-      const logDate = new Date(`${dayStr}T12:00:00Z`);
-      const intLogs = logsByInt.get(interpreterId);
-      const existingLog = intLogs?.get(dayStr);
+        const existingLog = await tx.productionLog.findFirst({
+          where: {
+            interpreterId: session.interpreterId,
+            date: logDate,
+          },
+          select: {
+            id: true,
+            interpretedMinutes: true,
+            callsAttended: true,
+          },
+        });
 
-      if (existingLog) {
-        if (existingLog.observaciones?.includes('Sincronizado desde llamadas en vivo')) {
-          continue;
+        if (existingLog) {
+          await tx.productionLog.update({
+            where: { id: existingLog.id },
+            data: {
+              interpretedMinutes: (existingLog.interpretedMinutes ?? 0) + minutes,
+              callsAttended: (existingLog.callsAttended ?? 0) + 1,
+            },
+          });
+          return 'updated' as const;
         }
 
-        await prisma.productionLog.update({
-          where: { id: existingLog.id },
+        await tx.productionLog.create({
           data: {
-            interpretedMinutes: (existingLog.interpretedMinutes || 0) + extraMinutes,
-            callsAttended: (existingLog.callsAttended || 0) + calls,
-            observaciones: existingLog.observaciones
-              ? `${existingLog.observaciones} | Sincronizado desde llamadas en vivo (+${extraMinutes}m)`
-              : `Sincronizado desde llamadas en vivo (+${extraMinutes}m)`
-          }
-        });
-        updatedCount++;
-      } else {
-        await prisma.productionLog.create({
-          data: {
-            interpreterId,
+            interpreterId: session.interpreterId,
             date: logDate,
-            interpretedMinutes: extraMinutes,
-            callsAttended: calls,
+            interpretedMinutes: minutes,
+            callsAttended: 1,
             status: 'Completed',
-            observaciones: 'Sincronizado desde llamadas en vivo',
-            adherence: 100
-          }
+            observaciones: 'Synced from live CallSession reconciliation',
+            adherence: 100,
+          },
         });
-        createdCount++;
-      }
+        return 'created' as const;
+      });
+
+      if (result === 'created') createdCount++;
+      else if (result === 'updated') updatedCount++;
+      else skippedCount++;
     }
+
+    const [remainingCount, invalidTimestampCount] = await Promise.all([
+      prisma.callSession.count({ where: processableWhere }),
+      prisma.callSession.count({ where: invalidTimestampWhere }),
+    ]);
 
     return NextResponse.json({
       success: true,
-      message: 'Sincronización completada',
+      processedCount: sessions.length,
       createdCount,
-      updatedCount
+      updatedCount,
+      skippedCount,
+      remainingCount,
+      invalidTimestampCount,
+      hasMore: remainingCount > 0,
+      batchSize: MAX_BATCH_SIZE,
     });
-  } catch (error: any) {
-    console.error('Error syncing:', error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+  } catch (error) {
+    console.error(
+      'CallSession reconciliation failed:',
+      error instanceof Error ? error.message : 'Unknown error',
+    );
+    return NextResponse.json(
+      { success: false, error: 'Unable to reconcile production sessions' },
+      { status: 500 },
+    );
   }
 }

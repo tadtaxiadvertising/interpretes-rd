@@ -51,3 +51,6 @@ CREATE INDEX IF NOT EXISTS "idx_roleplay_audio_jobs_session"
 
 CREATE INDEX IF NOT EXISTS "idx_roleplay_audio_jobs_scenario"
   ON "public"."roleplay_audio_jobs" ("scenario_id");
+
+-- Defense in depth: this table is an internal worker queue, not a client API.
+ALTER TABLE "public"."roleplay_audio_jobs" ENABLE ROW LEVEL SECURITY;

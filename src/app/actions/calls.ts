@@ -113,9 +113,30 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
 
     // End session and reset status atomically
     const session = await db.$transaction(async (tx) => {
+      const activeSession = await tx.callSession.findFirst({
+        where: { id: sessionId, interpreterId, endedAt: null },
+        select: { startedAt: true, tariffSnapshot: true },
+      });
+      if (!activeSession?.startedAt) {
+        throw new Error('Active call session not found or has no start timestamp.');
+      }
+
+      const endedAt = new Date();
+      const durationSeconds = Math.max(
+        0,
+        Math.round((endedAt.getTime() - activeSession.startedAt.getTime()) / 1000),
+      );
+      const tariffSnapshot = Number(activeSession.tariffSnapshot);
+      if (!Number.isFinite(tariffSnapshot) || tariffSnapshot < 0) {
+        throw new Error('Active call session has an invalid tariff snapshot.');
+      }
+      const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
+
+      // The call, its production aggregate and its settled flag share one
+      // transaction. Retries cannot leave a null duration or double-count it.
       const updated = await tx.callSession.update({
-        where: { id: sessionId, interpreterId },
-        data: { endedAt: new Date() },
+        where: { id: sessionId, interpreterId, endedAt: null },
+        data: { endedAt, durationSeconds, callCost, isSettled: true },
         select: { durationSeconds: true, callCost: true, startedAt: true }
       });
 

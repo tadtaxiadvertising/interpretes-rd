@@ -36,6 +36,9 @@ export async function POST(req: Request) {
     if (!userData) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
+    if (userData.profile.role !== 'interpreter') {
+      return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await parseJsonBody(req, PresenceSchema);
     const profile = userData.profile;
@@ -207,8 +210,11 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const userData = await getCurrentUser();
-    if (!userData?.profile?.interpreterId) {
-      return NextResponse.json({ online: false });
+    if (!userData) {
+      return NextResponse.json({ online: false }, { status: 401 });
+    }
+    if (userData.profile.role !== 'interpreter' || !userData.profile.interpreterId) {
+      return NextResponse.json({ online: false }, { status: 403 });
     }
 
     const interpreter = await db.interpreter.findUnique({

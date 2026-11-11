@@ -212,6 +212,8 @@ export async function runDeploymentPreflight(
           (SELECT relrowsecurity FROM pg_class
            WHERE oid = 'public.clients'::regclass) AS client_rls,
           to_regclass('public.roleplay_audio_jobs') IS NOT NULL AS roleplay_queue_table,
+          (SELECT relrowsecurity FROM pg_class
+           WHERE oid = 'public.roleplay_audio_jobs'::regclass) AS roleplay_queue_rls,
           EXISTS (
             SELECT 1 FROM pg_type t
             JOIN pg_namespace n ON n.oid = t.typnamespace
@@ -244,7 +246,7 @@ export async function runDeploymentPreflight(
       const status = integrity.rows[0];
       if (!status || ![
         'account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls',
-        'roleplay_queue_table', 'roleplay_queue_enum', 'roleplay_queue_unique',
+        'roleplay_queue_table', 'roleplay_queue_rls', 'roleplay_queue_enum', 'roleplay_queue_unique',
         'roleplay_queue_foreign_keys', 'roleplay_base_audio_path',
       ].every((key) => status[key] === true)) {
         throw new Error('Client-directory or Roleplay audio database constraints are incomplete.');

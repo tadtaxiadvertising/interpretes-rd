@@ -1,38 +1,31 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-import { guardApiAuth } from '@/lib/api-auth';
-import { apiError } from '@/lib/api-responses';
 
-export async function GET(request: Request) {
-  try {
-    const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+/**
+ * Schema changes are deployment-managed through reviewed Prisma SQL
+ * migrations and deployment preflight. This legacy endpoint previously
+ * executed ALTER TABLE statements from an HTTP GET request, which made
+ * database structure mutable at request time and bypassed migration history.
+ *
+ * Keep a 410 response for old clients/bookmarks; never run DDL from a route.
+ */
+function retiredSchemaPatchEndpoint() {
+  return NextResponse.json(
+    {
+      success: false,
+      error: 'This endpoint has been retired. Database changes must be delivered through reviewed migrations.',
+      code: 'ENDPOINT_RETIRED',
+    },
+    {
+      status: 410,
+      headers: { 'Cache-Control': 'no-store' },
+    },
+  );
+}
 
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE interpreters 
-      ADD COLUMN IF NOT EXISTS payment_frequency TEXT DEFAULT 'Monthly',
-      ADD COLUMN IF NOT EXISTS payment_day TEXT DEFAULT '1';
-    `);
+export async function GET() {
+  return retiredSchemaPatchEndpoint();
+}
 
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE production_logs 
-      ADD COLUMN IF NOT EXISTS verified_minutes INTEGER;
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE payroll_records 
-      ADD COLUMN IF NOT EXISTS verified_minutes INTEGER,
-      ADD COLUMN IF NOT EXISTS incentives_total DECIMAL(10, 2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP(3),
-      ADD COLUMN IF NOT EXISTS transaction_reference TEXT,
-      ADD COLUMN IF NOT EXISTS reconciliation_hash TEXT UNIQUE;
-    `);
-
-    return NextResponse.json({
-      success: true,
-      message: "Database schema successfully patched with all missing columns!",
-    });
-  } catch (error) {
-    return apiError({ error, fallback: 'Database schema patch failed' });
-  }
+export async function POST() {
+  return retiredSchemaPatchEndpoint();
 }

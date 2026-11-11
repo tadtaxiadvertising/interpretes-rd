@@ -9,7 +9,7 @@ export default async function AssignmentsPage() {
       orderBy: [{ startsAt: 'desc' }, { id: 'desc' }], take: 100,
       include: { interpreter: { select: { name: true } }, account: { select: { name: true, client: { select: { name: true } }, company: { select: { name: true } } } } },
     }),
-    prisma.interpreter.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    prisma.interpreter.findMany({ where: { status: 'Activo' }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.account.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true, client: { select: { name: true } }, company: { select: { name: true } } } }),
   ]);
   return <section className="space-y-6 text-white">
