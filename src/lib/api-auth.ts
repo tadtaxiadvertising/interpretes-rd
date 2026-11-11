@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import prisma from '@/lib/prisma';
 import { resolveUserRoleByEmail } from '@/lib/admin-identity';
-import { getCurrentActor, type CurrentActor } from '@/lib/auth/current-actor';
+import { getCurrentActor, resolveRecruitmentIdentity, type CurrentActor } from '@/lib/auth/current-actor';
 import type { UserRole } from '@/lib/types';
 
 /**
@@ -26,6 +26,7 @@ export type ApiActor = {
   role: UserRole;
   interpreterId: number | null;
   profileId: string | null;
+  candidateId: number | null;
 };
 
 export class ApiAuthError extends Error {
@@ -78,7 +79,7 @@ async function actorFromSupabaseUser(user: {
     role = resolveUserRoleByEmail(email, 'interpreter');
   }
 
-  if (role !== 'admin' && !interpreterId) {
+  if (role !== 'admin' && role !== 'candidate' && !interpreterId) {
     const interpreter = await prisma.interpreter.findFirst({
       where: { emailCorporativo: email },
       select: { id: true },
@@ -86,11 +87,17 @@ async function actorFromSupabaseUser(user: {
     interpreterId = interpreter?.id ?? null;
   }
 
+  // Keep Bearer-token API identity resolution identical to cookie-session
+  // resolution. Recruitment candidates must never silently become interpreters
+  // simply because they do not yet have a user_profiles row.
+  const recruitment = await resolveRecruitmentIdentity(email, role, interpreterId);
+
   return {
     userId,
     email,
-    role,
-    interpreterId,
+    role: recruitment.role,
+    interpreterId: recruitment.interpreterId,
+    candidateId: recruitment.candidateId,
     profileId: profile?.id ?? null,
   };
 }
@@ -126,6 +133,7 @@ function actorFromCurrentActor(actor: CurrentActor): ApiActor {
     role: actor.role,
     interpreterId: actor.interpreterId,
     profileId: actor.profileId,
+    candidateId: actor.candidateId,
   };
 }
 
