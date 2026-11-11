@@ -34,7 +34,6 @@ export async function POST(request: Request) {
   try {
     const where = {
       endedAt: { not: null },
-      durationSeconds: { gt: 0 },
       isSettled: false,
       OR: [
         { notes: null },
@@ -51,7 +50,9 @@ export async function POST(request: Request) {
         id: true,
         interpreterId: true,
         startedAt: true,
+        endedAt: true,
         durationSeconds: true,
+        tariffSnapshot: true,
       },
       orderBy: [{ startedAt: 'asc' }, { id: 'asc' }],
       take: MAX_BATCH_SIZE,
@@ -62,12 +63,20 @@ export async function POST(request: Request) {
     let skippedCount = 0;
 
     for (const session of sessions) {
-      if (!session.startedAt || !session.durationSeconds || session.durationSeconds < 0) {
+      if (!session.startedAt || !session.endedAt || session.tariffSnapshot === null) {
         skippedCount++;
         continue;
       }
-
-      const minutes = Math.floor(session.durationSeconds / 60);
+      const durationSeconds = session.durationSeconds && session.durationSeconds > 0
+        ? session.durationSeconds
+        : Math.max(0, Math.round((session.endedAt.getTime() - session.startedAt.getTime()) / 1000));
+      const tariffSnapshot = Number(session.tariffSnapshot);
+      if (!Number.isFinite(tariffSnapshot) || tariffSnapshot < 0) {
+        skippedCount++;
+        continue;
+      }
+      const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
+      const minutes = Math.floor(durationSeconds / 60);
       const day = formatSantoDomingoDate(session.startedAt);
       const logDate = new Date(`${day}T12:00:00.000Z`);
 
@@ -76,7 +85,7 @@ export async function POST(request: Request) {
         // the claim rolls back; another request cannot claim the same row.
         const claim = await tx.callSession.updateMany({
           where: { id: session.id, isSettled: false },
-          data: { isSettled: true },
+          data: { isSettled: true, durationSeconds, callCost },
         });
         if (claim.count !== 1) return 'skipped' as const;
         if (!session.interpreterId) return 'skipped' as const;
