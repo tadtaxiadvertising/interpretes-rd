@@ -16,7 +16,7 @@ export default async function AdminAccountsPage() {
         client: { select: { name: true } },
         company: { select: { name: true } },
         platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true, secretRef: true } },
-        assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { interpreter: { select: { id: true, name: true } } } },
+        assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { id: true, interpreterId: true, startsAt: true, endsAt: true, interpreter: { select: { id: true, name: true } } } },
         _count: { select: { assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] } } } },
       },
     }),
