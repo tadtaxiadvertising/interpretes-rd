@@ -9,6 +9,7 @@ const CLIENT_NAME = `E2E Client ${RUN_ID}`;
 const LEGACY_ACCOUNT_EMAIL = `e2e-legacy-${RUN_ID}@example.com`;
 const OPERATIONAL_ACCOUNT_EMAIL = `e2e-operational-${RUN_ID}@example.com`;
 const PASSWORD = 'E2E-Only-Password-2026!';
+let seededInterpreterId: number | null = null;
 
 async function withDatabase<T>(callback: (client: Client) => Promise<T>): Promise<T> {
   const connectionString = process.env.E2E_DATABASE_URL;
@@ -63,6 +64,7 @@ test.describe('Browser authentication and role isolation', () => {
       );
       const interpreterId = interpreter.rows[0]?.id;
       if (!interpreterId) throw new Error('Could not seed E2E interpreter');
+      seededInterpreterId = interpreterId;
 
       await client.query(
         `INSERT INTO public.rbac_users (id, email, password, name, role, "updatedAt")
@@ -81,6 +83,10 @@ test.describe('Browser authentication and role isolation', () => {
     await withDatabase(async (client) => {
       await client.query('DELETE FROM public.user_profiles WHERE email IN ($1, $2)', [ADMIN_EMAIL, INTERPRETER_EMAIL]);
       await client.query('DELETE FROM public.rbac_users WHERE email IN ($1, $2)', [ADMIN_EMAIL, INTERPRETER_EMAIL]);
+      await client.query(
+        'DELETE FROM public.interpreter_account_assignments WHERE interpreter_id = $1 AND account_id IN (SELECT id FROM public.accounts WHERE email = $2)',
+        [seededInterpreterId, OPERATIONAL_ACCOUNT_EMAIL],
+      );
       await client.query(
         'DELETE FROM public.account_platforms WHERE account_id IN (SELECT id FROM public.accounts WHERE email IN ($1, $2))',
         [LEGACY_ACCOUNT_EMAIL, OPERATIONAL_ACCOUNT_EMAIL],
@@ -143,6 +149,17 @@ test.describe('Browser authentication and role isolation', () => {
     await expect(page.getByText('Cuenta registrada correctamente.')).toBeVisible();
     await expect(page.getByRole('row').filter({ hasText: 'E2E Operational Account' })).toContainText('E2E Account Holder');
     await expect(page.getByRole('row').filter({ hasText: 'E2E Operational Account' })).toContainText(CLIENT_NAME);
+
+    await page.goto('/admin/assignments');
+    await page.getByLabel('Intérprete').selectOption({ label: 'E2E Interpreter' });
+    await page.getByLabel('Cuenta').selectOption({
+      label: `${CLIENT_NAME} · Sin compañía · E2E Operational Account`,
+    });
+    await page.getByLabel('Inicio').fill(new Date().toISOString().slice(0, 10));
+    await page.getByLabel('Notas').fill('E2E assignment workflow');
+    await page.getByRole('button', { name: 'Crear asignación' }).click();
+    await expect(page.getByText('Asignación registrada.')).toBeVisible();
+    await expect(page.getByRole('row').filter({ hasText: 'E2E Operational Account' })).toContainText('E2E Interpreter');
 
     await page.goto('/dashboard');
     await expect(page).toHaveURL(/\/admin(?:\/)?(?:\?.*)?$/);
