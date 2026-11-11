@@ -1,25 +1,40 @@
 import { readFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
+import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error('DATABASE_URL is required to verify critical SQL migrations.');
 }
 
-const pool = new Pool({ connectionString });
+const caPath = join(process.cwd(), 'certs', 'prod-ca-2021.crt');
+const caPem = readFileSync(caPath, 'utf8');
+const pool = new Pool(createDatabasePoolConfig(connectionString, caPem));
 
 async function main() {
   try {
     // Simulate the legacy production CHECK that caused SQLSTATE 23514.
     // Prisma db push does not model this hand-written CHECK constraint.
     await pool.query(`
-      ALTER TABLE public.roleplay_sessions
-      ADD CONSTRAINT roleplay_session_xor_subject
-      CHECK (
-        ((interpreter_id IS NOT NULL)::integer
-          + (recruitment_candidate_id IS NOT NULL)::integer) = 1
-      )
+      DO $migration$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = 'public.roleplay_sessions'::regclass
+            AND conname = 'roleplay_session_xor_subject'
+        ) THEN
+          ALTER TABLE public.roleplay_sessions
+          ADD CONSTRAINT roleplay_session_xor_subject
+          CHECK (
+            ((interpreter_id IS NOT NULL)::integer
+              + (recruitment_candidate_id IS NOT NULL)::integer) = 1
+          );
+        END IF;
+      END
+      $migration$;
     `);
 
     const migrations = [
