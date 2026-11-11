@@ -418,7 +418,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
 
     if (!profile) return null;
 
-    const resolvedRole = resolveUserRoleByEmail(profile.email, profile.role);
+    const resolvedRole = resolveUserRoleByEmail(profile.email, actor.role ?? profile.role);
     // CurrentActor can safely resolve a missing interpreter link by the
     // interpreter's unique corporate email. Persist that same resolution so
     // pages using getCurrentProfile do not disagree with API/Server Action RBAC.
