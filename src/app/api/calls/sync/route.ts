@@ -65,6 +65,12 @@ export async function POST(req: NextRequest) {
 
     for (const session of orphanedSessions) {
       if (!session.endedAt || !session.durationSeconds) continue;
+      if (!session.startedAt) {
+        // Without the original timestamp we cannot safely assign a payroll day.
+        // Leave the call unsettled for explicit data repair rather than using now.
+        skipped.push(session.id);
+        continue;
+      }
 
       const minutes = Math.floor(session.durationSeconds / 60);
       if (minutes <= 0) {
@@ -78,7 +84,7 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      const dayStr = getLocalDateStr(session.startedAt || new Date());
+      const dayStr = getLocalDateStr(session.startedAt);
       const logDate = new Date(`${dayStr}T12:00:00Z`);
 
       // Claim, aggregate and settle the source call in one transaction. A
