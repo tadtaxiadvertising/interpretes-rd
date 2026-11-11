@@ -70,8 +70,10 @@ export interface PayrollCalculationResult {
  *   key: "tier3_hours" â†’ value: "200"
  *   key: "tier3_bonus" â†’ value: "200.00"
  */
-export async function getIncentiveTiers(): Promise<IncentiveTier[]> {
-  const configs = await db.systemConfig.findMany({
+export async function getIncentiveTiers(
+  client: Prisma.TransactionClient = db
+): Promise<IncentiveTier[]> {
+  const configs = await client.systemConfig.findMany({
     where: {
       key: {
         startsWith: 'tier',
@@ -159,8 +161,11 @@ export async function calculateUnifiedTime(
  * Calcula el bono de incentivo dinÃ¡micamente basado en los tiers de SystemConfig.
  * Retorna el bono del tier mÃ¡s alto que el intÃ©rprete haya alcanzado.
  */
-export async function calculateIncentive(totalHours: number): Promise<IncentiveResult> {
-  const tiers = await getIncentiveTiers();
+export async function calculateIncentive(
+  totalHours: number,
+  client: Prisma.TransactionClient = db
+): Promise<IncentiveResult> {
+  const tiers = await getIncentiveTiers(client);
 
   // Busca el tier mÃ¡s alto alcanzado (ya estÃ¡n ordenados descendente)
   for (const tier of tiers) {
@@ -185,10 +190,11 @@ export async function calculateIncentive(totalHours: number): Promise<IncentiveR
 export async function calculateFullPayroll(
   interpreterId: number,
   periodStart: Date,
-  periodEnd: Date
+  periodEnd: Date,
+  client: Prisma.TransactionClient = db
 ): Promise<PayrollCalculationResult> {
   // 1. Obtener intérprete con sus metadatos financieros
-  const interpreter = await db.interpreter.findUnique({
+  const interpreter = await client.interpreter.findUnique({
     where: { id: interpreterId },
     select: {
       id: true,
@@ -211,7 +217,7 @@ export async function calculateFullPayroll(
 
   // 2. Obtener logs de producción (single source of truth: incluye imports,
   //    logs manuales y llamadas sincronizadas desde el timer en vivo)
-  const productionLogs = await db.productionLog.findMany({
+  const productionLogs = await client.productionLog.findMany({
     where: {
       interpreterId,
       date: { gte: periodStart, lte: periodEnd },
@@ -244,11 +250,11 @@ export async function calculateFullPayroll(
   const grossTotal = Math.round(totalMinutes * baseRatePerMinute * 100) / 100;
 
   // 6. Incentivos dinámicos
-  const incentive = await calculateIncentive(totalHours);
+  const incentive = await calculateIncentive(totalHours, client);
 
   // 7. Quality bonus (QA) con Regla de Auto-Fail
   let qualityBonus = 0;
-  const qaScores = await db.qAScore.findMany({
+  const qaScores = await client.qAScore.findMany({
     where: {
       interpreterId,
       auditDate: { gte: periodStart, lte: periodEnd },
@@ -295,7 +301,7 @@ export async function calculateFullPayroll(
     const fifteenthDay = new Date(periodStart.getFullYear(), periodStart.getMonth(), 15);
     
     // Buscar registro de nómina de Q1
-    const q1Record = await db.payrollRecord.findFirst({
+    const q1Record = await client.payrollRecord.findFirst({
       where: {
         interpreterId,
         periodStart: { gte: firstDayOfMonth },
@@ -418,9 +424,10 @@ export async function recalculateWithVerifiedMinutes(
  */
 export async function refreshPayrollRecord(
   interpreterId: number,
-  dateWithinPeriod: Date
+  dateWithinPeriod: Date,
+  client: Prisma.TransactionClient = db
 ): Promise<void> {
-  const record = await db.payrollRecord.findFirst({
+  const record = await client.payrollRecord.findFirst({
     where: {
       interpreterId,
       periodStart: { lte: dateWithinPeriod },
@@ -430,10 +437,10 @@ export async function refreshPayrollRecord(
   });
 
   if (record) {
-    const calc = await calculateFullPayroll(interpreterId, record.periodStart, record.periodEnd);
+    const calc = await calculateFullPayroll(interpreterId, record.periodStart, record.periodEnd, client);
     // Recheck the pending state in the write itself. A payment may be marked
     // paid after the initial read while this calculation is in progress.
-    await db.payrollRecord.updateMany({
+    await client.payrollRecord.updateMany({
       where: {
         id: record.id,
         status: { in: ['Pendiente', 'PENDING'] },
