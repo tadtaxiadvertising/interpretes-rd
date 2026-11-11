@@ -25,6 +25,7 @@ export type ApiActor = {
   email: string | null;
   role: UserRole;
   interpreterId: number | null;
+  candidateId: number | null;
   profileId: string | null;
 };
 
@@ -153,6 +154,7 @@ function actorFromCurrentActor(actor: CurrentActor): ApiActor {
     email: actor.email,
     role: actor.role,
     interpreterId: actor.interpreterId,
+    candidateId: actor.candidateId,
     profileId: actor.profileId,
   };
 }
