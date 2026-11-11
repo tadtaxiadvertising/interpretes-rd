@@ -14,7 +14,7 @@ const validEnv = {
 function fakeConnection() {
   const client = {
     connect: vi.fn().mockResolvedValue(undefined),
-    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true }] }),
+    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_rls: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true }] }),
     end: vi.fn().mockResolvedValue(undefined),
   };
   return { client, createClient: vi.fn().mockReturnValue(client) };
@@ -156,8 +156,33 @@ describe('deployment credential boundary', () => {
     expect(checks[6]).toContain('AS client_fk');
     expect(checks[6]).toContain('AS client_rls');
     expect(checks[6]).toContain('AS roleplay_queue_table');
+    expect(checks[6]).toContain('AS roleplay_queue_rls');
     expect(checks[6]).toContain('AS roleplay_queue_foreign_keys');
     expect(checks[7]).toBe('ROLLBACK');
+    expect(client.end).toHaveBeenCalledOnce();
+  });
+
+  it('blocks deployment if the internal Roleplay queue is missing RLS', async () => {
+    const { client, createClient } = fakeConnection();
+    client.query.mockImplementation(async (sql: string) => ({
+      rows: sql.includes('AS account_unique')
+        ? [{
+            account_unique: true,
+            legacy_unique_absent: true,
+            client_fk: true,
+            client_rls: true,
+            roleplay_queue_table: true,
+            roleplay_queue_rls: false,
+            roleplay_queue_enum: true,
+            roleplay_queue_unique: true,
+            roleplay_queue_foreign_keys: true,
+            roleplay_base_audio_path: true,
+          }]
+        : [],
+    }));
+    await expect(runDeploymentPreflight(validEnv, createClient, true)).rejects.toThrow(
+      'Production preflight: DIRECT_URL connection or schema prerequisite check failed.',
+    );
     expect(client.end).toHaveBeenCalledOnce();
   });
 
