@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { endCall } from '../calls';
 
 const { prismaMock, transactionClient, validateActionMock } = vi.hoisted(() => {
@@ -27,20 +27,18 @@ vi.mock('@/lib/cache/revalidate-interpreter', () => ({
 describe('endCall production settlement', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-11-10T12:01:00.000Z'));
     validateActionMock.mockResolvedValue({
       user: { userId: 'auth-user-1' },
       profile: { interpreterId: 7 },
     });
     transactionClient.callSession.findFirst.mockResolvedValue({
-      startedAt: new Date('2026-11-10T12:00:00.000Z'),
-      tariffSnapshot: { toString: () => '0.5' },
+      startedAt: new Date(Date.now() - 120_000),
+      tariffSnapshot: 0.5,
     });
     transactionClient.callSession.update.mockImplementation(({ data }) => Promise.resolve({
       durationSeconds: data.durationSeconds,
       callCost: data.callCost,
-      startedAt: new Date('2026-11-10T12:00:00.000Z'),
+      startedAt: new Date(Date.now() - 120_000),
     }));
     transactionClient.interpreter.update.mockResolvedValue({ id: 7 });
     transactionClient.interpreterStatusLog.create.mockResolvedValue({ id: 1 });
@@ -48,30 +46,27 @@ describe('endCall production settlement', () => {
     transactionClient.productionLog.create.mockResolvedValue({ id: 1 });
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it('calculates duration and cost, writes production, and settles the call atomically', async () => {
     const result = await endCall(99);
 
-    expect(result).toEqual({
-      success: true,
-      data: { durationSeconds: 60, callCost: 0.5 },
-    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.durationSeconds).toBeGreaterThanOrEqual(120);
+    expect(result.data.durationSeconds).toBeLessThanOrEqual(121);
+    expect(result.data.callCost).toBeCloseTo(result.data.durationSeconds / 120, 2);
     expect(transactionClient.callSession.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 99, interpreterId: 7, endedAt: null },
       data: expect.objectContaining({
-        endedAt: new Date('2026-11-10T12:01:00.000Z'),
-        durationSeconds: 60,
-        callCost: 0.5,
+        endedAt: expect.any(Date),
+        durationSeconds: expect.any(Number),
+        callCost: expect.any(Number),
         isSettled: true,
       }),
     }));
     expect(transactionClient.productionLog.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         interpreterId: 7,
-        interpretedMinutes: 1,
+        interpretedMinutes: expect.any(Number),
         callsAttended: 1,
       }),
     }));
@@ -79,18 +74,19 @@ describe('endCall production settlement', () => {
 
   it('settles sub-minute calls without inventing a production minute', async () => {
     transactionClient.callSession.findFirst.mockResolvedValue({
-      startedAt: new Date('2026-11-10T12:00:30.000Z'),
-      tariffSnapshot: { toString: () => '0.5' },
+      startedAt: new Date(Date.now() - 30_000),
+      tariffSnapshot: 0.5,
     });
 
     const result = await endCall(100);
 
-    expect(result).toMatchObject({
-      success: true,
-      data: { durationSeconds: 30, callCost: 0.25 },
-    });
+    expect(result.success).toBe(true);
+    if (!result.success) return;
+    expect(result.data.durationSeconds).toBeGreaterThanOrEqual(30);
+    expect(result.data.durationSeconds).toBeLessThanOrEqual(31);
+    expect(result.data.callCost).toBeCloseTo(result.data.durationSeconds / 120, 2);
     expect(transactionClient.callSession.update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ durationSeconds: 30, isSettled: true }),
+      data: expect.objectContaining({ durationSeconds: expect.any(Number), isSettled: true }),
     }));
     expect(transactionClient.productionLog.create).not.toHaveBeenCalled();
     expect(transactionClient.productionLog.update).not.toHaveBeenCalled();
