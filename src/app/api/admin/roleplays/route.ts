@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 const db = prisma;
@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
     const participantId = formData.get('participantId');
     const rawScenarios = formData.get('scenarios');
     const scenarioAudios = formData.getAll('scenarioAudios');
+    const rawAudioChecksums = formData.get('scenarioAudioSha256');
 
     if (typeof participantType !== 'string' || typeof rawScenarios !== 'string') {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -121,6 +122,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let expectedAudioChecksums: Array<string | null> | null = null;
+    if (rawAudioChecksums !== null) {
+      if (typeof rawAudioChecksums !== 'string') {
+        return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+      }
+      try {
+        const parsedChecksums: unknown = JSON.parse(rawAudioChecksums);
+        if (!Array.isArray(parsedChecksums) || parsedChecksums.length !== scenarios.length || parsedChecksums.some((value) => value !== null && (typeof value !== 'string' || !/^[a-f0-9]{64}$/i.test(value)))) {
+          return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+        }
+        expectedAudioChecksums = parsedChecksums as Array<string | null>;
+      } catch {
+        return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+      }
+    }
+
     if (scenarioAudios.length !== scenarios.length) {
       return NextResponse.json(
         { success: false, error: 'Each scenario requires exactly one base audio file' },
@@ -140,6 +157,19 @@ export async function POST(req: NextRequest) {
           { success: false, error: `Audio type ${audio.type || 'unknown'} not allowed` },
           { status: 400 }
         );
+      }
+    }
+
+    if (expectedAudioChecksums) {
+      for (let index = 0; index < scenarioAudios.length; index++) {
+        const expected = expectedAudioChecksums[index];
+        if (!expected) continue;
+        const audio = scenarioAudios[index];
+        if (!(audio instanceof File)) continue;
+        const actual = createHash('sha256').update(Buffer.from(await audio.arrayBuffer())).digest('hex');
+        if (actual !== expected.toLowerCase()) {
+          return NextResponse.json({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
+        }
       }
     }
 
