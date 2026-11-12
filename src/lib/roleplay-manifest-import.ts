@@ -112,7 +112,7 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
     }
     result.push({
       title: segment.title.trim(),
-      baseAudioFile: audio.type ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
+      baseAudioFile: audio.type === 'audio/mpeg' ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
       durationLimitSec: segment.duration_limit_sec ?? 0,
       scriptPrompt: segment.script_prompt ?? '',
       sha256: digest,
