@@ -1,7 +1,7 @@
 -- Per-session audit ledger for live-call production.
 -- Deliberately no backfill: historical daily aggregates cannot be mapped
 -- reliably to individual sessions without risking duplicate production.
-CREATE TABLE "public"."call_production_entries" (
+CREATE TABLE IF NOT EXISTS "public"."call_production_entries" (
   "call_session_id" INTEGER PRIMARY KEY,
   "interpreter_id" INTEGER NOT NULL,
   "production_date" DATE NOT NULL,
@@ -15,9 +15,9 @@ CREATE TABLE "public"."call_production_entries" (
     CHECK ("calls_attended" >= 0)
 );
 
-CREATE INDEX "idx_call_production_entries_interpreter_date"
+CREATE INDEX IF NOT EXISTS "idx_call_production_entries_interpreter_date"
   ON "public"."call_production_entries" ("interpreter_id", "production_date");
-CREATE INDEX "idx_call_production_entries_production_log"
+CREATE INDEX IF NOT EXISTS "idx_call_production_entries_production_log"
   ON "public"."call_production_entries" ("production_log_id");
 
 COMMENT ON TABLE "public"."call_production_entries" IS
