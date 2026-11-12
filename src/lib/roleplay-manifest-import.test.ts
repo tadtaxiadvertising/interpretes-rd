@@ -37,6 +37,14 @@ describe('prepareRoleplayManifestImport', () => {
     expect(scenarios[0].scriptPrompt).toBe('Interpreta consecutivamente');
   });
 
+  it('matches MP3 filenames without case sensitivity', async () => {
+    const { files } = createFixture(1);
+    const originalAudio = files[1];
+    const renamedAudio = new File([await originalAudio.arrayBuffer()], 'MEDICAL-01-EN.MP3', { type: 'audio/mpeg' });
+    const imported = await prepareRoleplayManifestImport([files[0], renamedAudio]);
+    expect(imported[0].baseAudioFile.name).toBe('MEDICAL-01-EN.MP3');
+  });
+
   it('returns a server-verifiable checksum even when the manifest omits one', async () => {
     const { files } = createFixture(1);
     const manifest = JSON.parse(await files[0].text());
