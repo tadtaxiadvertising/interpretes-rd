@@ -103,9 +103,9 @@ describe('endCall production ledger', () => {
     const result = await endCall(99);
 
     expect(result.success).toBe(false);
-    // The aggregate update is attempted before the ledger insert. Prisma's
-    // rejected transaction rolls it back; this unit mock cannot prove the
-    // database rollback itself.
+    // The daily aggregate write is attempted before the ledger insert. The
+    // rejected Prisma transaction is what guarantees that this write rolls
+    // back; this unit mock cannot assert database rollback semantics.
     expect(tx.productionLog.update).toHaveBeenCalledOnce();
     expect(tx.productionLog.create).not.toHaveBeenCalled();
   });
