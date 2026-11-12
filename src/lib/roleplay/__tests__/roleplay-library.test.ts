@@ -31,6 +31,12 @@ describe('getRoleplaySnapshotHash', () => {
   it('is stable when input rows are provided in a different order', () => {
     expect(getRoleplaySnapshotHash(scenarios)).toBe(getRoleplaySnapshotHash([...scenarios].reverse()));
   });
+  it('includes expected assessment keys in the snapshot identity', () => {
+    expect(getRoleplaySnapshotHash(scenarios)).not.toBe(getRoleplaySnapshotHash([
+      { ...scenarios[0], expectedKeys: ['Critical terminology'] }, scenarios[1],
+    ]));
+  });
+
   it('changes when a referenced audio or prompt changes', () => {
     expect(getRoleplaySnapshotHash(scenarios)).not.toBe(getRoleplaySnapshotHash([
       { ...scenarios[0], baseAudioUrl: `${publicBase}/b/0.mp3` }, scenarios[1],
