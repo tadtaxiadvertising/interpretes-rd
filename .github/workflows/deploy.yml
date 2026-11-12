@@ -207,6 +207,11 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261108120000_operational_account_holder_details/migration.sql --apply --transaction
 
+      - name: Apply per-session call production ledger migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run migrate -- prisma/migrations/20261111090000_call_production_ledger/migration.sql --apply --transaction
+
       - name: Verify production client directory schema after migrations
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
