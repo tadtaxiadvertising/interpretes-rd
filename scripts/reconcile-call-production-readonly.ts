@@ -19,6 +19,11 @@ if (!isValidDate(fromDate) || !isValidDate(toDate) || fromDate > toDate) {
   );
 }
 
+const rangeDays = (Date.parse(`${toDate}T00:00:00.000Z`) - Date.parse(`${fromDate}T00:00:00.000Z`)) / 86_400_000;
+if (rangeDays > 366) {
+  throw new Error('Limit each reconciliation run to 367 calendar dates or fewer; split longer histories into smaller windows.');
+}
+
 const reconciliationQuery = `
   WITH session_daily AS (
     SELECT
