@@ -113,11 +113,26 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
 
     // End session and reset status atomically
     const session = await db.$transaction(async (tx) => {
-      const updated = await tx.callSession.update({
-        where: { id: sessionId, interpreterId },
+      // Claim the active session exactly once. Repeated/concurrent endCall
+      // requests must never add the same call to ProductionLog more than once.
+      const claimed = await tx.callSession.updateMany({
+        where: { id: sessionId, interpreterId, endedAt: null },
         data: { endedAt: new Date() },
+      });
+
+      const updated = await tx.callSession.findFirst({
+        where: { id: sessionId, interpreterId },
         select: { durationSeconds: true, callCost: true, startedAt: true }
       });
+
+      if (!updated) {
+        throw new Error('Call session not found for this interpreter');
+      }
+
+      // Another request already ended and accounted for this session.
+      if (claimed.count === 0) {
+        return updated;
+      }
 
       await tx.interpreter.update({
         where: { id: interpreterId },
