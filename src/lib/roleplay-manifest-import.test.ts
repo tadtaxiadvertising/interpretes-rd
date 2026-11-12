@@ -37,6 +37,17 @@ describe('prepareRoleplayManifestImport', () => {
     expect(scenarios[0].scriptPrompt).toBe('Interpreta consecutivamente');
   });
 
+  it('returns a server-verifiable checksum even when the manifest omits one', async () => {
+    const { files } = createFixture(1);
+    const manifest = JSON.parse(await files[0].text());
+    delete manifest.segments[0].sha256;
+    const imported = await prepareRoleplayManifestImport([
+      new File([JSON.stringify(manifest)], 'MANIFEST.JSON', { type: 'application/json' }),
+      files[1],
+    ]);
+    expect(imported[0].sha256).toBe(createHash('sha256').update(Buffer.from('audio 0')).digest('hex'));
+  });
+
   it('rejects files changed after checksum generation', async () => {
     const { files } = createFixture(2, { wrongHash: true });
     await expect(prepareRoleplayManifestImport(files)).rejects.toThrow(/SHA-256/);
