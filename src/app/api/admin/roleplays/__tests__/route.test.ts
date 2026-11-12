@@ -22,9 +22,9 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    interpreter: { findUnique: vi.fn() },
+    interpreter: { findUnique: vi.fn(), findMany: vi.fn() },
     recruitmentCandidate: { findUnique: vi.fn() },
-    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn() },
+    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
     roleplayAccess: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -84,6 +84,8 @@ describe('POST /api/admin/roleplays', () => {
 
     (validateAction as any).mockResolvedValue(adminAuth);
     (prisma.interpreter.findUnique as any).mockResolvedValue({ id: 7 });
+    (prisma.interpreter.findMany as any).mockResolvedValue([{ id: 7 }, { id: 8 }]);
+    (prisma.roleplaySession.findMany as any).mockResolvedValue([]);
     (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({ id: 9 });
     (prisma.roleplaySession.create as any).mockResolvedValue({ id: 'sess-1' });
     (prisma.roleplaySession.update as any).mockResolvedValue({});
@@ -95,7 +97,7 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.$transaction as any).mockImplementation(async (cb: any) =>
       cb({
         roleplayScenario: { create: prisma.roleplayScenario.create },
-        roleplaySession: { update: prisma.roleplaySession.update },
+        roleplaySession: { update: prisma.roleplaySession.update, create: prisma.roleplaySession.create },
       })
     );
 
@@ -146,6 +148,62 @@ describe('POST /api/admin/roleplays', () => {
       const overLimit = JSON.stringify([{ title: 'Escenario 1', durationLimitSec: 301, scriptPrompt: '' }]);
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: overLimit, audios: [audioFile()] }) as any);
       expect(res.status).toBe(400);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+    });
+
+
+    it('supports a 21-segment medical roleplay in one session', async () => {
+      const scenarios = Array.from({ length: 21 }, (_, index) => ({
+        title: `Medical segment ${index + 1}`,
+        durationLimitSec: 0,
+        scriptPrompt: 'Interpreta consecutivamente',
+      }));
+      const audios = scenarios.map((_, index) => audioFile(`segment-${index}.mp3`, 'audio/mpeg'));
+
+      const res = await POST(buildRequest({
+        participantType: 'interpreter',
+        participantId: '7',
+        scenarios: JSON.stringify(scenarios),
+        audios,
+      }) as any);
+
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.scenarioCount).toBe(21);
+      expect(mockUpload).toHaveBeenCalledTimes(21);
+      expect(prisma.roleplayScenario.create).toHaveBeenCalledTimes(21);
+    });
+
+    it('supports a 21-segment roleplay for all eligible active interpreters', async () => {
+      const scenarios = Array.from({ length: 21 }, (_, index) => ({
+        title: `Medical segment ${index + 1}`,
+        scriptPrompt: 'Interpreta consecutivamente',
+      }));
+      const audios = scenarios.map((_, index) => audioFile(`segment-${index}.mp3`, 'audio/mpeg'));
+
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        scenarios: JSON.stringify(scenarios),
+        audios,
+      }) as any);
+
+      const response = await res.json();
+      expect(res.status).toBe(200);
+      expect(response.data.createdCount).toBe(2);
+      expect(response.data.scenarioCount).toBe(21);
+      expect(mockUpload).toHaveBeenCalledTimes(21);
+      expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('rejects more than 25 scenarios before uploading audio', async () => {
+      const scenarios = Array.from({ length: 26 }, (_, index) => ({ title: `Segment ${index}` }));
+      const res = await POST(buildRequest({
+        participantType: 'interpreter',
+        participantId: '7',
+        scenarios: JSON.stringify(scenarios),
+        audios: scenarios.map((_, i) => audioFile(`segment-${i}.mp3`, 'audio/mpeg')),
+      }) as any);
+      expect(res.status).toBe(400);
+      expect(mockUpload).not.toHaveBeenCalled();
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
 
