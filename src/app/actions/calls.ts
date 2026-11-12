@@ -157,52 +157,67 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         },
       });
 
-      // Synchronize live call into ProductionLog so it appears in "Production Logs"
-      if (updated.durationSeconds && updated.durationSeconds > 0) {
-        const getLocalDateStr = (d: Date) => {
-          return new Intl.DateTimeFormat('en-CA', {
-            timeZone: 'America/Santo_Domingo',
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit'
-          }).format(d);
-        };
-        const dayStr = getLocalDateStr(updated.startedAt || new Date());
-        const logDate = new Date(`${dayStr}T12:00:00Z`);
-        const minutes = Math.floor(updated.durationSeconds / 60);
+      // Persist a per-session ledger entry in the same transaction as the
+      // daily aggregate. The primary key makes one production entry possible
+      // per CallSession and provides an auditable source for future reports.
+      const getLocalDateStr = (d: Date) => new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Santo_Domingo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(d);
+      const dayStr = getLocalDateStr(updated.startedAt || new Date());
+      const logDate = new Date(`${dayStr}T12:00:00Z`);
+      const minutes = Math.max(0, Math.floor((updated.durationSeconds || 0) / 60));
+      const callsAttended = minutes > 0 ? 1 : 0;
 
-        if (minutes > 0) {
-          // Check if there's already a log for today
-          const existingLog = await tx.productionLog.findFirst({
-            where: {
-              interpreterId,
-              date: logDate
-            }
+      await tx.callProductionEntry.create({
+        data: {
+          callSessionId: sessionId,
+          interpreterId,
+          productionDate: logDate,
+          interpretedMinutes: minutes,
+          callsAttended,
+        },
+      });
+
+      let productionLogId: number | null = null;
+      if (minutes > 0) {
+        const existingLog = await tx.productionLog.findFirst({
+          where: { interpreterId, date: logDate }
+        });
+
+        if (existingLog) {
+          const updatedLog = await tx.productionLog.update({
+            where: { id: existingLog.id },
+            data: {
+              interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
+              callsAttended: (existingLog.callsAttended || 0) + 1,
+            },
+            select: { id: true },
           });
-
-          if (existingLog) {
-            await tx.productionLog.update({
-              where: { id: existingLog.id },
-              data: {
-                interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
-                callsAttended: (existingLog.callsAttended || 0) + 1,
-              }
-            });
-          } else {
-            await tx.productionLog.create({
-              data: {
-                interpreterId,
-                date: logDate,
-                interpretedMinutes: minutes,
-                callsAttended: 1,
-                status: 'Completed',
-                observaciones: 'Sincronizado automáticamente (Llamada en vivo)',
-                adherence: 100
-              }
-            });
-          }
+          productionLogId = updatedLog.id;
+        } else {
+          const createdLog = await tx.productionLog.create({
+            data: {
+              interpreterId,
+              date: logDate,
+              interpretedMinutes: minutes,
+              callsAttended: 1,
+              status: 'Completed',
+              observaciones: 'Sincronizado automáticamente (Llamada en vivo)',
+              adherence: 100
+            },
+            select: { id: true },
+          });
+          productionLogId = createdLog.id;
         }
       }
+
+      await tx.callProductionEntry.update({
+        where: { callSessionId: sessionId },
+        data: { productionLogId },
+      });
 
       return updated;
     });
