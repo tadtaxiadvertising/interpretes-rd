@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Mic2, Users, Waves } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
 import { SessionActions } from '@/components/admin/SessionActions';
@@ -56,7 +56,7 @@ export default async function AdminRoleplaysPage() {
   const roleplays = result.data;
 
   const activeCount = roleplays.filter((session) =>
-    ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW'].includes(session.status),
+    ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status),
   ).length;
   const awaitingReviewCount = roleplays.filter((session) =>
     ['SUBMITTED', 'UNDER_REVIEW'].includes(session.status),
@@ -64,9 +64,6 @@ export default async function AdminRoleplaysPage() {
   const evaluatedCount = roleplays.filter((session) =>
     ['EVALUATED', 'PASSED', 'FAILED'].includes(session.status),
   ).length;
-  const participantCount = new Set(roleplays.map((session) =>
-    session.interpreterId ? `interpreter:${session.interpreterId}` : `candidate:${session.recruitmentCandidateId}`,
-  )).size;
 
   const statusColors: Record<string, string> = {
     DRAFT: 'bg-slate-500/10 text-slate-400',
@@ -124,7 +121,7 @@ export default async function AdminRoleplaysPage() {
         <MetricCard label="Sesiones cargadas" value={roleplays.length} detail="Máximo 50 sesiones recientes" icon={Mic2} />
         <MetricCard label="En curso" value={activeCount} detail="Borrador, invitadas o iniciadas" icon={Clock3} />
         <MetricCard label="Pendientes de QA" value={awaitingReviewCount} detail="Entregadas o bajo revisión" icon={AlertTriangle} />
-        <MetricCard label="Evaluadas" value={evaluatedCount} detail={`${participantCount} participantes en la vista`} icon={CheckCircle2} />
+        <MetricCard label="Evaluadas" value={evaluatedCount} detail="Evaluadas, aprobadas o no aprobadas" icon={CheckCircle2} />
       </section>
 
       <section className="glass rounded-3xl overflow-hidden">
@@ -219,9 +216,8 @@ export default async function AdminRoleplaysPage() {
         )}
       </section>
 
-      <div className="flex items-center gap-2 text-xs text-gray-500">
-        <Users size={14} />
-        <span>Vista administrativa limitada a las 50 sesiones más recientes. El historial completo permanece en la base de datos.</span>
+      <div className="text-xs text-gray-500">
+        Vista administrativa limitada a las 50 sesiones más recientes. El historial completo permanece en la base de datos.
       </div>
     </div>
   );
