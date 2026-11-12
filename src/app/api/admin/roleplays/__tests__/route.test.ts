@@ -1,11 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockUpload, mockRemove, mockGetPublicUrl, mockList } = vi.hoisted(() => ({
+const { mockUpload, mockRemove, mockGetPublicUrl, mockList, mockInfo } = vi.hoisted(() => ({
   mockUpload: vi.fn(),
   mockRemove: vi.fn(),
   mockGetPublicUrl: vi.fn(),
   mockList: vi.fn(),
+  mockInfo: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({
@@ -22,11 +23,11 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    interpreter: { findUnique: vi.fn(), findMany: vi.fn() },
+    interpreter: { findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
     recruitmentCandidate: { findUnique: vi.fn() },
-    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
-    roleplayAccess: { create: vi.fn() },
+    roleplayAccess: { create: vi.fn(), findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -39,6 +40,7 @@ vi.mock('@supabase/supabase-js', () => ({
         remove: mockRemove,
         getPublicUrl: mockGetPublicUrl,
         list: mockList,
+        info: mockInfo,
       })),
     },
   })),
@@ -72,6 +74,7 @@ function buildRequest(fields: {
 }
 
 const oneScenario = JSON.stringify([{ title: 'Escenario 1', durationLimitSec: 0, scriptPrompt: 'Saluda' }]);
+const draftUpdatedAt = new Date('2026-11-10T10:00:00.000Z');
 
 describe('POST /api/admin/roleplays', () => {
   const originalEnv = { ...process.env };
@@ -87,7 +90,10 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.interpreter.findMany as any).mockResolvedValue([{ id: 7 }, { id: 8 }]);
     (prisma.roleplaySession.findMany as any).mockResolvedValue([]);
     (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({ id: 9 });
-    (prisma.roleplaySession.create as any).mockResolvedValue({ id: 'sess-1' });
+    (prisma.roleplaySession.create as any).mockResolvedValue({ id: 'sess-1', updatedAt: draftUpdatedAt });
+    (prisma.roleplaySession.findUnique as any).mockResolvedValue({ id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt });
+    (prisma.roleplayAccess.findUnique as any).mockResolvedValue(null);
+    (prisma.interpreter.findFirst as any).mockResolvedValue({ id: 7 });
     (prisma.roleplaySession.update as any).mockResolvedValue({});
     (prisma.roleplaySession.delete as any).mockResolvedValue({});
     (prisma.roleplaySession.findFirst as any).mockResolvedValue(null);
@@ -96,14 +102,23 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.roleplayAccess.create as any).mockResolvedValue({ id: 'acc-1' });
     (prisma.$transaction as any).mockImplementation(async (cb: any) =>
       cb({
-        roleplayScenario: { create: prisma.roleplayScenario.create },
-        roleplaySession: { update: prisma.roleplaySession.update, create: prisma.roleplaySession.create },
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        interpreter: { findFirst: prisma.interpreter.findFirst },
+        roleplayScenario: { create: prisma.roleplayScenario.create, deleteMany: prisma.roleplayScenario.deleteMany },
+        roleplaySession: {
+          findFirst: prisma.roleplaySession.findFirst,
+          findUnique: prisma.roleplaySession.findUnique,
+          update: prisma.roleplaySession.update,
+          create: prisma.roleplaySession.create,
+        },
+        roleplayAccess: { findUnique: prisma.roleplayAccess.findUnique, create: prisma.roleplayAccess.create },
       })
     );
 
     mockUpload.mockResolvedValue({ error: null });
     mockRemove.mockResolvedValue({ error: null });
     mockList.mockResolvedValue({ data: [], error: null });
+    mockInfo.mockResolvedValue({ data: { name: '0.mp3' }, error: null });
     mockGetPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.test/base/0.webm' } });
   });
 
@@ -309,14 +324,15 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('failure cleanup', () => {
-    it('deletes the half-created session when an audio upload fails', async () => {
+    it('preserves a newly reserved draft when an audio upload fails', async () => {
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
 
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(500);
       expect((await res.json()).error).toBe('Failed to upload audio: boom');
-      expect(prisma.roleplaySession.delete).toHaveBeenCalledWith({ where: { id: 'sess-1' } });
+      expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(1);
+      expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.create).not.toHaveBeenCalled();
     });
   });
@@ -350,7 +366,7 @@ describe('POST /api/admin/roleplays', () => {
     it('resumes an unfinished DRAFT: reuses the row and replaces its scenarios', async () => {
       (prisma.roleplaySession.findFirst as any)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'sess-d' });
+        .mockResolvedValueOnce({ id: 'sess-d', updatedAt: draftUpdatedAt });
       mockList.mockResolvedValue({ data: [{ name: '0.webm' }], error: null });
 
       const res = await POST(buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] }) as any);
@@ -361,28 +377,28 @@ describe('POST /api/admin/roleplays', () => {
       expect(body.data.sessionId).toBe('sess-d');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.deleteMany).toHaveBeenCalledWith({ where: { sessionId: 'sess-d' } });
-      expect(mockRemove).toHaveBeenCalledWith(['base/sess-d/0.webm']);
+      expect(mockRemove).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sessionId: 'sess-d' }) })
       );
       expect(prisma.roleplayAccess.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sessionId: 'sess-d' }) })
       );
-      expect(mockUpload).toHaveBeenCalledWith('base/sess-d/0.webm', expect.anything(), expect.objectContaining({ upsert: true }));
+      expect(mockUpload).toHaveBeenCalledWith(expect.stringMatching(/^base\/sess-d\/upload-[^/]+\/0\.webm$/), expect.anything(), expect.objectContaining({ upsert: true }));
     });
 
-    it('keeps a resumed DRAFT row on failure, resetting it instead of deleting', async () => {
+    it('keeps a resumed DRAFT and its scenarios on failure', async () => {
       (prisma.roleplaySession.findFirst as any)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'sess-d' });
+        .mockResolvedValueOnce({ id: 'sess-d', updatedAt: draftUpdatedAt });
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
 
       const res = await POST(buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(500);
       expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
-      expect(prisma.roleplayScenario.deleteMany).toHaveBeenCalledWith({ where: { sessionId: 'sess-d' } });
-      expect(prisma.roleplaySession.update).toHaveBeenCalledWith({ where: { id: 'sess-d' }, data: { baseAudioUrl: '' } });
+      expect(prisma.roleplayScenario.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
     });
 
     it('creates a brand-new session when only cancelled/expired sessions exist', async () => {
