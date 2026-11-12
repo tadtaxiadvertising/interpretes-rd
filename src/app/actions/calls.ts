@@ -171,16 +171,6 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       const minutes = Math.max(0, Math.floor((updated.durationSeconds || 0) / 60));
       const callsAttended = minutes > 0 ? 1 : 0;
 
-      await tx.callProductionEntry.create({
-        data: {
-          callSessionId: sessionId,
-          interpreterId,
-          productionDate: logDate,
-          interpretedMinutes: minutes,
-          callsAttended,
-        },
-      });
-
       let productionLogId: number | null = null;
       if (minutes > 0) {
         const existingLog = await tx.productionLog.findFirst({
@@ -214,9 +204,17 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         }
       }
 
-      await tx.callProductionEntry.update({
-        where: { callSessionId: sessionId },
-        data: { productionLogId },
+      // Insert the ledger only after the aggregate ID is known. This keeps
+      // ledger rows append-only while remaining atomic with the daily update.
+      await tx.callProductionEntry.create({
+        data: {
+          callSessionId: sessionId,
+          interpreterId,
+          productionDate: logDate,
+          interpretedMinutes: minutes,
+          callsAttended,
+          productionLogId,
+        },
       });
 
       return updated;
