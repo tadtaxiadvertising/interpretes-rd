@@ -12,6 +12,7 @@ interface Scenario {
   baseAudioPreview: string;
   durationLimitSec: number;
   scriptPrompt: string;
+  sha256?: string;
 }
 
 interface ScenarioCardProps {
@@ -60,6 +61,7 @@ export function ScenarioCard({
     onUpdate(scenario.id, {
       baseAudioFile: file,
       baseAudioPreview: URL.createObjectURL(file),
+      sha256: undefined,
     });
   };
 

@@ -3,7 +3,7 @@ import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 const db = prisma;
@@ -72,9 +72,8 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 }
 
 export async function POST(req: NextRequest) {
-  let sessionId: string | null = null;
-  let createdSession = false;
-  let bulkCreated = false;
+  let databaseCommitted = false;
+  let draftConflict = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -87,6 +86,7 @@ export async function POST(req: NextRequest) {
     const participantId = formData.get('participantId');
     const rawScenarios = formData.get('scenarios');
     const scenarioAudios = formData.getAll('scenarioAudios');
+    const rawAudioChecksums = formData.get('scenarioAudioSha256');
 
     if (typeof participantType !== 'string' || typeof rawScenarios !== 'string') {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
@@ -121,6 +121,22 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    let expectedAudioChecksums: Array<string | null> | null = null;
+    if (rawAudioChecksums !== null) {
+      if (typeof rawAudioChecksums !== 'string') {
+        return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+      }
+      try {
+        const parsedChecksums: unknown = JSON.parse(rawAudioChecksums);
+        if (!Array.isArray(parsedChecksums) || parsedChecksums.length !== scenarios.length || parsedChecksums.some((value) => value !== null && (typeof value !== 'string' || !/^[a-f0-9]{64}$/i.test(value)))) {
+          return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+        }
+        expectedAudioChecksums = parsedChecksums as Array<string | null>;
+      } catch {
+        return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+      }
+    }
+
     if (scenarioAudios.length !== scenarios.length) {
       return NextResponse.json(
         { success: false, error: 'Each scenario requires exactly one base audio file' },
@@ -140,6 +156,19 @@ export async function POST(req: NextRequest) {
           { success: false, error: `Audio type ${audio.type || 'unknown'} not allowed` },
           { status: 400 }
         );
+      }
+    }
+
+    if (expectedAudioChecksums) {
+      for (let index = 0; index < scenarioAudios.length; index++) {
+        const expected = expectedAudioChecksums[index];
+        if (!expected) continue;
+        const audio = scenarioAudios[index];
+        if (!(audio instanceof File)) continue;
+        const actual = createHash('sha256').update(Buffer.from(await audio.arrayBuffer())).digest('hex');
+        if (actual !== expected.toLowerCase()) {
+          return NextResponse.json({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
+        }
       }
     }
 
@@ -165,23 +194,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'No active interpreters found' }, { status: 400 });
       }
 
-      const existingSessions = await db.roleplaySession.findMany({
-        where: {
-          interpreterId: { in: activeInterpreters.map((interpreter) => interpreter.id) },
-          status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
-        },
-        select: { interpreterId: true, status: true },
-      });
-      const blockedInterpreterIds = new Set(existingSessions.map((session) => session.interpreterId).filter((id): id is number => id !== null));
-      const eligibleInterpreters = activeInterpreters.filter((interpreter) => !blockedInterpreterIds.has(interpreter.id));
-      const skippedCount = activeInterpreters.length - eligibleInterpreters.length;
-      if (eligibleInterpreters.length === 0) {
-        return NextResponse.json({
-          success: false,
-          error: 'All active interpreters already have a draft or existing roleplay session',
-          skippedCount,
-        }, { status: 409 });
-      }
+      // Eligibility is rechecked under per-interpreter advisory locks
+      // inside the creation transaction below; this preview is not authoritative.
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -205,9 +219,28 @@ export async function POST(req: NextRequest) {
         audioUrls.push(publicUrlData.publicUrl);
       }
 
-      const createdSessions = await db.$transaction(async (tx) => {
+      const bulkResult = await db.$transaction(async (tx) => {
         const created: Array<{ id: string }> = [];
-        for (const interpreter of eligibleInterpreters) {
+        let skippedCount = 0;
+        for (const interpreter of activeInterpreters) {
+          // A transaction-scoped advisory lock serializes bulk and individual
+          // assignments for this interpreter without requiring a schema change.
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:interpreter:${interpreter.id}`}, 0))`;
+          const stillActive = await tx.interpreter.findFirst({
+            where: { id: interpreter.id, status: 'Activo' },
+            select: { id: true },
+          });
+          const existing = stillActive ? await tx.roleplaySession.findFirst({
+            where: {
+              interpreterId: interpreter.id,
+              status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
+            },
+            select: { id: true },
+          }) : { id: 'inactive' };
+          if (!stillActive || existing) {
+            skippedCount++;
+            continue;
+          }
           const session = await tx.roleplaySession.create({
             data: {
               interpreterId: interpreter.id,
@@ -229,9 +262,20 @@ export async function POST(req: NextRequest) {
           });
           created.push(session);
         }
-        return created;
+        return { created, skippedCount };
       });
-      bulkCreated = true;
+      if (bulkResult.created.length === 0) {
+        if (uploadedPaths.length > 0) {
+          await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
+          uploadedPaths.length = 0;
+        }
+        return NextResponse.json({
+          success: false,
+          error: 'All active interpreters already have a draft or existing roleplay session',
+          skippedCount: bulkResult.skippedCount,
+        }, { status: 409 });
+      }
+      databaseCommitted = true;
 
       revalidatePath('/admin/roleplays');
       revalidatePath('/admin/roleplays/new');
@@ -239,9 +283,9 @@ export async function POST(req: NextRequest) {
         success: true,
         data: {
           bulk: true,
-          createdCount: createdSessions.length,
-          skippedCount,
-          sessionIds: createdSessions.map((session) => session.id),
+          createdCount: bulkResult.created.length,
+          skippedCount: bulkResult.skippedCount,
+          sessionIds: bulkResult.created.map((session) => session.id),
           scenarioCount: scenarios.length,
         },
       });
@@ -252,23 +296,6 @@ export async function POST(req: NextRequest) {
         ? { interpreterId: parsedParticipantId! }
         : { recruitmentCandidateId: parsedParticipantId! };
 
-    const blockingSession = await db.roleplaySession.findFirst({
-      where: { ...participantWhere, status: { in: [...BLOCKING_SESSION_STATUSES] } },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, status: true },
-    });
-    if (blockingSession) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Participant already has a roleplay session in status ${blockingSession.status}`,
-          sessionId: blockingSession.id,
-          status: blockingSession.status,
-        },
-        { status: 409 }
-      );
-    }
-
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) {
@@ -278,49 +305,59 @@ export async function POST(req: NextRequest) {
     const { createClient } = await import('@supabase/supabase-js');
     supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
-    // Resume an unfinished DRAFT by reusing its row (stable id => stable
-    // invite link) and replacing its scenarios/audios with this submission.
-    const draftSession = await db.roleplaySession.findFirst({
-      where: { ...participantWhere, status: 'DRAFT' },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true },
-    });
-
-    let session: { id: string };
-    if (draftSession) {
-      session = { id: draftSession.id };
-      await db.roleplayScenario.deleteMany({ where: { sessionId: draftSession.id } });
-      try {
-        const { data: staleFiles, error: listError } = await supabaseAdmin.storage
-          .from('roleplay-audio')
-          .list(`base/${draftSession.id}`);
-        if (!listError && staleFiles && staleFiles.length > 0) {
-          await supabaseAdmin.storage
-            .from('roleplay-audio')
-            .remove(staleFiles.map((f) => `base/${draftSession.id}/${f.name}`));
-        }
-      } catch (cleanupError) {
-        console.error('Draft resume storage cleanup failed:', cleanupError);
+    // Reserve or resume the participant draft atomically. All roleplay
+    // creation paths use the same advisory-lock key for this participant.
+    const lockKey = participantType === 'interpreter'
+      ? `roleplay:interpreter:${parsedParticipantId!}`
+      : `roleplay:candidate:${parsedParticipantId!}`;
+    const reservation = await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      const blocking = await tx.roleplaySession.findFirst({
+        where: { ...participantWhere, status: { in: [...BLOCKING_SESSION_STATUSES] } },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, status: true },
+      });
+      if (blocking) return { conflict: blocking, session: null };
+      const draft = await tx.roleplaySession.findFirst({
+        where: { ...participantWhere, status: 'DRAFT' },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, updatedAt: true },
+      });
+      if (draft && participantType === 'candidate') {
+        const existingAccess = await tx.roleplayAccess.findUnique({
+          where: { sessionId: draft.id },
+          select: { id: true },
+        });
+        if (existingAccess) return { conflict: { id: draft.id, status: 'DRAFT' as const }, session: null };
       }
-    } else {
-      session = await db.roleplaySession.create({
+      if (draft) return { conflict: null, session: draft };
+      const created = await tx.roleplaySession.create({
         data: {
           interpreterId: participantType === 'interpreter' ? parsedParticipantId! : null,
           recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId! : null,
           baseAudioUrl: '',
           status: 'DRAFT',
         },
-        select: { id: true },
+        select: { id: true, updatedAt: true },
       });
-      createdSession = true;
+      return { conflict: null, session: created };
+    });
+    if (reservation.conflict) {
+      return NextResponse.json({
+        success: false,
+        error: `Participant already has a roleplay session in status ${reservation.conflict.status}`,
+        sessionId: reservation.conflict.id,
+        status: reservation.conflict.status,
+      }, { status: 409 });
     }
-    sessionId = session.id;
+    if (!reservation.session) throw new Error('Could not reserve roleplay draft');
+    const session = reservation.session;
 
     const audioUrls: string[] = [];
     for (let i = 0; i < scenarios.length; i++) {
       const audio = scenarioAudios[i] as File;
       const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
-      const path = `base/${session.id}/${i}.${extension}`;
+      const path = `base/${session.id}/upload-${randomUUID()}/${i}.${extension}`;
 
       const { error: uploadError } = await supabaseAdmin.storage
         .from('roleplay-audio')
@@ -332,7 +369,39 @@ export async function POST(req: NextRequest) {
       audioUrls.push(publicUrlData.publicUrl);
     }
 
+    const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
+    let inviteLink = `${origin}/roleplays/${session.id}`;
+    let candidateAccess: { tokenHash: string; inviteCode: string; expiresAt: Date } | null = null;
+    if (participantType === 'candidate') {
+      const { randomBytes, createHash } = await import('crypto');
+      const rawToken = randomBytes(32).toString('hex');
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+      const inviteCode = randomBytes(4).toString('base64url').slice(0, 8).toUpperCase();
+      candidateAccess = { tokenHash, inviteCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+      inviteLink = `${origin}/r/${inviteCode}`;
+    }
+
     await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      const currentSession = await tx.roleplaySession.findUnique({
+        where: { id: session.id },
+        select: { status: true, updatedAt: true },
+      });
+      if (!currentSession || currentSession.status !== 'DRAFT' || currentSession.updatedAt.getTime() !== reservation.session.updatedAt.getTime()) {
+        draftConflict = true;
+        throw new Error('Roleplay draft changed while the audio was uploading');
+      }
+      if (participantType === 'candidate') {
+        const existingAccess = await tx.roleplayAccess.findUnique({
+          where: { sessionId: session.id },
+          select: { id: true },
+        });
+        if (existingAccess) {
+          draftConflict = true;
+          throw new Error('Candidate roleplay has already been invited');
+        }
+      }
+      await tx.roleplayScenario.deleteMany({ where: { sessionId: session.id } });
       for (let i = 0; i < scenarios.length; i++) {
         await tx.roleplayScenario.create({
           data: {
@@ -347,32 +416,17 @@ export async function POST(req: NextRequest) {
           select: { id: true },
         });
       }
-      // Legacy readers (intro screen, dashboard) still resolve the session-level
-      // audio; keep it pointing at the first scenario's base audio.
       await tx.roleplaySession.update({
         where: { id: session.id },
         data: { baseAudioUrl: audioUrls[0] },
       });
+      if (candidateAccess) {
+        await tx.roleplayAccess.create({
+          data: { sessionId: session.id, ...candidateAccess },
+        });
+      }
     });
-
-    const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
-    let inviteLink = `${origin}/roleplays/${session.id}`;
-
-    if (participantType === 'candidate') {
-      const { randomBytes, createHash } = await import('crypto');
-      const rawToken = randomBytes(32).toString('hex');
-      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-
-      // Generate short invite code (8 chars alphanumeric)
-      const inviteCode = randomBytes(4).toString('base64url').slice(0, 8).toUpperCase();
-
-      await db.roleplayAccess.create({
-        data: { sessionId: session.id, tokenHash, inviteCode, expiresAt },
-      });
-
-      inviteLink = `${origin}/r/${inviteCode}`;
-    }
+    databaseCommitted = true;
 
     revalidatePath('/admin/roleplays');
     revalidatePath('/admin/roleplays/new');
@@ -384,22 +438,9 @@ export async function POST(req: NextRequest) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Create Roleplay API Error:', message);
 
-    // Best-effort cleanup: never leave a half-created session (no scenarios,
-    // missing audios) behind after a failed create. A resumed DRAFT row is
-    // kept (idempotent retry target) but reset to an empty draft.
-    if (sessionId) {
-      try {
-        if (createdSession) {
-          await db.roleplaySession.delete({ where: { id: sessionId } });
-        } else {
-          await db.roleplayScenario.deleteMany({ where: { sessionId } });
-          await db.roleplaySession.update({ where: { id: sessionId }, data: { baseAudioUrl: '' } });
-        }
-      } catch (cleanupError) {
-        console.error('Create Roleplay cleanup failed:', cleanupError);
-      }
-    }
-    if (!bulkCreated && supabaseAdmin && uploadedPaths.length > 0) {
+    // Audio paths are unique per request. Never delete/reset a shared draft
+    // here: another administrator may have completed it concurrently.
+    if (!databaseCommitted && supabaseAdmin && uploadedPaths.length > 0) {
       try {
         await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
       } catch (cleanupError) {
@@ -407,6 +448,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (draftConflict) {
+      return NextResponse.json({ success: false, error: 'This draft was updated by another administrator. Reload and try again.' }, { status: 409 });
+    }
     const isUploadFailure = message.startsWith('Failed to upload audio');
     return NextResponse.json(
       { success: false, error: isUploadFailure ? message : 'Failed to create roleplay' },

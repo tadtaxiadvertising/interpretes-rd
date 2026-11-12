@@ -5,6 +5,7 @@ export interface ImportedRoleplayScenario {
   baseAudioFile: File;
   durationLimitSec: number;
   scriptPrompt: string;
+  sha256: string;
 }
 
 interface ManifestSegment {
@@ -45,7 +46,7 @@ function bytesToHex(buffer: ArrayBuffer): string {
  * A checksum mismatch fails closed; publication is never attempted here.
  */
 export async function prepareRoleplayManifestImport(files: File[]): Promise<ImportedRoleplayScenario[]> {
-  const manifests = files.filter((file) => file.name === 'manifest.json');
+  const manifests = files.filter((file) => file.name.toLowerCase() === 'manifest.json');
   if (manifests.length !== 1) {
     throw new Error('Selecciona exactamente un manifest.json junto con todos los archivos MP3.');
   }
@@ -80,10 +81,11 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
     if (audio.size < 1 || audio.size > MAX_AUDIO_SIZE) {
       throw new Error(`Tamaño de audio inválido (máximo 15 MiB): ${audio.name}.`);
     }
-    if (byName.has(audio.name)) {
+    const normalizedName = audio.name.toLowerCase();
+    if (byName.has(normalizedName)) {
       throw new Error(`Archivo MP3 duplicado: ${audio.name}.`);
     }
-    byName.set(audio.name, audio);
+    byName.set(normalizedName, audio);
   }
 
   if (byName.size !== ordered.length) {
@@ -92,28 +94,28 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
   const usedNames = new Set<string>();
   const result: ImportedRoleplayScenario[] = [];
   for (const segment of ordered) {
-    if (usedNames.has(segment.file)) throw new Error(`El manifiesto repite el MP3 ${segment.file}.`);
-    usedNames.add(segment.file);
-    const audio = byName.get(segment.file);
+    const normalizedName = segment.file.toLowerCase();
+    if (usedNames.has(normalizedName)) throw new Error(`El manifiesto repite el MP3 ${segment.file}.`);
+    usedNames.add(normalizedName);
+    const audio = byName.get(normalizedName);
     if (!audio) throw new Error(`Falta el archivo requerido: ${segment.file}.`);
     if (segment.size_bytes !== undefined && segment.size_bytes !== audio.size) {
       throw new Error(`Tamaño no coincide con el manifiesto: ${segment.file}.`);
     }
 
-    if (segment.sha256) {
-      if (typeof crypto === 'undefined' || !crypto.subtle) {
-        throw new Error('El navegador no permite validar SHA-256. Usa un navegador seguro (HTTPS).');
-      }
-      const digest = bytesToHex(await crypto.subtle.digest('SHA-256', await audio.arrayBuffer()));
-      if (digest !== segment.sha256.toLowerCase()) {
-        throw new Error(`SHA-256 no coincide: ${segment.file}. No publiques el archivo.`);
-      }
+    if (typeof crypto === 'undefined' || !crypto.subtle) {
+      throw new Error('El navegador no permite validar SHA-256. Usa un navegador seguro (HTTPS).');
+    }
+    const digest = bytesToHex(await crypto.subtle.digest('SHA-256', await audio.arrayBuffer()));
+    if (segment.sha256 && digest !== segment.sha256.toLowerCase()) {
+      throw new Error(`SHA-256 no coincide: ${segment.file}. No publiques el archivo.`);
     }
     result.push({
       title: segment.title.trim(),
-      baseAudioFile: audio.type ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
+      baseAudioFile: audio.type === 'audio/mpeg' ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
       durationLimitSec: segment.duration_limit_sec ?? 0,
       scriptPrompt: segment.script_prompt ?? '',
+      sha256: digest,
     });
   }
   return result;

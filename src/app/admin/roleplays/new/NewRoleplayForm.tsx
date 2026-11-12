@@ -24,6 +24,7 @@ interface Scenario {
   baseAudioPreview: string;
   durationLimitSec: number;
   scriptPrompt: string;
+  sha256?: string;
 }
 
 interface NewRoleplayFormProps {
@@ -184,10 +185,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         scriptPrompt: s.scriptPrompt,
       }))));
       for (const scenario of scenarios) {
-        if (scenario.baseAudioFile) {
-          formData.append('scenarioAudios', scenario.baseAudioFile);
-        }
+        if (scenario.baseAudioFile) formData.append('scenarioAudios', scenario.baseAudioFile);
       }
+      formData.append('scenarioAudioSha256', JSON.stringify(scenarios.map((scenario) => scenario.sha256 ?? null)));
 
       const res = await fetch('/api/admin/roleplays', {
         method: 'POST',
