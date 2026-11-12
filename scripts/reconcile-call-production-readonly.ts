@@ -1,4 +1,9 @@
+import 'dotenv/config';
+
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Client } from 'pg';
+import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -115,7 +120,8 @@ const reconciliationQuery = `
 `;
 
 async function main() {
-  const client = new Client({ connectionString });
+  const caPem = readFileSync(join(process.cwd(), 'certs', 'prod-ca-2021.crt'), 'utf8');
+  const client = new Client(createDatabasePoolConfig(connectionString, caPem));
   await client.connect();
   let transactionStarted = false;
 
