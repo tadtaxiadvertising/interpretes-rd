@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { Mic2, Loader2, User, UserPlus, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScenarioCard } from './ScenarioCard';
+import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 
 interface Participant {
   id: number;
@@ -50,7 +51,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const activeInterpreterCount = interpreters.filter((participant) => participant.status === 'Activo').length;
 
   const addScenario = useCallback(() => {
-    setScenarios(prev => [...prev, { 
+    setScenarios(prev => prev.length >= ROLEPLAY_MAX_SCENARIOS ? prev : [...prev, { 
       id: generateId(), 
       title: '', 
       baseAudioFile: null, 
@@ -98,8 +99,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       setError('Please select a participant');
       return false;
     }
-    if (scenarios.length === 0) {
-      setError('Please add at least one scenario');
+    if (scenarios.length === 0 || scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
+      setError(`Please add between 1 and ${ROLEPLAY_MAX_SCENARIOS} scenarios`);
       return false;
     }
     for (const scenario of scenarios) {
@@ -280,10 +281,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">Scenarios</h3>
+          <h3 className="text-lg font-bold text-white">Scenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>
           <button
             onClick={addScenario}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors flex items-center gap-2"
+            disabled={scenarios.length >= ROLEPLAY_MAX_SCENARIOS}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={18} />
             Add Scenario
