@@ -67,7 +67,7 @@ export default async function NewRoleplayPage({
         status: true,
         scenarios: {
           orderBy: { order: 'asc' },
-          select: { order: true, title: true, baseAudioUrl: true, durationLimitSec: true, scriptPrompt: true },
+          select: { order: true, title: true, baseAudioUrl: true, durationLimitSec: true, scriptPrompt: true, expectedKeys: true },
         },
       },
     });
