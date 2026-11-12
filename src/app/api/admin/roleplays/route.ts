@@ -72,7 +72,8 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 }
 
 export async function POST(req: NextRequest) {
-  let bulkCreated = false;
+  let databaseCommitted = false;
+  let draftConflict = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -287,7 +288,7 @@ export async function POST(req: NextRequest) {
           skippedCount: bulkResult.skippedCount,
         }, { status: 409 });
       }
-      bulkCreated = true;
+      databaseCommitted = true;
 
       revalidatePath('/admin/roleplays');
       revalidatePath('/admin/roleplays/new');
@@ -333,7 +334,7 @@ export async function POST(req: NextRequest) {
       const draft = await tx.roleplaySession.findFirst({
         where: { ...participantWhere, status: 'DRAFT' },
         orderBy: { createdAt: 'desc' },
-        select: { id: true },
+        select: { id: true, updatedAt: true },
       });
       if (draft) return { conflict: null, session: draft };
       const created = await tx.roleplaySession.create({
@@ -343,7 +344,7 @@ export async function POST(req: NextRequest) {
           baseAudioUrl: '',
           status: 'DRAFT',
         },
-        select: { id: true },
+        select: { id: true, updatedAt: true },
       });
       return { conflict: null, session: created };
     });
@@ -386,7 +387,7 @@ export async function POST(req: NextRequest) {
 
     // Audio paths are unique per request. Never delete/reset a shared draft
     // here: another administrator may have completed it concurrently.
-    if (!bulkCreated && supabaseAdmin && uploadedPaths.length > 0) {
+    if (!databaseCommitted && supabaseAdmin && uploadedPaths.length > 0) {
       try {
         await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
       } catch (cleanupError) {
@@ -394,6 +395,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (draftConflict) {
+      return NextResponse.json({ success: false, error: 'This draft was updated by another administrator. Reload and try again.' }, { status: 409 });
+    }
     const isUploadFailure = message.startsWith('Failed to upload audio');
     return NextResponse.json(
       { success: false, error: isUploadFailure ? message : 'Failed to create roleplay' },
