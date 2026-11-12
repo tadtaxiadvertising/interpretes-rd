@@ -21,6 +21,7 @@ import {
   Building2,
   Key,
   Mic2,
+  Library,
   FileText,
   CalendarDays,
   SlidersHorizontal
@@ -47,6 +48,7 @@ export const adminMenu: MenuItem[] = [
   { icon: Users, label: 'Intérpretes', href: '/interpreters', section: 'Personas' },
   { icon: UserPlus, label: 'Reclutamiento', href: '/recruitment', section: 'Personas' },
   { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays', section: 'Operaciones' },
+  { icon: Library, label: 'Biblioteca roleplays', href: '/admin/roleplays/library', section: 'Operaciones' },
   { icon: Clock, label: 'Producción', href: '/production', section: 'Operaciones' },
   { icon: Users, label: 'Clientes', href: '/admin/clients', section: 'Operaciones' },
   { icon: Building2, label: 'Cuentas operativas', href: '/admin/accounts', section: 'Operaciones' },
