@@ -105,6 +105,9 @@ jobs:
       - name: Verify operational migrations on isolated PostgreSQL
         run: npx tsx scripts/verify-operational-migrations.ts
 
+      - name: Verify call production ledger migration on isolated PostgreSQL
+        run: npx tsx scripts/verify-call-production-ledger-migration.ts
+
       - name: Verify deployment preflight on isolated PostgreSQL
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: http://127.0.0.1:9/unused-frontend
