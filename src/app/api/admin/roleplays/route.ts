@@ -375,6 +375,65 @@ export async function POST(req: NextRequest) {
       audioUrls.push(publicUrlData.publicUrl);
     }
 
+    const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
+    let inviteLink = `${origin}/roleplays/${session.id}`;
+    let candidateAccess: { tokenHash: string; inviteCode: string; expiresAt: Date } | null = null;
+    if (participantType === 'candidate') {
+      const { randomBytes, createHash } = await import('crypto');
+      const rawToken = randomBytes(32).toString('hex');
+      const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+      const inviteCode = randomBytes(4).toString('base64url').slice(0, 8).toUpperCase();
+      candidateAccess = { tokenHash, inviteCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+      inviteLink = `${origin}/r/${inviteCode}`;
+    }
+
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      const currentSession = await tx.roleplaySession.findUnique({
+        where: { id: session.id },
+        select: { status: true, updatedAt: true },
+      });
+      if (!currentSession || currentSession.status !== 'DRAFT' || currentSession.updatedAt.getTime() !== reservation.session.updatedAt.getTime()) {
+        draftConflict = true;
+        throw new Error('Roleplay draft changed while the audio was uploading');
+      }
+      if (participantType === 'candidate') {
+        const existingAccess = await tx.roleplayAccess.findUnique({
+          where: { sessionId: session.id },
+          select: { id: true },
+        });
+        if (existingAccess) {
+          draftConflict = true;
+          throw new Error('Candidate roleplay has already been invited');
+        }
+      }
+      await tx.roleplayScenario.deleteMany({ where: { sessionId: session.id } });
+      for (let i = 0; i < scenarios.length; i++) {
+        await tx.roleplayScenario.create({
+          data: {
+            sessionId: session.id,
+            order: i,
+            title: scenarios[i].title,
+            baseAudioUrl: audioUrls[i],
+            durationLimitSec: scenarios[i].durationLimitSec,
+            scriptPrompt: scenarios[i].scriptPrompt,
+            expectedKeys: [],
+          },
+          select: { id: true },
+        });
+      }
+      await tx.roleplaySession.update({
+        where: { id: session.id },
+        data: { baseAudioUrl: audioUrls[0] },
+      });
+      if (candidateAccess) {
+        await tx.roleplayAccess.create({
+          data: { sessionId: session.id, ...candidateAccess },
+        });
+      }
+    });
+    databaseCommitted = true;
+
     revalidatePath('/admin/roleplays');
     revalidatePath('/admin/roleplays/new');
     return NextResponse.json({
