@@ -6,6 +6,7 @@ export interface ReusableRoleplayScenario {
   baseAudioUrl: string;
   durationLimitSec: number | null;
   scriptPrompt: string | null;
+  expectedKeys?: string[];
 }
 
 /**
@@ -42,5 +43,6 @@ export function getRoleplaySnapshotHash(scenarios: ReusableRoleplayScenario[]): 
     baseAudioUrl: scenario.baseAudioUrl,
     durationLimitSec: scenario.durationLimitSec,
     scriptPrompt: scenario.scriptPrompt,
+    expectedKeys: scenario.expectedKeys ?? [],
   })))).digest('hex');
 }
