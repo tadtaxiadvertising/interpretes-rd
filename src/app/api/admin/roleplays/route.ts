@@ -323,6 +323,13 @@ export async function POST(req: NextRequest) {
         orderBy: { createdAt: 'desc' },
         select: { id: true, updatedAt: true },
       });
+      if (draft && participantType === 'candidate') {
+        const existingAccess = await tx.roleplayAccess.findUnique({
+          where: { sessionId: draft.id },
+          select: { id: true },
+        });
+        if (existingAccess) return { conflict: { id: draft.id, status: 'DRAFT' as const }, session: null };
+      }
       if (draft) return { conflict: null, session: draft };
       const created = await tx.roleplaySession.create({
         data: {
