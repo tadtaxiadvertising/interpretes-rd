@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { Mic2, Loader2, User, UserPlus, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -47,10 +47,32 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [eligibility, setEligibility] = useState<{ activeCount: number; eligibleCount: number; skippedCount: number } | null>(null);
+  const [eligibilityLoading, setEligibilityLoading] = useState(false);
+  const [eligibilityError, setEligibilityError] = useState<string | null>(null);
 
   const participants = participantType === 'candidate' ? candidates : interpreters;
   const isBulk = participantType === 'all-active-interpreters';
   const activeInterpreterCount = interpreters.filter((participant) => participant.status === 'Activo').length;
+
+  useEffect(() => {
+    if (!isBulk) return;
+    let cancelled = false;
+    setEligibilityLoading(true);
+    setEligibilityError(null);
+    fetch('/api/admin/roleplays/eligibility', { cache: 'no-store', credentials: 'same-origin' })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok || result?.success !== true || !result?.data) {
+          throw new Error('No fue posible consultar las asignaciones disponibles.');
+        }
+        return result.data as { activeCount: number; eligibleCount: number; skippedCount: number };
+      })
+      .then((data) => { if (!cancelled) setEligibility(data); })
+      .catch(() => { if (!cancelled) { setEligibility(null); setEligibilityError('No se pudo consultar elegibilidad. El servidor verificará nuevamente al crear.'); } })
+      .finally(() => { if (!cancelled) setEligibilityLoading(false); });
+    return () => { cancelled = true; };
+  }, [isBulk]);
 
   const addScenario = useCallback(() => {
     setScenarios(prev => prev.length >= ROLEPLAY_MAX_SCENARIOS ? prev : [...prev, { 
@@ -287,9 +309,17 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <p className="font-semibold text-white">Bulk assignment</p>
           <p className="text-sm text-gray-300 mt-1">
             The roleplay will be created for every interpreter whose status is exactly “Activo”.
-            {activeInterpreterCount > 0 ? ` ${activeInterpreterCount} active interpreter(s) are currently listed.` : ' The server will verify the active count before creating anything.'}
+            {activeInterpreterCount > 0 ? ` ${activeInterpreterCount} active interpreter(s) are listed in the editor.` : ' The server will verify the active count before creating anything.'}
           </p>
-          <p className="text-xs text-gray-400 mt-2">Existing drafts and roleplays that are in progress or already evaluated are skipped. Scenario audios are uploaded once and reused.</p>
+          <p className="text-xs text-gray-400 mt-2">Previous drafts, active sessions and evaluated sessions are currently excluded. Audio files are uploaded once and reused across eligible sessions.</p>
+          {eligibilityLoading && <p role="status" className="mt-3 text-sm text-blue-200">Verificando destinatarios elegibles…</p>}
+          {eligibility && !eligibilityLoading && (
+            <p role="status" className="mt-3 text-sm font-medium text-blue-100">
+              Vista previa (solo lectura): {eligibility.eligibleCount} elegibles de {eligibility.activeCount} activos; {eligibility.skippedCount} omitidos por sesiones previas.
+            </p>
+          )}
+          {eligibilityError && <p role="alert" className="mt-3 text-xs text-amber-300">{eligibilityError}</p>}
+          <p className="mt-2 text-xs text-slate-400">Esta vista previa puede cambiar; al crear, el servidor vuelve a comprobar la elegibilidad.</p>
         </div>
       ) : (
         <div>
