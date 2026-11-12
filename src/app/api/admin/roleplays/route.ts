@@ -194,21 +194,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'No active interpreters found' }, { status: 400 });
       }
 
-      const existingSessions = await db.roleplaySession.findMany({
-        where: {
-          interpreterId: { in: activeInterpreters.map((interpreter) => interpreter.id) },
-          status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
-        },
-        select: { interpreterId: true },
-      });
-      const initiallyBlockedIds = new Set(existingSessions.map((session) => session.interpreterId).filter((id): id is number => id !== null));
-      if (activeInterpreters.every((interpreter) => initiallyBlockedIds.has(interpreter.id))) {
-        return NextResponse.json({
-          success: false,
-          error: 'All active interpreters already have a draft or existing roleplay session',
-          skippedCount: activeInterpreters.length,
-        }, { status: 409 });
-      }
+      // Eligibility is rechecked under per-interpreter advisory locks
+      // inside the creation transaction below; this preview is not authoritative.
 
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
