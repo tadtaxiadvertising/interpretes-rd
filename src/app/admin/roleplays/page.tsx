@@ -231,6 +231,14 @@ export default async function AdminRoleplaysPage({
             <p className="text-gray-300">La lista está temporalmente indisponible.</p>
             <p className="mt-2 text-sm text-gray-500">Los indicadores no se mostrarán como cero cuando la consulta falle.</p>
           </div>
+        ) : filters.page > totalPages ? (
+          <div className="p-12 text-center">
+            <p className="font-semibold text-white">Esta página ya no existe para los filtros seleccionados.</p>
+            <p className="mt-2 text-sm text-gray-400">Es posible que las sesiones hayan cambiado desde la última consulta.</p>
+            <Link href={roleplayPageHref(filters, totalPages)} className="mt-4 inline-flex rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500">
+              Ir a la última página disponible
+            </Link>
+          </div>
         ) : roleplays.length === 0 ? (
           <div className="p-16 text-center">
             <Mic2 size={44} className="mx-auto text-gray-700 mb-4" />
@@ -312,10 +320,10 @@ export default async function AdminRoleplaysPage({
       {!result.error && result.total > 0 && (
         <nav aria-label="Paginación de roleplays" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 p-4">
           <p className="text-sm text-gray-400">
-            Página {currentPage} de {totalPages} · {Math.min((filters.page - 1) * PAGE_SIZE + 1, result.total)}–{Math.min(filters.page * PAGE_SIZE, result.total)} de {result.total} coincidencias
+            Página {currentPage} de {totalPages} · {filters.page > totalPages ? 0 : Math.min((filters.page - 1) * PAGE_SIZE + 1, result.total)}–{filters.page > totalPages ? 0 : Math.min(filters.page * PAGE_SIZE, result.total)} de {result.total} coincidencias
           </p>
           <div className="flex items-center gap-2">
-            {filters.page > 1 && (
+            {filters.page > 1 && filters.page <= totalPages && (
               <Link href={roleplayPageHref(filters, Math.max(1, currentPage - 1))} className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white hover:bg-white/10">Anterior</Link>
             )}
             {filters.page < totalPages && (
