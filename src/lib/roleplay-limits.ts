@@ -7,3 +7,6 @@
  * silently truncated the converted MP3 at five minutes.
  */
 export const ROLEPLAY_RESPONSE_MAX_DURATION_SEC = 300;
+
+/** Maximum scenario count per assigned Roleplay session, including long medical training exercises. */
+export const ROLEPLAY_MAX_SCENARIOS = 25;
