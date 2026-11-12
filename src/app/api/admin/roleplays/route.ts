@@ -200,16 +200,14 @@ export async function POST(req: NextRequest) {
           interpreterId: { in: activeInterpreters.map((interpreter) => interpreter.id) },
           status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
         },
-        select: { interpreterId: true, status: true },
+        select: { interpreterId: true },
       });
-      const blockedInterpreterIds = new Set(existingSessions.map((session) => session.interpreterId).filter((id): id is number => id !== null));
-      const eligibleInterpreters = activeInterpreters.filter((interpreter) => !blockedInterpreterIds.has(interpreter.id));
-      const skippedCount = activeInterpreters.length - eligibleInterpreters.length;
-      if (eligibleInterpreters.length === 0) {
+      const initiallyBlockedIds = new Set(existingSessions.map((session) => session.interpreterId).filter((id): id is number => id !== null));
+      if (activeInterpreters.every((interpreter) => initiallyBlockedIds.has(interpreter.id))) {
         return NextResponse.json({
           success: false,
           error: 'All active interpreters already have a draft or existing roleplay session',
-          skippedCount,
+          skippedCount: activeInterpreters.length,
         }, { status: 409 });
       }
 
@@ -235,9 +233,28 @@ export async function POST(req: NextRequest) {
         audioUrls.push(publicUrlData.publicUrl);
       }
 
-      const createdSessions = await db.$transaction(async (tx) => {
+      const bulkResult = await db.$transaction(async (tx) => {
         const created: Array<{ id: string }> = [];
-        for (const interpreter of eligibleInterpreters) {
+        let skippedCount = 0;
+        for (const interpreter of activeInterpreters) {
+          // A transaction-scoped advisory lock serializes bulk and individual
+          // assignments for this interpreter without requiring a schema change.
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:interpreter:${interpreter.id}`}, 0))`;
+          const stillActive = await tx.interpreter.findFirst({
+            where: { id: interpreter.id, status: 'Activo' },
+            select: { id: true },
+          });
+          const existing = stillActive ? await tx.roleplaySession.findFirst({
+            where: {
+              interpreterId: interpreter.id,
+              status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
+            },
+            select: { id: true },
+          }) : { id: 'inactive' };
+          if (!stillActive || existing) {
+            skippedCount++;
+            continue;
+          }
           const session = await tx.roleplaySession.create({
             data: {
               interpreterId: interpreter.id,
@@ -259,8 +276,19 @@ export async function POST(req: NextRequest) {
           });
           created.push(session);
         }
-        return created;
+        return { created, skippedCount };
       });
+      if (bulkResult.created.length === 0) {
+        if (uploadedPaths.length > 0) {
+          await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
+          uploadedPaths.length = 0;
+        }
+        return NextResponse.json({
+          success: false,
+          error: 'All active interpreters already have a draft or existing roleplay session',
+          skippedCount: bulkResult.skippedCount,
+        }, { status: 409 });
+      }
       bulkCreated = true;
 
       revalidatePath('/admin/roleplays');
@@ -269,9 +297,9 @@ export async function POST(req: NextRequest) {
         success: true,
         data: {
           bulk: true,
-          createdCount: createdSessions.length,
-          skippedCount,
-          sessionIds: createdSessions.map((session) => session.id),
+          createdCount: bulkResult.created.length,
+          skippedCount: bulkResult.skippedCount,
+          sessionIds: bulkResult.created.map((session) => session.id),
           scenarioCount: scenarios.length,
         },
       });
