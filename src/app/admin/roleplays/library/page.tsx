@@ -15,7 +15,7 @@ async function getLibrary() {
 
   try {
     const sessions = await prisma.roleplaySession.findMany({
-      where: { status: { not: 'DRAFT' }, scenarios: { some: {} } },
+      where: { status: { notIn: ['DRAFT', 'CANCELLED'] }, scenarios: { some: {} } },
       orderBy: { createdAt: 'desc' },
       take: SCAN_LIMIT,
       select: {
@@ -26,7 +26,7 @@ async function getLibrary() {
           orderBy: { order: 'asc' },
           select: {
             id: true, order: true, title: true, baseAudioUrl: true,
-            durationLimitSec: true, scriptPrompt: true,
+            durationLimitSec: true, scriptPrompt: true, expectedKeys: true,
           },
         },
       },
@@ -111,8 +111,8 @@ export default async function RoleplayLibraryPage({
       <section className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-blue-100">
         <div className="mb-2 flex items-center gap-2 font-semibold"><Layers3 size={17} /> Instantáneas reutilizables</div>
         <p className="text-blue-100/80">
-          Esta primera biblioteca recupera los ejercicios ya publicados y agrupa versiones idénticas por su huella SHA-256
-          de contenido. No modifica ni elimina sesiones históricas, y no requiere una nueva tabla. La edición y el
+          Esta primera biblioteca recupera los ejercicios ya publicados y agrupa configuraciones equivalentes por una huella SHA-256
+          de referencias y metadatos. No modifica ni elimina sesiones históricas, y no requiere una nueva tabla. La edición y el
           versionado editorial formal se incorporarán en una etapa posterior.
         </p>
         <p className="mt-2 text-xs text-blue-100/70">
@@ -168,7 +168,7 @@ export default async function RoleplayLibraryPage({
                   {item.titles.length > 5 && <span className="px-2 py-1 text-xs text-gray-500">+{item.titles.length - 5} más</span>}
                 </div>
                 <p className="mt-3 flex items-center gap-2 font-mono text-xs text-gray-500">
-                  <Copy size={13} /> SHA-256: {item.fingerprint.slice(0, 16)}…
+                  <Copy size={13} /> Huella de plantilla: {item.fingerprint.slice(0, 16)}…
                 </p>
               </div>
               <Link
