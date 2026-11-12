@@ -4,11 +4,10 @@ import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 const db = prisma;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
-const MAX_SCENARIOS = 10;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
 const MAX_DURATION_SEC = ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
@@ -44,7 +43,7 @@ const scenarioPayloadSchema = z.array(z.object({
   title: z.string().trim().min(1).max(MAX_TITLE),
   durationLimitSec: z.union([z.number(), z.string(), z.null()]).optional(),
   scriptPrompt: z.string().max(MAX_SCRIPT_PROMPT).nullable().optional(),
-})).min(1).max(MAX_SCENARIOS);
+})).min(1).max(ROLEPLAY_MAX_SCENARIOS);
 
 function parseScenarios(raw: string): ScenarioInput[] | null {
   let parsed: unknown;
@@ -117,7 +116,7 @@ export async function POST(req: NextRequest) {
     const scenarios = parseScenarios(rawScenarios);
     if (!scenarios) {
       return NextResponse.json(
-        { success: false, error: `Invalid scenarios: expected 1-${MAX_SCENARIOS} entries with a non-empty title` },
+        { success: false, error: `Invalid scenarios: expected 1-${ROLEPLAY_MAX_SCENARIOS} entries with a non-empty title` },
         { status: 400 }
       );
     }
