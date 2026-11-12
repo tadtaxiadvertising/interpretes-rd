@@ -41,7 +41,6 @@ function transactionMocks() {
     interpreterStatusLog: { create: vi.fn().mockResolvedValue({ id: 1 }) },
     callProductionEntry: {
       create: vi.fn().mockResolvedValue({ callSessionId: 99 }),
-      update: vi.fn().mockResolvedValue({ callSessionId: 99 }),
     },
     productionLog: {
       findFirst: vi.fn().mockResolvedValue({
@@ -76,16 +75,13 @@ describe('endCall production ledger', () => {
         interpreterId: 7,
         interpretedMinutes: 2,
         callsAttended: 1,
+        productionLogId: 22,
       }),
     });
     expect(tx.productionLog.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 22 },
       data: { interpretedMinutes: 12, callsAttended: 4 },
     }));
-    expect(tx.callProductionEntry.update).toHaveBeenCalledWith({
-      where: { callSessionId: 99 },
-      data: { productionLogId: 22 },
-    });
   });
 
   it('does not write production again when another request already ended the session', async () => {
