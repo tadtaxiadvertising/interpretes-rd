@@ -819,6 +819,21 @@ model CallSession {
   @@schema("public")
 }
 
+model CallProductionEntry {
+  callSessionId      Int      @id @map("call_session_id")
+  interpreterId      Int      @map("interpreter_id")
+  productionDate     DateTime @map("production_date") @db.Date
+  interpretedMinutes Int      @default(0) @map("interpreted_minutes")
+  callsAttended      Int      @default(0) @map("calls_attended")
+  productionLogId    Int?     @map("production_log_id")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([interpreterId, productionDate], map: "idx_call_production_entries_interpreter_date")
+  @@index([productionLogId], map: "idx_call_production_entries_production_log")
+  @@map("call_production_entries")
+  @@schema("public")
+}
+
 model RbacUser {
   id               String         @id @default(cuid())
   email            String         @unique
