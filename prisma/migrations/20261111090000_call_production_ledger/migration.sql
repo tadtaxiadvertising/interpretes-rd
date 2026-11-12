@@ -21,4 +21,6 @@ CREATE INDEX "idx_call_production_entries_production_log"
   ON "public"."call_production_entries" ("production_log_id");
 
 COMMENT ON TABLE "public"."call_production_entries" IS
-  'Immutable per-session audit ledger for live-call production; historical sessions are not backfilled.';
+  'Append-only per-session audit ledger for live-call production; historical sessions are not backfilled.';
+
+ALTER TABLE "public"."call_production_entries" ENABLE ROW LEVEL SECURITY;
