@@ -167,9 +167,16 @@ export async function POST(req: NextRequest) {
       }
       const { createClient } = await import('@supabase/supabase-js');
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-      for (const path of [...new Set(paths)]) {
-        const { data, error } = await supabaseAdmin.storage.from('roleplay-audio').info(path!);
-        if (error || !data) {
+      // Cap concurrent storage lookups: a medical exercise can contain 25 segments.
+      // Verify every object before reserving a participant or writing to the database.
+      const uniquePaths = [...new Set(paths as string[])];
+      for (let offset = 0; offset < uniquePaths.length; offset += 5) {
+        const batch = await Promise.all(
+          uniquePaths.slice(offset, offset + 5).map((path) =>
+            supabaseAdmin!.storage.from('roleplay-audio').info(path)
+          )
+        );
+        if (batch.some(({ data, error }) => error || !data)) {
           return NextResponse.json({
             success: false,
             error: 'Un audio de esta plantilla ya no está disponible. No se creó ninguna sesión.',
