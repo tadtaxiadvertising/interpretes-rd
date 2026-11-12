@@ -6,6 +6,7 @@ import { Mic2, Loader2, User, UserPlus, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScenarioCard } from './ScenarioCard';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 
 interface Participant {
   id: number;
@@ -45,6 +46,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const participants = participantType === 'candidate' ? candidates : interpreters;
   const isBulk = participantType === 'all-active-interpreters';
@@ -93,6 +95,34 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     });
   }, []);
 
+
+  const handleManifestImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    if (selected.length === 0) return;
+    setIsImporting(true);
+    setError(null);
+    try {
+      const prepared = await prepareRoleplayManifestImport(selected);
+      const next = prepared.map((scenario) => ({
+        ...scenario,
+        id: generateId(),
+        baseAudioPreview: URL.createObjectURL(scenario.baseAudioFile),
+      }));
+      // A failed import never touches existing edits. Revoke old previews
+      // only after every selected file has been verified.
+      setScenarios((prev) => {
+        prev.forEach((scenario) => {
+          if (scenario.baseAudioPreview) URL.revokeObjectURL(scenario.baseAudioPreview);
+        });
+        return next;
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo importar el manifiesto.');
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const validateForm = () => {
     if (!isBulk && !selectedParticipantId) {
@@ -280,6 +310,26 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       )}
 
       <div>
+        <div className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <label htmlFor="manifest-roleplay-upload" className="block text-sm font-semibold text-blue-100">
+            Importar roleplay preparado (manifest.json + todos los MP3)
+          </label>
+          <p className="mt-1 text-xs text-slate-300">
+            Extrae el ZIP en tu equipo. Selecciona manifest.json y los MP3 juntos; verificaremos nombres,
+            orden y SHA-256 antes de llenar los escenarios. Importar reemplaza el borrador actual,
+            pero nunca publica automáticamente.
+          </p>
+          <input
+            id="manifest-roleplay-upload"
+            type="file"
+            multiple
+            accept=".json,.mp3,audio/mpeg,application/json"
+            disabled={isImporting || isCreating}
+            onChange={(event) => { void handleManifestImport(event); }}
+            className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white disabled:opacity-50"
+          />
+          {isImporting && <p role="status" className="mt-2 text-sm text-blue-200">Verificando archivos y huellas SHA-256…</p>}
+        </div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-white">Scenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>
           <button
@@ -329,10 +379,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || (!isBulk && !selectedParticipantId) || scenarios.length === 0}
+        disabled={isCreating || isImporting || (!isBulk && !selectedParticipantId) || scenarios.length === 0}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || (!isBulk && !selectedParticipantId) || scenarios.length === 0
+          isCreating || isImporting || (!isBulk && !selectedParticipantId) || scenarios.length === 0
             ? "bg-slate-800 text-slate-500 cursor-not-allowed"
             : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
         )}
