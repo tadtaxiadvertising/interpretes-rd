@@ -96,14 +96,17 @@ describe('endCall production ledger', () => {
     expect(tx.productionLog.create).not.toHaveBeenCalled();
   });
 
-  it('rolls back the call transaction if the ledger insert fails', async () => {
+  it('returns a failure when the ledger insert fails inside the transaction', async () => {
     const tx = transactionMocks();
     tx.callProductionEntry.create.mockRejectedValue(new Error('ledger unavailable'));
 
     const result = await endCall(99);
 
     expect(result.success).toBe(false);
-    expect(tx.productionLog.update).not.toHaveBeenCalled();
+    // The aggregate update is attempted before the ledger insert. Prisma's
+    // rejected transaction rolls it back; this unit mock cannot prove the
+    // database rollback itself.
+    expect(tx.productionLog.update).toHaveBeenCalledOnce();
     expect(tx.productionLog.create).not.toHaveBeenCalled();
   });
 });
