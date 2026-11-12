@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { createHash } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { createHash, webcrypto } from 'node:crypto';
 import { prepareRoleplayManifestImport } from './roleplay-manifest-import';
 
 function createFixture(count: number, overrides?: { size?: number; wrongHash?: boolean }) {
@@ -25,6 +25,9 @@ function createFixture(count: number, overrides?: { size?: number; wrongHash?: b
 }
 
 describe('prepareRoleplayManifestImport', () => {
+  beforeAll(() => vi.stubGlobal('crypto', webcrypto));
+  afterAll(() => vi.unstubAllGlobals());
+
   it('imports all 21 checked MP3s in manifest order even when input order differs', async () => {
     const { files } = createFixture(21);
     const scenarios = await prepareRoleplayManifestImport([files[0], ...files.slice(1).reverse()]);
