@@ -25,12 +25,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isValidSegment(value: unknown): value is ManifestSegment {
   if (!isRecord(value)) return false;
-  if (!Number.isSafeInteger(value.order) || Number(value.order) < 0) return false;
+  if (typeof value.order !== 'number' || !Number.isSafeInteger(value.order) || value.order < 0) return false;
   if (typeof value.title !== 'string' || !value.title.trim() || value.title.length > 200) return false;
   if (typeof value.file !== 'string' || !/^[a-zA-Z0-9_.-]+\.mp3$/i.test(value.file)) return false;
-  if (value.size_bytes !== undefined && (!Number.isSafeInteger(value.size_bytes) || Number(value.size_bytes) <= 0)) return false;
+  if (value.size_bytes !== undefined && (typeof value.size_bytes !== 'number' || !Number.isSafeInteger(value.size_bytes) || value.size_bytes <= 0)) return false;
   if (value.sha256 !== undefined && (typeof value.sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(value.sha256))) return false;
-  if (value.duration_limit_sec !== undefined && (!Number.isSafeInteger(value.duration_limit_sec) || Number(value.duration_limit_sec) < 0 || Number(value.duration_limit_sec) > ROLEPLAY_RESPONSE_MAX_DURATION_SEC)) return false;
+  if (value.duration_limit_sec !== undefined && (typeof value.duration_limit_sec !== 'number' || !Number.isSafeInteger(value.duration_limit_sec) || value.duration_limit_sec < 0 || value.duration_limit_sec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC)) return false;
   if (value.script_prompt !== undefined && (typeof value.script_prompt !== 'string' || value.script_prompt.length > 5000)) return false;
   return true;
 }
@@ -111,7 +111,7 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
     }
     result.push({
       title: segment.title.trim(),
-      baseAudioFile: audio,
+      baseAudioFile: audio.type ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
       durationLimitSec: segment.duration_limit_sec ?? 0,
       scriptPrompt: segment.script_prompt ?? '',
     });
