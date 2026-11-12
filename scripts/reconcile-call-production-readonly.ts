@@ -8,7 +8,7 @@ if (!connectionString) {
 const [fromDate, toDate] = process.argv.slice(2);
 
 function isValidDate(value: string | undefined): value is string {
-  if (!value || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
