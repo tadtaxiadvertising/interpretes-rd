@@ -217,6 +217,11 @@ jobs:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261111090000_call_production_ledger/migration.sql --apply --transaction
 
+      - name: Apply roleplay library archive migration
+        env:
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+        run: npm run migrate -- prisma/migrations/20261112220000_roleplay_library_archives/migration.sql --apply --transaction
+
       - name: Verify production client directory schema after migrations
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
