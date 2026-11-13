@@ -14,6 +14,14 @@ Esta rama incorpora una **primera fase funcional**, no la migración completa de
 
 No se graba el archivo fuente en Supabase ni se crea una sesión automáticamente. Publicación y asignación continúan dentro del endpoint administrativo actual, que vuelve a validar autorizaciones y hashes.
 
+## Revisión e importación de subtítulos (PR #270)
+- El estudio puede importar, **en el navegador del administrador**, un archivo SRT/WebVTT de hasta 1 MB.
+- Detecta intervalos temporales y etiquetas sencillas de hablante, sin afirmar que identifica automáticamente idiomas ni voces.
+- Los subtítulos originales permanecen solo como referencia visual local. El paquete exportado solo contiene `title`, marcas de inicio/fin (convertidas en MP3), límite e instrucciones redactadas por el administrador; la transcripción no se copia automáticamente a `script_prompt`.
+- El administrador debe **excluir las intervenciones del intérprete original**, revisar todos los límites y retirar información identificable antes de crear un roleplay.
+- Importar subtítulos sustituye la selección local previa de segmentos, pero nunca crea sesiones ni publica audios.
+- Los botones de marca temporal y previsualización permiten escuchar únicamente una intervención.
+
 ## Límites y pendientes antes de considerar producción
 1. **Pruebas**: comprobar build TypeScript, lint, tests, ZIP real generado y reimportación con el importador existente; hacer pruebas de RBAC (403 en la API para candidato, intérprete y anónimo). No declarar completado sin CI verde y ensayo de navegador.
 2. **Protección de recursos**: evaluar límites por usuario (rate limiting, concurrencia), límite de tiempo de FFmpeg y memoria en Railway/Easypanel; una carga maliciosa o concurrencia excesiva podría agotar recursos del proceso Next.js. El procesamiento debe migrar al worker ya disponible antes de escalar.
