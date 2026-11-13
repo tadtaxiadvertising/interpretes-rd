@@ -6,6 +6,10 @@ import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { parseTimedTranscript, toPublishableStudioSegments } from '@/lib/roleplay-studio/transcript';
 import StudioWaveform from './StudioWaveform';
+import {
+  classifySpeakerRole, filterInterpreterCues, makeNeutralSegmentTitle,
+  type StudioLanguage, type StudioSpeakerRole,
+} from '@/lib/roleplay-studio/speaker-profiles';
 
 type Segment = {
   id: string;
@@ -14,6 +18,8 @@ type Segment = {
   end: number;
   scriptPrompt: string;
   responseLimit: number;
+  speakerRole: StudioSpeakerRole;
+  language: StudioLanguage;
 };
 
 function formatTime(value: number): string {
@@ -33,6 +39,7 @@ export default function RoleplayStudioPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
+  const [excludeInterpreter, setExcludeInterpreter] = useState(true);
   const player = useRef<HTMLAudioElement>(null);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
@@ -119,18 +126,24 @@ export default function RoleplayStudioPage() {
       // The file may have changed, or a newer import/edit may have started.
       if (revision !== subtitleImportRevision.current) return;
       const cues = parseTimedTranscript(transcript);
-      if (cues.some(cue => cue.end > duration + 0.1)) {
+      const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
+      if (!selected.length) {
+        throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
+      }
+      if (selected.some(cue => cue.end > duration + 0.1)) {
         throw new Error('Los subtítulos contienen intervalos posteriores al final de la grabación.');
       }
       // Only the intervals and labels are used for publication. The subtitle
       // text is local-only reference material, never copied into scriptPrompt.
-      const prepared: Segment[] = toPublishableStudioSegments(cues).map(segment => ({
+      const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => ({
         ...segment,
         id: crypto.randomUUID(),
+        speakerRole: classifySpeakerRole(selected[index].speaker),
+        language: 'unknown',
       }));
       setSegments(prepared);
-      setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, cues[index].text])));
-      setNotice(`${prepared.length} intervenciones importadas desde subtítulos. Revisa los hablantes y elimina las intervenciones del intérprete antes de exportar.`);
+      setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
+      setNotice(`${prepared.length} intervenciones importadas. ${excludedCount} del intérprete original omitidas automáticamente. Revisa los roles e idiomas antes de exportar.`);
     } catch (cause) {
       if (revision !== subtitleImportRevision.current) return;
       setError(cause instanceof Error ? cause.message : 'No fue posible leer el archivo de subtítulos.');
@@ -147,7 +160,7 @@ export default function RoleplayStudioPage() {
     setSegments(prev => [...prev, {
       id: crypto.randomUUID(), title: 'Intervención ' + (prev.length + 1),
       start: Number(start.toFixed(2)), end: Number(end.toFixed(2)),
-      scriptPrompt: '', responseLimit: 120,
+      scriptPrompt: '', responseLimit: 120, speakerRole: 'unknown', language: 'unknown',
     }]);
   };
 
@@ -160,6 +173,10 @@ export default function RoleplayStudioPage() {
     if (!audio || !duration || !segments.length) return;
     setError('');
     setNotice('');
+    if (segments.some(segment => segment.speakerRole === 'interpreter')) {
+      setError('Hay intervenciones etiquetadas como Intérprete. Elimina esos fragmentos antes de exportar un roleplay para candidatos o intérpretes.');
+      return;
+    }
     const ordered = [...segments].sort((a, b) => a.start - b.start);
     let end = 0;
     let total = 0;
@@ -271,8 +288,18 @@ export default function RoleplayStudioPage() {
                   event.currentTarget.value = '';
                   if (file) void importSubtitles(file);
                 }}/>
+              <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
+                <input type="checkbox" checked={excludeInterpreter}
+                  onChange={event => {
+                    subtitleImportRevision.current += 1;
+                    setExcludeInterpreter(event.currentTarget.checked);
+                  }}
+                  className="h-4 w-4 accent-blue-500"/>
+                Excluir intervenciones del intérprete original al importar
+              </label>
               <p className="mt-2 text-xs text-slate-400">
-                Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
+                El filtro solo reconoce etiquetas genéricas exactas (por ejemplo, Interpreter o Intérprete).
+                Revisa manualmente cualquier hablante desconocido. Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
                 Los nombres personales se reemplazan por títulos neutrales. La transcripción se muestra
                 únicamente aquí y no se envía al participante. Revisa y excluye las intervenciones del intérprete.
               </p>
@@ -325,6 +352,37 @@ export default function RoleplayStudioPage() {
                   <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-300">{captionTexts[segment.id]}</p>
                 </div>
               )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-sm text-slate-300">
+                  Perfil del hablante
+                  <select value={segment.speakerRole} onChange={event => {
+                    update(segment.id, { speakerRole: event.target.value as StudioSpeakerRole });
+                  }} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                    <option value="unknown">Hablante sin identificar</option>
+                    <option value="doctor">Médico / profesional de salud</option>
+                    <option value="patient">Paciente</option>
+                    <option value="nurse">Enfermería</option>
+                    <option value="operator">Operador</option>
+                    <option value="interpreter">Intérprete original — excluir</option>
+                  </select>
+                </label>
+                <label className="block text-sm text-slate-300">
+                  Idioma de la intervención
+                  <select value={segment.language} onChange={event => {
+                    update(segment.id, { language: event.target.value as StudioLanguage });
+                  }} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                    <option value="unknown">Por revisar</option>
+                    <option value="en">Inglés (EN)</option>
+                    <option value="es">Español (ES)</option>
+                  </select>
+                </label>
+              </div>
+              <button type="button" className="text-sm text-blue-300 hover:underline"
+                onClick={() => update(segment.id, {
+                  title: makeNeutralSegmentTitle(segment.speakerRole, segment.language, index),
+                })}>
+                Aplicar perfil e idioma al título
+              </button>
               <label className="block text-sm text-slate-300">Instrucciones para el participante
                 <textarea value={segment.scriptPrompt} maxLength={5000} rows={2}
                   onChange={event => update(segment.id, {scriptPrompt: event.target.value})}
