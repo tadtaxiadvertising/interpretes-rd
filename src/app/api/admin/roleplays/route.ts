@@ -6,6 +6,9 @@ import { z } from 'zod';
 import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import {
+  blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentScope,
+} from '@/lib/roleplay-assignment-ownership';
 
 const db = prisma;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -18,21 +21,6 @@ const ALLOWED_AUDIO_TYPES = new Set([
   'audio/wav',
   'audio/mpeg',
 ]);
-
-// Statuses that block creating a new session for the same participant
-// (create-or-resume invariant): a live or already-evaluated attempt must
-// never be silently duplicated. DRAFT means an unfinished admin draft that
-// this route may replace; EXPIRED/CANCELLED allow a fresh creation.
-const BLOCKING_SESSION_STATUSES = [
-  'INVITED',
-  'STARTED',
-  'IN_PROGRESS',
-  'SUBMITTED',
-  'UNDER_REVIEW',
-  'EVALUATED',
-  'PASSED',
-  'FAILED',
-] as const;
 
 interface ScenarioInput {
   title: string;
@@ -337,8 +325,8 @@ export async function POST(req: NextRequest) {
           });
           const existing = stillActive ? await tx.roleplaySession.findFirst({
             where: {
-              interpreterId: interpreter.id,
-              status: { in: [...BLOCKING_SESSION_STATUSES, 'DRAFT'] },
+              ...interpreterAssignmentScope(interpreter.id),
+              status: { in: blockingAssignmentStatuses(true) },
             },
             select: { id: true },
           }) : { id: 'inactive' };
@@ -396,10 +384,12 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const participantWhere =
-      participantType === 'interpreter'
-        ? { interpreterId: parsedParticipantId! }
-        : { recruitmentCandidateId: parsedParticipantId! };
+    // Candidate ownership wins over provisional interpreter IDs retained in
+    // old recruitment sessions. The interpreter's active session must not be
+    // blocked or replaced because such a historical candidate row exists.
+    const participantWhere = participantType === 'interpreter'
+      ? interpreterAssignmentScope(parsedParticipantId!)
+      : candidateAssignmentScope(parsedParticipantId!);
 
     if (!useLibrary) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -421,7 +411,7 @@ export async function POST(req: NextRequest) {
     const reservation = await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
       const blocking = await tx.roleplaySession.findFirst({
-        where: { ...participantWhere, status: { in: [...BLOCKING_SESSION_STATUSES] } },
+        where: { ...participantWhere, status: { in: blockingAssignmentStatuses(false) } },
         orderBy: { createdAt: 'desc' },
         select: { id: true, status: true },
       });
