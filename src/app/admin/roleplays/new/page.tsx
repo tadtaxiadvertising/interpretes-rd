@@ -74,7 +74,12 @@ export default async function NewRoleplayPage({
     if (source && source.status !== 'DRAFT' && source.status !== 'CANCELLED' &&
         source.scenarios.length > 0 && source.scenarios.length <= ROLEPLAY_MAX_SCENARIOS &&
         source.scenarios.every((scenario) => getReusableBaseAudioPath(scenario.baseAudioUrl, storageUrl))) {
-      librarySource = {
+      const fingerprint = getRoleplaySnapshotHash(source.scenarios);
+      const visibility = await prisma.roleplayLibraryArchive.findUnique({
+        where: { fingerprint },
+        select: { archivedAt: true },
+      });
+      if (!visibility?.archivedAt) librarySource = {
         id: sourceSessionId,
         fingerprint: getRoleplaySnapshotHash(source.scenarios),
         scenarios: source.scenarios.map(({ title, durationLimitSec, scriptPrompt }) => ({ title, durationLimitSec, scriptPrompt })),
