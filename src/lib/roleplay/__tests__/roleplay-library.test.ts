@@ -15,6 +15,7 @@ describe('getReusableBaseAudioPath', () => {
     `${supabaseUrl}/storage/v1/object/public/roleplay-audio/responses/x.mp3`,
     `${publicBase}/bulk-123/0.mp3?download=1`,
     `${publicBase}/bulk-123/%2e%2e/file.mp3`,
+    `${publicBase}/group/%2e%2e/bulk-123/0.mp3`,
     `${publicBase}/bulk-123/file%2Fother.mp3`,
     `${supabaseUrl}/storage/v1/object/sign/roleplay-audio/base/bulk-123/0.mp3?token=x`,
     'not a url',
