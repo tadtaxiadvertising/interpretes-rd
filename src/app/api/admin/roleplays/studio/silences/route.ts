@@ -22,9 +22,10 @@ type SilenceAnalysis = {
 };
 
 async function detectSilences(input: Buffer, signal: AbortSignal): Promise<SilenceAnalysis> {
-  if (!ffmpegPath) throw new Error('FFmpeg unavailable');
+  const executable = ffmpegPath;
+  if (!executable) throw new Error('FFmpeg unavailable');
   return await new Promise((resolve, reject) => {
-    const child = spawn(ffmpegPath, [
+    const child = spawn(executable, [
       '-hide_banner', '-loglevel', 'info', '-nostdin', '-nostats',
       '-progress', 'pipe:1',
       '-i', 'pipe:0', '-map', '0:a:0',
