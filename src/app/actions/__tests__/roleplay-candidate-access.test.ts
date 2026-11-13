@@ -104,6 +104,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     vi.clearAllMocks();
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.scenarioCount.mockResolvedValue(0);
     m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1', order: 0 });
     m.responseCount.mockResolvedValue(0);
@@ -384,6 +385,119 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.responseCreate).not.toHaveBeenCalled();
     expect(m.responseUpdate).not.toHaveBeenCalled();
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a confirmation when cancellation or QA changes the session before the atomic claim', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.sessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://untrusted.test/client-url',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Session not available');
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'sess-cand',
+        currentScenarioIndex: 0,
+        status: { in: ['INVITED', 'STARTED', 'IN_PROGRESS'] },
+      },
+      data: { updatedAt: expect.any(Date) },
+    });
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.audioJobCreate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('returns an idempotent success when the same recording was committed while awaiting the row lock', async () => {
+    const path = 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm';
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.responseFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'resp-previous',
+        sourceAudioUrl: 'https://signed.example/existing.webm',
+        sourceAudioPath: path,
+        processedAudioPath: null,
+      });
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: path,
+      recordedAudioUrl: 'https://untrusted.test/client-url',
+    });
+
+    expect(res.success).toBe(true);
+    if (res.success) {
+      expect(res.data).toMatchObject({
+        newlyCreated: false,
+        sourceAudioPath: path,
+        recordedAudioUrl: 'https://signed.example/existing.webm',
+      });
+    }
+    expect(m.responseFindFirst).toHaveBeenCalledTimes(2);
+    expect(m.sessionUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.audioJobCreate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite another recording committed during the claim', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.responseFindFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'resp-other',
+        sourceAudioUrl: 'https://signed.example/other.webm',
+        sourceAudioPath: 'responses/sess-cand/scn-1/11111111-1111-4111-8111-111111111111.webm',
+        processedAudioPath: null,
+      });
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://untrusted.test/client-url',
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.error).toContain('Response already recorded');
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.audioJobCreate).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('never echoes a caller-supplied URL when an earlier recording lacks a stored URL', async () => {
+    const path = 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm';
+    m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED' };
+    m.cookie = 'sess-cand';
+    m.responseFindFirst.mockResolvedValueOnce({
+      id: 'resp-legacy',
+      sourceAudioUrl: null,
+      sourceAudioPath: path,
+      processedAudioPath: null,
+    });
+
+    const res = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: path,
+      recordedAudioUrl: 'https://untrusted.test/client-url',
+    });
+
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.data.recordedAudioUrl).toBeNull();
+    expect(JSON.stringify(res)).not.toContain('untrusted.test');
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.responseCreate).not.toHaveBeenCalled();
   });
 
   it('rejects legacy confirms without a scenario id', async () => {
