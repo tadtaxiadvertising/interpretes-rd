@@ -50,3 +50,12 @@ npm run build
 - El importador actual `manifest.json`/ZIP, RBAC, biblioteca, asignaciones y auditoría QA continúan siendo los puntos únicos de publicación y consumo.
 - No se ha integrado todavía el motor de Google AI Studio: falta su código fuente exportado para un port preciso, y quedan pendientes diarización automática, transcripción autónoma, simulador consecutivo avanzado, proyectos editables persistentes y trabajo asíncrono en el worker.
 
+
+## Proyectos editables portables (fase siguiente)
+- Desde Audio Studio el administrador puede guardar un archivo `roleplay-studio-proyecto.json` con la selección de intervenciones, perfiles EN/ES, límites y las instrucciones que redactó.
+- No se guarda el MP3, su nombre, los subtítulos de referencia, URLs de audio, identidad del usuario ni claves del sistema. El proyecto contiene únicamente el tamaño y **SHA-256** del MP3 para volver a asociarlo correctamente, junto con los metadatos editoriales.
+- Para reabrir: seleccionar primero el MP3 original, esperar la lectura de duración, y cargar después el JSON. Se verifican formato, versión, campos, límites, tamaño y hash. Si el MP3 no coincide, no se modifica el borrador actual.
+- Cambiar de MP3 o editar durante una importación asíncrona invalida el resultado anterior. No se modifica ningún roleplay ya asignado ni su grabación.
+- **Advertencia:** aunque no guarda transcripciones ni audio, el JSON puede contener texto sensible que el administrador haya escrito en títulos o instrucciones. Debe almacenarse en un lugar seguro y no compartirse con participantes.
+- Es una persistencia explícita y portable en archivo local, no una persistencia en Supabase. Proyectos colaborativos/versionados, historial de modificaciones y retención gestionada siguen pendientes.
+
