@@ -14,6 +14,12 @@ Esta rama incorpora una **primera fase funcional**, no la migración completa de
 
 No se graba el archivo fuente en Supabase ni se crea una sesión automáticamente. Publicación y asignación continúan dentro del endpoint administrativo actual, que vuelve a validar autorizaciones y hashes.
 
+## Revisión de subtítulos y protección de nombres
+- El editor admite archivos SRT/WebVTT para preparar las marcas de tiempo sin enviar la transcripción al servidor.
+- El contenido de cada intervención se muestra únicamente como referencia local del administrador; no se incorpora automáticamente a las instrucciones entregadas al participante.
+- **Los nombres del campo hablante no se publican automáticamente.** Solo un vocabulario de roles no identificables (Doctor, Médico, Paciente, Enfermería, Intérprete y Operador, en español o inglés) puede convertirse en título; cualquier otro texto se sustituye por `Intervención N`. El administrador debe revisar y excluir las intervenciones del intérprete original.
+- Esta medida no sustituye el proceso editorial de anonimización del audio fuente, que sigue siendo obligatorio antes de publicar.
+
 ## Importación ZIP directa (PR #271)
 La creación administrativa acepta el ZIP STORE de Audio Studio sin extracción manual. El navegador valida la estructura ZIP (cabeceras locales y directorio central), los nombres permitidos, la ausencia de compresión, CRC32, conteo y tamaños. Luego **reutiliza el validador canónico** de `manifest.json` y SHA-256 para cada MP3. No se crea ninguna sesión hasta que el administrador elige destinatarios y confirma el formulario. Se conserva el mecanismo previo de importación de múltiples archivos.
 
