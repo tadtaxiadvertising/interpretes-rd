@@ -875,6 +875,35 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         throw new Error('This scenario is not the current step');
       }
 
+      // Claim the persisted stage before reading or changing the response.
+      // The guarded UPDATE locks this session row for the transaction: a
+      // concurrent submission/QA evaluation cannot be silently rolled back to
+      // IN_PROGRESS, and two assessments cannot advance the same cursor.
+      const claim = isLegacyUnclaimedSubmission
+        ? await tx.roleplaySession.updateMany({
+          where: {
+            id: session.id,
+            status: 'SUBMITTED',
+            evaluatorId: null,
+            qaScoreId: null,
+            currentScenarioIndex: session.currentScenarioIndex,
+          },
+          // Keep the submitted cursor/status intact; touch a real field to
+          // acquire the row lock before checking whether scores were saved.
+          data: { updatedAt: new Date() },
+        })
+        : await tx.roleplaySession.updateMany({
+          where: {
+            id: session.id,
+            status: { in: ['STARTED', 'IN_PROGRESS'] },
+            currentScenarioIndex: scenario.order,
+          },
+          data: { currentScenarioIndex: scenario.order + 1, status: 'IN_PROGRESS' },
+        });
+      if (claim.count !== 1) {
+        throw new Error('Session not available for self-assessment');
+      }
+
       const response = await tx.roleplayResponse.findFirst({
         where: { scenarioId: input.scenarioId },
         select: { id: true, sourceAudioUrl: true, selfScore: true },
@@ -902,17 +931,10 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         },
       });
 
-      // Persist the workflow cursor only after both recording and self-assessment
-      // have been stored. Refreshing the page therefore resumes at the right stage.
-      // Old clients could mark the session SUBMITTED immediately after the
-      // final recording. Permit only unclaimed legacy submissions to fill in
-      // missing self-assessments, without reopening or moving the submitted cursor.
-      if (!isLegacyUnclaimedSubmission) {
-        await tx.roleplaySession.update({
-          where: { id: session.id },
-          data: { currentScenarioIndex: scenario.order + 1, status: 'IN_PROGRESS' },
-        });
-      }
+      // The stage and scores commit atomically. If saving the response fails,
+      // PostgreSQL rolls back the guarded cursor update above as well. Legacy
+      // SUBMITTED attempts remain submitted and can be repaired only before QA
+      // claims the row.
     });
 
     revalidatePath('/dashboard/roleplays');

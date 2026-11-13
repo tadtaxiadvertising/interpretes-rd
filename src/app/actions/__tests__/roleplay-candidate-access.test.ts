@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   session: null as any,
   findUnique: vi.fn(),
   update: vi.fn(),
+  sessionUpdateMany: vi.fn(),
   scenarioCount: vi.fn(),
   scenarioFindFirst: vi.fn(),
   responseCount: vi.fn(),
@@ -49,7 +50,7 @@ vi.mock('@/lib/prisma', () => ({
     recruitmentEvent: { create: m.eventCreate },
     $transaction: async (cb: any) =>
       cb({
-        roleplaySession: { findUnique: m.findUnique, update: m.update },
+        roleplaySession: { findUnique: m.findUnique, update: m.update, updateMany: m.sessionUpdateMany },
         roleplayScenario: { count: m.scenarioCount, findFirst: m.scenarioFindFirst },
         roleplayResponse: {
           findFirst: m.responseFindFirst,
@@ -563,6 +564,7 @@ describe('saveSelfAssessment gate', () => {
     vi.clearAllMocks();
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.scenarioFindFirst.mockResolvedValue({ id: 'scn-1', order: 0 });
     m.responseFindFirst.mockResolvedValue({ id: 'resp-1', sourceAudioUrl: 'https://x/response.webm' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
