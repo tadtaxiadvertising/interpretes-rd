@@ -500,6 +500,35 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(m.responseCreate).not.toHaveBeenCalled();
   });
 
+  it.each(['DRAFT', 'CANCELLED', 'EXPIRED'])(
+    'does not disclose stored audio on a %s session even for an exact replay',
+    async (status) => {
+      const path = 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm';
+      m.session = { ...CANDIDATE_SESSION, status };
+      m.cookie = 'sess-cand';
+      m.responseFindFirst.mockResolvedValueOnce({
+        id: 'resp-revoked',
+        sourceAudioUrl: 'https://signed.example/revoked.webm',
+        sourceAudioPath: path,
+        processedAudioPath: null,
+      });
+
+      const res = await confirmRoleplayResponse({
+        sessionId: 'sess-cand',
+        scenarioId: 'scn-1',
+        sourceAudioPath: path,
+        recordedAudioUrl: 'https://untrusted.test/client-url',
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('Session not available');
+      expect(JSON.stringify(res)).not.toContain('revoked.webm');
+      expect(m.responseFindFirst).not.toHaveBeenCalled();
+      expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+      expect(m.responseCreate).not.toHaveBeenCalled();
+    },
+  );
+
   it('rejects legacy confirms without a scenario id', async () => {
     m.session = { ...CANDIDATE_SESSION, recordedAudioUrl: 'https://x/already.webm' };
     m.cookie = 'sess-cand';
