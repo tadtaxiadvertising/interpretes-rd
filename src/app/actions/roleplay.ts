@@ -712,6 +712,12 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       if (!isCanonicalResponseAudioPath(input.sourceAudioPath, session.id, input.scenarioId)) {
         throw new Error('A valid uploaded audio object is required before confirming the response');
       }
+      // The idempotent replay below is intentionally available after a
+      // legitimate SUBMITTED/QA result, but never for a draft, revoked or
+      // expired attempt. Those states must not return stored audio URLs.
+      if (['DRAFT', 'CANCELLED', 'EXPIRED'].includes(session.status)) {
+        throw new Error('Session not available for submission');
+      }
 
       // A retried confirm after a successful commit may arrive after the
       // session index has advanced. Treat only the exact same stored audio
