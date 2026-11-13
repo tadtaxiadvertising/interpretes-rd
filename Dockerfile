@@ -53,6 +53,12 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/certs ./certs
 
+# The admin Audio Studio spawns ffmpeg at runtime. Prove it was traced into
+# the production standalone image and can execute under Alpine + libc6-compat.
+# Fail the image build, not the first administrator export request.
+RUN test -x ./node_modules/ffmpeg-static/ffmpeg && \
+    ./node_modules/ffmpeg-static/ffmpeg -hide_banner -version >/dev/null
+
 USER nextjs
 
 ARG PORT=3000
