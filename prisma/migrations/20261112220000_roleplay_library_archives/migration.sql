@@ -2,7 +2,7 @@
 -- Historical roleplay sessions, audio objects and evaluation records are untouched.
 CREATE TABLE IF NOT EXISTS public.roleplay_library_archives (
   fingerprint VARCHAR(64) PRIMARY KEY,
-  archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  archived_at TIMESTAMPTZ,
   archived_by TEXT,
   CONSTRAINT roleplay_library_archives_fingerprint_hex
     CHECK (fingerprint ~ '^[a-f0-9]{64}$')
