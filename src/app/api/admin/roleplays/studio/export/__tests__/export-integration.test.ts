@@ -83,4 +83,25 @@ describe('Audio Studio creates a real, re-importable MP3 archive', () => {
       expect(decoded.stdout.length).toBeGreaterThan(1000);
     }
   }, 60_000);
+
+  it('rejects a partially truncated interval even when FFmpeg exits successfully', async () => {
+    const source = spawnSync(ffmpegPath!, [
+      '-hide_banner', '-loglevel', 'error', '-f', 'lavfi',
+      '-i', 'sine=frequency=440:duration=3',
+      '-codec:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3', 'pipe:1',
+    ], { maxBuffer: 2 * 1024 * 1024, timeout: 15_000 });
+    expect(source.status).toBe(0);
+
+    const form = new FormData();
+    form.append('audio', new File([new Uint8Array(source.stdout)], 'recording.mp3', { type: 'audio/mpeg' }));
+    // Starts inside the 3-second recording but requests 2 seconds: only ~0.5
+    // seconds would be encoded without the final progress check.
+    form.append('segments', JSON.stringify([
+      { title: 'Invalid trailing clip', start: 2.5, end: 4.5, scriptPrompt: '', responseLimit: 120 },
+    ]));
+    const request = new Request('http://localhost/api/admin/roleplays/studio/export', { method: 'POST', body: form });
+    const response = await POST(request as never);
+    expect(response.status).toBe(422);
+    expect(response.headers.get('content-type')).toContain('application/json');
+  }, 60_000);
 });
