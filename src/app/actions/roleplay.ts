@@ -465,7 +465,8 @@ export async function startCandidateRoleplay() {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Start Candidate Roleplay Error:', message);
-    return { success: false as const, error: message, code: 'INTERNAL_ERROR' as const };
+    // Internal database/storage failures must never reach the candidate client.
+    return { success: false as const, error: 'No fue posible preparar tu roleplay. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' as const };
   }
 }
 

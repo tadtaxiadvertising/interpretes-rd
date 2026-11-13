@@ -381,6 +381,22 @@ describe('startCandidateRoleplay', () => {
     expect(m.sessionCreate).not.toHaveBeenCalled();
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
+
+  it('never returns database exception details when restoring a candidate session', async () => {
+    const secret = 'postgresql://private-user:secret@db.internal.invalid/roleplay';
+    m.candidateFindUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await startCandidateRoleplay();
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INTERNAL_ERROR');
+      expect(result.error).toBe('No fue posible preparar tu roleplay. Inténtalo nuevamente.');
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(m.cookieSet).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
 });
 
 describe('validateInviteToken protects candidate responses from database details', () => {

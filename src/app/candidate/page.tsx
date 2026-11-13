@@ -114,9 +114,7 @@ export default async function CandidatePortalPage() {
               El Roleplay es parte de tu postulación. Se realiza y evalúa antes de cualquier activación como intérprete.
             </p>
             {roleplayActive && session ? (
-              <Link href={`/roleplays/${session.id}`} className="mt-5 inline-flex rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-400">
-                Continuar Roleplay
-              </Link>
+              <div className="mt-5"><CandidateRoleplayAction label="Continuar Roleplay" /></div>
             ) : !roleplayFinished && ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS', 'ROLEPLAY_REVIEW'].includes(status) ? (
               <div className="mt-5"><CandidateRoleplayAction /></div>
             ) : roleplayFinished ? (
