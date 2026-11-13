@@ -132,6 +132,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # The Easypanel "interpreters-api" service must run the standalone
+      # Express backend. Validate its actual Dockerfile, not only Next.js.
+      - name: Build dedicated interpreters-api backend image
+        run: docker build --file Dockerfile.api --tag interpreters-api:ci .
+
       - name: Build dedicated Roleplay audio worker image
         run: docker build --file Dockerfile.worker --tag roleplay-audio-worker:ci .
 

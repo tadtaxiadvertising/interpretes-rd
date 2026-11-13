@@ -11,8 +11,8 @@ WORKDIR /app
 # Git SHA for version tracking (auto-reload on deploy)
 ARG GIT_SHA
 ENV GIT_SHA=${GIT_SHA}
-ARG BUILD_TIMESTAMP
-ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP:-$(date +%s)}
+ARG BUILD_TIMESTAMP=unknown
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 # Copiar solo el subdirectorio interpreters-api (no el frontend entero)
 COPY interpreters-api/package.json interpreters-api/package-lock.json ./
