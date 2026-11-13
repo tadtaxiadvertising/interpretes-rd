@@ -83,16 +83,22 @@ export async function POST(req: NextRequest) {
       path: '/',
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        sessionId: access.session.id,
-        baseAudioUrl: access.session.baseAudioUrl,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          sessionId: access.session.id,
+          baseAudioUrl: access.session.baseAudioUrl,
+        },
       },
-    });
+      { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Start Roleplay Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }
