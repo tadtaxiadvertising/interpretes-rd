@@ -1057,7 +1057,9 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Validate Invite Token Error:', message);
-    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+    // This server action is callable by participants just like the API routes.
+    // Never reflect raw Prisma/Storage exception messages in its result.
+    return { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' };
   }
 }
 
