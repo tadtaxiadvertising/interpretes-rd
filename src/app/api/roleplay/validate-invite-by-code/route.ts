@@ -113,6 +113,10 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Validate Invite By Code Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    // Invite codes and internal failures must not be disclosed in API errors.
+    return NextResponse.json(
+      { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }
