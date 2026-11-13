@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves, Library } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, RoleplayStatus } from '@prisma/client';
 import { SessionActions } from '@/components/admin/SessionActions';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -12,7 +12,7 @@ const PAGE_SIZE = 20;
 const FILTERABLE_STATUSES = [
   'DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED',
   'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED',
-] as const;
+] as const satisfies readonly RoleplayStatus[];
 
 type RoleplaySearchParams = {
   search?: string;
@@ -23,7 +23,8 @@ type RoleplaySearchParams = {
 
 function parseRoleplayFilters(params: RoleplaySearchParams) {
   const search = (params.search ?? '').trim().slice(0, 100);
-  const status = FILTERABLE_STATUSES.find((value) => value === params.status) ?? 'all';
+  // Keep the parsed filter in Prisma's RoleplayStatus union, never a generic string.
+  const status: RoleplayStatus | 'all' = FILTERABLE_STATUSES.find((value) => value === params.status) ?? 'all';
   const participantType = params.participantType === 'candidate' || params.participantType === 'interpreter'
     ? params.participantType
     : 'all';
