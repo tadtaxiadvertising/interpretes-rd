@@ -33,6 +33,10 @@ const SAFE_ROLEPLAY_ACTION_FAILURES = new Set([
   'Roleplay is not ready to submit',
   'Complete every recording and self-assessment before submitting',
   'Roleplay was already submitted or changed',
+  'Session not found',
+  'Session already evaluated',
+  'No response submitted yet',
+  'Concurrent evaluation detected or session not available',
 ]);
 
 function publicRoleplayActionFailure(error: unknown, fallback: string): string {
@@ -1307,6 +1311,6 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Evaluate Roleplay Error:', message);
-    return { success: false, error: 'No fue posible evaluar el roleplay. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' };
+    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible evaluar el roleplay. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }
