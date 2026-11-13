@@ -16,6 +16,10 @@ export interface ReusableRoleplayScenario {
  */
 export function getReusableBaseAudioPath(audioUrl: string, supabaseUrl: string): string | null {
   try {
+    // URL.pathname normalizes encoded dot segments (e.g. %2e%2e), so reject
+    // encoded paths before URL parsing instead of trusting the normalized result.
+    // Our own object keys are ASCII-only and never need percent encoding.
+    if (/%[0-9a-f]{2}/i.test(audioUrl)) return null;
     const origin = new URL(supabaseUrl);
     const candidate = new URL(audioUrl);
     if (candidate.origin !== origin.origin || candidate.protocol !== 'https:' || candidate.search || candidate.hash) {
