@@ -56,7 +56,8 @@ export default function RoleplayStudioPage() {
       stopPreview();
       return;
     }
-    audioPlayer.pause();
+    // Seek directly even if audio is already playing. Calling pause() here
+    // schedules an onPause event which can clear the new segment's end marker.
     audioPlayer.currentTime = segment.start;
     previewEnd.current = segment.end;
     setPreviewingId(segment.id);
