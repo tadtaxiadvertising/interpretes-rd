@@ -87,6 +87,15 @@ describe('Audio Studio direct ZIP import', () => {
     await expect(extractStudioZip(archiveFile(zip))).rejects.toThrow('CRC32');
   });
 
+  it('rejects a ZIP with valid CRC32 but MP3 content inconsistent with manifest SHA-256', async () => {
+    const changedAudio = Buffer.from([0x49, 0x44, 0x33, 0x07, 0x08]);
+    const extracted = await extractStudioZip(archiveFile(buildArchive([
+      { name: 'manifest.json', data: manifest },
+      { name: 'segment-01.mp3', data: changedAudio },
+    ])));
+    await expect(prepareRoleplayManifestImport(extracted)).rejects.toThrow('SHA-256');
+  });
+
   it('rejects path traversal even when the ZIP is structurally valid', async () => {
     const zip = buildArchive([
       { name: 'manifest.json', data: manifest },
