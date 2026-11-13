@@ -1,11 +1,12 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockUpload, mockRemove, mockGetPublicUrl, mockList } = vi.hoisted(() => ({
+const { mockUpload, mockRemove, mockGetPublicUrl, mockList, mockInfo } = vi.hoisted(() => ({
   mockUpload: vi.fn(),
   mockRemove: vi.fn(),
   mockGetPublicUrl: vi.fn(),
   mockList: vi.fn(),
+  mockInfo: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({
@@ -22,11 +23,11 @@ vi.mock('next/cache', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    interpreter: { findUnique: vi.fn(), findMany: vi.fn() },
+    interpreter: { findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
     recruitmentCandidate: { findUnique: vi.fn() },
-    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
-    roleplayAccess: { create: vi.fn() },
+    roleplayAccess: { create: vi.fn(), findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -39,6 +40,7 @@ vi.mock('@supabase/supabase-js', () => ({
         remove: mockRemove,
         getPublicUrl: mockGetPublicUrl,
         list: mockList,
+        info: mockInfo,
       })),
     },
   })),
@@ -47,6 +49,7 @@ vi.mock('@supabase/supabase-js', () => ({
 import { POST } from '../route';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
+import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
 const adminAuth = {
   user: { userId: 'a1', email: 'admin@x.com', role: 'admin', interpreterId: null, profileId: 'a1' },
@@ -62,16 +65,29 @@ function buildRequest(fields: {
   participantId?: string;
   scenarios?: string;
   audios?: File[];
+  librarySessionId?: string;
+  libraryFingerprint?: string;
 }) {
   const formData = new FormData();
   if (fields.participantType !== undefined) formData.append('participantType', fields.participantType);
   if (fields.participantId !== undefined) formData.append('participantId', fields.participantId);
   if (fields.scenarios !== undefined) formData.append('scenarios', fields.scenarios);
+  if (fields.librarySessionId !== undefined) formData.append('librarySessionId', fields.librarySessionId);
+  if (fields.libraryFingerprint !== undefined) formData.append('libraryFingerprint', fields.libraryFingerprint);
   for (const a of fields.audios ?? []) formData.append('scenarioAudios', a);
   return new Request('http://localhost/api/admin/roleplays', { method: 'POST', body: formData });
 }
 
 const oneScenario = JSON.stringify([{ title: 'Escenario 1', durationLimitSec: 0, scriptPrompt: 'Saluda' }]);
+const draftUpdatedAt = new Date('2026-11-10T10:00:00.000Z');
+
+const librarySourceId = 'library-source-123';
+const libraryAudio = 'https://supabase.test/storage/v1/object/public/roleplay-audio/base/bulk-source/0.mp3';
+const libraryScenario = {
+  order: 0, title: 'Medical introduction', baseAudioUrl: libraryAudio,
+  durationLimitSec: 300, scriptPrompt: 'Interpretar fielmente', expectedKeys: ['Terminología médica'],
+};
+const libraryFingerprint = getRoleplaySnapshotHash([libraryScenario]);
 
 describe('POST /api/admin/roleplays', () => {
   const originalEnv = { ...process.env };
@@ -87,7 +103,10 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.interpreter.findMany as any).mockResolvedValue([{ id: 7 }, { id: 8 }]);
     (prisma.roleplaySession.findMany as any).mockResolvedValue([]);
     (prisma.recruitmentCandidate.findUnique as any).mockResolvedValue({ id: 9 });
-    (prisma.roleplaySession.create as any).mockResolvedValue({ id: 'sess-1' });
+    (prisma.roleplaySession.create as any).mockResolvedValue({ id: 'sess-1', updatedAt: draftUpdatedAt });
+    (prisma.roleplaySession.findUnique as any).mockResolvedValue({ id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt });
+    (prisma.roleplayAccess.findUnique as any).mockResolvedValue(null);
+    (prisma.interpreter.findFirst as any).mockResolvedValue({ id: 7 });
     (prisma.roleplaySession.update as any).mockResolvedValue({});
     (prisma.roleplaySession.delete as any).mockResolvedValue({});
     (prisma.roleplaySession.findFirst as any).mockResolvedValue(null);
@@ -96,14 +115,23 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.roleplayAccess.create as any).mockResolvedValue({ id: 'acc-1' });
     (prisma.$transaction as any).mockImplementation(async (cb: any) =>
       cb({
-        roleplayScenario: { create: prisma.roleplayScenario.create },
-        roleplaySession: { update: prisma.roleplaySession.update, create: prisma.roleplaySession.create },
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        interpreter: { findFirst: prisma.interpreter.findFirst },
+        roleplayScenario: { create: prisma.roleplayScenario.create, deleteMany: prisma.roleplayScenario.deleteMany },
+        roleplaySession: {
+          findFirst: prisma.roleplaySession.findFirst,
+          findUnique: prisma.roleplaySession.findUnique,
+          update: prisma.roleplaySession.update,
+          create: prisma.roleplaySession.create,
+        },
+        roleplayAccess: { findUnique: prisma.roleplayAccess.findUnique, create: prisma.roleplayAccess.create },
       })
     );
 
     mockUpload.mockResolvedValue({ error: null });
     mockRemove.mockResolvedValue({ error: null });
     mockList.mockResolvedValue({ data: [], error: null });
+    mockInfo.mockResolvedValue({ data: { name: '0.mp3' }, error: null });
     mockGetPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.test/base/0.webm' } });
   });
 
@@ -309,14 +337,15 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('failure cleanup', () => {
-    it('deletes the half-created session when an audio upload fails', async () => {
+    it('preserves a newly reserved draft when an audio upload fails', async () => {
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
 
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(500);
       expect((await res.json()).error).toBe('Failed to upload audio: boom');
-      expect(prisma.roleplaySession.delete).toHaveBeenCalledWith({ where: { id: 'sess-1' } });
+      expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(1);
+      expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.create).not.toHaveBeenCalled();
     });
   });
@@ -350,7 +379,7 @@ describe('POST /api/admin/roleplays', () => {
     it('resumes an unfinished DRAFT: reuses the row and replaces its scenarios', async () => {
       (prisma.roleplaySession.findFirst as any)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'sess-d' });
+        .mockResolvedValueOnce({ id: 'sess-d', updatedAt: draftUpdatedAt });
       mockList.mockResolvedValue({ data: [{ name: '0.webm' }], error: null });
 
       const res = await POST(buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] }) as any);
@@ -361,28 +390,28 @@ describe('POST /api/admin/roleplays', () => {
       expect(body.data.sessionId).toBe('sess-d');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.deleteMany).toHaveBeenCalledWith({ where: { sessionId: 'sess-d' } });
-      expect(mockRemove).toHaveBeenCalledWith(['base/sess-d/0.webm']);
+      expect(mockRemove).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sessionId: 'sess-d' }) })
       );
       expect(prisma.roleplayAccess.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sessionId: 'sess-d' }) })
       );
-      expect(mockUpload).toHaveBeenCalledWith('base/sess-d/0.webm', expect.anything(), expect.objectContaining({ upsert: true }));
+      expect(mockUpload).toHaveBeenCalledWith(expect.stringMatching(/^base\/sess-d\/upload-[^/]+\/0\.webm$/), expect.anything(), expect.objectContaining({ upsert: true }));
     });
 
-    it('keeps a resumed DRAFT row on failure, resetting it instead of deleting', async () => {
+    it('keeps a resumed DRAFT and its scenarios on failure', async () => {
       (prisma.roleplaySession.findFirst as any)
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 'sess-d' });
+        .mockResolvedValueOnce({ id: 'sess-d', updatedAt: draftUpdatedAt });
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
 
       const res = await POST(buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(500);
       expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
-      expect(prisma.roleplayScenario.deleteMany).toHaveBeenCalledWith({ where: { sessionId: 'sess-d' } });
-      expect(prisma.roleplaySession.update).toHaveBeenCalledWith({ where: { id: 'sess-d' }, data: { baseAudioUrl: '' } });
+      expect(prisma.roleplayScenario.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
     });
 
     it('creates a brand-new session when only cancelled/expired sessions exist', async () => {
@@ -393,6 +422,115 @@ describe('POST /api/admin/roleplays', () => {
       expect(res.status).toBe(200);
       expect((await res.json()).data.sessionId).toBe('sess-1');
       expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('library reuse', () => {
+    it('assigns a library source to active interpreters in bulk without a reupload', async () => {
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({
+        status: 'INVITED', scenarios: [libraryScenario],
+      });
+
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        librarySessionId: librarySourceId,
+        libraryFingerprint,
+      }) as any);
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.bulk).toBe(true);
+      expect(body.data.createdCount).toBe(2);
+      expect(body.data.scenarioCount).toBe(1);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(mockInfo).toHaveBeenCalledWith('base/bulk-source/0.mp3');
+      expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates a candidate invitation from a library source without uploading', async () => {
+      (prisma.roleplaySession.findUnique as any).mockImplementation(({ where }: any) =>
+        where.id === librarySourceId
+          ? { status: 'INVITED', scenarios: [libraryScenario] }
+          : { id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt }
+      );
+      const res = await POST(buildRequest({
+        participantType: 'candidate', participantId: '9',
+        librarySessionId: librarySourceId, libraryFingerprint,
+      }) as any);
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-Z0-9_-]+$/);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.roleplayAccess.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('reuses stored audio and expected assessment keys without uploading', async () => {
+      (prisma.roleplaySession.findUnique as any).mockImplementation(({ where }: any) =>
+        where.id === librarySourceId
+          ? { status: 'INVITED', scenarios: [libraryScenario] }
+          : { id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt }
+      );
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        librarySessionId: librarySourceId, libraryFingerprint,
+      }) as any);
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.scenarioCount).toBe(1);
+      expect(mockInfo).toHaveBeenCalledWith('base/bulk-source/0.mp3');
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.roleplayScenario.create).toHaveBeenCalledWith(expect.objectContaining({
+        data: expect.objectContaining({
+          title: libraryScenario.title,
+          baseAudioUrl: libraryAudio,
+          expectedKeys: libraryScenario.expectedKeys,
+        }),
+      }));
+    });
+
+    it('rejects an outdated snapshot before creating a draft', async () => {
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({ status: 'INVITED', scenarios: [libraryScenario] });
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7', librarySessionId: librarySourceId,
+        libraryFingerprint: '0'.repeat(64),
+      }) as any);
+      expect(res.status).toBe(409);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+      expect(mockInfo).not.toHaveBeenCalled();
+    });
+
+    it('rejects audio from a different storage host', async () => {
+      const external = { ...libraryScenario, baseAudioUrl: 'https://other.example/storage/v1/object/public/roleplay-audio/base/a/0.mp3' };
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({ status: 'INVITED', scenarios: [external] });
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7', librarySessionId: librarySourceId,
+        libraryFingerprint: getRoleplaySnapshotHash([external]),
+      }) as any);
+      expect(res.status).toBe(409);
+      expect(mockInfo).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects deleted audio before creating any session', async () => {
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({ status: 'INVITED', scenarios: [libraryScenario] });
+      mockInfo.mockResolvedValue({ data: null, error: { message: 'Not found' } });
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        librarySessionId: librarySourceId, libraryFingerprint,
+      }) as any);
+      expect(res.status).toBe(409);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
+    it('blocks client uploads mixed with a library reference', async () => {
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        librarySessionId: librarySourceId, libraryFingerprint,
+        audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(400);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
   });
 });

@@ -31,13 +31,18 @@ interface NewRoleplayFormProps {
   interpreters: Participant[];
   candidates: Participant[];
   initialCandidateId?: number;
+  librarySource?: {
+    id: string;
+    fingerprint: string;
+    scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null }>;
+  };
 }
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [scenarios, setScenarios] = useState<Scenario[]>([
@@ -152,6 +157,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       setError('Please select a participant');
       return false;
     }
+    if (librarySource) return librarySource.scenarios.length > 0;
     if (scenarios.length === 0 || scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
       setError(`Please add between 1 and ${ROLEPLAY_MAX_SCENARIOS} scenarios`);
       return false;
@@ -179,15 +185,20 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const formData = new FormData();
       formData.append('participantType', participantType);
       if (!isBulk) formData.append('participantId', selectedParticipantId);
-      formData.append('scenarios', JSON.stringify(scenarios.map(s => ({
-        title: s.title.trim(),
-        durationLimitSec: s.durationLimitSec || 0,
-        scriptPrompt: s.scriptPrompt,
-      }))));
-      for (const scenario of scenarios) {
-        if (scenario.baseAudioFile) formData.append('scenarioAudios', scenario.baseAudioFile);
+      if (librarySource) {
+        formData.append('librarySessionId', librarySource.id);
+        formData.append('libraryFingerprint', librarySource.fingerprint);
+      } else {
+        formData.append('scenarios', JSON.stringify(scenarios.map(s => ({
+          title: s.title.trim(),
+          durationLimitSec: s.durationLimitSec || 0,
+          scriptPrompt: s.scriptPrompt,
+        }))));
+        for (const scenario of scenarios) {
+          if (scenario.baseAudioFile) formData.append('scenarioAudios', scenario.baseAudioFile);
+        }
+        formData.append('scenarioAudioSha256', JSON.stringify(scenarios.map((scenario) => scenario.sha256 ?? null)));
       }
-      formData.append('scenarioAudioSha256', JSON.stringify(scenarios.map((scenario) => scenario.sha256 ?? null)));
 
       const res = await fetch('/api/admin/roleplays', {
         method: 'POST',
@@ -202,7 +213,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         setSuccess({
           link: `${window.location.origin}/admin/roleplays`,
           participantName: `${data.data.createdCount} active interpreter(s)`,
-          summary: `${data.data.createdCount} sessions created · ${data.data.skippedCount} skipped because they already have a draft or active roleplay. ${data.data.scenarioCount} scenario(s) were uploaded once and reused across sessions.`,
+          summary: `${data.data.createdCount} sesiones creadas · ${data.data.skippedCount} omitidas. ${data.data.scenarioCount} escenarios ${librarySource ? 'reutilizados desde la biblioteca' : 'subidos una vez y compartidos entre sesiones'}.`,
         });
       } else {
         setSuccess({
@@ -230,7 +241,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         <p className="text-gray-400 mb-6">
           Created for <span className="font-bold text-white">{success.participantName}</span>
         </p>
-        <p className="text-gray-400 mb-6">{scenarios.length} scenario(s) configured</p>
+        <p className="text-gray-400 mb-6">{librarySource?.scenarios.length ?? scenarios.length} escenarios configurados</p>
         {success.summary && <p className="text-sm text-gray-300 mb-6">{success.summary}</p>}
         <div className="mb-6 p-4 bg-slate-900/50 rounded-xl">
           <input 
@@ -339,6 +350,29 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </div>
       )}
 
+      {librarySource ? (
+        <section className="space-y-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
+          <h3 className="text-lg font-semibold text-white">Plantilla seleccionada</h3>
+          <p className="text-sm text-blue-100/80">
+            Los siguientes audios se reutilizarán sin volver a subir archivos. El servidor
+            verificará que sigan disponibles antes de asignarlos.
+          </p>
+          <ol className="space-y-2">
+            {librarySource.scenarios.map((scenario, index) => (
+              <li key={index} className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
+                <p className="font-medium text-white">{index + 1}. {scenario.title}</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  {scenario.durationLimitSec ? `Límite de ${scenario.durationLimitSec} segundos` : 'Duración predeterminada'}
+                </p>
+              </li>
+            ))}
+          </ol>
+          <p className="font-mono text-xs text-gray-500">Huella SHA-256: {librarySource.fingerprint.slice(0, 16)}…</p>
+          <Link href="/admin/roleplays/library" className="inline-block text-sm font-medium text-blue-300 hover:text-blue-200">
+            Elegir otra plantilla
+          </Link>
+        </section>
+      ) : (
       <div>
         <div className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
           <label htmlFor="manifest-roleplay-upload" className="block text-sm font-semibold text-blue-100">
@@ -400,6 +434,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </div>
       </div>
 
+      )}
+
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3">
           <AlertCircle />
@@ -409,15 +445,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting || (!isBulk && !selectedParticipantId) || scenarios.length === 0}
+        disabled={isCreating || isImporting || (!isBulk && !selectedParticipantId) || (!librarySource && scenarios.length === 0)}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting || (!isBulk && !selectedParticipantId) || scenarios.length === 0
+          isCreating || isImporting || (!isBulk && !selectedParticipantId) || (!librarySource && scenarios.length === 0)
             ? "bg-slate-800 text-slate-500 cursor-not-allowed"
             : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
         )}
       >
-        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creating...</> : <><Mic2 size={24} /> {isBulk ? 'Create for all active interpreters' : 'Create Roleplay'}</>}
+        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creando...</> : <><Mic2 size={24} /> {librarySource ? 'Asignar plantilla' : isBulk ? 'Crear para todos los intérpretes activos' : 'Crear roleplay'}</>}
       </button>
     </div>
   );

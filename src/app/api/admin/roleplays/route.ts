@@ -5,6 +5,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
 const db = prisma;
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -37,6 +38,7 @@ interface ScenarioInput {
   title: string;
   durationLimitSec: number | null;
   scriptPrompt: string | null;
+  expectedKeys?: string[];
 }
 
 const scenarioPayloadSchema = z.array(z.object({
@@ -87,8 +89,20 @@ export async function POST(req: NextRequest) {
     const rawScenarios = formData.get('scenarios');
     const scenarioAudios = formData.getAll('scenarioAudios');
     const rawAudioChecksums = formData.get('scenarioAudioSha256');
+    const rawLibrarySessionId = formData.get('librarySessionId');
+    const rawLibraryFingerprint = formData.get('libraryFingerprint');
+    const useLibrary = rawLibrarySessionId !== null;
+    if (useLibrary && (
+      typeof rawLibrarySessionId !== 'string' ||
+      !/^[a-zA-Z0-9_-]{5,120}$/.test(rawLibrarySessionId) ||
+      typeof rawLibraryFingerprint !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(rawLibraryFingerprint) ||
+      scenarioAudios.length !== 0 || rawAudioChecksums !== null
+    )) {
+      return NextResponse.json({ success: false, error: 'Invalid library source or audio payload' }, { status: 400 });
+    }
 
-    if (typeof participantType !== 'string' || typeof rawScenarios !== 'string') {
+    if (typeof participantType !== 'string' || (!useLibrary && typeof rawScenarios !== 'string')) {
       return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
@@ -113,7 +127,72 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const scenarios = parseScenarios(rawScenarios);
+    // Published sessions act as immutable reference snapshots for this first
+    // catalog phase. The browser supplies only a source ID + expected hash.
+    // All scenarios, prompts and audio URLs are loaded server-side.
+    const sourceAudioUrls: string[] = [];
+    let scenarios: ScenarioInput[] | null = null;
+    if (useLibrary) {
+      const source = await db.roleplaySession.findUnique({
+        where: { id: rawLibrarySessionId as string },
+        select: {
+          status: true,
+          scenarios: {
+            orderBy: { order: 'asc' },
+            select: {
+              order: true, title: true, baseAudioUrl: true,
+              durationLimitSec: true, scriptPrompt: true, expectedKeys: true,
+            },
+          },
+        },
+      });
+      if (!source || source.status === 'DRAFT' || source.status === 'CANCELLED' ||
+          source.scenarios.length === 0 || source.scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
+        return NextResponse.json({ success: false, error: 'Reusable roleplay not available' }, { status: 404 });
+      }
+      if (getRoleplaySnapshotHash(source.scenarios) !== rawLibraryFingerprint) {
+        return NextResponse.json({
+          success: false,
+          error: 'La biblioteca cambió desde que abriste esta plantilla. Vuelve a seleccionarla.',
+        }, { status: 409 });
+      }
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !serviceRoleKey) {
+        return NextResponse.json({ success: false, error: 'Storage is not configured' }, { status: 503 });
+      }
+      const paths = source.scenarios.map((scenario) => getReusableBaseAudioPath(scenario.baseAudioUrl, supabaseUrl));
+      if (paths.some((path) => !path)) {
+        return NextResponse.json({ success: false, error: 'Roleplay has unsupported audio references' }, { status: 409 });
+      }
+      const { createClient } = await import('@supabase/supabase-js');
+      supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      // Cap concurrent storage lookups: a medical exercise can contain 25 segments.
+      // Verify every object before reserving a participant or writing to the database.
+      const uniquePaths = [...new Set(paths as string[])];
+      for (let offset = 0; offset < uniquePaths.length; offset += 5) {
+        const batch = await Promise.all(
+          uniquePaths.slice(offset, offset + 5).map((path) =>
+            supabaseAdmin!.storage.from('roleplay-audio').info(path)
+          )
+        );
+        if (batch.some(({ data, error }) => error || !data)) {
+          return NextResponse.json({
+            success: false,
+            error: 'Un audio de esta plantilla ya no está disponible. No se creó ninguna sesión.',
+          }, { status: 409 });
+        }
+      }
+      scenarios = source.scenarios.map((scenario) => ({
+        title: scenario.title,
+        scriptPrompt: scenario.scriptPrompt,
+        durationLimitSec: scenario.durationLimitSec,
+        expectedKeys: scenario.expectedKeys,
+      }));
+      sourceAudioUrls.push(...source.scenarios.map((scenario) => scenario.baseAudioUrl));
+    } else {
+      scenarios = parseScenarios(rawScenarios as string);
+    }
     if (!scenarios) {
       return NextResponse.json(
         { success: false, error: `Invalid scenarios: expected 1-${ROLEPLAY_MAX_SCENARIOS} entries with a non-empty title` },
@@ -137,14 +216,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (scenarioAudios.length !== scenarios.length) {
+    if (!useLibrary && scenarioAudios.length !== scenarios.length) {
       return NextResponse.json(
         { success: false, error: 'Each scenario requires exactly one base audio file' },
         { status: 400 }
       );
     }
 
-    for (const audio of scenarioAudios) {
+    if (!useLibrary) for (const audio of scenarioAudios) {
       if (!(audio instanceof File)) {
         return NextResponse.json({ success: false, error: 'Invalid scenario audio payload' }, { status: 400 });
       }
@@ -159,7 +238,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (expectedAudioChecksums) {
+    if (!useLibrary && expectedAudioChecksums) {
       for (let index = 0; index < scenarioAudios.length; index++) {
         const expected = expectedAudioChecksums[index];
         if (!expected) continue;
@@ -197,6 +276,8 @@ export async function POST(req: NextRequest) {
       // Eligibility is rechecked under per-interpreter advisory locks
       // inside the creation transaction below; this preview is not authoritative.
 
+      const audioUrls: string[] = [...sourceAudioUrls];
+      if (!useLibrary) {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (!supabaseUrl || !serviceRoleKey) {
@@ -205,7 +286,6 @@ export async function POST(req: NextRequest) {
       const { createClient } = await import('@supabase/supabase-js');
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
       const batchPath = `base/bulk-${randomUUID()}`;
-      const audioUrls: string[] = [];
       for (let i = 0; i < scenarios.length; i++) {
         const audio = scenarioAudios[i] as File;
         const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
@@ -217,6 +297,8 @@ export async function POST(req: NextRequest) {
         uploadedPaths.push(path);
         const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
         audioUrls.push(publicUrlData.publicUrl);
+      }
+
       }
 
       const bulkResult = await db.$transaction(async (tx) => {
@@ -254,7 +336,7 @@ export async function POST(req: NextRequest) {
                   baseAudioUrl: audioUrls[index],
                   durationLimitSec: scenario.durationLimitSec,
                   scriptPrompt: scenario.scriptPrompt,
-                  expectedKeys: [],
+                  expectedKeys: scenario.expectedKeys ?? [],
                 })),
               },
             },
@@ -296,6 +378,7 @@ export async function POST(req: NextRequest) {
         ? { interpreterId: parsedParticipantId! }
         : { recruitmentCandidateId: parsedParticipantId! };
 
+    if (!useLibrary) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) {
@@ -304,6 +387,8 @@ export async function POST(req: NextRequest) {
 
     const { createClient } = await import('@supabase/supabase-js');
     supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+
+    }
 
     // Reserve or resume the participant draft atomically. All roleplay
     // creation paths use the same advisory-lock key for this participant.
@@ -353,7 +438,8 @@ export async function POST(req: NextRequest) {
     if (!reservation.session) throw new Error('Could not reserve roleplay draft');
     const session = reservation.session;
 
-    const audioUrls: string[] = [];
+    const audioUrls: string[] = [...sourceAudioUrls];
+    if (!useLibrary) {
     for (let i = 0; i < scenarios.length; i++) {
       const audio = scenarioAudios[i] as File;
       const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
@@ -367,6 +453,8 @@ export async function POST(req: NextRequest) {
 
       const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
       audioUrls.push(publicUrlData.publicUrl);
+    }
+
     }
 
     const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
@@ -411,7 +499,7 @@ export async function POST(req: NextRequest) {
             baseAudioUrl: audioUrls[i],
             durationLimitSec: scenarios[i].durationLimitSec,
             scriptPrompt: scenarios[i].scriptPrompt,
-            expectedKeys: [],
+            expectedKeys: scenarios[i].expectedKeys ?? [],
           },
           select: { id: true },
         });
