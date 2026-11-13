@@ -429,6 +429,23 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('library reuse', () => {
+    it('refuses bulk publication when the source is archived during the transaction', async () => {
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({
+        status: 'INVITED', scenarios: [libraryScenario],
+      });
+      (prisma.roleplayLibraryArchive.findUnique as any)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ archivedAt: new Date() });
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        librarySessionId: librarySourceId,
+        libraryFingerprint,
+      }) as any);
+      expect(res.status).toBe(409);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
     it('rejects an archived library snapshot without changing sessions', async () => {
       (prisma.roleplaySession.findUnique as any).mockResolvedValue({
         status: 'INVITED', scenarios: [libraryScenario],
