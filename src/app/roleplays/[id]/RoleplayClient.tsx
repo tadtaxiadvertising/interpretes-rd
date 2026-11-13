@@ -23,7 +23,6 @@ interface Scenario {
   baseAudioUrl: string;
   scriptPrompt?: string;
   durationLimitSec?: number;
-  expectedKeys?: string[];
   responses?: Array<{
     sourceAudioUrl: string | null;
     durationSec: number | null;
