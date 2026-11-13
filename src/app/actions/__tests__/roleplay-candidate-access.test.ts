@@ -102,6 +102,9 @@ const INTERPRETER_SESSION = {
 describe('confirmRoleplayResponse candidate-access gate', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Clear queued mockResolvedValueOnce responses from authorization-denial
+    // tests where the response query is intentionally never reached.
+    m.responseFindFirst.mockReset();
     m.findUnique.mockImplementation(async () => m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
