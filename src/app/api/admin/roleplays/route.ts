@@ -76,6 +76,7 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 export async function POST(req: NextRequest) {
   let databaseCommitted = false;
   let draftConflict = false;
+  let libraryArchivedDuringAssignment = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -154,6 +155,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: false,
           error: 'La biblioteca cambió desde que abriste esta plantilla. Vuelve a seleccionarla.',
+        }, { status: 409 });
+      }
+      const visibility = await db.roleplayLibraryArchive.findUnique({
+        where: { fingerprint: rawLibraryFingerprint as string },
+        select: { archivedAt: true },
+      });
+      if (visibility?.archivedAt) {
+        return NextResponse.json({
+          success: false,
+          error: 'Este roleplay fue retirado de la biblioteca y no admite nuevas asignaciones.',
         }, { status: 409 });
       }
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
@@ -302,6 +313,18 @@ export async function POST(req: NextRequest) {
       }
 
       const bulkResult = await db.$transaction(async (tx) => {
+        if (useLibrary) {
+          const fingerprint = rawLibraryFingerprint as string;
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:library:${fingerprint}`}, 0))`;
+          const visibility = await tx.roleplayLibraryArchive.findUnique({
+            where: { fingerprint },
+            select: { archivedAt: true },
+          });
+          if (visibility?.archivedAt) {
+            libraryArchivedDuringAssignment = true;
+            throw new Error('Roleplay library snapshot archived during assignment');
+          }
+        }
         const created: Array<{ id: string }> = [];
         let skippedCount = 0;
         for (const interpreter of activeInterpreters) {
@@ -472,6 +495,18 @@ export async function POST(req: NextRequest) {
 
     await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      if (useLibrary) {
+        const fingerprint = rawLibraryFingerprint as string;
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:library:${fingerprint}`}, 0))`;
+        const visibility = await tx.roleplayLibraryArchive.findUnique({
+          where: { fingerprint },
+          select: { archivedAt: true },
+        });
+        if (visibility?.archivedAt) {
+          libraryArchivedDuringAssignment = true;
+          throw new Error('Roleplay library snapshot archived during assignment');
+        }
+      }
       const currentSession = await tx.roleplaySession.findUnique({
         where: { id: session.id },
         select: { status: true, updatedAt: true },
@@ -537,6 +572,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (libraryArchivedDuringAssignment) {
+      return NextResponse.json({
+        success: false,
+        error: 'Esta plantilla fue retirada de la biblioteca mientras se creaba la asignación.',
+      }, { status: 409 });
+    }
     if (draftConflict) {
       return NextResponse.json({ success: false, error: 'This draft was updated by another administrator. Reload and try again.' }, { status: 409 });
     }

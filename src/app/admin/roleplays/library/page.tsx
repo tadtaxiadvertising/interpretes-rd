@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { AlertTriangle, AudioLines, Copy, Layers3, Library, Plus } from 'lucide-react';
 import prisma from '@/lib/prisma';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,6 +40,7 @@ async function getLibrary() {
       titles: string[];
       audioCount: number;
       assignmentsInWindow: number;
+      archivedAt: Date | null;
     }>();
 
     for (const session of sessions) {
@@ -60,9 +62,19 @@ async function getLibrary() {
         titles: scenarios.map((scenario) => scenario.title),
         audioCount: scenarios.length,
         assignmentsInWindow: 1,
+        archivedAt: null,
       });
     }
-    return { items: [...versions.values()], scanned: sessions.length, error: null as string | null };
+    const items = [...versions.values()];
+    if (items.length > 0) {
+      const archives = await prisma.roleplayLibraryArchive.findMany({
+        where: { fingerprint: { in: items.map((item) => item.fingerprint) } },
+        select: { fingerprint: true, archivedAt: true },
+      });
+      const archivedAtByFingerprint = new Map(archives.map((entry) => [entry.fingerprint, entry.archivedAt]));
+      for (const item of items) item.archivedAt = archivedAtByFingerprint.get(item.fingerprint) ?? null;
+    }
+    return { items, scanned: sessions.length, error: null as string | null };
   } catch (error) {
     console.error('[ADMIN ROLEPLAY LIBRARY] Failed to load existing scenario snapshots:', error);
     return {
@@ -76,14 +88,17 @@ async function getLibrary() {
 export default async function RoleplayLibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string }>;
 }) {
   const params = await searchParams;
   const q = (params.q ?? '').trim().toLowerCase().slice(0, 100);
+  const showArchived = params.archived === '1';
   const result = await getLibrary();
-  const matches = q
-    ? result.items.filter((item) => item.titles.some((title) => title.toLowerCase().includes(q)) || item.fingerprint.startsWith(q))
-    : result.items;
+  const matches = result.items.filter((item) =>
+    (showArchived ? item.archivedAt !== null : item.archivedAt === null) &&
+    (!q || item.titles.some((title) => title.toLowerCase().includes(q)) || item.fingerprint.startsWith(q))
+  );
+  const archivedCount = result.items.filter((item) => item.archivedAt !== null).length;
 
   return (
     <div className="space-y-7">
@@ -134,20 +149,27 @@ export default async function RoleplayLibraryPage({
           defaultValue={params.q?.slice(0, 100) ?? ''}
           placeholder="Buscar por escenario o huella SHA-256"
           className="min-w-64 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500" />
+        {showArchived && <input type="hidden" name="archived" value="1" />}
         <button type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500">Buscar</button>
-        {q && <Link href="/admin/roleplays/library" className="rounded-xl border border-white/10 px-4 py-3 text-sm text-gray-300 hover:bg-white/5">Limpiar</Link>}
+        {q && <Link href={showArchived ? '/admin/roleplays/library?archived=1' : '/admin/roleplays/library'} className="rounded-xl border border-white/10 px-4 py-3 text-sm text-gray-300 hover:bg-white/5">Limpiar</Link>}
       </form>
 
       <section aria-label="Ejercicios reutilizables" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-white">Ejercicios disponibles</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-white">{showArchived ? 'Roleplays retirados' : 'Ejercicios disponibles'}</h2>
+            <div className="mt-2 flex flex-wrap gap-3 text-sm">
+              <Link href="/admin/roleplays/library" className={!showArchived ? 'font-bold text-blue-300' : 'text-gray-400 hover:text-white'}>Disponibles</Link>
+              <Link href="/admin/roleplays/library?archived=1" className={showArchived ? 'font-bold text-blue-300' : 'text-gray-400 hover:text-white'}>Eliminados de la biblioteca ({archivedCount})</Link>
+            </div>
+          </div>
           {!result.error && <p className="text-sm text-gray-400">{matches.length} instantáneas · {result.scanned} sesiones examinadas</p>}
         </div>
         {!result.error && matches.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-12 text-center">
             <AudioLines size={38} className="mx-auto mb-3 text-gray-500" />
-            <p className="font-semibold text-white">No hay ejercicios reutilizables {q ? 'con esa búsqueda' : 'todavía'}</p>
-            <p className="mt-2 text-sm text-gray-400">Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.</p>
+            <p className="font-semibold text-white">{showArchived ? 'No hay roleplays retirados' : q ? 'No hay ejercicios con esa búsqueda' : 'No hay ejercicios reutilizables todavía'}</p>
+            <p className="mt-2 text-sm text-gray-400">{showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
           </div>
         )}
         {matches.map((item) => (
@@ -171,19 +193,25 @@ export default async function RoleplayLibraryPage({
                   <Copy size={13} /> Huella de plantilla: {item.fingerprint.slice(0, 16)}…
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/admin/roleplays/library/${encodeURIComponent(item.sourceSessionId)}`}
-                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white hover:bg-white/10"
-                >
-                  Escuchar y revisar
-                </Link>
-                <Link
-                  href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
-                  className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
-                >
-                  Reutilizar y asignar
-                </Link>
+              <div className="flex flex-wrap items-start gap-2">
+                {!showArchived && (
+                  <>
+                    <Link
+                      href={`/admin/roleplays/library/${encodeURIComponent(item.sourceSessionId)}`}
+                      className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white hover:bg-white/10"
+                    >
+                      Escuchar y revisar
+                    </Link>
+                    <Link
+                      href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
+                      className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
+                    >
+                      Reutilizar y asignar
+                    </Link>
+                  </>
+                )}
+                <RoleplayLibraryVisibilityButton fingerprint={item.fingerprint}
+                  sourceSessionId={item.sourceSessionId} archived={showArchived} />
               </div>
             </div>
           </article>

@@ -993,6 +993,18 @@ model RoleplayAccess {
 }
 
 
+// A library entry is an immutable scenario snapshot derived from historic sessions.
+// Archiving removes it from the administrative catalog only. Sessions, recordings,
+// QA evaluations and shared base-audio objects must never be deleted here.
+model RoleplayLibraryArchive {
+  fingerprint String   @id @db.VarChar(64)
+  archivedAt  DateTime? @map("archived_at")
+  archivedBy  String?  @map("archived_by")
+
+  @@map("roleplay_library_archives")
+  @@schema("public")
+}
+
 model RoleplayScenario {
   id                String   @id @default(cuid())
   sessionId         String   @map("session_id")
