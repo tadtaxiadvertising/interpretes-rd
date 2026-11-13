@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { parseTimedTranscript, toPublishableStudioSegments } from '@/lib/roleplay-studio/transcript';
+import StudioWaveform from './StudioWaveform';
 
 type Segment = {
   id: string;
@@ -26,6 +27,7 @@ export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
   const [url, setUrl] = useState('');
   const [duration, setDuration] = useState(0);
+  const [playhead, setPlayhead] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -40,6 +42,18 @@ export default function RoleplayStudioPage() {
     previewEnd.current = null;
     setPreviewingId(null);
     player.current?.pause();
+  };
+
+  const seekAudio = (seconds: number) => {
+    const audioPlayer = player.current;
+    if (!audioPlayer || !Number.isFinite(seconds) || !duration) return;
+    const timestamp = Math.min(duration, Math.max(0, seconds));
+    // Seeking manually exits a clip preview; its previous end must not stop
+    // the administrator when inspecting another timestamp.
+    previewEnd.current = null;
+    setPreviewingId(null);
+    audioPlayer.currentTime = timestamp;
+    setPlayhead(timestamp);
   };
 
   const markAtPlayhead = (id: string, boundary: 'start' | 'end') => {
@@ -80,6 +94,7 @@ export default function RoleplayStudioPage() {
     setSegments([]);
     setCaptionTexts({});
     setDuration(0);
+    setPlayhead(0);
     if (!file) { setAudio(null); setUrl(''); return; }
     if (!/\.mp3$/i.test(file.name) || file.size < 1 || file.size > 15 * 1024 * 1024) {
       setError('Selecciona un MP3 válido de hasta 15 MiB.');
@@ -223,7 +238,9 @@ export default function RoleplayStudioPage() {
                 if (!Number.isFinite(length) || length <= 0) setError('No se pudo determinar la duración de este MP3.');
               }}
               onTimeUpdate={event => {
-                if (previewEnd.current !== null && event.currentTarget.currentTime >= previewEnd.current) stopPreview();
+                setPlayhead(event.currentTarget.currentTime);
+                if (previewEnd.current !== null &&
+                    event.currentTarget.currentTime >= previewEnd.current) stopPreview();
               }}
               onPause={() => {
                 previewEnd.current = null;
@@ -233,7 +250,16 @@ export default function RoleplayStudioPage() {
                 previewEnd.current = null;
                 setPreviewingId(null);
               }} />
-            <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Reproduce el audio y utiliza “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
+            {audio && duration > 0 && (
+              <StudioWaveform
+                file={audio}
+                duration={duration}
+                currentTime={playhead}
+                segments={segments}
+                onSeek={seekAudio}
+              />
+            )}
+            <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
