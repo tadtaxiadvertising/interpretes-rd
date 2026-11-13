@@ -92,13 +92,14 @@ function makeZip(entries: ZipEntry[]): Buffer {
 }
 
 async function sliceMp3(input: Buffer, segment: Segment): Promise<Buffer> {
-  if (!ffmpegPath) throw new Error('FFmpeg unavailable');
+  const executable = ffmpegPath;
+  if (!executable) throw new Error('FFmpeg unavailable');
   return await new Promise<Buffer>((resolve, reject) => {
-    const child = spawn(ffmpegPath, [
+    const child = spawn(executable, [
       '-hide_banner', '-loglevel', 'error', '-nostdin',
       '-i', 'pipe:0', '-ss', String(segment.start), '-t', String(segment.end - segment.start),
       '-vn', '-ac', '1', '-ar', '24000', '-codec:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3', 'pipe:1',
-    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    ], { stdio: 'pipe' });
     const chunks: Buffer[] = [];
     let size = 0;
     let errorText = '';
