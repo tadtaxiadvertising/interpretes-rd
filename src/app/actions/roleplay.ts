@@ -18,6 +18,33 @@ import { advanceApplication } from '@/services/recruitment/transitions';
 
 const db = prisma;
 
+// Only explicit business-rule messages may reach participants. Prisma, Storage
+// and infrastructure exceptions can contain table names, URLs or credentials.
+const SAFE_ROLEPLAY_ACTION_FAILURES = new Set([
+  'Unauthorized',
+  'Session not available for submission',
+  'A valid uploaded audio object is required before confirming the response',
+  'Response already recorded for this scenario',
+  'Concurrent submission detected',
+  'Session not available for self-assessment',
+  'This scenario is not the current step',
+  'Confirm your recording before completing the self-assessment',
+  'This self-assessment has already been submitted',
+  'Roleplay is not ready to submit',
+  'Complete every recording and self-assessment before submitting',
+  'Roleplay was already submitted or changed',
+  'Session not found',
+  'Session already evaluated',
+  'No response submitted yet',
+  'Concurrent evaluation detected or session not available',
+]);
+
+function publicRoleplayActionFailure(error: unknown, fallback: string): string {
+  return error instanceof Error && SAFE_ROLEPLAY_ACTION_FAILURES.has(error.message)
+    ? error.message
+    : fallback;
+}
+
 async function canAccessRoleplaySession(
   session: { interpreterId: number | null; recruitmentCandidateId: number | null; id: string },
   sessionCookie: string | null
@@ -140,7 +167,7 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Create Roleplay Session Error:', message);
-    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+    return { success: false, error: 'No fue posible crear el roleplay. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' };
   }
 }
 
@@ -543,7 +570,7 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Submit Response Error:', message);
-    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+    return { success: false, error: 'No fue posible preparar la respuesta del roleplay.', code: 'INTERNAL_ERROR' };
   }
 }
 
@@ -777,7 +804,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Confirm Response Error:', message);
-    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible confirmar la grabación. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }
 
@@ -886,7 +913,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Save Self Assessment Error:', message);
-    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible guardar la autoevaluación. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }
 
@@ -985,7 +1012,8 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Submit Roleplay Session Error:', message);
-    return { success: false, error: message, code: 'CONFLICT' };
+    const publicMessage = publicRoleplayActionFailure(error, 'No fue posible enviar el roleplay. Inténtalo nuevamente.');
+    return { success: false, error: publicMessage, code: SAFE_ROLEPLAY_ACTION_FAILURES.has(publicMessage) ? 'CONFLICT' : 'INTERNAL_ERROR' };
   }
 }
 
@@ -1283,6 +1311,6 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Evaluate Roleplay Error:', message);
-    return { success: false, error: message, code: 'INTERNAL_ERROR' };
+    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible evaluar el roleplay. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }

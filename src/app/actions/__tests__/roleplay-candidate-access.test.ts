@@ -190,6 +190,29 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
     expect(res.code).toBe('VALIDATION_ERROR');
     expect(m.responseCreate).not.toHaveBeenCalled();
   });
+  it('redacts internal storage exceptions while preserving the failed confirmation', async () => {
+    const secret = 'postgresql://private:password@db.internal.invalid/roleplay';
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.confirmUpload.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await confirmRoleplayResponse({
+        sessionId: 'sess-cand',
+        scenarioId: 'scn-1',
+        sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+        recordedAudioUrl: 'https://example.test/audio.webm',
+      });
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('INTERNAL_ERROR');
+      expect(res.error).toContain('No fue posible confirmar');
+      expect(JSON.stringify(res)).not.toContain(secret);
+      expect(m.responseCreate).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('does not confirm a client-supplied URL when the uploaded object cannot be signed', async () => {
     m.session = CANDIDATE_SESSION;
     m.cookie = 'sess-cand';
@@ -546,6 +569,28 @@ describe('saveSelfAssessment gate', () => {
     m.cookie = null;
     m.actor = { interpreterId: null };
     m.session = CANDIDATE_SESSION;
+  });
+
+  it('does not send internal database failures to the candidate during self-assessment', async () => {
+    const secret = 'postgresql://private:password@db.internal.invalid/assessments';
+    m.cookie = 'sess-cand';
+    m.responseFindFirst.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await saveSelfAssessment({
+        sessionId: 'sess-cand',
+        scenarioId: 'scn-1',
+        scores: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 },
+        criticalError: false,
+      });
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('INTERNAL_ERROR');
+      expect(res.error).toContain('No fue posible guardar la autoevaluación');
+      expect(JSON.stringify(res)).not.toContain(secret);
+      expect(m.responseUpdate).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('rejects a candidate session when the session cookie is missing', async () => {

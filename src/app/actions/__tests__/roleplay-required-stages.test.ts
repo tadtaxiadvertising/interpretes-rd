@@ -216,6 +216,22 @@ describe('Roleplay required stages', () => {
     expect(m.sessionUpdateMany).not.toHaveBeenCalled();
   });
 
+  it('redacts database failures during final submission instead of returning a false conflict', async () => {
+    const secret = 'postgresql://private:password@db.internal.invalid/submission';
+    m.sessionFindUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitRoleplaySession({ sessionId: 'sess-1' });
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INTERNAL_ERROR');
+      expect(result.error).toContain('No fue posible enviar el roleplay');
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('submits only after every scenario has a complete self-assessment', async () => {
     m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
     m.session = { ...m.session, recruitmentCandidateId: null, interpreterId: 7, currentScenarioIndex: 1 };
