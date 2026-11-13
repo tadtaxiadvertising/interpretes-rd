@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
-import { calculateRoleplayScore } from '@/lib/roleplay/scoring';
+import { calculateRoleplayScore, ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 
@@ -312,6 +312,8 @@ export async function startCandidateRoleplay() {
         id: true,
         status: true,
         baseAudioUrl: true,
+        // A retry must be based on an actually reviewed, non-passing result.
+        qaScore: { select: { totalScore: true, criticalError: true } },
         scenarios: {
           orderBy: { order: 'asc' },
           select: {
@@ -345,13 +347,20 @@ export async function startCandidateRoleplay() {
       };
     }
 
-    // A reviewed attempt may be retried only after QA releases it. Validate the
-    // prior assignment first so a failed retry cannot regress the application.
+    // ROLEPLAY_REVIEW is set on submission, before QA evaluates the attempt.
+    // Never move the application back to pending while the submitted session
+    // is still unreviewed or a passing evaluation has not advanced the pipeline.
     const retryingFromReview = application.status === 'ROLEPLAY_REVIEW';
-    if (retryingFromReview && previousSession.status === 'UNDER_REVIEW') {
+    const priorEvaluationFailed = previousSession.status === 'FAILED' ||
+      (previousSession.status === 'EVALUATED' && !!previousSession.qaScore && (
+        previousSession.qaScore.criticalError === true ||
+        (previousSession.qaScore.totalScore !== null &&
+          Number(previousSession.qaScore.totalScore) < ROLEPLAY_PASS_THRESHOLD)
+      ));
+    if (retryingFromReview && !priorEvaluationFailed) {
       return {
         success: false as const,
-        error: 'Tu roleplay todavía está siendo evaluado. Espera el resultado antes de reintentarlo.',
+        error: 'Tu roleplay está pendiente de revisión o no admite un reintento. Contacta al equipo de reclutamiento.',
         code: 'CONFLICT' as const,
       };
     }
@@ -378,8 +387,7 @@ export async function startCandidateRoleplay() {
 
     // A reviewed attempt is historical evidence. Retrying creates a fresh
     // session with the same scenario definitions, never prior responses or QA.
-    const shouldCreateRetry = retryingFromReview &&
-      ['SUBMITTED', 'EVALUATED', 'PASSED', 'FAILED'].includes(previousSession.status);
+    const shouldCreateRetry = retryingFromReview;
 
     let session;
     if (shouldCreateRetry) {
