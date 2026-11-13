@@ -20,7 +20,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
 
   // Prisma debe ser external para evitar bundling en el serverless edge
-  serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'prisma', 'pg', 'bcryptjs'],
+  serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'prisma', 'pg', 'bcryptjs', 'ffmpeg-static'],
 
   // Asegurar que los archivos del engine de Prisma se copien en el build standalone
   outputFileTracingIncludes: {
