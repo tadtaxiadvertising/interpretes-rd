@@ -11,12 +11,17 @@ export const maxDuration = 300;
 
 const MAX_INPUT_BYTES = 15 * 1024 * 1024;
 const MAX_TOTAL_SECONDS = 900;
+const MAX_METADATA_CHARS = 150_000;
+const MAX_CONCURRENT_EXPORTS = 2; // Process-local admission control. Not a distributed quota.
+const MAX_EXPORT_TIME_MS = 105_000;
+const MAX_SEGMENT_TIME_MS = 15_000;
+let activeExports = 0;
 
 type Segment = { title: string; start: number; end: number; scriptPrompt: string; responseLimit: number };
 type ZipEntry = { name: string; data: Buffer };
 
 function parseSegments(value: string | null): Segment[] | null {
-  if (!value) return null;
+  if (!value || value.length > MAX_METADATA_CHARS) return null;
   let raw: unknown;
   try { raw = JSON.parse(value); } catch { return null; }
   if (!Array.isArray(raw) || raw.length < 1 || raw.length > ROLEPLAY_MAX_SCENARIOS) return null;
@@ -30,7 +35,7 @@ function parseSegments(value: string | null): Segment[] | null {
     if (typeof title !== 'string' || title.trim().length < 1 || title.length > 200 ||
       typeof start !== 'number' || !Number.isFinite(start) ||
       typeof end !== 'number' || !Number.isFinite(end) ||
-      start < 0 || end <= start || end - start > 300 ||
+      start < 0 || end - start < 0.1 || end - start > 300 ||
       start < lastEnd || end > 7200 ||
       typeof scriptPrompt !== 'string' || scriptPrompt.length > 5000 ||
       typeof responseLimit !== 'number' || !Number.isSafeInteger(responseLimit) ||
@@ -91,7 +96,9 @@ function makeZip(entries: ZipEntry[]): Buffer {
   return Buffer.concat([...local, ...central, end]);
 }
 
-async function sliceMp3(input: Buffer, segment: Segment): Promise<Buffer> {
+async function sliceMp3(input: Buffer, segment: Segment, deadline: number, signal: AbortSignal): Promise<Buffer> {
+  const remaining = Math.min(MAX_SEGMENT_TIME_MS, deadline - Date.now());
+  if (remaining <= 0 || signal.aborted) throw new Error('Export deadline exceeded');
   const executable = ffmpegPath;
   if (!executable) throw new Error('FFmpeg unavailable');
   return await new Promise<Buffer>((resolve, reject) => {
@@ -104,9 +111,15 @@ async function sliceMp3(input: Buffer, segment: Segment): Promise<Buffer> {
     let size = 0;
     let errorText = '';
     let settled = false;
-    const timeout = setTimeout(() => child.kill('SIGKILL'), 45000);
+    const abort = () => child.kill('SIGKILL');
+    signal.addEventListener('abort', abort, { once: true });
+    const cleanup = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', abort);
+    };
+    const timeout = setTimeout(() => child.kill('SIGKILL'), remaining);
     const fail = (message: string) => {
-      if (!settled) { settled = true; reject(new Error(message)); }
+      if (!settled) { settled = true; cleanup(); reject(new Error(message)); }
     };
     child.on('error', () => fail('FFmpeg execution failed'));
     child.stderr.on('data', (chunk: Buffer) => { errorText = (errorText + chunk.toString()).slice(-500); });
@@ -116,7 +129,7 @@ async function sliceMp3(input: Buffer, segment: Segment): Promise<Buffer> {
       else chunks.push(chunk);
     });
     child.on('close', (code) => {
-      clearTimeout(timeout);
+      cleanup();
       if (settled) return;
       if (code !== 0 || size === 0) return fail('Invalid audio or FFmpeg failure: ' + errorText);
       settled = true;
@@ -130,7 +143,12 @@ async function sliceMp3(input: Buffer, segment: Segment): Promise<Buffer> {
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  const limit = applyRateLimit(req, RATE_LIMITS.audioUpload);
+  // A real authenticated actor is a more stable quota key than a proxy header.
+  const limit = applyRateLimit(
+    req,
+    { ...RATE_LIMITS.audioUpload, maxRequests: 3, keyPrefix: 'studio-export' },
+    auth.user.userId,
+  );
   if (!limit.success) return NextResponse.json({ error: 'Demasiadas solicitudes de audio.' }, {
     status: 429, headers: createRateLimitHeaders(limit),
   });
@@ -138,7 +156,13 @@ export async function POST(req: NextRequest) {
   if (contentLength > MAX_INPUT_BYTES + 100000) {
     return NextResponse.json({ error: 'Audio exceeds 15 MiB' }, { status: 413 });
   }
+  if (activeExports >= MAX_CONCURRENT_EXPORTS) {
+    return NextResponse.json({ error: 'El estudio está ocupado. Inténtalo de nuevo en unos momentos.' }, { status: 503, headers: { 'Retry-After': '10' } });
+  }
+  activeExports++;
+  const deadline = Date.now() + MAX_EXPORT_TIME_MS;
   try {
+    if (req.signal.aborted) return NextResponse.json({ error: 'Solicitud cancelada' }, { status: 499 });
     const form = await req.formData();
     const audio = form.get('audio');
     const segments = parseSegments(typeof form.get('segments') === 'string' ? form.get('segments') as string : null);
@@ -150,7 +174,7 @@ export async function POST(req: NextRequest) {
     const entries: ZipEntry[] = [];
     const manifest = { version: 1, generator: 'interpretes-rd-roleplay-studio', segments: [] as Array<Record<string, unknown>> };
     for (const [index, segment] of segments.entries()) {
-      const data = await sliceMp3(input, segment);
+      const data = await sliceMp3(input, segment, deadline, req.signal);
       const file = 'segment-' + String(index + 1).padStart(2, '0') + '.mp3';
       entries.push({ name: file, data });
       manifest.segments.push({
@@ -172,5 +196,7 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('[ROLEPLAY STUDIO] Export failed:', error instanceof Error ? error.message : 'Unexpected error');
     return NextResponse.json({ error: 'No se pudo procesar el audio. Revisa el formato y la duración.' }, { status: 422 });
+  } finally {
+    activeExports--;
   }
 }
