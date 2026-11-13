@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   sessionUpdateMany: vi.fn(),
   sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
+  applyRateLimit: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -25,6 +26,11 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('next/headers', () => ({
   cookies: async () => ({ set: m.setCookie }),
 }));
+vi.mock('@/lib/security/rate-limit', () => ({
+  applyRateLimit: m.applyRateLimit,
+  createRateLimitHeaders: vi.fn(() => ({})),
+  RATE_LIMITS: { inviteValidation: { maxRequests: 5, windowMs: 60_000, keyPrefix: 'invite' } },
+}));
 
 import { POST } from '@/app/api/roleplay/start/route';
 
@@ -39,6 +45,7 @@ function makeRequest(token = 'secret-token') {
 describe('POST /api/roleplay/start race protection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.applyRateLimit.mockReturnValue({ success: true });
     m.accessFindUnique.mockResolvedValue({
       id: 'access-1',
       sessionId: 'session-1',
@@ -115,6 +122,22 @@ describe('POST /api/roleplay/start race protection', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('Vary')).toBe('Cookie');
+  });
+
+  it('rate-limits legacy token starts before a database lookup', async () => {
+    m.applyRateLimit.mockReturnValueOnce({ success: false });
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(429);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects unexpectedly long tokens before querying invitation records', async () => {
+    const response = await POST(makeRequest('x'.repeat(513)));
+    expect(response.status).toBe(400);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
   });
 
 });
