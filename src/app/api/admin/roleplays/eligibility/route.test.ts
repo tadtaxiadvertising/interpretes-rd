@@ -42,10 +42,32 @@ describe('GET /api/admin/roleplays/eligibility', () => {
     });
     expect(prisma.roleplaySession.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: expect.objectContaining({ interpreterId: { in: [10, 11, 12] } }),
+        where: expect.objectContaining({
+          interpreterId: { in: [10, 11, 12] },
+          recruitmentCandidateId: null,
+          status: { in: expect.arrayContaining(['DRAFT', 'INVITED', 'PASSED']) },
+        }),
         select: { interpreterId: true },
       }),
     );
+  });
+
+  it('does not count candidate recruitment history as an interpreter blocking attempt', async () => {
+    // Database returns only interpreter-owned records when recruitmentCandidateId is null.
+    vi.mocked(prisma.roleplaySession.findMany).mockResolvedValue([] as never);
+    const response = await GET();
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toEqual({
+      activeCount: 3, eligibleCount: 3, skippedCount: 0,
+    });
+    expect(prisma.roleplaySession.findMany).toHaveBeenCalledWith({
+      where: {
+        interpreterId: { in: [10, 11, 12] },
+        recruitmentCandidateId: null,
+        status: { in: expect.arrayContaining(['DRAFT', 'INVITED', 'PASSED']) },
+      },
+      select: { interpreterId: true },
+    });
   });
 
   it('returns zero counts without querying sessions when nobody is active', async () => {

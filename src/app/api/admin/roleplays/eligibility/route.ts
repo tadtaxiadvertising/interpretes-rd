@@ -1,13 +1,7 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
-
-// Keep the preview aligned with POST /api/admin/roleplays. A previous session
-// in any of these statuses currently prevents assigning another roleplay.
-const BLOCKING_STATUSES = [
-  'DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS',
-  'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED',
-] as const;
+import { blockingAssignmentStatuses, interpreterAssignmentBatchScope } from '@/lib/roleplay-assignment-ownership';
 
 /**
  * Advisory, read-only preview for a mass assignment. POST remains the
@@ -37,8 +31,8 @@ export async function GET() {
 
     const existing = await prisma.roleplaySession.findMany({
       where: {
-        interpreterId: { in: interpreters.map((interpreter) => interpreter.id) },
-        status: { in: [...BLOCKING_STATUSES] },
+        ...interpreterAssignmentBatchScope(interpreters.map((interpreter) => interpreter.id)),
+        status: { in: blockingAssignmentStatuses(true) },
       },
       select: { interpreterId: true },
     });
