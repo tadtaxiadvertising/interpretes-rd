@@ -127,6 +127,7 @@ describe('POST /api/admin/roleplays', () => {
           create: prisma.roleplaySession.create,
         },
         roleplayAccess: { findUnique: prisma.roleplayAccess.findUnique, create: prisma.roleplayAccess.create },
+        roleplayLibraryArchive: { findUnique: prisma.roleplayLibraryArchive.findUnique },
       })
     );
 
