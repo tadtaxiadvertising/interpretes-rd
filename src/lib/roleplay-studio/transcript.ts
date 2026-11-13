@@ -1,4 +1,5 @@
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { safePublishableSpeakerLabel } from './speaker-profiles';
 
 export interface TimedTranscriptCue {
   start: number;
@@ -75,37 +76,10 @@ export function parseTimedTranscript(raw: string): TimedTranscriptCue[] {
   return cues;
 }
 
-// Never publish arbitrary diarization labels: a label such as
-// "Dr. Jane Doe" or "Patient Ana Pérez" may identify a real person.
-// Recognize only a small, non-identifying vocabulary of professional roles.
-const PUBLIC_SPEAKER_ROLES = new Map<string, string>([
-  ['doctor', 'Doctor'],
-  ['dr', 'Doctor'],
-  ['dr.', 'Doctor'],
-  ['médico', 'Médico'],
-  ['medico', 'Médico'],
-  ['physician', 'Médico'],
-  ['patient', 'Paciente'],
-  ['paciente', 'Paciente'],
-  ['nurse', 'Enfermería'],
-  ['enfermero', 'Enfermería'],
-  ['enfermera', 'Enfermería'],
-  ['interpreter', 'Intérprete'],
-  ['intérprete', 'Intérprete'],
-  ['interprete', 'Intérprete'],
-  ['operator', 'Operador'],
-  ['operador', 'Operador'],
-]);
-
-function getPublishableSpeakerRole(label: string | null): string | null {
-  if (!label) return null;
-  return PUBLIC_SPEAKER_ROLES.get(label.trim().toLocaleLowerCase('es')) ?? null;
-}
-
 /** Build publishable metadata without copying personal names or transcript text. */
 export function toPublishableStudioSegments(cues: TimedTranscriptCue[]) {
   return cues.map((cue, index) => {
-    const role = getPublishableSpeakerRole(cue.speaker);
+    const role = safePublishableSpeakerLabel(cue.speaker);
     return {
       title: role ? `${role} · ${index + 1}` : `Intervención ${index + 1}`,
       start: cue.start,
