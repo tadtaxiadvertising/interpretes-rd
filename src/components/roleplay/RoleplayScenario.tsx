@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Headphones, ChevronRight, AlertCircle, Info } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Headphones, ChevronRight, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface RoleplayScenarioProps {
@@ -12,7 +12,6 @@ interface RoleplayScenarioProps {
     baseAudioUrl: string;
     scriptPrompt?: string;
     durationLimitSec?: number;
-    expectedKeys?: string[];
   };
   currentIndex: number;
   totalScenarios: number;
@@ -32,7 +31,6 @@ export function RoleplayScenario({
   isLoading
 }: RoleplayScenarioProps) {
   const [showPrompt, setShowPrompt] = useState(false);
-  const [showExpectedKeys, setShowExpectedKeys] = useState(false);
   const [isBasePlaying, setIsBasePlaying] = useState(false);
   const [hasListened, setHasListened] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -224,23 +222,6 @@ export function RoleplayScenario({
             </div>
           )}
 
-          {showExpectedKeys && scenario.expectedKeys && scenario.expectedKeys.length > 0 && (
-            <div className="mt-4 p-4 bg-amber-500/10 rounded-xl border border-amber-500/20 animate-in fade-in">
-              <h4 className="text-sm font-bold text-amber-400 mb-2 flex items-center gap-2">
-                <AlertCircle className="text-amber-400" size={16} />
-                Puntos clave esperados (para tu referencia)
-              </h4>
-              <ul className="text-sm text-slate-300 space-y-1">
-                {scenario.expectedKeys.map((key, i) => (
-                  <li key={i} className="flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-amber-500 rounded-full" />
-                    {key}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
           <div className="flex gap-2 mt-4 pt-4 border-t border-white/5">
             <button
               onClick={() => setShowPrompt(!showPrompt)}
@@ -253,19 +234,6 @@ export function RoleplayScenario({
             >
               {showPrompt ? 'Ocultar guión' : 'Ver guión'}
             </button>
-            {scenario.expectedKeys && scenario.expectedKeys.length > 0 && (
-              <button
-                onClick={() => setShowExpectedKeys(!showExpectedKeys)}
-                className={cn(
-                  "px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2",
-                  showExpectedKeys
-                    ? "bg-amber-600 text-white"
-                    : "bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white"
-                )}
-              >
-                {showExpectedKeys ? 'Ocultar claves' : 'Ver claves esperadas'}
-              </button>
-            )}
           </div>
         </div>
       </div>
