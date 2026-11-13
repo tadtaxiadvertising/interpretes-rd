@@ -46,10 +46,15 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'This library snapshot is no longer available' }, { status: 409 });
     }
 
-    await prisma.roleplayLibraryArchive.upsert({
-      where: { fingerprint },
-      create: { fingerprint, archivedAt: new Date() },
-      update: { archivedAt: new Date() },
+    const archivedAt = new Date();
+    await prisma.$transaction(async (tx) => {
+      // Coordinate with assignments using this exact content snapshot.
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:library:${fingerprint}`}, 0))`;
+      await tx.roleplayLibraryArchive.upsert({
+        where: { fingerprint },
+        create: { fingerprint, archivedAt, archivedBy: auth.user.userId },
+        update: { archivedAt, archivedBy: auth.user.userId },
+      });
     });
     revalidatePath('/admin/roleplays/library');
     revalidatePath(`/admin/roleplays/library/${payload.sourceSessionId}`);
@@ -74,9 +79,12 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Invalid catalog fingerprint' }, { status: 400 });
     }
 
-    const result = await prisma.roleplayLibraryArchive.updateMany({
-      where: { fingerprint, archivedAt: { not: null } },
-      data: { archivedAt: null },
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:library:${fingerprint}`}, 0))`;
+      return tx.roleplayLibraryArchive.updateMany({
+        where: { fingerprint, archivedAt: { not: null } },
+        data: { archivedAt: null },
+      });
     });
     if (result.count === 0) {
       return NextResponse.json({ success: false, error: 'No archived entry found' }, { status: 404 });
