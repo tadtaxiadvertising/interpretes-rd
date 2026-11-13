@@ -339,6 +339,75 @@ describe('POST /api/admin/roleplays', () => {
     });
   });
 
+  describe('candidate ownership precedence for historical sessions', () => {
+    it('does not treat a historical candidate session as a blocking interpreter attempt', async () => {
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(200);
+      const findFirstQueries = (prisma.roleplaySession.findFirst as any).mock.calls
+        .map(([query]: [unknown]) => query);
+      expect(findFirstQueries).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          where: {
+            interpreterId: 7,
+            recruitmentCandidateId: null,
+            status: { in: expect.arrayContaining(['INVITED', 'PASSED']) },
+          },
+        }),
+        expect.objectContaining({
+          where: {
+            interpreterId: 7,
+            recruitmentCandidateId: null,
+            status: 'DRAFT',
+          },
+        }),
+      ]));
+      expect(mockUpload).toHaveBeenCalledTimes(1);
+    });
+
+    it('checks bulk assignment under the same candidate-safe ownership scope', async () => {
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.createdCount).toBe(2);
+      const queries = (prisma.roleplaySession.findFirst as any).mock.calls.map(([query]: [unknown]) => query);
+      for (const id of [7, 8]) {
+        expect(queries).toEqual(expect.arrayContaining([
+          expect.objectContaining({
+            where: {
+              interpreterId: id,
+              recruitmentCandidateId: null,
+              status: { in: expect.arrayContaining(['DRAFT', 'INVITED', 'PASSED']) },
+            },
+          }),
+        ]));
+      }
+    });
+
+    it('still blocks a genuine interpreter-owned previously completed session', async () => {
+      (prisma.roleplaySession.findFirst as any).mockResolvedValueOnce({ id: 'already-done', status: 'PASSED' });
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(409);
+      expect(prisma.roleplaySession.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            interpreterId: 7,
+            recruitmentCandidateId: null,
+            status: { in: expect.arrayContaining(['PASSED']) },
+          },
+        }),
+      );
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+  });
+
   describe('failure cleanup', () => {
     it('preserves a newly reserved draft when an audio upload fails', async () => {
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
