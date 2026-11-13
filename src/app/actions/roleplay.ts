@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { canBindRoleplayInvitation } from '@/lib/roleplay/invite-ownership';
 import { revalidatePath } from 'next/cache';
 import { createSignedUploadUrl, createSignedResponseUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -1014,6 +1015,13 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
   const tokenHash = createHash('sha256').update(token).digest('hex');
 
   try {
+    // Authentication may query the database; failures must be redacted by
+    // this same catch rather than escaping as a raw Server Action exception.
+    const identity = await resolveCurrentIdentity();
+    if (!identity) {
+      return { success: false, error: 'Not authenticated', code: 'UNAUTHORIZED' };
+    }
+
     const access = await db.roleplayAccess.findFirst({
       where: { tokenHash },
       include: { session: true },
@@ -1021,6 +1029,10 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
 
     if (!access) {
       return { success: false, error: 'Invalid or expired invitation', code: 'INVALID_TOKEN' };
+    }
+
+    if (!canBindRoleplayInvitation(identity, access.session)) {
+      return { success: false, error: 'Access denied', code: 'FORBIDDEN' };
     }
 
     if (access.usedAt) {

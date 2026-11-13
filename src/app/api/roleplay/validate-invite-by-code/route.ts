@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { canBindRoleplayInvitation } from '@/lib/roleplay/invite-ownership';
 import { setRoleplaySessionCookie } from '@/lib/roleplay/session-cookie';
 import { z } from 'zod';
 
@@ -42,6 +44,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
     }
 
+    // A leaked invitation token must not start another person's evaluation.
+    // Authenticate before looking up tokens, preventing anonymous enumeration.
+    const identity = await resolveCurrentIdentity();
+    if (!identity) {
+      return NextResponse.json(
+        { success: false, error: 'Not authenticated' },
+        { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+      );
+    }
+
     const access = await db.roleplayAccess.findUnique({
       where: { inviteCode: inviteCode.toUpperCase() },
       include: { session: true },
@@ -49,6 +61,13 @@ export async function POST(req: NextRequest) {
 
     if (!access) {
       return NextResponse.json({ success: false, error: 'Invalid or expired invitation' }, { status: 404 });
+    }
+
+    if (!canBindRoleplayInvitation(identity, access.session)) {
+      return NextResponse.json(
+        { success: false, error: 'Access denied' },
+        { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
+      );
     }
 
     if (access.usedAt) {

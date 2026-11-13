@@ -11,12 +11,14 @@ export default function InviteByCodePage() {
   const code = params.code as string;
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
+  const [needsLogin, setNeedsLogin] = useState(false);
 
   useEffect(() => {
     async function validateInvite() {
       try {
         const res = await fetch('/api/roleplay/validate-invite-by-code', {
           method: 'POST',
+          referrerPolicy: 'no-referrer',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ inviteCode: code }),
         });
@@ -26,7 +28,16 @@ export default function InviteByCodePage() {
           router.push(`/roleplays/${data.data.sessionId}`);
         } else {
           setStatus('error');
-          setError(data.error || 'Invalid invitation');
+          if (res.status === 401) {
+            // Never copy an invitation token/code into a login redirect URL.
+            // After login, the participant resumes from their own private portal.
+            setNeedsLogin(true);
+            setError('Inicia sesión con la cuenta a la que se asignó este roleplay. Luego ábrelo desde tu portal privado.');
+          } else {
+            setError(res.status === 403
+              ? 'Esta invitación no corresponde a la cuenta con la que iniciaste sesión.'
+              : data.error || 'No se pudo validar la invitación.');
+          }
         }
       } catch {
         setStatus('error');
@@ -57,14 +68,15 @@ export default function InviteByCodePage() {
           <div className="w-20 h-20 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <AlertCircle size={40} className="text-red-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Invalid Invitation</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">{needsLogin ? 'Inicia sesión para continuar' : 'No se pudo validar la invitación'}</h2>
           <p className="text-gray-400 mb-6">{error}</p>
-          <a 
-            href="/login" 
+          <a
+            href="/login"
+            referrerPolicy="no-referrer" 
             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors"
           >
             <Mic2 size={18} />
-            Back to Login
+            {needsLogin ? 'Iniciar sesión' : 'Ir al acceso'}
           </a>
         </div>
       </div>

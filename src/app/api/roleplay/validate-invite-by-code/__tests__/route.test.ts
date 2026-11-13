@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const m = vi.hoisted(() => ({
+  identity: null as any,
   access: null as any,
   findUnique: vi.fn(),
   accessUpdate: vi.fn(),
@@ -8,6 +9,10 @@ const m = vi.hoisted(() => ({
   sessionUpdateMany: vi.fn(),
   sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
+}));
+
+vi.mock('@/lib/identity/resolve-user', () => ({
+  resolveCurrentIdentity: async () => m.identity,
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -44,18 +49,46 @@ function makeRequest(inviteCode: string) {
 describe('POST /api/roleplay/validate-invite-by-code', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
     m.access = {
       id: 'acc-1',
       sessionId: 'sess-1',
       usedAt: null,
       expiresAt: new Date(Date.now() + 60_000),
-      session: { id: 'sess-1', status: 'DRAFT', baseAudioUrl: 'https://x/a.webm' },
+      session: { id: 'sess-1', status: 'DRAFT', baseAudioUrl: 'https://x/a.webm' , recruitmentCandidateId: 5, interpreterId: null},
     };
     m.findUnique.mockImplementation(async () => m.access);
     m.accessUpdate.mockResolvedValue({ id: 'acc-1' });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  it('requires authentication before looking up a bearer invitation', async () => {
+    m.identity = null;
+    const response = await POST(makeRequest('ABCD1234'));
+    expect(response.status).toBe(401);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects a different candidate even if they possess a valid invitation', async () => {
+    m.identity = { role: 'candidate', candidateId: 99, interpreterId: null };
+    const response = await POST(makeRequest('ABCD1234'));
+    expect(response.status).toBe(403);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects an interpreter trying to start a legacy dual-linked candidate session', async () => {
+    m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
+    m.access = { ...m.access, session: { ...m.access.session, interpreterId: 7 } };
+    const response = await POST(makeRequest('ABCD1234'));
+    expect(response.status).toBe(403);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
   });
 
   it('rejects an unknown or expired invitation without binding a cookie', async () => {
