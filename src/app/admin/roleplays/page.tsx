@@ -296,8 +296,8 @@ export default async function AdminRoleplaysPage({
                         <div className="flex items-center gap-2">
                           <div className="w-16 bg-white/5 h-1.5 rounded-full overflow-hidden">
                             <div
-                              className={cn('h-full rounded-full', session.qaScore.criticalError ? 'bg-red-500' : (session.qaScore.totalScore || 0) >= 80 ? 'bg-green-500' : (session.qaScore.totalScore || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500')}
-                              style={{ width: `${Math.max(0, Math.min(100, session.qaScore.totalScore || 0))}%` }}
+                              className={cn('h-full rounded-full', session.qaScore.criticalError ? 'bg-red-500' : Number(session.qaScore.totalScore ?? 0) >= 80 ? 'bg-green-500' : Number(session.qaScore.totalScore ?? 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500')}
+                              style={{ width: `${Math.max(0, Math.min(100, Number(session.qaScore.totalScore ?? 0)))}%` }}
                             />
                           </div>
                           <span className="text-sm font-bold text-white">
