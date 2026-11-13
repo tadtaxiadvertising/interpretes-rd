@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.roleplay_library_archives (
 -- The application uses its privileged server-side Prisma database connection.
 -- Deny direct Data API access unless a later migration introduces explicit policies.
 ALTER TABLE public.roleplay_library_archives ENABLE ROW LEVEL SECURITY;
-DO $
+DO $roleplay_archive$
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
     REVOKE ALL ON TABLE public.roleplay_library_archives FROM anon;
@@ -20,4 +20,4 @@ BEGIN
     REVOKE ALL ON TABLE public.roleplay_library_archives FROM authenticated;
   END IF;
 END
-$;
+$roleplay_archive$;
