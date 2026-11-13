@@ -31,7 +31,9 @@ describe('Participant roleplay scenario — evaluator answer isolation', () => {
     expect(screen.queryByText(/Hidden clinical reference/)).toBeNull();
     expect(screen.queryByRole('button', { name: /Ver claves esperadas/i })).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Ver guión' }));
+    const showScript = screen.getAllByRole('button', { name: 'Ver guión' });
+    expect(showScript.length).toBeGreaterThan(0);
+    fireEvent.click(showScript[showScript.length - 1]);
     expect(screen.getByText('Contexto para practicar la interpretación.')).toBeTruthy();
     expect(screen.queryByText(/PRIVATE-EVALUATOR-ANSWER/)).toBeNull();
     expect(screen.queryByText(/Hidden clinical reference/)).toBeNull();
