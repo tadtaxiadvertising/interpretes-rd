@@ -347,7 +347,7 @@ export async function POST(req: NextRequest) {
         return { created, skippedCount };
       });
       if (bulkResult.created.length === 0) {
-        if (uploadedPaths.length > 0) {
+        if (uploadedPaths.length > 0 && supabaseAdmin) {
           await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
           uploadedPaths.length = 0;
         }
@@ -440,21 +440,22 @@ export async function POST(req: NextRequest) {
 
     const audioUrls: string[] = [...sourceAudioUrls];
     if (!useLibrary) {
-    for (let i = 0; i < scenarios.length; i++) {
+      const storageClient = supabaseAdmin;
+      if (!storageClient) throw new Error('Storage is not configured');
+      for (let i = 0; i < scenarios.length; i++) {
       const audio = scenarioAudios[i] as File;
       const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
       const path = `base/${session.id}/upload-${randomUUID()}/${i}.${extension}`;
 
-      const { error: uploadError } = await supabaseAdmin.storage
+      const { error: uploadError } = await storageClient.storage
         .from('roleplay-audio')
         .upload(path, audio, { contentType: audio.type, upsert: true });
       if (uploadError) throw new Error(`Failed to upload audio: ${uploadError.message}`);
       uploadedPaths.push(path);
 
-      const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
+      const { data: publicUrlData } = storageClient.storage.from('roleplay-audio').getPublicUrl(path);
       audioUrls.push(publicUrlData.publicUrl);
-    }
-
+      }
     }
 
     const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
