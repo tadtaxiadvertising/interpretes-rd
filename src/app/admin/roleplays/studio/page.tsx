@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
-import { parseTimedTranscript } from '@/lib/roleplay-studio/transcript';
+import { parseTimedTranscript, toPublishableStudioSegments } from '@/lib/roleplay-studio/transcript';
 
 type Segment = {
   id: string;
@@ -101,13 +101,9 @@ export default function RoleplayStudioPage() {
       }
       // Only the intervals and labels are used for publication. The subtitle
       // text is local-only reference material, never copied into scriptPrompt.
-      const prepared: Segment[] = cues.map((cue, index) => ({
+      const prepared: Segment[] = toPublishableStudioSegments(cues).map(segment => ({
+        ...segment,
         id: crypto.randomUUID(),
-        title: cue.speaker ? `${cue.speaker} · ${index + 1}` : `Intervención ${index + 1}`,
-        start: cue.start,
-        end: cue.end,
-        scriptPrompt: '',
-        responseLimit: 120,
       }));
       setSegments(prepared);
       setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, cues[index].text])));
