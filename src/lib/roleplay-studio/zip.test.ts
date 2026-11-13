@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { createHash } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { createHash, webcrypto } from 'node:crypto';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { extractStudioZip } from './zip';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 
@@ -70,6 +70,11 @@ const validFiles = [
 ];
 
 describe('Audio Studio direct ZIP import', () => {
+  // The production validator uses Web Crypto in a secure browser context.
+  // Vitest's Node environment may not expose it as a global.
+  beforeAll(() => vi.stubGlobal('crypto', webcrypto));
+  afterAll(() => vi.unstubAllGlobals());
+
   it('converts a valid STORE ZIP into files accepted by the canonical manifest validator', async () => {
     const extracted = await extractStudioZip(archiveFile(buildArchive(validFiles)));
     expect(extracted.map(file => file.name)).toEqual(['manifest.json', 'segment-01.mp3']);
