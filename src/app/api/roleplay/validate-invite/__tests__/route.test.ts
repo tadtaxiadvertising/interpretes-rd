@@ -121,4 +121,11 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     expect(response.headers.get('Vary')).toBe('Cookie');
   });
 
+  it('rejects oversized invite tokens before accessing the database', async () => {
+    const response = await POST(makeRequest('x'.repeat(513)));
+    expect(response.status).toBe(400);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
 });
