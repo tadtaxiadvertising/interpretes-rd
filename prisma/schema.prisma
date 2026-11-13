@@ -998,7 +998,7 @@ model RoleplayAccess {
 // QA evaluations and shared base-audio objects must never be deleted here.
 model RoleplayLibraryArchive {
   fingerprint String   @id @db.VarChar(64)
-  archivedAt  DateTime @default(now()) @map("archived_at")
+  archivedAt  DateTime? @map("archived_at")
   archivedBy  String?  @map("archived_by")
 
   @@map("roleplay_library_archives")
