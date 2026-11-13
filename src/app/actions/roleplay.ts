@@ -723,7 +723,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       if (priorResponse) {
         if (priorResponse.sourceAudioPath === input.sourceAudioPath) {
           return {
-            recordedAudioUrl: priorResponse.sourceAudioUrl ?? input.recordedAudioUrl,
+            recordedAudioUrl: priorResponse.sourceAudioUrl ?? null,
             submitted: session.status === 'SUBMITTED',
             candidateId: session.recruitmentCandidateId,
             sourceAudioPath: priorResponse.sourceAudioPath,
@@ -755,8 +755,44 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       // as proof that an audio recording exists in the roleplay bucket.
       const confirmedAudioUrl = await confirmUpload(input.sourceAudioPath, 15 * 1024 * 1024);
 
-      // Persist a new response only once. The existing-response path above
-      // handles idempotent retries before the sequential-index check.
+      // Compare-and-set locks the session row within this transaction. Another
+      // upload, assessment, cancellation or QA claim cannot change this stage
+      // between validation and the subsequent response/session writes.
+      const claimed = await tx.roleplaySession.updateMany({
+        where: {
+          id: session.id,
+          currentScenarioIndex: session.currentScenarioIndex,
+          status: { in: ['INVITED', 'STARTED', 'IN_PROGRESS'] },
+        },
+        data: { updatedAt: new Date() },
+      });
+      if (claimed.count !== 1) {
+        throw new Error('Session not available for submission');
+      }
+
+      // A competing confirm may have committed while we waited on that row
+      // lock. Re-read under the lock so identical retries return success
+      // without creating a duplicate response or conversion job.
+      const concurrentlyConfirmed = await tx.roleplayResponse.findFirst({
+        where: { scenarioId: input.scenarioId },
+        select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true },
+      });
+      if (concurrentlyConfirmed) {
+        if (concurrentlyConfirmed.sourceAudioPath !== input.sourceAudioPath) {
+          throw new Error('Response already recorded for this scenario');
+        }
+        return {
+          recordedAudioUrl: concurrentlyConfirmed.sourceAudioUrl ?? null,
+          submitted: false,
+          candidateId: session.recruitmentCandidateId,
+          sourceAudioPath: concurrentlyConfirmed.sourceAudioPath,
+          processedAudioPath: concurrentlyConfirmed.processedAudioPath,
+          newlyCreated: false,
+        };
+      }
+
+      // The unique scenario constraint remains defense in depth. Claim, audio,
+      // conversion job and session status all commit or roll back together.
       await tx.roleplayResponse.create({
         data: {
           scenarioId: input.scenarioId,
