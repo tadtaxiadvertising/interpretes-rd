@@ -76,3 +76,12 @@ npm run build
 - El administrador escucha las pausas y debe pulsar **Reemplazar con cortes sugeridos** antes de modificar el borrador. Los campos de hablante e idioma permanecen **desconocidos** y los títulos son neutrales. Se exige revisión del intérprete original y la exportación canónica ZIP sigue siendo el único camino de publicación.
 - La herramienta **no es diarización, no identifica idiomas y no transcribe**. Su ventaja es reducir marcas manuales sin presupuestos adicionales ni envíos del MP3 a terceros. El servidor procesa la solicitud en memoria y no persiste el audio.
 
+
+## Plantillas bilingües de protocolos para la práctica consecutiva
+- Audio Studio incluye instrucciones **originales, opcionales y editables** de apertura, petición de repetición/aclaración y cierre en inglés y español.
+- El administrador selecciona protocolo e idioma y debe pulsar «Añadir protocolo seleccionado a esta intervención»; no se alteran otros escenarios ni se insertan instrucciones automáticamente.
+- Los textos van al mismo campo `scriptPrompt` ya admitido por el ZIP y el formulario de asignación. El candidato o intérprete solo podrá leerlos mediante el botón «Ver guión» de su escenario; se reutilizan las mismas autorizaciones y evaluaciones.
+- El sistema deduplica instrucciones iguales y exige el límite de 5000 caracteres. No introduce transcripciones, datos clínicos identificables ni respuestas modelo.
+- Estas plantillas son **guías de práctica**, no un simulador de voz ni certificación de procedimientos NBCMI/CCHI. Para una evaluación ciega el administrador debe decidir si mostrar indicaciones comprometería el examen.
+- Siguen pendientes la práctica interactiva de apertura/cierre en audio, solicitudes de repetición con registro y evaluación detallada, y la versión del material original de Google AI Studio.
+
