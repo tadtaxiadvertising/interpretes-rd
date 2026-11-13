@@ -8,7 +8,7 @@ import { z } from 'zod';
 const db = prisma;
 
 const ValidateInviteSchema = z.object({
-  token: z.string().trim().min(1, 'Token required'),
+  token: z.string().trim().min(1, 'Token required').max(512),
 });
 
 // Invitation entry is validate + start: opening a still-available link binds
