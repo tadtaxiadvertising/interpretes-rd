@@ -272,6 +272,22 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     expect(m.qaCreate).not.toHaveBeenCalled();
   });
 
+  it('does not expose database exceptions to an administrator through the action payload', async () => {
+    const secret = 'postgresql://private:password@db.internal.invalid/evaluation';
+    m.sessionFindUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await evaluateRoleplay(null, makeForm());
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INTERNAL_ERROR');
+      expect(result.error).toContain('No fue posible evaluar el roleplay');
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(m.qaCreate).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('requires admin authorization', async () => {
     m.actor = null;
 
