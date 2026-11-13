@@ -29,7 +29,10 @@ describe('Audio Studio local waveform safety and peak sampling', () => {
   it('uses the shortest channel safely and discards corrupt non-finite samples', () => {
     const left = new Float32Array([0, Number.NaN, 0.2, 0.3, 0.9, 0]);
     const right = new Float32Array([0, 0.6, Number.POSITIVE_INFINITY, 0.4]);
-    expect(calculateWaveformPeaks([left, right], 2)).toEqual([0.6, 0.4]);
+    const peaks = calculateWaveformPeaks([left, right], 2);
+    expect(peaks).toHaveLength(2);
+    expect(peaks[0]).toBeCloseTo(0.6, 5);
+    expect(peaks[1]).toBeCloseTo(0.4, 5);
   });
 
   it('fails closed for empty and excessive inputs', () => {
