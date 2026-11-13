@@ -48,7 +48,7 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
   };
 
   it('displays suggestions without replacing the active draft until explicit approval', async () => {
-    const fetchMock = vi.fn(async () => ({
+    const fetchMock = vi.fn(async (_url: RequestInfo | URL, _options?: RequestInit) => ({
       ok: true,
       json: async () => result,
     }));
