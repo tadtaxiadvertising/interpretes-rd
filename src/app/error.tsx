@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 
 export default function AppError({
   error,
@@ -21,7 +22,7 @@ export default function AppError({
       {error.digest && <p className="rounded-lg bg-slate-800 px-4 py-2 font-mono text-xs text-slate-300">Referencia del error: {error.digest}</p>}
       <div className="flex flex-wrap justify-center gap-3">
         <button type="button" onClick={reset} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-500">Reintentar</button>
-        <a href="/" className="rounded-xl border border-slate-600 px-5 py-3 font-semibold hover:bg-slate-800">Volver al inicio</a>
+        <Link href="/" className="rounded-xl border border-slate-600 px-5 py-3 font-semibold hover:bg-slate-800">Volver al inicio</Link>
       </div>
     </main>
   );
