@@ -252,4 +252,21 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(res.status).toBe(409);
     expect(m.updateMany).not.toHaveBeenCalled();
   });
+  it('returns a generic private error when a roleplay database query fails', async () => {
+    const secret = 'postgresql://db-user:private-pass@internal.invalid/health';
+    m.findUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest(), { params });
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(body.error).toContain('No fue posible iniciar el roleplay');
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.updateMany).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
 });
