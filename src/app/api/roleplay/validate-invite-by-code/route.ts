@@ -7,7 +7,7 @@ import { z } from 'zod';
 const db = prisma;
 
 const ValidateInviteByCodeSchema = z.object({
-  inviteCode: z.string().trim().min(1, 'Invite code required'),
+  inviteCode: z.string().trim().min(1, 'Invite code required').max(64),
 });
 
 // Invitation entry is validate + start: opening a still-available link binds
