@@ -40,3 +40,13 @@ npm run lint
 npm test -- --run
 npm run build
 ```
+
+## Editor de revisión visual y perfiles EN/ES (siguiente fase)
+- Nueva línea de tiempo del Audio Studio con barras de onda PCM, marcadores visuales de todos los fragmentos y control accesible para buscar segundos exactos.
+- El navegador calcula la forma de onda **localmente**, sin cargar audio adicional al servidor. Para evitar problemas de memoria solo decodifica grabaciones de hasta **4 minutos / 8 MiB**. En grabaciones más largas aparece una vista temporal simplificada que sigue permitiendo buscar, escuchar, marcar y exportar.
+- Cada intervención puede etiquetarse manualmente como Doctor, Paciente, Enfermería, Operador, Intérprete original o Hablante sin identificar. Los idiomas son EN, ES o por revisar; **no se infiere automáticamente el idioma a partir del texto**, evitando falsas atribuciones.
+- El archivo SRT/VTT puede excluir automáticamente las intervenciones con un perfil genérico exacto `Interpreter`/`Intérprete`. Los nombres no reconocidos permanecen por revisar; la revisión humana es obligatoria. Los fragmentos marcados como intérprete se bloquean al exportar.
+- El administrador puede crear un título genérico con perfil e idioma, sin copiar nombres personales ni contenido clínico de la transcripción. Los campos de perfil/idioma son **metadatos editoriales** en esta fase: se expresan en el título al aplicarlos explícitamente y no modifican el esquema existente.
+- El importador actual `manifest.json`/ZIP, RBAC, biblioteca, asignaciones y auditoría QA continúan siendo los puntos únicos de publicación y consumo.
+- No se ha integrado todavía el motor de Google AI Studio: falta su código fuente exportado para un port preciso, y quedan pendientes diarización automática, transcripción autónoma, simulador consecutivo avanzado, proyectos editables persistentes y trabajo asíncrono en el worker.
+
