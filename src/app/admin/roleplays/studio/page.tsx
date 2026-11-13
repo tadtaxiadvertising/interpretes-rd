@@ -33,6 +33,7 @@ export default function RoleplayStudioPage() {
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
   const player = useRef<HTMLAudioElement>(null);
   const previewEnd = useRef<number | null>(null);
+  const subtitleImportRevision = useRef(0);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const stopPreview = () => {
@@ -71,6 +72,8 @@ export default function RoleplayStudioPage() {
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
 
   const chooseAudio = (file: File | undefined) => {
+    // Invalidate any in-flight SRT/VTT read bound to the previous audio.
+    subtitleImportRevision.current += 1;
     stopPreview();
     setError('');
     setNotice('');
@@ -90,13 +93,17 @@ export default function RoleplayStudioPage() {
 
   const importSubtitles = async (file: File) => {
     if (!audio || !duration) return;
+    const revision = ++subtitleImportRevision.current;
     setError('');
     setNotice('');
     try {
       if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > 1_000_000) {
         throw new Error('Selecciona un SRT o VTT de hasta 1 MB.');
       }
-      const cues = parseTimedTranscript(await file.text());
+      const transcript = await file.text();
+      // The file may have changed, or a newer import/edit may have started.
+      if (revision !== subtitleImportRevision.current) return;
+      const cues = parseTimedTranscript(transcript);
       if (cues.some(cue => cue.end > duration + 0.1)) {
         throw new Error('Los subtítulos contienen intervalos posteriores al final de la grabación.');
       }
@@ -110,11 +117,13 @@ export default function RoleplayStudioPage() {
       setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, cues[index].text])));
       setNotice(`${prepared.length} intervenciones importadas desde subtítulos. Revisa los hablantes y elimina las intervenciones del intérprete antes de exportar.`);
     } catch (cause) {
+      if (revision !== subtitleImportRevision.current) return;
       setError(cause instanceof Error ? cause.message : 'No fue posible leer el archivo de subtítulos.');
     }
   };
 
   const addSegment = () => {
+    subtitleImportRevision.current += 1;
     const start = segments.length > 0
       ? Math.max(...segments.map(segment => Number.isFinite(segment.end) ? segment.end : 0))
       : (player.current?.currentTime || 0);
@@ -128,6 +137,7 @@ export default function RoleplayStudioPage() {
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
+    subtitleImportRevision.current += 1;
     setSegments(prev => prev.map(segment => segment.id === id ? { ...segment, ...patch } : segment));
   };
 
@@ -236,9 +246,9 @@ export default function RoleplayStudioPage() {
                   if (file) void importSubtitles(file);
                 }}/>
               <p className="mt-2 text-xs text-slate-400">
-                Se importan los tiempos y etiquetas de hablante. El texto de la transcripción se muestra únicamente
-                aquí como referencia, sin incorporarse a las instrucciones que verá el candidato o intérprete.
-                Debes revisar y excluir las intervenciones del propio intérprete.
+                Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
+                Los nombres personales se reemplazan por títulos neutrales. La transcripción se muestra
+                únicamente aquí y no se envía al participante. Revisa y excluye las intervenciones del intérprete.
               </p>
             </div>
           </div>
@@ -256,7 +266,10 @@ export default function RoleplayStudioPage() {
             <article key={segment.id} className="space-y-3 rounded-xl border border-white/10 bg-slate-950/70 p-4">
               <div className="flex items-center justify-between gap-3">
                 <h3 className="font-semibold text-white">Intervención {index + 1}</h3>
-                <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => setSegments(prev => prev.filter(s => s.id !== segment.id))}
+                <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
+                  subtitleImportRevision.current += 1;
+                  setSegments(prev => prev.filter(s => s.id !== segment.id));
+                }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
               <label className="block text-sm text-slate-300">Título
