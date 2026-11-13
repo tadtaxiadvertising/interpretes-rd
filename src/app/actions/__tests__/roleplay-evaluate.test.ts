@@ -160,6 +160,7 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     const res = await evaluateRoleplay(null, makeForm());
 
     expect(res.success).toBe(false);
+    expect(res.error).toBe('Session already evaluated');
     expect(m.sessionUpdateMany).not.toHaveBeenCalled();
     expect(m.appFindUnique).not.toHaveBeenCalled();
   });
