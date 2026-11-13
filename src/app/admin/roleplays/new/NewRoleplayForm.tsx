@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { ScenarioCard } from './ScenarioCard';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
+import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 
 interface Participant {
   id: number;
@@ -131,7 +132,12 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     setIsImporting(true);
     setError(null);
     try {
-      const prepared = await prepareRoleplayManifestImport(selected);
+      // Accept the exact STORE-only ZIP emitted by Audio Studio, or the legacy
+      // manifest.json + MP3 selection. Both paths share SHA-256 validation.
+      const files = selected.length === 1 && /\.zip$/i.test(selected[0].name)
+        ? await extractStudioZip(selected[0])
+        : selected;
+      const prepared = await prepareRoleplayManifestImport(files);
       const next = prepared.map((scenario) => ({
         ...scenario,
         id: generateId(),
@@ -376,18 +382,18 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       <div>
         <div className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
           <label htmlFor="manifest-roleplay-upload" className="block text-sm font-semibold text-blue-100">
-            Importar roleplay preparado (manifest.json + todos los MP3)
+            Importar roleplay preparado (ZIP de Audio Studio o manifest.json + MP3)
           </label>
           <p className="mt-1 text-xs text-slate-300">
-            Extrae el ZIP en tu equipo. Selecciona manifest.json y los MP3 juntos; verificaremos nombres,
-            orden y SHA-256 antes de llenar los escenarios. Importar reemplaza el borrador actual,
-            pero nunca publica automáticamente.
+            Selecciona directamente el ZIP descargado de Audio Studio, o selecciona manifest.json
+            y todos los MP3 juntos. Verificaremos estructura, CRC32, orden y SHA-256 antes de llenar los
+            escenarios. Importar reemplaza el borrador actual, pero nunca publica automáticamente.
           </p>
           <input
             id="manifest-roleplay-upload"
             type="file"
             multiple
-            accept=".json,.mp3,audio/mpeg,application/json"
+            accept=".zip,.json,.mp3,audio/mpeg,application/json,application/zip"
             disabled={isImporting || isCreating}
             onChange={(event) => { void handleManifestImport(event); }}
             className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white disabled:opacity-50"
