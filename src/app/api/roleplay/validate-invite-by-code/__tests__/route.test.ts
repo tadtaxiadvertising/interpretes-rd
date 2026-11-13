@@ -135,4 +135,28 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     });
   });
 
+  it('never exposes internal connection errors or invitation codes on lookup failure', async () => {
+    const secret = 'postgresql://hidden-user:secret@private.invalid/roleplay';
+    m.findUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest('ABCD1234'));
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(JSON.stringify(body)).not.toContain('ABCD1234');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.setCookie).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('keeps the successful invitation response private and uncacheable', async () => {
+    const response = await POST(makeRequest('ABCD1234'));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vary')).toBe('Cookie');
+  });
+
 });
