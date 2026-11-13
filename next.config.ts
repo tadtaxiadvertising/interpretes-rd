@@ -20,11 +20,14 @@ const nextConfig: NextConfig = {
   output: 'standalone',
 
   // Prisma debe ser external para evitar bundling en el serverless edge
-  serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'prisma', 'pg', 'bcryptjs'],
+  serverExternalPackages: ['@prisma/client', '@prisma/adapter-pg', 'prisma', 'pg', 'bcryptjs', 'ffmpeg-static'],
 
   // Asegurar que los archivos del engine de Prisma se copien en el build standalone
   outputFileTracingIncludes: {
     '/': ['./prisma/**/*'],
+    // ffmpeg-static resolves its executable from a runtime filesystem path.
+    // Next standalone tracing may omit that binary without an explicit include.
+    '/api/admin/roleplays/studio/export': ['./node_modules/ffmpeg-static/ffmpeg'],
   },
 
   /**

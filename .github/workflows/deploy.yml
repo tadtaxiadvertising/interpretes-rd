@@ -135,6 +135,13 @@ jobs:
       - name: Build
         run: npm run build
 
+      # A successful Next build does not prove a runtime binary was copied
+      # into the standalone distribution. Check the exact route dependency.
+      - name: Verify standalone Audio Studio FFmpeg
+        run: |
+          test -x .next/standalone/node_modules/ffmpeg-static/ffmpeg
+          .next/standalone/node_modules/ffmpeg-static/ffmpeg -hide_banner -version >/dev/null
+
       # The Easypanel "interpreters-api" service must run the standalone
       # Express backend. Validate its actual Dockerfile, not only Next.js.
       - name: Build dedicated interpreters-api backend image

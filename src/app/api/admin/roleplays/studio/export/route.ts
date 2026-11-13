@@ -5,6 +5,7 @@ import ffmpegPath from 'ffmpeg-static';
 import { validateAction } from '@/lib/auth/actions';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { parseFinalFfmpegOutputSeconds } from '@/lib/roleplay-studio/ffmpeg-progress';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -104,6 +105,7 @@ async function sliceMp3(input: Buffer, segment: Segment, deadline: number, signa
   return await new Promise<Buffer>((resolve, reject) => {
     const child = spawn(executable, [
       '-hide_banner', '-loglevel', 'error', '-nostdin',
+      '-progress', 'pipe:2', '-nostats',
       '-i', 'pipe:0', '-ss', String(segment.start), '-t', String(segment.end - segment.start),
       '-vn', '-ac', '1', '-ar', '24000', '-codec:a', 'libmp3lame', '-b:a', '64k', '-f', 'mp3', 'pipe:1',
     ], { stdio: 'pipe' });
@@ -122,7 +124,9 @@ async function sliceMp3(input: Buffer, segment: Segment, deadline: number, signa
       if (!settled) { settled = true; cleanup(); reject(new Error(message)); }
     };
     child.on('error', () => fail('FFmpeg execution failed'));
-    child.stderr.on('data', (chunk: Buffer) => { errorText = (errorText + chunk.toString()).slice(-500); });
+    // FFmpeg exits zero when the requested interval runs past EOF. Capture
+    // its progress record to reject partial audio instead of exporting it.
+    child.stderr.on('data', (chunk: Buffer) => { errorText = (errorText + chunk.toString()).slice(-8192); });
     child.stdout.on('data', (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_INPUT_BYTES) { child.kill('SIGKILL'); fail('Segment too large'); }
@@ -132,6 +136,12 @@ async function sliceMp3(input: Buffer, segment: Segment, deadline: number, signa
       cleanup();
       if (settled) return;
       if (code !== 0 || size === 0) return fail('Invalid audio or FFmpeg failure: ' + errorText);
+      const actualSeconds = parseFinalFfmpegOutputSeconds(errorText);
+      const expectedSeconds = segment.end - segment.start;
+      const tolerance = Math.min(0.25, Math.max(0.05, expectedSeconds * 0.1));
+      if (actualSeconds === null || actualSeconds + tolerance < expectedSeconds) {
+        return fail('El intervalo solicitado supera el audio real o FFmpeg no reportó su duración final');
+      }
       settled = true;
       resolve(Buffer.concat(chunks));
     });
@@ -195,6 +205,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('[ROLEPLAY STUDIO] Export failed:', error instanceof Error ? error.message : 'Unexpected error');
+    if (error instanceof Error && error.message.startsWith('El intervalo solicitado supera el audio real')) {
+      return NextResponse.json({ error: 'Una intervención termina después del audio original. Revisa su inicio y final antes de exportar.' }, { status: 422 });
+    }
     return NextResponse.json({ error: 'No se pudo procesar el audio. Revisa el formato y la duración.' }, { status: 422 });
   } finally {
     activeExports--;

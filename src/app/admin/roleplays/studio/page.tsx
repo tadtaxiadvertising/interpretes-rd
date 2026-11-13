@@ -56,7 +56,8 @@ export default function RoleplayStudioPage() {
       stopPreview();
       return;
     }
-    audioPlayer.pause();
+    // Seek directly even if audio is already playing. Calling pause() here
+    // schedules an onPause event which can clear the new segment's end marker.
     audioPlayer.currentTime = segment.start;
     previewEnd.current = segment.end;
     setPreviewingId(segment.id);
@@ -179,7 +180,7 @@ export default function RoleplayStudioPage() {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice('Paquete generado. Extrae el ZIP e importa manifest.json junto con sus MP3 desde Crear roleplay.');
+      setNotice('Paquete generado. Ve a Crear roleplay, importa directamente este ZIP y elige el candidato o intérprete destinatario.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Error al preparar el paquete.');
     } finally {
