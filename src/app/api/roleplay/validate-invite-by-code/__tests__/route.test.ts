@@ -159,4 +159,11 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     expect(response.headers.get('Vary')).toBe('Cookie');
   });
 
+  it('rejects oversized invitation codes before database access', async () => {
+    const response = await POST(makeRequest('A'.repeat(65)));
+    expect(response.status).toBe(400);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
 });
