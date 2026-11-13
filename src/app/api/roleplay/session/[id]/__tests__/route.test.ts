@@ -236,6 +236,33 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
   });
 
+  it('never exposes internal database errors in participant API responses', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      m.findUnique.mockRejectedValueOnce(
+        new Error('postgresql://private-admin:secret@private-db.example/roleplay'),
+      );
+
+      const res = await GET(makeRequest('sess-1'), { params });
+      const body = await res.json();
+
+      expect(res.status).toBe(500);
+      expect(body.success).toBe(false);
+      expect(body.error).toBe('No fue posible cargar la sesión. Inténtalo nuevamente.');
+      expect(JSON.stringify(body)).not.toContain('secret');
+      expect(JSON.stringify(body)).not.toContain('private-db.example');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('marks authorized session responses private and uncacheable', async () => {
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toBe('Cookie');
   it('returns 401 to an anonymous user before accessing a private session', async () => {
     m.identity = null;
     const res = await GET(makeRequest('sess-1'), { params });
