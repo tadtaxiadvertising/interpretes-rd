@@ -200,6 +200,69 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
+  it.each(['SUBMITTED', 'STARTED', 'IN_PROGRESS', 'INVITED', 'PASSED'])(
+    'never reopens a %s session while the application is in QA review',
+    async (status) => {
+      m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+      m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, status });
+
+      const res = await startCandidateRoleplay();
+
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('CONFLICT');
+      expect(m.advanceApplication).not.toHaveBeenCalled();
+      expect(m.sessionCreate).not.toHaveBeenCalled();
+      expect(m.accessUpsert).not.toHaveBeenCalled();
+      expect(m.cookieSet).not.toHaveBeenCalled();
+    },
+  );
+
+  it('does not permit a retry if QA has not saved a score for an evaluated session', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, status: 'EVALUATED', qaScore: null });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(m.advanceApplication).not.toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+  });
+
+  it('does not allow a passed QA evaluation to be retried because pipeline bookkeeping lagged', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'EVALUATED',
+      qaScore: { totalScore: 88, criticalError: false },
+    });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.advanceApplication).not.toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ totalScore: 62.5, criticalError: false }, 'a failed QA score'],
+    [{ totalScore: 88, criticalError: true }, 'a critical QA error'],
+  ])('creates a fresh attempt only after %s', async (qaScore) => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, status: 'EVALUATED', qaScore });
+    m.sessionCreate.mockResolvedValue({ id: 'sess-retry', status: 'STARTED' });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.sessionCreate).toHaveBeenCalledTimes(1);
+    expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({
+      fromStatuses: ['ROLEPLAY_REVIEW'],
+      toStatus: 'ROLEPLAY_PENDING',
+    }));
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-retry', expect.any(Object));
+  });
+
   it('creates a fresh session when retrying a reviewed attempt', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
     m.sessionFindFirst.mockResolvedValue({
