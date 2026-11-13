@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { Mic2, Loader2, User, UserPlus, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -54,6 +54,20 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  // Keep the import identity independent from React render batching. The user
+  // can edit a draft while a ZIP/SHA-256 validation is still awaiting.
+  const importRevision = useRef(0);
+  const importPending = useRef(false);
+
+  const invalidatePendingImport = useCallback(() => {
+    // Increment on every draft edit, including one React processes after an
+    // import has resolved but before its state update has committed.
+    importRevision.current += 1;
+    if (!importPending.current) return;
+    importPending.current = false;
+    setIsImporting(false);
+    setError('Importación descartada: modificaste el borrador antes de terminar la verificación.');
+  }, []);
   const [eligibility, setEligibility] = useState<{ activeCount: number; eligibleCount: number; skippedCount: number } | null>(null);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
@@ -82,6 +96,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   }, [isBulk]);
 
   const addScenario = useCallback(() => {
+    invalidatePendingImport();
     setScenarios(prev => prev.length >= ROLEPLAY_MAX_SCENARIOS ? prev : [...prev, { 
       id: generateId(), 
       title: '', 
@@ -90,17 +105,19 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       durationLimitSec: 0, 
       scriptPrompt: '' 
     }]);
-  }, []);
+  }, [invalidatePendingImport]);
 
   const removeScenario = useCallback((id: string) => {
+    invalidatePendingImport();
     setScenarios(prev => {
       const removed = prev.find((scenario) => scenario.id === id);
       if (removed?.baseAudioPreview) URL.revokeObjectURL(removed.baseAudioPreview);
       return prev.filter((scenario) => scenario.id !== id);
     });
-  }, []);
+  }, [invalidatePendingImport]);
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
+    invalidatePendingImport();
     setScenarios(prev => prev.map((scenario) => {
       if (scenario.id !== id) return scenario;
       if (updates.baseAudioPreview && scenario.baseAudioPreview && updates.baseAudioPreview !== scenario.baseAudioPreview) {
@@ -108,9 +125,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       }
       return { ...scenario, ...updates };
     }));
-  }, []);
+  }, [invalidatePendingImport]);
 
   const moveScenario = useCallback(function(id: string, direction: 'up' | 'down') {
+    invalidatePendingImport();
     setScenarios(prev => {
       const index = prev.findIndex(s => s.id === id);
       if (index === -1) return prev;
@@ -122,13 +140,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       [newScenarios[index], newScenarios[targetIndex]] = [newScenarios[targetIndex], newScenarios[index]];
       return newScenarios;
     });
-  }, []);
+  }, [invalidatePendingImport]);
 
 
   const handleManifestImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = '';
     if (selected.length === 0) return;
+    const revision = ++importRevision.current;
+    importPending.current = true;
     setIsImporting(true);
     setError(null);
     try {
@@ -138,6 +158,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         ? await extractStudioZip(selected[0])
         : selected;
       const prepared = await prepareRoleplayManifestImport(files);
+      // Never overwrite a newer ZIP import or edits made during validation.
+      if (revision !== importRevision.current) return;
       const next = prepared.map((scenario) => ({
         ...scenario,
         id: generateId(),
@@ -146,15 +168,24 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       // A failed import never touches existing edits. Revoke old previews
       // only after every selected file has been verified.
       setScenarios((prev) => {
+        if (revision !== importRevision.current) {
+          next.forEach((scenario) => URL.revokeObjectURL(scenario.baseAudioPreview));
+          return prev;
+        }
         prev.forEach((scenario) => {
           if (scenario.baseAudioPreview) URL.revokeObjectURL(scenario.baseAudioPreview);
         });
         return next;
       });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se pudo importar el manifiesto.');
+      if (revision === importRevision.current) {
+        setError(cause instanceof Error ? cause.message : 'No se pudo importar el manifiesto.');
+      }
     } finally {
-      setIsImporting(false);
+      if (revision === importRevision.current) {
+        importPending.current = false;
+        setIsImporting(false);
+      }
     }
   };
 
