@@ -245,9 +245,9 @@ describe('startCandidateRoleplay', () => {
   });
 
   it.each([
-    [{ totalScore: 62.5, criticalError: false }, 'a failed QA score'],
-    [{ totalScore: 88, criticalError: true }, 'a critical QA error'],
-  ])('creates a fresh attempt only after %s', async (qaScore) => {
+    ['a failed QA score', { totalScore: 62.5, criticalError: false }],
+    ['a critical QA error', { totalScore: 88, criticalError: true }],
+  ])('creates a fresh attempt only after %s', async (_reason, qaScore) => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
     m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, status: 'EVALUATED', qaScore });
     m.sessionCreate.mockResolvedValue({ id: 'sess-retry', status: 'STARTED' });
