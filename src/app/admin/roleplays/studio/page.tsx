@@ -7,6 +7,9 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/li
 import { parseTimedTranscript, toPublishableStudioSegments } from '@/lib/roleplay-studio/transcript';
 import StudioWaveform from './StudioWaveform';
 import {
+  createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
+} from '@/lib/roleplay-studio/draft';
+import {
   classifySpeakerRole, filterInterpreterCues, makeNeutralSegmentTitle,
   type StudioLanguage, type StudioSpeakerRole,
 } from '@/lib/roleplay-studio/speaker-profiles';
@@ -36,6 +39,7 @@ export default function RoleplayStudioPage() {
   const [playhead, setPlayhead] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [busy, setBusy] = useState(false);
+  const [draftBusy, setDraftBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
@@ -43,6 +47,7 @@ export default function RoleplayStudioPage() {
   const player = useRef<HTMLAudioElement>(null);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
+  const draftOperationRevision = useRef(0);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const stopPreview = () => {
@@ -95,6 +100,7 @@ export default function RoleplayStudioPage() {
   const chooseAudio = (file: File | undefined) => {
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
+    draftOperationRevision.current += 1;
     stopPreview();
     setError('');
     setNotice('');
@@ -102,6 +108,7 @@ export default function RoleplayStudioPage() {
     setCaptionTexts({});
     setDuration(0);
     setPlayhead(0);
+    setDraftBusy(false);
     if (!file) { setAudio(null); setUrl(''); return; }
     if (!/\.mp3$/i.test(file.name) || file.size < 1 || file.size > 15 * 1024 * 1024) {
       setError('Selecciona un MP3 válido de hasta 15 MiB.');
@@ -167,6 +174,68 @@ export default function RoleplayStudioPage() {
   const update = (id: string, patch: Partial<Segment>) => {
     subtitleImportRevision.current += 1;
     setSegments(prev => prev.map(segment => segment.id === id ? { ...segment, ...patch } : segment));
+  };
+
+  const saveDraft = async () => {
+    if (!audio || !duration || busy || draftBusy) return;
+    const revision = subtitleImportRevision.current;
+    const operation = ++draftOperationRevision.current;
+    const snapshot = [...segments];
+    setDraftBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const digest = await sha256StudioAudio(audio);
+      if (revision !== subtitleImportRevision.current) return;
+      const draft = createStudioDraft(audio.size, digest, snapshot, duration);
+      const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' });
+      if (blob.size > MAX_STUDIO_DRAFT_CHARS) {
+        throw new Error('El proyecto supera 180 KB. Reduce las instrucciones antes de guardarlo.');
+      }
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = 'roleplay-studio-proyecto.json';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
+      setNotice('Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
+    } catch (cause) {
+      if (revision === subtitleImportRevision.current) {
+        setError(cause instanceof Error ? cause.message : 'No fue posible guardar el proyecto.');
+      }
+    } finally {
+      if (operation === draftOperationRevision.current) setDraftBusy(false);
+    }
+  };
+
+  const openDraftFile = async (file: File) => {
+    if (!audio || !duration || busy || draftBusy) return;
+    const revision = ++subtitleImportRevision.current;
+    const operation = ++draftOperationRevision.current;
+    setDraftBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      if (!/\.json$/i.test(file.name) || file.size < 1 || file.size > MAX_STUDIO_DRAFT_CHARS) {
+        throw new Error('Selecciona un proyecto JSON de Audio Studio de hasta 180 KB.');
+      }
+      const json = await file.text();
+      if (revision !== subtitleImportRevision.current) return;
+      const digest = await sha256StudioAudio(audio);
+      if (revision !== subtitleImportRevision.current) return;
+      const restored = openStudioDraft(json, audio.size, digest, duration);
+      setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
+      setCaptionTexts({});
+      setNotice(`Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
+    } catch (cause) {
+      if (revision === subtitleImportRevision.current) {
+        setError(cause instanceof Error ? cause.message : 'No se pudo abrir el proyecto.');
+      }
+    } finally {
+      if (operation === draftOperationRevision.current) setDraftBusy(false);
+    }
   };
 
   const exportPackage = async () => {
@@ -307,6 +376,35 @@ export default function RoleplayStudioPage() {
           </div>
         )}
       </section>
+      {audio && duration > 0 && (
+        <section className="space-y-3 rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-5">
+          <h2 className="text-lg font-bold text-white">Proyecto de edición</h2>
+          <p className="text-sm leading-6 text-slate-300">
+            Guarda y recupera los cortes y perfiles sin volver a empezar. El proyecto JSON
+            se verifica contra el MP3 original mediante SHA-256; no guarda el audio
+            ni las transcripciones. Sí incluye los títulos e instrucciones que hayas redactado,
+            por lo que debes protegerlo si contiene información sensible.
+          </p>
+          <div className="flex flex-wrap items-end gap-4">
+            <button type="button" onClick={() => void saveDraft()}
+              disabled={busy || draftBusy}
+              className="rounded-xl border border-indigo-300/30 bg-indigo-500/20 px-4 py-2 text-sm font-semibold text-indigo-100 disabled:opacity-50">
+              {draftBusy ? 'Verificando proyecto…' : 'Guardar proyecto JSON'}
+            </button>
+            <label className="block text-sm text-indigo-100">
+              Abrir proyecto del MP3 seleccionado
+              <input type="file" accept=".json,application/json"
+                disabled={busy || draftBusy}
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (file) void openDraftFile(file);
+                }}
+                className="mt-2 block w-full text-xs text-slate-300 disabled:opacity-50"/>
+            </label>
+          </div>
+        </section>
+      )}
       {audio && duration > 0 && (
         <section className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
