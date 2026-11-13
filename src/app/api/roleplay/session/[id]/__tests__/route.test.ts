@@ -263,6 +263,61 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     expect(res.headers.get('Vary')).toBe('Cookie');
+  it('returns 401 to an anonymous user before accessing a private session', async () => {
+    m.identity = null;
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(401);
+    expect(m.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('allows the owning interpreter to read an interpreter-only roleplay without a candidate cookie', async () => {
+    m.session = {
+      ...candidateSession('IN_PROGRESS'),
+      recruitmentCandidateId: null,
+      interpreterId: 21,
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'English to Spanish',
+        baseAudioUrl: 'https://example.test/base.mp3',
+        durationLimitSec: 120,
+        scriptPrompt: 'Interpret accurately',
+        expectedKeys: ['EVALUATOR PRIVATE ANSWER'],
+        responses: [],
+      }],
+    };
+    m.identity = { role: 'interpreter', interpreterId: 21, candidateId: null };
+
+    const res = await GET(makeRequest(), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.scenarios).toHaveLength(1);
+    expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
+    expect(JSON.stringify(body)).not.toContain('EVALUATOR PRIVATE ANSWER');
+  });
+
+  it('denies a different candidate even when they have the correct session cookie', async () => {
+    m.identity = { role: 'candidate', candidateId: 99, interpreterId: null };
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('denies candidates access to interpreter-only sessions', async () => {
+    m.session = { ...candidateSession('IN_PROGRESS'), recruitmentCandidateId: null, interpreterId: 5 };
+    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('denies candidates access to a cancelled attempt even if they own its cookie', async () => {
+    m.session = candidateSession('CANCELLED');
+    const res = await GET(makeRequest('sess-1'), { params });
+
+    expect(res.status).toBe(403);
   });
 
 });
