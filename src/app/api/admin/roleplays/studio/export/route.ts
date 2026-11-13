@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import ffmpegPath from 'ffmpeg-static';
 import { validateAction } from '@/lib/auth/actions';
+import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 export const runtime = 'nodejs';
@@ -128,6 +129,10 @@ async function sliceMp3(input: Buffer, segment: Segment): Promise<Buffer> {
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  const limit = applyRateLimit(req, RATE_LIMITS.audioUpload);
+  if (!limit.success) return NextResponse.json({ error: 'Demasiadas solicitudes de audio.' }, {
+    status: 429, headers: createRateLimitHeaders(limit),
+  });
   const contentLength = Number(req.headers.get('content-length') ?? 0);
   if (contentLength > MAX_INPUT_BYTES + 100000) {
     return NextResponse.json({ error: 'Audio exceeds 15 MiB' }, { status: 413 });
