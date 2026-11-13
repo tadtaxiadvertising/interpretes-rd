@@ -1000,7 +1000,7 @@ async function deleteAudio(path: string) {
 }
 
 const ValidateInviteTokenSchema = z.object({
-  token: z.string().min(1),
+  token: z.string().min(1).max(512),
 });
 
 export type ValidateInviteTokenInput = z.infer<typeof ValidateInviteTokenSchema>;
