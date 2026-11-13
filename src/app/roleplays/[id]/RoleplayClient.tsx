@@ -75,6 +75,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [baseAudioVolume, setBaseAudioVolume] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [accessErrorStatus, setAccessErrorStatus] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [completedScenarios, setCompletedScenarios] = useState<number[]>([]);
   const [scenarioResponses, setScenarioResponses] = useState<Record<string, {
@@ -146,10 +147,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
             }
           }
         } else {
+          setAccessErrorStatus(res.status);
           setError(data.error || 'Failed to load session');
           setPageState('error');
         }
       } catch {
+        setAccessErrorStatus(null);
         setError('Failed to load session');
         setPageState('error');
       }
@@ -357,6 +360,19 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     }
   }, [pageState, currentScenarioIndex]);
 
+  const recoveryDestination = accessErrorStatus === 401
+    ? `/login?next=${encodeURIComponent(`/roleplays/${sessionId}`)}`
+    : initialIdentity?.role === 'candidate'
+      ? '/candidate'
+      : initialIdentity?.role === 'admin'
+        ? '/admin/roleplays'
+        : '/dashboard/roleplays';
+  const recoveryLabel = accessErrorStatus === 401
+    ? 'Iniciar sesión para continuar'
+    : initialIdentity?.role === 'candidate'
+      ? 'Volver a mi candidatura'
+      : 'Volver a mis Roleplays';
+
   const currentScenario = session?.scenarios[currentScenarioIndex];
 
   const totalSteps = 5;
@@ -388,12 +404,22 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Error al Cargar</h2>
           <p className="text-gray-400 mb-6">{error}</p>
+          {accessErrorStatus === 401 && (
+            <p className="text-gray-400 mb-6">
+              Tu sesión de inicio de sesión ha expirado. Accede nuevamente con tu cuenta para continuar.
+            </p>
+          )}
+          {accessErrorStatus === 403 && initialIdentity?.role === 'candidate' && (
+            <p className="text-gray-400 mb-6">
+              Si este ejercicio te pertenece, vuelve a tu candidatura y selecciona «Continuar Roleplay» para renovar el acceso. Las sesiones ajenas siguen protegidas.
+            </p>
+          )}
           <button
-            onClick={() => router.push('/dashboard/roleplays')}
+            onClick={() => router.push(recoveryDestination)}
             className="w-full py-4 rounded-xl font-bold bg-blue-600 hover:bg-blue-500 text-white transition-colors flex items-center justify-center gap-2"
           >
             <ChevronLeft size={18} />
-            Volver al Dashboard
+            {recoveryLabel}
           </button>
         </div>
       </div>
@@ -409,7 +435,8 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       <div className="fixed top-4 left-4 right-4 z-40 flex justify-between items-center px-4 pointer-events-none">
         <div className="pointer-events-auto">
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={handleExit}
+            aria-label="Salir del Roleplay"
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
           >
             <X size={20} />
