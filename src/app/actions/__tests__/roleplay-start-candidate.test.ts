@@ -13,6 +13,7 @@ const m = vi.hoisted(() => ({
   scenarioCount: vi.fn(),
   scenarioCreate: vi.fn(),
   accessUpsert: vi.fn(),
+  accessFindFirst: vi.fn(),
   appFindUnique: vi.fn(),
   applicationFindFirst: vi.fn(),
   appUpdateMany: vi.fn(),
@@ -46,7 +47,7 @@ vi.mock('@/lib/prisma', () => ({
       findUnique: m.sessionFindUnique,
     },
     roleplayScenario: { count: m.scenarioCount, create: m.scenarioCreate },
-    roleplayAccess: { upsert: m.accessUpsert },
+    roleplayAccess: { upsert: m.accessUpsert, findFirst: m.accessFindFirst },
     recruitmentApplication: { findUnique: m.appFindUnique, findFirst: m.applicationFindFirst },
     $transaction: async (cb: any) =>
       cb({
@@ -85,7 +86,7 @@ vi.mock('@/services/recruitment/transitions', async (importOriginal) => {
 
 vi.mock('@/app/actions/notifications', () => ({ createNotification: vi.fn() }));
 
-import { startCandidateRoleplay } from '@/app/actions/roleplay';
+import { startCandidateRoleplay, validateInviteToken } from '@/app/actions/roleplay';
 
 const CANDIDATE_ACTOR = {
   provider: 'supabase',
@@ -379,5 +380,28 @@ describe('startCandidateRoleplay', () => {
     expect(res.code).toBe('CONFLICT');
     expect(m.sessionCreate).not.toHaveBeenCalled();
     expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+});
+
+describe('validateInviteToken protects candidate responses from database details', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('returns a generic action error and never reflects internal connection strings', async () => {
+    const secret = 'postgresql://private-user:secret@db.internal.invalid/roleplay';
+    m.accessFindFirst.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await validateInviteToken({ token: 'fictional-private-token' });
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INTERNAL_ERROR');
+      expect(result.error).toContain('No fue posible validar la invitación');
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(result)).not.toContain('fictional-private-token');
+      expect(m.cookieSet).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
   });
 });
