@@ -130,6 +130,7 @@ export async function POST(req: NextRequest) {
     // Published sessions act as immutable reference snapshots for this first
     // catalog phase. The browser supplies only a source ID + expected hash.
     // All scenarios, prompts and audio URLs are loaded server-side.
+    let libraryArchivedDuringAssignment = false;
     const sourceAudioUrls: string[] = [];
     let scenarios: ScenarioInput[] | null = null;
     if (useLibrary) {
@@ -312,6 +313,18 @@ export async function POST(req: NextRequest) {
       }
 
       const bulkResult = await db.$transaction(async (tx) => {
+        if (useLibrary) {
+          const fingerprint = rawLibraryFingerprint as string;
+          await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:library:${fingerprint}`}, 0))`;
+          const visibility = await tx.roleplayLibraryArchive.findUnique({
+            where: { fingerprint },
+            select: { archivedAt: true },
+          });
+          if (visibility?.archivedAt) {
+            libraryArchivedDuringAssignment = true;
+            throw new Error('Roleplay library snapshot archived during assignment');
+          }
+        }
         const created: Array<{ id: string }> = [];
         let skippedCount = 0;
         for (const interpreter of activeInterpreters) {
@@ -482,6 +495,18 @@ export async function POST(req: NextRequest) {
 
     await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      if (useLibrary) {
+        const fingerprint = rawLibraryFingerprint as string;
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`roleplay:library:${fingerprint}`}, 0))`;
+        const visibility = await tx.roleplayLibraryArchive.findUnique({
+          where: { fingerprint },
+          select: { archivedAt: true },
+        });
+        if (visibility?.archivedAt) {
+          libraryArchivedDuringAssignment = true;
+          throw new Error('Roleplay library snapshot archived during assignment');
+        }
+      }
       const currentSession = await tx.roleplaySession.findUnique({
         where: { id: session.id },
         select: { status: true, updatedAt: true },
@@ -547,6 +572,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (libraryArchivedDuringAssignment) {
+      return NextResponse.json({
+        success: false,
+        error: 'Esta plantilla fue retirada de la biblioteca mientras se creaba la asignación.',
+      }, { status: 409 });
+    }
     if (draftConflict) {
       return NextResponse.json({ success: false, error: 'This draft was updated by another administrator. Reload and try again.' }, { status: 409 });
     }
