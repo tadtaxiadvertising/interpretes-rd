@@ -171,12 +171,20 @@ export default async function RoleplayLibraryPage({
                   <Copy size={13} /> Huella de plantilla: {item.fingerprint.slice(0, 16)}…
                 </p>
               </div>
-              <Link
-                href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
-                className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
-              >
-                Reutilizar y asignar
-              </Link>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/admin/roleplays/library/${encodeURIComponent(item.sourceSessionId)}`}
+                  className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-white hover:bg-white/10"
+                >
+                  Escuchar y revisar
+                </Link>
+                <Link
+                  href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
+                  className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
+                >
+                  Reutilizar y asignar
+                </Link>
+              </div>
             </div>
           </article>
         ))}
