@@ -25,6 +25,9 @@ const nextConfig: NextConfig = {
   // Asegurar que los archivos del engine de Prisma se copien en el build standalone
   outputFileTracingIncludes: {
     '/': ['./prisma/**/*'],
+    // ffmpeg-static resolves its executable from a runtime filesystem path.
+    // Next standalone tracing may omit that binary without an explicit include.
+    '/api/admin/roleplays/studio/export': ['./node_modules/ffmpeg-static/ffmpeg'],
   },
 
   /**
