@@ -44,6 +44,37 @@ Doctor: Private medical information goes here.`);
     expect(JSON.stringify(publishable)).not.toContain('Private medical information');
   });
 
+  it('never copies a real person\'s diarization label into public scenario titles', () => {
+    const cues = parseTimedTranscript(`WEBVTT
+
+00:00:00.500 --> 00:00:02.000
+<v Dr. Ana Pérez>Private medical dialogue</v>
+
+00:00:02.100 --> 00:00:03.000
+Paciente: Me duele la cabeza.
+
+00:00:03.100 --> 00:00:04.000
+<v Doctor>What symptoms do you have?</v>`);
+    const published = toPublishableStudioSegments(cues);
+    expect(published.map(item => item.title)).toEqual([
+      'Intervención 1', 'Paciente · 2', 'Doctor · 3',
+    ]);
+    expect(JSON.stringify(published)).not.toContain('Ana Pérez');
+    expect(JSON.stringify(published)).not.toContain('Private medical dialogue');
+    expect(JSON.stringify(published)).not.toContain('Me duele');
+  });
+
+  it('uses a neutral title for unknown or attacker-controlled speaker labels', () => {
+    const published = toPublishableStudioSegments([
+      { start: 0, end: 1, speaker: 'Patient John Doe', text: 'Sensitive', },
+      { start: 1, end: 2, speaker: '__proto__', text: 'Sensitive', },
+      { start: 2, end: 3, speaker: null, text: 'Sensitive', },
+    ]);
+    expect(published.map(item => item.title)).toEqual([
+      'Intervención 1', 'Intervención 2', 'Intervención 3',
+    ]);
+  });
+
   it.each([
     ['', 'empty'],
     ['not a transcript', 'no timing'],
