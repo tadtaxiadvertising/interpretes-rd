@@ -31,7 +31,8 @@ export const STUDIO_PROTOCOL_PROMPT_LIMIT = 5000;
 export function addStudioProtocol(
   existingPrompt: string, kind: StudioProtocolKind, language: StudioProtocolLanguage,
 ): { text: string; added: boolean } {
-  if (!(kind in STUDIO_PROTOCOLS) || !(language in STUDIO_PROTOCOLS[kind])) {
+  if (!Object.prototype.hasOwnProperty.call(STUDIO_PROTOCOLS, kind) ||
+      !Object.prototype.hasOwnProperty.call(STUDIO_PROTOCOLS[kind], language)) {
     throw new Error('El protocolo o idioma seleccionado no está disponible.');
   }
   if (typeof existingPrompt !== 'string') throw new Error('Las instrucciones no son válidas.');
