@@ -3,14 +3,25 @@ import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import { z } from 'zod';
+import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 
 const db = prisma;
 
 const StartRoleplaySchema = z.object({
-  token: z.string().trim().min(1, 'Token required'),
+  token: z.string().trim().min(1, 'Token required').max(512),
 });
 
 export async function POST(req: NextRequest) {
+  const quota = applyRateLimit(req, {
+    ...RATE_LIMITS.inviteValidation,
+    keyPrefix: 'roleplay-legacy-start',
+  });
+  if (!quota.success) {
+    return NextResponse.json(
+      { success: false, error: 'Too many requests. Please try again later.' },
+      { status: 429, headers: { ...createRateLimitHeaders(quota), 'Cache-Control': 'private, no-store' } },
+    );
+  }
   try {
     let token: string;
     try {
@@ -83,16 +94,22 @@ export async function POST(req: NextRequest) {
       path: '/',
     });
 
-    return NextResponse.json({
-      success: true,
-      data: {
-        sessionId: access.session.id,
-        baseAudioUrl: access.session.baseAudioUrl,
+    return NextResponse.json(
+      {
+        success: true,
+        data: {
+          sessionId: access.session.id,
+          baseAudioUrl: access.session.baseAudioUrl,
+        },
       },
-    });
+      { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
+    );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Start Roleplay Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    return NextResponse.json(
+      { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }

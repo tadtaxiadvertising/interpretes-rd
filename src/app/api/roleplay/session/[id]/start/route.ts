@@ -130,7 +130,11 @@ export async function POST(
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Start Session Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    // Never send database/storage exception text to a candidate or interpreter.
+    return NextResponse.json(
+      { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }
 

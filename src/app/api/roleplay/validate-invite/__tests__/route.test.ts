@@ -97,4 +97,35 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     expect(response.status).toBe(200);
     expect(m.setCookie).toHaveBeenCalledWith('session-1');
   });
+  it('does not disclose invitation token, database details or audio URLs on internal failure', async () => {
+    const secret = 'postgresql://hidden-user:secret@private.invalid/roleplay';
+    m.accessFindUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest('secret-token'));
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(JSON.stringify(body)).not.toContain('secret-token');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.setCookie).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('does not cache a successful invitation response containing session audio', async () => {
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vary')).toBe('Cookie');
+  });
+
+  it('rejects oversized invite tokens before accessing the database', async () => {
+    const response = await POST(makeRequest('x'.repeat(513)));
+    expect(response.status).toBe(400);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
 });

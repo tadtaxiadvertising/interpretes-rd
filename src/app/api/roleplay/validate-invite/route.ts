@@ -8,7 +8,7 @@ import { z } from 'zod';
 const db = prisma;
 
 const ValidateInviteSchema = z.object({
-  token: z.string().trim().min(1, 'Token required'),
+  token: z.string().trim().min(1, 'Token required').max(512),
 });
 
 // Invitation entry is validate + start: opening a still-available link binds
@@ -111,11 +111,15 @@ export async function POST(req: NextRequest) {
           baseAudioUrl: access.session.baseAudioUrl,
         } 
       },
-      { headers: createRateLimitHeaders(rateLimitResult) }
+      { headers: { ...createRateLimitHeaders(rateLimitResult), 'Cache-Control': 'private, no-store', Vary: 'Cookie' } }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Validate Invite Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    // Tokens and database exception details must not be reflected to the caller.
+    return NextResponse.json(
+      { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }
