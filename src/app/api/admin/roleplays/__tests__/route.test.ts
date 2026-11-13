@@ -426,6 +426,45 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('library reuse', () => {
+    it('assigns a library source to active interpreters in bulk without a reupload', async () => {
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({
+        status: 'INVITED', scenarios: [libraryScenario],
+      });
+
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        librarySessionId: librarySourceId,
+        libraryFingerprint,
+      }) as any);
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.bulk).toBe(true);
+      expect(body.data.createdCount).toBe(2);
+      expect(body.data.scenarioCount).toBe(1);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(mockInfo).toHaveBeenCalledWith('base/bulk-source/0.mp3');
+      expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('creates a candidate invitation from a library source without uploading', async () => {
+      (prisma.roleplaySession.findUnique as any).mockImplementation(({ where }: any) =>
+        where.id === librarySourceId
+          ? { status: 'INVITED', scenarios: [libraryScenario] }
+          : { id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt }
+      );
+      const res = await POST(buildRequest({
+        participantType: 'candidate', participantId: '9',
+        librarySessionId: librarySourceId, libraryFingerprint,
+      }) as any);
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-Z0-9_-]+$/);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.roleplayAccess.create).toHaveBeenCalledTimes(1);
+    });
+
     it('reuses stored audio and expected assessment keys without uploading', async () => {
       (prisma.roleplaySession.findUnique as any).mockImplementation(({ where }: any) =>
         where.id === librarySourceId
