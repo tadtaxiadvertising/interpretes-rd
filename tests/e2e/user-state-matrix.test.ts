@@ -8,7 +8,7 @@ import { test, expect, describe, beforeAll, afterAll } from 'vitest';
  * administrator, candidate, and interpreter journeys passed.
  *
  * Real browser tests live under `e2e/*.spec.ts`. Real API role/ownership
- * regressions live beside their routes under `src/app/api/**/__tests__`.
+ * regressions live in the API route test directories.
  * Re-enable each case only after replacing its placeholder with an assertion
  * that exercises the application and fails on broken behavior.
  *
