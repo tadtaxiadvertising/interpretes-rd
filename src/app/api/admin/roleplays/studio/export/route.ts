@@ -205,6 +205,9 @@ export async function POST(req: NextRequest) {
     });
   } catch (error) {
     console.error('[ROLEPLAY STUDIO] Export failed:', error instanceof Error ? error.message : 'Unexpected error');
+    if (error instanceof Error && error.message.startsWith('El intervalo solicitado supera el audio real')) {
+      return NextResponse.json({ error: 'Una intervención termina después del audio original. Revisa su inicio y final antes de exportar.' }, { status: 422 });
+    }
     return NextResponse.json({ error: 'No se pudo procesar el audio. Revisa el formato y la duración.' }, { status: 422 });
   } finally {
     activeExports--;
