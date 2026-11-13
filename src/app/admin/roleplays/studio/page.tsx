@@ -30,10 +30,45 @@ export default function RoleplayStudioPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const player = useRef<HTMLAudioElement>(null);
+  const previewEnd = useRef<number | null>(null);
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+
+  const stopPreview = () => {
+    previewEnd.current = null;
+    setPreviewingId(null);
+    player.current?.pause();
+  };
+
+  const markAtPlayhead = (id: string, boundary: 'start' | 'end') => {
+    const position = player.current?.currentTime;
+    if (position === undefined || !Number.isFinite(position) || !duration) return;
+    const timestamp = Math.min(duration, Math.max(0, Number(position.toFixed(2))));
+    update(id, { [boundary]: timestamp });
+  };
+
+  const previewSegment = (segment: Segment) => {
+    const audioPlayer = player.current;
+    if (!audioPlayer || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
+      segment.end <= segment.start || segment.start < 0 || segment.end > duration) return;
+    if (previewingId === segment.id) {
+      stopPreview();
+      return;
+    }
+    audioPlayer.pause();
+    audioPlayer.currentTime = segment.start;
+    previewEnd.current = segment.end;
+    setPreviewingId(segment.id);
+    void audioPlayer.play().catch(() => {
+      previewEnd.current = null;
+      setPreviewingId(null);
+      setError('No fue posible reproducir el fragmento.');
+    });
+  };
 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
 
   const chooseAudio = (file: File | undefined) => {
+    stopPreview();
     setError('');
     setNotice('');
     setSegments([]);
@@ -50,8 +85,9 @@ export default function RoleplayStudioPage() {
   };
 
   const addSegment = () => {
-    const last = segments[segments.length - 1];
-    const start = last?.end ?? (player.current?.currentTime || 0);
+    const start = segments.length > 0
+      ? Math.max(...segments.map(segment => Number.isFinite(segment.end) ? segment.end : 0))
+      : (player.current?.currentTime || 0);
     const end = Math.min(duration, start + 30);
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS || end - start < 0.1) return;
     setSegments(prev => [...prev, {
@@ -141,8 +177,23 @@ export default function RoleplayStudioPage() {
         {url && (
           <div className="mt-5 space-y-3">
             <audio ref={player} src={url} controls preload="metadata" className="w-full"
-              onLoadedMetadata={event => setDuration(Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0)} />
-            <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Marca los intervalos escuchando el audio.</p>
+              onLoadedMetadata={event => {
+                const length = event.currentTarget.duration;
+                setDuration(Number.isFinite(length) ? length : 0);
+                if (!Number.isFinite(length) || length <= 0) setError('No se pudo determinar la duración de este MP3.');
+              }}
+              onTimeUpdate={event => {
+                if (previewEnd.current !== null && event.currentTarget.currentTime >= previewEnd.current) stopPreview();
+              }}
+              onPause={() => {
+                previewEnd.current = null;
+                setPreviewingId(null);
+              }}
+              onEnded={() => {
+                previewEnd.current = null;
+                setPreviewingId(null);
+              }} />
+            <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Reproduce el audio y utiliza “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
           </div>
         )}
       </section>
@@ -187,9 +238,16 @@ export default function RoleplayStudioPage() {
                   onChange={event => update(segment.id, {scriptPrompt: event.target.value})}
                   className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
               </label>
-              <button type="button" className="text-sm text-blue-300 hover:underline" onClick={() => {
-                if (player.current) { player.current.currentTime = segment.start; void player.current.play(); }
-              }}>Escuchar desde {formatTime(segment.start)}</button>
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                  onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
+                <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                  onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
+                <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
+                  onClick={() => previewSegment(segment)}>
+                  {previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
+                </button>
+              </div>
             </article>
           ))}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
