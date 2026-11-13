@@ -60,8 +60,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const importPending = useRef(false);
 
   const invalidatePendingImport = useCallback(() => {
-    if (!importPending.current) return;
+    // Increment on every draft edit, including one React processes after an
+    // import has resolved but before its state update has committed.
     importRevision.current += 1;
+    if (!importPending.current) return;
     importPending.current = false;
     setIsImporting(false);
     setError('Importación descartada: modificaste el borrador antes de terminar la verificación.');
