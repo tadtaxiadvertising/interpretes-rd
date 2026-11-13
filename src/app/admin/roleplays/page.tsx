@@ -2,38 +2,17 @@ import React from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves, Library } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
-import type { Prisma, RoleplayStatus } from '@prisma/client';
+import {
+  ADMIN_ROLEPLAY_FILTERABLE_STATUSES, ADMIN_ROLEPLAY_PAGE_SIZE,
+  boundAdminRoleplayPage, buildAdminRoleplayWhere, parseAdminRoleplayFilters,
+  type AdminRoleplayFilters, type AdminRoleplaySearchParams,
+} from '@/lib/admin-roleplays-list';
 import { SessionActions } from '@/components/admin/SessionActions';
 import { cn, formatDate } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
-const PAGE_SIZE = 20;
-const FILTERABLE_STATUSES = [
-  'DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED',
-  'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED',
-] as const satisfies readonly RoleplayStatus[];
-
-type RoleplaySearchParams = {
-  search?: string;
-  status?: string;
-  participantType?: string;
-  page?: string;
-};
-
-function parseRoleplayFilters(params: RoleplaySearchParams) {
-  const search = (params.search ?? '').trim().slice(0, 100);
-  // Keep the parsed filter in Prisma's RoleplayStatus union, never a generic string.
-  const status: RoleplayStatus | 'all' = FILTERABLE_STATUSES.find((value) => value === params.status) ?? 'all';
-  const participantType = params.participantType === 'candidate' || params.participantType === 'interpreter'
-    ? params.participantType
-    : 'all';
-  const parsedPage = Number(params.page);
-  const page = Number.isSafeInteger(parsedPage) && parsedPage > 0 ? Math.min(parsedPage, 100000) : 1;
-  return { search, status, participantType, page };
-}
-
-function roleplayPageHref(filters: ReturnType<typeof parseRoleplayFilters>, page: number) {
+function roleplayPageHref(filters: AdminRoleplayFilters, page: number) {
   const params = new URLSearchParams();
   if (filters.search) params.set('search', filters.search);
   if (filters.status !== 'all') params.set('status', filters.status);
@@ -43,43 +22,35 @@ function roleplayPageHref(filters: ReturnType<typeof parseRoleplayFilters>, page
   return `/admin/roleplays${query ? `?${query}` : ''}`;
 }
 
-async function getRoleplays(filters: ReturnType<typeof parseRoleplayFilters>) {
-  const where: Prisma.RoleplaySessionWhereInput = {};
-  if (filters.status !== 'all') where.status = filters.status;
-  if (filters.participantType === 'interpreter') where.interpreterId = { not: null };
-  if (filters.participantType === 'candidate') where.recruitmentCandidateId = { not: null };
-  if (filters.search) {
-    where.OR = [
-      { interpreter: { name: { contains: filters.search, mode: 'insensitive' } } },
-      { interpreter: { emailCorporativo: { contains: filters.search, mode: 'insensitive' } } },
-      { interpreter: { externalId: { contains: filters.search, mode: 'insensitive' } } },
-      { recruitmentCandidate: { name: { contains: filters.search, mode: 'insensitive' } } },
-      { recruitmentCandidate: { email: { contains: filters.search, mode: 'insensitive' } } },
-    ];
-  }
+async function getRoleplays(filters: AdminRoleplayFilters) {
+  const where = buildAdminRoleplayWhere(filters);
   try {
-    const [data, total, statusGroups] = await Promise.all([
-      prisma.roleplaySession.findMany({
-        where,
-        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        skip: (filters.page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
-        include: {
-          interpreter: { select: { id: true, name: true, externalId: true, emailCorporativo: true } },
-          recruitmentCandidate: { select: { id: true, name: true, email: true } },
-          qaScore: { select: { id: true, totalScore: true, criticalError: true } },
-        },
-      }),
+    const [total, statusGroups] = await Promise.all([
       prisma.roleplaySession.count({ where }),
       prisma.roleplaySession.groupBy({ by: ['status'], _count: { _all: true } }),
     ]);
+    // Clamp before querying, not only when drawing pagination controls.
+    // Otherwise ?page=999 shows "page 2" with an empty table.
+    const page = boundAdminRoleplayPage(filters.page, total);
+    const data = await prisma.roleplaySession.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      skip: (page - 1) * ADMIN_ROLEPLAY_PAGE_SIZE,
+      take: ADMIN_ROLEPLAY_PAGE_SIZE,
+      include: {
+        interpreter: { select: { id: true, name: true, externalId: true, emailCorporativo: true } },
+        recruitmentCandidate: { select: { id: true, name: true, email: true } },
+        qaScore: { select: { id: true, totalScore: true, criticalError: true } },
+      },
+    });
     const counts = Object.fromEntries(statusGroups.map((entry) => [entry.status, entry._count._all])) as Record<string, number>;
-    return { data, total, counts, error: null as string | null };
+    return { data, total, page, counts, error: null as string | null };
   } catch (error) {
     console.error('[ADMIN ROLEPLAYS] Failed to load roleplay sessions:', error);
     return {
       data: [],
       total: 0,
+      page: 1,
       counts: {} as Record<string, number>,
       error: 'No se pudieron cargar las sesiones. Comprueba la conexión con la base de datos e inténtalo de nuevo.',
     };
@@ -112,17 +83,17 @@ function MetricCard({
 export default async function AdminRoleplaysPage({
   searchParams,
 }: {
-  searchParams: Promise<RoleplaySearchParams>;
+  searchParams: Promise<AdminRoleplaySearchParams>;
 }) {
-  const filters = parseRoleplayFilters(await searchParams);
+  const filters = parseAdminRoleplayFilters(await searchParams);
   const result = await getRoleplays(filters);
   const roleplays = result.data;
   const count = (status: string) => result.counts[status] ?? 0;
   const activeCount = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS'].reduce((total, status) => total + count(status), 0);
   const awaitingReviewCount = count('SUBMITTED') + count('UNDER_REVIEW');
   const evaluatedCount = count('EVALUATED') + count('PASSED') + count('FAILED');
-  const totalPages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
-  const currentPage = Math.min(filters.page, totalPages);
+  const totalPages = Math.max(1, Math.ceil(result.total / ADMIN_ROLEPLAY_PAGE_SIZE));
+  const currentPage = result.page;
 
   const statusColors: Record<string, string> = {
     DRAFT: 'bg-slate-500/10 text-slate-400',
@@ -212,7 +183,7 @@ export default async function AdminRoleplaysPage({
           <select id="roleplay-status" name="status" defaultValue={filters.status}
             className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white">
             <option value="all">Todos los estados</option>
-            {FILTERABLE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            {ADMIN_ROLEPLAY_FILTERABLE_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
           </select>
           <label className="sr-only" htmlFor="roleplay-participant">Tipo de participante</label>
           <select id="roleplay-participant" name="participantType" defaultValue={filters.participantType}
@@ -333,7 +304,7 @@ export default async function AdminRoleplaysPage({
       {!result.error && result.total > 0 && (
         <nav aria-label="Paginación de roleplays" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/5 p-4">
           <p className="text-sm text-gray-400">
-            Página {currentPage} de {totalPages} · {filters.page > totalPages ? 0 : Math.min((filters.page - 1) * PAGE_SIZE + 1, result.total)}–{filters.page > totalPages ? 0 : Math.min(filters.page * PAGE_SIZE, result.total)} de {result.total} coincidencias
+            Página {currentPage} de {totalPages} · {filters.page > totalPages ? 0 : Math.min((filters.page - 1) * ADMIN_ROLEPLAY_PAGE_SIZE + 1, result.total)}–{filters.page > totalPages ? 0 : Math.min(filters.page * ADMIN_ROLEPLAY_PAGE_SIZE, result.total)} de {result.total} coincidencias
           </p>
           <div className="flex items-center gap-2">
             {filters.page > 1 && filters.page <= totalPages && (
