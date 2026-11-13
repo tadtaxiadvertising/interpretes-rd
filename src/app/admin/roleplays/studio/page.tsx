@@ -235,9 +235,9 @@ export default function RoleplayStudioPage() {
                   if (file) void importSubtitles(file);
                 }}/>
               <p className="mt-2 text-xs text-slate-400">
-                Se importan los tiempos y etiquetas de hablante. El texto de la transcripción se muestra únicamente
-                aquí como referencia, sin incorporarse a las instrucciones que verá el candidato o intérprete.
-                Debes revisar y excluir las intervenciones del propio intérprete.
+                Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
+                Los nombres personales se reemplazan por títulos neutrales. La transcripción se muestra
+                únicamente aquí y no se envía al participante. Revisa y excluye las intervenciones del intérprete.
               </p>
             </div>
           </div>
