@@ -263,6 +263,8 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     expect(res.headers.get('Vary')).toBe('Cookie');
+  });
+
   it('returns 401 to an anonymous user before accessing a private session', async () => {
     m.identity = null;
     const res = await GET(makeRequest('sess-1'), { params });
