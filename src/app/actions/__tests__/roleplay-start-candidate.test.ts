@@ -404,4 +404,12 @@ describe('validateInviteToken protects candidate responses from database details
       log.mockRestore();
     }
   });
+  it('rejects oversized invite token strings before database access', async () => {
+    const result = await validateInviteToken({ token: 'x'.repeat(513) });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('VALIDATION_ERROR');
+    expect(m.accessFindFirst).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
 });
