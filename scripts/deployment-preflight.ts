@@ -180,6 +180,7 @@ export async function runDeploymentPreflight(
       // reads the canonical base-audio path. Validate both before deployment.
       await client.query('SELECT id, session_id, scenario_id, source_audio_path, status FROM public.roleplay_audio_jobs LIMIT 0');
       await client.query('SELECT base_audio_path FROM public.roleplay_sessions LIMIT 0');
+      await client.query('SELECT fingerprint, archived_at, archived_by FROM public.roleplay_library_archives LIMIT 0');
       // A table/column-only check can pass after a partial schema change.
       // Confirm the client-scoped uniqueness, FK, RLS, and removal of the
       // old global uniqueness before the deployment webhooks can run.
@@ -239,13 +240,18 @@ export async function runDeploymentPreflight(
             WHERE table_schema = 'public'
               AND table_name = 'roleplay_sessions'
               AND column_name = 'base_audio_path'
-          ) AS roleplay_base_audio_path
+          ) AS roleplay_base_audio_path,
+          EXISTS (
+            SELECT 1 FROM pg_class
+            WHERE oid = to_regclass('public.roleplay_library_archives')
+              AND relrowsecurity
+          ) AS library_archive_rls
       `);
       const status = integrity.rows[0];
       if (!status || ![
         'account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls',
         'roleplay_queue_table', 'roleplay_queue_enum', 'roleplay_queue_unique',
-        'roleplay_queue_foreign_keys', 'roleplay_base_audio_path',
+        'roleplay_queue_foreign_keys', 'roleplay_base_audio_path', 'library_archive_rls',
       ].every((key) => status[key] === true)) {
         throw new Error('Client-directory or Roleplay audio database constraints are incomplete.');
       }
