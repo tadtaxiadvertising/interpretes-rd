@@ -9,6 +9,9 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
+import {
+  suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
+} from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
 import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
@@ -44,6 +47,10 @@ export default function RoleplayStudioPage() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [busy, setBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
+  const [analyzingSilences, setAnalyzingSilences] = useState(false);
+  const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
+  const [suggestedClips, setSuggestedClips] = useState<StudioSuggestedClip[]>([]);
+  const [omittedSuggestions, setOmittedSuggestions] = useState(0);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
@@ -54,6 +61,8 @@ export default function RoleplayStudioPage() {
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
+  const silenceRevision = useRef(0);
+  const silenceAbort = useRef<AbortController | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
 
   const stopPreview = () => {
@@ -102,11 +111,19 @@ export default function RoleplayStudioPage() {
   };
 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
+  useEffect(() => () => { silenceAbort.current?.abort(); }, []);
 
   const chooseAudio = (file: File | undefined) => {
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
     draftOperationRevision.current += 1;
+    silenceRevision.current += 1;
+    silenceAbort.current?.abort();
+    silenceAbort.current = null;
+    setAnalyzingSilences(false);
+    setDetectedSilences([]);
+    setSuggestedClips([]);
+    setOmittedSuggestions(0);
     stopPreview();
     setError('');
     setNotice('');
@@ -163,6 +180,84 @@ export default function RoleplayStudioPage() {
     }
     setError('');
     setChosenCueIndices(prev => [...prev, index].sort((a, b) => a - b));
+  };
+
+  const analyzeSilences = async () => {
+    if (!audio || !duration || busy || draftBusy || analyzingSilences) return;
+    const revision = ++silenceRevision.current;
+    const controller = new AbortController();
+    silenceAbort.current?.abort();
+    silenceAbort.current = controller;
+    setAnalyzingSilences(true);
+    setError('');
+    setNotice('');
+    setDetectedSilences([]);
+    setSuggestedClips([]);
+    setOmittedSuggestions(0);
+
+    try {
+      const form = new FormData();
+      form.append('audio', audio);
+      const response = await fetch('/api/admin/roleplays/studio/silences', {
+        method: 'POST', credentials: 'same-origin', body: form, signal: controller.signal,
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(typeof body?.error === 'string'
+          ? body.error : 'No fue posible detectar las pausas del MP3.');
+      }
+      const body: unknown = await response.json();
+      if (!body || typeof body !== 'object' || !('durationSeconds' in body) ||
+          !('silences' in body) || typeof body.durationSeconds !== 'number' ||
+          !Array.isArray(body.silences)) {
+        throw new Error('El servidor devolvió un resultado de análisis incompleto.');
+      }
+      const decodedDuration = body.durationSeconds;
+      if (!Number.isFinite(decodedDuration) || decodedDuration <= 0 ||
+          Math.abs(decodedDuration - duration) > Math.max(1, duration * 0.03) ||
+          body.silences.length > 501) {
+        throw new Error('La duración del MP3 no coincide o el análisis es demasiado extenso.');
+      }
+      const pauses: StudioSilence[] = body.silences.map((item: unknown) => {
+        if (!item || typeof item !== 'object' || !('start' in item) ||
+            !('end' in item) || typeof item.start !== 'number' ||
+            typeof item.end !== 'number') {
+          throw new Error('El servidor devolvió pausas con tiempos inválidos.');
+        }
+        return { start: item.start, end: item.end };
+      });
+      const proposal = suggestStudioClips(pauses, decodedDuration);
+      if (revision !== silenceRevision.current || controller.signal.aborted) return;
+      setDetectedSilences(pauses);
+      setSuggestedClips(proposal.clips);
+      setOmittedSuggestions(proposal.omittedCount);
+      setNotice(`Análisis local del servidor completado: ${pauses.length} pausas y ${proposal.clips.length} cortes sugeridos. Escucha y revisa cada intervención antes de publicarla.`);
+    } catch (cause) {
+      if (revision === silenceRevision.current && !controller.signal.aborted) {
+        setError(cause instanceof Error ? cause.message : 'No fue posible analizar el MP3.');
+      }
+    } finally {
+      if (revision === silenceRevision.current) {
+        setAnalyzingSilences(false);
+        silenceAbort.current = null;
+      }
+    }
+  };
+
+  const applySilenceSuggestions = () => {
+    if (!suggestedClips.length || analyzingSilences || busy || draftBusy) return;
+    subtitleImportRevision.current += 1;
+    setSegments(suggestedClips.map((clip, index) => ({
+      id: crypto.randomUUID(),
+      title: `Intervención sugerida ${index + 1}`,
+      start: clip.start, end: clip.end, scriptPrompt: '',
+      responseLimit: 120, speakerRole: 'unknown', language: 'unknown',
+    })));
+    setCaptionTexts({});
+    setReviewCues([]);
+    setChosenCueIndices([]);
+    setError('');
+    setNotice('Cortes sugeridos aplicados. Son aproximaciones basadas en pausas, no separación de voces. Revisa cada inicio, fin, rol e idioma antes de exportar.');
   };
 
   const importSubtitles = async (file: File) => {
@@ -399,6 +494,52 @@ export default function RoleplayStudioPage() {
               />
             )}
             <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
+            <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
+              <h2 className="text-sm font-bold text-violet-100">Asistente gratuito de pausas</h2>
+              <p className="mt-2 text-xs leading-5 text-slate-300">
+                FFmpeg puede localizar silencios del MP3 para sugerir posibles cortes.
+                No transcribe, distingue inglés y español ni identifica médico, paciente o intérprete.
+                La grabación se procesa temporalmente en nuestro servidor y no se guarda en la biblioteca.
+              </p>
+              <button type="button" onClick={() => void analyzeSilences()}
+                disabled={analyzingSilences || busy || draftBusy}
+                className="mt-3 rounded-lg border border-violet-300/30 bg-violet-500/20 px-4 py-2 text-sm font-semibold text-violet-100 disabled:opacity-50">
+                {analyzingSilences ? 'Analizando pausas…' : 'Detectar pausas del MP3'}
+              </button>
+              {detectedSilences.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-sm text-slate-200">
+                    {detectedSilences.length} pausas detectadas · {suggestedClips.length} cortes sugeridos
+                    {omittedSuggestions > 0 ? ` · ${omittedSuggestions} intervalos omitidos por los límites` : ''}
+                  </p>
+                  <div className="flex max-h-36 flex-wrap gap-2 overflow-y-auto">
+                    {detectedSilences.slice(0, 40).map((pause, index) => (
+                      <button key={index} type="button"
+                        onClick={() => seekAudio((pause.start + pause.end) / 2)}
+                        className="rounded-md border border-white/10 bg-slate-950/70 px-2 py-1 text-xs text-blue-200">
+                        Pausa {index + 1}: {formatTime(pause.start)}–{formatTime(pause.end)}
+                      </button>
+                    ))}
+                  </div>
+                  {detectedSilences.length > 40 && (
+                    <p className="text-xs text-slate-400">Se muestran las primeras 40 pausas. Navega el resto con la línea de tiempo.</p>
+                  )}
+                </div>
+              )}
+              {suggestedClips.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs leading-5 text-amber-100">
+                    Las sugerencias pueden dividir frases o incluir la voz del intérprete original.
+                    Aplicarlas reemplazará los segmentos actuales; los títulos e idiomas quedarán por revisar.
+                  </p>
+                  <button type="button" onClick={applySilenceSuggestions}
+                    disabled={analyzingSilences || busy || draftBusy}
+                    className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    Reemplazar con {suggestedClips.length} cortes sugeridos
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
@@ -594,7 +735,7 @@ export default function RoleplayStudioPage() {
           ))}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
-          <button type="button" onClick={() => void exportPackage()} disabled={busy || !segments.length}
+          <button type="button" onClick={() => void exportPackage()} disabled={busy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
             <Download size={18} /> {busy ? 'Procesando segmentos…' : 'Exportar MP3 + manifiesto ZIP'}
           </button>
