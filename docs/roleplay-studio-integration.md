@@ -59,3 +59,11 @@ npm run build
 - **Advertencia:** aunque no guarda transcripciones ni audio, el JSON puede contener texto sensible que el administrador haya escrito en títulos o instrucciones. Debe almacenarse en un lugar seguro y no compartirse con participantes.
 - Es una persistencia explícita y portable en archivo local, no una persistencia en Supabase. Proyectos colaborativos/versionados, historial de modificaciones y retención gestionada siguen pendientes.
 
+
+## Selector de transcripciones largas para roleplays
+- `parseTimedTranscriptForReview` puede leer hasta 500 turnos de un archivo SRT/WebVTT de hasta 1 MB (máximo 2 h de audio). Puede admitir solapamientos en la **referencia editorial**, pero nunca se aceptan cortes solapados en el paquete final.
+- Cuando la transcripción contiene más de 25 turnos, solapamientos o más de 15 minutos de audio acumulado, no se publica ni se reemplaza el borrador automáticamente. Aparece una lista desplazable con marcas de tiempo, referencia de hablante genérica, texto local de subtítulos y botón para escuchar desde ese momento.
+- El administrador elige como máximo 25 intervenciones y pulsa explícitamente **Aplicar selección al editor**. Se valida la selección, se comprueban límites de audio y se rellenan únicamente los escenarios elegidos.
+- La lista de referencia no sale del navegador: tampoco se copia al JSON de proyecto ni a los participantes. Se continúa usando el mismo contrato de ZIP, SHA-256, biblioteca, asignaciones y QA.
+- El límite de 500 turnos y 1 MB es intencional para contener memoria y tiempo de edición. Archivos mayores deben dividirse antes de importar; el desarrollo futuro contempla paginación/virtualización y procesamiento asíncrono en worker.
+

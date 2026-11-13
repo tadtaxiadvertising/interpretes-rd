@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
-import { parseTimedTranscript, toPublishableStudioSegments } from '@/lib/roleplay-studio/transcript';
+import {
+  parseTimedTranscriptForReview, toPublishableStudioSegments,
+  type TimedTranscriptCue,
+} from '@/lib/roleplay-studio/transcript';
+import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import StudioWaveform from './StudioWaveform';
 import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
@@ -44,6 +48,8 @@ export default function RoleplayStudioPage() {
   const [notice, setNotice] = useState('');
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
   const [excludeInterpreter, setExcludeInterpreter] = useState(true);
+  const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
+  const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
   const player = useRef<HTMLAudioElement>(null);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
@@ -106,6 +112,8 @@ export default function RoleplayStudioPage() {
     setNotice('');
     setSegments([]);
     setCaptionTexts({});
+    setReviewCues([]);
+    setChosenCueIndices([]);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
@@ -120,6 +128,43 @@ export default function RoleplayStudioPage() {
     setUrl(URL.createObjectURL(file));
   };
 
+  const loadSelectedCues = (selected: TimedTranscriptCue[], excludedCount: number) => {
+    const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => ({
+      ...segment,
+      id: crypto.randomUUID(),
+      speakerRole: classifySpeakerRole(selected[index].speaker),
+      language: 'unknown',
+    }));
+    subtitleImportRevision.current += 1;
+    setSegments(prepared);
+    setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
+    setNotice(`${prepared.length} intervenciones cargadas. ${excludedCount} del intérprete original omitidas; revisa idiomas, hablantes y límites antes de exportar.`);
+  };
+
+  const applyCueSelection = () => {
+    setError('');
+    try {
+      const selected = selectTimedCues(reviewCues, chosenCueIndices);
+      loadSelectedCues(selected, 0);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible aplicar la selección.');
+    }
+  };
+
+  const toggleCueSelection = (index: number) => {
+    subtitleImportRevision.current += 1;
+    if (chosenCueIndices.includes(index)) {
+      setChosenCueIndices(prev => prev.filter(value => value !== index));
+      return;
+    }
+    if (chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS) {
+      setError(`Puedes seleccionar como máximo ${ROLEPLAY_MAX_SCENARIOS} intervenciones.`);
+      return;
+    }
+    setError('');
+    setChosenCueIndices(prev => [...prev, index].sort((a, b) => a - b));
+  };
+
   const importSubtitles = async (file: File) => {
     if (!audio || !duration) return;
     const revision = ++subtitleImportRevision.current;
@@ -132,7 +177,7 @@ export default function RoleplayStudioPage() {
       const transcript = await file.text();
       // The file may have changed, or a newer import/edit may have started.
       if (revision !== subtitleImportRevision.current) return;
-      const cues = parseTimedTranscript(transcript);
+      const cues = parseTimedTranscriptForReview(transcript);
       const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
       if (!selected.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
@@ -140,17 +185,23 @@ export default function RoleplayStudioPage() {
       if (selected.some(cue => cue.end > duration + 0.1)) {
         throw new Error('Los subtítulos contienen intervalos posteriores al final de la grabación.');
       }
-      // Only the intervals and labels are used for publication. The subtitle
-      // text is local-only reference material, never copied into scriptPrompt.
-      const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => ({
-        ...segment,
-        id: crypto.randomUUID(),
-        speakerRole: classifySpeakerRole(selected[index].speaker),
-        language: 'unknown',
-      }));
-      setSegments(prepared);
-      setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
-      setNotice(`${prepared.length} intervenciones importadas. ${excludedCount} del intérprete original omitidas automáticamente. Revisa los roles e idiomas antes de exportar.`);
+      // The long source transcript is only browser-side reference material.
+      // A 500-cue recording cannot be published as an unreviewed 500-scene task.
+      const allIndices = selected.map((_, index) => index);
+      let canApplyAll = selected.length <= ROLEPLAY_MAX_SCENARIOS;
+      if (canApplyAll) {
+        try { selectTimedCues(selected, allIndices); }
+        catch { canApplyAll = false; }
+      }
+      if (canApplyAll) {
+        setReviewCues([]);
+        setChosenCueIndices([]);
+        loadSelectedCues(selected, excludedCount);
+      } else {
+        setReviewCues(selected);
+        setChosenCueIndices(allIndices.slice(0, ROLEPLAY_MAX_SCENARIOS));
+        setNotice(`${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Elige hasta ${ROLEPLAY_MAX_SCENARIOS} turnos compatibles y pulsa “Aplicar selección”. El borrador no se reemplazó.`);
+      }
     } catch (cause) {
       if (revision !== subtitleImportRevision.current) return;
       setError(cause instanceof Error ? cause.message : 'No fue posible leer el archivo de subtítulos.');
@@ -228,6 +279,8 @@ export default function RoleplayStudioPage() {
       const restored = openStudioDraft(json, audio.size, digest, duration);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
+      setReviewCues([]);
+      setChosenCueIndices([]);
       setNotice(`Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
@@ -376,6 +429,47 @@ export default function RoleplayStudioPage() {
           </div>
         )}
       </section>
+      {audio && duration > 0 && reviewCues.length > 0 && (
+        <section className="space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
+          <h2 className="text-lg font-bold text-white">Seleccionar turnos de la transcripción</h2>
+          <p className="text-sm text-slate-300">
+            Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
+            (máximo {ROLEPLAY_MAX_SCENARIOS}). Solo los turnos marcados se convertirán en
+            escenarios. Revisa cualquier solapamiento o diálogo del intérprete antes de aplicar.
+            Esta acción reemplaza las intervenciones actuales del editor.
+          </p>
+          <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            {reviewCues.map((cue, index) => (
+              <div key={index} className="flex items-start gap-3 rounded-lg border border-white/5 p-2">
+                <input type="checkbox" checked={chosenCueIndices.includes(index)}
+                  aria-label={`Seleccionar turno ${index + 1}`}
+                  onChange={() => toggleCueSelection(index)}
+                  className="mt-1 h-4 w-4 shrink-0 accent-blue-500"/>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-amber-200">
+                    {index + 1} · {formatTime(cue.start)}–{formatTime(cue.end)} ·
+                    {classifySpeakerRole(cue.speaker) === 'unknown'
+                      ? ' Hablante por revisar'
+                      : ` ${cue.speaker}`}
+                  </p>
+                  <p className="mt-1 break-words text-xs text-slate-300">
+                    {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
+                  </p>
+                </div>
+                <button type="button" onClick={() => seekAudio(cue.start)}
+                  aria-label={`Escuchar desde turno ${index + 1}`}
+                  className="shrink-0 text-xs text-blue-300 hover:underline">
+                  Escuchar
+                </button>
+              </div>
+            ))}
+          </div>
+          <button type="button" onClick={applyCueSelection}
+            className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30">
+            Aplicar selección al editor ({chosenCueIndices.length})
+          </button>
+        </section>
+      )}
       {audio && duration > 0 && (
         <section className="space-y-3 rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-5">
           <h2 className="text-lg font-bold text-white">Proyecto de edición</h2>
