@@ -1,6 +1,17 @@
 import { test, expect, describe, beforeAll, afterAll } from 'vitest';
 
 /**
+ * DOCUMENTATION-ONLY TEST MATRIX — NOT EXECUTABLE ACCEPTANCE COVERAGE.
+ *
+ * The tests in this legacy file contain `expect(true).toBe(true)` placeholders.
+ * Mark all three groups skipped so CI never treats them as evidence that
+ * administrator, candidate, and interpreter journeys passed.
+ *
+ * Real browser tests live under `e2e/*.spec.ts`. Real API role/ownership
+ * regressions live beside their routes under `src/app/api/**/__tests__`.
+ * Re-enable each case only after replacing its placeholder with an assertion
+ * that exercises the application and fails on broken behavior.
+ *
  * E2E Tests for User State Matrix
  * 
  * These tests verify the complete user journey through the application
@@ -14,7 +25,7 @@ import { test, expect, describe, beforeAll, afterAll } from 'vitest';
  * 6. Complete Onboarding + Roleplay Submitted/Under Review/Evaluated → Dashboard/Result
  */
 
-describe('User State Matrix E2E Tests', () => {
+describe.skip('User State Matrix E2E Tests', () => {
   const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000';
 
   // Test user credentials for each state
@@ -169,7 +180,7 @@ describe('User State Matrix E2E Tests', () => {
   });
 });
 
-describe('Admin Workflow', () => {
+describe.skip('Admin Workflow', () => {
   test('admin should create roleplay and send invite', async () => {
     // 1. Login as admin
     // 2. Create roleplay with base audio
@@ -199,7 +210,7 @@ describe('Admin Workflow', () => {
   });
 });
 
-describe('Security', () => {
+describe.skip('Security', () => {
   test('should enforce ownership on roleplay session', async () => {
     // 1. User A tries to access User B's session
     // 2. Should return 403
