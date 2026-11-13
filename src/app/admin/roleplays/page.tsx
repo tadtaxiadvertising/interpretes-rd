@@ -2,7 +2,7 @@ import React from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves, Library } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, RoleplayStatus } from '@prisma/client';
 import { SessionActions } from '@/components/admin/SessionActions';
 import { cn, formatDate } from '@/lib/utils';
 
@@ -12,7 +12,7 @@ const PAGE_SIZE = 20;
 const FILTERABLE_STATUSES = [
   'DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED',
   'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED', 'EXPIRED', 'CANCELLED',
-] as const;
+] as const satisfies readonly RoleplayStatus[];
 
 type RoleplaySearchParams = {
   search?: string;
@@ -23,7 +23,8 @@ type RoleplaySearchParams = {
 
 function parseRoleplayFilters(params: RoleplaySearchParams) {
   const search = (params.search ?? '').trim().slice(0, 100);
-  const status = FILTERABLE_STATUSES.find((value) => value === params.status) ?? 'all';
+  // Keep the parsed filter in Prisma's RoleplayStatus union, never a generic string.
+  const status: RoleplayStatus | 'all' = FILTERABLE_STATUSES.find((value) => value === params.status) ?? 'all';
   const participantType = params.participantType === 'candidate' || params.participantType === 'interpreter'
     ? params.participantType
     : 'all';
@@ -295,8 +296,8 @@ export default async function AdminRoleplaysPage({
                         <div className="flex items-center gap-2">
                           <div className="w-16 bg-white/5 h-1.5 rounded-full overflow-hidden">
                             <div
-                              className={cn('h-full rounded-full', session.qaScore.criticalError ? 'bg-red-500' : (session.qaScore.totalScore || 0) >= 80 ? 'bg-green-500' : (session.qaScore.totalScore || 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500')}
-                              style={{ width: `${Math.max(0, Math.min(100, session.qaScore.totalScore || 0))}%` }}
+                              className={cn('h-full rounded-full', session.qaScore.criticalError ? 'bg-red-500' : Number(session.qaScore.totalScore ?? 0) >= 80 ? 'bg-green-500' : Number(session.qaScore.totalScore ?? 0) >= 70 ? 'bg-yellow-500' : 'bg-red-500')}
+                              style={{ width: `${Math.max(0, Math.min(100, Number(session.qaScore.totalScore ?? 0)))}%` }}
                             />
                           </div>
                           <span className="text-sm font-bold text-white">
