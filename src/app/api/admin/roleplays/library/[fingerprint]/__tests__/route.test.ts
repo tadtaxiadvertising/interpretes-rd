@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: vi.fn() },
     roleplayLibraryArchive: { upsert: vi.fn(), updateMany: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 
@@ -51,6 +52,13 @@ describe('admin roleplay library visibility', () => {
     (prisma.roleplaySession.findUnique as any).mockResolvedValue({ status: 'INVITED', scenarios });
     (prisma.roleplayLibraryArchive.upsert as any).mockResolvedValue({ fingerprint, archivedAt: new Date() });
     (prisma.roleplayLibraryArchive.updateMany as any).mockResolvedValue({ count: 1 });
+    (prisma.$transaction as any).mockImplementation(async (callback: any) => callback({
+      $queryRaw: vi.fn().mockResolvedValue([]),
+      roleplayLibraryArchive: {
+        upsert: prisma.roleplayLibraryArchive.upsert,
+        updateMany: prisma.roleplayLibraryArchive.updateMany,
+      },
+    }));
   });
 
   it('requires admin privileges to archive', async () => {
@@ -84,7 +92,7 @@ describe('admin roleplay library visibility', () => {
     expect(prisma.roleplayLibraryArchive.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { fingerprint },
       create: expect.objectContaining({ fingerprint }),
-      update: expect.objectContaining({ archivedAt: expect.any(Date) }),
+      update: expect.objectContaining({ archivedAt: expect.any(Date), archivedBy: 'admin-1' }),
     }));
     expect(prisma.roleplaySession.findUnique).toHaveBeenCalledOnce();
   });
