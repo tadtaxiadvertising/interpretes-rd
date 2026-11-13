@@ -73,3 +73,14 @@ export function parseTimedTranscript(raw: string): TimedTranscriptCue[] {
   if (!cues.length) throw new Error('No se encontraron tiempos SRT o WebVTT válidos.');
   return cues;
 }
+
+/** Build publishable metadata without copying the private reference transcript. */
+export function toPublishableStudioSegments(cues: TimedTranscriptCue[]) {
+  return cues.map((cue, index) => ({
+    title: cue.speaker ? `${cue.speaker} · ${index + 1}` : `Intervención ${index + 1}`,
+    start: cue.start,
+    end: cue.end,
+    scriptPrompt: '',
+    responseLimit: 120,
+  }));
+}
