@@ -47,6 +47,12 @@ export default async function RoleplayLibraryDetailPage({
   if (paths.some((path) => !path)) notFound();
 
   const fingerprint = getRoleplaySnapshotHash(source.scenarios);
+  const visibility = await prisma.roleplayLibraryArchive.findUnique({
+    where: { fingerprint },
+    select: { archivedAt: true },
+  });
+  if (visibility?.archivedAt) notFound();
+
   const preview: Array<{ title: string; order: number; durationLimitSec: number | null; scriptPrompt: string | null; expectedKeys: string[]; audioUrl: string | null }> = [];
 
   // Keep signed links scoped to this authenticated administrative page,
