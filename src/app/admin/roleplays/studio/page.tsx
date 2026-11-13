@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { parseTimedTranscript } from '@/lib/roleplay-studio/transcript';
 
 type Segment = {
   id: string;
@@ -29,6 +30,7 @@ export default function RoleplayStudioPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
   const player = useRef<HTMLAudioElement>(null);
   const previewEnd = useRef<number | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     setSegments([]);
+    setCaptionTexts({});
     setDuration(0);
     if (!file) { setAudio(null); setUrl(''); return; }
     if (!/\.mp3$/i.test(file.name) || file.size < 1 || file.size > 15 * 1024 * 1024) {
@@ -82,6 +85,36 @@ export default function RoleplayStudioPage() {
     }
     setAudio(file);
     setUrl(URL.createObjectURL(file));
+  };
+
+  const importSubtitles = async (file: File) => {
+    if (!audio || !duration) return;
+    setError('');
+    setNotice('');
+    try {
+      if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > 1_000_000) {
+        throw new Error('Selecciona un SRT o VTT de hasta 1 MB.');
+      }
+      const cues = parseTimedTranscript(await file.text());
+      if (cues.some(cue => cue.end > duration + 0.1)) {
+        throw new Error('Los subtítulos contienen intervalos posteriores al final de la grabación.');
+      }
+      // Only the intervals and labels are used for publication. The subtitle
+      // text is local-only reference material, never copied into scriptPrompt.
+      const prepared: Segment[] = cues.map((cue, index) => ({
+        id: crypto.randomUUID(),
+        title: cue.speaker ? `${cue.speaker} · ${index + 1}` : `Intervención ${index + 1}`,
+        start: cue.start,
+        end: cue.end,
+        scriptPrompt: '',
+        responseLimit: 120,
+      }));
+      setSegments(prepared);
+      setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, cues[index].text])));
+      setNotice(`${prepared.length} intervenciones importadas desde subtítulos. Revisa los hablantes y elimina las intervenciones del intérprete antes de exportar.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible leer el archivo de subtítulos.');
+    }
   };
 
   const addSegment = () => {
@@ -194,6 +227,23 @@ export default function RoleplayStudioPage() {
                 setPreviewingId(null);
               }} />
             <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Reproduce el audio y utiliza “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+              <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
+                Opcional: importar tiempos de transcripción SRT / WebVTT
+              </label>
+              <input id="studio-transcript" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip"
+                className="mt-2 block w-full text-sm text-slate-300"
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (file) void importSubtitles(file);
+                }}/>
+              <p className="mt-2 text-xs text-slate-400">
+                Se importan los tiempos y etiquetas de hablante. El texto de la transcripción se muestra únicamente
+                aquí como referencia, sin incorporarse a las instrucciones que verá el candidato o intérprete.
+                Debes revisar y excluir las intervenciones del propio intérprete.
+              </p>
+            </div>
           </div>
         )}
       </section>
@@ -233,6 +283,12 @@ export default function RoleplayStudioPage() {
                     className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
                 </label>
               </div>
+              {captionTexts[segment.id] && (
+                <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
+                  <p className="text-xs font-bold text-amber-200">Transcripción de referencia · solo editor</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-300">{captionTexts[segment.id]}</p>
+                </div>
+              )}
               <label className="block text-sm text-slate-300">Instrucciones para el participante
                 <textarea value={segment.scriptPrompt} maxLength={5000} rows={2}
                   onChange={event => update(segment.id, {scriptPrompt: event.target.value})}
