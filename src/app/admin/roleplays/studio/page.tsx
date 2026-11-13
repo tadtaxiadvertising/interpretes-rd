@@ -10,6 +10,9 @@ import {
 } from '@/lib/roleplay-studio/transcript';
 import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import {
+  addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
+} from '@/lib/roleplay-studio/protocols';
+import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
@@ -51,6 +54,8 @@ export default function RoleplayStudioPage() {
   const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
   const [suggestedClips, setSuggestedClips] = useState<StudioSuggestedClip[]>([]);
   const [omittedSuggestions, setOmittedSuggestions] = useState(0);
+  const [protocolKind, setProtocolKind] = useState<StudioProtocolKind>('opening');
+  const [protocolLanguage, setProtocolLanguage] = useState<StudioProtocolLanguage>('en');
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
@@ -386,6 +391,21 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const insertProtocol = (segment: Segment) => {
+    setError('');
+    try {
+      const result = addStudioProtocol(segment.scriptPrompt, protocolKind, protocolLanguage);
+      if (!result.added) {
+        setNotice('Este protocolo ya aparece en las instrucciones de la intervención.');
+        return;
+      }
+      update(segment.id, { scriptPrompt: result.text });
+      setNotice('Protocolo añadido a las instrucciones. Revísalo antes de asignar el ejercicio a candidatos o intérpretes.');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se pudo añadir el protocolo.');
+    }
+  };
+
   const exportPackage = async () => {
     if (!audio || !duration || !segments.length) return;
     setError('');
@@ -647,6 +667,34 @@ export default function RoleplayStudioPage() {
             <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
               className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
           </div>
+          <div className="space-y-3 rounded-xl border border-teal-400/20 bg-teal-400/5 p-4">
+            <h3 className="font-semibold text-teal-100">Protocolos de interpretación consecutiva</h3>
+            <p className="text-xs leading-5 text-slate-300">
+              Plantillas opcionales de apertura, petición de repetición y cierre.
+              Solo se insertan en las instrucciones de la intervención que elijas;
+              no crean audios ni respuestas modelo. El participante podrá leerlas al abrir «Ver guión».
+              Evita incluirlas en evaluaciones sin ayuda si revelarían la respuesta.
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="text-sm text-slate-200">Protocolo
+                <select value={protocolKind}
+                  onChange={event => setProtocolKind(event.currentTarget.value as StudioProtocolKind)}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                  <option value="opening">Apertura</option>
+                  <option value="repetition">Pedir repetición / aclaración</option>
+                  <option value="closing">Cierre</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-200">Idioma del protocolo
+                <select value={protocolLanguage}
+                  onChange={event => setProtocolLanguage(event.currentTarget.value as StudioProtocolLanguage)}
+                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                  <option value="en">Inglés</option>
+                  <option value="es">Español</option>
+                </select>
+              </label>
+            </div>
+          </div>
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.map((segment, index) => (
             <article key={segment.id} className="space-y-3 rounded-xl border border-white/10 bg-slate-950/70 p-4">
@@ -721,6 +769,10 @@ export default function RoleplayStudioPage() {
                   onChange={event => update(segment.id, {scriptPrompt: event.target.value})}
                   className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
               </label>
+              <button type="button" onClick={() => insertProtocol(segment)}
+                className="rounded-lg border border-teal-400/30 bg-teal-400/5 px-3 py-2 text-sm text-teal-100 hover:bg-teal-400/10">
+                Añadir protocolo seleccionado a esta intervención
+              </button>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
                   onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
