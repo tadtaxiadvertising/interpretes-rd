@@ -67,3 +67,12 @@ npm run build
 - La lista de referencia no sale del navegador: tampoco se copia al JSON de proyecto ni a los participantes. Se continúa usando el mismo contrato de ZIP, SHA-256, biblioteca, asignaciones y QA.
 - El límite de 500 turnos y 1 MB es intencional para contener memoria y tiempo de edición. Archivos mayores deben dividirse antes de importar; el desarrollo futuro contempla paginación/virtualización y procesamiento asíncrono en worker.
 
+
+## Asistente de pausas con FFmpeg (sin transcripción ni coste por proveedor)
+- El administrador puede pulsar **Detectar pausas del MP3** dentro de Audio Studio. El endpoint `POST /api/admin/roleplays/studio/silences` usa la misma autorización administrativa, cuota y FFmpeg del exportador, sin base de datos ni servicio externo.
+- FFmpeg analiza temporalmente un MP3 de hasta 15 MiB (umbral de silencio -32 dB; duración mínima 0,65 s). Las únicas respuestas son segundos y duraciones de pausas, más avisos; **no se devuelven textos clínicos ni registros brutos del proceso**.
+- Se establece límite de 45 s por procesamiento, una ejecución simultánea por proceso y tamaño máximo de salida de FFmpeg. Los audios con formato incorrecto o demasiados eventos se rechazan. El ejecutable se incluye explícitamente en el empaquetado standalone de esta nueva ruta.
+- Las pausas producen posibles ventanas con voz (hasta 25 cortes, 5 minutos por intervención y 15 minutos totales). Se omiten turnos demasiado cortos o extensos; no se dividen frases automáticamente.
+- El administrador escucha las pausas y debe pulsar **Reemplazar con cortes sugeridos** antes de modificar el borrador. Los campos de hablante e idioma permanecen **desconocidos** y los títulos son neutrales. Se exige revisión del intérprete original y la exportación canónica ZIP sigue siendo el único camino de publicación.
+- La herramienta **no es diarización, no identifica idiomas y no transcribe**. Su ventaja es reducir marcas manuales sin presupuestos adicionales ni envíos del MP3 a terceros. El servidor procesa la solicitud en memoria y no persiste el audio.
+
