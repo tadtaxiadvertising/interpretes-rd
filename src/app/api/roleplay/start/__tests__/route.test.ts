@@ -92,4 +92,29 @@ describe('POST /api/roleplay/start race protection', () => {
     expect(m.accessUpdate).toHaveBeenCalled();
     expect(m.setCookie).toHaveBeenCalledWith('roleplay_session', 'session-1', expect.any(Object));
   });
+  it('never reflects internal errors to token holders', async () => {
+    const secret = 'postgresql://username:password@internal.invalid/roleplays';
+    m.accessFindUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest('secret-token'));
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(body)).not.toContain(secret);
+      expect(JSON.stringify(body)).not.toContain('secret-token');
+      expect(body.error).toContain('No fue posible iniciar el roleplay');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.setCookie).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('never caches a successful start response containing the audio URL', async () => {
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vary')).toBe('Cookie');
+  });
+
 });
