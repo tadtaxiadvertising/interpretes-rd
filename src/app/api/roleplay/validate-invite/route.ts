@@ -116,6 +116,10 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Validate Invite Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    // Tokens and database exception details must not be reflected to the caller.
+    return NextResponse.json(
+      { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }
