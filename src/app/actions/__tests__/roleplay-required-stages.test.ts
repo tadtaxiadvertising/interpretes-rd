@@ -138,8 +138,12 @@ describe('Roleplay required stages', () => {
         selfNotes: 'Reviewed',
       }),
     }));
-    expect(m.sessionUpdate).toHaveBeenCalledWith({
-      where: { id: 'sess-1' },
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'sess-1',
+        status: { in: ['STARTED', 'IN_PROGRESS'] },
+        currentScenarioIndex: 0,
+      },
       data: { currentScenarioIndex: 1, status: 'IN_PROGRESS' },
     });
   });
@@ -162,6 +166,16 @@ describe('Roleplay required stages', () => {
     expect(result.success).toBe(true);
     expect(m.responseUpdate).toHaveBeenCalledTimes(1);
     expect(m.sessionUpdate).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'sess-1',
+        status: 'SUBMITTED',
+        evaluatorId: null,
+        qaScoreId: null,
+        currentScenarioIndex: 1,
+      },
+      data: { updatedAt: expect.any(Date) },
+    });
   });
   it('does not allow changing a legacy self-assessment that was already saved', async () => {
     m.session = {
@@ -203,6 +217,55 @@ describe('Roleplay required stages', () => {
 
     expect(result.success).toBe(true);
     expect(m.responseUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a stale scenario cursor without writing or changing an assessment', async () => {
+    m.sessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Session not available for self-assessment');
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'sess-1',
+        status: { in: ['STARTED', 'IN_PROGRESS'] },
+        currentScenarioIndex: 0,
+      },
+      data: { currentScenarioIndex: 1, status: 'IN_PROGRESS' },
+    });
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+  });
+
+  it('never repairs a submitted attempt after QA claimed it concurrently', async () => {
+    m.session = { ...m.session, status: 'SUBMITTED', currentScenarioIndex: 1 };
+    m.sessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Session not available for self-assessment');
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'sess-1',
+        status: 'SUBMITTED',
+        evaluatorId: null,
+        qaScoreId: null,
+        currentScenarioIndex: 1,
+      },
+      data: { updatedAt: expect.any(Date) },
+    });
+    expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects final submission while any scenario lacks a self-assessment', async () => {
