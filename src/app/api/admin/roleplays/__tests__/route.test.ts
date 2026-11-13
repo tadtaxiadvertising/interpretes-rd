@@ -28,6 +28,7 @@ vi.mock('@/lib/prisma', () => ({
     roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
     roleplayAccess: { create: vi.fn(), findUnique: vi.fn() },
+    roleplayLibraryArchive: { findUnique: vi.fn() },
     $transaction: vi.fn(),
   },
 }));
@@ -106,6 +107,7 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.roleplaySession.create as any).mockResolvedValue({ id: 'sess-1', updatedAt: draftUpdatedAt });
     (prisma.roleplaySession.findUnique as any).mockResolvedValue({ id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt });
     (prisma.roleplayAccess.findUnique as any).mockResolvedValue(null);
+    (prisma.roleplayLibraryArchive.findUnique as any).mockResolvedValue(null);
     (prisma.interpreter.findFirst as any).mockResolvedValue({ id: 7 });
     (prisma.roleplaySession.update as any).mockResolvedValue({});
     (prisma.roleplaySession.delete as any).mockResolvedValue({});
@@ -426,6 +428,22 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('library reuse', () => {
+    it('rejects an archived library snapshot without changing sessions', async () => {
+      (prisma.roleplaySession.findUnique as any).mockResolvedValue({
+        status: 'INVITED', scenarios: [libraryScenario],
+      });
+      (prisma.roleplayLibraryArchive.findUnique as any).mockResolvedValue({
+        archivedAt: new Date(),
+      });
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        librarySessionId: librarySourceId, libraryFingerprint,
+      }) as any);
+      expect(res.status).toBe(409);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
     it('assigns a library source to active interpreters in bulk without a reupload', async () => {
       (prisma.roleplaySession.findUnique as any).mockResolvedValue({
         status: 'INVITED', scenarios: [libraryScenario],
