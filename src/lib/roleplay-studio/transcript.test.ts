@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimedTranscript } from './transcript';
+import { parseTimedTranscript, toPublishableStudioSegments } from './transcript';
 
 describe('Audio Studio offline subtitle import', () => {
   it('imports SRT cues in order and extracts speaker labels', () => {
@@ -31,6 +31,17 @@ cue2
       { start: 1, end: 2.5, speaker: 'Doctor', text: 'Good morning.' },
       { start: 3, end: 4, speaker: 'Patient', text: '[Patient] Buenos días.' },
     ]);
+  });
+
+  it('does not expose source dialogue to a participant in publishable metadata', () => {
+    const cues = parseTimedTranscript(`1
+00:00:00,500 --> 00:00:02,000
+Doctor: Private medical information goes here.`);
+    const publishable = toPublishableStudioSegments(cues);
+    expect(publishable).toEqual([
+      { title: 'Doctor · 1', start: 0.5, end: 2, scriptPrompt: '', responseLimit: 120 },
+    ]);
+    expect(JSON.stringify(publishable)).not.toContain('Private medical information');
   });
 
   it.each([
