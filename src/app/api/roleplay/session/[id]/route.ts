@@ -157,12 +157,17 @@ export async function GET(
           scenarios: playbackScenarios,
         },
       },
-      { headers: createRateLimitHeaders(rateLimitResult) }
+      { headers: { ...createRateLimitHeaders(rateLimitResult), 'Cache-Control': 'private, no-store', Vary: 'Cookie' } }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Get Session Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    // Internal exception messages may contain database details or private URLs.
+    // Log server-side only; never send exception text to candidate/interpreter clients.
+    return NextResponse.json(
+      { success: false, error: 'No fue posible cargar la sesión. Inténtalo nuevamente.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }
 
