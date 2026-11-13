@@ -15,9 +15,10 @@ const MAX_CLIP_DURATION = 300;
 function decodeTimestamp(value: string): number | null {
   const parts = value.replace(',', '.').split(':');
   if (parts.length !== 2 && parts.length !== 3) return null;
-  const seconds = Number(parts.pop());
-  const minutes = Number(parts.pop());
-  const hours = parts.length === 1 ? Number(parts.pop()) : 0;
+  const hasHours = parts.length === 3;
+  const seconds = Number(parts.at(-1));
+  const minutes = Number(parts.at(-2));
+  const hours = hasHours ? Number(parts.at(-3)) : 0;
   if (![seconds, minutes, hours].every(Number.isFinite) || seconds >= 60 ||
       minutes >= 60 || hours < 0 || minutes < 0 || seconds < 0) return null;
   return Math.round((hours * 3600 + minutes * 60 + seconds) * 1000) / 1000;
