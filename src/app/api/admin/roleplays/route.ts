@@ -156,6 +156,16 @@ export async function POST(req: NextRequest) {
           error: 'La biblioteca cambió desde que abriste esta plantilla. Vuelve a seleccionarla.',
         }, { status: 409 });
       }
+      const visibility = await db.roleplayLibraryArchive.findUnique({
+        where: { fingerprint: rawLibraryFingerprint as string },
+        select: { archivedAt: true },
+      });
+      if (visibility?.archivedAt) {
+        return NextResponse.json({
+          success: false,
+          error: 'Este roleplay fue retirado de la biblioteca y no admite nuevas asignaciones.',
+        }, { status: 409 });
+      }
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (!supabaseUrl || !serviceRoleKey) {
