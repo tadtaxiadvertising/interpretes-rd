@@ -39,6 +39,10 @@ interface NewRoleplayFormProps {
   };
 }
 
+// The first card is rendered by both Next.js SSR and the browser.
+// A random initial ID makes all htmlFor/id attributes disagree at hydration.
+const INITIAL_SCENARIO_ID = 'new-roleplay-initial-scenario';
+
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
@@ -47,7 +51,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [scenarios, setScenarios] = useState<Scenario[]>([
-    { id: generateId(), title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
+    { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
