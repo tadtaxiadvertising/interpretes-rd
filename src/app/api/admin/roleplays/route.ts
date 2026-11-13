@@ -76,6 +76,7 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 export async function POST(req: NextRequest) {
   let databaseCommitted = false;
   let draftConflict = false;
+  let libraryArchivedDuringAssignment = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
 
@@ -130,7 +131,6 @@ export async function POST(req: NextRequest) {
     // Published sessions act as immutable reference snapshots for this first
     // catalog phase. The browser supplies only a source ID + expected hash.
     // All scenarios, prompts and audio URLs are loaded server-side.
-    let libraryArchivedDuringAssignment = false;
     const sourceAudioUrls: string[] = [];
     let scenarios: ScenarioInput[] | null = null;
     if (useLibrary) {
