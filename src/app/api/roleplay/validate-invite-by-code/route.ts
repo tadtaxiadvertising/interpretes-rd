@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
           baseAudioUrl: access.session.baseAudioUrl,
         } 
       },
-      { headers: createRateLimitHeaders(rateLimitResult) }
+      { headers: { ...createRateLimitHeaders(rateLimitResult), 'Cache-Control': 'private, no-store', Vary: 'Cookie' } }
     );
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
