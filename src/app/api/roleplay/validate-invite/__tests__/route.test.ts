@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
+  identity: null as any,
   access: null as any,
   accessFindUnique: vi.fn(),
   accessUpdate: vi.fn(),
@@ -9,6 +10,10 @@ const m = vi.hoisted(() => ({
   sessionUpdateMany: vi.fn(),
   sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
+}));
+
+vi.mock('@/lib/identity/resolve-user', () => ({
+  resolveCurrentIdentity: async () => m.identity,
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -48,18 +53,46 @@ function makeRequest(token = 'secret-token') {
 describe('POST /api/roleplay/validate-invite race protection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
     m.access = {
       id: 'access-1',
       sessionId: 'session-1',
       usedAt: null,
       expiresAt: new Date(Date.now() + 60_000),
-      session: { id: 'session-1', status: 'DRAFT', baseAudioUrl: 'https://example.test/base.webm' },
+      session: { id: 'session-1', status: 'DRAFT', baseAudioUrl: 'https://example.test/base.webm' , recruitmentCandidateId: 5, interpreterId: null},
     };
     m.accessFindUnique.mockImplementation(async () => m.access);
     m.accessUpdate.mockResolvedValue({ id: 'access-1' });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  it('requires authentication before looking up a bearer invitation', async () => {
+    m.identity = null;
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(401);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects a different candidate even if they possess a valid invitation', async () => {
+    m.identity = { role: 'candidate', candidateId: 99, interpreterId: null };
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(403);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects an interpreter trying to start a legacy dual-linked candidate session', async () => {
+    m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
+    m.access = { ...m.access, session: { ...m.access.session, interpreterId: 7 } };
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(403);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
   });
 
   it('starts only if the session still has the state observed during lookup', async () => {

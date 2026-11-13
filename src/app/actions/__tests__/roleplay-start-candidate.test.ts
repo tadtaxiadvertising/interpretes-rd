@@ -402,6 +402,48 @@ describe('startCandidateRoleplay', () => {
 describe('validateInviteToken protects candidate responses from database details', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+  });
+
+  it('refuses an anonymous invitation before looking up its token', async () => {
+    m.identity = null;
+    const result = await validateInviteToken({ token: 'some-private-token' });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('UNAUTHORIZED');
+    expect(m.accessFindFirst).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('does not bind a valid token when the authenticated candidate is not its owner', async () => {
+    m.identity = { role: 'candidate', candidateId: 99, interpreterId: null };
+    m.accessFindFirst.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      usedAt: null,
+      session: { id: 'session-1', status: 'INVITED', recruitmentCandidateId: 5, interpreterId: null },
+    });
+    const result = await validateInviteToken({ token: 'token-held-by-other-candidate' });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('FORBIDDEN');
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('binds a valid invitation only for its authenticated candidate owner', async () => {
+    m.accessFindFirst.mockResolvedValueOnce({
+      sessionId: 'session-1',
+      expiresAt: new Date(Date.now() + 60_000),
+      usedAt: null,
+      session: {
+        id: 'session-1',
+        status: 'INVITED',
+        recruitmentCandidateId: 5,
+        interpreterId: 7, // legacy provisional link does not supersede candidate ownership
+        baseAudioUrl: 'https://example.test/audio.mp3',
+      },
+    });
+    const result = await validateInviteToken({ token: 'candidate-own-token' });
+    expect(result.success).toBe(true);
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'session-1', expect.any(Object));
   });
 
   it('returns a generic action error and never reflects internal connection strings', async () => {
