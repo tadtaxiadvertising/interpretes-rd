@@ -147,6 +147,84 @@ describe('POST /api/roleplay/start race protection', () => {
     });
     expect(m.setCookie).toHaveBeenCalledWith('roleplay_session', 'session-1', expect.any(Object));
   });
+  it('resumes an already STARTED invitation with its original startedAt', async () => {
+    const originalStartedAt = new Date('2026-11-13T20:00:00.000Z');
+    const access = await m.accessFindUnique();
+    m.accessFindUnique.mockResolvedValue({
+      ...access,
+      startedAt: originalStartedAt,
+      session: { ...access.session, status: 'STARTED' },
+    });
+
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(200);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.sessionFindUnique).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      select: { status: true },
+    });
+    const update = m.accessUpdate.mock.calls[0][0];
+    expect(update.data.startedAt).toBe(originalStartedAt);
+    expect(update.data.validatedAt).toBeInstanceOf(Date);
+    expect(update.data).not.toHaveProperty('usedAt');
+    expect(m.setCookie).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers from an access validation failure after STARTED was committed', async () => {
+    let persistedStatus = 'DRAFT';
+    const access = await m.accessFindUnique();
+    m.accessFindUnique.mockImplementation(async () => ({
+      ...access,
+      session: { ...access.session, status: persistedStatus },
+    }));
+    m.sessionUpdateMany.mockImplementation(async () => {
+      persistedStatus = 'STARTED';
+      return { count: 1 };
+    });
+    m.accessUpdate.mockRejectedValueOnce(new Error('temporary database failure'));
+    m.accessUpdate.mockResolvedValue({ id: 'access-1' });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const first = await POST(makeRequest());
+      expect(first.status).toBe(500);
+      expect(m.setCookie).not.toHaveBeenCalled();
+      const retry = await POST(makeRequest());
+      expect(retry.status).toBe(200);
+      expect(m.sessionUpdateMany).toHaveBeenCalledTimes(1);
+      expect(m.accessUpdate).toHaveBeenCalledTimes(2);
+      expect(m.setCookie).toHaveBeenCalledTimes(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('rejects a stale active invitation if the session was submitted during validation', async () => {
+    const access = await m.accessFindUnique();
+    m.accessFindUnique.mockResolvedValue({
+      ...access,
+      session: { ...access.session, status: 'IN_PROGRESS' },
+    });
+    m.sessionFindUnique.mockResolvedValue({ status: 'SUBMITTED' });
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(409);
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('refuses resume after invitation expiration even if session is already STARTED', async () => {
+    const access = await m.accessFindUnique();
+    m.accessFindUnique.mockResolvedValue({
+      ...access,
+      expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+      session: { ...access.session, status: 'STARTED' },
+    });
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(400);
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
   it('never reflects internal errors to token holders', async () => {
     const secret = 'postgresql://username:password@internal.invalid/roleplays';
     m.accessFindUnique.mockRejectedValueOnce(new Error(secret));
