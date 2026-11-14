@@ -88,6 +88,61 @@ describe('candidate roleplay entry', () => {
     expect(markup).not.toContain('href="/roleplays/sess-5"');
   });
 
+  it.each([
+    ['EVALUATED', { totalScore: 62.5, criticalError: false }],
+    ['EVALUATED', { totalScore: 89, criticalError: true }],
+    ['FAILED', null],
+  ])('offers a new roleplay attempt after failed QA: %s / %j', async (sessionStatus, qaScore) => {
+    m.findCandidate.mockResolvedValue({
+      name: 'Candidate',
+      email: 'candidate@example.test',
+      applications: [{
+        id: 'app-5',
+        status: 'ROLEPLAY_REVIEW',
+        currentStep: 'ROLEPLAY_REVIEW',
+        updatedAt: new Date('2026-11-13T12:00:00Z'),
+      }],
+    });
+    m.findSession.mockResolvedValue({
+      id: 'sess-5',
+      status: sessionStatus,
+      qaScore,
+    });
+
+    const markup = renderToStaticMarkup(await CandidatePortalPage());
+    expect(markup).toContain('Reintentar Roleplay');
+    expect(markup).toContain('data-testid="candidate-roleplay-action"');
+    expect(markup).not.toContain('href="/roleplays/sess-5"');
+  });
+
+  it.each([
+    ['EVALUATED', { totalScore: 89, criticalError: false }, 'ROLEPLAY_REVIEW'],
+    ['EVALUATED', null, 'ROLEPLAY_REVIEW'],
+    ['SUBMITTED', null, 'ROLEPLAY_REVIEW'],
+    ['FAILED', null, 'REJECTED'],
+  ])('does not display retry on reviewed or disallowed attempt: %s / %j / %s', async (sessionStatus, qaScore, applicationStatus) => {
+    m.findCandidate.mockResolvedValue({
+      name: 'Candidate',
+      email: 'candidate@example.test',
+      applications: [{
+        id: 'app-5',
+        status: applicationStatus,
+        currentStep: 'ROLEPLAY_REVIEW',
+        updatedAt: new Date('2026-11-13T12:00:00Z'),
+      }],
+    });
+    m.findSession.mockResolvedValue({
+      id: 'sess-5',
+      status: sessionStatus,
+      qaScore,
+    });
+
+    const markup = renderToStaticMarkup(await CandidatePortalPage());
+    expect(markup).not.toContain('Reintentar Roleplay');
+    expect(markup).not.toContain('data-testid="candidate-roleplay-action"');
+    expect(markup).toContain('Tu intento quedó registrado');
+  });
+
   it('does not allow a submitted roleplay to be restarted from the candidate portal', async () => {
     m.findSession.mockResolvedValue({ id: 'sess-5', status: 'SUBMITTED' });
 
