@@ -38,6 +38,6 @@ export default function LocalVadAssistant({file,remaining,onApply}:{file:File;re
       {found.length>0&&<span className="text-xs text-slate-300">{found.length} intervenciones detectadas</span>}
     </div>
     {error&&<p role="status" className="mt-2 text-xs text-amber-200">{error}</p>}
-    {found.length>0&&<ol className="mt-3 grid gap-1 text-xs text-slate-300 sm:grid-cols-2">{found.map((s,i)=><li key={i}>Turno {i+1}: {s.start.toFixed(2)}–{s.end.toFixed(2)} s · confianza acústica {(s.confidence*100).toFixed(0)}%</li>)}</ol>}
+    {found.length>0&&<ol className="mt-3 grid gap-1 text-xs text-slate-300 sm:grid-cols-2">{found.map((s,i)=><li key={i}>Turno {i+1}: {s.start.toFixed(2)}–{s.end.toFixed(2)} s · nivel relativo de señal {(s.signalLevel*100).toFixed(0)}%</li>)}</ol>}
   </section>;
 }
