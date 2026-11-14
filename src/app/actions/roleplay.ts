@@ -14,6 +14,7 @@ import { cookies } from 'next/headers';
 import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
 import { calculateRoleplayScore, ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
+import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 
@@ -369,7 +370,7 @@ export async function startCandidateRoleplay() {
             scriptPrompt: true,
             expectedKeys: true,
             responses: {
-              select: { sourceAudioUrl: true, selfScore: true },
+              select: { sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true, selfScore: true },
             },
           },
         },
@@ -406,11 +407,11 @@ export async function startCandidateRoleplay() {
       // A submitted attempt without a recording cannot be repaired using
       // assessments alone; do not offer an unusable recovery session.
       previousSession.scenarios.every((scenario) =>
-        scenario.responses?.some((response) => Boolean(response.sourceAudioUrl))
+        scenario.responses?.some(hasPersistedRoleplayRecording)
       ) &&
       previousSession.scenarios.some((scenario) =>
         scenario.responses?.some((response) =>
-          Boolean(response.sourceAudioUrl) &&
+          hasPersistedRoleplayRecording(response) &&
           !hasCompleteRoleplaySelfAssessment(response.selfScore)
         )
       );
@@ -994,9 +995,9 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
 
       const response = await tx.roleplayResponse.findFirst({
         where: { scenarioId: input.scenarioId },
-        select: { id: true, sourceAudioUrl: true, selfScore: true },
+        select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true, selfScore: true },
       });
-      if (!response?.sourceAudioUrl) {
+      if (!hasPersistedRoleplayRecording(response)) {
         throw new Error('Confirm your recording before completing the self-assessment');
       }
       const existingScore = response.selfScore;
@@ -1074,14 +1075,14 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
         orderBy: { order: 'asc' },
         select: {
           order: true,
-          responses: { select: { sourceAudioUrl: true, selfScore: true } },
+          responses: { select: { sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true, selfScore: true } },
         },
       });
       const hasCompleteAssessments = scenarios.length > 0 &&
         scenarios.every((scenario) => {
           const response = scenario.responses[0];
           const score = response?.selfScore;
-          if (!response?.sourceAudioUrl || !score || typeof score !== 'object' || Array.isArray(score)) return false;
+          if (!hasPersistedRoleplayRecording(response) || !score || typeof score !== 'object' || Array.isArray(score)) return false;
           return ['protocol', 'interpretation', 'language', 'service', 'technical']
             .every((key) => typeof (score as Record<string, unknown>)[key] === 'number');
         });
@@ -1297,7 +1298,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
           status: true,
           scenarios: {
             select: {
-              responses: { select: { sourceAudioUrl: true, selfScore: true } },
+              responses: { select: { sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true, selfScore: true } },
             },
           },
         },
@@ -1305,7 +1306,11 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
 
       if (!session) throw new Error('Session not found');
       if (session.qaScoreId) throw new Error('Session already evaluated');
-      if (!session.recordedAudioUrl) throw new Error('No response submitted yet');
+      // The legacy session URL may be absent although individual responses
+      // still have canonical Storage paths. Check the actual scenario rows.
+      if (!session.scenarios.some((scenario) =>
+        scenario.responses.some(hasPersistedRoleplayRecording)
+      )) throw new Error('No response submitted yet');
       // Never claim QA until every scenario has a confirmed recording and a
       // complete assessment. This preserves the repair window for historical
       // SUBMITTED sessions and mirrors submitRoleplaySession's requirements.
@@ -1313,7 +1318,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
         session.scenarios.length === 0 ||
         session.scenarios.some((scenario) =>
           !scenario.responses.some((response) =>
-            Boolean(response.sourceAudioUrl) &&
+            hasPersistedRoleplayRecording(response) &&
             hasCompleteRoleplaySelfAssessment(response.selfScore)
           )
         )
