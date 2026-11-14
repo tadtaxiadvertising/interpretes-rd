@@ -120,7 +120,8 @@ export const POST = withSecurity(async (request: NextRequest) => {
     }
 
     console.info('[API_INTERPRETERS_POST] Linking Auth profile');
-    await prisma.userProfile.upsert({
+    try {
+      await prisma.userProfile.upsert({
       where: { id: authUser.id },
       update: {
         email: interpreterData.emailCorporativo!,
@@ -134,8 +135,19 @@ export const POST = withSecurity(async (request: NextRequest) => {
         role: 'interpreter',
         interpreterId: newInterpreter.id
       }
-    });
-    console.log('[API_INTERPRETERS_POST] ✅ UserProfile upserted successfully');
+      });
+    } catch (profileError) {
+      console.error('[API_INTERPRETERS_POST] Auth profile linking failed:', safeServerErrorCategory(profileError));
+      return privateAdminJson(
+        {
+          success: false,
+          error: 'Interpreter and Auth records created, but profile linking failed. Contact support before retrying.',
+          interpreterId: newInterpreter.id,
+        },
+        { status: 500 }
+      );
+    }
+    console.info('[API_INTERPRETERS_POST] UserProfile upserted successfully');
   }
 
   return privateAdminJson({ success: true, data: newInterpreter }, { status: 201 });
