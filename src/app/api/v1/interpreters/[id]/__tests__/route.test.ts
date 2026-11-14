@@ -50,6 +50,11 @@ const passwordRequest = () => new NextRequest('http://localhost/api/v1/interpret
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ password: 'fictional-password-only' }),
 });
+const combinedPasswordRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ password: 'fictional-password-only', name: 'Updated Interpreter' }),
+});
 
 describe('interpreter detail admin API privacy', () => {
   beforeEach(() => {
@@ -161,16 +166,61 @@ describe('interpreter detail admin API privacy', () => {
     expect(m.adminAuth).not.toHaveBeenCalled();
   });
 
-  it('preserves the supported password update for linked Auth users', async () => {
-    m.findUnique.mockResolvedValueOnce({ id: 12, userProfile: { id: 'auth-user-12' } });
+  it('finishes a password-only change after Auth succeeds without any PostgreSQL writes', async () => {
+    m.findUnique.mockResolvedValueOnce({
+      id: 12,
+      name: 'Original Interpreter',
+      emailCorporativo: 'employee@example.test',
+      userProfile: { id: 'auth-user-12', email: 'employee@example.test' },
+    });
+    // There is no need to enter a DB transaction after updating the password.
+    // If it were called, this synthetic failure would falsely report an error.
+    m.transaction.mockRejectedValueOnce(new Error('synthetic database failure'));
     const res = await PATCH(passwordRequest(), params);
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await res.json()).toEqual({
+      success: true,
+      data: { id: 12, name: 'Original Interpreter', emailCorporativo: 'employee@example.test' },
+    });
+    expect(m.updateUserById).toHaveBeenCalledOnce();
     expect(m.updateUserById).toHaveBeenCalledWith(
       'auth-user-12',
       { password: 'fictional-password-only', email_confirm: true }
     );
-    expect(m.update).toHaveBeenCalledOnce();
+    expect(m.transaction).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('still uses a DB transaction when changing both password and interpreter fields', async () => {
+    m.findUnique.mockResolvedValueOnce({ id: 12, userProfile: { id: 'auth-user-12' } });
+    const res = await PATCH(combinedPasswordRequest(), params);
+    expect(res.status).toBe(200);
+    expect(m.updateUserById).toHaveBeenCalledOnce();
+    expect(m.transaction).toHaveBeenCalledOnce();
+    expect(m.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { name: 'Updated Interpreter' },
+    });
+    expect(m.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it('does not attempt database writes after a failed password-only Auth update', async () => {
+    m.findUnique.mockResolvedValueOnce({ id: 12, userProfile: { id: 'auth-user-12' } });
+    m.updateUserById.mockResolvedValueOnce({ error: new Error('synthetic Auth failure') });
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await PATCH(passwordRequest(), params);
+      expect(res.status).toBe(500);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(JSON.stringify(await res.json())).not.toContain('synthetic Auth failure');
+      expect(m.transaction).not.toHaveBeenCalled();
+      expect(m.update).not.toHaveBeenCalled();
+      expect(m.updateMany).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('redacts provider errors from PATCH response and logs', async () => {
