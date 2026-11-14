@@ -198,6 +198,7 @@ function checkSessionAccess(
     interpreterId: number | null;
     recruitmentCandidateId: number | null;
     status: string;
+    access?: { validatedAt: Date | null; usedAt: Date | null } | null;
   },
   sessionCookie: string | null
 ): boolean {
@@ -212,7 +213,16 @@ function checkSessionAccess(
   // legacy rows still carry a provisional interpreterId.
   if (session.recruitmentCandidateId !== null) {
     if (identity.role !== 'candidate' || identity.candidateId !== session.recruitmentCandidateId) return false;
-    if (sessionCookie !== session.id) return false;
+    if (sessionCookie !== session.id) {
+      // Recover an already-submitted, consumed invitation using the
+      // authenticated candidate's authoritative ownership. The 24-hour
+      // invite cookie must not permanently block review/self-assessment.
+      // Never grant active recording access or unvalidated invitation access.
+      const submittedOwnerReview = session.status === 'SUBMITTED'
+        && Boolean(session.access?.validatedAt)
+        && Boolean(session.access?.usedAt);
+      if (!submittedOwnerReview) return false;
+    }
     const candidateAccessibleStates = ['DRAFT', 'INVITED', 'STARTED', 'IN_PROGRESS', 'SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'];
     return candidateAccessibleStates.includes(session.status);
   }
