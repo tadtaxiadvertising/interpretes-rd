@@ -12,6 +12,7 @@ export default function LocalVadAssistant({file,duration,remaining,onApply}:{fil
     let context:AudioContext|null=null;
     try {
       if(typeof window.AudioContext!=='function') throw new Error('Este navegador no permite analizar audio localmente.');
+      if(!Number.isFinite(duration)||duration<=0||duration>240) throw new Error('El audio debe durar entre 0 y 4 minutos para el análisis local.');
       if(file.size<1||file.size>15*1024*1024) throw new Error('El MP3 debe pesar hasta 15 MiB.');
       // The parent audio element has already loaded MP3 metadata. Reject
       // oversized duration *before* allocating decoded PCM in AudioContext.
