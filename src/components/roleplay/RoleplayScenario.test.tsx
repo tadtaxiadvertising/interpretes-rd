@@ -62,6 +62,18 @@ describe('participant scenario playback controls', () => {
     expect(screen.queryByRole('button', { name: /Solicitar repetición/ })).toBeNull();
   });
 
+  it('cancels a delayed repetition before advancing to the response workflow', () => {
+    const onNext = vi.fn();
+    const { container } = render(<RoleplayScenario scenario={first} {...shared} onNext={onNext} />);
+    fireEvent.ended(container.querySelector('audio')!);
+    fireEvent.click(screen.getByRole('button', { name: /Solicitar repetición/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Grabar respuesta/ }));
+    expect(onNext).toHaveBeenCalledOnce();
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(play).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
   it('updates the audio element playbackRate without bypassing the full-listen gate', () => {
     const { container } = render(<RoleplayScenario scenario={first} {...shared} />);
     const audio = container.querySelector('audio')!;
