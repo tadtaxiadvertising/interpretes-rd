@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
 import { findMissingWorkerEnvVars } from '@/lib/roleplay-audio-worker-config';
 import { markResponseProcessingIfLeaseOwned } from '@/lib/roleplay-audio-worker-lease';
+import { safeRoleplayAudioJobError } from '@/lib/roleplay-audio-worker-errors';
 
 interface ClaimedAudioJob {
   id: string;
@@ -108,7 +109,7 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
       leaseLost = true;
       console.error(
         `[ROLEPLAY AUDIO WORKER] Lease renewal failed for job ${job.id}:`,
-        error instanceof Error ? error.message : 'Unknown database error',
+        error instanceof Error ? 'Error' : 'UnknownError',
       );
     } finally {
       heartbeatInFlight = false;
@@ -185,7 +186,7 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
 }
 
 async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<void> {
-  const message = (error instanceof Error ? error.message : 'Unknown conversion error').slice(0, 1_000);
+  const message = safeRoleplayAudioJobError(error);
   const shouldRetry = job.attempts < job.maxAttempts;
   const backoffSeconds = Math.min(300, 15 * (2 ** Math.max(0, job.attempts - 1)));
 
@@ -243,7 +244,7 @@ async function run(): Promise<void> {
     } catch (error) {
       console.error(
         '[ROLEPLAY AUDIO WORKER] Queue polling failed:',
-        error instanceof Error ? error.message : 'Unknown database error',
+        error instanceof Error ? 'Error' : 'UnknownError',
       );
       await sleep(POLL_INTERVAL_MS);
     }
@@ -269,7 +270,7 @@ process.on('SIGINT', () => {
 
 run()
   .catch(error => {
-    console.error('[ROLEPLAY AUDIO WORKER] Fatal error:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('[ROLEPLAY AUDIO WORKER] Fatal error:', error instanceof Error ? 'Error' : 'UnknownError');
     process.exitCode = 1;
   })
   .finally(async () => {
