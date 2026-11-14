@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { deleteInterpreterDatabaseRecords } from '@/lib/interpreters/delete-interpreter';
 import { InterpreterPatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
+import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function DELETE(
   request: Request,
@@ -12,21 +13,18 @@ export async function DELETE(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id: interpreterId } = numericIdParamSchema.parse(await params);
 
     // Initialize Supabase admin client first, catching errors so missing environment
     // variables or configuration issues do not crash the entire deletion action.
     try {
-      const { supabaseAdmin, isAdminUnavailableError } = await import('@/lib/supabase/admin');
+      const { supabaseAdmin } = await import('@/lib/supabase/admin');
       // Validate access to trigger error if missing role key
       void supabaseAdmin.auth;
     } catch (adminError: unknown) {
-      console.warn(
-        '⚠️ Fallo al inicializar el cliente de Supabase Admin:',
-        adminError instanceof Error ? adminError.message : adminError
-      );
+      console.warn('Supabase Admin initialization failed:', safeServerErrorCategory(adminError));
     }
 
     const { authUserId } = await prisma.$transaction((tx: any) => deleteInterpreterDatabaseRecords(tx, interpreterId));
@@ -35,25 +33,25 @@ export async function DELETE(
       try {
         const { supabaseAdmin } = await import('@/lib/supabase/admin');
         const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
-        if (authError) console.warn('⚠️ Fallo al borrar usuario de Auth:', authError.message);
+        if (authError) console.warn('Auth user deletion failed:', safeServerErrorCategory(authError));
       } catch (err: unknown) {
-        console.warn('⚠️ Fallo al borrar usuario de Auth:', err instanceof Error ? err.message : err);
+        console.warn('Auth user deletion failed:', safeServerErrorCategory(err));
       }
     }
 
     revalidateInterpreterProfileRecords(interpreterId);
-    return NextResponse.json({ success: true });
+    return privateAdminJson({ success: true });
 
   } catch (error) {
-    console.error('Error deleting interpreter:', error);
+    console.error('Error deleting interpreter:', safeServerErrorCategory(error));
     const message = error instanceof Error ? error.message : 'Error deleting interpreter';
     
     // Resolve gracefully if the interpreter is already deleted (e.g. from transaction desync)
     if (message === 'Intérprete no encontrado') {
-      return NextResponse.json({ success: true });
+      return privateAdminJson({ success: true });
     }
     
-    return apiError({ error, fallback: 'Error deleting interpreter' });
+    return privateAdminResponse(apiError({ error, fallback: 'Error deleting interpreter', exposeMessage: false }));
   }
 }
 
@@ -63,7 +61,7 @@ export async function PATCH(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id: interpreterId } = numericIdParamSchema.parse(await params);
     const body = await parseJsonBody(request, InterpreterPatchSchema);
@@ -86,7 +84,7 @@ export async function PATCH(
           if (authError) throw authError;
         } catch (err: unknown) {
           if (isAdminUnavailableError(err)) {
-            return NextResponse.json(
+            return privateAdminJson(
               { success: false, error: ADMIN_UNAVAILABLE_MESSAGE },
               { status: 503 }
             );
@@ -111,9 +109,9 @@ export async function PATCH(
     });
 
     revalidateInterpreterProfileRecords(interpreterId);
-    return NextResponse.json({ success: true, data: updated });
+    return privateAdminJson({ success: true, data: updated });
   } catch (error) {
-    console.error('Error updating interpreter:', error);
-    return apiError({ error, fallback: 'Error updating interpreter' });
+    console.error('Error updating interpreter:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Error updating interpreter', exposeMessage: false }));
   }
 }
