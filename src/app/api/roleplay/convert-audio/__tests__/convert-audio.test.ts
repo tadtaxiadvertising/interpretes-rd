@@ -125,6 +125,41 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     expect(mocks.confirm).not.toHaveBeenCalled();
   });
 
+  it.each([
+    { validatedAt: null, usedAt: null, reason: 'never validated' },
+    { validatedAt: new Date(), usedAt: new Date(), reason: 'already consumed' },
+    { validatedAt: null, usedAt: new Date(), reason: 'invalid and consumed' },
+  ])('blocks uploads for a candidate invitation that is $reason', async ({ validatedAt, usedAt }) => {
+    mocks.findSession.mockResolvedValueOnce({
+      id: 'session-1',
+      interpreterId: null,
+      recruitmentCandidateId: 5,
+      status: 'IN_PROGRESS',
+      access: { validatedAt, usedAt, startedAt: new Date() },
+    });
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(403);
+    expect((await response.json()).success).toBe(false);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(mocks.findScenario).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it('keeps interpreter-owned recordings available without candidate invite data', async () => {
+    mocks.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+    mocks.findSession.mockResolvedValueOnce({
+      id: 'session-1',
+      interpreterId: 7,
+      recruitmentCandidateId: null,
+      status: 'IN_PROGRESS',
+      access: null,
+    });
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(200);
+    expect(mocks.upload).toHaveBeenCalledOnce();
+  });
+
   it('rejects candidate uploads without the session-bound cookie', async () => {
     const response = await POST(makeRequest());
 

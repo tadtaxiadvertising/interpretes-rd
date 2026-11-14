@@ -15,6 +15,7 @@ import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventTyp
 import { calculateRoleplayScore, ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
+import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 
@@ -658,13 +659,15 @@ export async function createRoleplayResponseUpload(rawInput: z.input<typeof Crea
         recruitmentCandidateId: true,
         status: true,
         currentScenarioIndex: true,
+        access: { select: { validatedAt: true, usedAt: true } },
       },
     });
     if (!session) return { success: false, error: 'Session not found', code: 'NOT_FOUND' };
     if (!['INVITED', 'STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { success: false, error: 'Session is not accepting recordings', code: 'INVALID_STATE' };
     }
-    if (!(await canAccessRoleplaySession(session, sessionCookie))) {
+    if (!(await canAccessRoleplaySession(session, sessionCookie)) ||
+        !candidateCanUploadRoleplayAudio(session)) {
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
@@ -735,6 +738,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           recruitmentCandidateId: true, 
           status: true,
           currentScenarioIndex: true,
+          access: { select: { validatedAt: true, usedAt: true } },
         },
       });
 
@@ -786,6 +790,14 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           };
         }
         throw new Error('Response already recorded for this scenario');
+      }
+
+      // Unlike an idempotent replay of a previously confirmed response, a
+      // NEW response requires the candidate's invitation to have been
+      // validated and not yet consumed. The source object alone is not proof
+      // of permission to record into a session.
+      if (!candidateCanUploadRoleplayAudio(session)) {
+        throw new Error('Unauthorized');
       }
 
       // Sequential binding: a new response must target the scenario expected

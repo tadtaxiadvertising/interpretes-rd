@@ -86,6 +86,7 @@ const CANDIDATE_SESSION = {
   recordedAudioUrl: null,
   interpreterId: null,
   recruitmentCandidateId: 5,
+  access: { validatedAt: new Date('2026-11-14T07:00:00.000Z'), usedAt: null },
   status: 'STARTED',
   currentScenarioIndex: 0,
 };
@@ -148,6 +149,30 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
 
     expect(res.success).toBe(false);
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { validatedAt: null, usedAt: null, reason: 'never validated' },
+    { validatedAt: new Date(), usedAt: new Date(), reason: 'already consumed' },
+    { validatedAt: null, usedAt: new Date(), reason: 'revoked' },
+  ])('rejects a new confirmed recording when candidate invitation is $reason', async ({ validatedAt, usedAt }) => {
+    m.session = {
+      ...CANDIDATE_SESSION,
+      access: { validatedAt, usedAt },
+    };
+    m.cookie = 'sess-cand';
+
+    const result = await confirmRoleplayResponse({
+      sessionId: 'sess-cand',
+      scenarioId: 'scn-1',
+      sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+      recordedAudioUrl: 'https://untrusted.example/response.webm',
+    });
+
+    expect(result.success).toBe(false);
+    expect(m.confirmUpload).not.toHaveBeenCalled();
+    expect(m.responseCreate).not.toHaveBeenCalled();
+    expect(m.audioJobCreate).not.toHaveBeenCalled();
   });
 
   it('allows a candidate session when the cookie and scenario ownership match', async () => {
@@ -601,7 +626,12 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
   });
 
   it('does not consume again when an already-submitted confirm is replayed', async () => {
-    m.session = { ...CANDIDATE_SESSION, status: 'SUBMITTED', recordedAudioUrl: 'https://x/first.webm' };
+    m.session = {
+      ...CANDIDATE_SESSION,
+      status: 'SUBMITTED',
+      recordedAudioUrl: 'https://x/first.webm',
+      access: { validatedAt: new Date(), usedAt: new Date() },
+    };
     m.cookie = 'sess-cand';
     m.responseFindFirst.mockResolvedValue({ id: 'resp-recorded', sourceAudioUrl: 'https://x/first.webm', sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm' });
 
