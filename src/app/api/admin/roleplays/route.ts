@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import {
   blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentScope,
 } from '@/lib/roleplay-assignment-ownership';
@@ -256,7 +257,7 @@ export async function POST(req: NextRequest) {
         if (!expected) continue;
         const audio = scenarioAudios[index];
         if (!(audio instanceof File)) continue;
-        const actual = createHash('sha256').update(Buffer.from(await audio.arrayBuffer())).digest('hex');
+        const actual = await sha256RoleplayFile(audio);
         if (actual !== expected.toLowerCase()) {
           return privateRoleplayJson({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
         }
