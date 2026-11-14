@@ -82,6 +82,8 @@ describe('/api/v1/recruitment', () => {
       const res = await GET(new Request('http://localhost/api/v1/recruitment'));
 
       expect(res.status).toBe(401);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toContain('Authorization');
       expect(prisma.recruitmentCandidate.findMany).not.toHaveBeenCalled();
     });
 
@@ -93,6 +95,8 @@ describe('/api/v1/recruitment', () => {
       const res = await POST(postRequest(validBody));
 
       expect(res.status).toBe(403);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toContain('Cookie');
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
   });
@@ -105,6 +109,8 @@ describe('/api/v1/recruitment', () => {
       const res = await POST(postRequest(validBody));
 
       expect(res.status).toBe(201);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toContain('Authorization');
       expect(await res.json()).toEqual(expect.objectContaining({ id: 41, email: 'jane@example.com' }));
 
       expect(tx.candidateCreate).toHaveBeenCalledTimes(1);
@@ -150,6 +156,25 @@ describe('/api/v1/recruitment', () => {
       );
     });
 
+    it('never returns or logs private database diagnostics when creation fails', async () => {
+      const message = 'postgresql://private:PRIVATE_PASSWORD@internal.invalid/recruitment';
+      (prisma.$transaction as any).mockRejectedValueOnce(new Error(message));
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const res = await POST(postRequest(validBody));
+        const body = await res.json();
+        expect(res.status).toBe(500);
+        expect(body).toMatchObject({ success: false, error: 'Unable to create candidate' });
+        expect(JSON.stringify(body)).not.toContain('PRIVATE_PASSWORD');
+        expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_PASSWORD');
+        expect(log).toHaveBeenCalledWith('Error creating candidate:', 'Error');
+        expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+        expect(res.headers.get('Vary')).toContain('Cookie');
+      } finally {
+        log.mockRestore();
+      }
+    });
+
     it('falls back to the generic message on unexpected errors', async () => {
       (prisma.$transaction as any).mockRejectedValue(new Error('boom'));
 
@@ -161,6 +186,25 @@ describe('/api/v1/recruitment', () => {
   });
 
   describe('GET listing', () => {
+    it('returns generic private errors when the candidate listing query fails', async () => {
+      const message = 'PRIVATE_DB_TOKEN https://storage.internal.invalid/path';
+      (prisma.recruitmentCandidate.findMany as any).mockRejectedValueOnce(new Error(message));
+      const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const res = await GET(new Request('http://localhost/api/v1/recruitment'));
+        const body = await res.json();
+        expect(res.status).toBe(500);
+        expect(body).toMatchObject({ success: false, error: 'Unable to fetch candidates' });
+        expect(JSON.stringify(body)).not.toContain('PRIVATE_DB_TOKEN');
+        expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_DB_TOKEN');
+        expect(log).toHaveBeenCalledWith('Error fetching candidates:', 'Error');
+        expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+        expect(res.headers.get('Vary')).toContain('Authorization');
+      } finally {
+        log.mockRestore();
+      }
+    });
+
     it('filters candidates by the canonical application status', async () => {
       (prisma.recruitmentCandidate.findMany as any).mockResolvedValue([]);
 

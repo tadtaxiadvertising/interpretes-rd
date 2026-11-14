@@ -80,10 +80,23 @@ describe('GET /api/admin/roleplays/eligibility', () => {
     expect(prisma.roleplaySession.findMany).not.toHaveBeenCalled();
   });
 
-  it('returns generic error details without exposing internal DB errors', async () => {
-    vi.mocked(prisma.interpreter.findMany).mockRejectedValue(new Error('connection-string:secret'));
-    const response = await GET();
-    expect(response.status).toBe(500);
-    expect(JSON.stringify(await response.json())).not.toContain('connection-string:secret');
+  it('redacts private database diagnostics from eligibility errors and logs', async () => {
+    const error = new Error('connection-string:PRIVATE_DATABASE_SECRET');
+    error.name = 'PRIVATE_PROVIDER_TOKEN';
+    vi.mocked(prisma.interpreter.findMany).mockRejectedValueOnce(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await GET();
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(body)).not.toContain('PRIVATE_DATABASE_SECRET');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_DATABASE_SECRET');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_PROVIDER_TOKEN');
+      expect(log).toHaveBeenCalledWith('Get Roleplay Eligibility Error:', 'Error');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(response.headers.get('Vary')).toBe('Cookie');
+    } finally {
+      log.mockRestore();
+    }
   });
 });
