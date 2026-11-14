@@ -46,8 +46,8 @@ export default function StudioConsecutivePreview({
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<PreviewPhase>('idle');
   const [speed, setSpeed] = useState(1);
-  const [multiplier, setMultiplier] = useState(1.2);
-  const [fixedSeconds, setFixedSeconds] = useState(3);
+  const [multiplier, setMultiplier] = useState(1.25);
+  const [fixedSeconds, setFixedSeconds] = useState(1);
   const [autoAdvance, setAutoAdvance] = useState(false);
   const [remaining, setRemaining] = useState(0);
   const [deadline, setDeadline] = useState(0);
@@ -167,8 +167,8 @@ export default function StudioConsecutivePreview({
     if (!turns[index]) return;
     stopAudio();
     setRepeatCount(n => n + 1);
-    setRemaining(3);
-    setDeadline(Date.now() + 3000);
+    setRemaining(4.5);
+    setDeadline(Date.now() + 4500);
     setPhase('repetition');
   };
 
@@ -207,6 +207,7 @@ export default function StudioConsecutivePreview({
                 <option value={0.5}>0.5×</option>
                 <option value={1}>1×</option>
                 <option value={1.2}>1.2×</option>
+                <option value={1.25}>1.25× (original)</option>
                 <option value={1.5}>1.5×</option>
                 <option value={2}>2×</option>
                 <option value={3}>3×</option>
@@ -215,7 +216,7 @@ export default function StudioConsecutivePreview({
             <label className="text-sm text-slate-200">Segundos extra
               <select aria-label="Pausa fija" value={fixedSeconds} onChange={e => setFixedSeconds(Number(e.currentTarget.value))}
                 className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
-                {[0, 3, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} s</option>)}
+                {[0, 1, 3, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} s</option>)}
               </select>
             </label>
             <label className="text-sm text-slate-200">Velocidad de escucha
@@ -277,7 +278,7 @@ export default function StudioConsecutivePreview({
                 className="rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-200 disabled:opacity-40">Siguiente</button>
               <button type="button" onClick={requestRepetition} disabled={!canPlay}
                 className="rounded-lg border border-amber-400/30 px-3 py-2 text-sm text-amber-200 disabled:opacity-40">
-                Pedir repetición (3 s)
+                Pedir repetición (4,5 s)
               </button>
               <button type="button" onClick={reset} className="rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-200">
                 Reiniciar
