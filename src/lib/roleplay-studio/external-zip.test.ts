@@ -6,7 +6,7 @@ import { extractExternalStudioZip } from './external-zip';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 
 type Input = { name: string; content: Buffer };
-type Options = { method?: 0 | 8; descriptor?: boolean };
+type Options = { method?: 0 | 8; descriptor?: boolean; descriptorSignature?: boolean };
 
 function crc32(bytes: Buffer): number {
   let crc = 0xffffffff;
@@ -39,11 +39,13 @@ function buildZip(entries: Input[], options: Options = {}): Buffer {
     local.writeUInt16LE(name.length, 26);
     let descriptor = Buffer.alloc(0);
     if (options.descriptor) {
-      descriptor = Buffer.alloc(16);
-      descriptor.writeUInt32LE(0x08074b50, 0);
-      descriptor.writeUInt32LE(crc, 4);
-      descriptor.writeUInt32LE(compressed.length, 8);
-      descriptor.writeUInt32LE(contents.length, 12);
+      const hasSignature = options.descriptorSignature !== false;
+      const dataStart = hasSignature ? 4 : 0;
+      descriptor = Buffer.alloc(hasSignature ? 16 : 12);
+      if (hasSignature) descriptor.writeUInt32LE(0x08074b50, 0);
+      descriptor.writeUInt32LE(crc, dataStart);
+      descriptor.writeUInt32LE(compressed.length, dataStart + 4);
+      descriptor.writeUInt32LE(contents.length, dataStart + 8);
     }
     locals.push(local, name, compressed, descriptor);
 
@@ -130,6 +132,43 @@ describe('secure direct external Audio Studio ZIP import', () => {
         .not.toMatch(/PRIVATE|Sensitive|DIAGNOSIS/);
       expect(prepared[0].sha256).toBe(createHash('sha256').update(mp3a).digest('hex'));
     });
+
+  it('accepts valid signed and unsigned ZIP data descriptors', async () => {
+    for (const descriptorSignature of [true, false]) {
+      const contents = await extractExternalStudioZip(
+        archive(buildZip(files(), { method: 8, descriptor: true, descriptorSignature })),
+      );
+      expect(contents.map(file => file.name)).toEqual(['manifest.json', ...names]);
+    }
+  });
+
+  it('rejects a corrupt data descriptor even when the central CRC remains valid', async () => {
+    const bytes = buildZip(files(), { method: 8, descriptor: true });
+    const signature = Buffer.from([0x50, 0x4b, 0x07, 0x08]);
+    const descriptorOffset = bytes.indexOf(signature);
+    expect(descriptorOffset).toBeGreaterThan(0);
+    bytes[descriptorOffset + 4] ^= 0xff;
+    await expect(extractExternalStudioZip(archive(bytes))).rejects.toThrow(/ZIP externo inválido/);
+  });
+
+  it('rejects contradictory CRC values in a descriptor-enabled local header', async () => {
+    const bytes = buildZip(files(), { method: 8, descriptor: true });
+    bytes.writeUInt32LE(0x12345678, 14);
+    await expect(extractExternalStudioZip(archive(bytes))).rejects.toThrow(/ZIP externo inválido/);
+  });
+
+  it('rejects unreferenced payload bytes between entries and the central directory', async () => {
+    const original = buildZip(files());
+    const centralStart = original.readUInt32LE(original.length - 22 + 16);
+    const hidden = Buffer.from('undeclared-archive-payload');
+    const bytes = Buffer.concat([
+      original.subarray(0, centralStart),
+      hidden,
+      original.subarray(centralStart),
+    ]);
+    bytes.writeUInt32LE(centralStart + hidden.length, bytes.length - 22 + 16);
+    await expect(extractExternalStudioZip(archive(bytes))).rejects.toThrow(/ZIP externo inválido/);
+  });
 
   it('rejects undeclared files, traversal paths and duplicate case-folded names', async () => {
     await expect(extractExternalStudioZip(archive(buildZip([
