@@ -68,7 +68,11 @@ export default async function CandidatePortalPage() {
   });
 
   const status = application?.status ?? 'APPLIED';
-  const roleplayActive = !!session && ['STARTED', 'IN_PROGRESS'].includes(session.status);
+  // The same recruitment status gate enforced by startCandidateRoleplay().
+  // A stale active session must not expose "Continuar" after rejection,
+  // hiring or while an already-submitted attempt awaits QA review.
+  const canStartAssignedRoleplay = ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS'].includes(status);
+  const roleplayActive = canStartAssignedRoleplay && !!session && ['STARTED', 'IN_PROGRESS'].includes(session.status);
   const roleplayFinished = !!session && ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status);
   // QA deliberately leaves failed evaluations in ROLEPLAY_REVIEW. The
   // server action can create a new attempt only for a failed QA verdict;
@@ -140,7 +144,7 @@ export default async function CandidatePortalPage() {
                 <p className="text-sm text-slate-300">Tu evaluación permite realizar otro intento con los escenarios asignados.</p>
                 <CandidateRoleplayAction label="Reintentar Roleplay" />
               </div>
-            ) : !roleplayFinished && ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS', 'ROLEPLAY_REVIEW'].includes(status) ? (
+            ) : !roleplayFinished && canStartAssignedRoleplay ? (
               <div className="mt-5"><CandidateRoleplayAction /></div>
             ) : roleplayFinished ? (
               <p className="mt-5 text-sm text-slate-300">Tu intento quedó registrado. El equipo de evaluación actualizará aquí el resultado y los próximos pasos.</p>
