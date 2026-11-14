@@ -87,6 +87,9 @@ export function RoleplayScenario({
   }, []);
 
   const handleTogglePlayback = async () => {
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+    repeatTimerRef.current = null;
+    setRepeatPending(false);
     const audio = audioRef.current;
     if (!audio || !scenario.baseAudioUrl) {
       setAudioError('El audio base de este escenario no está disponible.');
@@ -144,6 +147,9 @@ export function RoleplayScenario({
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+    repeatTimerRef.current = null;
+    setRepeatPending(false);
     if (audioRef.current) {
       audioRef.current.currentTime = parseFloat(e.target.value);
     }
