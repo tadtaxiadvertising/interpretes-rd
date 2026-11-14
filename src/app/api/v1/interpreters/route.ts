@@ -6,6 +6,8 @@ import { guardApiAuth } from '@/lib/api-auth';
 import { parseJsonBody } from '@/lib/api-responses';
 import { corsHeaders } from '@/lib/cors';
 import { z } from 'zod';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json(
@@ -16,7 +18,7 @@ export async function OPTIONS(request: Request) {
 
 export const GET = withSecurity(async (request: NextRequest) => {
   const denied = await guardApiAuth(request, 'admin');
-  if (denied) return denied;
+  if (denied) return privateAdminResponse(denied);
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
@@ -37,7 +39,7 @@ export const GET = withSecurity(async (request: NextRequest) => {
     offset: offsetRaw ?? undefined,
   });
   if (!parsed.success) {
-    return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400 });
+    return privateAdminJson({ success: false, error: 'Invalid query parameters' }, { status: 400 });
   }
 
   const whereClause: Record<string, unknown> = {};
@@ -59,7 +61,7 @@ export const GET = withSecurity(async (request: NextRequest) => {
     skip: parsed.data.offset,
   });
 
-  return NextResponse.json(interpreters);
+  return privateAdminJson(interpreters);
 }, {
   query: z.object({
     status: z.string().optional(),
@@ -71,27 +73,27 @@ export const GET = withSecurity(async (request: NextRequest) => {
 
 export const POST = withSecurity(async (request: NextRequest) => {
   const denied = await guardApiAuth(request, 'admin');
-  if (denied) return denied;
+  if (denied) return privateAdminResponse(denied);
 
   const body = await parseJsonBody(request, InterpreterSchema);
   const { password, ...interpreterData } = body;
 
   if (password && !interpreterData.emailCorporativo) {
-    return NextResponse.json(
+    return privateAdminJson(
       { success: false, error: 'Email corporativo is required when creating an account with a password.' },
       { status: 400 }
     );
   }
 
-  console.log(`[API_INTERPRETERS_POST] Step 1: Creating interpreter record for ${interpreterData.emailCorporativo}`);
+  console.info('[API_INTERPRETERS_POST] Creating interpreter record');
   const newInterpreter = await prisma.interpreter.create({
     data: interpreterData as never,
   });
-  console.log(`[API_INTERPRETERS_POST] Interpreter created with ID: ${newInterpreter.id}`);
+  console.info('[API_INTERPRETERS_POST] Interpreter record created');
 
   // 2. If password provided, create Auth user and UserProfile
   if (password) {
-    console.log(`[API_INTERPRETERS_POST] Step 2: Creating Auth user for ${interpreterData.emailCorporativo}`);
+    console.info('[API_INTERPRETERS_POST] Provisioning Auth user');
     const { upsertConfirmedAuthUser } = await import('@/lib/supabase/auth-users');
     let authUser = null;
 
@@ -102,23 +104,22 @@ export const POST = withSecurity(async (request: NextRequest) => {
         displayName: interpreterData.name,
       });
     } catch (authError) {
-      const message = authError instanceof Error ? authError.message : 'Unknown auth error';
-      console.error(`[API_INTERPRETERS_POST] ❌ Auth creation failed: ${message}`);
-      return NextResponse.json(
-        { success: false, error: `Interpreter record created (ID: ${newInterpreter.id}), but Auth creation failed: ${message}` },
+      console.error('[API_INTERPRETERS_POST] Auth creation failed:', safeServerErrorCategory(authError));
+      return privateAdminJson(
+        { success: false, error: 'Interpreter record created, but account provisioning failed. Contact support.', interpreterId: newInterpreter.id },
         { status: 400 }
       );
     }
 
     if (!authUser) {
       console.error('[API_INTERPRETERS_POST] ❌ Auth creation failed: no user returned');
-      return NextResponse.json(
-        { success: false, error: `Interpreter record created (ID: ${newInterpreter.id}), but Auth creation failed.` },
+      return privateAdminJson(
+        { success: false, error: 'Interpreter record created, but account provisioning failed. Contact support.', interpreterId: newInterpreter.id },
         { status: 400 }
       );
     }
 
-    console.log(`[API_INTERPRETERS_POST] Step 3: Upserting UserProfile for Auth ID: ${authUser.id}`);
+    console.info('[API_INTERPRETERS_POST] Linking Auth profile');
     await prisma.userProfile.upsert({
       where: { id: authUser.id },
       update: {
@@ -137,7 +138,7 @@ export const POST = withSecurity(async (request: NextRequest) => {
     console.log('[API_INTERPRETERS_POST] ✅ UserProfile upserted successfully');
   }
 
-  return NextResponse.json({ success: true, data: newInterpreter }, { status: 201 });
+  return privateAdminJson({ success: true, data: newInterpreter }, { status: 201 });
 }, {
   body: InterpreterSchema
 });
