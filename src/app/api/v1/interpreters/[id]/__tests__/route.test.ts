@@ -39,6 +39,11 @@ vi.mock('@/lib/supabase/admin', () => ({
 import { PATCH, DELETE } from '../route';
 
 const params = { params: Promise.resolve({ id: '12' }) };
+const emptyPatchRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({}),
+});
 const patchRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
   method: 'PATCH',
   headers: { 'Content-Type': 'application/json' },
@@ -77,6 +82,22 @@ describe('interpreter detail admin API privacy', () => {
     expect(res.status).toBe(403);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty PATCH before accessing Auth or PostgreSQL', async () => {
+    const res = await PATCH(emptyPatchRequest(), params);
+    expect(res.status).toBe(400);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Authorization');
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'At least one field must be provided.',
+    });
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.transaction).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.updateUserById).not.toHaveBeenCalled();
   });
 
   it('returns private successful PATCH without changing the update contract', async () => {
