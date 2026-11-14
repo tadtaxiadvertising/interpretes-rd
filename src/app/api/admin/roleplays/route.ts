@@ -381,7 +381,7 @@ export async function POST(req: NextRequest) {
           sessionIds: bulkResult.created.map((session) => session.id),
           scenarioCount: scenarios.length,
         },
-      });
+      }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
     }
 
     // Candidate ownership wins over provisional interpreter IDs retained in
@@ -547,7 +547,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
-    });
+    }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     // Storage and database exceptions can include signed URLs, credentials,
