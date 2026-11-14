@@ -20,7 +20,8 @@ describe('public short roleplay invitation link', () => {
     async (code) => {
       await expect(ShortInviteRedirect({ params: Promise.resolve({ code }) }))
         .rejects.toThrow('NEXT_REDIRECT');
-      expect(navigation.redirect).toHaveBeenCalledExactlyOnceWith(
+      expect(navigation.redirect).toHaveBeenCalledTimes(1);
+      expect(navigation.redirect).toHaveBeenCalledWith(
         `/roleplays/invite-by-code/${code.toUpperCase()}`,
       );
       expect(navigation.notFound).not.toHaveBeenCalled();
