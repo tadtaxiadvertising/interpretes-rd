@@ -210,6 +210,8 @@ export function RoleplayScenario({
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <button
+              type="button"
+              aria-label={isBasePlaying ? 'Pausar audio base' : 'Reproducir audio base'}
               onClick={handleTogglePlayback}
               disabled={isLoading || !scenario.baseAudioUrl}
               className={cn(
@@ -256,6 +258,8 @@ export function RoleplayScenario({
                 </select>
               </label>
               <button
+                type="button"
+                aria-label={baseVolume > 0 ? 'Silenciar audio base' : 'Activar audio base'}
                 onClick={() => {
                   if (audioRef.current) {
                     audioRef.current.volume = baseVolume > 0 ? 0 : 1;
@@ -340,6 +344,10 @@ export function RoleplayScenario({
           if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
           repeatTimerRef.current = null;
           setRepeatPending(false);
+          // The original clip must not bleed into the microphone recording
+          // while the parent transitions asynchronously to the response UI.
+          audioRef.current?.pause();
+          setIsBasePlaying(false);
           onNext();
         }}
         disabled={isLoading || !scenario.baseAudioUrl || !hasListened}
