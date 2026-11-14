@@ -1,4 +1,5 @@
 import React from 'react';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getCurrentProfile } from '@/app/actions/auth';
 import { redirect } from 'next/navigation';
 import {
@@ -70,7 +71,7 @@ export default async function AdminDashboard(props: PageProps) {
       })
     ]);
   } catch (error) {
-    console.error('❌ ADMIN: Database fetch failed:', error);
+    console.error('❌ ADMIN: Database fetch failed:', safeServerErrorCategory(error));
   }
 
   const totalMinutesMonth = monthProductionLogs.reduce((sum, log) => sum + (log.interpretedMinutes || 0), 0);
