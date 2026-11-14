@@ -38,7 +38,16 @@ export const InterpreterPasswordSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters').max(128),
 });
 
-export const PayrollRecordPatchSchema = PayrollRecordSchema.partial();
+// PATCH must not insert CREATE defaults for omitted monetary fields.
+// Zod's .partial() alone still applies nested .default(0) schemas, which
+// silently resets existing bonuses/deductions when editing only a status.
+export const PayrollRecordPatchSchema = PayrollRecordSchema.partial().extend({
+  qualityBonus: z.number().nonnegative().optional(),
+  incentivesTotal: z.number().nonnegative().optional(),
+  penalidades: z.number().nonnegative().optional(),
+  transferDeduction: z.number().nonnegative().optional(),
+  status: z.string().optional(),
+});
 export const QAScorePatchSchema = QAScoreSchema.partial();
 // Canonical funnel state lives on RecruitmentApplication and may only
 // transition through `advanceApplication`; the candidate record itself carries
