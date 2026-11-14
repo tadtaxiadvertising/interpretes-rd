@@ -25,6 +25,7 @@ vi.mock('@/lib/cache/revalidate-interpreter', () => ({
 }));
 vi.mock('@/lib/interpreters/delete-interpreter', () => ({
   deleteInterpreterDatabaseRecords: m.deleteRecords,
+  InterpreterNotFoundError: class InterpreterNotFoundError extends Error {},
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: { auth: { admin: { deleteUser: m.deleteUser } } },
@@ -80,6 +81,29 @@ describe('interpreter detail admin API privacy', () => {
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
       expect(JSON.stringify(await res.json())).not.toMatch(/SECRET_VALUE|postgresql:/);
       expect(JSON.stringify(spy.mock.calls)).not.toMatch(/SECRET_VALUE|postgresql:/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+
+  it('treats a typed missing interpreter as an idempotent success', async () => {
+    const { InterpreterNotFoundError } = await import('@/lib/interpreters/delete-interpreter');
+    m.transaction.mockRejectedValueOnce(new InterpreterNotFoundError());
+    const res = await DELETE(deleteRequest(), params);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await res.json()).toEqual({ success: true });
+  });
+
+  it('does not report success for a provider error with the former not-found text', async () => {
+    m.transaction.mockRejectedValueOnce(new Error('Intérprete no encontrado'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await DELETE(deleteRequest(), params);
+      expect(res.status).toBe(500);
+      expect((await res.json()).success).toBe(false);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     } finally {
       spy.mockRestore();
     }

@@ -1,3 +1,11 @@
+/** A missing interpreter is an expected, idempotent deletion outcome. */
+export class InterpreterNotFoundError extends Error {
+  constructor() {
+    super('Intérprete no encontrado');
+    this.name = 'InterpreterNotFoundError';
+  }
+}
+
 /**
  * Removes an interpreter account while preserving auditable Roleplay history.
  *
@@ -16,7 +24,7 @@ export async function deleteInterpreterDatabaseRecords(tx: any, interpreterId: n
   });
 
   if (!interpreter) {
-    throw new Error('Intérprete no encontrado');
+    throw new InterpreterNotFoundError();
   }
 
   // Do not cascade-delete Roleplay evidence (sessions, scenarios, responses,
