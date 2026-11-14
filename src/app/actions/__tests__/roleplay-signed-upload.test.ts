@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
     recruitmentCandidateId: number | null;
     status: string;
     currentScenarioIndex: number;
+    access?: { validatedAt: Date | null; usedAt: Date | null } | null;
   },
   scenario: { id: 'scenario-1' } as { id: string } | null,
   response: null as { id: string } | null,
@@ -69,6 +70,7 @@ describe('createRoleplayResponseUpload', () => {
       recruitmentCandidateId: 5,
       status: 'IN_PROGRESS',
       currentScenarioIndex: 2,
+      access: { validatedAt: new Date(), usedAt: null },
     };
     mocks.scenario = { id: 'scenario-1' };
     mocks.response = null;
@@ -100,6 +102,41 @@ describe('createRoleplayResponseUpload', () => {
       select: { id: true },
     });
     expect(mocks.createSignedUpload).toHaveBeenCalledWith('session-1', 'scenario-1', 'audio/webm');
+  });
+
+  it.each([
+    { validatedAt: null, usedAt: null },
+    { validatedAt: new Date(), usedAt: new Date() },
+  ])('rejects an invalid or consumed candidate invitation before issuing a Storage upload token', async (access) => {
+    mocks.session = { ...mocks.session!, access };
+    const result = await createRoleplayResponseUpload({
+      sessionId: 'session-1',
+      scenarioId: 'scenario-1',
+      mimeType: 'audio/webm',
+      size: 1024,
+    });
+    expect(result.success).toBe(false);
+    expect(result.code).toBe('FORBIDDEN');
+    expect(mocks.createSignedUpload).not.toHaveBeenCalled();
+    expect(mocks.findScenario).not.toHaveBeenCalled();
+  });
+
+  it('does not require invitation data for an interpreter-owned session', async () => {
+    mocks.actor = { role: 'interpreter', candidateId: null, interpreterId: 7 };
+    mocks.session = {
+      ...mocks.session!,
+      interpreterId: 7,
+      recruitmentCandidateId: null,
+      access: null,
+    };
+    const result = await createRoleplayResponseUpload({
+      sessionId: 'session-1',
+      scenarioId: 'scenario-1',
+      mimeType: 'audio/webm',
+      size: 1024,
+    });
+    expect(result.success).toBe(true);
+    expect(mocks.createSignedUpload).toHaveBeenCalledOnce();
   });
 
   it('rejects a session owned by another candidate', async () => {
