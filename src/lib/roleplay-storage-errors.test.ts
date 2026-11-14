@@ -65,7 +65,7 @@ describe('Roleplay Storage errors never expose provider error messages', () => {
     ['admin review', () => getAdminReviewUrl('base/a.webm')],
     ['short-lived refresh', () => getSignedAudioUrl('base/a.webm')],
     ['confirmed base audio', () => confirmUpload('base/a.webm', 15 * 1024 * 1024)],
-  ])('redacts provider tokens when signing %s', async (_name, getUrl) => {
+  ] as const)('redacts provider tokens when signing %s', async (_name, getUrl) => {
     storage.signed.mockResolvedValue({
       data: null,
       error: { message: 'PRIVATE_STORAGE_TOKEN connection-string=db.internal.invalid' },
