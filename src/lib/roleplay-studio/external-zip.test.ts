@@ -133,6 +133,24 @@ describe('secure direct external Audio Studio ZIP import', () => {
       expect(prepared[0].sha256).toBe(createHash('sha256').update(mp3a).digest('hex'));
     });
 
+  it('imports an external ZIP whose optional speaker track has no MP3', async () => {
+    const raw = {
+      ...manifest,
+      files: {
+        ...manifest.files,
+        speakerTracks: [{ speaker: 'speaker_1', mp3File: null }],
+      },
+    };
+    const entries = files(raw).filter(entry => entry.name !== 'Pista_01_Paciente.mp3');
+    const extracted = await extractExternalStudioZip(
+      archive(buildZip(entries, { method: 8, descriptor: true })),
+    );
+    expect(extracted.map(file => file.name)).toEqual(['manifest.json', ...names]);
+    const prepared = await prepareRoleplayManifestImport(extracted);
+    expect(prepared.map(s => s.title)).toEqual(['Intervención 1', 'Intervención 2']);
+    expect(prepared.every(s => s.scriptPrompt === '')).toBe(true);
+  });
+
   it('accepts valid signed and unsigned ZIP data descriptors', async () => {
     for (const descriptorSignature of [true, false]) {
       const contents = await extractExternalStudioZip(
