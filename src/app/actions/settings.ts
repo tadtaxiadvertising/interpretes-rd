@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath, unstable_cache } from 'next/cache';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 import { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
@@ -30,7 +31,7 @@ export async function updateSystemConfig(key: string, value: string): Promise<Ac
     revalidatePath('/dashboard');
     return { success: true };
   } catch (error) {
-    console.error(`Error updating system config ${key}:`, error);
+    console.error('Error updating system config:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to update configuration', code: 'INTERNAL_ERROR' };
   }
 }
@@ -48,7 +49,7 @@ const getSystemConfigCached = unstable_cache(
       });
       return config ? config.value : defaultValue;
     } catch (error) {
-      console.error(`Error fetching system config ${key}:`, error);
+      console.error('Error fetching system config:', safeServerErrorCategory(error));
       return defaultValue;
     }
   },
