@@ -57,7 +57,7 @@ export default async function NewRoleplayPage({
   let librarySource: {
     id: string;
     fingerprint: string;
-    scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null }>;
+    scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null; studioTurn: number | null; studioSpeaker: string | null; studioLanguage: string | null; sourceStartSec: number | null; sourceEndSec: number | null }>;
   } | undefined;
 
   if (sourceSessionId && /^[a-zA-Z0-9_-]{5,120}$/.test(sourceSessionId) && storageUrl) {
@@ -67,7 +67,7 @@ export default async function NewRoleplayPage({
         status: true,
         scenarios: {
           orderBy: { order: 'asc' },
-          select: { order: true, title: true, baseAudioUrl: true, durationLimitSec: true, scriptPrompt: true, expectedKeys: true },
+          select: { order: true, title: true, baseAudioUrl: true, durationLimitSec: true, scriptPrompt: true, studioTurn: true, studioSpeaker: true, studioLanguage: true, sourceStartSec: true, sourceEndSec: true, expectedKeys: true },
         },
       },
     });
@@ -82,7 +82,7 @@ export default async function NewRoleplayPage({
       if (!visibility?.archivedAt) librarySource = {
         id: sourceSessionId,
         fingerprint: getRoleplaySnapshotHash(source.scenarios),
-        scenarios: source.scenarios.map(({ title, durationLimitSec, scriptPrompt }) => ({ title, durationLimitSec, scriptPrompt })),
+        scenarios: source.scenarios.map(({ title, durationLimitSec, scriptPrompt, studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }) => ({ title, durationLimitSec, scriptPrompt, studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec })),
       };
     }
   }
