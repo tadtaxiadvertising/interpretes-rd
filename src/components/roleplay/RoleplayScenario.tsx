@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, Headphones, ChevronRight, Info } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Headphones, ChevronRight, Info, RotateCcw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface RoleplayScenarioProps {
@@ -35,6 +35,9 @@ export function RoleplayScenario({
   const [hasListened, setHasListened] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const repeatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [repeatPending, setRepeatPending] = useState(false);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
 
@@ -63,6 +66,9 @@ export function RoleplayScenario({
 
   useEffect(() => {
     const audio = audioRef.current;
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+    repeatTimerRef.current = null;
+    setRepeatPending(false);
     if (!audio) return;
     audio.pause();
     audio.currentTime = 0;
@@ -72,7 +78,18 @@ export function RoleplayScenario({
     setAudioError(null);
   }, [scenario.id]);
 
+  useEffect(() => {
+    if (audioRef.current) audioRef.current.playbackRate = playbackRate;
+  }, [playbackRate]);
+
+  useEffect(() => () => {
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+  }, []);
+
   const handleTogglePlayback = async () => {
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+    repeatTimerRef.current = null;
+    setRepeatPending(false);
     const audio = audioRef.current;
     if (!audio || !scenario.baseAudioUrl) {
       setAudioError('El audio base de este escenario no está disponible.');
@@ -91,6 +108,31 @@ export function RoleplayScenario({
     }
   };
 
+  const handleRequestRepetition = () => {
+    const audio = audioRef.current;
+    if (!audio || !scenario.baseAudioUrl || !hasListened || repeatPending || isLoading) return;
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+    audio.pause();
+    setAudioError(null);
+    setRepeatPending(true);
+    repeatTimerRef.current = setTimeout(() => {
+      repeatTimerRef.current = null;
+      const currentAudio = audioRef.current;
+      if (!currentAudio) {
+        setRepeatPending(false);
+        return;
+      }
+      currentAudio.currentTime = 0;
+      void currentAudio.play().then(() => {
+        setRepeatPending(false);
+      }).catch(() => {
+        setRepeatPending(false);
+        setIsBasePlaying(false);
+        setAudioError('No se pudo reproducir la repetición. Intenta nuevamente.');
+      });
+    }, 4500);
+  };
+
   // Sync volume with parent control
   useEffect(() => {
     if (audioRef.current) {
@@ -105,6 +147,9 @@ export function RoleplayScenario({
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+    repeatTimerRef.current = null;
+    setRepeatPending(false);
     if (audioRef.current) {
       audioRef.current.currentTime = parseFloat(e.target.value);
     }
@@ -185,6 +230,22 @@ export function RoleplayScenario({
             </div>
 
             <div className="flex items-center gap-2">
+              <label className="flex items-center gap-2 text-xs text-slate-400">
+                Velocidad
+                <select
+                  aria-label="Velocidad de reproducción"
+                  value={playbackRate}
+                  onChange={(event) => setPlaybackRate(Number(event.target.value))}
+                  className="rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-sm text-white"
+                  disabled={isLoading}
+                >
+                  <option value={0.75}>0.75×</option>
+                  <option value={0.85}>0.85×</option>
+                  <option value={1}>1×</option>
+                  <option value={1.15}>1.15×</option>
+                  <option value={1.25}>1.25×</option>
+                </select>
+              </label>
               <button
                 onClick={() => {
                   if (audioRef.current) {
@@ -207,6 +268,25 @@ export function RoleplayScenario({
               />
             </div>
           </div>
+
+          {hasListened && scenario.baseAudioUrl && (
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleRequestRepetition}
+                disabled={isLoading || repeatPending}
+                className="inline-flex items-center gap-2 rounded-lg border border-amber-400/30 bg-amber-400/5 px-3 py-2 text-sm font-medium text-amber-200 hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCcw size={16} />
+                {repeatPending ? 'Repetición en espera…' : 'Solicitar repetición (4,5 s)'}
+              </button>
+              {repeatPending && (
+                <span role="status" aria-live="polite" className="text-xs text-amber-200">
+                  La intervención se reproducirá nuevamente después de la pausa de 4,5 segundos.
+                </span>
+              )}
+            </div>
+          )}
 
           {audioError && (
             <p role="alert" className="mt-3 text-sm text-red-400">{audioError}</p>
@@ -245,7 +325,14 @@ export function RoleplayScenario({
       )}
 
       <button
-        onClick={onNext}
+        onClick={() => {
+          // Stop any scheduled replay before the parent starts the recording
+          // workflow, even when navigation awaits an asynchronous response.
+          if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+          repeatTimerRef.current = null;
+          setRepeatPending(false);
+          onNext();
+        }}
         disabled={isLoading || !scenario.baseAudioUrl || !hasListened}
         className={cn(
           "w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",

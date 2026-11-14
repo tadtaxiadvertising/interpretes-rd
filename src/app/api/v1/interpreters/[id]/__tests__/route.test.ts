@@ -39,12 +39,28 @@ vi.mock('@/lib/supabase/admin', () => ({
 import { PATCH, DELETE } from '../route';
 
 const params = { params: Promise.resolve({ id: '12' }) };
+const emptyPatchRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({}),
+});
 const patchRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
   method: 'PATCH',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ name: 'Updated Interpreter' }),
 });
 const deleteRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', { method: 'DELETE' });
+const statusOnlyRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ status: 'Inactivo' }),
+});
+const emailOnlyRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ emailCorporativo: 'new@example.test' }),
+});
+
 const passwordRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
   method: 'PATCH',
   headers: { 'Content-Type': 'application/json' },
@@ -77,6 +93,22 @@ describe('interpreter detail admin API privacy', () => {
     expect(res.status).toBe(403);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty PATCH before accessing Auth or PostgreSQL', async () => {
+    const res = await PATCH(emptyPatchRequest(), params);
+    expect(res.status).toBe(400);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Authorization');
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'At least one field must be provided.',
+    });
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.transaction).not.toHaveBeenCalled();
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.updateUserById).not.toHaveBeenCalled();
   });
 
   it('returns private successful PATCH without changing the update contract', async () => {
@@ -114,9 +146,61 @@ describe('interpreter detail admin API privacy', () => {
     });
     expect(txProfile).toHaveBeenCalledWith({
       where: { interpreterId: 12 },
-      data: { displayName: 'Transactional Name', email: 'staff@example.test' },
+      data: { displayName: 'Transactional Name' },
     });
     expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not touch UserProfile when only the interpreter status changes', async () => {
+    m.update.mockResolvedValueOnce({ id: 12, name: 'Existing Name', emailCorporativo: 'staff@example.test', status: 'Inactivo' });
+    const res = await PATCH(statusOnlyRequest(), params);
+    expect(res.status).toBe(200);
+    expect(m.transaction).toHaveBeenCalledOnce();
+    expect(m.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { status: 'Inactivo' },
+    });
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite an existing profile email during a name-only edit', async () => {
+    m.update.mockResolvedValueOnce({
+      id: 12,
+      name: 'Updated Interpreter',
+      emailCorporativo: 'unverified-corporate@example.test',
+    });
+    const res = await PATCH(patchRequest(), params);
+    expect(res.status).toBe(200);
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { interpreterId: 12 },
+      data: { displayName: 'Updated Interpreter' },
+    });
+  });
+
+  it('synchronizes profile email when the corporate email is explicitly changed', async () => {
+    m.update.mockResolvedValueOnce({ id: 12, name: 'Existing Name', emailCorporativo: 'new@example.test' });
+    const res = await PATCH(emailOnlyRequest(), params);
+    expect(res.status).toBe(200);
+    expect(m.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { emailCorporativo: 'new@example.test' },
+    });
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { interpreterId: 12 },
+      data: { email: 'new@example.test' },
+    });
+  });
+
+  it('does not attempt to null the required profile email when corporate email is cleared', async () => {
+    const clearRequest = new NextRequest('http://localhost/api/v1/interpreters/12', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailCorporativo: null }),
+    });
+    m.update.mockResolvedValueOnce({ id: 12, name: 'Existing Name', emailCorporativo: null });
+    const res = await PATCH(clearRequest, params);
+    expect(res.status).toBe(200);
     expect(m.updateMany).not.toHaveBeenCalled();
   });
 

@@ -73,6 +73,14 @@ export async function PATCH(
     const body = await parseJsonBody(request, InterpreterPatchSchema);
     const { password, ...updateData } = body;
 
+    // An empty PATCH should not bump updatedAt or write a UserProfile.
+    if (!password && Object.keys(updateData).length === 0) {
+      return privateAdminJson(
+        { success: false, error: 'At least one field must be provided.' },
+        { status: 400 }
+      );
+    }
+
     // 1. If password provided, update Supabase Auth
     if (password) {
       const interpreter = await prisma.interpreter.findUnique({
@@ -127,13 +135,24 @@ export async function PATCH(
         data: updateData,
       });
 
-      await tx.userProfile.updateMany({
-        where: { interpreterId },
-        data: {
-          displayName: saved.name,
-          ...(saved.emailCorporativo ? { email: saved.emailCorporativo } : {}),
-        },
-      });
+      // Sync only profile fields explicitly edited in this PATCH. Previously,
+      // any operational update could overwrite an unchanged profile email with
+      // the interpreter's corporate email, even if those addresses intentionally
+      // differed or had not yet completed Auth email verification.
+      const profileUpdates: { displayName?: string; email?: string } = {};
+      if (updateData.name !== undefined) {
+        profileUpdates.displayName = saved.name;
+      }
+      if (typeof updateData.emailCorporativo === 'string') {
+        profileUpdates.email = updateData.emailCorporativo;
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        await tx.userProfile.updateMany({
+          where: { interpreterId },
+          data: profileUpdates,
+        });
+      }
 
       return saved;
     });
