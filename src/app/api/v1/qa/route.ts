@@ -5,6 +5,8 @@ import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
 import { z } from 'zod';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
@@ -13,7 +15,7 @@ export async function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { searchParams } = new URL(request.url);
     const interpreterIdRaw = searchParams.get('interpreterId');
@@ -34,7 +36,7 @@ export async function GET(request: Request) {
       offset: offsetRaw ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400, headers: corsHeaders(request) });
+      return privateAdminJson({ success: false, error: 'Invalid query parameters' }, { status: 400, headers: corsHeaders(request) });
     }
 
     const whereClause: Record<string, unknown> = {};
@@ -57,20 +59,19 @@ export async function GET(request: Request) {
       skip: parsed.data.offset,
     });
 
-    return NextResponse.json(scores, {
+    return privateAdminJson(scores, {
       headers: corsHeaders(request),
     });
   } catch (error) {
-    console.error('Error fetching QA scores:', error);
-    const message = error instanceof Error ? error.message : 'Error fetching QA scores';
-    return apiError({ error, fallback: message });
+    console.error('Error fetching QA scores:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Unable to fetch QA scores', exposeMessage: false }));
   }
 }
 
 export async function POST(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const data = { ...(await parseJsonBody(request, QAScoreSchema)) };
 
@@ -101,14 +102,13 @@ export async function POST(request: Request) {
       data: data,
     });
 
-    return NextResponse.json(newScore, { 
+    return privateAdminJson(newScore, { 
       status: 201,
       headers: corsHeaders(request),
     });
   } catch (error) {
-    console.error('🔴 QA API ERROR:', error);
-    const message = error instanceof Error ? error.message : 'Internal Server Error';
-    return apiError({ error, fallback: message });
+    console.error('QA API ERROR:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Unable to create QA score', exposeMessage: false }));
   }
 }
 
