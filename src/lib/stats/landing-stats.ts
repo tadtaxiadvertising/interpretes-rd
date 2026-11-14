@@ -1,4 +1,5 @@
 import { unstable_cache } from 'next/cache';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 
 export interface LandingStats {
@@ -44,7 +45,7 @@ export async function getLandingStats(): Promise<LandingStats | null> {
   try {
     return await getCachedLandingStats();
   } catch (error) {
-    console.error('[landing-stats] failed to compute public stats:', error);
+    console.error('[landing-stats] failed to compute public stats:', safeServerErrorCategory(error));
     return null;
   }
 }
