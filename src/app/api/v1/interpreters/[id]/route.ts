@@ -110,18 +110,24 @@ export async function PATCH(
       }
     }
 
-    // 2. Update Interpreter record and keep the linked user profile in sync
-    const updated = await prisma.interpreter.update({
-      where: { id: interpreterId },
-      data: updateData,
-    });
+    // 2. Persist both PostgreSQL updates atomically. A failed profile write
+    // must roll back the interpreter update instead of leaving inconsistent data.
+    // Supabase Auth updates above remain external to this DB transaction.
+    const updated = await prisma.$transaction(async (tx) => {
+      const saved = await tx.interpreter.update({
+        where: { id: interpreterId },
+        data: updateData,
+      });
 
-    await prisma.userProfile.updateMany({
-      where: { interpreterId },
-      data: {
-        displayName: updated.name,
-        ...(updated.emailCorporativo ? { email: updated.emailCorporativo } : {}),
-      },
+      await tx.userProfile.updateMany({
+        where: { interpreterId },
+        data: {
+          displayName: saved.name,
+          ...(saved.emailCorporativo ? { email: saved.emailCorporativo } : {}),
+        },
+      });
+
+      return saved;
     });
 
     revalidateInterpreterProfileRecords(interpreterId);
