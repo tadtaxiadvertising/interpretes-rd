@@ -72,25 +72,44 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invitation expired' }, { status: 400 });
     }
 
-    const validInviteStates = ['DRAFT', 'INVITED'];
-    if (!validInviteStates.includes(access.session.status)) {
+    const preStartStates = ['DRAFT', 'INVITED'];
+    const resumableStates = ['STARTED', 'IN_PROGRESS'];
+    if (![...preStartStates, ...resumableStates].includes(access.session.status)) {
       return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 400 });
     }
 
-    // Compare-and-set prevents a concurrent terminal transition being overwritten.
-    const transition = await db.roleplaySession.updateMany({
-      where: { id: access.sessionId, status: access.session.status },
-      data: { status: 'STARTED' },
-    });
+    // If the start was committed but validation/cookie binding failed, a
+    // subsequent authenticated request with the same unexpired, unused token
+    // must be able to repair the invitation and resume without a new attempt.
+    // Fresh attempts still require CAS to avoid regressing terminal states.
+    if (preStartStates.includes(access.session.status)) {
+      const transition = await db.roleplaySession.updateMany({
+        where: { id: access.sessionId, status: access.session.status },
+        data: { status: 'STARTED' },
+      });
 
-    if (transition.count === 0) {
+      if (transition.count === 0) {
+        const latestSession = await db.roleplaySession.findUnique({
+          where: { id: access.sessionId },
+          select: { status: true },
+        });
+
+        // Another request may have started it; never regress a terminal state.
+        if (!latestSession || !resumableStates.includes(latestSession.status)) {
+          return NextResponse.json(
+            { success: false, error: 'Session no longer available' },
+            { status: 409 },
+          );
+        }
+      }
+    } else {
+      // A stale read cannot authorize a session cancelled or submitted
+      // concurrently. Recheck active status before binding a new cookie.
       const latestSession = await db.roleplaySession.findUnique({
         where: { id: access.sessionId },
         select: { status: true },
       });
-
-      // A concurrent request may have started the same session; only resume active states.
-      if (!latestSession || !['STARTED', 'IN_PROGRESS'].includes(latestSession.status)) {
+      if (!latestSession || !resumableStates.includes(latestSession.status)) {
         return NextResponse.json(
           { success: false, error: 'Session no longer available' },
           { status: 409 },
@@ -98,10 +117,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mark as started (not consumed yet), only after the session transition is safe.
+    // The session-read API withholds candidate audio until validatedAt exists.
+    // Preserve the original start timestamp, even on idempotent resume.
+    const validatedAt = new Date();
     await db.roleplayAccess.update({
       where: { id: access.id },
-      data: { startedAt: new Date() },
+      data: { startedAt: access.startedAt ?? validatedAt, validatedAt },
     });
 
     const cookieStore = await cookies();
@@ -124,8 +145,9 @@ export async function POST(req: NextRequest) {
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Start Roleplay Error:', message);
+    // Never log exception messages or objects: drivers can embed tokens,
+    // private audio URLs and database credentials in their error payloads.
+    console.error('Start Roleplay Error:', error instanceof Error ? 'Error' : 'UnknownError');
     return NextResponse.json(
       { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
