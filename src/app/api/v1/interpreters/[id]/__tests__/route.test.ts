@@ -59,7 +59,10 @@ describe('interpreter detail admin API privacy', () => {
     m.updateUserById.mockResolvedValue({ error: null });
     m.update.mockResolvedValue({ id: 12, name: 'Updated Interpreter', emailCorporativo: null });
     m.updateMany.mockResolvedValue({ count: 1 });
-    m.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({}));
+    m.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({
+      interpreter: { update: m.update },
+      userProfile: { updateMany: m.updateMany },
+    }));
     m.deleteRecords.mockResolvedValue({ authUserId: null });
   });
 
@@ -82,6 +85,53 @@ describe('interpreter detail admin API privacy', () => {
       where: { id: 12 },
       data: { name: 'Updated Interpreter' },
     });
+    expect(m.transaction).toHaveBeenCalledOnce();
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: { interpreterId: 12 },
+      data: { displayName: 'Updated Interpreter' },
+    });
+  });
+
+  it('uses the transaction client for interpreter and profile updates', async () => {
+    const txUpdate = vi.fn().mockResolvedValue({
+      id: 12, name: 'Transactional Name', emailCorporativo: 'staff@example.test',
+    });
+    const txProfile = vi.fn().mockResolvedValue({ count: 1 });
+    m.transaction.mockImplementationOnce(async (cb: (tx: unknown) => unknown) => cb({
+      interpreter: { update: txUpdate },
+      userProfile: { updateMany: txProfile },
+    }));
+    const res = await PATCH(patchRequest(), params);
+    expect(res.status).toBe(200);
+    expect(m.transaction).toHaveBeenCalledOnce();
+    expect(txUpdate).toHaveBeenCalledWith({
+      where: { id: 12 }, data: { name: 'Updated Interpreter' },
+    });
+    expect(txProfile).toHaveBeenCalledWith({
+      where: { interpreterId: 12 },
+      data: { displayName: 'Transactional Name', email: 'staff@example.test' },
+    });
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not report success when the profile update fails inside the transaction', async () => {
+    const error = new Error('postgresql://private:SECRET_PROFILE@db.invalid');
+    error.name = 'Bearer SECRET_PROFILE';
+    m.updateMany.mockRejectedValueOnce(error);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await PATCH(patchRequest(), params);
+      expect(res.status).toBe(500);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.transaction).toHaveBeenCalledOnce();
+      expect(m.update).toHaveBeenCalledOnce();
+      expect(m.updateMany).toHaveBeenCalledOnce();
+      expect(JSON.stringify(await res.json())).not.toMatch(/SECRET_PROFILE|postgresql:/);
+      expect(JSON.stringify(spy.mock.calls)).not.toMatch(/SECRET_PROFILE|postgresql:/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('rejects a password change when the interpreter does not exist', async () => {
