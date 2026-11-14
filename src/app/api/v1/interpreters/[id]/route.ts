@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
-import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError } from '@/lib/interpreters/delete-interpreter';
+import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError, InterpreterHasHistoricalRecordsError } from '@/lib/interpreters/delete-interpreter';
 import { InterpreterPatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
 import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
@@ -46,12 +46,17 @@ export async function DELETE(
     return privateAdminJson({ success: true });
 
   } catch (error) {
-    console.error('Error deleting interpreter:', safeServerErrorCategory(error));
     // Only a typed missing-record error is idempotent; provider messages are not.
     if (error instanceof InterpreterNotFoundError) {
       return privateAdminJson({ success: true });
     }
-    
+    if (error instanceof InterpreterHasHistoricalRecordsError) {
+      return privateAdminJson(
+        { success: false, error: 'Cannot delete an interpreter with historical records. Deactivate the account instead.' },
+        { status: 409 }
+      );
+    }
+    console.error('Error deleting interpreter:', safeServerErrorCategory(error));
     return privateAdminResponse(apiError({ error, fallback: 'Error deleting interpreter', exposeMessage: false }));
   }
 }
