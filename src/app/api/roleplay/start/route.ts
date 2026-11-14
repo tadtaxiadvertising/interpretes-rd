@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
     keyPrefix: 'roleplay-legacy-start',
   });
   if (!quota.success) {
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: false, error: 'Too many requests. Please try again later.' },
       { status: 429, headers: { ...createRateLimitHeaders(quota), 'Cache-Control': 'private, no-store' } },
     );
@@ -29,18 +30,18 @@ export async function POST(req: NextRequest) {
     try {
       const parsed = StartRoleplaySchema.safeParse(await req.json());
       if (!parsed.success) {
-        return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
+        return privateRoleplayResponse({ success: false, error: 'Token required' }, { status: 400 });
       }
       token = parsed.data.token;
     } catch {
-      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid request body' }, { status: 400 });
     }
 
     // A leaked invitation token must not start another person's evaluation.
     // Authenticate before looking up tokens, preventing anonymous enumeration.
     const identity = await resolveCurrentIdentity();
     if (!identity) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Not authenticated' },
         { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
       );
@@ -54,28 +55,28 @@ export async function POST(req: NextRequest) {
     });
 
     if (!access) {
-      return NextResponse.json({ success: false, error: 'Invalid or expired invitation' }, { status: 404 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid or expired invitation' }, { status: 404 });
     }
 
     if (!canBindRoleplayInvitation(identity, access.session)) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Access denied' },
         { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
       );
     }
 
     if (access.usedAt) {
-      return NextResponse.json({ success: false, error: 'Invitation already used' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invitation already used' }, { status: 400 });
     }
 
     if (access.expiresAt < new Date()) {
-      return NextResponse.json({ success: false, error: 'Invitation expired' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invitation expired' }, { status: 400 });
     }
 
     const preStartStates = ['DRAFT', 'INVITED'];
     const resumableStates = ['STARTED', 'IN_PROGRESS'];
     if (![...preStartStates, ...resumableStates].includes(access.session.status)) {
-      return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Session no longer available' }, { status: 400 });
     }
 
     // If the start was committed but validation/cookie binding failed, a
@@ -96,7 +97,7 @@ export async function POST(req: NextRequest) {
 
         // Another request may have started it; never regress a terminal state.
         if (!latestSession || !resumableStates.includes(latestSession.status)) {
-          return NextResponse.json(
+          return privateRoleplayResponse(
             { success: false, error: 'Session no longer available' },
             { status: 409 },
           );
@@ -110,7 +111,7 @@ export async function POST(req: NextRequest) {
         select: { status: true },
       });
       if (!latestSession || !resumableStates.includes(latestSession.status)) {
-        return NextResponse.json(
+        return privateRoleplayResponse(
           { success: false, error: 'Session no longer available' },
           { status: 409 },
         );
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest) {
       path: '/',
     });
 
-    return NextResponse.json(
+    return privateRoleplayResponse(
       {
         success: true,
         data: {
@@ -148,7 +149,7 @@ export async function POST(req: NextRequest) {
     // Never log exception messages or objects: drivers can embed tokens,
     // private audio URLs and database credentials in their error payloads.
     console.error('Start Roleplay Error:', error instanceof Error ? 'Error' : 'UnknownError');
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
     );
