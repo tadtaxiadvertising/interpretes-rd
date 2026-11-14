@@ -477,6 +477,33 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(403);
   });
 
+  it.each(['CANCELLED', 'EXPIRED'])(
+    'denies an interpreter access to their own %s attempt',
+    async (status) => {
+      m.session = {
+        ...candidateSession(status),
+        recruitmentCandidateId: null,
+        interpreterId: 21,
+      };
+      m.identity = { role: 'interpreter', interpreterId: 21, candidateId: null };
+      const res = await GET(makeRequest(), { params });
+      expect(res.status).toBe(403);
+      expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+    },
+  );
+
+  it('retains administrator read access to a cancelled interpreter attempt for audit', async () => {
+    m.session = {
+      ...candidateSession('CANCELLED'),
+      recruitmentCandidateId: null,
+      interpreterId: 21,
+    };
+    m.identity = { role: 'admin', interpreterId: null, candidateId: null };
+    const res = await GET(makeRequest(), { params });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.status).toBe('CANCELLED');
+  });
+
   it('denies candidates access to a cancelled attempt even if they own its cookie', async () => {
     m.session = candidateSession('CANCELLED');
     const res = await GET(makeRequest('sess-1'), { params });
