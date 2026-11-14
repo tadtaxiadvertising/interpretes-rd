@@ -71,6 +71,7 @@ const CANDIDATE = {
   recordedAudioUrl: null,
   interpreterId: null,
   recruitmentCandidateId: 5,
+  access: { validatedAt: new Date('2026-11-14T07:00:00.000Z'), usedAt: null },
   status: 'INVITED',
   currentScenarioIndex: 0,
 };
