@@ -86,7 +86,20 @@ export async function GET(
       if (!hasValidToken) {
         baseAudioUrl = null;
         recordedAudioUrl = null;
-        scenarios = scenarios.map((s) => ({ ...s, baseAudioUrl: '' }));
+        // A bound session cookie proves ownership, but does not renew an
+        // unvalidated or consumed invitation. Clear BOTH legacy response URLs
+        // and canonical paths before the signing pass below, otherwise a
+        // participant could still obtain playable response recordings.
+        scenarios = scenarios.map((scenario) => ({
+          ...scenario,
+          baseAudioUrl: '',
+          responses: scenario.responses.map((response) => ({
+            ...response,
+            sourceAudioUrl: null,
+            sourceAudioPath: null,
+            processedAudioPath: null,
+          })),
+        }));
       }
     }
 
