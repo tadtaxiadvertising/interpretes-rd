@@ -141,7 +141,9 @@ async function convertToMp3(inputPath: string, outputPath: string): Promise<void
       outputPath,
     ], { stdio: 'pipe' });
 
-    let stderr = '';
+    // Drain FFmpeg diagnostic output without collecting potentially sensitive
+    // filenames, container metadata or transcript-like text in memory.
+    ffmpeg.stderr.resume();
     let settled = false;
     const timeout = setTimeout(() => {
       ffmpeg.kill('SIGKILL');
@@ -159,16 +161,10 @@ async function convertToMp3(inputPath: string, outputPath: string): Promise<void
       else resolve();
     };
 
-    ffmpeg.stderr.on('data', (data: Buffer) => {
-      if (stderr.length < 8_192) {
-        stderr += data.toString().slice(0, 8_192 - stderr.length);
-      }
-    });
-
-    ffmpeg.on('error', (error) => finish(new Error(`FFmpeg process error: ${error.message}`)));
+    ffmpeg.on('error', () => finish(new Error('FFmpeg process error: SpawnError')));
     ffmpeg.on('close', (code) => {
       if (code === 0) finish();
-      else finish(new Error(`FFmpeg exited with code ${code}: ${summarizeFfmpegStderr(stderr) || 'no stderr output'}`));
+      else finish(new Error(`FFmpeg exited with code ${Number.isInteger(code) ? code : 'unknown'}`));
     });
   });
 }
@@ -187,7 +183,7 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
       .download(sourcePath);
 
     if (downloadError || !fileData) {
-      throw new Error(`Failed to download source audio: ${downloadError?.message}`);
+      throw new Error('Failed to download source audio: StorageError');
     }
     if (fileData.size <= 0 || fileData.size > MAX_SOURCE_AUDIO_BYTES) {
       throw new Error('Source audio is empty or exceeds the 15 MB processing limit');
@@ -209,7 +205,7 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
       .upload(mp3Path, mp3Buffer, { contentType: 'audio/mpeg', upsert: false });
 
     if (mp3UploadError) {
-      throw new Error(`Failed to upload MP3: ${mp3UploadError.message}`);
+      throw new Error('Failed to upload MP3: StorageError');
     }
 
     // Each attempt has an immutable path: a stale worker cannot overwrite the
