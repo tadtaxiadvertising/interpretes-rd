@@ -301,8 +301,10 @@ export async function startCandidateRoleplay() {
   }
 
   try {
+    // The resolved authenticated candidate ID is the ownership key. Do not
+    // repeat a lookup by mutable email when selecting applications or sessions.
     const candidate = await db.recruitmentCandidate.findUnique({
-      where: { email },
+      where: { id: identity.candidateId },
       select: { id: true },
     });
     if (!candidate) {
