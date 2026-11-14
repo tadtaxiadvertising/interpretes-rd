@@ -7,6 +7,7 @@ import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
+import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 import {
   blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentScope,
 } from '@/lib/roleplay-assignment-ownership';
@@ -29,12 +30,7 @@ const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
 const MAX_DURATION_SEC = ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
-const ALLOWED_AUDIO_TYPES = new Set([
-  'audio/webm',
-  'audio/mp4',
-  'audio/wav',
-  'audio/mpeg',
-]);
+
 
 interface ScenarioInput {
   title: string;
@@ -243,7 +239,7 @@ export async function POST(req: NextRequest) {
       if (audio.size <= 0 || audio.size > MAX_AUDIO_SIZE) {
         return privateRoleplayJson({ success: false, error: 'Audio must be between 1 byte and 15 MB' }, { status: 400 });
       }
-      if (!ALLOWED_AUDIO_TYPES.has(audio.type)) {
+      if (!getAdminRoleplayAudioExtension(audio.type)) {
         return privateRoleplayJson(
           { success: false, error: `Audio type ${audio.type || 'unknown'} not allowed` },
           { status: 400 }
@@ -301,7 +297,10 @@ export async function POST(req: NextRequest) {
       const batchPath = `base/bulk-${randomUUID()}`;
       for (let i = 0; i < scenarios.length; i++) {
         const audio = scenarioAudios[i] as File;
-        const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
+        // MIME was validated before any upload. Never derive Storage paths from
+        // an attacker-controlled File.name (e.g. .html, .svg or separators).
+        const extension = getAdminRoleplayAudioExtension(audio.type);
+        if (!extension) throw new Error('Unsupported audio MIME type');
         const path = `${batchPath}/${i}.${extension}`;
         const { error: uploadError } = await supabaseAdmin.storage
           .from('roleplay-audio')
@@ -471,13 +470,16 @@ export async function POST(req: NextRequest) {
       if (!storageClient) throw new Error('Storage is not configured');
       for (let i = 0; i < scenarios.length; i++) {
       const audio = scenarioAudios[i] as File;
-      const extension = audio.name.split('.').pop()?.toLowerCase() || 'webm';
+      // MIME was validated before any upload. Never derive Storage paths from
+        // an attacker-controlled File.name (e.g. .html, .svg or separators).
+        const extension = getAdminRoleplayAudioExtension(audio.type);
+        if (!extension) throw new Error('Unsupported audio MIME type');
       const path = `base/${session.id}/upload-${randomUUID()}/${i}.${extension}`;
 
       const { error: uploadError } = await storageClient.storage
         .from('roleplay-audio')
-        .upload(path, audio, { contentType: audio.type, upsert: true });
-      if (uploadError) throw new Error(`Failed to upload audio: ${uploadError.message}`);
+        .upload(path, audio, { contentType: audio.type, upsert: false });
+      if (uploadError) throw new Error('Failed to upload audio');
       uploadedPaths.push(path);
 
       const { data: publicUrlData } = storageClient.storage.from('roleplay-audio').getPublicUrl(path);

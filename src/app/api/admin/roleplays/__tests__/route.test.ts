@@ -324,6 +324,43 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.roleplayAccess.create).not.toHaveBeenCalled();
     });
 
+    it.each([
+      ['patient-chart.html', 'audio/mpeg', 'mp3'],
+      ['../path.svg', 'audio/webm', 'webm'],
+      ['recording.js', 'audio/mp4', 'mp4'],
+      ['recording.bat', 'audio/wav', 'wav'],
+    ] as const)('stores individual admin audio using a MIME-derived extension for %s', async (name, type, extension) => {
+      const res = await POST(buildRequest({
+        participantType: 'interpreter',
+        participantId: '7',
+        scenarios: oneScenario,
+        audios: [audioFile(name, type)],
+      }) as any);
+
+      expect(res.status).toBe(200);
+      expect(mockUpload).toHaveBeenCalledOnce();
+      const [path, , options] = mockUpload.mock.calls[0];
+      expect(path).toMatch(/^base\/sess-1\/upload-[a-f0-9-]+\/0\.(webm|mp3|mp4|wav)$/);
+      expect(path.endsWith('.' + extension)).toBe(true);
+      expect(path).not.toContain('patient-chart');
+      expect(path).not.toContain('path.svg');
+      expect(options).toEqual({ contentType: type, upsert: false });
+    });
+
+    it('uses canonical MIME extensions in bulk assignments without trusting filenames', async () => {
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        scenarios: oneScenario,
+        audios: [audioFile('../attack.html', 'audio/mpeg')],
+      }) as any);
+      expect(res.status).toBe(200);
+      expect(mockUpload).toHaveBeenCalledOnce();
+      const [path, , options] = mockUpload.mock.calls[0];
+      expect(path).toMatch(/^base\/bulk-[a-f0-9-]+\/0\.mp3$/);
+      expect(path).not.toContain('attack');
+      expect(options).toEqual({ contentType: 'audio/mpeg', upsert: false });
+    });
+
     it('creates an invitation and an invite link for a candidate session', async () => {
       const res = await POST(buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] }) as any);
       const body = await res.json();
@@ -525,7 +562,7 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.roleplayAccess.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sessionId: 'sess-d' }) })
       );
-      expect(mockUpload).toHaveBeenCalledWith(expect.stringMatching(/^base\/sess-d\/upload-[^/]+\/0\.webm$/), expect.anything(), expect.objectContaining({ upsert: true }));
+      expect(mockUpload).toHaveBeenCalledWith(expect.stringMatching(/^base\/sess-d\/upload-[^/]+\/0\.webm$/), expect.anything(), expect.objectContaining({ upsert: false }));
     });
 
     it('keeps a resumed DRAFT and its scenarios on failure', async () => {
