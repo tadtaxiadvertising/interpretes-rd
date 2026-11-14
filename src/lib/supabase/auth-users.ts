@@ -23,7 +23,7 @@ export async function repairAuthUser(params: {
 
     // User must already exist in Supabase Auth — no auto-creation
     if (!existingUser) {
-      console.log(`[AUTH-USERS] repairAuthUser: user ${email} does not exist — no repair possible`);
+      console.info('[AUTH-USERS] repairAuthUser: account missing; no automatic repair attempted');
       return null;
     }
 
