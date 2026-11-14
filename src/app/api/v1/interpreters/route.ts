@@ -85,6 +85,22 @@ export const POST = withSecurity(async (request: NextRequest) => {
     );
   }
 
+  // Check the local Auth admin configuration before creating a database row.
+  // This prevents a predictable orphan when service credentials are missing.
+  // It does not test network connectivity or guarantee later provisioning.
+  if (password) {
+    try {
+      const { supabaseAdmin } = await import('@/lib/supabase/admin');
+      void supabaseAdmin.auth;
+    } catch (adminError) {
+      console.warn('[API_INTERPRETERS_POST] Auth admin preflight failed:', safeServerErrorCategory(adminError));
+      return privateAdminJson(
+        { success: false, error: 'Authentication administration is unavailable. No interpreter was created.' },
+        { status: 503 }
+      );
+    }
+  }
+
   console.info('[API_INTERPRETERS_POST] Creating interpreter record');
   const newInterpreter = await prisma.interpreter.create({
     data: interpreterData as never,

@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   profileUpsert: vi.fn(),
   guard: vi.fn(),
   provision: vi.fn(),
+  adminAuth: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -19,6 +20,9 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: m.guard }));
 vi.mock('@/lib/api-security', () => ({ withSecurity: (handler: unknown) => handler }));
 vi.mock('@/lib/supabase/auth-users', () => ({ upsertConfirmedAuthUser: m.provision }));
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: { get auth() { return m.adminAuth(); } },
+}));
 
 import { GET, POST } from '../route';
 
@@ -40,6 +44,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     m.guard.mockResolvedValue(null);
+    m.adminAuth.mockReturnValue({ admin: {} });
     m.create.mockResolvedValue({ id: 77, name: 'Test Interpreter' });
     m.findMany.mockResolvedValue([{ id: 77, name: 'Private Employee', emailCorporativo: input.emailCorporativo }]);
     m.profileUpsert.mockResolvedValue({ id: 'auth-id-1' });
@@ -53,6 +58,29 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     expect(res.headers.get('Vary')).toContain('Authorization');
     expect(m.findMany).not.toHaveBeenCalled();
+  });
+
+  it('never creates an interpreter when Supabase Admin configuration is missing', async () => {
+    const error = new Error('postgresql://SECRET_AUTH@db.invalid');
+    error.name = 'Bearer SECRET_AUTH';
+    m.adminAuth.mockImplementationOnce(() => { throw error; });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const response = await POST(postRequest(), undefined);
+      expect(response.status).toBe(503);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(response.headers.get('Vary')).toContain('Authorization');
+      expect(await response.json()).toEqual({
+        success: false,
+        error: 'Authentication administration is unavailable. No interpreter was created.',
+      });
+      expect(m.create).not.toHaveBeenCalled();
+      expect(m.provision).not.toHaveBeenCalled();
+      expect(m.profileUpsert).not.toHaveBeenCalled();
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/SECRET_AUTH|postgresql:/);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it('keeps admin interpreter listing and creation private', async () => {
