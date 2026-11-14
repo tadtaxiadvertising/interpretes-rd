@@ -738,6 +738,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           recruitmentCandidateId: true, 
           status: true,
           currentScenarioIndex: true,
+          access: { select: { validatedAt: true, usedAt: true } },
         },
       });
 
@@ -789,6 +790,14 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
           };
         }
         throw new Error('Response already recorded for this scenario');
+      }
+
+      // Unlike an idempotent replay of a previously confirmed response, a
+      // NEW response requires the candidate's invitation to have been
+      // validated and not yet consumed. The source object alone is not proof
+      // of permission to record into a session.
+      if (!candidateCanUploadRoleplayAudio(session)) {
+        throw new Error('Unauthorized');
       }
 
       // Sequential binding: a new response must target the scenario expected
