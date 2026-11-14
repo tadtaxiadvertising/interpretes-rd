@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   transaction: vi.fn(),
   deleteRecords: vi.fn(),
   deleteUser: vi.fn(),
+  updateUserById: vi.fn(),
   adminAuth: vi.fn(),
 }));
 
@@ -54,7 +55,8 @@ describe('interpreter detail admin API privacy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     m.guard.mockResolvedValue(null);
-    m.adminAuth.mockReturnValue({ admin: { deleteUser: m.deleteUser } });
+    m.adminAuth.mockReturnValue({ admin: { deleteUser: m.deleteUser, updateUserById: m.updateUserById } });
+    m.updateUserById.mockResolvedValue({ error: null });
     m.update.mockResolvedValue({ id: 12, name: 'Updated Interpreter', emailCorporativo: null });
     m.updateMany.mockResolvedValue({ count: 1 });
     m.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({}));
@@ -107,6 +109,18 @@ describe('interpreter detail admin API privacy', () => {
     expect(m.update).not.toHaveBeenCalled();
     expect(m.updateMany).not.toHaveBeenCalled();
     expect(m.adminAuth).not.toHaveBeenCalled();
+  });
+
+  it('preserves the supported password update for linked Auth users', async () => {
+    m.findUnique.mockResolvedValueOnce({ id: 12, userProfile: { id: 'auth-user-12' } });
+    const res = await PATCH(passwordRequest(), params);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(m.updateUserById).toHaveBeenCalledWith(
+      'auth-user-12',
+      { password: 'fictional-password-only', email_confirm: true }
+    );
+    expect(m.update).toHaveBeenCalledOnce();
   });
 
   it('redacts provider errors from PATCH response and logs', async () => {
