@@ -26,6 +26,11 @@ interface Scenario {
   baseAudioPreview: string;
   durationLimitSec: number;
   scriptPrompt: string;
+  studioTurn?: number;
+  studioSpeaker?: 'speaker_1' | 'speaker_2' | 'speaker_3';
+  studioLanguage?: 'en' | 'es' | 'mixed';
+  sourceStartSec?: number;
+  sourceEndSec?: number;
   sha256?: string;
 }
 
@@ -36,7 +41,7 @@ interface NewRoleplayFormProps {
   librarySource?: {
     id: string;
     fingerprint: string;
-    scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null }>;
+    scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null; studioTurn?: number | null; studioSpeaker?: string | null; studioLanguage?: string | null; sourceStartSec?: number | null; sourceEndSec?: number | null }>;
   };
 }
 
@@ -247,6 +252,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           title: s.title.trim(),
           durationLimitSec: s.durationLimitSec || 0,
           scriptPrompt: s.scriptPrompt,
+          studioTurn: s.studioTurn ?? null,
+          studioSpeaker: s.studioSpeaker ?? null,
+          studioLanguage: s.studioLanguage ?? null,
+          sourceStartSec: s.sourceStartSec ?? null,
+          sourceEndSec: s.sourceEndSec ?? null,
         }))));
         for (const scenario of scenarios) {
           if (scenario.baseAudioFile) formData.append('scenarioAudios', scenario.baseAudioFile);

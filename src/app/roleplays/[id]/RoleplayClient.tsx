@@ -23,6 +23,11 @@ interface Scenario {
   baseAudioUrl: string;
   scriptPrompt?: string;
   durationLimitSec?: number;
+  studioTurn?: number | null;
+  studioSpeaker?: string | null;
+  studioLanguage?: string | null;
+  sourceStartSec?: number | null;
+  sourceEndSec?: number | null;
   responses?: Array<{
     sourceAudioUrl: string | null;
     durationSec: number | null;

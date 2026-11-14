@@ -12,6 +12,11 @@ interface RoleplayScenarioProps {
     baseAudioUrl: string;
     scriptPrompt?: string;
     durationLimitSec?: number;
+    studioTurn?: number | null;
+    studioSpeaker?: string | null;
+    studioLanguage?: string | null;
+    sourceStartSec?: number | null;
+    sourceEndSec?: number | null;
   };
   currentIndex: number;
   totalScenarios: number;
@@ -173,6 +178,14 @@ export function RoleplayScenario({
           <div>
             <h2 className="text-xl font-bold text-white">{scenario.title}</h2>
             <p className="text-slate-400 text-sm">Escenario {currentIndex + 1} de {totalScenarios}</p>
+            {(scenario.studioTurn || scenario.studioSpeaker || scenario.studioLanguage || scenario.sourceStartSec !== null && scenario.sourceStartSec !== undefined) && (
+              <p className="mt-1 text-xs text-slate-500">
+                {scenario.studioTurn ? 'Intervención original #' + scenario.studioTurn : 'Intervención'}
+                {scenario.studioSpeaker ? ' · ' + scenario.studioSpeaker.replace('_', ' ') : ''}
+                {scenario.studioLanguage ? ' · ' + scenario.studioLanguage.toUpperCase() : ''}
+                {scenario.sourceStartSec !== null && scenario.sourceStartSec !== undefined && scenario.sourceEndSec !== null && scenario.sourceEndSec !== undefined ? ' · ' + scenario.sourceStartSec.toFixed(2) + 's–' + scenario.sourceEndSec.toFixed(2) + 's' : ''}
+              </p>
+            )}
           </div>
         </div>
         {scenario.durationLimitSec && (

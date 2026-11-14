@@ -14,6 +14,11 @@ type Entry = {
   file: string;
   duration_limit_sec: 0;
   script_prompt: '';
+  studio_turn: number;
+  studio_speaker: 'speaker_1' | 'speaker_2' | 'speaker_3';
+  studio_language: 'en' | 'es' | 'mixed';
+  source_start_sec: number;
+  source_end_sec: number;
 };
 
 type Adapted = { segments: Entry[]; audioFiles: File[] };
@@ -56,7 +61,7 @@ export function adaptExternalAudioStudioManifest(raw: unknown, files: File[]): A
   let duration = 0;
   for (const [i, segment] of raw.segments.entries()) {
     if (!record(segment) || !safeMp3(segment.mp3File) ||
-        typeof segment.turn !== 'number' || !Number.isSafeInteger(segment.turn) || segment.turn < 1 ||
+        typeof segment.turn !== 'number' || !Number.isSafeInteger(segment.turn) || segment.turn < 1 || segment.turn > 10000 ||
         seenTurns.has(segment.turn) ||
         !['speaker_1', 'speaker_2', 'speaker_3'].includes(String(segment.speaker)) ||
         !['en', 'es', 'mixed'].includes(String(segment.language)) ||
@@ -81,6 +86,11 @@ export function adaptExternalAudioStudioManifest(raw: unknown, files: File[]): A
       file: segment.mp3File,
       duration_limit_sec: 0,
       script_prompt: '',
+      studio_turn: segment.turn,
+      studio_speaker: segment.speaker as 'speaker_1' | 'speaker_2' | 'speaker_3',
+      studio_language: segment.language as 'en' | 'es' | 'mixed',
+      source_start_sec: segment.startTime,
+      source_end_sec: segment.endTime,
     });
   }
   if (duration > MAX_TOTAL_SECONDS) invalid();

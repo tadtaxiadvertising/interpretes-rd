@@ -172,6 +172,10 @@ describe('external Roleplay Audio Studio manifest import', () => {
       '002_SPK2_ES_2s0_4s0.mp3',
     ]);
     expect(imported.every(x => x.scriptPrompt === '' && x.durationLimitSec === 0)).toBe(true);
+    expect(imported.map(({ studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }) => ({ studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }))).toEqual([
+      { studioTurn: 1, studioSpeaker: 'speaker_1', studioLanguage: 'en', sourceStartSec: 0, sourceEndSec: 2 },
+      { studioTurn: 2, studioSpeaker: 'speaker_2', studioLanguage: 'es', sourceStartSec: 2, sourceEndSec: 4 },
+    ]);
     expect(JSON.stringify(imported.map(x => ({
       title: x.title, scriptPrompt: x.scriptPrompt,
     })))).not.toMatch(/Sensitive|PRIVATE|Smith/);
@@ -189,6 +193,17 @@ describe('external Roleplay Audio Studio manifest import', () => {
     expect(imported.map(s => s.title)).toEqual(['Intervención 1', 'Intervención 2']);
     expect(imported.every(s => s.scriptPrompt === '')).toBe(true);
     expect(JSON.stringify(imported)).not.toMatch(/PRIVATE CLINICAL|Sensitive Patient|PRIVATE DIAGNOSIS/);
+  });
+
+  it('rejects invalid source turn metadata and out-of-range timelines', async () => {
+    const input = externalFixture();
+    const original = JSON.parse(await input[0].text());
+    const invalidTurn = structuredClone(original);
+    invalidTurn.segments[0].turn = 0;
+    await expect(prepareRoleplayManifestImport([new File([JSON.stringify(invalidTurn)], 'manifest.json'), ...input.slice(1)])).rejects.toThrow(/referencias o tiempos inválidos/);
+    const invalidTimeline = structuredClone(original);
+    invalidTimeline.segments[1].endTime = invalidTimeline.segments[1].startTime;
+    await expect(prepareRoleplayManifestImport([new File([JSON.stringify(invalidTimeline)], 'manifest.json'), ...input.slice(1)])).rejects.toThrow(/referencias o tiempos inválidos/);
   });
 
   it('rejects malformed non-null speaker track references', async () => {

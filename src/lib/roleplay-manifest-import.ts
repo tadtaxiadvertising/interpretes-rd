@@ -6,6 +6,11 @@ export interface ImportedRoleplayScenario {
   baseAudioFile: File;
   durationLimitSec: number;
   scriptPrompt: string;
+  studioTurn?: number;
+  studioSpeaker?: 'speaker_1' | 'speaker_2' | 'speaker_3';
+  studioLanguage?: 'en' | 'es' | 'mixed';
+  sourceStartSec?: number;
+  sourceEndSec?: number;
   sha256: string;
 }
 
@@ -17,6 +22,11 @@ interface ManifestSegment {
   sha256?: string;
   duration_limit_sec?: number;
   script_prompt?: string;
+  studio_turn?: number;
+  studio_speaker?: 'speaker_1' | 'speaker_2' | 'speaker_3';
+  studio_language?: 'en' | 'es' | 'mixed';
+  source_start_sec?: number;
+  source_end_sec?: number;
 }
 
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -34,6 +44,13 @@ function isValidSegment(value: unknown): value is ManifestSegment {
   if (value.sha256 !== undefined && (typeof value.sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(value.sha256))) return false;
   if (value.duration_limit_sec !== undefined && (typeof value.duration_limit_sec !== 'number' || !Number.isSafeInteger(value.duration_limit_sec) || value.duration_limit_sec < 0 || value.duration_limit_sec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC)) return false;
   if (value.script_prompt !== undefined && (typeof value.script_prompt !== 'string' || value.script_prompt.length > 5000)) return false;
+  if (value.studio_turn !== undefined && (typeof value.studio_turn !== 'number' || !Number.isSafeInteger(value.studio_turn) || value.studio_turn < 1 || value.studio_turn > 10000)) return false;
+  if (value.studio_speaker !== undefined && !['speaker_1', 'speaker_2', 'speaker_3'].includes(String(value.studio_speaker))) return false;
+  if (value.studio_language !== undefined && !['en', 'es', 'mixed'].includes(String(value.studio_language))) return false;
+  if (value.source_start_sec !== undefined && (typeof value.source_start_sec !== 'number' || !Number.isFinite(value.source_start_sec) || value.source_start_sec < 0 || value.source_start_sec > 7200)) return false;
+  if (value.source_end_sec !== undefined && (typeof value.source_end_sec !== 'number' || !Number.isFinite(value.source_end_sec) || value.source_end_sec <= 0 || value.source_end_sec > 7200)) return false;
+  if ((value.source_start_sec === undefined) !== (value.source_end_sec === undefined)) return false;
+  if (value.source_start_sec !== undefined && value.source_end_sec !== undefined && value.source_end_sec <= value.source_start_sec) return false;
   return true;
 }
 
@@ -128,6 +145,11 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
       baseAudioFile: audio.type === 'audio/mpeg' ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
       durationLimitSec: segment.duration_limit_sec ?? 0,
       scriptPrompt: segment.script_prompt ?? '',
+      ...(segment.studio_turn !== undefined ? { studioTurn: segment.studio_turn } : {}),
+      ...(segment.studio_speaker !== undefined ? { studioSpeaker: segment.studio_speaker } : {}),
+      ...(segment.studio_language !== undefined ? { studioLanguage: segment.studio_language } : {}),
+      ...(segment.source_start_sec !== undefined ? { sourceStartSec: segment.source_start_sec } : {}),
+      ...(segment.source_end_sec !== undefined ? { sourceEndSec: segment.source_end_sec } : {}),
       sha256: digest,
     });
   }

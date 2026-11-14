@@ -36,6 +36,11 @@ interface ScenarioInput {
   title: string;
   durationLimitSec: number | null;
   scriptPrompt: string | null;
+  studioTurn: number | null;
+  studioSpeaker: string | null;
+  studioLanguage: string | null;
+  sourceStartSec: number | null;
+  sourceEndSec: number | null;
   expectedKeys?: string[];
 }
 
@@ -43,6 +48,17 @@ const scenarioPayloadSchema = z.array(z.object({
   title: z.string().trim().min(1).max(MAX_TITLE),
   durationLimitSec: z.union([z.number(), z.string(), z.null()]).optional(),
   scriptPrompt: z.string().max(MAX_SCRIPT_PROMPT).nullable().optional(),
+  studioTurn: z.number().int().positive().max(10000).nullable().optional(),
+  studioSpeaker: z.enum(['speaker_1', 'speaker_2', 'speaker_3']).nullable().optional(),
+  studioLanguage: z.enum(['en', 'es', 'mixed']).nullable().optional(),
+  sourceStartSec: z.number().finite().min(0).max(7200).nullable().optional(),
+  sourceEndSec: z.number().finite().min(0).max(7200).nullable().optional(),
+}).superRefine((item, ctx) => {
+  const hasStart = item.sourceStartSec !== undefined && item.sourceStartSec !== null;
+  const hasEnd = item.sourceEndSec !== undefined && item.sourceEndSec !== null;
+  if (hasStart !== hasEnd || (hasStart && hasEnd && item.sourceEndSec! <= item.sourceStartSec!)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid source time range' });
+  }
 })).min(1).max(ROLEPLAY_MAX_SCENARIOS);
 
 function parseScenarios(raw: string): ScenarioInput[] | null {
@@ -66,7 +82,7 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
     const prompt = typeof item.scriptPrompt === 'string' && item.scriptPrompt.trim()
       ? item.scriptPrompt.trim()
       : null;
-    scenarios.push({ title: item.title, durationLimitSec: duration, scriptPrompt: prompt });
+    scenarios.push({ title: item.title, durationLimitSec: duration, scriptPrompt: prompt, studioTurn: item.studioTurn ?? null, studioSpeaker: item.studioSpeaker ?? null, studioLanguage: item.studioLanguage ?? null, sourceStartSec: item.sourceStartSec ?? null, sourceEndSec: item.sourceEndSec ?? null });
   }
   return scenarios;
 }
@@ -140,7 +156,7 @@ export async function POST(req: NextRequest) {
             orderBy: { order: 'asc' },
             select: {
               order: true, title: true, baseAudioUrl: true,
-              durationLimitSec: true, scriptPrompt: true, expectedKeys: true,
+              durationLimitSec: true, scriptPrompt: true, studioTurn: true, studioSpeaker: true, studioLanguage: true, sourceStartSec: true, sourceEndSec: true, expectedKeys: true,
             },
           },
         },
@@ -195,6 +211,11 @@ export async function POST(req: NextRequest) {
       scenarios = source.scenarios.map((scenario) => ({
         title: scenario.title,
         scriptPrompt: scenario.scriptPrompt,
+        studioTurn: scenario.studioTurn,
+        studioSpeaker: scenario.studioSpeaker,
+        studioLanguage: scenario.studioLanguage,
+        sourceStartSec: scenario.sourceStartSec,
+        sourceEndSec: scenario.sourceEndSec,
         durationLimitSec: scenario.durationLimitSec,
         expectedKeys: scenario.expectedKeys,
       }));
@@ -360,6 +381,11 @@ export async function POST(req: NextRequest) {
                   baseAudioUrl: audioUrls[index],
                   durationLimitSec: scenario.durationLimitSec,
                   scriptPrompt: scenario.scriptPrompt,
+        studioTurn: scenario.studioTurn,
+        studioSpeaker: scenario.studioSpeaker,
+        studioLanguage: scenario.studioLanguage,
+        sourceStartSec: scenario.sourceStartSec,
+        sourceEndSec: scenario.sourceEndSec,
                   expectedKeys: scenario.expectedKeys ?? [],
                 })),
               },
@@ -541,7 +567,12 @@ export async function POST(req: NextRequest) {
             baseAudioUrl: audioUrls[i],
             durationLimitSec: scenarios[i].durationLimitSec,
             scriptPrompt: scenarios[i].scriptPrompt,
-            expectedKeys: scenarios[i].expectedKeys ?? [],
+            studioTurn: scenarios[i].studioTurn,
+             studioSpeaker: scenarios[i].studioSpeaker,
+             studioLanguage: scenarios[i].studioLanguage,
+             sourceStartSec: scenarios[i].sourceStartSec,
+             sourceEndSec: scenarios[i].sourceEndSec,
+             expectedKeys: scenarios[i].expectedKeys ?? [],
           },
           select: { id: true },
         });
