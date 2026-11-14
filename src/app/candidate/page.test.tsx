@@ -181,6 +181,59 @@ describe('candidate roleplay entry', () => {
     expect(markup).not.toContain('data-testid="candidate-roleplay-action"');
   });
 
+  it('offers recovery for a submitted legacy recording with incomplete rubric before QA claims it', async () => {
+    m.findCandidate.mockResolvedValue({
+      name: 'Candidate',
+      email: 'candidate@example.test',
+      applications: [{
+        id: 'app-5',
+        status: 'ROLEPLAY_REVIEW',
+        currentStep: 'ROLEPLAY_REVIEW',
+        updatedAt: new Date('2026-11-13T12:00:00Z'),
+      }],
+    });
+    m.findSession.mockResolvedValue({
+      id: 'sess-5',
+      status: 'SUBMITTED',
+      evaluatorId: null,
+      qaScoreId: null,
+      scenarios: [{ responses: [{ sourceAudioUrl: 'https://audio.example/recorded.webm', selfScore: { fluency: 8 } }] }],
+    });
+
+    const markup = renderToStaticMarkup(await CandidatePortalPage());
+    expect(markup).toContain('Completar autoevaluación');
+    expect(markup).toContain('data-testid="candidate-roleplay-action"');
+    expect(markup).not.toContain('href="/roleplays/sess-5"');
+  });
+
+  it.each([
+    ['QA already claimed', 'admin-1', null, { fluency: 8 }],
+    ['QA score exists', null, 9, { fluency: 8 }],
+    ['rubric already complete', null, null, { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }],
+  ])('hides legacy recovery after %s', async (_reason, evaluatorId, qaScoreId, selfScore) => {
+    m.findCandidate.mockResolvedValue({
+      name: 'Candidate',
+      email: 'candidate@example.test',
+      applications: [{
+        id: 'app-5',
+        status: 'ROLEPLAY_REVIEW',
+        currentStep: 'ROLEPLAY_REVIEW',
+        updatedAt: new Date('2026-11-13T12:00:00Z'),
+      }],
+    });
+    m.findSession.mockResolvedValue({
+      id: 'sess-5',
+      status: 'SUBMITTED',
+      evaluatorId,
+      qaScoreId,
+      scenarios: [{ responses: [{ sourceAudioUrl: 'https://audio.example/recorded.webm', selfScore }] }],
+    });
+
+    const markup = renderToStaticMarkup(await CandidatePortalPage());
+    expect(markup).not.toContain('Completar autoevaluación');
+    expect(markup).not.toContain('data-testid="candidate-roleplay-action"');
+  });
+
   it('does not allow a submitted roleplay to be restarted from the candidate portal', async () => {
     m.findSession.mockResolvedValue({ id: 'sess-5', status: 'SUBMITTED' });
 
