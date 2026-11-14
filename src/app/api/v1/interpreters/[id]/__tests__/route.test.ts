@@ -70,6 +70,10 @@ describe('interpreter detail admin API privacy', () => {
     expect(res.headers.get('Vary')).toContain('Authorization');
     expect((await res.json()).success).toBe(true);
     expect(m.update).toHaveBeenCalledOnce();
+    expect(m.update).toHaveBeenCalledWith({
+      where: { id: 12 },
+      data: { name: 'Updated Interpreter' },
+    });
   });
 
   it('redacts provider errors from PATCH response and logs', async () => {
