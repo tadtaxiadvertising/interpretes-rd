@@ -105,6 +105,17 @@ describe('participant scenario playback controls', () => {
     expect((screen.getByRole('slider', { name: 'Posición del audio base' }) as HTMLInputElement).disabled).toBe(true);
   });
 
+  it('clears the previous audio duration until new metadata is loaded', () => {
+    const { container, rerender } = render(<RoleplayScenario scenario={first} {...shared} />);
+    const audio = container.querySelector('audio')!;
+    Object.defineProperty(audio, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(audio);
+    expect(screen.getByText('00:00 / 01:00')).toBeTruthy();
+
+    rerender(<RoleplayScenario scenario={{ ...first, baseAudioUrl: '/tests/changed.mp3' }} {...shared} />);
+    expect(screen.getByText('00:00 / 00:00')).toBeTruthy();
+  });
+
   it('updates the audio element playbackRate without bypassing the full-listen gate', () => {
     const { container } = render(<RoleplayScenario scenario={first} {...shared} />);
     const audio = container.querySelector('audio')!;
