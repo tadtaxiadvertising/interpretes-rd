@@ -264,6 +264,33 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-assigned', expect.any(Object));
   });
 
+  it('recovers a submitted candidate whose confirmed audio has a Storage path but no legacy URL', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'SUBMITTED',
+      evaluatorId: null,
+      qaScoreId: null,
+      scenarios: [{
+        ...ASSIGNED_SESSION.scenarios[0],
+        responses: [{
+          sourceAudioUrl: null,
+          sourceAudioPath: 'responses/sess-assigned/scenario-1/source.webm',
+          processedAudioPath: null,
+          selfScore: { fluency: 8 },
+        }],
+      }],
+    });
+
+    const res = await startCandidateRoleplay();
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.data.sessionId).toBe('sess-assigned');
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.advanceApplication).not.toHaveBeenCalled();
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-assigned', expect.any(Object));
+  });
+
   it('does not resume a submitted legacy attempt if any scenario lacks a recording', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
     m.sessionFindFirst.mockResolvedValue({
