@@ -73,10 +73,13 @@ export function RoleplayScenario({
     audio.pause();
     audio.currentTime = 0;
     setCurrentTime(0);
+    // Do not display the previous clip's duration while metadata for the
+    // new audio is still loading.
+    setDuration(0);
     setIsBasePlaying(false);
     setHasListened(false);
     setAudioError(null);
-  }, [scenario.id]);
+  }, [scenario.id, scenario.baseAudioUrl]);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
@@ -147,6 +150,9 @@ export function RoleplayScenario({
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // The full-listen gate must not be bypassed by dragging the timeline.
+    // Rewinding/fast-forwarding becomes available after the first complete listen.
+    if (!hasListened || isLoading) return;
     if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
     repeatTimerRef.current = null;
     setRepeatPending(false);
@@ -217,6 +223,9 @@ export function RoleplayScenario({
             <div className="flex-1">
               <input
                 type="range"
+                aria-label="Posición del audio base"
+                title={!hasListened ? 'Escucha el audio completo antes de mover la posición' : 'Mover la posición del audio'}
+                disabled={!hasListened || isLoading}
                 min={0}
                 max={duration || 100}
                 value={currentTime}
