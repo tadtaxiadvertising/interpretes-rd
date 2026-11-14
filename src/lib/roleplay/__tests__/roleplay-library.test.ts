@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'crypto';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
 const supabaseUrl = 'https://example.supabase.co';
@@ -32,6 +33,19 @@ describe('getRoleplaySnapshotHash', () => {
   it('is stable when input rows are provided in a different order', () => {
     expect(getRoleplaySnapshotHash(scenarios)).toBe(getRoleplaySnapshotHash([...scenarios].reverse()));
   });
+  it('keeps legacy snapshot fingerprints stable when all Studio metadata is absent', () => {
+    const legacyPayload = scenarios.map((scenario) => ({
+      order: scenario.order,
+      title: scenario.title,
+      baseAudioUrl: scenario.baseAudioUrl,
+      durationLimitSec: scenario.durationLimitSec,
+      scriptPrompt: scenario.scriptPrompt,
+      expectedKeys: [],
+    }));
+    const expected = createHash('sha256').update(JSON.stringify(legacyPayload)).digest('hex');
+    expect(getRoleplaySnapshotHash(scenarios)).toBe(expected);
+  });
+
   it('includes expected assessment keys in the snapshot identity', () => {
     expect(getRoleplaySnapshotHash(scenarios)).not.toBe(getRoleplaySnapshotHash([
       { ...scenarios[0], expectedKeys: ['Critical terminology'] }, scenarios[1],
