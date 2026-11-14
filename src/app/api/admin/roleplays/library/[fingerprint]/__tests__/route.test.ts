@@ -65,6 +65,8 @@ describe('admin roleplay library visibility', () => {
     (validateAction as any).mockResolvedValue({ error: 'Access denied', code: 'UNAUTHORIZED' });
     const response = await POST(archiveRequest(), context());
     expect(response.status).toBe(403);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vary')).toBe('Cookie');
     expect(prisma.roleplayLibraryArchive.upsert).not.toHaveBeenCalled();
   });
 
@@ -89,6 +91,8 @@ describe('admin roleplay library visibility', () => {
     const response = await POST(archiveRequest(), context());
     expect(response.status).toBe(200);
     expect((await response.json()).archived).toBe(true);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vary')).toBe('Cookie');
     expect(prisma.roleplayLibraryArchive.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { fingerprint },
       create: expect.objectContaining({ fingerprint }),
@@ -113,10 +117,35 @@ describe('admin roleplay library visibility', () => {
     expect(prisma.roleplayLibraryArchive.updateMany).not.toHaveBeenCalled();
   });
 
-  it('returns generic errors without leaking database details', async () => {
-    (prisma.roleplayLibraryArchive.upsert as any).mockRejectedValue(new Error('sensitive connection string'));
-    const response = await POST(archiveRequest(), context());
-    expect(response.status).toBe(500);
-    expect(JSON.stringify(await response.json())).not.toContain('sensitive');
+  it('never logs provider exception names or database secrets during archive', async () => {
+    const error = new Error('postgresql://PRIVATE_PASSWORD@internal.invalid');
+    error.name = 'Bearer PRIVATE_AUTH_TOKEN';
+    (prisma.roleplayLibraryArchive.upsert as any).mockRejectedValueOnce(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(archiveRequest(), context());
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(await response.json())).not.toContain('PRIVATE_PASSWORD');
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_|postgresql:/);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(log).toHaveBeenCalledWith('[ADMIN ROLEPLAY LIBRARY] Failed to archive snapshot', 'Error');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('does not leak a provider error when restoring archived catalog visibility', async () => {
+    const error = new Error('PRIVATE_RESTORE_TOKEN');
+    error.name = 'PRIVATE_ERROR_NAME';
+    (prisma.roleplayLibraryArchive.updateMany as any).mockRejectedValueOnce(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await DELETE(restoreRequest(), context());
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    } finally {
+      log.mockRestore();
+    }
   });
 });

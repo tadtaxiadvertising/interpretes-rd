@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import ffmpegPath from 'ffmpeg-static';
@@ -152,33 +154,33 @@ async function sliceMp3(input: Buffer, segment: Segment, deadline: number, signa
 
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
-  if ('error' in auth) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if ('error' in auth) return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
   // A real authenticated actor is a more stable quota key than a proxy header.
   const limit = applyRateLimit(
     req,
     { ...RATE_LIMITS.audioUpload, maxRequests: 3, keyPrefix: 'studio-export' },
     auth.user.userId,
   );
-  if (!limit.success) return NextResponse.json({ error: 'Demasiadas solicitudes de audio.' }, {
+  if (!limit.success) return privateRoleplayResponse({ error: 'Demasiadas solicitudes de audio.' }, {
     status: 429, headers: createRateLimitHeaders(limit),
   });
   const contentLength = Number(req.headers.get('content-length') ?? 0);
   if (contentLength > MAX_INPUT_BYTES + 100000) {
-    return NextResponse.json({ error: 'Audio exceeds 15 MiB' }, { status: 413 });
+    return privateRoleplayResponse({ error: 'Audio exceeds 15 MiB' }, { status: 413 });
   }
   if (activeExports >= MAX_CONCURRENT_EXPORTS) {
-    return NextResponse.json({ error: 'El estudio está ocupado. Inténtalo de nuevo en unos momentos.' }, { status: 503, headers: { 'Retry-After': '10' } });
+    return privateRoleplayResponse({ error: 'El estudio está ocupado. Inténtalo de nuevo en unos momentos.' }, { status: 503, headers: { 'Retry-After': '10' } });
   }
   activeExports++;
   const deadline = Date.now() + MAX_EXPORT_TIME_MS;
   try {
-    if (req.signal.aborted) return NextResponse.json({ error: 'Solicitud cancelada' }, { status: 499 });
+    if (req.signal.aborted) return privateRoleplayResponse({ error: 'Solicitud cancelada' }, { status: 499 });
     const form = await req.formData();
     const audio = form.get('audio');
     const segments = parseSegments(typeof form.get('segments') === 'string' ? form.get('segments') as string : null);
     if (!(audio instanceof File) || audio.size < 1 || audio.size > MAX_INPUT_BYTES ||
       !['audio/mpeg', 'audio/mp3', ''].includes(audio.type) || !/\.mp3$/i.test(audio.name) || !segments) {
-      return NextResponse.json({ error: 'Invalid MP3 or segment boundaries' }, { status: 400 });
+      return privateRoleplayResponse({ error: 'Invalid MP3 or segment boundaries' }, { status: 400 });
     }
     const input = Buffer.from(await audio.arrayBuffer());
     const entries: ZipEntry[] = [];
@@ -200,15 +202,16 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/zip',
         'Content-Disposition': 'attachment; filename="roleplay-studio.zip"',
         'Cache-Control': 'private, no-store',
+        Vary: 'Cookie',
         'X-Content-Type-Options': 'nosniff',
       },
     });
   } catch (error) {
-    console.error('[ROLEPLAY STUDIO] Export failed:', error instanceof Error ? error.message : 'Unexpected error');
+    console.error('[ROLEPLAY STUDIO] Export failed:', safeServerErrorCategory(error));
     if (error instanceof Error && error.message.startsWith('El intervalo solicitado supera el audio real')) {
-      return NextResponse.json({ error: 'Una intervención termina después del audio original. Revisa su inicio y final antes de exportar.' }, { status: 422 });
+      return privateRoleplayResponse({ error: 'Una intervención termina después del audio original. Revisa su inicio y final antes de exportar.' }, { status: 422 });
     }
-    return NextResponse.json({ error: 'No se pudo procesar el audio. Revisa el formato y la duración.' }, { status: 422 });
+    return privateRoleplayResponse({ error: 'No se pudo procesar el audio. Revisa el formato y la duración.' }, { status: 422 });
   } finally {
     activeExports--;
   }

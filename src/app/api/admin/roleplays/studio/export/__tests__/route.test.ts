@@ -35,6 +35,8 @@ describe('admin roleplay studio export security and input boundaries', () => {
     vi.mocked(validateAction).mockResolvedValue({ error: 'Forbidden', code: 'UNAUTHORIZED' });
     const result = await POST(request([validSegment]) as never);
     expect(result.status).toBe(403);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toBe('Cookie');
     expect(applyRateLimit).not.toHaveBeenCalled();
   });
 
@@ -42,6 +44,8 @@ describe('admin roleplay studio export security and input boundaries', () => {
     vi.mocked(applyRateLimit).mockReturnValue({ success: false } as never);
     const result = await POST(request([validSegment]) as never);
     expect(result.status).toBe(429);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toBe('Cookie');
   });
 
   it.each([
@@ -57,6 +61,26 @@ describe('admin roleplay studio export security and input boundaries', () => {
   ])('rejects invalid boundary: %s (%s)', async (segments) => {
     const result = await POST(request(segments) as never);
     expect(result.status).toBe(400);
+  });
+
+  it('never logs private diagnostic messages from failed export decoding', async () => {
+    const req = request([validSegment]);
+    const error = new Error('PRIVATE_AUDIO_TOKEN /tmp/medical-interpreting.mp3');
+    error.name = 'PRIVATE_ERROR_NAME';
+    vi.spyOn(req, 'formData').mockRejectedValueOnce(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(req as never);
+      const body = await res.json();
+      expect(res.status).toBe(422);
+      expect(JSON.stringify(body)).not.toContain('PRIVATE_AUDIO_TOKEN');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_');
+      expect(log).toHaveBeenCalledWith('[ROLEPLAY STUDIO] Export failed:', 'Error');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('rejects audio with the wrong extension', async () => {

@@ -80,7 +80,28 @@ describe('GET /api/dashboard/roleplays — interpreter ownership and minimal exp
 
     const result = await GET();
     expect(result.status).toBe(403);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toBe('Cookie');
     expect(m.findMany).not.toHaveBeenCalled();
+  });
+
+  it('does not expose database diagnostics in the response or error log', async () => {
+    const error = new Error('postgresql://private:PRIVATE_DB_PASSWORD@internal.invalid');
+    error.name = 'Bearer PRIVATE_AUDIO_TOKEN';
+    m.findMany.mockRejectedValueOnce(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await GET();
+      const body = await result.json();
+      expect(result.status).toBe(500);
+      expect(JSON.stringify(body)).not.toContain('PRIVATE_DB_PASSWORD');
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_|postgresql:/);
+      expect(log).toHaveBeenCalledWith('Get My Roleplays Error:', 'Error');
+      expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(result.headers.get('Vary')).toBe('Cookie');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('requires an interpreter profile', async () => {
