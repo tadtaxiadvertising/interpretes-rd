@@ -119,7 +119,7 @@ export async function createSignedUploadUrl(
     .createSignedUploadUrl(path);
 
   if (error) {
-    throw new Error(`Failed to create signed upload URL: ${error.message}`);
+    throw new Error('Failed to create signed upload URL');
   }
 
   return {
@@ -174,7 +174,7 @@ export async function confirmUpload(path: string, maxSizeBytes?: number): Promis
         .from(BUCKET)
         .remove([path]);
       if (cleanupError) {
-        console.error('Failed to remove rejected Roleplay audio object:', cleanupError.message);
+        console.error('Failed to remove rejected Roleplay audio object:', 'StorageError');
       }
       throw new Error('Uploaded audio size is invalid or exceeds the allowed limit');
     }
@@ -184,7 +184,7 @@ export async function confirmUpload(path: string, maxSizeBytes?: number): Promis
     .createSignedUrl(path, 60 * 60 * 24 * 7); // 7 days - for base audio / admin review
 
   if (error) {
-    throw new Error(`Failed to create signed URL: ${error.message}`);
+    throw new Error('Failed to create signed URL');
   }
 
   return data.signedUrl;
@@ -196,7 +196,7 @@ export async function getPlaybackUrl(path: string): Promise<string> {
     .createSignedUrl(path, 60 * 60); // 1 hour - for candidate playback during roleplay
 
   if (error) {
-    throw new Error(`Failed to create signed URL: ${error.message}`);
+    throw new Error('Failed to create signed URL');
   }
 
   return data.signedUrl;
@@ -208,7 +208,7 @@ export async function getValidationUrl(path: string): Promise<string> {
     .createSignedUrl(path, 15 * 60); // 15 minutes - for invite validation
 
   if (error) {
-    throw new Error(`Failed to create signed URL: ${error.message}`);
+    throw new Error('Failed to create signed URL');
   }
 
   return data.signedUrl;
@@ -220,7 +220,7 @@ export async function getAdminReviewUrl(path: string): Promise<string> {
     .createSignedUrl(path, 60 * 60 * 24); // 24 hours - for QA review
 
   if (error) {
-    throw new Error(`Failed to create signed URL: ${error.message}`);
+    throw new Error('Failed to create signed URL');
   }
 
   return data.signedUrl;
@@ -232,7 +232,7 @@ export async function deleteAudio(path: string): Promise<void> {
 
 export async function getSignedAudioUrl(path: string, expiresIn: number = 60 * 60): Promise<string> {
   const { data, error } = await getSupabaseAdmin().storage.from(BUCKET).createSignedUrl(path, expiresIn);
-  if (error) throw new Error(`Failed to create signed URL: ${error.message}`);
+  if (error) throw new Error('Failed to create signed URL');
   return data.signedUrl;
 }
 
