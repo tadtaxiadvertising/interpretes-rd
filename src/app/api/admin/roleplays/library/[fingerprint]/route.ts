@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
@@ -17,18 +19,18 @@ export async function POST(
 ) {
   try {
     const auth = await validateAction('admin');
-    if ('error' in auth) return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    if ('error' in auth) return privateRoleplayResponse({ success: false, error: auth.error }, { status: 403 });
 
     const { fingerprint } = await params;
     if (!FINGERPRINT_RE.test(fingerprint)) {
-      return NextResponse.json({ success: false, error: 'Invalid catalog fingerprint' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid catalog fingerprint' }, { status: 400 });
     }
 
     const payload: unknown = await req.json().catch(() => null);
     if (!payload || typeof payload !== 'object' ||
       !('sourceSessionId' in payload) || typeof payload.sourceSessionId !== 'string' ||
       !/^[a-zA-Z0-9_-]{5,120}$/.test(payload.sourceSessionId)) {
-      return NextResponse.json({ success: false, error: 'Invalid source session' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid source session' }, { status: 400 });
     }
 
     const source = await prisma.roleplaySession.findUnique({
@@ -43,7 +45,7 @@ export async function POST(
     });
     if (!source || source.status === 'DRAFT' || source.status === 'CANCELLED' ||
         source.scenarios.length === 0 || getRoleplaySnapshotHash(source.scenarios) !== fingerprint) {
-      return NextResponse.json({ success: false, error: 'This library snapshot is no longer available' }, { status: 409 });
+      return privateRoleplayResponse({ success: false, error: 'This library snapshot is no longer available' }, { status: 409 });
     }
 
     const archivedAt = new Date();
@@ -58,10 +60,10 @@ export async function POST(
     });
     revalidatePath('/admin/roleplays/library');
     revalidatePath(`/admin/roleplays/library/${payload.sourceSessionId}`);
-    return NextResponse.json({ success: true, archived: true });
+    return privateRoleplayResponse({ success: true, archived: true });
   } catch (error) {
-    console.error('[ADMIN ROLEPLAY LIBRARY] Failed to archive snapshot', error instanceof Error ? error.name : 'UnknownError');
-    return NextResponse.json({ success: false, error: 'No se pudo retirar el roleplay de la biblioteca' }, { status: 500 });
+    console.error('[ADMIN ROLEPLAY LIBRARY] Failed to archive snapshot', safeServerErrorCategory(error));
+    return privateRoleplayResponse({ success: false, error: 'No se pudo retirar el roleplay de la biblioteca' }, { status: 500 });
   }
 }
 
@@ -72,11 +74,11 @@ export async function DELETE(
 ) {
   try {
     const auth = await validateAction('admin');
-    if ('error' in auth) return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    if ('error' in auth) return privateRoleplayResponse({ success: false, error: auth.error }, { status: 403 });
 
     const { fingerprint } = await params;
     if (!FINGERPRINT_RE.test(fingerprint)) {
-      return NextResponse.json({ success: false, error: 'Invalid catalog fingerprint' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid catalog fingerprint' }, { status: 400 });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -87,12 +89,12 @@ export async function DELETE(
       });
     });
     if (result.count === 0) {
-      return NextResponse.json({ success: false, error: 'No archived entry found' }, { status: 404 });
+      return privateRoleplayResponse({ success: false, error: 'No archived entry found' }, { status: 404 });
     }
     revalidatePath('/admin/roleplays/library');
-    return NextResponse.json({ success: true, archived: false });
+    return privateRoleplayResponse({ success: true, archived: false });
   } catch (error) {
-    console.error('[ADMIN ROLEPLAY LIBRARY] Failed to restore snapshot', error instanceof Error ? error.name : 'UnknownError');
-    return NextResponse.json({ success: false, error: 'No se pudo restaurar el roleplay' }, { status: 500 });
+    console.error('[ADMIN ROLEPLAY LIBRARY] Failed to restore snapshot', safeServerErrorCategory(error));
+    return privateRoleplayResponse({ success: false, error: 'No se pudo restaurar el roleplay' }, { status: 500 });
   }
 }
