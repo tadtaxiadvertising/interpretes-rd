@@ -202,6 +202,10 @@ function checkSessionAccess(
   if (!identity) return false;
   if (identity.role === 'admin') return true;
 
+  // Cancellation/expiration revokes participant playback for BOTH roles.
+  // Administrators retain read access for auditing and historical QA.
+  if (session.status === 'CANCELLED' || session.status === 'EXPIRED') return false;
+
   // Recruitment sessions belong exclusively to their candidate, even when
   // legacy rows still carry a provisional interpreterId.
   if (session.recruitmentCandidateId !== null) {
