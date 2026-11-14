@@ -138,7 +138,7 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
       access: { validatedAt, usedAt, startedAt: new Date() },
     });
     const response = await POST(makeRequest({ cookie: 'session-1' }));
-    expect(response.status()).toBe(403);
+    expect(response.status).toBe(403);
     expect((await response.json()).success).toBe(false);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(mocks.findScenario).not.toHaveBeenCalled();
@@ -156,7 +156,7 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
       access: null,
     });
     const response = await POST(makeRequest());
-    expect(response.status()).toBe(200);
+    expect(response.status).toBe(200);
     expect(mocks.upload).toHaveBeenCalledOnce();
   });
 
