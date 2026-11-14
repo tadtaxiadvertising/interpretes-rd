@@ -179,6 +179,8 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
       expect(JSON.stringify(body)).not.toContain(secret);
       expect(JSON.stringify(body)).not.toContain('ABCD1234');
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('hidden-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private.invalid');
       expect(m.setCookie).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
