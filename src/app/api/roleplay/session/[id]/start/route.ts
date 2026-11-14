@@ -3,6 +3,7 @@ import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
 
 const db = prisma;
 
@@ -34,6 +35,7 @@ export async function POST(
         status: true,
         interpreterId: true,
         recruitmentCandidateId: true,
+        access: { select: { validatedAt: true, usedAt: true } },
       },
     });
 
@@ -44,6 +46,16 @@ export async function POST(
     const sessionCookie = req.cookies.get('roleplay_session')?.value ?? null;
     if (!isSessionOwner(identity, session, sessionCookie)) {
       return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
+    }
+
+    // A session-bound cookie proves ownership, not validation of the invite.
+    // Direct starts must use the same candidate gate as recording/signed-upload
+    // or the UI can transition to STARTED while playback stays unavailable.
+    if (identity.role === 'candidate' && !candidateCanUploadRoleplayAudio(session)) {
+      return privateRoleplayResponse(
+        { success: false, error: 'Validate your roleplay invitation before starting.' },
+        { status: 403 },
+      );
     }
 
     // Candidate selection Roleplay is part of recruitment and must not be
