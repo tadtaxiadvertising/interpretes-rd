@@ -381,7 +381,7 @@ export async function POST(req: NextRequest) {
           sessionIds: bulkResult.created.map((session) => session.id),
           scenarioCount: scenarios.length,
         },
-      });
+      }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
     }
 
     // Candidate ownership wins over provisional interpreter IDs retained in
@@ -547,10 +547,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
-    });
+    }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Create Roleplay API Error:', message);
+    // Storage and database exceptions can include signed URLs, credentials,
+    // or infrastructure details; preserve an error category, not its payload.
+    console.error('Create Roleplay API Error:', error instanceof Error ? error.name : 'UnknownError');
 
     // Audio paths are unique per request. Never delete/reset a shared draft
     // here: another administrator may have completed it concurrently.
@@ -558,7 +560,7 @@ export async function POST(req: NextRequest) {
       try {
         await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
       } catch (cleanupError) {
-        console.error('Create Roleplay storage cleanup failed:', cleanupError);
+        console.error('Create Roleplay storage cleanup failed:', cleanupError instanceof Error ? cleanupError.name : 'UnknownError');
       }
     }
 
@@ -573,8 +575,13 @@ export async function POST(req: NextRequest) {
     }
     const isUploadFailure = message.startsWith('Failed to upload audio');
     return NextResponse.json(
-      { success: false, error: isUploadFailure ? message : 'Failed to create roleplay' },
-      { status: 500 }
+      {
+        success: false,
+        error: isUploadFailure
+          ? 'No fue posible subir un audio. Revisa el archivo e inténtalo de nuevo.'
+          : 'No fue posible crear el roleplay. Inténtalo de nuevo.',
+      },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } }
     );
   }
 }
@@ -582,7 +589,10 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     const auth = await validateAction('admin');
-    if ('error' in auth) return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    if ('error' in auth) return NextResponse.json(
+      { success: false, error: 'Forbidden' },
+      { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
+    );
 
     const sessions = await db.roleplaySession.findMany({
       orderBy: { createdAt: 'desc' },
@@ -594,10 +604,15 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json({ success: true, data: sessions });
+    return NextResponse.json(
+      { success: true, data: sessions },
+      { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
+    );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Get Roleplays Error:', message);
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error('Get Roleplays Error:', error instanceof Error ? error.name : 'UnknownError');
+    return NextResponse.json(
+      { success: false, error: 'No fue posible consultar los roleplays.' },
+      { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
+    );
   }
 }

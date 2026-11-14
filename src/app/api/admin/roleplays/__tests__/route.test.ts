@@ -47,7 +47,7 @@ vi.mock('@supabase/supabase-js', () => ({
   })),
 }));
 
-import { POST } from '../route';
+import { POST, GET } from '../route';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
@@ -408,6 +408,31 @@ describe('POST /api/admin/roleplays', () => {
     });
   });
 
+  describe('storage error privacy', () => {
+    it('does not echo provider exception details or cache failed uploads', async () => {
+      const leak = 'https://storage-internal.example?token=secret-provider-token';
+      mockUpload.mockResolvedValueOnce({ error: { message: leak } });
+      const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const res = await POST(buildRequest({
+          participantType: 'candidate',
+          participantId: '9',
+          scenarios: oneScenario,
+          audios: [audioFile()],
+        }) as any);
+        const body = await res.json();
+        expect(res.status).toBe(500);
+        expect(body.error).toMatch(/No fue posible subir un audio/);
+        expect(JSON.stringify(body)).not.toContain('secret-provider-token');
+        expect(JSON.stringify(body)).not.toContain('storage-internal.example');
+        expect(JSON.stringify(logs.mock.calls)).not.toContain('secret-provider-token');
+        expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      } finally {
+        logs.mockRestore();
+      }
+    });
+  });
+
   describe('failure cleanup', () => {
     it('preserves a newly reserved draft when an audio upload fails', async () => {
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
@@ -415,7 +440,7 @@ describe('POST /api/admin/roleplays', () => {
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(500);
-      expect((await res.json()).error).toBe('Failed to upload audio: boom');
+      expect((await res.json()).error).toBe('No fue posible subir un audio. Revisa el archivo e inténtalo de nuevo.');
       expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(1);
       expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.create).not.toHaveBeenCalled();
@@ -637,5 +662,55 @@ describe('POST /api/admin/roleplays', () => {
       expect(res.status).toBe(400);
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('GET /api/admin/roleplays privacy', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    (validateAction as any).mockResolvedValue(adminAuth);
+  });
+
+  it('makes the administrator list private and uncacheable', async () => {
+    (prisma.roleplaySession.findMany as any).mockResolvedValue([
+      { id: 'sess-1', recruitmentCandidate: { email: 'sensitive@example.test' } },
+    ]);
+    const res = await GET();
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data[0].id).toBe('sess-1');
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toBe('Cookie');
+  });
+
+  it('does not expose database exception details in an administrator response or logs', async () => {
+    (prisma.roleplaySession.findMany as any).mockRejectedValue(
+      new Error('postgresql://db-user:secret@internal-database.example/roleplay'),
+    );
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await GET();
+      const body = await res.json();
+      expect(res.status).toBe(500);
+      expect(body.error).toBe('No fue posible consultar los roleplays.');
+      expect(JSON.stringify(body)).not.toContain('secret');
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('internal-database.example');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('rejects a non-administrator without exposing auth context', async () => {
+    (validateAction as any).mockResolvedValue({
+      error: 'Access denied for private-user-id',
+      code: 'UNAUTHORIZED',
+    });
+    const res = await GET();
+    const body = await res.json();
+    expect(res.status).toBe(403);
+    expect(body.error).toBe('Forbidden');
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(prisma.roleplaySession.findMany).not.toHaveBeenCalled();
   });
 });
