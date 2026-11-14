@@ -44,6 +44,11 @@ const patchRequest = () => new NextRequest('http://localhost/api/v1/interpreters
   body: JSON.stringify({ name: 'Updated Interpreter' }),
 });
 const deleteRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', { method: 'DELETE' });
+const passwordRequest = () => new NextRequest('http://localhost/api/v1/interpreters/12', {
+  method: 'PATCH',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ password: 'fictional-password-only' }),
+});
 
 describe('interpreter detail admin API privacy', () => {
   beforeEach(() => {
@@ -75,6 +80,33 @@ describe('interpreter detail admin API privacy', () => {
       where: { id: 12 },
       data: { name: 'Updated Interpreter' },
     });
+  });
+
+  it('rejects a password change when the interpreter does not exist', async () => {
+    m.findUnique.mockResolvedValueOnce(null);
+    const res = await PATCH(passwordRequest(), params);
+    expect(res.status).toBe(404);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await res.json()).toEqual({ success: false, error: 'Interpreter not found.' });
+    expect(m.findUnique).toHaveBeenCalledOnce();
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.adminAuth).not.toHaveBeenCalled();
+  });
+
+  it('refuses to claim password success if the interpreter has no linked Auth profile', async () => {
+    m.findUnique.mockResolvedValueOnce({ id: 12, userProfile: null });
+    const res = await PATCH(passwordRequest(), params);
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Authorization');
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Cannot change password without a linked authentication account. Contact support.',
+    });
+    expect(m.update).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.adminAuth).not.toHaveBeenCalled();
   });
 
   it('redacts provider errors from PATCH response and logs', async () => {
