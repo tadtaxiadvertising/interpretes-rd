@@ -16,8 +16,8 @@ interface Scenario {
   studioTurn?: number;
   studioSpeaker?: 'speaker_1' | 'speaker_2' | 'speaker_3';
   studioLanguage?: 'en' | 'es' | 'mixed';
-  sourceStartSec?: number;
-  sourceEndSec?: number;
+  sourceStartSec?: number | null;
+  sourceEndSec?: number | null;
   sha256?: string;
 }
 
@@ -143,7 +143,7 @@ export function ScenarioCard({
               {scenario.studioTurn && <span>Turno original #{scenario.studioTurn}</span>}
               {scenario.studioSpeaker && <span>{scenario.studioSpeaker.replace('_', ' ')}</span>}
               {scenario.studioLanguage && <span>{scenario.studioLanguage.toUpperCase()}</span>}
-              {scenario.sourceStartSec !== undefined && scenario.sourceEndSec !== undefined && <span>{scenario.sourceStartSec.toFixed(2)}s–{scenario.sourceEndSec.toFixed(2)}s</span>}
+              {scenario.sourceStartSec != null && scenario.sourceEndSec != null && <span>{scenario.sourceStartSec.toFixed(2)}s–{scenario.sourceEndSec.toFixed(2)}s</span>}
               {scenario.baseAudioFile && (
                 <span className="flex items-center gap-1 text-green-400">
                   <Mic2 size={12} />
