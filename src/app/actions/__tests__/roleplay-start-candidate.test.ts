@@ -149,15 +149,35 @@ describe('startCandidateRoleplay', () => {
     expect(m.accessUpsert).not.toHaveBeenCalled();
   });
 
-  it('rejects when the account has no matching application (normalized email)', async () => {
+  it('looks up the authorized candidate by resolved ID, never mutable email', async () => {
+    m.sessionFindFirst.mockResolvedValue(ASSIGNED_SESSION);
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.candidateFindUnique).toHaveBeenCalledWith({
+      where: { id: 5 },
+      select: { id: true },
+    });
+    expect(m.candidateFindUnique).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: 'candidate@example.com' } })
+    );
+  });
+
+  it('rejects when the resolved candidate ID no longer has an expediente', async () => {
+    m.identity.candidateId = 99;
     m.candidateFindUnique.mockResolvedValue(null);
 
     const res = await startCandidateRoleplay();
 
     expect(res.success).toBe(false);
-    expect(m.candidateFindUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: 'candidate@example.com' } })
-    );
+    expect(res.code).toBe('NOT_FOUND');
+    expect(m.candidateFindUnique).toHaveBeenCalledWith({
+      where: { id: 99 },
+      select: { id: true },
+    });
+    expect(m.applicationFindFirst).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
