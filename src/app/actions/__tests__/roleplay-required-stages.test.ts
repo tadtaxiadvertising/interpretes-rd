@@ -294,6 +294,8 @@ describe('Roleplay required stages', () => {
     const result = await submitRoleplaySession({ sessionId: 'sess-1' });
 
     expect(result.success).toBe(false);
+    expect(result.code).toBe('INVALID_STATE');
+    expect(result.error).toBe('Complete every recording and self-assessment before submitting');
     expect(m.sessionUpdateMany).not.toHaveBeenCalled();
   });
 
@@ -311,6 +313,44 @@ describe('Roleplay required stages', () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  it('does not mistake a Prisma exception using a business-rule message for a conflict', async () => {
+    m.sessionFindUnique.mockRejectedValueOnce(new Error('Roleplay was already submitted or changed'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitRoleplaySession({ sessionId: 'sess-1' });
+      expect(result).toEqual({
+        success: false,
+        code: 'INTERNAL_ERROR',
+        error: 'No fue posible enviar el roleplay. Inténtalo nuevamente.',
+      });
+      expect(log).toHaveBeenCalledWith('Submit Roleplay Session Error:', 'Error');
+      expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('returns CONFLICT for a genuine compare-and-set submission race', async () => {
+    m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
+    m.session = { ...m.session, recruitmentCandidateId: null, interpreterId: 7, currentScenarioIndex: 1 };
+    m.scenarios = [{
+      order: 0,
+      responses: [{
+        sourceAudioPath: 'responses/sess-1/scenario-1/audio.webm',
+        selfScore: { ...SCORES, criticalError: false },
+      }],
+    }];
+    m.sessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+
+    const result = await submitRoleplaySession({ sessionId: 'sess-1' });
+    expect(result).toEqual({
+      success: false,
+      code: 'CONFLICT',
+      error: 'Roleplay was already submitted or changed',
+    });
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
   });
 
   it('submits a complete path-only response without requiring an old signed URL', async () => {

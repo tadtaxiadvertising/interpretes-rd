@@ -224,6 +224,7 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
 
     expect(res.success).toBe(false);
     expect(res.error).toBe('Session already evaluated');
+    expect(res.code).toBe('CONFLICT');
     expect(m.sessionUpdateMany).not.toHaveBeenCalled();
     expect(m.appFindUnique).not.toHaveBeenCalled();
   });
@@ -349,6 +350,23 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
       expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
       expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
       expect(JSON.stringify(log.mock.calls)).not.toContain('password');
+      expect(m.qaCreate).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('does not treat a Prisma error containing a known QA message as a business conflict', async () => {
+    m.sessionFindUnique.mockRejectedValueOnce(new Error('Session already evaluated'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await evaluateRoleplay(null, makeForm());
+      expect(result).toEqual({
+        success: false,
+        code: 'INTERNAL_ERROR',
+        error: 'No fue posible evaluar el roleplay. Inténtalo nuevamente.',
+      });
+      expect(log).toHaveBeenCalledWith('Evaluate Roleplay Error:', 'Error');
       expect(m.qaCreate).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();

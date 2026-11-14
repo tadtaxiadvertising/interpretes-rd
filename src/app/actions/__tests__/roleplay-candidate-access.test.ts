@@ -138,6 +138,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
 
     expect(res.success).toBe(false);
     expect(res.error).toContain('Unauthorized');
+    expect(res.code).toBe('FORBIDDEN');
     expect(m.update).not.toHaveBeenCalled();
   });
 
@@ -240,6 +241,30 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
       expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
       expect(JSON.stringify(log.mock.calls)).not.toContain('password');
+      expect(m.responseCreate).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('never trusts a storage exception whose message looks like an authorization failure', async () => {
+    m.session = CANDIDATE_SESSION;
+    m.cookie = 'sess-cand';
+    m.confirmUpload.mockRejectedValueOnce(new Error('Unauthorized'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await confirmRoleplayResponse({
+        sessionId: 'sess-cand',
+        scenarioId: 'scn-1',
+        sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+        recordedAudioUrl: 'https://example.test/ignored-client-audio.webm',
+      });
+      expect(result).toMatchObject({
+        success: false,
+        code: 'INTERNAL_ERROR',
+        error: 'No fue posible confirmar la grabación. Inténtalo nuevamente.',
+      });
+      expect(log).toHaveBeenCalledWith('Confirm Response Error:', 'Error');
       expect(m.responseCreate).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();

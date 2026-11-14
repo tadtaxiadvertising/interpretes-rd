@@ -18,30 +18,9 @@ import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence
 import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
+import { publicRoleplayActionError, roleplayBusinessError } from '@/lib/roleplay/action-errors';
 
 const db = prisma;
-
-// Only explicit business-rule messages may reach participants. Prisma, Storage
-// and infrastructure exceptions can contain table names, URLs or credentials.
-const SAFE_ROLEPLAY_ACTION_FAILURES = new Set([
-  'Unauthorized',
-  'Session not available for submission',
-  'A valid uploaded audio object is required before confirming the response',
-  'Response already recorded for this scenario',
-  'Concurrent submission detected',
-  'Session not available for self-assessment',
-  'This scenario is not the current step',
-  'Confirm your recording before completing the self-assessment',
-  'This self-assessment has already been submitted',
-  'Roleplay is not ready to submit',
-  'Complete every recording and self-assessment before submitting',
-  'Roleplay was already submitted or changed',
-  'Session not found',
-  'Session already evaluated',
-  'No response submitted yet',
-  'Complete every recording and self-assessment before evaluating',
-  'Concurrent evaluation detected or session not available',
-]);
 
 // Log only stable, allowlisted error categories; raw messages, objects and
 // stacks may contain clinical audio URLs, bearer tokens or database credentials.
@@ -56,12 +35,6 @@ function logRoleplayActionError(context: string, error: unknown): void {
     ? error.name
     : error instanceof Error ? 'Error' : 'UnknownError';
   console.error(context, kind);
-}
-
-function publicRoleplayActionFailure(error: unknown, fallback: string): string {
-  return error instanceof Error && SAFE_ROLEPLAY_ACTION_FAILURES.has(error.message)
-    ? error.message
-    : fallback;
 }
 
 async function canAccessRoleplaySession(
@@ -743,7 +716,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       });
 
       if (!session) {
-        throw new Error('Session not available for submission');
+        throw roleplayBusinessError('Session not available for submission');
       }
 
       // Interpreter sessions are bound to the resolved interpreter id.
@@ -751,7 +724,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       // roleplay_session cookie created by the invite/start flow: an
       // authenticated user alone is not sufficient.
       if (!(await canAccessRoleplaySession(session, sessionCookie))) {
-        throw new Error('Unauthorized');
+        throw roleplayBusinessError('Unauthorized');
       }
       // A response must belong to a real scenario in this session. Without this check a
       // caller could read or overwrite another session's response by passing
@@ -760,15 +733,15 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         where: { id: input.scenarioId, sessionId: session.id },
         select: { id: true },
       });
-      if (!scenario) throw new Error('Unauthorized');
+      if (!scenario) throw roleplayBusinessError('Unauthorized');
       if (!isCanonicalResponseAudioPath(input.sourceAudioPath, session.id, input.scenarioId)) {
-        throw new Error('A valid uploaded audio object is required before confirming the response');
+        throw roleplayBusinessError('A valid uploaded audio object is required before confirming the response');
       }
       // The idempotent replay below is intentionally available after a
       // legitimate SUBMITTED/QA result, but never for a draft, revoked or
       // expired attempt. Those states must not return stored audio URLs.
       if (['DRAFT', 'CANCELLED', 'EXPIRED'].includes(session.status)) {
-        throw new Error('Session not available for submission');
+        throw roleplayBusinessError('Session not available for submission');
       }
 
       // A retried confirm after a successful commit may arrive after the
@@ -789,7 +762,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
             newlyCreated: false,
           };
         }
-        throw new Error('Response already recorded for this scenario');
+        throw roleplayBusinessError('Response already recorded for this scenario');
       }
 
       // Unlike an idempotent replay of a previously confirmed response, a
@@ -797,7 +770,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       // validated and not yet consumed. The source object alone is not proof
       // of permission to record into a session.
       if (!candidateCanUploadRoleplayAudio(session)) {
-        throw new Error('Unauthorized');
+        throw roleplayBusinessError('Unauthorized');
       }
 
       // Sequential binding: a new response must target the scenario expected
@@ -807,14 +780,14 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         select: { id: true },
       });
       if (!nextScenario || nextScenario.id !== input.scenarioId) {
-        throw new Error('Unauthorized');
+        throw roleplayBusinessError('Unauthorized');
       }
 
       const validSubmitStates = ['INVITED', 'STARTED', 'IN_PROGRESS'];
       const canSubmit = validSubmitStates.includes(session.status);
 
       if (!canSubmit) {
-        throw new Error('Session not available for submission');
+        throw roleplayBusinessError('Session not available for submission');
       }
 
       // Sign the uploaded object server-side. Never trust a client-supplied URL
@@ -833,7 +806,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         data: { updatedAt: new Date() },
       });
       if (claimed.count !== 1) {
-        throw new Error('Session not available for submission');
+        throw roleplayBusinessError('Session not available for submission');
       }
 
       // A competing confirm may have committed while we waited on that row
@@ -845,7 +818,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       });
       if (concurrentlyConfirmed) {
         if (concurrentlyConfirmed.sourceAudioPath !== input.sourceAudioPath) {
-          throw new Error('Response already recorded for this scenario');
+          throw roleplayBusinessError('Response already recorded for this scenario');
         }
         return {
           recordedAudioUrl: concurrentlyConfirmed.sourceAudioUrl ?? null,
@@ -893,7 +866,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
         },
         select: { id: true },
       });
-      if (!updated) throw new Error('Concurrent submission detected');
+      if (!updated) throw roleplayBusinessError('Concurrent submission detected');
 
       return {
         recordedAudioUrl: confirmedAudioUrl,
@@ -913,7 +886,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
     return { success: true, data: result };
   } catch (error: unknown) {
     logRoleplayActionError('Confirm Response Error:', error);
-    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible confirmar la grabación. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
+    return { success: false, ...publicRoleplayActionError(error, 'No fue posible confirmar la grabación. Inténtalo nuevamente.') };
   }
 }
 
@@ -962,9 +935,9 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         && session.evaluatorId === null
         && session.qaScoreId === null;
       if (!session || (!['STARTED', 'IN_PROGRESS'].includes(session.status) && !isLegacyUnclaimedSubmission)) {
-        throw new Error('Session not available for self-assessment');
+        throw roleplayBusinessError('Session not available for self-assessment');
       }
-      if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
+      if (!(await canAccessRoleplaySession(session, sessionCookie))) throw roleplayBusinessError('Unauthorized');
 
       const scenario = await tx.roleplayScenario.findFirst({
         where: { id: input.scenarioId, sessionId: session.id },
@@ -973,7 +946,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
       if (!scenario || (isLegacyUnclaimedSubmission
         ? scenario.order >= session.currentScenarioIndex
         : scenario.order !== session.currentScenarioIndex)) {
-        throw new Error('This scenario is not the current step');
+        throw roleplayBusinessError('This scenario is not the current step');
       }
 
       // Claim the persisted stage before reading or changing the response.
@@ -1002,7 +975,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
           data: { currentScenarioIndex: scenario.order + 1, status: 'IN_PROGRESS' },
         });
       if (claim.count !== 1) {
-        throw new Error('Session not available for self-assessment');
+        throw roleplayBusinessError('Session not available for self-assessment');
       }
 
       const response = await tx.roleplayResponse.findFirst({
@@ -1010,7 +983,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true, selfScore: true },
       });
       if (!response || !hasPersistedRoleplayRecording(response)) {
-        throw new Error('Confirm your recording before completing the self-assessment');
+        throw roleplayBusinessError('Confirm your recording before completing the self-assessment');
       }
       const existingScore = response.selfScore;
       const existingScoreIsComplete = Boolean(
@@ -1021,7 +994,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
           .every((key) => typeof (existingScore as Record<string, unknown>)[key] === 'number')
       );
       if (isLegacyUnclaimedSubmission && existingScoreIsComplete) {
-        throw new Error('This self-assessment has already been submitted');
+        throw roleplayBusinessError('This self-assessment has already been submitted');
       }
 
       await tx.roleplayResponse.update({
@@ -1043,7 +1016,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
     return { success: true };
   } catch (error: unknown) {
     logRoleplayActionError('Save Self Assessment Error:', error);
-    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible guardar la autoevaluación. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
+    return { success: false, ...publicRoleplayActionError(error, 'No fue posible guardar la autoevaluación. Inténtalo nuevamente.') };
   }
 }
 
@@ -1078,9 +1051,9 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
         && session.evaluatorId === null
         && session.qaScoreId === null;
       if (!session || (!['STARTED', 'IN_PROGRESS'].includes(session.status) && !isLegacyUnclaimedSubmission)) {
-        throw new Error('Roleplay is not ready to submit');
+        throw roleplayBusinessError('Roleplay is not ready to submit');
       }
-      if (!(await canAccessRoleplaySession(session, sessionCookie))) throw new Error('Unauthorized');
+      if (!(await canAccessRoleplaySession(session, sessionCookie))) throw roleplayBusinessError('Unauthorized');
 
       const scenarios = await tx.roleplayScenario.findMany({
         where: { sessionId },
@@ -1100,7 +1073,7 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
         });
 
       if (!hasCompleteAssessments || session.currentScenarioIndex !== scenarios.length) {
-        throw new Error('Complete every recording and self-assessment before submitting');
+        throw roleplayBusinessError('Complete every recording and self-assessment before submitting');
       }
 
       if (!isLegacyUnclaimedSubmission) {
@@ -1112,7 +1085,7 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
           },
           data: { status: 'SUBMITTED', submittedAt: new Date() },
         });
-        if (transition.count !== 1) throw new Error('Roleplay was already submitted or changed');
+        if (transition.count !== 1) throw roleplayBusinessError('Roleplay was already submitted or changed');
       }
 
       if (session.recruitmentCandidateId) {
@@ -1141,8 +1114,7 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
     return { success: true };
   } catch (error: unknown) {
     logRoleplayActionError('Submit Roleplay Session Error:', error);
-    const publicMessage = publicRoleplayActionFailure(error, 'No fue posible enviar el roleplay. Inténtalo nuevamente.');
-    return { success: false, error: publicMessage, code: SAFE_ROLEPLAY_ACTION_FAILURES.has(publicMessage) ? 'CONFLICT' : 'INTERNAL_ERROR' };
+    return { success: false, ...publicRoleplayActionError(error, 'No fue posible enviar el roleplay. Inténtalo nuevamente.') };
   }
 }
 
@@ -1316,13 +1288,13 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
         },
       });
 
-      if (!session) throw new Error('Session not found');
-      if (session.qaScoreId) throw new Error('Session already evaluated');
+      if (!session) throw roleplayBusinessError('Session not found');
+      if (session.qaScoreId) throw roleplayBusinessError('Session already evaluated');
       // The legacy session URL may be absent although individual responses
       // still have canonical Storage paths. Check the actual scenario rows.
       if (!session.scenarios.some((scenario) =>
         scenario.responses.some(hasPersistedRoleplayRecording)
-      )) throw new Error('No response submitted yet');
+      )) throw roleplayBusinessError('No response submitted yet');
       // Never claim QA until every scenario has a confirmed recording and a
       // complete assessment. This preserves the repair window for historical
       // SUBMITTED sessions and mirrors submitRoleplaySession's requirements.
@@ -1335,7 +1307,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
           )
         )
       ) {
-        throw new Error('Complete every recording and self-assessment before evaluating');
+        throw roleplayBusinessError('Complete every recording and self-assessment before evaluating');
       }
 
       // Atomic claim: exactly one evaluator wins. Guarded by
@@ -1356,7 +1328,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
       });
 
       if (claimed.count !== 1) {
-        throw new Error('Concurrent evaluation detected or session not available');
+        throw roleplayBusinessError('Concurrent evaluation detected or session not available');
       }
 
       const qaScore = await tx.qAScore.create({
@@ -1460,6 +1432,6 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
     return { success: true, data: result };
   } catch (error: unknown) {
     logRoleplayActionError('Evaluate Roleplay Error:', error);
-    return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible evaluar el roleplay. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
+    return { success: false, ...publicRoleplayActionError(error, 'No fue posible evaluar el roleplay. Inténtalo nuevamente.') };
   }
 }
