@@ -70,6 +70,8 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest(), { params });
 
     expect(res.status).toBe(401);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toBe('Cookie');
     expect(m.findUnique).not.toHaveBeenCalled();
   });
 
@@ -225,6 +227,32 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(m.updateMany).not.toHaveBeenCalled();
   });
 
+
+  it('never resumes an active session that became terminal before the second read', async () => {
+    m.findUnique
+      .mockResolvedValueOnce({ ...INTERPRETER_SESSION, status: 'IN_PROGRESS' })
+      .mockResolvedValueOnce({ id: 'sess-1', status: 'SUBMITTED' });
+    const res = await POST(makeRequest(), { params });
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(m.findUnique).toHaveBeenCalledTimes(2);
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('uses the current active status for a valid concurrent resume', async () => {
+    m.findUnique
+      .mockResolvedValueOnce({ ...INTERPRETER_SESSION, status: 'STARTED' })
+      .mockResolvedValueOnce({ id: 'sess-1', status: 'IN_PROGRESS' });
+    const res = await POST(makeRequest(), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.status).toBe('IN_PROGRESS');
+    expect(body.data.resumed).toBe(true);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toBe('Cookie');
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
 
   it('does not overwrite a submitted state when it changes after the initial read', async () => {
     m.findUnique
