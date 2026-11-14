@@ -46,17 +46,26 @@ export function getReusableBaseAudioPath(audioUrl: string, supabaseUrl: string):
 /** Stable snapshot identity independent of the participant or session ID. */
 export function getRoleplaySnapshotHash(scenarios: ReusableRoleplayScenario[]): string {
   const sorted = [...scenarios].sort((a, b) => a.order - b.order);
-  return createHash('sha256').update(JSON.stringify(sorted.map((scenario) => ({
-    order: scenario.order,
-    title: scenario.title,
-    baseAudioUrl: scenario.baseAudioUrl,
-    durationLimitSec: scenario.durationLimitSec,
-    scriptPrompt: scenario.scriptPrompt,
-    studioTurn: scenario.studioTurn ?? null,
-    studioSpeaker: scenario.studioSpeaker ?? null,
-    studioLanguage: scenario.studioLanguage ?? null,
-    sourceStartSec: scenario.sourceStartSec ?? null,
-    sourceEndSec: scenario.sourceEndSec ?? null,
-    expectedKeys: scenario.expectedKeys ?? [],
-  })))).digest('hex');
+  return createHash('sha256').update(JSON.stringify(sorted.map((scenario) => {
+    const snapshot = {
+      order: scenario.order,
+      title: scenario.title,
+      baseAudioUrl: scenario.baseAudioUrl,
+      durationLimitSec: scenario.durationLimitSec,
+      scriptPrompt: scenario.scriptPrompt,
+      expectedKeys: scenario.expectedKeys ?? [],
+    };
+    // Keep legacy fingerprints stable when all new metadata is null; otherwise
+    // archived catalog entries would silently reappear after this migration.
+    const hasStudioMetadata = scenario.studioTurn != null || scenario.studioSpeaker != null ||
+      scenario.studioLanguage != null || scenario.sourceStartSec != null || scenario.sourceEndSec != null;
+    return hasStudioMetadata ? {
+      ...snapshot,
+      studioTurn: scenario.studioTurn ?? null,
+      studioSpeaker: scenario.studioSpeaker ?? null,
+      studioLanguage: scenario.studioLanguage ?? null,
+      sourceStartSec: scenario.sourceStartSec ?? null,
+      sourceEndSec: scenario.sourceEndSec ?? null,
+    } : snapshot;
+  })).digest('hex');
 }
