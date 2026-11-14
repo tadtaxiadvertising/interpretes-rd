@@ -72,7 +72,6 @@ export function RoleplayScenario({
     if (!audio) return;
     audio.pause();
     audio.currentTime = 0;
-    audio.playbackRate = playbackRate;
     setCurrentTime(0);
     setIsBasePlaying(false);
     setHasListened(false);
@@ -121,7 +120,6 @@ export function RoleplayScenario({
         return;
       }
       currentAudio.currentTime = 0;
-      currentAudio.playbackRate = playbackRate;
       void currentAudio.play().then(() => {
         setRepeatPending(false);
       }).catch(() => {
