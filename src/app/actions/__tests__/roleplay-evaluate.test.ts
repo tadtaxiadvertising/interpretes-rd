@@ -147,6 +147,28 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     expect(m.qaCreate).not.toHaveBeenCalled();
   });
 
+  it('allows QA to claim a complete confirmed path-only recording without a legacy session URL', async () => {
+    m.session = {
+      ...m.session,
+      recordedAudioUrl: null,
+      scenarios: [{
+        responses: [{
+          sourceAudioUrl: null,
+          sourceAudioPath: 'responses/sess-1/scenario-1/recording.webm',
+          processedAudioPath: null,
+          selfScore: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 },
+        }],
+      }],
+    };
+
+    const result = await evaluateRoleplay(null, makeForm());
+    expect(result.success).toBe(true);
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'sess-1', status: 'SUBMITTED', evaluatorId: null },
+    }));
+    expect(m.qaCreate).toHaveBeenCalled();
+  });
+
   it('claims the session atomically (SUBMITTED + evaluatorId NULL -> UNDER_REVIEW)', async () => {
     const res = await evaluateRoleplay(null, makeForm());
 
