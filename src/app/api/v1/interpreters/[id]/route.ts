@@ -135,13 +135,24 @@ export async function PATCH(
         data: updateData,
       });
 
-      await tx.userProfile.updateMany({
-        where: { interpreterId },
-        data: {
-          displayName: saved.name,
-          ...(saved.emailCorporativo ? { email: saved.emailCorporativo } : {}),
-        },
-      });
+      // Sync only profile fields explicitly edited in this PATCH. Previously,
+      // any operational update could overwrite an unchanged profile email with
+      // the interpreter's corporate email, even if those addresses intentionally
+      // differed or had not yet completed Auth email verification.
+      const profileUpdates: { displayName?: string; email?: string } = {};
+      if (updateData.name !== undefined) {
+        profileUpdates.displayName = saved.name;
+      }
+      if (typeof updateData.emailCorporativo === 'string') {
+        profileUpdates.email = updateData.emailCorporativo;
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        await tx.userProfile.updateMany({
+          where: { interpreterId },
+          data: profileUpdates,
+        });
+      }
 
       return saved;
     });
