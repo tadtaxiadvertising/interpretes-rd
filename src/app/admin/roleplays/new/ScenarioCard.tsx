@@ -71,6 +71,13 @@ export function ScenarioCard({
       baseAudioFile: file,
       baseAudioPreview: URL.createObjectURL(file),
       sha256: undefined,
+      // Audio Studio metadata describes the original imported recording.
+      // Replacing the clip must not preserve stale speaker/timeline identity.
+      studioTurn: undefined,
+      studioSpeaker: undefined,
+      studioLanguage: undefined,
+      sourceStartSec: undefined,
+      sourceEndSec: undefined,
     });
   };
 
