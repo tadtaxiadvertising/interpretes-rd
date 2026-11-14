@@ -74,7 +74,7 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
       interpreterId: null,
       recruitmentCandidateId: 42,
       status: 'STARTED',
-      access: null,
+      access: { validatedAt: new Date(), usedAt: null, startedAt: new Date() },
     });
     m.scenarioFindFirst.mockResolvedValue({ id: 'scenario-1' });
     m.responseFindUnique.mockResolvedValue(null);
@@ -82,6 +82,20 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
     m.storageRemove.mockResolvedValue({ error: null });
     m.createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.test/audio' }, error: null });
     m.confirmResponse.mockResolvedValue({ success: true, data: { recordedAudioUrl: 'https://signed.test/audio' } });
+  });
+
+  it('denies a matching candidate cookie when the invitation was never validated', async () => {
+    m.sessionFindUnique.mockResolvedValueOnce({
+      id: 'session-1',
+      interpreterId: null,
+      recruitmentCandidateId: 42,
+      status: 'STARTED',
+      access: null,
+    });
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(403);
+    expect(m.scenarioFindFirst).not.toHaveBeenCalled();
+    expect(m.storageUpload).not.toHaveBeenCalled();
   });
 
   it('rejects a scenario that does not belong to the supplied session before storage upload', async () => {
@@ -140,7 +154,7 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
       interpreterId: 7,
       recruitmentCandidateId: 42,
       status: 'STARTED',
-      access: null,
+      access: { validatedAt: new Date(), usedAt: null, startedAt: new Date() },
     });
 
     const candidateResponse = await POST(makeRequest({ cookie: 'session-1' }));
