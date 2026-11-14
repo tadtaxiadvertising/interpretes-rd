@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -24,7 +25,7 @@ export async function POST(req: NextRequest) {
   const rateLimitResult = applyRateLimit(req, RATE_LIMITS.inviteValidation);
   
   if (!rateLimitResult.success) {
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: false, error: 'Too many requests. Please try again later.' },
       { 
         status: 429,
@@ -38,18 +39,18 @@ export async function POST(req: NextRequest) {
     try {
       const parsed = ValidateInviteSchema.safeParse(await req.json());
       if (!parsed.success) {
-        return NextResponse.json({ success: false, error: 'Token required' }, { status: 400 });
+        return privateRoleplayResponse({ success: false, error: 'Token required' }, { status: 400 });
       }
       token = parsed.data.token;
     } catch {
-      return NextResponse.json({ success: false, error: 'Invalid request body' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid request body' }, { status: 400 });
     }
 
     // A leaked invitation token must not start another person's evaluation.
     // Authenticate before looking up tokens, preventing anonymous enumeration.
     const identity = await resolveCurrentIdentity();
     if (!identity) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Not authenticated' },
         { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
       );
@@ -63,26 +64,26 @@ export async function POST(req: NextRequest) {
     });
 
     if (!access) {
-      return NextResponse.json({ success: false, error: 'Invalid or expired invitation' }, { status: 404 });
+      return privateRoleplayResponse({ success: false, error: 'Invalid or expired invitation' }, { status: 404 });
     }
 
     if (!canBindRoleplayInvitation(identity, access.session)) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Access denied' },
         { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
       );
     }
 
     if (access.usedAt) {
-      return NextResponse.json({ success: false, error: 'Invitation already used' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invitation already used' }, { status: 400 });
     }
 
     if (access.expiresAt < new Date()) {
-      return NextResponse.json({ success: false, error: 'Invitation expired' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Invitation expired' }, { status: 400 });
     }
 
     if (!ENTERABLE_STATES.includes(access.session.status)) {
-      return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 400 });
+      return privateRoleplayResponse({ success: false, error: 'Session no longer available' }, { status: 400 });
     }
 
     // Compare-and-set the transition: the session may have become terminal
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
           select: { status: true },
         });
         if (!latest || !['STARTED', 'IN_PROGRESS'].includes(latest.status)) {
-          return NextResponse.json(
+          return privateRoleplayResponse(
             { success: false, error: 'Session no longer available' },
             { status: 409 }
           );
@@ -111,6 +112,19 @@ export async function POST(req: NextRequest) {
           where: { sessionId: access.sessionId, startedAt: null },
           data: { startedAt: new Date() },
         });
+      }
+    } else {
+      // A stale access lookup must never rebind a cookie after this attempt
+      // was submitted, cancelled or evaluated by another request.
+      const latest = await db.roleplaySession.findUnique({
+        where: { id: access.sessionId },
+        select: { status: true },
+      });
+      if (!latest || !['STARTED', 'IN_PROGRESS'].includes(latest.status)) {
+        return privateRoleplayResponse(
+          { success: false, error: 'Session no longer available' },
+          { status: 409 },
+        );
       }
     }
 
@@ -122,7 +136,7 @@ export async function POST(req: NextRequest) {
     });
     await setRoleplaySessionCookie(access.session.id);
 
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { 
         success: true, 
         data: { 
@@ -135,9 +149,9 @@ export async function POST(req: NextRequest) {
   } catch (error: unknown) {
     // Never write raw exception messages: drivers may include tokens,
     // connection strings or private invitation metadata in their errors.
-    console.error('Validate Invite Error:', error instanceof Error ? error.name : 'UnknownError');
+    console.error('Validate Invite Error:', error instanceof Error ? 'Error' : 'UnknownError');
     // Tokens and database exception details must not be reflected to the caller.
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
     );
