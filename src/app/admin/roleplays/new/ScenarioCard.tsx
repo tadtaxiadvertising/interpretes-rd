@@ -4,6 +4,7 @@ import React, { useRef, useState } from 'react';
 import { Mic2, Trash2, GripVertical, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage } from '@/lib/roleplay-studio/protocols';
 
 interface Scenario {
   id: string;
@@ -40,6 +41,9 @@ export function ScenarioCard({
   isDragging,
 }: ScenarioCardProps) {
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [protocolLanguage, setProtocolLanguage] = useState<StudioProtocolLanguage>('es');
+  const [protocolError, setProtocolError] = useState<string | null>(null);
+  const [protocolNotice, setProtocolNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleAudioSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -78,7 +82,21 @@ export function ScenarioCard({
   };
 
   const handleScriptChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setProtocolError(null);
+    setProtocolNotice(null);
     onUpdate(scenario.id, { scriptPrompt: event.target.value });
+  };
+
+  const handleAddProtocol = (kind: StudioProtocolKind) => {
+    try {
+      const result = addStudioProtocol(scenario.scriptPrompt, kind, protocolLanguage);
+      setProtocolError(null);
+      setProtocolNotice(result.added ? 'Protocolo añadido a las instrucciones del escenario.' : 'Este protocolo ya está incluido.');
+      if (result.added) onUpdate(scenario.id, { scriptPrompt: result.text });
+    } catch (error) {
+      setProtocolNotice(null);
+      setProtocolError(error instanceof Error ? error.message : 'No se pudo añadir el protocolo.');
+    }
   };
 
   return (
@@ -171,10 +189,33 @@ export function ScenarioCard({
               value={scenario.scriptPrompt}
               onChange={handleScriptChange}
               placeholder="Key phrases or guidance for the interpreter..."
-              rows={2}
+              rows={3}
               maxLength={5000}
               className="w-full bg-slate-950 border border-white/10 rounded-xl py-2 px-3 text-white focus:border-blue-500 transition-colors resize-none"
             />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label className="sr-only" htmlFor={`scenario-protocol-language-${scenario.id}`}>Protocol language</label>
+              <select
+                id={`scenario-protocol-language-${scenario.id}`}
+                value={protocolLanguage}
+                onChange={(event) => setProtocolLanguage(event.target.value as StudioProtocolLanguage)}
+                className="rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-gray-200"
+              >
+                <option value="es">Protocolos en español</option>
+                <option value="en">Protocols in English</option>
+              </select>
+              <button type="button" onClick={() => handleAddProtocol('opening')} className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-blue-200 hover:bg-white/10">
+                + Apertura
+              </button>
+              <button type="button" onClick={() => handleAddProtocol('repetition')} className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-blue-200 hover:bg-white/10">
+                + Repetición
+              </button>
+              <button type="button" onClick={() => handleAddProtocol('closing')} className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-blue-200 hover:bg-white/10">
+                + Cierre
+              </button>
+            </div>
+            {protocolNotice && <p role="status" className="mt-2 text-xs text-emerald-300">{protocolNotice}</p>}
+            {protocolError && <p role="alert" className="mt-2 text-xs text-red-300">{protocolError}</p>}
           </div>
         </div>
 
