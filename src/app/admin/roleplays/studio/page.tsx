@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -65,7 +65,7 @@ export default function RoleplayStudioPage() {
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
   const player = useRef<HTMLAudioElement>(null);
-  const pauseEditorialAudio = () => player.current?.pause();
+  const pauseEditorialAudio = useCallback(() => { player.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
