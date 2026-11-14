@@ -29,8 +29,8 @@ interface Scenario {
   studioTurn?: number;
   studioSpeaker?: 'speaker_1' | 'speaker_2' | 'speaker_3';
   studioLanguage?: 'en' | 'es' | 'mixed';
-  sourceStartSec?: number;
-  sourceEndSec?: number;
+  sourceStartSec?: number | null;
+  sourceEndSec?: number | null;
   sha256?: string;
 }
 
