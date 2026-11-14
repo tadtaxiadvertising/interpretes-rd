@@ -106,7 +106,7 @@ describe('Roleplay required stages', () => {
     expect(m.responseUpdate).not.toHaveBeenCalled();
     expect(m.sessionUpdate).not.toHaveBeenCalled();
   });
-  it('rejects a response row that has no confirmed audio URL', async () => {
+  it('rejects a response row without a persisted recording reference', async () => {
     m.response = { id: 'response-1', sourceAudioUrl: null };
 
     const result = await saveSelfAssessment({
@@ -119,6 +119,24 @@ describe('Roleplay required stages', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('Confirm your recording');
     expect(m.responseUpdate).not.toHaveBeenCalled();
+  });
+
+  it('accepts self-assessment for a confirmed source Storage path without a legacy signed URL', async () => {
+    m.response = {
+      id: 'response-1',
+      sourceAudioUrl: null,
+      sourceAudioPath: 'responses/sess-1/scenario-1/source.webm',
+      processedAudioPath: null,
+      selfScore: null,
+    };
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+    expect(result.success).toBe(true);
+    expect(m.responseUpdate).toHaveBeenCalled();
   });
 
   it('persists self-assessment before advancing the scenario cursor', async () => {
@@ -293,6 +311,25 @@ describe('Roleplay required stages', () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  it('submits a complete path-only response without requiring an old signed URL', async () => {
+    m.identity = { role: 'interpreter', candidateId: null, interpreterId: 7 };
+    m.session = { ...m.session, recruitmentCandidateId: null, interpreterId: 7, currentScenarioIndex: 1 };
+    m.scenarios = [{
+      order: 0,
+      responses: [{
+        sourceAudioUrl: null,
+        sourceAudioPath: 'responses/sess-1/scenario-1/source.webm',
+        processedAudioPath: null,
+        selfScore: { ...SCORES, criticalError: false },
+      }],
+    }];
+    const result = await submitRoleplaySession({ sessionId: 'sess-1' });
+    expect(result.success).toBe(true);
+    expect(m.sessionUpdateMany).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ status: 'SUBMITTED' }),
+    }));
   });
 
   it('submits only after every scenario has a complete self-assessment', async () => {

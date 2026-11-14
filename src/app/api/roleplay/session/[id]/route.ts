@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
+import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { getSignedAudioUrl } from '@/lib/roleplay';
 
 const db = prisma;
@@ -167,7 +168,7 @@ export async function GET(
             !session.qaScoreId &&
             session.scenarios.some((scenario) => {
               const response = scenario.responses[0];
-              return Boolean(response?.sourceAudioUrl) &&
+              return hasPersistedRoleplayRecording(response) &&
                 !hasCompleteRoleplaySelfAssessment(response?.selfScore);
             }),
           currentScenarioIndex: session.currentScenarioIndex,
