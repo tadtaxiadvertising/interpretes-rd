@@ -257,6 +257,7 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
         sessionId: 'sess-cand',
         scenarioId: 'scn-1',
         sourceAudioPath: 'responses/sess-cand/scn-1/00000000-0000-4000-8000-000000000001.webm',
+        recordedAudioUrl: 'https://example.test/ignored-client-audio.webm',
       });
       expect(result).toMatchObject({
         success: false,
