@@ -99,12 +99,36 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
     expect(res.status).toBe(409);
   });
 
-  it('returns 500 without leaking internals when the update fails', async () => {
-    (prisma.roleplaySession.updateMany as any).mockRejectedValue(new Error('db down'));
+  it('redacts provider connection details in a failed cancellation and its server logs', async () => {
+    const secret = 'postgresql://private:password@internal.invalid/roleplays';
+    (prisma.roleplaySession.updateMany as any).mockRejectedValue(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await PATCH(request(), context());
+      const body = await res.json();
+      expect(res.status).toBe(500);
+      expect(body.error).toBe('Failed to cancel roleplay');
+      expect(JSON.stringify(body)).not.toContain('password');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('internal.invalid');
+      expect(log).toHaveBeenCalledWith('Cancel Roleplay API Error:', 'Error');
+    } finally {
+      log.mockRestore();
+    }
+  });
 
-    const res = await PATCH(request(), context());
-
-    expect(res.status).toBe(500);
-    expect((await res.json()).error).toBe('Failed to cancel roleplay');
+  it('does not log a secret injected into an exception name', async () => {
+    const injected = new Error('Database failure');
+    injected.name = 'Bearer_PRIVATE_CANCEL_TOKEN';
+    (prisma.roleplaySession.findUnique as any).mockRejectedValue(injected);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await PATCH(request(), context());
+      expect(res.status).toBe(500);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('Bearer_PRIVATE_CANCEL_TOKEN');
+      expect(log).toHaveBeenCalledWith('Cancel Roleplay API Error:', 'Error');
+    } finally {
+      log.mockRestore();
+    }
   });
 });
