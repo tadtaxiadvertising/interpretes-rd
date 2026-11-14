@@ -130,10 +130,16 @@ export default function StudioConsecutivePreview({
 
   useEffect(() => {
     if (phase !== 'practice' && phase !== 'repetition') return;
+    // Guard the deadline as a one-shot transition. Two timer ticks can arrive
+    // before React commits the next phase (especially under a loaded browser).
+    // Without this flag one repetition can restart audio multiple times.
+    let completed = false;
     const tick = () => {
+      if (completed) return;
       const left = Math.max(0, (deadline - Date.now()) / 1000);
       setRemaining(left);
       if (left > 0) return;
+      completed = true;
       if (phase === 'repetition') {
         playTurn(index);
       } else if (autoAdvance && index < turns.length - 1) {
