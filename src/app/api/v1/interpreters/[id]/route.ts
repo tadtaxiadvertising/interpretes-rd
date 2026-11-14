@@ -17,14 +17,17 @@ export async function DELETE(
 
     const { id: interpreterId } = numericIdParamSchema.parse(await params);
 
-    // Initialize Supabase admin client first, catching errors so missing environment
-    // variables or configuration issues do not crash the entire deletion action.
+    // Fail closed before modifying PostgreSQL when the Auth admin client cannot
+    // initialize. This is a configuration preflight, not an Auth network probe.
     try {
       const { supabaseAdmin } = await import('@/lib/supabase/admin');
-      // Validate access to trigger error if missing role key
       void supabaseAdmin.auth;
     } catch (adminError: unknown) {
       console.warn('Supabase Admin initialization failed:', safeServerErrorCategory(adminError));
+      return privateAdminJson(
+        { success: false, error: 'Authentication administration is unavailable. No interpreter records were deleted.' },
+        { status: 503 }
+      );
     }
 
     const { authUserId } = await prisma.$transaction((tx: any) => deleteInterpreterDatabaseRecords(tx, interpreterId));
