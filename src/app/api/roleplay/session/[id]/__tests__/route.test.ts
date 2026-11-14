@@ -356,6 +356,46 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
   });
 
+  it('does not log or return private URLs when Storage signature refresh fails', async () => {
+    const secret = 'https://internal-storage.invalid/audio?token=secret-storage-token';
+    m.session = {
+      ...candidateSession('STARTED'),
+      baseAudioPath: 'base/sess-1.webm',
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario',
+        baseAudioUrl: 'https://legacy.example/clip.webm',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: [],
+        responses: [{
+          sourceAudioUrl: 'https://old.example/audio.webm',
+          sourceAudioPath: 'responses/sess-1/audio.webm',
+          processedAudioPath: null,
+          durationSec: 25,
+          selfScore: null,
+          selfNotes: null,
+        }],
+      }],
+    };
+    m.getSignedAudioUrl.mockRejectedValue(new Error(secret));
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await GET(makeRequest('sess-1'), { params });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.baseAudioUrl).toBeNull();
+      expect(body.data.scenarios[0].responses[0].sourceAudioUrl).toBeNull();
+      expect(JSON.stringify(body)).not.toContain('secret-storage-token');
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('secret-storage-token');
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('internal-storage.invalid');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
   it('never exposes internal database errors in participant API responses', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
@@ -371,6 +411,8 @@ describe('GET /api/roleplay/session/[id]', () => {
       expect(body.error).toBe('No fue posible cargar la sesión. Inténtalo nuevamente.');
       expect(JSON.stringify(body)).not.toContain('secret');
       expect(JSON.stringify(body)).not.toContain('private-db.example');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-db.example');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('secret');
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     } finally {
       log.mockRestore();
