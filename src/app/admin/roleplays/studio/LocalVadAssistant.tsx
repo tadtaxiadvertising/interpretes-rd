@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { detectLocalSpeech, type LocalVadSegment } from '@/lib/roleplay-studio/local-vad';
 
-export default function LocalVadAssistant({file,remaining,onApply}:{file:File;remaining:number;onApply:(segments:LocalVadSegment[])=>void}) {
+export default function LocalVadAssistant({file,duration,remaining,onApply}:{file:File;duration:number;remaining:number;onApply:(segments:LocalVadSegment[])=>void}) {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
   const [found,setFound]=useState<LocalVadSegment[]>([]);
@@ -13,6 +13,10 @@ export default function LocalVadAssistant({file,remaining,onApply}:{file:File;re
     try {
       if(typeof window.AudioContext!=='function') throw new Error('Este navegador no permite analizar audio localmente.');
       if(file.size<1||file.size>15*1024*1024) throw new Error('El MP3 debe pesar hasta 15 MiB.');
+      // The parent audio element has already loaded MP3 metadata. Reject
+      // oversized duration *before* allocating decoded PCM in AudioContext.
+      if(!Number.isFinite(duration)||duration<=0) throw new Error('Espera a que se cargue la duración del MP3.');
+      if(duration>240) throw new Error('Para proteger la memoria del navegador, el VAD local admite audios de hasta 4 minutos.');
       context=new AudioContext();
       const decoded=await context.decodeAudioData((await file.arrayBuffer()).slice(0));
       if(decoded.duration>240) throw new Error('Para proteger la memoria del navegador, el VAD local admite audios de hasta 4 minutos.');
