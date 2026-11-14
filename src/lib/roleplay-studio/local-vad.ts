@@ -1,4 +1,4 @@
-export type LocalVadSegment = { start: number; end: number; confidence: number };
+export type LocalVadSegment = { start: number; end: number; signalLevel: number };
 export type LocalVadOptions = {
   thresholdRms?: number;
   minSilenceDurationSec?: number;
@@ -65,7 +65,7 @@ export function detectLocalSpeech(
     return {
       start:Number((startSample/sampleRate).toFixed(3)),
       end:Number((endSample/sampleRate).toFixed(3)),
-      confidence:Number(clamp(rms.slice(range.start,range.end).reduce((a,b)=>a+b,0)/
+      signalLevel:Number(clamp(rms.slice(range.start,range.end).reduce((a,b)=>a+b,0)/
         Math.max(1,range.end-range.start)/(threshold*2),0,1).toFixed(3)),
     };
   }).filter(s=>s.end>s.start && s.end<=totalSeconds);
