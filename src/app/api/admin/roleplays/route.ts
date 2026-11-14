@@ -11,6 +11,19 @@ import {
 } from '@/lib/roleplay-assignment-ownership';
 
 const db = prisma;
+
+// Admin responses can contain invitation links, participant identifiers and
+// workflow state. Disallow storage by shared caches even for validation errors.
+function privateRoleplayJson<T extends object>(body: T, init: ResponseInit = {}): NextResponse<T> {
+  const headers = new Headers(init.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  const vary = headers.get('Vary');
+  if (!vary?.split(',').some(value => value.trim().toLowerCase() === 'cookie')) {
+    headers.set('Vary', vary ? `${vary}, Cookie` : 'Cookie');
+  }
+  return NextResponse.json(body, { ...init, headers });
+}
+
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
@@ -70,7 +83,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const auth = await validateAction('admin');
-    if ('error' in auth) return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    if ('error' in auth) return privateRoleplayJson({ success: false, error: auth.error }, { status: 403 });
 
     const formData = await req.formData();
     const participantType = formData.get('participantType');
@@ -88,31 +101,31 @@ export async function POST(req: NextRequest) {
       !/^[a-f0-9]{64}$/.test(rawLibraryFingerprint) ||
       scenarioAudios.length !== 0 || rawAudioChecksums !== null
     )) {
-      return NextResponse.json({ success: false, error: 'Invalid library source or audio payload' }, { status: 400 });
+      return privateRoleplayJson({ success: false, error: 'Invalid library source or audio payload' }, { status: 400 });
     }
 
     if (typeof participantType !== 'string' || (!useLibrary && typeof rawScenarios !== 'string')) {
-      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+      return privateRoleplayJson({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
     const isBulk = participantType === 'all-active-interpreters';
     if (participantType !== 'interpreter' && participantType !== 'candidate' && !isBulk) {
-      return NextResponse.json({ success: false, error: 'Invalid participant type' }, { status: 400 });
+      return privateRoleplayJson({ success: false, error: 'Invalid participant type' }, { status: 400 });
     }
 
     let parsedParticipantId: number | null = null;
     if (!isBulk) {
       if (typeof participantId !== 'string') {
-        return NextResponse.json({ success: false, error: 'Participant is required' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Participant is required' }, { status: 400 });
       }
       // parseInt accepts malformed identifiers such as "12abc" and "12.5".
       // Require an exact positive decimal integer before resolving a participant.
       if (!/^[1-9][0-9]*$/.test(participantId)) {
-        return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Invalid participant ID' }, { status: 400 });
       }
       parsedParticipantId = Number(participantId);
       if (!Number.isSafeInteger(parsedParticipantId) || parsedParticipantId <= 0) {
-        return NextResponse.json({ success: false, error: 'Invalid participant ID' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Invalid participant ID' }, { status: 400 });
       }
     }
 
@@ -137,10 +150,10 @@ export async function POST(req: NextRequest) {
       });
       if (!source || source.status === 'DRAFT' || source.status === 'CANCELLED' ||
           source.scenarios.length === 0 || source.scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
-        return NextResponse.json({ success: false, error: 'Reusable roleplay not available' }, { status: 404 });
+        return privateRoleplayJson({ success: false, error: 'Reusable roleplay not available' }, { status: 404 });
       }
       if (getRoleplaySnapshotHash(source.scenarios) !== rawLibraryFingerprint) {
-        return NextResponse.json({
+        return privateRoleplayJson({
           success: false,
           error: 'La biblioteca cambió desde que abriste esta plantilla. Vuelve a seleccionarla.',
         }, { status: 409 });
@@ -150,7 +163,7 @@ export async function POST(req: NextRequest) {
         select: { archivedAt: true },
       });
       if (visibility?.archivedAt) {
-        return NextResponse.json({
+        return privateRoleplayJson({
           success: false,
           error: 'Este roleplay fue retirado de la biblioteca y no admite nuevas asignaciones.',
         }, { status: 409 });
@@ -158,11 +171,11 @@ export async function POST(req: NextRequest) {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (!supabaseUrl || !serviceRoleKey) {
-        return NextResponse.json({ success: false, error: 'Storage is not configured' }, { status: 503 });
+        return privateRoleplayJson({ success: false, error: 'Storage is not configured' }, { status: 503 });
       }
       const paths = source.scenarios.map((scenario) => getReusableBaseAudioPath(scenario.baseAudioUrl, supabaseUrl));
       if (paths.some((path) => !path)) {
-        return NextResponse.json({ success: false, error: 'Roleplay has unsupported audio references' }, { status: 409 });
+        return privateRoleplayJson({ success: false, error: 'Roleplay has unsupported audio references' }, { status: 409 });
       }
       const { createClient } = await import('@supabase/supabase-js');
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
@@ -176,7 +189,7 @@ export async function POST(req: NextRequest) {
           )
         );
         if (batch.some(({ data, error }) => error || !data)) {
-          return NextResponse.json({
+          return privateRoleplayJson({
             success: false,
             error: 'Un audio de esta plantilla ya no está disponible. No se creó ninguna sesión.',
           }, { status: 409 });
@@ -193,7 +206,7 @@ export async function POST(req: NextRequest) {
       scenarios = parseScenarios(rawScenarios as string);
     }
     if (!scenarios) {
-      return NextResponse.json(
+      return privateRoleplayJson(
         { success: false, error: `Invalid scenarios: expected 1-${ROLEPLAY_MAX_SCENARIOS} entries with a non-empty title` },
         { status: 400 }
       );
@@ -202,21 +215,21 @@ export async function POST(req: NextRequest) {
     let expectedAudioChecksums: Array<string | null> | null = null;
     if (rawAudioChecksums !== null) {
       if (typeof rawAudioChecksums !== 'string') {
-        return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
       }
       try {
         const parsedChecksums: unknown = JSON.parse(rawAudioChecksums);
         if (!Array.isArray(parsedChecksums) || parsedChecksums.length !== scenarios.length || parsedChecksums.some((value) => value !== null && (typeof value !== 'string' || !/^[a-f0-9]{64}$/i.test(value)))) {
-          return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+          return privateRoleplayJson({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
         }
         expectedAudioChecksums = parsedChecksums as Array<string | null>;
       } catch {
-        return NextResponse.json({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Invalid audio checksum payload' }, { status: 400 });
       }
     }
 
     if (!useLibrary && scenarioAudios.length !== scenarios.length) {
-      return NextResponse.json(
+      return privateRoleplayJson(
         { success: false, error: 'Each scenario requires exactly one base audio file' },
         { status: 400 }
       );
@@ -224,13 +237,13 @@ export async function POST(req: NextRequest) {
 
     if (!useLibrary) for (const audio of scenarioAudios) {
       if (!(audio instanceof File)) {
-        return NextResponse.json({ success: false, error: 'Invalid scenario audio payload' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Invalid scenario audio payload' }, { status: 400 });
       }
       if (audio.size <= 0 || audio.size > MAX_AUDIO_SIZE) {
-        return NextResponse.json({ success: false, error: 'Audio must be between 1 byte and 15 MB' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'Audio must be between 1 byte and 15 MB' }, { status: 400 });
       }
       if (!ALLOWED_AUDIO_TYPES.has(audio.type)) {
-        return NextResponse.json(
+        return privateRoleplayJson(
           { success: false, error: `Audio type ${audio.type || 'unknown'} not allowed` },
           { status: 400 }
         );
@@ -245,17 +258,17 @@ export async function POST(req: NextRequest) {
         if (!(audio instanceof File)) continue;
         const actual = createHash('sha256').update(Buffer.from(await audio.arrayBuffer())).digest('hex');
         if (actual !== expected.toLowerCase()) {
-          return NextResponse.json({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
+          return privateRoleplayJson({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
         }
       }
     }
 
     if (!isBulk && participantType === 'interpreter') {
       const interpreter = await db.interpreter.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
-      if (!interpreter) return NextResponse.json({ success: false, error: 'Interpreter not found' }, { status: 404 });
+      if (!interpreter) return privateRoleplayJson({ success: false, error: 'Interpreter not found' }, { status: 404 });
     } else if (!isBulk) {
       const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
-      if (!candidate) return NextResponse.json({ success: false, error: 'Candidate not found' }, { status: 404 });
+      if (!candidate) return privateRoleplayJson({ success: false, error: 'Candidate not found' }, { status: 404 });
     }
 
     // Create-or-resume invariant: never create a second live/evaluated
@@ -269,7 +282,7 @@ export async function POST(req: NextRequest) {
         orderBy: { id: 'asc' },
       });
       if (activeInterpreters.length === 0) {
-        return NextResponse.json({ success: false, error: 'No active interpreters found' }, { status: 400 });
+        return privateRoleplayJson({ success: false, error: 'No active interpreters found' }, { status: 400 });
       }
 
       // Eligibility is rechecked under per-interpreter advisory locks
@@ -280,7 +293,7 @@ export async function POST(req: NextRequest) {
       const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       if (!supabaseUrl || !serviceRoleKey) {
-        return NextResponse.json({ success: false, error: 'Storage is not configured' }, { status: 503 });
+        return privateRoleplayJson({ success: false, error: 'Storage is not configured' }, { status: 503 });
       }
       const { createClient } = await import('@supabase/supabase-js');
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
@@ -362,7 +375,7 @@ export async function POST(req: NextRequest) {
           await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
           uploadedPaths.length = 0;
         }
-        return NextResponse.json({
+        return privateRoleplayJson({
           success: false,
           error: 'All active interpreters already have a draft or existing roleplay session',
           skippedCount: bulkResult.skippedCount,
@@ -372,7 +385,7 @@ export async function POST(req: NextRequest) {
 
       revalidatePath('/admin/roleplays');
       revalidatePath('/admin/roleplays/new');
-      return NextResponse.json({
+      return privateRoleplayJson({
         success: true,
         data: {
           bulk: true,
@@ -395,7 +408,7 @@ export async function POST(req: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
     if (!supabaseUrl || !serviceRoleKey) {
-      return NextResponse.json({ success: false, error: 'Storage is not configured' }, { status: 503 });
+      return privateRoleplayJson({ success: false, error: 'Storage is not configured' }, { status: 503 });
     }
 
     const { createClient } = await import('@supabase/supabase-js');
@@ -441,7 +454,7 @@ export async function POST(req: NextRequest) {
       return { conflict: null, session: created };
     });
     if (reservation.conflict) {
-      return NextResponse.json({
+      return privateRoleplayJson({
         success: false,
         error: `Participant already has a roleplay session in status ${reservation.conflict.status}`,
         sessionId: reservation.conflict.id,
@@ -544,7 +557,7 @@ export async function POST(req: NextRequest) {
 
     revalidatePath('/admin/roleplays');
     revalidatePath('/admin/roleplays/new');
-    return NextResponse.json({
+    return privateRoleplayJson({
       success: true,
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
     }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
@@ -552,7 +565,7 @@ export async function POST(req: NextRequest) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     // Storage and database exceptions can include signed URLs, credentials,
     // or infrastructure details; preserve an error category, not its payload.
-    console.error('Create Roleplay API Error:', error instanceof Error ? error.name : 'UnknownError');
+    console.error('Create Roleplay API Error:', error instanceof Error ? 'Error' : 'UnknownError');
 
     // Audio paths are unique per request. Never delete/reset a shared draft
     // here: another administrator may have completed it concurrently.
@@ -560,21 +573,21 @@ export async function POST(req: NextRequest) {
       try {
         await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
       } catch (cleanupError) {
-        console.error('Create Roleplay storage cleanup failed:', cleanupError instanceof Error ? cleanupError.name : 'UnknownError');
+        console.error('Create Roleplay storage cleanup failed:', cleanupError instanceof Error ? 'Error' : 'UnknownError');
       }
     }
 
     if (libraryArchivedDuringAssignment) {
-      return NextResponse.json({
+      return privateRoleplayJson({
         success: false,
         error: 'Esta plantilla fue retirada de la biblioteca mientras se creaba la asignación.',
       }, { status: 409 });
     }
     if (draftConflict) {
-      return NextResponse.json({ success: false, error: 'This draft was updated by another administrator. Reload and try again.' }, { status: 409 });
+      return privateRoleplayJson({ success: false, error: 'This draft was updated by another administrator. Reload and try again.' }, { status: 409 });
     }
     const isUploadFailure = message.startsWith('Failed to upload audio');
-    return NextResponse.json(
+    return privateRoleplayJson(
       {
         success: false,
         error: isUploadFailure
@@ -589,7 +602,7 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     const auth = await validateAction('admin');
-    if ('error' in auth) return NextResponse.json(
+    if ('error' in auth) return privateRoleplayJson(
       { success: false, error: 'Forbidden' },
       { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
     );
@@ -604,13 +617,13 @@ export async function GET() {
       },
     });
 
-    return NextResponse.json(
+    return privateRoleplayJson(
       { success: true, data: sessions },
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch (error: unknown) {
-    console.error('Get Roleplays Error:', error instanceof Error ? error.name : 'UnknownError');
-    return NextResponse.json(
+    console.error('Get Roleplays Error:', error instanceof Error ? 'Error' : 'UnknownError');
+    return privateRoleplayJson(
       { success: false, error: 'No fue posible consultar los roleplays.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
     );
