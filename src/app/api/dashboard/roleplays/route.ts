@@ -1,4 +1,6 @@
-import { NextResponse } from 'next/server';
+
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 
@@ -7,11 +9,11 @@ const db = prisma;
 export async function GET() {
   try {
     const auth = await validateAction('interpreter');
-    if ('error' in auth) return NextResponse.json({ success: false, error: auth.error }, { status: 403 });
+    if ('error' in auth) return privateRoleplayResponse({ success: false, error: auth.error }, { status: 403 });
 
     const interpreterId = auth.profile?.interpreterId;
     if (!interpreterId) {
-      return NextResponse.json({ success: false, error: 'No interpreter profile found' }, { status: 404 });
+      return privateRoleplayResponse({ success: false, error: 'No interpreter profile found' }, { status: 404 });
     }
 
     // Legacy recruitment sessions can still contain a provisional interpreterId.
@@ -46,13 +48,13 @@ export async function GET() {
         accionRequerida: session.qaScore.accionRequerida,
       } : null,
     }));
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: true, data },
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch (error: unknown) {
-    console.error('Get My Roleplays Error:', error);
-    return NextResponse.json(
+    console.error('Get My Roleplays Error:', safeServerErrorCategory(error));
+    return privateRoleplayResponse(
       { success: false, error: 'No fue posible recuperar tus roleplays.' },
       { status: 500 }
     );
