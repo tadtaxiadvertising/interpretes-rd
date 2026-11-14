@@ -603,6 +603,24 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
+  it('does not log a secret injected into a custom error name', async () => {
+    const secret = 'Bearer PRIVATE_ROLEPLAY_UPLOAD_TOKEN';
+    const injected = new Error('Connection failed');
+    injected.name = secret;
+    m.candidateFindUnique.mockRejectedValueOnce(injected);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await startCandidateRoleplay();
+      expect(result.success).toBe(false);
+      expect(result.code).toBe('INTERNAL_ERROR');
+      expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain(secret);
+      expect(log).toHaveBeenCalledWith('Start Candidate Roleplay Error:', 'Error');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('never returns database exception details when restoring a candidate session', async () => {
     const secret = 'postgresql://private-user:secret@db.internal.invalid/roleplay';
     m.candidateFindUnique.mockRejectedValueOnce(new Error(secret));
