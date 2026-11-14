@@ -44,6 +44,7 @@ const CANDIDATE_SESSION = {
   status: 'DRAFT',
   interpreterId: null,
   recruitmentCandidateId: 5,
+  access: { validatedAt: new Date('2026-11-14T09:00:00.000Z'), usedAt: null },
 };
 
 const INTERPRETER_SESSION = {
@@ -126,6 +127,39 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     const res = await POST(makeRequest('sess-1'), { params });
 
     expect(res.status).toBe(403);
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { access: null, reason: 'no invitation record' },
+    { access: { validatedAt: null, usedAt: null }, reason: 'unvalidated invitation' },
+    { access: { validatedAt: new Date(), usedAt: new Date() }, reason: 'consumed invitation' },
+  ])('does not start candidate roleplay with $reason even when the cookie matches', async ({ access }) => {
+    m.session = { ...CANDIDATE_SESSION, access };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 5 };
+    m.applicationFindUnique.mockResolvedValue({ status: 'ROLEPLAY_PENDING' });
+
+    const res = await POST(makeRequest('sess-1'), { params });
+    const body = await res.json();
+
+    expect(res.status).toBe(403);
+    expect(body.success).toBe(false);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+    expect(m.applicationFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects an already-active candidate session when its invitation becomes consumed', async () => {
+    m.session = {
+      ...CANDIDATE_SESSION,
+      status: 'IN_PROGRESS',
+      access: { validatedAt: new Date(), usedAt: new Date() },
+    };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 5 };
+    const res = await POST(makeRequest('sess-1'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).toHaveBeenCalledTimes(1);
     expect(m.updateMany).not.toHaveBeenCalled();
   });
 
