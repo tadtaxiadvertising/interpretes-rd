@@ -37,7 +37,8 @@ async function failExhaustedStaleJobs(): Promise<void> {
       SET status = 'FAILED',
           locked_at = NULL,
           locked_by = NULL,
-          last_error = COALESCE(last_error, 'Worker lease expired after maximum attempts'),
+          -- Never copy earlier unredacted provider errors to responses.
+          last_error = 'Worker lease expired after maximum attempts',
           updated_at = NOW()
       WHERE status = 'PROCESSING'
         AND locked_at < NOW() - (${STALE_LOCK_MINUTES} * INTERVAL '1 minute')
