@@ -172,6 +172,10 @@ describe('external Roleplay Audio Studio manifest import', () => {
       '002_SPK2_ES_2s0_4s0.mp3',
     ]);
     expect(imported.every(x => x.scriptPrompt === '' && x.durationLimitSec === 0)).toBe(true);
+    expect(imported.map(({ studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }) => ({ studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }))).toEqual([
+      { studioTurn: 1, studioSpeaker: 'speaker_1', studioLanguage: 'en', sourceStartSec: 0, sourceEndSec: 2 },
+      { studioTurn: 2, studioSpeaker: 'speaker_2', studioLanguage: 'es', sourceStartSec: 2, sourceEndSec: 4 },
+    ]);
     expect(JSON.stringify(imported.map(x => ({
       title: x.title, scriptPrompt: x.scriptPrompt,
     })))).not.toMatch(/Sensitive|PRIVATE|Smith/);
