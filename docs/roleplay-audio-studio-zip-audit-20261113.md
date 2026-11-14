@@ -9,7 +9,7 @@ Intérpretes RD ya utiliza Next.js, Auth/RBAC, Supabase, exportación FFmpeg, im
 ## Incompatibilidades confirmadas
 
 - El manifiesto externo roleplayAudioStudioVersion 1.0.0 utiliza turn/startTime/endTime/mp3File/speakerName/text/notes; el importador canónico utiliza order/title/file/sha256/script_prompt.
-- El ZIP externo se genera mediante JSZip, puede contener compresión y pistas adicionales. El ZIP nativo solo admite el contrato STORE canónico. Descomprimir el ZIP externo y seleccionar manifest.json con MP3, sin afirmar soporte ZIP directo.
+- El ZIP externo se genera mediante JSZip y puede contener compresión y pistas adicionales; el ZIP nativo sigue usando contrato STORE estricto. La integración posterior admite un subconjunto acotado de ZIP externos con STORE/DEFLATE, sin habilitar extracción arbitraria.
 - El ZIP original puede contener clips, pistas por hablante y audio masterizado. Solo los clips individuales forman escenarios; el master no sustituye un clip faltante.
 - El ZIP externo no lleva SHA-256 por archivo. El adaptador calcula SHA-256 sobre los bytes MP3, pero eso verifica integridad de subida, NO autenticidad del origen.
 
@@ -42,3 +42,7 @@ D. Validar por CI tipos, lint, tests, build, E2E y pruebas contra paquetes reale
 - Happy Scribe API v1: https://dev.happyscribe.com/sections/general/
 - Happy Scribe Product API / deprecación: https://dev.happyscribe.com/sections/product/
 - Gemini audio transcription: https://ai.google.dev/gemini-api/docs/transcribe
+
+## Actualización — importación directa del ZIP externo
+
+La fase de compatibilidad posterior añade un lector separado, limitado, de ZIP externo **STORE/DEFLATE** en el navegador. Descarta pistas auxiliares, valida integridad CRC32 y luego utiliza el importador canónico con SHA-256; no copia el servidor Express. El ZIP nativo STORE mantiene su lector original. ZIP64, directorios, archivos desconocidos, cifrado y archivos excesivos se rechazan, y el administrador puede recurrir al manifiesto + MP3 extraídos cuando su paquete no cumpla el subconjunto permitido. Ver las pruebas en \`src/lib/roleplay-studio/external-zip.test.ts\`.

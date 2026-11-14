@@ -101,3 +101,10 @@ npm run build
 - Solo se simulan cortes válidos no solapados; se excluye el intérprete original y se exige que el administrador lo retire del borrador antes de exportar (el exportador mantiene esa condición). No se reproducen transcripciones ni se publican modelos de respuesta.
 - Es una **previsualización solo de administrador**. No graba micrófono, no envía audios al servidor, no persiste resultados, no modifica el MP3, no crea sesiones y no altera QA. No confundirla con el simulador formal para intérpretes/candidatos, que requiere un modo de práctica específico y autorización/estados propios.
 - Mantener revisión de los cortes, consentimiento editorial, SHA-256 y el flujo de asignación en el administrador. Antes de ampliar el simulador a participantes, diseñar una ruta independiente de las evaluaciones para que repetir o ajustar velocidad no invalide pruebas puntuadas.
+
+## Importación directa del ZIP externo (siguiente fase)
+
+- El formulario administrativo acepta directamente el ZIP externo de Audio Studio (STORE o DEFLATE con data descriptors), siempre que contenga archivos planos válidos \`manifest.json\` y clips MP3 declarados. No modifica el lector estricto ZIP nativo.
+- El extractor examina central/local, rechaza cifrado, ZIP64, multidisco, rutas, nombres repetidos y archivos no declarados; limita tamaño comprimido, archivos/segmentos, memoria total de clips y verifica CRC32 antes de devolver archivos.
+- No se extraen pistas por hablante ni master de audio, aunque estén incluidos y declarados. El adaptador externo y el importador canónico siguen comprobando orden/tiempos y SHA-256. No hay publicación automática ni exposición de transcripciones.
+- Paquetes cifrados, ZIP64, nombres de archivo con directorios y navegadores sin compatibilidad con DEFLATE raw deben importarse seleccionando \`manifest.json\` y MP3 extraídos manualmente. No se garantiza compatibilidad con todas las variantes de ZIP que puedan producir proveedores externos.

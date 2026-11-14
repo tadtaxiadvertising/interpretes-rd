@@ -8,6 +8,7 @@ import { ScenarioCard } from './ScenarioCard';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
+import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 
 interface Participant {
   id: number;
@@ -156,11 +157,23 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     setIsImporting(true);
     setError(null);
     try {
-      // Accept the exact STORE-only ZIP emitted by Audio Studio, or the legacy
-      // manifest.json + MP3 selection. Both paths share SHA-256 validation.
-      const files = selected.length === 1 && /\.zip$/i.test(selected[0].name)
-        ? await extractStudioZip(selected[0])
-        : selected;
+      // Preserve the strict native ZIP contract. When it is not a native
+      // package, attempt the bounded external Audio Studio reader; both still
+      // pass through the canonical manifest + SHA-256 validation.
+      let files = selected;
+      if (selected.length === 1 && /\.zip$/i.test(selected[0].name)) {
+        try {
+          files = await extractStudioZip(selected[0]);
+        } catch (nativeError) {
+          try {
+            files = await extractExternalStudioZip(selected[0]);
+          } catch (externalError) {
+            // A damaged native ZIP should retain its CRC32 diagnostic.
+            if (nativeError instanceof Error && /CRC32/.test(nativeError.message)) throw nativeError;
+            throw externalError;
+          }
+        }
+      }
       const prepared = await prepareRoleplayManifestImport(files);
       // Never overwrite a newer ZIP import or edits made during validation.
       if (revision !== importRevision.current) return;
@@ -420,10 +433,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Importar roleplay preparado (ZIP de Audio Studio o manifest.json + MP3)
           </label>
           <p className="mt-1 text-xs text-slate-300">
-            Puedes importar el ZIP generado por el estudio integrado de Intérpretes RD
-             o el manifest.json y los clips MP3 del Audio Studio externo de Google.
-             Para el ZIP externo, extrae primero sus archivos y selecciona el manifest.json
-             y todos los MP3. Se omiten las pistas por hablante y el audio masterizado.
+            Puedes importar el ZIP del estudio integrado o el ZIP exportado
+             por Audio Studio externo (archivos planos STORE/DEFLATE, sin cifrado).
+             También puedes seleccionar manifest.json y todos los MP3 individuales.
+             En los ZIP externos se omiten las pistas por hablante y el audio masterizado.
              Los nombres, transcripciones y notas internas nunca se publican como instrucciones.
              Las huellas SHA-256 se calculan antes de crear escenarios. La importación
              reemplaza el borrador, pero nunca publica automáticamente.
