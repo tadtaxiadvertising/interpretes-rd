@@ -89,6 +89,11 @@ describe('prepareRoleplayManifestImport', () => {
 });
 
 describe('external Roleplay Audio Studio manifest import', () => {
+  // The native-manifest describe has its own crypto stub lifecycle; restore
+  // WebCrypto explicitly for this separate describe in the Node test runner.
+  beforeAll(() => vi.stubGlobal('crypto', webcrypto));
+  afterAll(() => vi.unstubAllGlobals());
+
   function externalFixture(options?: {
     missingClip?: boolean;
     includeMaster?: boolean;
