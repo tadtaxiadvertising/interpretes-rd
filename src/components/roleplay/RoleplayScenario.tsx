@@ -325,7 +325,14 @@ export function RoleplayScenario({
       )}
 
       <button
-        onClick={onNext}
+        onClick={() => {
+          // Stop any scheduled replay before the parent starts the recording
+          // workflow, even when navigation awaits an asynchronous response.
+          if (repeatTimerRef.current) clearTimeout(repeatTimerRef.current);
+          repeatTimerRef.current = null;
+          setRepeatPending(false);
+          onNext();
+        }}
         disabled={isLoading || !scenario.baseAudioUrl || !hasListened}
         className={cn(
           "w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
