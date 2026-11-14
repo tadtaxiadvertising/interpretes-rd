@@ -244,6 +244,64 @@ describe('GET /api/roleplay/session/[id]', () => {
       .toBe('https://signed.test/responses/sess-1/answer.mp3');
   });
 
+  it('lets the authenticated candidate owner review a consumed SUBMITTED attempt after the cookie expires', async () => {
+    const initial = candidateSession('SUBMITTED');
+    m.session = {
+      ...initial,
+      access: { ...initial.access, usedAt: new Date() },
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Own answer',
+        baseAudioUrl: 'https://private.example/base.mp3',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: ['EVALUATOR-ONLY'],
+        responses: [{
+          sourceAudioUrl: null,
+          sourceAudioPath: 'responses/sess-1/answer.webm',
+          processedAudioPath: null,
+          durationSec: 20,
+          selfScore: null,
+          selfNotes: null,
+        }],
+      }],
+    };
+    const res = await GET(makeRequest(), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.status).toBe('SUBMITTED');
+    expect(body.data.canCompleteSelfAssessment).toBe(true);
+    expect(body.data.baseAudioUrl).toBeNull();
+    expect(body.data.scenarios[0].baseAudioUrl).toBe('');
+    expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
+    expect(body.data.scenarios[0].responses[0].sourceAudioUrl)
+      .toBe('https://signed.test/responses/sess-1/answer.webm');
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('still requires the bound invitation cookie for an in-progress attempt', async () => {
+    const res = await GET(makeRequest(), { params });
+    expect(res.status).toBe(403);
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it('does not grant submitted review without a validated and consumed invitation', async () => {
+    const initial = candidateSession('SUBMITTED');
+    m.session = { ...initial, access: { ...initial.access, validatedAt: null, usedAt: new Date() } };
+    expect((await GET(makeRequest(), { params })).status).toBe(403);
+    m.session = { ...initial, access: { ...initial.access, usedAt: null } };
+    expect((await GET(makeRequest(), { params })).status).toBe(403);
+  });
+
+  it('does not grant submitted review to another authenticated candidate', async () => {
+    const initial = candidateSession('SUBMITTED');
+    m.session = { ...initial, access: { ...initial.access, usedAt: new Date() } };
+    m.identity = { role: 'candidate', interpreterId: null, candidateId: 900 };
+    const res = await GET(makeRequest(), { params });
+    expect(res.status).toBe(403);
+  });
+
   it('preserves administrator playback access even when a candidate invitation is consumed', async () => {
     m.identity = { role: 'admin', interpreterId: null, candidateId: null };
     m.session = {
