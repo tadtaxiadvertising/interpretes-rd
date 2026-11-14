@@ -40,7 +40,7 @@ describe('administrative consecutive preview only', () => {
     fireEvent.timeUpdate(audio);
     expect(screen.getByText(/Tu turno para interpretar/)).toBeTruthy();
 
-    act(() => { vi.advanceTimersByTime(5600); }); // 2s * 1.2 + 3s
+    act(() => { vi.advanceTimersByTime(3600); }); // 2s * 1.25 + 1s
     expect(screen.getByText(/Pausa completada/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Continuar' }));
     expect(screen.getByText(/Turno 2 de 2/)).toBeTruthy();
@@ -48,7 +48,7 @@ describe('administrative consecutive preview only', () => {
     expect(onStart).toHaveBeenCalledTimes(2);
   });
 
-  it('supports repeat requests with a three-second delay without storing recordings', () => {
+  it('supports the original 4.5-second repetition protocol without storing recordings', () => {
     const { container } = render(
       <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={10} segments={segments} />
     );
@@ -58,7 +58,7 @@ describe('administrative consecutive preview only', () => {
     expect(screen.getByText(/Protocolo de repetición/)).toBeTruthy();
     expect(screen.getByText(/Repeticiones solicitadas: 1/)).toBeTruthy();
 
-    act(() => { vi.advanceTimersByTime(3100); });
+    act(() => { vi.advanceTimersByTime(4600); });
     expect(screen.getByText('Escuchando intervención')).toBeTruthy();
     expect(audio.currentTime).toBe(0);
     expect(HTMLMediaElement.prototype.play).toHaveBeenCalledTimes(2);
