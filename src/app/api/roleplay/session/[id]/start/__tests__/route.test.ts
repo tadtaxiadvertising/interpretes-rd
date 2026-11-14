@@ -252,6 +252,21 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(res.status).toBe(409);
     expect(m.updateMany).not.toHaveBeenCalled();
   });
+  it('does not log an injected error name containing sensitive data', async () => {
+    const injected = new Error('Internal error');
+    injected.name = 'Bearer PRIVATE_SESSION_TOKEN';
+    m.findUnique.mockRejectedValueOnce(injected);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest(), { params });
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_SESSION_TOKEN');
+      expect(log).toHaveBeenCalledWith('Start Session Error:', 'Error');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('returns a generic private error when a roleplay database query fails', async () => {
     const secret = 'postgresql://db-user:private-pass@internal.invalid/health';
     m.findUnique.mockRejectedValueOnce(new Error(secret));
@@ -262,6 +277,10 @@ describe('POST /api/roleplay/session/[id]/start', () => {
       expect(response.status).toBe(500);
       expect(body.error).toContain('No fue posible iniciar el roleplay');
       expect(JSON.stringify(body)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-pass');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('internal.invalid');
+      expect(log).toHaveBeenCalledWith('Start Session Error:', 'Error');
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
       expect(m.updateMany).not.toHaveBeenCalled();
     } finally {
