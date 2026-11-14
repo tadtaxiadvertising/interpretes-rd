@@ -76,7 +76,7 @@ export function RoleplayScenario({
     setIsBasePlaying(false);
     setHasListened(false);
     setAudioError(null);
-  }, [scenario.id]);
+  }, [scenario.id, scenario.baseAudioUrl]);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.playbackRate = playbackRate;
