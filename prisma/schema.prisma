@@ -1013,6 +1013,11 @@ model RoleplayScenario {
   baseAudioUrl      String   @map("base_audio_url")
   durationLimitSec  Int?     @map("duration_limit_sec")
   scriptPrompt      String?  @map("script_prompt")
+  studioTurn        Int?     @map("studio_turn")
+  studioSpeaker     String?  @map("studio_speaker")
+  studioLanguage    String?  @map("studio_language")
+  sourceStartSec    Float?   @map("source_start_sec")
+  sourceEndSec      Float?   @map("source_end_sec")
   expectedKeys      String[] @map("expected_keys")
   createdAt         DateTime @default(now()) @map("created_at")
 
