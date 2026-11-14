@@ -264,6 +264,30 @@ describe('startCandidateRoleplay', () => {
     expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-assigned', expect.any(Object));
   });
 
+  it('does not resume a submitted legacy attempt if any scenario lacks a recording', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'SUBMITTED',
+      evaluatorId: null,
+      qaScoreId: null,
+      scenarios: [{
+        ...ASSIGNED_SESSION.scenarios[0],
+        responses: [{ sourceAudioUrl: 'https://audio.example/recorded.webm', selfScore: { fluency: 8 } }],
+      }, {
+        ...ASSIGNED_SESSION.scenarios[0],
+        order: 1,
+        responses: [],
+      }],
+    });
+
+    const res = await startCandidateRoleplay();
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.cookieSet).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['QA already claimed the attempt', 'admin-1', null, { fluency: 8 }],
     ['an evaluation has already been saved', null, 8, { fluency: 8 }],
