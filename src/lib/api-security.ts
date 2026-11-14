@@ -1,6 +1,7 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 /**
  * Senior DevSecOps: Security Wrapper for Next.js App Router API Routes.
@@ -9,6 +10,21 @@ import { Prisma } from '@prisma/client';
  */
 
 type RouteHandler = (req: NextRequest, context: unknown) => Promise<NextResponse>;
+
+const PRIVATE_ERROR_HEADERS = {
+  'Cache-Control': 'private, no-store',
+  Vary: 'Authorization, Cookie, Origin',
+};
+
+function apiErrorResponse(body: unknown, status: number): NextResponse {
+  return NextResponse.json(body, { status, headers: PRIVATE_ERROR_HEADERS });
+}
+
+// Preserve the existing 409 contract for actual write conflicts, but never
+// classify schema drift (P2022), connection errors or unexpected Prisma codes
+// as an ordinary business conflict.
+const PRISMA_CONFLICT_CODES = new Set(['P2002', 'P2003', 'P2025']);
+
 
 export function withSecurity(
   handler: RouteHandler,
@@ -35,27 +51,25 @@ export function withSecurity(
       // Execute original handler
       return await handler(req, context);
 
-    } catch (error) {
-      console.error('🔴 [SECURITY-AUDIT] Critical Failure:', {
-        path: req.nextUrl.pathname,
-        method: req.method,
-        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-      });
+    } catch (error: unknown) {
+      // Never write provider-supplied .message, .stack, .name or arbitrary
+      // thrown objects: they can contain connection URLs and signed media.
+      console.error('[SECURITY-AUDIT] API handler failure:', safeServerErrorCategory(error));
 
       if (error instanceof z.ZodError) {
-        return NextResponse.json({ 
+        return apiErrorResponse({
           success: false,
-          error: 'Bad Request: Validation failed', 
-          details: error.issues 
-        }, { status: 400 });
+          error: 'Bad Request: Validation failed',
+          details: error.issues,
+        }, 400);
       }
 
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        return NextResponse.json({ success: false, error: 'Database conflict or constraint violation' }, { status: 409 });
+      if (error instanceof Prisma.PrismaClientKnownRequestError &&
+          PRISMA_CONFLICT_CODES.has(error.code)) {
+        return apiErrorResponse({ success: false, error: 'Database conflict or constraint violation' }, 409);
       }
 
-      return NextResponse.json({ success: false, error: 'Internal Server Error' }, { status: 500 });
+      return apiErrorResponse({ success: false, error: 'Internal Server Error' }, 500);
     }
   };
 }
-
