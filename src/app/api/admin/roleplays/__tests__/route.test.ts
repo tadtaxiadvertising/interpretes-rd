@@ -562,7 +562,7 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.roleplayAccess.create).toHaveBeenCalledWith(
         expect.objectContaining({ data: expect.objectContaining({ sessionId: 'sess-d' }) })
       );
-      expect(mockUpload).toHaveBeenCalledWith(expect.stringMatching(/^base\/sess-d\/upload-[^/]+\/0\.webm$/), expect.anything(), expect.objectContaining({ upsert: true }));
+      expect(mockUpload).toHaveBeenCalledWith(expect.stringMatching(/^base\/sess-d\/upload-[^/]+\/0\.webm$/), expect.anything(), expect.objectContaining({ upsert: false }));
     });
 
     it('keeps a resumed DRAFT and its scenarios on failure', async () => {
