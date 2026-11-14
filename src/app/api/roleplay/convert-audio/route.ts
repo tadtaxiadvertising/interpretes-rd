@@ -6,6 +6,18 @@ import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/secur
 import { BUCKET, getSupabaseAdmin } from '@/lib/roleplay-audio-conversion';
 import { confirmRoleplayResponse } from '@/app/actions/roleplay';
 
+// This endpoint returns participant-scoped audio URLs. Prevent intermediary
+// caches from retaining signed recordings, even for errors or rate limits.
+function privateJson<T extends object>(body: T, init: ResponseInit = {}): NextResponse<T> {
+  const headers = new Headers(init.headers);
+  headers.set('Cache-Control', 'private, no-store');
+  const vary = headers.get('Vary');
+  if (!vary?.split(',').some(value => value.trim().toLowerCase() === 'cookie')) {
+    headers.set('Vary', vary ? `${vary}, Cookie` : 'Cookie');
+  }
+  return NextResponse.json(body, { ...init, headers });
+}
+
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_MIME_TYPES = [
   'audio/webm',
@@ -102,7 +114,7 @@ export async function POST(req: NextRequest) {
     // Apply rate limiting
     const rateLimitResult = applyRateLimit(req, RATE_LIMITS.audioUpload);
     if (!rateLimitResult.success) {
-      return NextResponse.json(
+      return privateJson(
         { success: false, error: 'Too many requests. Please try again later.' },
         { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
       );
@@ -111,7 +123,7 @@ export async function POST(req: NextRequest) {
     // Resolve identity and check access
     const identity = await resolveCurrentIdentity();
     if (!identity) {
-      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+      return privateJson({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
 
     const formData = await req.formData();
@@ -120,14 +132,14 @@ export async function POST(req: NextRequest) {
     const scenarioId = formData.get('scenarioId');
 
     if (!(file instanceof File) || typeof sessionId !== 'string' || typeof scenarioId !== 'string' || !sessionId || !scenarioId) {
-      return NextResponse.json({ success: false, error: 'Missing required fields' }, { status: 400 });
+      return privateJson({ success: false, error: 'Missing required fields' }, { status: 400 });
     }
 
     // Check upload access
     const sessionCookie = req.cookies.get('roleplay_session')?.value ?? null;
     const accessCheck = await checkUploadAccess(identity, sessionId, sessionCookie);
     if (!accessCheck.hasAccess) {
-      return NextResponse.json({ success: false, error: accessCheck.error }, { status: 403 });
+      return privateJson({ success: false, error: accessCheck.error }, { status: 403 });
     }
 
     // The session cookie proves access to the session, not to an arbitrary
@@ -138,7 +150,7 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
     if (!scenario) {
-      return NextResponse.json(
+      return privateJson(
         { success: false, error: 'Scenario does not belong to this Roleplay session' },
         { status: 404 }
       );
@@ -152,7 +164,7 @@ export async function POST(req: NextRequest) {
       select: { id: true },
     });
     if (confirmedResponse) {
-      return NextResponse.json(
+      return privateJson(
         { success: false, error: 'Audio already confirmed for this scenario' },
         { status: 409 }
       );
@@ -160,7 +172,7 @@ export async function POST(req: NextRequest) {
 
     const validation = validateAudioFile(file);
     if (!validation.valid) {
-      return NextResponse.json({ success: false, error: validation.error }, { status: 400 });
+      return privateJson({ success: false, error: validation.error }, { status: 400 });
     }
 
     // Keep the storage suffix aligned with the normalized MIME type.
@@ -174,7 +186,7 @@ export async function POST(req: NextRequest) {
     };
     const ext = extensionByMime[normalizedMime];
     if (!ext) {
-      return NextResponse.json({ success: false, error: 'Unsupported audio format' }, { status: 400 });
+      return privateJson({ success: false, error: 'Unsupported audio format' }, { status: 400 });
     }
 
     // Each upload attempt receives its own immutable object path. Concurrent or
@@ -188,7 +200,7 @@ export async function POST(req: NextRequest) {
       .upload(sourcePath, file, { contentType: file.type, upsert: false });
 
     if (uploadError) {
-      return NextResponse.json({ success: false, error: 'Failed to upload original audio' }, { status: 500 });
+      return privateJson({ success: false, error: 'Failed to upload original audio' }, { status: 500 });
     }
 
     // Confirm through the canonical transactional path. This verifies the
@@ -207,19 +219,19 @@ export async function POST(req: NextRequest) {
         .from(BUCKET)
         .remove([sourcePath]);
       if (cleanupError) {
-        console.error('Failed to clean up unconfirmed Roleplay audio:', cleanupError.message);
+        console.error('Failed to clean up unconfirmed Roleplay audio:', 'StorageError');
       }
       const status = confirmation.code === 'CONFLICT' ? 409
         : confirmation.code === 'FORBIDDEN' || confirmation.code === 'UNAUTHORIZED' ? 403
         : 400;
-      return NextResponse.json(
+      return privateJson(
         { success: false, error: confirmation.error || 'Unable to confirm uploaded audio' },
         { status }
       );
     }
 
     const needsMp3 = normalizedMime === 'audio/webm';
-    return NextResponse.json({
+    return privateJson({
       success: true,
       data: {
         sourceUrl: confirmation.data.recordedAudioUrl,
@@ -230,8 +242,8 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Audio upload error:', error);
-    return NextResponse.json({ 
+    console.error('Audio upload error:', error instanceof Error ? 'Error' : 'UnknownError');
+    return privateJson({ 
       success: false, 
       error: 'Unable to process audio upload' 
     }, { status: 500 });
