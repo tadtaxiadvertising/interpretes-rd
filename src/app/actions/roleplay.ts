@@ -391,6 +391,11 @@ export async function startCandidateRoleplay() {
       previousSession.status === 'SUBMITTED' &&
       previousSession.evaluatorId === null &&
       previousSession.qaScoreId === null &&
+      // A submitted attempt without a recording cannot be repaired using
+      // assessments alone; do not offer an unusable recovery session.
+      previousSession.scenarios.every((scenario) =>
+        scenario.responses?.some((response) => Boolean(response.sourceAudioUrl))
+      ) &&
       previousSession.scenarios.some((scenario) =>
         scenario.responses?.some((response) =>
           Boolean(response.sourceAudioUrl) &&
