@@ -7,6 +7,17 @@ export class InterpreterNotFoundError extends Error {
 }
 
 /**
+ * An interpreter with historical or audit-linked records cannot be hard-deleted.
+ * The administrator must use a separately reviewed retention/deactivation flow.
+ */
+export class InterpreterHasHistoricalRecordsError extends Error {
+  constructor() {
+    super('Interpreter has historical records and cannot be deleted');
+    this.name = 'InterpreterHasHistoricalRecordsError';
+  }
+}
+
+/**
  * Removes an interpreter account while preserving auditable Roleplay history.
  *
  * Roleplay sessions are retained as historical records. Active sessions are
@@ -15,6 +26,16 @@ export class InterpreterNotFoundError extends Error {
  * deletion, while still forbidding a session from having two owners.
  */
 export async function deleteInterpreterDatabaseRecords(tx: any, interpreterId: number) {
+  // Lock the owner row before checking dependent history. FK inserts need a
+  // conflicting row lock, so a concurrent new call/payroll item cannot slip
+  // between the checks and the hard delete within this transaction.
+  const lockedRows: Array<{ id: number }> = await tx.$queryRaw`
+    SELECT id FROM public.interpreters WHERE id = ${interpreterId} FOR UPDATE
+  `;
+  if (lockedRows.length === 0) {
+    throw new InterpreterNotFoundError();
+  }
+
   const interpreter = await tx.interpreter.findUnique({
     where: { id: interpreterId },
     select: {
@@ -22,9 +43,27 @@ export async function deleteInterpreterDatabaseRecords(tx: any, interpreterId: n
       userProfile: { select: { id: true } },
     },
   });
-
   if (!interpreter) {
     throw new InterpreterNotFoundError();
+  }
+
+  // A hard delete previously erased financial, operational and audit records
+  // (including CASCADE-linked status/metrics). Fail closed until an approved
+  // retention and anonymization policy exists. Only select identifiers, not PII.
+  const historicalReferences = await Promise.all([
+    tx.payrollRecord.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.callSession.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.productionLog.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.qAScore.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.payrateAuditLog.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.interpreterStatusLog.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.interpreterMonthlyMetrics.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.interpreterAccountAssignment.findFirst({ where: { interpreterId }, select: { id: true } }),
+    tx.recruitmentApplication.findFirst({ where: { hiredInterpreterId: interpreterId }, select: { id: true } }),
+  ]);
+
+  if (historicalReferences.some(Boolean)) {
+    throw new InterpreterHasHistoricalRecordsError();
   }
 
   // Do not cascade-delete Roleplay evidence (sessions, scenarios, responses,
