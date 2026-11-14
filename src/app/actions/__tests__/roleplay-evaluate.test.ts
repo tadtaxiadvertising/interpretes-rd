@@ -142,7 +142,7 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     const result = await evaluateRoleplay(null, makeForm());
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe('Complete every recording and self-assessment before evaluating');
+    expect(result.error).toBe('No response submitted yet');
     expect(m.sessionUpdateMany).not.toHaveBeenCalled();
     expect(m.qaCreate).not.toHaveBeenCalled();
   });
