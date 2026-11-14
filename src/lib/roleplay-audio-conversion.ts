@@ -141,7 +141,9 @@ async function convertToMp3(inputPath: string, outputPath: string): Promise<void
       outputPath,
     ], { stdio: 'pipe' });
 
-    let stderr = '';
+    // Drain FFmpeg diagnostic output without collecting potentially sensitive
+    // filenames, container metadata or transcript-like text in memory.
+    ffmpeg.stderr.resume();
     let settled = false;
     const timeout = setTimeout(() => {
       ffmpeg.kill('SIGKILL');
@@ -158,12 +160,6 @@ async function convertToMp3(inputPath: string, outputPath: string): Promise<void
       if (error) reject(error);
       else resolve();
     };
-
-    ffmpeg.stderr.on('data', (data: Buffer) => {
-      if (stderr.length < 8_192) {
-        stderr += data.toString().slice(0, 8_192 - stderr.length);
-      }
-    });
 
     ffmpeg.on('error', () => finish(new Error('FFmpeg process error: SpawnError')));
     ffmpeg.on('close', (code) => {
