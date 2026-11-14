@@ -85,6 +85,8 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(response.headers.get('Vary')).toBe('Cookie');
     expect(body).toMatchObject({
       success: true,
       data: { sourceUrl: 'https://signed.test/response', audioStatus: 'UPLOADED' },
@@ -137,15 +139,43 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 
-  it('returns a generic error when storage or persistence throws an internal exception', async () => {
-    mocks.confirm.mockRejectedValue(new Error('database-password-or-storage-internals'));
+  it('does not cache errors or log internal database credentials on audio upload failure', async () => {
+    const secret = 'postgresql://private:password@db.internal.invalid/roleplay';
+    mocks.confirm.mockRejectedValue(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest({ cookie: 'session-1' }));
+      const body = await response.json();
+      expect(response.status).toBe(500);
+      expect(body).toEqual({ success: false, error: 'Unable to process audio upload' });
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(response.headers.get('Vary')).toBe('Cookie');
+      expect(JSON.stringify(body)).not.toContain('password');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
+    } finally {
+      log.mockRestore();
+    }
+  });
 
-    const response = await POST(makeRequest({ cookie: 'session-1' }));
-    const body = await response.json();
-
-    expect(response.status).toBe(500);
-    expect(body).toEqual({ success: false, error: 'Unable to process audio upload' });
-    expect(JSON.stringify(body)).not.toContain('database-password-or-storage-internals');
+  it('does not log provider tokens when cleanup of an unconfirmed upload fails', async () => {
+    mocks.confirm.mockResolvedValue({
+      success: false,
+      code: 'CONFLICT',
+      error: 'Response already recorded for this scenario',
+    });
+    mocks.remove.mockResolvedValue({ error: { message: 'https://storage.invalid?token=PRIVATE_TOKEN' } });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest({ cookie: 'session-1' }));
+      expect(response.status).toBe(409);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(JSON.stringify(await response.json())).not.toContain('PRIVATE_TOKEN');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_TOKEN');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('storage.invalid');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('does not allow administrators to create participant response recordings', async () => {
