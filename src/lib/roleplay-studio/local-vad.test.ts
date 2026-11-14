@@ -46,4 +46,22 @@ describe('local VAD',()=>{
     const result=detectLocalSpeech([left,right],16000,{ minSilenceDurationSec: 0.1 });
     expect(result).toHaveLength(2);
   });
+
+  it('honors an explicit RMS threshold and minimum speech duration',()=>{
+    const short=signal(16000,2,[[0.5,0.8]]);
+    expect(detectLocalSpeech([short],16000,{ thresholdRms: 0.05, minSpeechDurationSec: 0.5 })).toEqual([]);
+    const result=detectLocalSpeech([short],16000,{ thresholdRms: 0.05, minSpeechDurationSec: 0.1 });
+    expect(result).toHaveLength(1);
+  });
+  it('rejects sample rates outside the supported range',()=>{
+    const data=new Float32Array(16000);
+    expect(detectLocalSpeech([data],7999)).toEqual([]);
+    expect(detectLocalSpeech([data],192001)).toEqual([]);
+  });
+  it('never pads a segment beyond the source duration',()=>{
+    const data=signal(16000,1,[[0.7,1]]);
+    const result=detectLocalSpeech([data],16000,{ postRollSec: 1 });
+    expect(result).toHaveLength(1);
+    expect(result[0].end).toBeLessThanOrEqual(1);
+  });
 });
