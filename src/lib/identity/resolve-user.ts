@@ -553,9 +553,10 @@ export function resolveDestination(identity: ResolvedIdentity): string {
   }
 
   if (identity.role === 'candidate') {
-    if (['STARTED', 'IN_PROGRESS'].includes(identity.roleplayState) && identity.roleplaySessionId) {
-      return '/roleplays/' + identity.roleplaySessionId;
-    }
+    // A roleplay ID is not an access credential. The candidate portal uses
+    // startCandidateRoleplay() to revalidate ownership and rebind the
+    // HttpOnly roleplay_session cookie before any session can be opened.
+    // Redirecting directly here caused 403 after a fresh login or browser.
     return '/candidate';
   }
 

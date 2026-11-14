@@ -6,7 +6,7 @@ import { resolveDestination } from '@/lib/identity/resolve-user';
  * Each case maps (role, onboardingStatus, roleplayState, sessionId) → expected destination.
  */
 type Case = {
-  role: 'admin' | 'interpreter';
+  role: 'admin' | 'interpreter' | 'candidate';
   onboardingStatus: 'NOT_STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'NEEDS_REVIEW';
   roleplayState:
     | 'NO_ROLEPLAY' | 'DRAFT' | 'INVITED' | 'STARTED' | 'IN_PROGRESS'
@@ -29,6 +29,16 @@ const cases: Case[] = [
   { role: 'admin', onboardingStatus: 'NOT_STARTED', roleplayState: 'NO_ROLEPLAY', sessionId: null, expected: '/admin' },
   { role: 'admin', onboardingStatus: 'COMPLETED', roleplayState: 'INVITED', sessionId: 's-1', expected: '/admin' },
   { role: 'admin', onboardingStatus: 'IN_PROGRESS', roleplayState: 'SUBMITTED', sessionId: 's-2', expected: '/admin' },
+
+  // Candidate entry must always reach /candidate, even with an active
+  // session ID. That portal reissues the roleplay_session cookie via the
+  // authorized start/resume Server Action (unlike a raw /roleplays/[id] URL).
+  { role: 'candidate', onboardingStatus: 'COMPLETED', roleplayState: 'STARTED', sessionId: 'candidate-1', expected: '/candidate' },
+  { role: 'candidate', onboardingStatus: 'COMPLETED', roleplayState: 'IN_PROGRESS', sessionId: 'candidate-2', expected: '/candidate' },
+  { role: 'candidate', onboardingStatus: 'COMPLETED', roleplayState: 'INVITED', sessionId: 'candidate-3', expected: '/candidate' },
+  { role: 'candidate', onboardingStatus: 'COMPLETED', roleplayState: 'SUBMITTED', sessionId: 'candidate-4', expected: '/candidate' },
+  { role: 'candidate', onboardingStatus: 'COMPLETED', roleplayState: 'FAILED', sessionId: 'candidate-5', expected: '/candidate' },
+  { role: 'candidate', onboardingStatus: 'NOT_STARTED', roleplayState: 'NO_ROLEPLAY', sessionId: null, expected: '/candidate' },
 
   // Onboarding not complete → onboarding
   interpreterBase({ onboardingStatus: 'NOT_STARTED', expected: '/onboarding' }),
