@@ -86,7 +86,8 @@ export async function PATCH(
           { status: 404 }
         );
       }
-      if (!interpreter.userProfile) {
+      const { userProfile, ...interpreterRecord } = interpreter;
+      if (!userProfile) {
         return privateAdminJson(
           { success: false, error: 'Cannot change password without a linked authentication account. Contact support.' },
           { status: 409 }
@@ -95,7 +96,7 @@ export async function PATCH(
       const { supabaseAdmin, ADMIN_UNAVAILABLE_MESSAGE, isAdminUnavailableError } = await import('@/lib/supabase/admin');
       try {
         const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-          interpreter.userProfile.id,
+          userProfile.id,
           { password, email_confirm: true }
         );
         if (authError) throw authError;
@@ -107,6 +108,13 @@ export async function PATCH(
           );
         }
         throw err;
+      }
+
+      // A password-only operation is complete once Supabase Auth succeeds.
+      // Avoid a no-op PostgreSQL transaction that could fail after the password
+      // was changed, reporting a false failure to the administrator.
+      if (Object.keys(updateData).length === 0) {
+        return privateAdminJson({ success: true, data: interpreterRecord });
       }
     }
 
