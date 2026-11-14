@@ -60,7 +60,7 @@ describe('local VAD',()=>{
   });
   it('never pads a segment beyond the source duration',()=>{
     const data=signal(16000,1,[[0.7,1]]);
-    const result=detectLocalSpeech([data],16000,{ postRollSec: 1 });
+    const result=detectLocalSpeech([data],16000,{ postRollSec: 1, minSpeechDurationSec: 0.1 });
     expect(result).toHaveLength(1);
     expect(result[0].end).toBeLessThanOrEqual(1);
   });
