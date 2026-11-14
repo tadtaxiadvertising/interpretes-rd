@@ -11,6 +11,7 @@ import prismaClient from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { getCurrentActor } from '@/lib/auth/current-actor';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const prisma = prismaClient;
 
@@ -105,25 +106,25 @@ export async function login(formData: FormData) {
     });
 
     if (error) {
-      console.error(`🔴 [AUTH_LOGIN] Failed for ${email}:`, error.message);
+      console.error('[AUTH_LOGIN] External sign-in failed:', safeServerErrorCategory(error));
 
       // ── LOCAL RBAC FALLBACK ─────────────────────────────────
       // Authenticate against the rbac_users table (works even without
       // Supabase service key).
-      console.log(`🔧 [AUTH_LOGIN] Falling through to local RBAC fallback for ${email}`);
+      console.info('[AUTH_LOGIN] Attempting local RBAC fallback');
       const localUser = await prisma.rbacUser.findUnique({
         where: { email },
         select: { id: true, email: true, name: true, role: true, password: true },
       });
 
       if (!localUser) {
-        console.log(`🔴 [AUTH_LOGIN] No local RBAC user found for ${email}`);
+        console.info('[AUTH_LOGIN] Local RBAC authentication rejected');
         return { success: false, error: 'Credenciales inválidas o error de autenticación.' };
       }
 
       const passwordMatches = await bcrypt.compare(password, localUser.password);
       if (!passwordMatches) {
-        console.log(`🔴 [AUTH_LOGIN] Local RBAC password mismatch for ${email}`);
+        console.info('[AUTH_LOGIN] Local RBAC authentication rejected');
         return { success: false, error: 'Credenciales inválidas o error de autenticación.' };
       }
 
@@ -187,7 +188,7 @@ export async function login(formData: FormData) {
             }
           }
         } catch (fallbackError) {
-          console.error(`🔴 [AUTH_LOGIN] Supabase repair failed for ${email}:`, fallbackError);
+          console.error('[AUTH_LOGIN] Supabase repair failed:', safeServerErrorCategory(fallbackError));
         }
       }
 
@@ -236,7 +237,7 @@ export async function login(formData: FormData) {
       };
     }
 
-    console.error('🔴 [AUTH_LOGIN] Unexpected error:', err);
+    console.error('[AUTH_LOGIN] Unexpected error:', safeServerErrorCategory(err));
     return { success: false, error: 'Error interno del sistema.' };
   }
 }
@@ -302,10 +303,10 @@ export async function register(formData: FormData) {
           password: validated.password,
         });
         if (signInError) {
-          console.warn(`⚠️ [AUTH_REGISTER] Auto sign-in after create failed for ${validated.email}:`, signInError.message);
+          console.warn('[AUTH_REGISTER] Auto sign-in failed:', safeServerErrorCategory(signInError));
         }
       } catch (adminError) {
-        console.error(`🔴 [AUTH_REGISTER] Admin API create failed for ${validated.email}:`, adminError);
+        console.error('[AUTH_REGISTER] Admin API create failed:', safeServerErrorCategory(adminError));
         return { success: false, error: 'Error al crear la cuenta. Intente nuevamente.' };
       }
     } else {
@@ -356,7 +357,7 @@ export async function register(formData: FormData) {
         },
       });
     } catch (rbacSyncErr) {
-      console.warn(`⚠️ [AUTH_REGISTER] rbac_users sync skipped for ${validated.email}:`, rbacSyncErr);
+      console.warn('[AUTH_REGISTER] Local RBAC sync skipped:', safeServerErrorCategory(rbacSyncErr));
     }
 
     return { success: true, role: resolvedRole };
@@ -371,7 +372,7 @@ export async function register(formData: FormData) {
       };
     }
 
-    console.error('🔴 [AUTH_REGISTER] Error:', err);
+    console.error('[AUTH_REGISTER] Error:', safeServerErrorCategory(err));
     return { success: false, error: 'Error interno durante el registro.' };
   }
 }
@@ -447,7 +448,7 @@ export async function getCurrentProfile(): Promise<UserProfile | null> {
       console.warn('⚠️ [AUTH] Profile fetch omitido por falta de configuración.');
       return null;
     }
-    console.error('🔴 [AUTH] Profile fetch failed:', error);
+    console.error('[AUTH] Profile fetch failed:', safeServerErrorCategory(error));
     return null;
   }
 }
@@ -496,7 +497,7 @@ export async function requestPasswordReset(formData: FormData) {
 
     if (error) {
       // Do not log the address or any token. Avoid leaking account existence.
-      console.error('[AUTH_RESET] Password reset request failed:', error.name || 'AuthError');
+      console.error('[AUTH_RESET] Password reset request failed:', safeServerErrorCategory(error));
       return {
         success: false,
         error: 'No se pudo enviar el enlace de recuperación. Inténtalo más tarde.',
@@ -510,7 +511,7 @@ export async function requestPasswordReset(formData: FormData) {
     }
     console.error(
       '[AUTH_RESET] Unexpected recovery error:',
-      err instanceof Error ? err.name : 'UnknownError'
+      safeServerErrorCategory(err)
     );
     return {
       success: false,
@@ -540,7 +541,7 @@ export async function updatePassword(formData: FormData) {
           data: { password: hashedPassword },
         });
       } catch (rbacSyncErr) {
-        console.warn('⚠️ [AUTH_UPDATE_PASSWORD] rbac_users sync skipped:', rbacSyncErr);
+        console.warn('[AUTH_UPDATE_PASSWORD] Local RBAC sync skipped:', safeServerErrorCategory(rbacSyncErr));
       }
     }
 
