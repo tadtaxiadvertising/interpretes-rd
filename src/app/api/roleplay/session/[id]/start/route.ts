@@ -128,8 +128,9 @@ export async function POST(
       { headers: createRateLimitHeaders(rateLimitResult) }
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Start Session Error:', message);
+    // Raw Prisma/Storage messages and attacker-supplied Error.name can leak
+    // secrets to centralized logs. Emit only a fixed error category.
+    console.error('Start Session Error:', error instanceof Error ? 'Error' : 'UnknownError');
     // Never send database/storage exception text to a candidate or interpreter.
     return NextResponse.json(
       { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
