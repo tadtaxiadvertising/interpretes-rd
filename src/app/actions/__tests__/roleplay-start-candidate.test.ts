@@ -51,6 +51,7 @@ vi.mock('@/lib/prisma', () => ({
     recruitmentApplication: { findUnique: m.appFindUnique, findFirst: m.applicationFindFirst },
     $transaction: async (cb: any) =>
       cb({
+        roleplaySession: { create: m.sessionCreate },
         recruitmentApplication: {
           findUnique: m.appFindUnique,
           updateMany: m.appUpdateMany,
@@ -123,7 +124,7 @@ describe('startCandidateRoleplay', () => {
       eligibility: { needsOnboarding: false },
     };
     m.candidateFindUnique.mockResolvedValue({ id: 5 });
-    m.advanceApplication.mockResolvedValue({ success: true });
+    m.advanceApplication.mockResolvedValue({ success: true, data: { advanced: true } });
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_PENDING' });
     m.sessionFindFirst.mockResolvedValue(null);
     m.sessionCreate.mockResolvedValue({ id: 'sess-new', status: 'STARTED' });
@@ -149,15 +150,35 @@ describe('startCandidateRoleplay', () => {
     expect(m.accessUpsert).not.toHaveBeenCalled();
   });
 
-  it('rejects when the account has no matching application (normalized email)', async () => {
+  it('looks up the authorized candidate by resolved ID, never mutable email', async () => {
+    m.sessionFindFirst.mockResolvedValue(ASSIGNED_SESSION);
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.candidateFindUnique).toHaveBeenCalledWith({
+      where: { id: 5 },
+      select: { id: true },
+    });
+    expect(m.candidateFindUnique).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: { email: 'candidate@example.com' } })
+    );
+  });
+
+  it('rejects when the resolved candidate ID no longer has an expediente', async () => {
+    m.identity.candidateId = 99;
     m.candidateFindUnique.mockResolvedValue(null);
 
     const res = await startCandidateRoleplay();
 
     expect(res.success).toBe(false);
-    expect(m.candidateFindUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { email: 'candidate@example.com' } })
-    );
+    expect(res.code).toBe('NOT_FOUND');
+    expect(m.candidateFindUnique).toHaveBeenCalledWith({
+      where: { id: 99 },
+      select: { id: true },
+    });
+    expect(m.applicationFindFirst).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
     expect(m.cookieSet).not.toHaveBeenCalled();
   });
 
@@ -261,6 +282,67 @@ describe('startCandidateRoleplay', () => {
       toStatus: 'ROLEPLAY_PENDING',
     }));
     expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-retry', expect.any(Object));
+  });
+
+  it('creates the replacement session through the same transaction as the QA retry transition', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'EVALUATED',
+      qaScore: { totalScore: 60, criticalError: false },
+    });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({
+      fromStatuses: ['ROLEPLAY_REVIEW'],
+      db: expect.objectContaining({
+        recruitmentApplication: expect.objectContaining({ updateMany: m.appUpdateMany }),
+        roleplaySession: expect.objectContaining({ create: m.sessionCreate }),
+      }),
+    }));
+    expect(m.sessionCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not create duplicate retries when another request has already claimed the transition', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'EVALUATED',
+      qaScore: { totalScore: 60, criticalError: false },
+    });
+    m.advanceApplication.mockResolvedValueOnce({ success: true, data: { advanced: false } });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('does not bind a cookie if session creation fails after the retry transition', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'EVALUATED',
+      qaScore: { totalScore: 60, criticalError: false },
+    });
+    m.sessionCreate.mockRejectedValueOnce(new Error('test-only database unavailable'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await startCandidateRoleplay();
+      expect(res.success).toBe(false);
+      expect(res.code).toBe('INTERNAL_ERROR');
+      expect(m.advanceApplication).toHaveBeenCalledWith(expect.objectContaining({ db: expect.any(Object) }));
+      expect(m.cookieSet).not.toHaveBeenCalled();
+      expect(m.accessUpsert).not.toHaveBeenCalled();
+      expect(JSON.stringify(res)).not.toContain('database unavailable');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('creates a fresh session when retrying a reviewed attempt', async () => {
