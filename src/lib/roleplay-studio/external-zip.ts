@@ -237,7 +237,7 @@ export async function extractExternalStudioZip(archive: File): Promise<File[]> {
   }
   if ([...entries.keys()].some(name => !allowed.has(name))) invalid();
 
-  const result: File[] = [new File([data], 'manifest.json', { type: 'application/json' })];
+  const result: File[] = [new File([new Uint8Array(data)], 'manifest.json', { type: 'application/json' })];
   let totalClipBytes = 0;
   for (const name of raw.files.clips) {
     const clip = entries.get(name.toLowerCase());
@@ -245,7 +245,7 @@ export async function extractExternalStudioZip(archive: File): Promise<File[]> {
     totalClipBytes += clip.size;
     if (totalClipBytes > MAX_CLIPS_TOTAL_BYTES) invalid();
     const payload = await readEntry(buffer, clip, MAX_CLIP_BYTES);
-    result.push(new File([payload], clip.name, { type: 'audio/mpeg' }));
+    result.push(new File([new Uint8Array(payload)], clip.name, { type: 'audio/mpeg' }));
   }
 
   // Reuse the established contract for segment ordering, timeline checks,
