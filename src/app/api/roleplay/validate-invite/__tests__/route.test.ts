@@ -141,6 +141,8 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
       expect(JSON.stringify(body)).not.toContain(secret);
       expect(JSON.stringify(body)).not.toContain('secret-token');
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('hidden-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private.invalid');
       expect(m.setCookie).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
