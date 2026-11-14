@@ -330,6 +330,37 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
   });
 
+  it('offers submitted-candidate recovery when only the canonical response Storage path remains', async () => {
+    m.session = {
+      ...candidateSession('SUBMITTED'),
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Scenario',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: [],
+        responses: [{
+          sourceAudioUrl: null,
+          sourceAudioPath: 'responses/sess-1/scenario-1/source.webm',
+          processedAudioPath: null,
+          durationSec: 25,
+          selfScore: { fluency: 7 },
+          selfNotes: null,
+        }],
+      }],
+    };
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.canCompleteSelfAssessment).toBe(true);
+    expect(m.getSignedAudioUrl).toHaveBeenCalledWith('responses/sess-1/scenario-1/source.webm', 3600);
+    expect(body.data.scenarios[0].responses[0].sourceAudioUrl)
+      .toBe('https://signed.test/responses/sess-1/scenario-1/source.webm');
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('sourceAudioPath');
+  });
+
   it('rejects an interpreter who does not own the session', async () => {
     m.session = { ...candidateSession('STARTED'), recruitmentCandidateId: null, interpreterId: 7 };
     m.identity = { role: 'interpreter', interpreterId: 999 };
