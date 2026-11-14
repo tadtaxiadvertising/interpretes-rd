@@ -238,6 +238,58 @@ describe('startCandidateRoleplay', () => {
     },
   );
 
+  it('resumes a legacy submitted recording with missing assessment without starting a new attempt', async () => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'SUBMITTED',
+      evaluatorId: null,
+      qaScoreId: null,
+      scenarios: [{
+        ...ASSIGNED_SESSION.scenarios[0],
+        responses: [{ sourceAudioUrl: 'https://audio.example/recorded.webm', selfScore: { fluency: 8 } }],
+      }],
+    });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(true);
+    if (res.success) expect(res.data.sessionId).toBe('sess-assigned');
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.advanceApplication).not.toHaveBeenCalled();
+    expect(m.accessUpsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { sessionId: 'sess-assigned' },
+    }));
+    expect(m.cookieSet).toHaveBeenCalledWith('roleplay_session', 'sess-assigned', expect.any(Object));
+  });
+
+  it.each([
+    ['QA already claimed the attempt', 'admin-1', null, { fluency: 8 }],
+    ['an evaluation has already been saved', null, 8, { fluency: 8 }],
+    ['the rubric is complete', null, null, { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 }],
+  ])('does not resume legacy assessment when %s', async (_reason, evaluatorId, qaScoreId, selfScore) => {
+    m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
+    m.sessionFindFirst.mockResolvedValue({
+      ...ASSIGNED_SESSION,
+      status: 'SUBMITTED',
+      evaluatorId,
+      qaScoreId,
+      scenarios: [{
+        ...ASSIGNED_SESSION.scenarios[0],
+        responses: [{ sourceAudioUrl: 'https://audio.example/recorded.webm', selfScore }],
+      }],
+    });
+
+    const res = await startCandidateRoleplay();
+
+    expect(res.success).toBe(false);
+    expect(res.code).toBe('CONFLICT');
+    expect(m.accessUpsert).not.toHaveBeenCalled();
+    expect(m.cookieSet).not.toHaveBeenCalled();
+    expect(m.sessionCreate).not.toHaveBeenCalled();
+  });
+
   it('does not permit a retry if QA has not saved a score for an evaluated session', async () => {
     m.applicationFindFirst.mockResolvedValue({ id: 'app-1', status: 'ROLEPLAY_REVIEW' });
     m.sessionFindFirst.mockResolvedValue({ ...ASSIGNED_SESSION, status: 'EVALUATED', qaScore: null });
