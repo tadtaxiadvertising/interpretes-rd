@@ -324,6 +324,9 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
       expect(result.code).toBe('INTERNAL_ERROR');
       expect(result.error).toContain('No fue posible evaluar el roleplay');
       expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
       expect(m.qaCreate).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
