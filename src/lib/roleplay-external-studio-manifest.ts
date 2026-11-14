@@ -61,7 +61,7 @@ export function adaptExternalAudioStudioManifest(raw: unknown, files: File[]): A
   let duration = 0;
   for (const [i, segment] of raw.segments.entries()) {
     if (!record(segment) || !safeMp3(segment.mp3File) ||
-        typeof segment.turn !== 'number' || !Number.isSafeInteger(segment.turn) || segment.turn < 1 ||
+        typeof segment.turn !== 'number' || !Number.isSafeInteger(segment.turn) || segment.turn < 1 || segment.turn > 10000 ||
         seenTurns.has(segment.turn) ||
         !['speaker_1', 'speaker_2', 'speaker_3'].includes(String(segment.speaker)) ||
         !['en', 'es', 'mixed'].includes(String(segment.language)) ||
