@@ -613,6 +613,9 @@ describe('startCandidateRoleplay', () => {
       expect(result.code).toBe('INTERNAL_ERROR');
       expect(result.error).toBe('No fue posible preparar tu roleplay. Inténtalo nuevamente.');
       expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
       expect(m.cookieSet).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
@@ -677,6 +680,9 @@ describe('validateInviteToken protects candidate responses from database details
       expect(result.code).toBe('INTERNAL_ERROR');
       expect(result.error).toContain('No fue posible validar la invitación');
       expect(JSON.stringify(result)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
       expect(JSON.stringify(result)).not.toContain('fictional-private-token');
       expect(m.cookieSet).not.toHaveBeenCalled();
     } finally {
