@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
-import { deleteInterpreterDatabaseRecords } from '@/lib/interpreters/delete-interpreter';
+import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError } from '@/lib/interpreters/delete-interpreter';
 import { InterpreterPatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
 import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
@@ -44,10 +44,8 @@ export async function DELETE(
 
   } catch (error) {
     console.error('Error deleting interpreter:', safeServerErrorCategory(error));
-    const message = error instanceof Error ? error.message : 'Error deleting interpreter';
-    
-    // Resolve gracefully if the interpreter is already deleted (e.g. from transaction desync)
-    if (message === 'Intérprete no encontrado') {
+    // Only a typed missing-record error is idempotent; provider messages are not.
+    if (error instanceof InterpreterNotFoundError) {
       return privateAdminJson({ success: true });
     }
     
