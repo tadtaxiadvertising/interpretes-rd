@@ -13,6 +13,11 @@ interface Scenario {
   baseAudioPreview: string;
   durationLimitSec: number;
   scriptPrompt: string;
+  studioTurn?: number;
+  studioSpeaker?: 'speaker_1' | 'speaker_2' | 'speaker_3';
+  studioLanguage?: 'en' | 'es' | 'mixed';
+  sourceStartSec?: number;
+  sourceEndSec?: number;
   sha256?: string;
 }
 
@@ -135,6 +140,10 @@ export function ScenarioCard({
                   ? `${Math.floor(scenario.durationLimitSec / 60)}:${(scenario.durationLimitSec % 60).toString().padStart(2, '0')}`
                   : 'Default (5:00 max)'}
               </span>
+              {scenario.studioTurn && <span>Turno original #{scenario.studioTurn}</span>}
+              {scenario.studioSpeaker && <span>{scenario.studioSpeaker.replace('_', ' ')}</span>}
+              {scenario.studioLanguage && <span>{scenario.studioLanguage.toUpperCase()}</span>}
+              {scenario.sourceStartSec !== undefined && scenario.sourceEndSec !== undefined && <span>{scenario.sourceStartSec.toFixed(2)}s–{scenario.sourceEndSec.toFixed(2)}s</span>}
               {scenario.baseAudioFile && (
                 <span className="flex items-center gap-1 text-green-400">
                   <Mic2 size={12} />
