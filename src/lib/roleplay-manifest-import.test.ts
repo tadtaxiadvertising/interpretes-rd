@@ -195,6 +195,17 @@ describe('external Roleplay Audio Studio manifest import', () => {
     expect(JSON.stringify(imported)).not.toMatch(/PRIVATE CLINICAL|Sensitive Patient|PRIVATE DIAGNOSIS/);
   });
 
+  it('rejects invalid source turn metadata and out-of-range timelines', async () => {
+    const input = externalFixture();
+    const original = JSON.parse(await input[0].text());
+    const invalidTurn = structuredClone(original);
+    invalidTurn.segments[0].turn = 0;
+    await expect(prepareRoleplayManifestImport([new File([JSON.stringify(invalidTurn)], 'manifest.json'), ...input.slice(1)])).rejects.toThrow(/referencias o tiempos inválidos/);
+    const invalidTimeline = structuredClone(original);
+    invalidTimeline.segments[1].endTime = invalidTimeline.segments[1].startTime;
+    await expect(prepareRoleplayManifestImport([new File([JSON.stringify(invalidTimeline)], 'manifest.json'), ...input.slice(1)])).rejects.toThrow(/referencias o tiempos inválidos/);
+  });
+
   it('rejects malformed non-null speaker track references', async () => {
     const input = externalFixture();
     const raw = JSON.parse(await input[0].text());
