@@ -48,6 +48,46 @@ describe('administrative consecutive preview only', () => {
     expect(onStart).toHaveBeenCalledTimes(2);
   });
 
+  it('enters practice on a natural audio end when the selected cut reaches the MP3 boundary', () => {
+    const { container } = render(
+      <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={2}
+        segments={[segments[0]]} />
+    );
+    const audio = container.querySelector('audio')!;
+    fireEvent.click(screen.getByRole('button', { name: 'Reproducir turno' }));
+
+    // Browsers may emit ended without a final timeupdate at exactly 2 seconds.
+    audio.currentTime = 2;
+    fireEvent.ended(audio);
+    expect(screen.getByText(/Tu turno para interpretar/)).toBeTruthy();
+    expect(screen.queryByText(/El MP3 terminó antes/)).toBeNull();
+  });
+
+  it('accepts the 100 ms cut rounding already allowed by the preview plan at EOF', () => {
+    const { container } = render(
+      <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={2}
+        segments={[{ ...segments[0], end: 2.08 }]} />
+    );
+    const audio = container.querySelector('audio')!;
+    fireEvent.click(screen.getByRole('button', { name: 'Reproducir turno' }));
+    audio.currentTime = 2;
+    fireEvent.ended(audio);
+    expect(screen.getByText(/Tu turno para interpretar/)).toBeTruthy();
+  });
+
+  it('still rejects physical audio ending before the selected cut finishes', () => {
+    const { container } = render(
+      <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={2}
+        segments={[segments[0]]} />
+    );
+    const audio = container.querySelector('audio')!;
+    fireEvent.click(screen.getByRole('button', { name: 'Reproducir turno' }));
+    audio.currentTime = 1;
+    fireEvent.ended(audio);
+    expect(screen.getByText(/El MP3 terminó antes del final seleccionado/)).toBeTruthy();
+    expect(screen.queryByText(/Tu turno para interpretar/)).toBeNull();
+  });
+
   it('supports the original 4.5-second repetition protocol without storing recordings', () => {
     const { container } = render(
       <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={10} segments={segments} />

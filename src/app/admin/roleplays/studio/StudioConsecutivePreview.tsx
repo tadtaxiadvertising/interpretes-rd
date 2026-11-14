@@ -241,12 +241,26 @@ export default function StudioConsecutivePreview({
                 finishTurn();
               }
             }}
-            onEnded={() => {
-              if (activeTurn.current) {
-                setMessage('El MP3 terminó antes del final seleccionado. Revisa los cortes.');
-                stopAudio();
-                setPhase('error');
+            onEnded={event => {
+              const current = activeTurn.current;
+              if (!current) return;
+              // timeupdate may be skipped at the physical MP3 boundary.
+              // Reaching a cut ending at that boundary is normal completion,
+              // not an early media failure.
+              const position = event.currentTarget.currentTime;
+              // The cut planner permits up to 100 ms of duration rounding
+              // beyond the MP3 metadata; do not flag that valid boundary.
+              const endAtSourceBoundary =
+                current.end >= sourceDuration &&
+                current.end <= sourceDuration + 0.1 &&
+                position >= sourceDuration - 0.025;
+              if (position >= current.end - 0.025 || endAtSourceBoundary) {
+                finishTurn();
+                return;
               }
+              setMessage('El MP3 terminó antes del final seleccionado. Revisa los cortes.');
+              stopAudio();
+              setPhase('error');
             }}
           />
           <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
