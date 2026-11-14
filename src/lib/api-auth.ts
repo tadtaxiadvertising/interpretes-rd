@@ -160,13 +160,18 @@ function actorFromCurrentActor(actor: CurrentActor): ApiActor {
 }
 
 /**
- * Resolve the caller: a verified Bearer token takes precedence, then the
- * authenticated session cookie (Supabase or Auth.js). Returns null when the
- * request is anonymous or the credential cannot be verified.
+ * Resolve the caller using exactly one explicit credential source.
+ * A supplied Authorization header must verify as Bearer; invalid or malformed
+ * authorization never falls back to a browser session cookie.
+ * Without an Authorization header, use an authenticated session cookie.
  */
 export async function resolveApiActor(req: Request): Promise<ApiActor | null> {
-  const bearerActor = await actorFromBearer(req);
-  if (bearerActor) return bearerActor;
+  // An explicit Authorization header chooses Bearer authentication. If the
+  // token is invalid, expired or malformed, fail closed: do not silently
+  // authenticate a different actor through an unrelated browser cookie.
+  if (req.headers.has('authorization')) {
+    return actorFromBearer(req);
+  }
 
   try {
     const actor = await getCurrentActor();
