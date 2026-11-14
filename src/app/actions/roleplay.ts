@@ -997,7 +997,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         where: { scenarioId: input.scenarioId },
         select: { id: true, sourceAudioUrl: true, sourceAudioPath: true, processedAudioPath: true, selfScore: true },
       });
-      if (!hasPersistedRoleplayRecording(response)) {
+      if (!response || !hasPersistedRoleplayRecording(response)) {
         throw new Error('Confirm your recording before completing the self-assessment');
       }
       const existingScore = response.selfScore;
