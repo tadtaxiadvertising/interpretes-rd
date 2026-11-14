@@ -154,62 +154,94 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('processedAudioPath');
   });
 
-  it.each(['unvalidated', 'consumed'] as const)(
-    'redacts all response audio links when a candidate invitation is %s',
-    async (accessState) => {
-      const original = candidateSession('SUBMITTED');
-      m.session = {
-        ...original,
-        baseAudioUrl: 'https://private.example/base.mp3',
-        baseAudioPath: 'base/sess-1.mp3',
-        recordedAudioUrl: 'https://private.example/legacy-recording.webm',
-        access: {
-          ...original.access,
-          validatedAt: accessState === 'unvalidated' ? null : new Date(),
-          usedAt: accessState === 'consumed' ? new Date() : null,
-        },
-        scenarios: [{
-          id: 'scenario-1',
-          order: 0,
-          title: 'Clinical scenario',
-          baseAudioUrl: 'https://private.example/clip.mp3',
-          durationLimitSec: 120,
-          scriptPrompt: null,
-          expectedKeys: ['ADMIN ONLY'],
-          responses: [{
-            sourceAudioUrl: 'https://private.example/legacy-answer.webm',
-            sourceAudioPath: 'responses/sess-1/answer.webm',
-            processedAudioPath: 'responses/sess-1/answer.mp3',
-            durationSec: 20,
-            selfScore: null,
-            selfNotes: null,
-          }, {
-            sourceAudioUrl: 'https://private.example/legacy-only.webm',
-            sourceAudioPath: null,
-            processedAudioPath: null,
-            durationSec: 10,
-            selfScore: null,
-            selfNotes: null,
-          }],
+  it('redacts legacy and signed response audio for an unvalidated candidate invitation', async () => {
+    const original = candidateSession('SUBMITTED');
+    m.session = {
+      ...original,
+      baseAudioUrl: 'https://private.example/base.mp3',
+      baseAudioPath: 'base/sess-1.mp3',
+      recordedAudioUrl: 'https://private.example/legacy-recording.webm',
+      access: { ...original.access, validatedAt: null, usedAt: null },
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Clinical scenario',
+        baseAudioUrl: 'https://private.example/clip.mp3',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: ['ADMIN ONLY'],
+        responses: [{
+          sourceAudioUrl: 'https://private.example/legacy-answer.webm',
+          sourceAudioPath: 'responses/sess-1/answer.webm',
+          processedAudioPath: 'responses/sess-1/answer.mp3',
+          durationSec: 20,
+          selfScore: null,
+          selfNotes: null,
+        }, {
+          sourceAudioUrl: 'https://private.example/legacy-only.webm',
+          sourceAudioPath: null,
+          processedAudioPath: null,
+          durationSec: 10,
+          selfScore: null,
+          selfNotes: null,
         }],
-      };
+      }],
+    };
 
-      const res = await GET(makeRequest('sess-1'), { params });
-      const body = await res.json();
-      expect(res.status).toBe(200);
-      expect(body.data.baseAudioUrl).toBeNull();
-      expect(body.data.recordedAudioUrl).toBeNull();
-      expect(body.data.scenarios[0].baseAudioUrl).toBe('');
-      expect(body.data.scenarios[0].responses.map((r: { sourceAudioUrl: string | null }) => r.sourceAudioUrl))
-        .toEqual([null, null]);
-      expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('sourceAudioPath');
-      expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('processedAudioPath');
-      expect(JSON.stringify(body)).not.toContain('private.example');
-      expect(JSON.stringify(body)).not.toContain('ADMIN ONLY');
-      expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
-      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    },
-  );
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.baseAudioUrl).toBeNull();
+    expect(body.data.recordedAudioUrl).toBeNull();
+    expect(body.data.scenarios[0].baseAudioUrl).toBe('');
+    expect(body.data.scenarios[0].responses.map((r: { sourceAudioUrl: string | null }) => r.sourceAudioUrl))
+      .toEqual([null, null]);
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('sourceAudioPath');
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('processedAudioPath');
+    expect(JSON.stringify(body)).not.toContain('private.example');
+    expect(JSON.stringify(body)).not.toContain('ADMIN ONLY');
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('lets a submitted candidate review their own recording after invite consumption', async () => {
+    const original = candidateSession('SUBMITTED');
+    m.session = {
+      ...original,
+      baseAudioPath: 'base/sess-1.mp3',
+      recordedAudioUrl: 'https://private.example/legacy-recording.webm',
+      access: { ...original.access, usedAt: new Date() },
+      scenarios: [{
+        id: 'scenario-1',
+        order: 0,
+        title: 'Clinical scenario',
+        baseAudioUrl: 'https://private.example/clip.mp3',
+        durationLimitSec: 120,
+        scriptPrompt: null,
+        expectedKeys: [],
+        responses: [{
+          sourceAudioUrl: 'https://private.example/old.webm',
+          sourceAudioPath: 'responses/sess-1/answer.webm',
+          processedAudioPath: 'responses/sess-1/answer.mp3',
+          durationSec: 20,
+          selfScore: null,
+          selfNotes: null,
+        }],
+      }],
+    };
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.status).toBe('SUBMITTED');
+    expect(body.data.baseAudioUrl).toBeNull();
+    expect(body.data.recordedAudioUrl).toBeNull();
+    expect(body.data.scenarios[0].baseAudioUrl).toBe('');
+    expect(body.data.canCompleteSelfAssessment).toBe(true);
+    expect(m.getSignedAudioUrl).toHaveBeenCalledWith('responses/sess-1/answer.mp3', 3600);
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalledWith('base/sess-1.mp3', 3600);
+    expect(body.data.scenarios[0].responses[0].sourceAudioUrl)
+      .toBe('https://signed.test/responses/sess-1/answer.mp3');
+  });
 
   it('preserves administrator playback access even when a candidate invitation is consumed', async () => {
     m.identity = { role: 'admin', interpreterId: null, candidateId: null };
