@@ -1,7 +1,7 @@
 # Roleplay Audio Studio — integración incremental
 
 ## Estado del alcance
-Esta rama incorpora una **primera fase funcional**, no la migración completa del código de Google AI Studio. El código fuente original de AI Studio aún no se ha importado ni auditado. El editor incluido es una implementación nativa limitada, con carga de MP3, escucha, anotación manual de cortes y exportación.
+La plataforma incorpora una **integración nativa incremental**, no una migración completa del código de Google AI Studio. El ZIP de código fuente recibido el 13 de noviembre de 2026 ya fue auditado; resultados y riesgos se documentan en [la auditoría del ZIP](./roleplay-audio-studio-zip-audit-20261113.md). El editor incluido es una implementación nativa limitada, con carga de MP3, escucha, anotación manual de cortes y exportación.
 
 ## Flujos por rol
 - **Administrador**: `/admin/roleplays/studio` → seleccionar MP3 → definir intervenciones sin solapamientos → exportar ZIP → `/admin/roleplays/new` → importar ZIP directamente (o su `manifest.json` + MP3 extraídos), validar, escoger candidato o intérprete y crear la sesión. La ruta hereda el layout que exige rol administrativo; la API de exportación exige igualmente `validateAction('admin')`.
@@ -48,7 +48,7 @@ npm run build
 - El archivo SRT/VTT puede excluir automáticamente las intervenciones con un perfil genérico exacto `Interpreter`/`Intérprete`. Los nombres no reconocidos permanecen por revisar; la revisión humana es obligatoria. Los fragmentos marcados como intérprete se bloquean al exportar.
 - El administrador puede crear un título genérico con perfil e idioma, sin copiar nombres personales ni contenido clínico de la transcripción. Los campos de perfil/idioma son **metadatos editoriales** en esta fase: se expresan en el título al aplicarlos explícitamente y no modifican el esquema existente.
 - El importador actual `manifest.json`/ZIP, RBAC, biblioteca, asignaciones y auditoría QA continúan siendo los puntos únicos de publicación y consumo.
-- No se ha integrado todavía el motor de Google AI Studio: falta su código fuente exportado para un port preciso, y quedan pendientes diarización automática, transcripción autónoma, simulador consecutivo avanzado, proyectos editables persistentes y trabajo asíncrono en el worker.
+- No se ha integrado todavía el motor completo de Google AI Studio. El código fuente ya está disponible y fue auditado, pero siguen pendientes diarización, transcripción con proveedor autorizado, simulador consecutivo avanzado, proyectos colaborativos/versionados y trabajos asíncronos con el worker.
 
 
 ## Proyectos editables portables (fase siguiente)
@@ -85,3 +85,10 @@ npm run build
 - Estas plantillas son **guías de práctica**, no un simulador de voz ni certificación de procedimientos NBCMI/CCHI. Para una evaluación ciega el administrador debe decidir si mostrar indicaciones comprometería el examen.
 - Siguen pendientes la práctica interactiva de apertura/cierre en audio, solicitudes de repetición con registro y evaluación detallada, y la versión del material original de Google AI Studio.
 
+
+## Compatibilidad con el manifiesto de Audio Studio externo (PR #303)
+
+- El importador administrativo reconoce el contrato externo `roleplayAudioStudioVersion: 1.0.0` de archivos `manifest.json` + MP3 individuales, además del contrato canónico propio. Usa títulos neutrales y guiones vacíos para no revelar nombres, transcripciones ni respuestas de referencia del archivo fuente.
+- Se aceptan pistas de hablantes/master en la selección solo si están expresamente declaradas, pero nunca se convierten en escenarios. Los clips faltantes o archivos imprevistos se rechazan. Cada MP3 publicado sigue pasando por SHA-256 del importador canónico y verificación del servidor.
+- No se admite aún importar directamente el ZIP externo generado por JSZip; extráelo y selecciona `manifest.json` junto con sus MP3. El ZIP STORE interno continúa funcionando sin cambios.
+- La compatibilidad del manifiesto **no implica** compatibilidad de la aplicación Express, endpoints Happy Scribe/Gemini o el simulador interactivo. Ver [auditoría y fases](./roleplay-audio-studio-zip-audit-20261113.md).

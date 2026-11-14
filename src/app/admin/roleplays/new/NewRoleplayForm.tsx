@@ -420,10 +420,14 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Importar roleplay preparado (ZIP de Audio Studio o manifest.json + MP3)
           </label>
           <p className="mt-1 text-xs text-slate-300">
-            Selecciona directamente el ZIP descargado de Audio Studio, o selecciona manifest.json
-            y todos los MP3 juntos. Verificaremos estructura, CRC32, orden y SHA-256 antes de llenar los
-            escenarios. Importar reemplaza el borrador actual, pero nunca publica automáticamente.
-          </p>
+            Puedes importar el ZIP generado por el estudio integrado de Intérpretes RD
+             o el manifest.json y los clips MP3 del Audio Studio externo de Google.
+             Para el ZIP externo, extrae primero sus archivos y selecciona el manifest.json
+             y todos los MP3. Se omiten las pistas por hablante y el audio masterizado.
+             Los nombres, transcripciones y notas internas nunca se publican como instrucciones.
+             Las huellas SHA-256 se calculan antes de crear escenarios. La importación
+             reemplaza el borrador, pero nunca publica automáticamente.
+           </p>
           <input
             id="manifest-roleplay-upload"
             type="file"
