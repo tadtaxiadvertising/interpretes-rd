@@ -394,50 +394,58 @@ export async function startCandidateRoleplay() {
       };
     }
 
+    // QA retry must transition the application and create the replacement
+    // session in ONE database transaction. Otherwise a failed create strands
+    // the application at ROLEPLAY_PENDING while the latest session is still
+    // EVALUATED/FAILED. A concurrent retry must win the transition exactly
+    // once rather than treating an already-pending application as permission
+    // to create a second session.
+    let session;
     if (retryingFromReview) {
-      const retryTransition = await advanceApplication({
-        applicationId: application.id,
-        fromStatuses: ['ROLEPLAY_REVIEW'],
-        toStatus: 'ROLEPLAY_PENDING',
-        toStep: 'ROLEPLAY',
-        eventType: 'ROLEPLAY_CREATED',
-        actorType: 'candidate',
-        actorId: String(candidate.id),
-        metadata: { retry: true },
+      const retryResult = await db.$transaction(async (tx) => {
+        const retryTransition = await advanceApplication({
+          applicationId: application.id,
+          fromStatuses: ['ROLEPLAY_REVIEW'],
+          toStatus: 'ROLEPLAY_PENDING',
+          toStep: 'ROLEPLAY',
+          eventType: 'ROLEPLAY_CREATED',
+          actorType: 'candidate',
+          actorId: String(candidate.id),
+          metadata: { retry: true },
+          db: tx,
+        });
+        if (!retryTransition.success || retryTransition.data?.advanced !== true) {
+          return { success: false as const };
+        }
+
+        const newSession = await tx.roleplaySession.create({
+          data: {
+            recruitmentCandidateId: candidate.id,
+            baseAudioUrl: previousSession.baseAudioUrl,
+            status: 'STARTED',
+            scenarios: {
+              create: previousSession.scenarios.map((scenario) => ({
+                order: scenario.order,
+                title: scenario.title,
+                baseAudioUrl: scenario.baseAudioUrl,
+                durationLimitSec: scenario.durationLimitSec,
+                scriptPrompt: scenario.scriptPrompt,
+                expectedKeys: scenario.expectedKeys,
+              })),
+            },
+          },
+          select: { id: true, status: true },
+        });
+        return { success: true as const, session: newSession };
       });
-      if (!retryTransition.success) {
+      if (!retryResult.success) {
         return {
           success: false as const,
           error: 'No se pudo habilitar el reintento de Roleplay. Inténtalo de nuevo.',
           code: 'CONFLICT' as const,
         };
       }
-    }
-
-    // A reviewed attempt is historical evidence. Retrying creates a fresh
-    // session with the same scenario definitions, never prior responses or QA.
-    const shouldCreateRetry = retryingFromReview;
-
-    let session;
-    if (shouldCreateRetry) {
-      session = await db.roleplaySession.create({
-        data: {
-          recruitmentCandidateId: candidate.id,
-          baseAudioUrl: previousSession.baseAudioUrl,
-          status: 'STARTED',
-          scenarios: {
-            create: previousSession.scenarios.map((scenario) => ({
-              order: scenario.order,
-              title: scenario.title,
-              baseAudioUrl: scenario.baseAudioUrl,
-              durationLimitSec: scenario.durationLimitSec,
-              scriptPrompt: scenario.scriptPrompt,
-              expectedKeys: scenario.expectedKeys,
-            })),
-          },
-        },
-        select: { id: true, status: true },
-      });
+      session = retryResult.session;
     } else {
       session = { id: previousSession.id, status: previousSession.status };
       if (['DRAFT', 'INVITED'].includes(session.status)) {
