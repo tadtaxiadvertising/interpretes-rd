@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { blockingAssignmentStatuses, interpreterAssignmentBatchScope } from '@/lib/roleplay-assignment-ownership';
@@ -11,7 +12,7 @@ export async function GET() {
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: auth.error },
         { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
       );
@@ -23,7 +24,7 @@ export async function GET() {
       orderBy: { id: 'asc' },
     });
     if (interpreters.length === 0) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: true, data: { activeCount: 0, eligibleCount: 0, skippedCount: 0 } },
         { headers: { 'Cache-Control': 'private, no-store' } },
       );
@@ -41,7 +42,7 @@ export async function GET() {
     );
     const skippedCount = interpreters.filter((interpreter) => blockedIds.has(interpreter.id)).length;
 
-    return NextResponse.json(
+    return privateRoleplayResponse(
       {
         success: true,
         data: {
@@ -53,8 +54,8 @@ export async function GET() {
       { headers: { 'Cache-Control': 'private, no-store' } },
     );
   } catch (error) {
-    console.error('Get Roleplay Eligibility Error:', error instanceof Error ? error.message : 'Unknown error');
-    return NextResponse.json(
+    console.error('Get Roleplay Eligibility Error:', safeServerErrorCategory(error));
+    return privateRoleplayResponse(
       { success: false, error: 'No fue posible calcular la elegibilidad de intérpretes.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
     );
