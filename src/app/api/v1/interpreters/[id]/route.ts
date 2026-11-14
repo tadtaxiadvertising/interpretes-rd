@@ -92,23 +92,21 @@ export async function PATCH(
           { status: 409 }
         );
       }
-      {
-        const { supabaseAdmin, ADMIN_UNAVAILABLE_MESSAGE, isAdminUnavailableError } = await import('@/lib/supabase/admin');
-        try {
-          const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
-            interpreter.userProfile.id,
-            { password, email_confirm: true }
+      const { supabaseAdmin, ADMIN_UNAVAILABLE_MESSAGE, isAdminUnavailableError } = await import('@/lib/supabase/admin');
+      try {
+        const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
+          interpreter.userProfile.id,
+          { password, email_confirm: true }
+        );
+        if (authError) throw authError;
+      } catch (err: unknown) {
+        if (isAdminUnavailableError(err)) {
+          return privateAdminJson(
+            { success: false, error: ADMIN_UNAVAILABLE_MESSAGE },
+            { status: 503 }
           );
-          if (authError) throw authError;
-        } catch (err: unknown) {
-          if (isAdminUnavailableError(err)) {
-            return privateAdminJson(
-              { success: false, error: ADMIN_UNAVAILABLE_MESSAGE },
-              { status: 503 }
-            );
-          }
-          throw err;
         }
+        throw err;
       }
     }
 
