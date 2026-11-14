@@ -121,6 +121,24 @@ describe('Roleplay required stages', () => {
     expect(m.responseUpdate).not.toHaveBeenCalled();
   });
 
+  it('accepts self-assessment for a confirmed source Storage path without a legacy signed URL', async () => {
+    m.response = {
+      id: 'response-1',
+      sourceAudioUrl: null,
+      sourceAudioPath: 'responses/sess-1/scenario-1/source.webm',
+      processedAudioPath: null,
+      selfScore: null,
+    };
+    const result = await saveSelfAssessment({
+      sessionId: 'sess-1',
+      scenarioId: 'scenario-1',
+      scores: SCORES,
+      criticalError: false,
+    });
+    expect(result.success).toBe(true);
+    expect(m.responseUpdate).toHaveBeenCalled();
+  });
+
   it('persists self-assessment before advancing the scenario cursor', async () => {
     const result = await saveSelfAssessment({
       sessionId: 'sess-1',
