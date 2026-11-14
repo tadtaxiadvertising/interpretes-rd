@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { BUCKET, getSupabaseAdmin } from '@/lib/roleplay-audio-conversion';
 import { confirmRoleplayResponse } from '@/app/actions/roleplay';
+import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
 
 // This endpoint returns participant-scoped audio URLs. Prevent intermediary
 // caches from retaining signed recordings, even for errors or rate limits.
@@ -68,6 +69,9 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     }
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
+    }
+    if (!candidateCanUploadRoleplayAudio(session)) {
+      return { hasAccess: false, error: 'Invitation not validated for recording' };
     }
     return { hasAccess: true };
   }
