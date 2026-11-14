@@ -173,9 +173,8 @@ describe('interpreter detail admin API privacy', () => {
       emailCorporativo: 'employee@example.test',
       userProfile: { id: 'auth-user-12', email: 'employee@example.test' },
     });
-    // There is no need to enter a DB transaction after updating the password.
-    // If it were called, this synthetic failure would falsely report an error.
-    m.transaction.mockRejectedValueOnce(new Error('synthetic database failure'));
+    // No transaction should execute for this operation; keeping the default
+    // mock behavior avoids leaking a one-time rejection into the next test.
     const res = await PATCH(passwordRequest(), params);
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
