@@ -27,7 +27,7 @@ async function getLibrary() {
           orderBy: { order: 'asc' },
           select: {
             id: true, order: true, title: true, baseAudioUrl: true,
-            durationLimitSec: true, scriptPrompt: true, expectedKeys: true,
+            durationLimitSec: true, scriptPrompt: true, studioTurn: true, studioSpeaker: true, studioLanguage: true, sourceStartSec: true, sourceEndSec: true, expectedKeys: true,
           },
         },
       },
