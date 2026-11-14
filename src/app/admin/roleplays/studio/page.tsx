@@ -523,6 +523,7 @@ export default function RoleplayStudioPage() {
               <LocalVadAssistant
                 key={url}
                 file={audio}
+                duration={duration}
               remaining={Math.max(0, ROLEPLAY_MAX_SCENARIOS - segments.length)}
               onApply={(detected) => {
                 subtitleImportRevision.current += 1;
