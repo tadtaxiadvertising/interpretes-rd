@@ -107,6 +107,32 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     }
   });
 
+  it('reports a partial profile-link failure without exposing the provider error or creating another Auth user', async () => {
+    const error = new Error('postgresql://secret:PRIVATE_PROFILE_PASSWORD@db.invalid');
+    error.name = 'Bearer PRIVATE_PROFILE_TOKEN';
+    m.profileUpsert.mockRejectedValueOnce(error);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(postRequest(), undefined);
+      expect(res.status).toBe(500);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toContain('Cookie');
+      const body = await res.json();
+      expect(body).toEqual({
+        success: false,
+        error: 'Interpreter and Auth records created, but profile linking failed. Contact support before retrying.',
+        interpreterId: 77,
+      });
+      expect(JSON.stringify(body)).not.toMatch(/PRIVATE_PROFILE_|postgresql:/);
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_PROFILE_|postgresql:/);
+      expect(m.create).toHaveBeenCalledOnce();
+      expect(m.provision).toHaveBeenCalledOnce();
+      expect(m.profileUpsert).toHaveBeenCalledOnce();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('returns the same static provisioning failure if Auth returns no user', async () => {
     m.provision.mockResolvedValueOnce(null);
     const res = await POST(postRequest(), undefined);
