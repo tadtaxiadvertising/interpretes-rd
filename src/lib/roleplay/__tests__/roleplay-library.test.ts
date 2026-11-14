@@ -38,6 +38,12 @@ describe('getRoleplaySnapshotHash', () => {
     ]));
   });
 
+  it('includes source turn, speaker, language and timeline metadata in the fingerprint', () => {
+    expect(getRoleplaySnapshotHash(scenarios)).not.toBe(getRoleplaySnapshotHash([
+      { ...scenarios[0], studioTurn: 1, studioSpeaker: 'speaker_1', studioLanguage: 'en', sourceStartSec: 0, sourceEndSec: 2 }, scenarios[1],
+    ]));
+  });
+
   it('changes when a referenced audio or prompt changes', () => {
     expect(getRoleplaySnapshotHash(scenarios)).not.toBe(getRoleplaySnapshotHash([
       { ...scenarios[0], baseAudioUrl: `${publicBase}/b/0.mp3` }, scenarios[1],
