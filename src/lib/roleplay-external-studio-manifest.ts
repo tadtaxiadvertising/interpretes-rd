@@ -56,8 +56,8 @@ export function adaptExternalAudioStudioManifest(raw: unknown, files: File[]): A
   let duration = 0;
   for (const [i, segment] of raw.segments.entries()) {
     if (!record(segment) || !safeMp3(segment.mp3File) ||
-        !Number.isSafeInteger(segment.turn) || (segment.turn as number) < 1 ||
-        seenTurns.has(segment.turn as number) ||
+        typeof segment.turn !== 'number' || !Number.isSafeInteger(segment.turn) || segment.turn < 1 ||
+        seenTurns.has(segment.turn) ||
         !['speaker_1', 'speaker_2', 'speaker_3'].includes(String(segment.speaker)) ||
         !['en', 'es', 'mixed'].includes(String(segment.language)) ||
         typeof segment.startTime !== 'number' || !Number.isFinite(segment.startTime) ||
@@ -70,7 +70,7 @@ export function adaptExternalAudioStudioManifest(raw: unknown, files: File[]): A
     const lower = segment.mp3File.toLowerCase();
     if (clipNames.has(lower)) invalid();
     clipNames.add(lower);
-    seenTurns.add(segment.turn as number);
+    seenTurns.add(segment.turn);
     duration += segment.endTime - segment.startTime;
     lastEnd = segment.endTime;
     // Keep metadata private. Even "speakerName" or "text" can reveal PHI or
