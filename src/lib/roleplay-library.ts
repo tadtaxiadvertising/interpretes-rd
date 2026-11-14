@@ -67,5 +67,5 @@ export function getRoleplaySnapshotHash(scenarios: ReusableRoleplayScenario[]): 
       sourceStartSec: scenario.sourceStartSec ?? null,
       sourceEndSec: scenario.sourceEndSec ?? null,
     } : snapshot;
-  })).digest('hex');
+  }))).digest('hex');
 }
