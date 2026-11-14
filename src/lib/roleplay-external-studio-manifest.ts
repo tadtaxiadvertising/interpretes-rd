@@ -103,7 +103,10 @@ export function adaptExternalAudioStudioManifest(raw: unknown, files: File[]): A
   if (raw.files.speakerTracks.length > 3) invalid();
   for (const track of raw.files.speakerTracks) {
     if (!record(track)) invalid();
-    if (track.mp3File !== undefined) {
+    // An optional speaker track can be absent (null) in a valid external
+    // export. Match the ZIP reader's contract without accepting malformed
+    // non-null paths or changing which individual clips are published.
+    if (track.mp3File !== undefined && track.mp3File !== null) {
       if (!safeMp3(track.mp3File)) invalid();
       const name = track.mp3File.toLowerCase();
       if (auxiliaries.has(name)) invalid();
