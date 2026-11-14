@@ -10,6 +10,16 @@ describe('safe server error categories', () => {
     expect(safeServerErrorCategory(error)).not.toMatch(/PRIVATE_|postgresql|storage\.invalid/);
   });
 
+  it('redacts authentication-provider errors containing account identifiers and reset tokens', () => {
+    const error = new Error('Failed for private.user@example.test; token=PRIVATE_RESET_TOKEN');
+    error.name = 'AuthError:PRIVATE_RESET_TOKEN';
+    const category = safeServerErrorCategory(error);
+    expect(category).toBe('Error');
+    expect(category).not.toContain('private.user@example.test');
+    expect(category).not.toContain('PRIVATE_RESET_TOKEN');
+    expect(category).not.toContain('AuthError:');
+  });
+
   it('does not serialize arbitrary thrown objects', () => {
     expect(safeServerErrorCategory({ message: 'PRIVATE_DATABASE_PASSWORD' }))
       .toBe('UnknownError');
