@@ -39,7 +39,7 @@ export async function POST(
         status: true,
         scenarios: {
           orderBy: { order: 'asc' },
-          select: { order: true, title: true, baseAudioUrl: true, durationLimitSec: true, scriptPrompt: true, expectedKeys: true },
+          select: { order: true, title: true, baseAudioUrl: true, durationLimitSec: true, scriptPrompt: true, studioTurn: true, studioSpeaker: true, studioLanguage: true, sourceStartSec: true, sourceEndSec: true, expectedKeys: true },
         },
       },
     });
