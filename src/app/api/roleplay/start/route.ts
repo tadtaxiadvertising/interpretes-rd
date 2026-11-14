@@ -98,10 +98,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Mark as started (not consumed yet), only after the session transition is safe.
+    // The session-read API withholds all candidate audio until validatedAt
+    // exists. A legacy token start must validate AND start the invitation,
+    // just like validate-invite-by-code; consumption (usedAt) remains separate.
+    const startedAt = new Date();
     await db.roleplayAccess.update({
       where: { id: access.id },
-      data: { startedAt: new Date() },
+      data: { startedAt, validatedAt: startedAt },
     });
 
     const cookieStore = await cookies();
@@ -124,8 +127,9 @@ export async function POST(req: NextRequest) {
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Start Roleplay Error:', message);
+    // Never log exception messages or objects: drivers can embed tokens,
+    // private audio URLs and database credentials in their error payloads.
+    console.error('Start Roleplay Error:', error instanceof Error ? 'Error' : 'UnknownError');
     return NextResponse.json(
       { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
