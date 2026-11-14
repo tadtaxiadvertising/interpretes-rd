@@ -519,9 +519,10 @@ export default function RoleplayStudioPage() {
               />
             )}
             <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
-            <LocalVadAssistant
-              key={url}
-              file={audio}
+            {audio && (
+              <LocalVadAssistant
+                key={url}
+                file={audio}
               remaining={Math.max(0, ROLEPLAY_MAX_SCENARIOS - segments.length)}
               onApply={(detected) => {
                 subtitleImportRevision.current += 1;
@@ -540,7 +541,8 @@ export default function RoleplayStudioPage() {
                 });
                 setNotice('Cortes VAD añadidos. Verifica hablantes, idioma y límites antes de exportar.');
               }}
-            />
+              />
+            )}
             <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
               <h2 className="text-sm font-bold text-violet-100">Asistente gratuito de pausas</h2>
               <p className="mt-2 text-xs leading-5 text-slate-300">
