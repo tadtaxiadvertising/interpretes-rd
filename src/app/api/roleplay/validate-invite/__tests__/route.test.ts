@@ -68,6 +68,55 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
   });
 
+  it('keeps malformed or unknown invitation responses private without binding cookies', async () => {
+    const invalid = await POST(makeRequest('A'.repeat(513)));
+    expect(invalid.status).toBe(400);
+    expect(invalid.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(invalid.headers.get('Vary')).toBe('Cookie');
+    expect(m.setCookie).not.toHaveBeenCalled();
+
+    m.accessFindUnique.mockResolvedValueOnce(null);
+    const unknown = await POST(makeRequest());
+    expect(unknown.status).toBe(404);
+    expect(unknown.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(unknown.headers.get('Vary')).toBe('Cookie');
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('refuses to resume when an active session becomes terminal before the cookie is bound', async () => {
+    m.access = {
+      ...m.access,
+      session: { ...m.access.session, status: 'STARTED' },
+    };
+    m.sessionFindUnique.mockResolvedValueOnce({ status: 'CANCELLED' });
+    const response = await POST(makeRequest());
+    expect(response.status).toBe(409);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(m.sessionFindUnique).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      select: { status: true },
+    });
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('does not log a manipulated exception name containing a token', async () => {
+    const injected = new Error('DB failed');
+    injected.name = 'Bearer PRIVATE_INVITE_TOKEN';
+    m.accessFindUnique.mockRejectedValueOnce(injected);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest());
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_INVITE_TOKEN');
+      expect(log).toHaveBeenCalledWith('Validate Invite Error:', 'Error');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.setCookie).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('requires authentication before looking up a bearer invitation', async () => {
     m.identity = null;
     const response = await POST(makeRequest());
