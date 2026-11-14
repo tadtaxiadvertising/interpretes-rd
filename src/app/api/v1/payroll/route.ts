@@ -4,6 +4,7 @@ import { withSecurity } from '@/lib/api-security';
 import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
 import { z } from 'zod';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, OPTIONS') });
@@ -11,7 +12,7 @@ export async function OPTIONS(request: Request) {
 
 export const GET = withSecurity(async (request: NextRequest) => {
   const denied = await guardApiAuth(request, 'admin');
-  if (denied) return denied;
+  if (denied) return privateAdminResponse(denied);
 
   const { searchParams } = new URL(request.url);
   const status = searchParams.get('status');
@@ -32,7 +33,7 @@ export const GET = withSecurity(async (request: NextRequest) => {
     offset: offsetRaw ?? undefined,
   });
   if (!parsed.success) {
-    return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400 });
+    return privateAdminJson({ success: false, error: 'Invalid query parameters' }, { status: 400 });
   }
 
   const whereClause: Record<string, unknown> = {};
@@ -55,7 +56,7 @@ export const GET = withSecurity(async (request: NextRequest) => {
     skip: parsed.data.offset,
   });
 
-  return NextResponse.json(records);
+  return privateAdminJson(records);
 }, {
   query: z.object({
     status: z.string().optional(),

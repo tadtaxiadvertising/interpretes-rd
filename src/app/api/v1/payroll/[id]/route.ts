@@ -4,6 +4,8 @@ import { PayrollRecordPatchSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody, stringIdParamSchema } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const METHODS = 'GET, PATCH, DELETE, OPTIONS';
 
@@ -17,7 +19,7 @@ export async function GET(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id } = stringIdParamSchema.parse(await params);
 
@@ -27,16 +29,15 @@ export async function GET(
     });
 
     if (!record) {
-      return NextResponse.json({ success: false, error: 'Payroll record not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Payroll record not found' }, { status: 404 });
     }
 
-    return NextResponse.json(record, {
+    return privateAdminJson(record, {
       headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
-    console.error('Error fetching payroll record:', error);
-    const message = error instanceof Error ? error.message : 'Error fetching payroll record';
-    return apiError({ error, fallback: message });
+    console.error('Error fetching payroll record:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Unable to fetch payroll record', exposeMessage: false }));
   }
 }
 
@@ -46,7 +47,7 @@ export async function PATCH(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id } = stringIdParamSchema.parse(await params);
 
@@ -55,7 +56,7 @@ export async function PATCH(
     // Partial validation
     const validationResult = { success: true as const, data: body };
     if (!validationResult.success) {
-      return NextResponse.json(
+      return privateAdminJson(
         { success: false, error: 'Validation failed', details: [] },
         { status: 400 }
       );
@@ -66,17 +67,16 @@ export async function PATCH(
       data: validationResult.data,
     });
 
-    return NextResponse.json(updatedRecord, {
+    return privateAdminJson(updatedRecord, {
       headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
-    console.error('Error updating payroll record:', error);
+    console.error('Error updating payroll record:', safeServerErrorCategory(error));
     const isPrismaError = error && typeof error === 'object' && 'code' in error;
     if (isPrismaError && error.code === 'P2025') {
-      return NextResponse.json({ success: false, error: 'Payroll record not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Payroll record not found' }, { status: 404 });
     }
-    const message = error instanceof Error ? error.message : 'Error updating payroll record';
-    return apiError({ error, fallback: message });
+    return privateAdminResponse(apiError({ error, fallback: 'Unable to update payroll record', exposeMessage: false }));
   }
 }
 
@@ -86,7 +86,7 @@ export async function DELETE(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id } = stringIdParamSchema.parse(await params);
 
@@ -94,16 +94,15 @@ export async function DELETE(
       where: { id },
     });
 
-    return NextResponse.json({ success: true, message: 'Payroll record deleted successfully' }, {
+    return privateAdminJson({ success: true, message: 'Payroll record deleted successfully' }, {
       headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
-    console.error('Error deleting payroll record:', error);
+    console.error('Error deleting payroll record:', safeServerErrorCategory(error));
     const isPrismaError = error && typeof error === 'object' && 'code' in error;
     if (isPrismaError && error.code === 'P2025') {
-      return NextResponse.json({ success: false, error: 'Payroll record not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Payroll record not found' }, { status: 404 });
     }
-    const message = error instanceof Error ? error.message : 'Error deleting payroll record';
-    return apiError({ error, fallback: message });
+    return privateAdminResponse(apiError({ error, fallback: 'Unable to delete payroll record', exposeMessage: false }));
   }
 }
