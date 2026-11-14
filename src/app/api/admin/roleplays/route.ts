@@ -37,8 +37,8 @@ interface ScenarioInput {
   durationLimitSec: number | null;
   scriptPrompt: string | null;
   studioTurn: number | null;
-  studioSpeaker: 'speaker_1' | 'speaker_2' | 'speaker_3' | null;
-  studioLanguage: 'en' | 'es' | 'mixed' | null;
+  studioSpeaker: string | null;
+  studioLanguage: string | null;
   sourceStartSec: number | null;
   sourceEndSec: number | null;
   expectedKeys?: string[];
