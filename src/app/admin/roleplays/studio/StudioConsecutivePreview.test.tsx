@@ -63,6 +63,18 @@ describe('administrative consecutive preview only', () => {
     expect(screen.queryByText(/El MP3 terminó antes/)).toBeNull();
   });
 
+  it('accepts the 100 ms cut rounding already allowed by the preview plan at EOF', () => {
+    const { container } = render(
+      <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={2}
+        segments={[{ ...segments[0], end: 2.08 }]} />
+    );
+    const audio = container.querySelector('audio')!;
+    fireEvent.click(screen.getByRole('button', { name: 'Reproducir turno' }));
+    audio.currentTime = 2;
+    fireEvent.ended(audio);
+    expect(screen.getByText(/Tu turno para interpretar/)).toBeTruthy();
+  });
+
   it('still rejects physical audio ending before the selected cut finishes', () => {
     const { container } = render(
       <StudioConsecutivePreview sourceUrl="blob:local-only" sourceDuration={2}
