@@ -32,6 +32,11 @@ export default async function RoleplayLibraryDetailPage({
           baseAudioUrl: true,
           durationLimitSec: true,
           scriptPrompt: true,
+          studioTurn: true,
+          studioSpeaker: true,
+          studioLanguage: true,
+          sourceStartSec: true,
+          sourceEndSec: true,
           expectedKeys: true,
         },
       },
@@ -53,7 +58,7 @@ export default async function RoleplayLibraryDetailPage({
   });
   if (visibility?.archivedAt) notFound();
 
-  const preview: Array<{ title: string; order: number; durationLimitSec: number | null; scriptPrompt: string | null; expectedKeys: string[]; audioUrl: string | null }> = [];
+  const preview: Array<{ title: string; order: number; durationLimitSec: number | null; scriptPrompt: string | null; expectedKeys: string[]; studioTurn: number | null; studioSpeaker: string | null; studioLanguage: string | null; sourceStartSec: number | null; sourceEndSec: number | null; audioUrl: string | null }> = [];
 
   // Keep signed links scoped to this authenticated administrative page,
   // and do not block the entire preview if an old object has been deleted.
@@ -71,6 +76,11 @@ export default async function RoleplayLibraryDetailPage({
       durationLimitSec: scenario.durationLimitSec,
       scriptPrompt: scenario.scriptPrompt,
       expectedKeys: scenario.expectedKeys,
+      studioTurn: scenario.studioTurn,
+      studioSpeaker: scenario.studioSpeaker,
+      studioLanguage: scenario.studioLanguage,
+      sourceStartSec: scenario.sourceStartSec,
+      sourceEndSec: scenario.sourceEndSec,
       audioUrl,
     });
   }
@@ -118,6 +128,7 @@ export default async function RoleplayLibraryDetailPage({
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-sm font-bold text-blue-300">{index + 1}</span>
               <div>
                 <h2 className="text-lg font-semibold text-white">{scenario.title}</h2>
+                {(scenario.studioTurn || scenario.studioSpeaker || scenario.studioLanguage) && <p className="text-xs text-gray-400">Turno {scenario.studioTurn ?? '—'} · {scenario.studioSpeaker ?? 'Hablante no indicado'} · {(scenario.studioLanguage ?? 'mixed').toUpperCase()}{scenario.sourceStartSec !== null && scenario.sourceEndSec !== null ? ' · ' + scenario.sourceStartSec.toFixed(2) + 's–' + scenario.sourceEndSec.toFixed(2) + 's' : ''}</p>}
                 <p className="text-xs text-gray-400">
                   {scenario.durationLimitSec ? `Límite de respuesta: ${scenario.durationLimitSec} segundos` : 'Duración predeterminada'}
                 </p>
