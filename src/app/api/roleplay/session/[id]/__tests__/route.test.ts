@@ -193,6 +193,7 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.data.baseAudioUrl).toBeNull();
     expect(body.data.recordedAudioUrl).toBeNull();
+    expect(body.data.canCompleteSelfAssessment).toBe(false);
     expect(body.data.scenarios[0].baseAudioUrl).toBe('');
     expect(body.data.scenarios[0].responses.map((r: { sourceAudioUrl: string | null }) => r.sourceAudioUrl))
       .toEqual([null, null]);
@@ -448,6 +449,37 @@ describe('GET /api/roleplay/session/[id]', () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  it('never logs an injected exception name containing a credential', async () => {
+    const injected = new Error('Internal error');
+    injected.name = 'Bearer PRIVATE_DB_TOKEN';
+    m.findUnique.mockRejectedValueOnce(injected);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await GET(makeRequest('sess-1'), { params });
+      expect(res.status).toBe(500);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_DB_TOKEN');
+      expect(log).toHaveBeenCalledWith('Get Session Error:', 'Error');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('never caches private rejection responses', async () => {
+    m.identity = null;
+    const unauthorized = await GET(makeRequest('sess-1'), { params });
+    expect(unauthorized.status).toBe(401);
+    expect(unauthorized.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(unauthorized.headers.get('Vary')).toBe('Cookie');
+
+    m.identity = { role: 'candidate', candidateId: 99, interpreterId: null };
+    const denied = await GET(makeRequest('sess-1'), { params });
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(denied.headers.get('Vary')).toBe('Cookie');
   });
 
   it('marks authorized session responses private and uncacheable', async () => {
