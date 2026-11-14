@@ -92,3 +92,11 @@ npm run build
 - Se aceptan pistas de hablantes/master en la selección solo si están expresamente declaradas, pero nunca se convierten en escenarios. Los clips faltantes o archivos imprevistos se rechazan. Cada MP3 publicado sigue pasando por SHA-256 del importador canónico y verificación del servidor.
 - No se admite aún importar directamente el ZIP externo generado por JSZip; extráelo y selecciona `manifest.json` junto con sus MP3. El ZIP STORE interno continúa funcionando sin cambios.
 - La compatibilidad del manifiesto **no implica** compatibilidad de la aplicación Express, endpoints Happy Scribe/Gemini o el simulador interactivo. Ver [auditoría y fases](./roleplay-audio-studio-zip-audit-20261113.md).
+
+## Simulador consecutivo local de revisión administrativa (siguiente fase)
+
+- El editor administrativo muestra una vista previa secuencial de los cortes del MP3 local, usando el reproductor HTMLAudio y las marcas ya revisadas. Se alternan la escucha del interlocutor y una pausa de interpretación calculada con la fórmula del Audio Studio original (duración × multiplicador + segundos extra).
+- Se admite avance anterior/siguiente, repetición con preparación de tres segundos, cambio de velocidad de escucha y avance automático opcional. El reproductor principal del editor interrumpe el simulador para que ambos no suenen al mismo tiempo.
+- Solo se simulan cortes válidos no solapados; se excluye el intérprete original y se exige que el administrador lo retire del borrador antes de exportar (el exportador mantiene esa condición). No se reproducen transcripciones ni se publican modelos de respuesta.
+- Es una **previsualización solo de administrador**. No graba micrófono, no envía audios al servidor, no persiste resultados, no modifica el MP3, no crea sesiones y no altera QA. No confundirla con el simulador formal para intérpretes/candidatos, que requiere un modo de práctica específico y autorización/estados propios.
+- Mantener revisión de los cortes, consentimiento editorial, SHA-256 y el flujo de asignación en el administrador. Antes de ampliar el simulador a participantes, diseñar una ruta independiente de las evaluaciones para que repetir o ajustar velocidad no invalide pruebas puntuadas.
