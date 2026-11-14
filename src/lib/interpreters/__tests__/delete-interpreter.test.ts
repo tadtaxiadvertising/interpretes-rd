@@ -25,7 +25,7 @@ function makeTransaction() {
     deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
   });
   return {
-    $queryRaw: vi.fn().mockResolvedValue([{ id: 12 }]),
+    $queryRaw: vi.fn((_query: TemplateStringsArray, _id: number) => Promise.resolve([{ id: 12 }])),
     interpreter: {
       findUnique: vi.fn().mockResolvedValue({ id: 12, userProfile: { id: 'fictional-auth-id' } }),
       delete: vi.fn().mockResolvedValue({ id: 12 }),
