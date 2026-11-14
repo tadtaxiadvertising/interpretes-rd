@@ -6,6 +6,21 @@ import { guardApiAuth, resolveApiActor } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
 import { isCanonicalStatus } from '@/lib/recruitment/status-display';
 import { z } from 'zod';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+
+function secureAdminRecruitmentResponse(response: NextResponse): NextResponse {
+  response.headers.set('Cache-Control', 'private, no-store');
+  const dims = (response.headers.get('Vary') || '').split(',').map(value => value.trim()).filter(Boolean);
+  for (const required of ['Authorization', 'Cookie', 'Origin']) {
+    if (!dims.some(value => value.toLowerCase() === required.toLowerCase())) dims.push(required);
+  }
+  response.headers.set('Vary', dims.join(', '));
+  return response;
+}
+
+function privateAdminJson(body: unknown, init?: ResponseInit): NextResponse {
+  return secureAdminRecruitmentResponse(NextResponse.json(body, init));
+}
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
@@ -14,7 +29,7 @@ export async function OPTIONS(request: Request) {
 export async function GET(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return secureAdminRecruitmentResponse(denied);
 
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -35,13 +50,13 @@ export async function GET(request: Request) {
       offset: offsetRaw ?? undefined,
     });
     if (!parsed.success) {
-      return NextResponse.json({ success: false, error: 'Invalid query parameters' }, { status: 400, headers: corsHeaders(request) });
+      return privateAdminJson({ success: false, error: 'Invalid query parameters' }, { status: 400, headers: corsHeaders(request) });
     }
 
     const whereClause: Record<string, unknown> = {};
     if (parsed.data.status) {
       if (!isCanonicalStatus(parsed.data.status)) {
-        return NextResponse.json(
+        return privateAdminJson(
           { success: false, error: `Unknown application status: ${parsed.data.status}` },
           { status: 400, headers: corsHeaders(request) }
         );
@@ -63,18 +78,17 @@ export async function GET(request: Request) {
       skip: parsed.data.offset,
     });
 
-    return NextResponse.json(candidates, { headers: corsHeaders(request) });
+    return privateAdminJson(candidates, { headers: corsHeaders(request) });
   } catch (error) {
-    console.error('Error fetching candidates:', error);
-    const message = error instanceof Error ? error.message : 'Error fetching candidates';
-    return apiError({ error, fallback: message });
+    console.error('Error fetching candidates:', safeServerErrorCategory(error));
+    return secureAdminRecruitmentResponse(apiError({ error, fallback: 'Unable to fetch candidates', exposeMessage: false }));
   }
 }
 
 export async function POST(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return secureAdminRecruitmentResponse(denied);
 
     const data = await parseJsonBody(request, RecruitmentCandidateSchema);
     // The guard already proved the caller is an admin; resolve the actor for
@@ -107,20 +121,19 @@ export async function POST(request: Request) {
       return candidate;
     });
 
-    return NextResponse.json(newCandidate, {
+    return privateAdminJson(newCandidate, {
       status: 201,
       headers: corsHeaders(request),
     });
   } catch (error) {
-    console.error('Error creating candidate:', error);
+    console.error('Error creating candidate:', safeServerErrorCategory(error));
     const isPrismaError = error && typeof error === 'object' && 'code' in error;
     if (isPrismaError && error.code === 'P2002') {
-      return NextResponse.json(
+      return privateAdminJson(
         { success: false, error: 'Candidate with this email already exists.' },
         { status: 409 }
       );
     }
-    const message = error instanceof Error ? error.message : 'Error creating candidate';
-    return apiError({ error, fallback: message });
+    return secureAdminRecruitmentResponse(apiError({ error, fallback: 'Unable to create candidate', exposeMessage: false }));
   }
 }
