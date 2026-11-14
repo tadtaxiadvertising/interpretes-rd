@@ -50,6 +50,19 @@ describe('local VAD', () => {
     expect(result).toHaveLength(2);
   });
 
+  it('splits a short stereo pause when the configured silence threshold is lower', () => {
+    const sampleRate = 16000;
+    const left = signal(sampleRate, 3, [[0.5, 1.5]]);
+    const right = signal(sampleRate, 3, [[1.7, 2.6]]);
+    const result = detectLocalSpeech([left, right], sampleRate, {
+      minSilenceDurationSec: 0.1,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].start).toBeLessThanOrEqual(0.5);
+    expect(result[1].start).toBeGreaterThanOrEqual(1.5);
+  });
+
   it('honors explicit RMS threshold and minimum speech duration', () => {
     const sampleRate = 16000;
     const data = signal(sampleRate, 3, [[0.5, 0.8], [1.5, 2.5]]);
