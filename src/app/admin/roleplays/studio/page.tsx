@@ -520,6 +520,7 @@ export default function RoleplayStudioPage() {
             )}
             <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
             <LocalVadAssistant
+              key={url}
               file={audio}
               remaining={Math.max(0, ROLEPLAY_MAX_SCENARIOS - segments.length)}
               onApply={(detected) => {
