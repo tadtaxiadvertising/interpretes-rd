@@ -233,6 +233,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       }
 
       const recordedUrl = confirmResult.data.recordedAudioUrl;
+      if (!recordedUrl) {
+        // An older response may have no stored signed URL. Never substitute
+        // the browser-supplied Storage path as a playback URL; a fresh page
+        // load resolves the canonical sourceAudioPath server-side.
+        throw new Error('La grabación ya está registrada, pero no hay enlace de reproducción disponible. Recarga la página para recuperarla.');
+      }
       setScenarioResponses(prev => ({
         ...prev,
         [scenario.id]: {

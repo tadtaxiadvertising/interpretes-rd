@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   session: null as any,
   findUnique: vi.fn(),
   update: vi.fn(),
+  sessionUpdateMany: vi.fn(),
   scenarioCount: vi.fn(),
   scenarioFindFirst: vi.fn(),
   scenarioCreate: vi.fn(),
@@ -44,7 +45,7 @@ vi.mock('@/lib/prisma', () => ({
     roleplayResponse: { create: m.responseCreate, update: m.responseUpdate, findFirst: m.responseFindFirst },
     roleplayAccess: { upsert: m.accessUpsert, create: m.accessCreate, updateMany: m.accessUpdateMany },
     $transaction: async (cb: any) => cb({
-      roleplaySession: { findUnique: m.findUnique, update: m.update },
+      roleplaySession: { findUnique: m.findUnique, update: m.update, updateMany: m.sessionUpdateMany },
       roleplayScenario: { count: m.scenarioCount, findFirst: m.scenarioFindFirst, create: m.scenarioCreate },
       roleplayResponse: { count: m.roleplayResponseCount, create: m.responseCreate, update: m.responseUpdate, findFirst: m.responseFindFirst },
       roleplayAudioJob: { create: m.audioJobCreate },
@@ -98,6 +99,7 @@ describe('roleplay: no scenario skipping', () => {
     m.session = { ...CANDIDATE };
     m.findUnique.mockResolvedValue(m.session);
     m.update.mockResolvedValue({ id: 'sess-cand' });
+    m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.scenarioCount.mockResolvedValue(2);
     m.responseCreate.mockResolvedValue({ id: 'resp-1' });
     m.responseUpdate.mockResolvedValue({ id: 'resp-1' });
