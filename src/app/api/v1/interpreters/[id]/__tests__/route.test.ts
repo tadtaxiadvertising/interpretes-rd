@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   transaction: vi.fn(),
   deleteRecords: vi.fn(),
   deleteUser: vi.fn(),
+  adminAuth: vi.fn(),
 }));
 
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: m.guard }));
@@ -28,7 +29,7 @@ vi.mock('@/lib/interpreters/delete-interpreter', () => ({
   InterpreterNotFoundError: class InterpreterNotFoundError extends Error {},
 }));
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: { auth: { admin: { deleteUser: m.deleteUser } } },
+  supabaseAdmin: { get auth() { return m.adminAuth(); } },
   ADMIN_UNAVAILABLE_MESSAGE: 'Admin unavailable',
   isAdminUnavailableError: () => false,
 }));
@@ -47,6 +48,7 @@ describe('interpreter detail admin API privacy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     m.guard.mockResolvedValue(null);
+    m.adminAuth.mockReturnValue({ admin: { deleteUser: m.deleteUser } });
     m.update.mockResolvedValue({ id: 12, name: 'Updated Interpreter', emailCorporativo: null });
     m.updateMany.mockResolvedValue({ count: 1 });
     m.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({}));
@@ -86,6 +88,28 @@ describe('interpreter detail admin API privacy', () => {
     }
   });
 
+
+  it('does not run the destructive database transaction when Auth admin cannot initialize', async () => {
+    const error = new Error('postgresql://hidden:SECRET_VALUE@invalid');
+    error.name = 'Bearer SECRET_VALUE';
+    m.adminAuth.mockImplementationOnce(() => { throw error; });
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await DELETE(deleteRequest(), params);
+      expect(res.status).toBe(503);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toContain('Cookie');
+      expect(await res.json()).toEqual({
+        success: false,
+        error: 'Authentication administration is unavailable. No interpreter records were deleted.',
+      });
+      expect(m.transaction).not.toHaveBeenCalled();
+      expect(m.deleteRecords).not.toHaveBeenCalled();
+      expect(JSON.stringify(spy.mock.calls)).not.toMatch(/SECRET_VALUE|postgresql:/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
 
   it('treats a typed missing interpreter as an idempotent success', async () => {
     const { InterpreterNotFoundError } = await import('@/lib/interpreters/delete-interpreter');
