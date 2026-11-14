@@ -74,6 +74,29 @@ describe('participant scenario playback controls', () => {
     expect(screen.queryByRole('status')).toBeNull();
   });
 
+  it('pauses an already playing base clip before the recording callback executes', () => {
+    const onNext = vi.fn(() => {
+      expect(pause).toHaveBeenCalledOnce();
+    });
+    const { container } = render(<RoleplayScenario scenario={first} {...shared} onNext={onNext} />);
+    const audio = container.querySelector('audio')!;
+    fireEvent.ended(audio);
+    fireEvent.play(audio);
+    expect(screen.getByRole('button', { name: 'Pausar audio base' })).toBeTruthy();
+    pause.mockClear();
+
+    fireEvent.click(screen.getByRole('button', { name: /Grabar respuesta/ }));
+    expect(pause).toHaveBeenCalledOnce();
+    expect(onNext).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Reproducir audio base' })).toBeTruthy();
+  });
+
+  it('exposes accessible names for the base-audio playback and mute controls', () => {
+    render(<RoleplayScenario scenario={first} {...shared} />);
+    expect(screen.getByRole('button', { name: 'Reproducir audio base' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Silenciar audio base' })).toBeTruthy();
+  });
+
   it('prevents skipping ahead before the first complete listen', () => {
     const { container } = render(<RoleplayScenario scenario={first} {...shared} />);
     const audio = container.querySelector('audio')!;
