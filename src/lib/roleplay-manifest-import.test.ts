@@ -178,6 +178,29 @@ describe('external Roleplay Audio Studio manifest import', () => {
     expect(imported[0].sha256).toBe(createHash('sha256').update('ID3-001').digest('hex'));
   });
 
+  it('accepts optional null speaker tracks without exposing private metadata', async () => {
+    const input = externalFixture();
+    const raw = JSON.parse(await input[0].text());
+    raw.files.speakerTracks[0].mp3File = null;
+    const imported = await prepareRoleplayManifestImport([
+      new File([JSON.stringify(raw)], 'manifest.json', { type: 'application/json' }),
+      ...input.slice(1),
+    ]);
+    expect(imported.map(s => s.title)).toEqual(['Intervención 1', 'Intervención 2']);
+    expect(imported.every(s => s.scriptPrompt === '')).toBe(true);
+    expect(JSON.stringify(imported)).not.toMatch(/PRIVATE CLINICAL|Sensitive Patient|PRIVATE DIAGNOSIS/);
+  });
+
+  it('rejects malformed non-null speaker track references', async () => {
+    const input = externalFixture();
+    const raw = JSON.parse(await input[0].text());
+    raw.files.speakerTracks[0].mp3File = 123;
+    await expect(prepareRoleplayManifestImport([
+      new File([JSON.stringify(raw)], 'manifest.json', { type: 'application/json' }),
+      ...input.slice(1),
+    ])).rejects.toThrow(/referencias o tiempos inválidos/);
+  });
+
   it('rejects a package without all its individual clips (never use master as a substitute)', async () => {
     await expect(prepareRoleplayManifestImport(externalFixture({
       missingClip: true, includeMaster: true,
