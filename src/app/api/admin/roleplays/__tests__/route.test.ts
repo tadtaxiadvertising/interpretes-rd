@@ -149,6 +149,8 @@ describe('POST /api/admin/roleplays', () => {
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
 
       expect(res.status).toBe(403);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
   });
@@ -157,6 +159,8 @@ describe('POST /api/admin/roleplays', () => {
     it('rejects missing required fields', async () => {
       const res = await POST(buildRequest({ participantType: 'interpreter' }) as any);
       expect(res.status).toBe(400);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
       expect((await res.json()).error).toMatch(/Missing required fields/);
     });
 
@@ -427,6 +431,31 @@ describe('POST /api/admin/roleplays', () => {
         expect(JSON.stringify(body)).not.toContain('storage-internal.example');
         expect(JSON.stringify(logs.mock.calls)).not.toContain('secret-provider-token');
         expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+        expect(res.headers.get('Vary')).toBe('Cookie');
+      } finally {
+        logs.mockRestore();
+      }
+    });
+  });
+
+  describe('injected exception names', () => {
+    it('never logs an attacker-provided exception name during admin creation', async () => {
+      const injected = new Error('Storage unavailable');
+      injected.name = 'Bearer PRIVATE_ADMIN_UPLOAD_TOKEN';
+      mockUpload.mockRejectedValueOnce(injected);
+      const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const res = await POST(buildRequest({
+          participantType: 'interpreter', participantId: '7',
+          scenarios: oneScenario, audios: [audioFile()],
+        }) as any);
+        const body = await res.json();
+        expect(res.status).toBe(500);
+        expect(JSON.stringify(body)).not.toContain('PRIVATE_ADMIN_UPLOAD_TOKEN');
+        expect(JSON.stringify(logs.mock.calls)).not.toContain('PRIVATE_ADMIN_UPLOAD_TOKEN');
+        expect(logs).toHaveBeenCalledWith('Create Roleplay API Error:', 'Error');
+        expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+        expect(res.headers.get('Vary')).toBe('Cookie');
       } finally {
         logs.mockRestore();
       }
@@ -458,6 +487,8 @@ describe('POST /api/admin/roleplays', () => {
       expect(body.success).toBe(false);
       expect(body.sessionId).toBe('sess-old');
       expect(body.status).toBe('INVITED');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
     });
@@ -696,6 +727,23 @@ describe('GET /api/admin/roleplays privacy', () => {
       expect(JSON.stringify(body)).not.toContain('secret');
       expect(JSON.stringify(logs.mock.calls)).not.toContain('internal-database.example');
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('does not log a malicious exception name in the administrator list', async () => {
+    const injected = new Error('Database unavailable');
+    injected.name = 'PRIVATE_DATABASE_CONNECTION_TOKEN';
+    (prisma.roleplaySession.findMany as any).mockRejectedValueOnce(injected);
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await GET();
+      expect(res.status).toBe(500);
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('PRIVATE_DATABASE_CONNECTION_TOKEN');
+      expect(logs).toHaveBeenCalledWith('Get Roleplays Error:', 'Error');
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
     } finally {
       logs.mockRestore();
     }
