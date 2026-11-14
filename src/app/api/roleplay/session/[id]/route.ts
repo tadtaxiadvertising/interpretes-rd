@@ -82,17 +82,21 @@ export async function GET(
     let scenarios = session.scenarios;
 
     if (identity.role !== 'admin' && session.recruitmentCandidateId) {
-      const hasValidToken = session.access?.validatedAt && !session.access.usedAt;
-      if (!hasValidToken) {
+      const invitationValidated = Boolean(session.access?.validatedAt);
+      const invitationConsumed = Boolean(session.access?.usedAt);
+      if (!invitationValidated || invitationConsumed) {
         baseAudioUrl = null;
         recordedAudioUrl = null;
-        // A bound session cookie proves ownership, but does not renew an
-        // unvalidated or consumed invitation. Clear BOTH legacy response URLs
-        // and canonical paths before the signing pass below, otherwise a
-        // participant could still obtain playable response recordings.
+        scenarios = scenarios.map((scenario) => ({ ...scenario, baseAudioUrl: '' }));
+      }
+      if (!invitationValidated) {
+        // A stale session cookie is not proof of a validated invitation.
+        // Clear legacy response URLs AND canonical paths before URL signing.
+        // In contrast, a *consumed* invite is the normal SUBMITTED state:
+        // its owner must still be able to review their recording and repair
+        // a missing self-assessment before QA claims the session.
         scenarios = scenarios.map((scenario) => ({
           ...scenario,
-          baseAudioUrl: '',
           responses: scenario.responses.map((response) => ({
             ...response,
             sourceAudioUrl: null,
