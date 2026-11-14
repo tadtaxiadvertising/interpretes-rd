@@ -73,6 +73,14 @@ export async function PATCH(
     const body = await parseJsonBody(request, InterpreterPatchSchema);
     const { password, ...updateData } = body;
 
+    // An empty PATCH should not bump updatedAt or write a UserProfile.
+    if (!password && Object.keys(updateData).length === 0) {
+      return privateAdminJson(
+        { success: false, error: 'At least one field must be provided.' },
+        { status: 400 }
+      );
+    }
+
     // 1. If password provided, update Supabase Auth
     if (password) {
       const interpreter = await prisma.interpreter.findUnique({
