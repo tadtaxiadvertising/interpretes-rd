@@ -114,7 +114,7 @@ export async function GET(
       try {
         baseAudioUrl = await getSignedAudioUrl(session.baseAudioPath, 60 * 60);
       } catch (error) {
-        console.error('Roleplay base audio playback URL could not be refreshed:', error instanceof Error ? error.message : 'Unknown storage error');
+        console.error('Roleplay base audio playback URL could not be refreshed:', error instanceof Error ? error.name : 'UnknownError');
         baseAudioUrl = null;
       }
     }
@@ -146,7 +146,7 @@ export async function GET(
         } catch (error) {
           console.error(
             'Roleplay response playback URL could not be refreshed:',
-            error instanceof Error ? error.message : 'Unknown storage error',
+            error instanceof Error ? error.name : 'UnknownError',
           );
           return { ...response, sourceAudioUrl: null };
         }
@@ -177,8 +177,9 @@ export async function GET(
       { headers: { ...createRateLimitHeaders(rateLimitResult), 'Cache-Control': 'private, no-store', Vary: 'Cookie' } }
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Get Session Error:', message);
+    // Raw exception messages may contain private Storage URLs, tokens or
+    // connection strings. Keep the public error generic and logs categorical.
+    console.error('Get Session Error:', error instanceof Error ? error.name : 'UnknownError');
     // Internal exception messages may contain database details or private URLs.
     // Log server-side only; never send exception text to candidate/interpreter clients.
     return NextResponse.json(
@@ -200,6 +201,10 @@ function checkSessionAccess(
 ): boolean {
   if (!identity) return false;
   if (identity.role === 'admin') return true;
+
+  // Cancellation/expiration revokes participant playback for BOTH roles.
+  // Administrators retain read access for auditing and historical QA.
+  if (session.status === 'CANCELLED' || session.status === 'EXPIRED') return false;
 
   // Recruitment sessions belong exclusively to their candidate, even when
   // legacy rows still carry a provisional interpreterId.
