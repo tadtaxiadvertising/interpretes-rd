@@ -99,6 +99,10 @@ export default async function CandidatePortalPage() {
     session?.status === 'SUBMITTED' &&
     session.evaluatorId === null &&
     session.qaScoreId === null &&
+    session.scenarios.length > 0 &&
+    session.scenarios.every((scenario) =>
+      scenario.responses.some((response) => Boolean(response.sourceAudioUrl))
+    ) &&
     session.scenarios.some((scenario) =>
       scenario.responses.some((response) =>
         Boolean(response.sourceAudioUrl) &&
