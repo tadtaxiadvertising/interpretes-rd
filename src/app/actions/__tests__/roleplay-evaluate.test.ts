@@ -95,6 +95,12 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
       recruitmentCandidateId: 5,
       interpreterId: null,
       status: 'SUBMITTED',
+      scenarios: [{
+        responses: [{
+          sourceAudioUrl: 'https://x/response.webm',
+          selfScore: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 },
+        }],
+      }],
     };
     m.sessionFindUnique.mockImplementation(async () => m.session);
     m.sessionUpdate.mockResolvedValue({ id: 'sess-1' });
@@ -104,6 +110,41 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     m.appFindUnique.mockResolvedValue({ id: 'app-5', status: 'ROLEPLAY_REVIEW', version: 6 });
     m.appUpdateMany.mockResolvedValue({ count: 1 });
     m.eventCreate.mockResolvedValue({ id: 'evt-1' });
+  });
+
+  it('does not let QA claim a legacy submitted session until all assessments are completed', async () => {
+    m.session = {
+      ...m.session,
+      scenarios: [{
+        responses: [{
+          sourceAudioUrl: 'https://x/response.webm',
+          selfScore: { fluency: 8 },
+        }],
+      }],
+    };
+
+    const result = await evaluateRoleplay(null, makeForm());
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Complete every recording and self-assessment before evaluating');
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.qaCreate).not.toHaveBeenCalled();
+    expect(m.candidateUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects QA claim if any scenario is missing its recording', async () => {
+    m.session = {
+      ...m.session,
+      scenarios: [{
+        responses: [{ sourceAudioUrl: null, selfScore: { protocol: 8, interpretation: 8, language: 8, service: 8, technical: 8 } }],
+      }],
+    };
+    const result = await evaluateRoleplay(null, makeForm());
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Complete every recording and self-assessment before evaluating');
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.qaCreate).not.toHaveBeenCalled();
   });
 
   it('claims the session atomically (SUBMITTED + evaluatorId NULL -> UNDER_REVIEW)', async () => {

@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
 import { CandidatePasswordSetup } from '@/components/recruitment/CandidatePasswordSetup';
 import { ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
+import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,6 +65,13 @@ export default async function CandidatePortalPage() {
       submittedAt: true,
       evaluatedAt: true,
       qaScore: { select: { totalScore: true, criticalError: true } },
+      evaluatorId: true,
+      qaScoreId: true,
+      scenarios: {
+        select: {
+          responses: { select: { sourceAudioUrl: true, selfScore: true } },
+        },
+      },
     },
   });
 
@@ -87,6 +95,20 @@ export default async function CandidatePortalPage() {
     ))
   );
   const canRetryRoleplay = status === 'ROLEPLAY_REVIEW' && qaFailed;
+  const canRecoverAssessment = status === 'ROLEPLAY_REVIEW' &&
+    session?.status === 'SUBMITTED' &&
+    session.evaluatorId === null &&
+    session.qaScoreId === null &&
+    session.scenarios.length > 0 &&
+    session.scenarios.every((scenario) =>
+      scenario.responses.some((response) => Boolean(response.sourceAudioUrl))
+    ) &&
+    session.scenarios.some((scenario) =>
+      scenario.responses.some((response) =>
+        Boolean(response.sourceAudioUrl) &&
+        !hasCompleteRoleplaySelfAssessment(response.selfScore)
+      )
+    );
   const roleplayLabel = !session
     ? 'Aún no iniciado'
     : ({
@@ -143,6 +165,11 @@ export default async function CandidatePortalPage() {
               <div className="mt-5 space-y-3">
                 <p className="text-sm text-slate-300">Tu evaluación permite realizar otro intento con los escenarios asignados.</p>
                 <CandidateRoleplayAction label="Reintentar Roleplay" />
+              </div>
+            ) : canRecoverAssessment ? (
+              <div className="mt-5 space-y-3">
+                <p className="text-sm text-slate-300">Tu grabación está enviada, pero falta completar una autoevaluación antes de la revisión de QA.</p>
+                <CandidateRoleplayAction label="Completar autoevaluación" />
               </div>
             ) : !roleplayFinished && canStartAssignedRoleplay ? (
               <div className="mt-5"><CandidateRoleplayAction /></div>
