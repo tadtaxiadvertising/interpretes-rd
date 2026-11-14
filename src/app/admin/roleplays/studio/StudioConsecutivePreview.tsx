@@ -241,12 +241,19 @@ export default function StudioConsecutivePreview({
                 finishTurn();
               }
             }}
-            onEnded={() => {
-              if (activeTurn.current) {
-                setMessage('El MP3 terminó antes del final seleccionado. Revisa los cortes.');
-                stopAudio();
-                setPhase('error');
+            onEnded={event => {
+              const current = activeTurn.current;
+              if (!current) return;
+              // timeupdate may be skipped at the physical MP3 boundary.
+              // Reaching a cut ending at that boundary is normal completion,
+              // not an early media failure.
+              if (event.currentTarget.currentTime >= current.end - 0.025) {
+                finishTurn();
+                return;
               }
+              setMessage('El MP3 terminó antes del final seleccionado. Revisa los cortes.');
+              stopAudio();
+              setPhase('error');
             }}
           />
           <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
