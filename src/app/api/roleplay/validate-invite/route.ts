@@ -133,8 +133,9 @@ export async function POST(req: NextRequest) {
       { headers: { ...createRateLimitHeaders(rateLimitResult), 'Cache-Control': 'private, no-store', Vary: 'Cookie' } }
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Validate Invite Error:', message);
+    // Never write raw exception messages: drivers may include tokens,
+    // connection strings or private invitation metadata in their errors.
+    console.error('Validate Invite Error:', error instanceof Error ? error.name : 'UnknownError');
     // Tokens and database exception details must not be reflected to the caller.
     return NextResponse.json(
       { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.' },
