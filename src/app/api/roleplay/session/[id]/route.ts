@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -15,7 +16,7 @@ export async function GET(
   try {
     const rateLimitResult = applyRateLimit(req, RATE_LIMITS.sessionAccess);
     if (!rateLimitResult.success) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Too many requests. Please try again later.' },
         { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
       );
@@ -24,7 +25,7 @@ export async function GET(
     const { id } = await params;
     const identity = await resolveCurrentIdentity();
     if (!identity) {
-      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+      return privateRoleplayResponse({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
 
     const session = await db.roleplaySession.findUnique({
@@ -40,7 +41,7 @@ export async function GET(
         interpreterId: true,
         recruitmentCandidateId: true,
         currentScenarioIndex: true,
-        access: { select: { tokenHash: true, usedAt: true, validatedAt: true } },
+        access: { select: { usedAt: true, validatedAt: true } },
         scenarios: {
           orderBy: { order: 'asc' },
           select: {
@@ -69,13 +70,13 @@ export async function GET(
     });
 
     if (!session) {
-      return NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 });
+      return privateRoleplayResponse({ success: false, error: 'Session not found' }, { status: 404 });
     }
 
     const sessionCookie = req.cookies.get('roleplay_session')?.value ?? null;
     const hasAccess = checkSessionAccess(identity, session, sessionCookie);
     if (!hasAccess) {
-      return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
+      return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
     let baseAudioUrl: string | null = session.baseAudioUrl;
@@ -115,7 +116,7 @@ export async function GET(
       try {
         baseAudioUrl = await getSignedAudioUrl(session.baseAudioPath, 60 * 60);
       } catch (error) {
-        console.error('Roleplay base audio playback URL could not be refreshed:', error instanceof Error ? error.name : 'UnknownError');
+        console.error('Roleplay base audio playback URL could not be refreshed:', error instanceof Error ? 'Error' : 'UnknownError');
         baseAudioUrl = null;
       }
     }
@@ -147,14 +148,14 @@ export async function GET(
         } catch (error) {
           console.error(
             'Roleplay response playback URL could not be refreshed:',
-            error instanceof Error ? error.name : 'UnknownError',
+            error instanceof Error ? 'Error' : 'UnknownError',
           );
           return { ...response, sourceAudioUrl: null };
         }
       })),
     })));
 
-    return NextResponse.json(
+    return privateRoleplayResponse(
       {
         success: true,
         data: {
@@ -166,7 +167,7 @@ export async function GET(
             session.status === 'SUBMITTED' &&
             !session.evaluatorId &&
             !session.qaScoreId &&
-            session.scenarios.some((scenario) => {
+            scenarios.some((scenario) => {
               const response = scenario.responses[0];
               return hasPersistedRoleplayRecording(response) &&
                 !hasCompleteRoleplaySelfAssessment(response?.selfScore);
@@ -180,10 +181,10 @@ export async function GET(
   } catch (error: unknown) {
     // Raw exception messages may contain private Storage URLs, tokens or
     // connection strings. Keep the public error generic and logs categorical.
-    console.error('Get Session Error:', error instanceof Error ? error.name : 'UnknownError');
+    console.error('Get Session Error:', error instanceof Error ? 'Error' : 'UnknownError');
     // Internal exception messages may contain database details or private URLs.
     // Log server-side only; never send exception text to candidate/interpreter clients.
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: false, error: 'No fue posible cargar la sesión. Inténtalo nuevamente.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
     );
