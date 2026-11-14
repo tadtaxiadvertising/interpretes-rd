@@ -13,6 +13,7 @@ import { randomBytes, createHash } from 'crypto';
 import { cookies } from 'next/headers';
 import type { RecruitmentApplicationStatus, RecruitmentStep, RecruitmentEventType } from '@/lib/prisma-types';
 import { calculateRoleplayScore, ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
+import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 
@@ -36,6 +37,7 @@ const SAFE_ROLEPLAY_ACTION_FAILURES = new Set([
   'Session not found',
   'Session already evaluated',
   'No response submitted yet',
+  'Complete every recording and self-assessment before evaluating',
   'Concurrent evaluation detected or session not available',
 ]);
 
@@ -341,6 +343,8 @@ export async function startCandidateRoleplay() {
         id: true,
         status: true,
         baseAudioUrl: true,
+        evaluatorId: true,
+        qaScoreId: true,
         // A retry must be based on an actually reviewed, non-passing result.
         qaScore: { select: { totalScore: true, criticalError: true } },
         scenarios: {
@@ -352,6 +356,9 @@ export async function startCandidateRoleplay() {
             durationLimitSec: true,
             scriptPrompt: true,
             expectedKeys: true,
+            responses: {
+              select: { sourceAudioUrl: true, selfScore: true },
+            },
           },
         },
       },
@@ -376,10 +383,23 @@ export async function startCandidateRoleplay() {
       };
     }
 
-    // ROLEPLAY_REVIEW is set on submission, before QA evaluates the attempt.
-    // Never move the application back to pending while the submitted session
-    // is still unreviewed or a passing evaluation has not advanced the pipeline.
-    const retryingFromReview = application.status === 'ROLEPLAY_REVIEW';
+    // Legacy submitted attempts may be missing a self-assessment. QA has not
+    // claimed them, so the owner must be able to rebind their session cookie
+    // and complete the missing rubric without reopening recordings or
+    // regressing the recruitment pipeline.
+    const recoveryFromReview = application.status === 'ROLEPLAY_REVIEW' &&
+      previousSession.status === 'SUBMITTED' &&
+      previousSession.evaluatorId === null &&
+      previousSession.qaScoreId === null &&
+      previousSession.scenarios.some((scenario) =>
+        scenario.responses?.some((response) =>
+          Boolean(response.sourceAudioUrl) &&
+          !hasCompleteRoleplaySelfAssessment(response.selfScore)
+        )
+      );
+
+    // A reviewed attempt can be retried only after a failing QA verdict.
+    const retryingFromReview = application.status === 'ROLEPLAY_REVIEW' && !recoveryFromReview;
     const priorEvaluationFailed = previousSession.status === 'FAILED' ||
       (previousSession.status === 'EVALUATED' && !!previousSession.qaScore && (
         previousSession.qaScore.criticalError === true ||
@@ -494,17 +514,19 @@ export async function startCandidateRoleplay() {
       maxAge: 60 * 60 * 24 * 7,
     });
 
-    // Pipeline bookkeeping: the roleplay is now in progress for this
-    // candidate. Guarded + best-effort (see advanceApplicationPipeline).
-    await advanceApplicationPipeline({
-      candidateId: candidate.id,
-      fromStatuses: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING'],
-      toStatus: 'ROLEPLAY_IN_PROGRESS',
-      toStep: 'ROLEPLAY',
-      eventType: 'ROLEPLAY_STARTED',
-      actorType: 'candidate',
-      actorId: String(candidate.id),
-    });
+    // A legacy submitted attempt stays SUBMITTED/ROLEPLAY_REVIEW. Only a
+    // genuine start or QA retry may advance recruitment bookkeeping.
+    if (!recoveryFromReview) {
+      await advanceApplicationPipeline({
+        candidateId: candidate.id,
+        fromStatuses: ['APPLIED', 'INDUCTION_PENDING', 'ROLEPLAY_PENDING'],
+        toStatus: 'ROLEPLAY_IN_PROGRESS',
+        toStep: 'ROLEPLAY',
+        eventType: 'ROLEPLAY_STARTED',
+        actorType: 'candidate',
+        actorId: String(candidate.id),
+      });
+    }
 
     revalidatePath('/dashboard/roleplays');
     return { success: true as const, data: { sessionId: session.id } };
@@ -1262,12 +1284,31 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
           recruitmentCandidateId: true,
           interpreterId: true,
           status: true,
+          scenarios: {
+            select: {
+              responses: { select: { sourceAudioUrl: true, selfScore: true } },
+            },
+          },
         },
       });
 
       if (!session) throw new Error('Session not found');
       if (session.qaScoreId) throw new Error('Session already evaluated');
       if (!session.recordedAudioUrl) throw new Error('No response submitted yet');
+      // Never claim QA until every scenario has a confirmed recording and a
+      // complete assessment. This preserves the repair window for historical
+      // SUBMITTED sessions and mirrors submitRoleplaySession's requirements.
+      if (
+        session.scenarios.length === 0 ||
+        session.scenarios.some((scenario) =>
+          !scenario.responses.some((response) =>
+            Boolean(response.sourceAudioUrl) &&
+            hasCompleteRoleplaySelfAssessment(response.selfScore)
+          )
+        )
+      ) {
+        throw new Error('Complete every recording and self-assessment before evaluating');
+      }
 
       // Atomic claim: exactly one evaluator wins. Guarded by
       // status = SUBMITTED AND evaluatorId IS NULL; the claim also moves the
