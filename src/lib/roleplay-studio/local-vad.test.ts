@@ -60,8 +60,17 @@ describe('local VAD',()=>{
   });
   it('never pads a segment beyond the source duration',()=>{
     const data=signal(16000,1,[[0.7,1]]);
-    const result=detectLocalSpeech([data],16000,{ postRollSec: 1 });
+    // This 0.3 s fixture is shorter than the default 0.5 s minimum.
+    // Lower the speech minimum explicitly to exercise end padding.
+    const result=detectLocalSpeech([data],16000,{ postRollSec: 1, minSpeechDurationSec: 0.1 });
     expect(result).toHaveLength(1);
     expect(result[0].end).toBeLessThanOrEqual(1);
+    expect(result[0].end).toBe(1);
+  });
+  it('does not count pre/post-roll as detected speech duration',()=>{
+    const data=signal(16000,1,[[0.7,1]]);
+    // Padding must not make a sub-threshold acoustic interval eligible.
+    expect(detectLocalSpeech([data],16000,{ preRollSec: 1, postRollSec: 1 }))
+      .toEqual([]);
   });
 });
