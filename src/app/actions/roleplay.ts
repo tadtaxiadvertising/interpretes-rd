@@ -41,6 +41,21 @@ const SAFE_ROLEPLAY_ACTION_FAILURES = new Set([
   'Concurrent evaluation detected or session not available',
 ]);
 
+// Log only stable, allowlisted error categories; raw messages, objects and
+// stacks may contain clinical audio URLs, bearer tokens or database credentials.
+const SAFE_ERROR_NAMES = new Set([
+  'Error', 'TypeError', 'RangeError', 'AbortError',
+  'PrismaClientKnownRequestError', 'PrismaClientUnknownRequestError',
+  'PrismaClientInitializationError', 'PrismaClientValidationError',
+]);
+
+function logRoleplayActionError(context: string, error: unknown): void {
+  const kind = error instanceof Error && SAFE_ERROR_NAMES.has(error.name)
+    ? error.name
+    : error instanceof Error ? 'Error' : 'UnknownError';
+  console.error(context, kind);
+}
+
 function publicRoleplayActionFailure(error: unknown, fallback: string): string {
   return error instanceof Error && SAFE_ROLEPLAY_ACTION_FAILURES.has(error.message)
     ? error.message
@@ -162,13 +177,12 @@ export async function createRoleplaySession(rawInput: CreateRoleplaySessionInput
       try {
         await db.roleplaySession.delete({ where: { id: session.id } });
       } catch (cleanupError) {
-        console.error('Failed to clean up incomplete Roleplay session:', cleanupError);
+        logRoleplayActionError('Failed to clean up incomplete Roleplay session:', cleanupError);
       }
       throw setupError;
     }
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Create Roleplay Session Error:', message);
+    logRoleplayActionError('Create Roleplay Session Error:', error);
     return { success: false, error: 'No fue posible crear el roleplay. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' };
   }
 }
@@ -225,8 +239,7 @@ export async function confirmBaseAudioUpload(sessionId: string, uploadPath: stri
     revalidatePath('/admin/roleplays');
     return { success: true, data: { baseAudioUrl: signedUrl } };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Confirm Base Audio Error:', message);
+    logRoleplayActionError('Confirm Base Audio Error:', error);
     return { success: false, error: 'No se pudo confirmar el audio base', code: 'INTERNAL_ERROR' };
   }
 }
@@ -266,8 +279,7 @@ async function advanceApplicationPipeline(advance: ApplicationAdvance): Promise<
       actorId: advance.actorId,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Application pipeline advance failed (ignored):', message);
+    logRoleplayActionError('Application pipeline advance failed (ignored):', error);
   }
 }
 
@@ -536,8 +548,7 @@ export async function startCandidateRoleplay() {
     revalidatePath('/dashboard/roleplays');
     return { success: true as const, data: { sessionId: session.id } };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Start Candidate Roleplay Error:', message);
+    logRoleplayActionError('Start Candidate Roleplay Error:', error);
     // Internal database/storage failures must never reach the candidate client.
     return { success: false as const, error: 'No fue posible preparar tu roleplay. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' as const };
   }
@@ -613,8 +624,7 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
       },
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Submit Response Error:', message);
+    logRoleplayActionError('Submit Response Error:', error);
     return { success: false, error: 'No fue posible preparar la respuesta del roleplay.', code: 'INTERNAL_ERROR' };
   }
 }
@@ -678,7 +688,7 @@ export async function createRoleplayResponseUpload(rawInput: z.input<typeof Crea
     const signedUpload = await createSignedResponseUploadUrl(session.id, scenario.id, input.mimeType);
     return { success: true, data: signedUpload };
   } catch (error) {
-    console.error('Create Roleplay Response Upload Error:', error instanceof Error ? error.message : 'Unknown error');
+    logRoleplayActionError('Create Roleplay Response Upload Error:', error);
     return { success: false, error: 'Unable to authorize audio upload', code: 'INTERNAL_ERROR' };
   }
 }
@@ -889,8 +899,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
     revalidatePath('/admin/roleplays');
     return { success: true, data: result };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Confirm Response Error:', message);
+    logRoleplayActionError('Confirm Response Error:', error);
     return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible confirmar la grabación. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }
@@ -1020,8 +1029,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
     revalidatePath('/admin/roleplays');
     return { success: true };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Save Self Assessment Error:', message);
+    logRoleplayActionError('Save Self Assessment Error:', error);
     return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible guardar la autoevaluación. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }
@@ -1119,8 +1127,7 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
     revalidatePath('/admin/roleplays');
     return { success: true };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Submit Roleplay Session Error:', message);
+    logRoleplayActionError('Submit Roleplay Session Error:', error);
     const publicMessage = publicRoleplayActionFailure(error, 'No fue posible enviar el roleplay. Inténtalo nuevamente.');
     return { success: false, error: publicMessage, code: SAFE_ROLEPLAY_ACTION_FAILURES.has(publicMessage) ? 'CONFLICT' : 'INTERNAL_ERROR' };
   }
@@ -1205,8 +1212,7 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
       } 
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Validate Invite Token Error:', message);
+    logRoleplayActionError('Validate Invite Token Error:', error);
     // This server action is callable by participants just like the API routes.
     // Never reflect raw Prisma/Storage exception messages in its result.
     return { success: false, error: 'No fue posible validar la invitación. Inténtalo nuevamente.', code: 'INTERNAL_ERROR' };
@@ -1426,8 +1432,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
           }
         }
       } catch (notifyErr: unknown) {
-        const message = notifyErr instanceof Error ? notifyErr.message : 'Unknown error';
-        console.error('Notification failed but roleplay evaluation saved:', message);
+        logRoleplayActionError('Notification failed but roleplay evaluation saved:', notifyErr);
       }
     }
 
@@ -1437,8 +1442,7 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
     revalidatePath('/dashboard/roleplays');
     return { success: true, data: result };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Evaluate Roleplay Error:', message);
+    logRoleplayActionError('Evaluate Roleplay Error:', error);
     return { success: false, error: publicRoleplayActionFailure(error, 'No fue posible evaluar el roleplay. Inténtalo nuevamente.'), code: 'INTERNAL_ERROR' };
   }
 }

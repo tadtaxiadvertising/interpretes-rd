@@ -212,6 +212,9 @@ describe('confirmRoleplayResponse candidate-access gate', () => {
       expect(res.code).toBe('INTERNAL_ERROR');
       expect(res.error).toContain('No fue posible confirmar');
       expect(JSON.stringify(res)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
       expect(m.responseCreate).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
@@ -735,6 +738,9 @@ describe('saveSelfAssessment gate', () => {
       expect(res.code).toBe('INTERNAL_ERROR');
       expect(res.error).toContain('No fue posible guardar la autoevaluación');
       expect(JSON.stringify(res)).not.toContain(secret);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('private-user');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
       expect(m.responseUpdate).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
