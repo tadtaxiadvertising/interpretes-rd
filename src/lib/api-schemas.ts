@@ -30,7 +30,17 @@ export const PayrollGenerateSchema = z.object({
   targetDate: z.coerce.date().optional(),
 });
 
+// A PATCH must not inject defaults from the interpreter creation schema.
+// In Zod 4, .partial() can retain defaults from the original fields, which
+// would otherwise reset status, languages, goals or payment settings.
 export const InterpreterPatchSchema = InterpreterSchema.partial().omit({ password: true }).extend({
+  status: z.enum(['Activo', 'Training', 'Inactivo', 'Probation']).optional(),
+  languageA: z.string().optional(),
+  languageB: z.string().optional(),
+  documentosCompleto: z.boolean().optional(),
+  monthlyGoal: z.number().int().positive().optional(),
+  paymentFrequency: z.enum(['Weekly', 'Biweekly', 'Monthly']).optional(),
+  paymentDay: z.string().optional(),
   password: z.string().min(6, 'Password must be at least 6 characters').max(128).optional(),
 });
 
