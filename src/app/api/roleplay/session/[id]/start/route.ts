@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -15,7 +16,7 @@ export async function POST(
   try {
     const rateLimitResult = applyRateLimit(req, RATE_LIMITS.sessionAccess);
     if (!rateLimitResult.success) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Too many requests. Please try again later.' },
         { status: 429, headers: createRateLimitHeaders(rateLimitResult) }
       );
@@ -24,7 +25,7 @@ export async function POST(
     const { id } = await params;
     const identity = await resolveCurrentIdentity();
     if (!identity) {
-      return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 });
+      return privateRoleplayResponse({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
     const session = await db.roleplaySession.findUnique({
       where: { id },
@@ -37,12 +38,12 @@ export async function POST(
     });
 
     if (!session) {
-      return NextResponse.json({ success: false, error: 'Session not found' }, { status: 404 });
+      return privateRoleplayResponse({ success: false, error: 'Session not found' }, { status: 404 });
     }
 
     const sessionCookie = req.cookies.get('roleplay_session')?.value ?? null;
     if (!isSessionOwner(identity, session, sessionCookie)) {
-      return NextResponse.json({ success: false, error: 'Access denied' }, { status: 403 });
+      return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
     }
 
     // Candidate selection Roleplay is part of recruitment and must not be
@@ -52,7 +53,7 @@ export async function POST(
       identity.role !== 'candidate' &&
       identity.eligibility?.needsOnboarding
     ) {
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Complete interpreter onboarding before starting Roleplay.' },
         { status: 403 }
       );
@@ -71,23 +72,34 @@ export async function POST(
         'ROLEPLAY_REVIEW',
       ];
       if (!application || !startableApplicationStatuses.includes(application.status)) {
-        return NextResponse.json(
+        return privateRoleplayResponse(
           { success: false, error: 'Application is not eligible for Roleplay.' },
           { status: 409 }
         );
       }
     }
 
-    // Idempotent: an attempt already in progress stays in progress.
+    // A stale active-state read must not authorize restarting a cancelled,
+    // expired or submitted session. Recheck before returning a resume token.
     if (RESUMABLE_STATES.includes(session.status)) {
-      return NextResponse.json(
-        { success: true, data: { sessionId: session.id, status: session.status, resumed: true } },
+      const latest = await db.roleplaySession.findUnique({
+        where: { id: session.id },
+        select: { id: true, status: true },
+      });
+      if (!latest || !RESUMABLE_STATES.includes(latest.status)) {
+        return privateRoleplayResponse(
+          { success: false, error: 'Session no longer available' },
+          { status: 409 },
+        );
+      }
+      return privateRoleplayResponse(
+        { success: true, data: { sessionId: latest.id, status: latest.status, resumed: true } },
         { headers: createRateLimitHeaders(rateLimitResult) }
       );
     }
 
     if (!STARTABLE_STATES.includes(session.status)) {
-      return NextResponse.json({ success: false, error: 'Session no longer available' }, { status: 409 });
+      return privateRoleplayResponse({ success: false, error: 'Session no longer available' }, { status: 409 });
     }
 
     // Compare-and-set the state we just validated. Without the status predicate,
@@ -106,13 +118,13 @@ export async function POST(
       });
 
       if (latest && RESUMABLE_STATES.includes(latest.status)) {
-        return NextResponse.json(
+        return privateRoleplayResponse(
           { success: true, data: { sessionId: latest.id, status: latest.status, resumed: true } },
           { headers: createRateLimitHeaders(rateLimitResult) }
         );
       }
 
-      return NextResponse.json(
+      return privateRoleplayResponse(
         { success: false, error: 'Session no longer available' },
         { status: 409 }
       );
@@ -123,7 +135,7 @@ export async function POST(
       data: { startedAt: new Date() },
     });
 
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: true, data: { sessionId: session.id, status: 'STARTED', resumed: false } },
       { headers: createRateLimitHeaders(rateLimitResult) }
     );
@@ -132,7 +144,7 @@ export async function POST(
     // secrets to centralized logs. Emit only a fixed error category.
     console.error('Start Session Error:', error instanceof Error ? 'Error' : 'UnknownError');
     // Never send database/storage exception text to a candidate or interpreter.
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { success: false, error: 'No fue posible iniciar el roleplay. Inténtalo nuevamente.' },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } },
     );
