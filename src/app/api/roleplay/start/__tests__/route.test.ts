@@ -111,7 +111,13 @@ describe('POST /api/roleplay/start race protection', () => {
       where: { id: 'session-1', status: 'DRAFT' },
       data: { status: 'STARTED' },
     });
-    expect(m.accessUpdate).toHaveBeenCalled();
+    expect(m.accessUpdate).toHaveBeenCalledWith({
+      where: { id: 'access-1' },
+      data: { startedAt: expect.any(Date), validatedAt: expect.any(Date) },
+    });
+    const accessData = m.accessUpdate.mock.calls[0][0].data;
+    expect(accessData.startedAt.getTime()).toBe(accessData.validatedAt.getTime());
+    expect(accessData).not.toHaveProperty('usedAt');
     expect(m.setCookie).toHaveBeenCalledWith('roleplay_session', 'session-1', expect.any(Object));
   });
 
@@ -135,7 +141,10 @@ describe('POST /api/roleplay/start race protection', () => {
     const response = await POST(makeRequest());
 
     expect(response.status).toBe(200);
-    expect(m.accessUpdate).toHaveBeenCalled();
+    expect(m.accessUpdate).toHaveBeenCalledWith({
+      where: { id: 'access-1' },
+      data: { startedAt: expect.any(Date), validatedAt: expect.any(Date) },
+    });
     expect(m.setCookie).toHaveBeenCalledWith('roleplay_session', 'session-1', expect.any(Object));
   });
   it('never reflects internal errors to token holders', async () => {
@@ -148,8 +157,27 @@ describe('POST /api/roleplay/start race protection', () => {
       expect(response.status).toBe(500);
       expect(JSON.stringify(body)).not.toContain(secret);
       expect(JSON.stringify(body)).not.toContain('secret-token');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('username');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('password');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('internal.invalid');
       expect(body.error).toContain('No fue posible iniciar el roleplay');
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(m.setCookie).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('never logs injected exception names containing secret token material', async () => {
+    const injected = new Error('Database failure');
+    injected.name = 'Bearer-private-invite-secret';
+    m.accessFindUnique.mockRejectedValueOnce(injected);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest());
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('Bearer-private-invite-secret');
+      expect(log).toHaveBeenCalledWith('Start Roleplay Error:', 'Error');
       expect(m.setCookie).not.toHaveBeenCalled();
     } finally {
       log.mockRestore();
