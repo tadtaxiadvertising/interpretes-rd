@@ -4,6 +4,7 @@ import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
 import { CandidatePasswordSetup } from '@/components/recruitment/CandidatePasswordSetup';
+import { ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,12 +58,31 @@ export default async function CandidatePortalPage() {
   const session = await prisma.roleplaySession.findFirst({
     where: { recruitmentCandidateId: identity.candidateId },
     orderBy: { createdAt: 'desc' },
-    select: { id: true, status: true, submittedAt: true, evaluatedAt: true },
+    select: {
+      id: true,
+      status: true,
+      submittedAt: true,
+      evaluatedAt: true,
+      qaScore: { select: { totalScore: true, criticalError: true } },
+    },
   });
 
   const status = application?.status ?? 'APPLIED';
   const roleplayActive = !!session && ['STARTED', 'IN_PROGRESS'].includes(session.status);
   const roleplayFinished = !!session && ['SUBMITTED', 'UNDER_REVIEW', 'EVALUATED', 'PASSED', 'FAILED'].includes(session.status);
+  // QA deliberately leaves failed evaluations in ROLEPLAY_REVIEW. The
+  // server action can create a new attempt only for a failed QA verdict;
+  // expose that existing action instead of trapping candidates on a
+  // permanent "finished" screen after a failed assessment.
+  const qaFailed = !!session && (
+    session.status === 'FAILED' ||
+    (session.status === 'EVALUATED' && !!session.qaScore && (
+      session.qaScore.criticalError ||
+      (session.qaScore.totalScore !== null &&
+        Number(session.qaScore.totalScore) < ROLEPLAY_PASS_THRESHOLD)
+    ))
+  );
+  const canRetryRoleplay = status === 'ROLEPLAY_REVIEW' && qaFailed;
   const roleplayLabel = !session
     ? 'Aún no iniciado'
     : ({
@@ -115,6 +135,11 @@ export default async function CandidatePortalPage() {
             </p>
             {roleplayActive && session ? (
               <div className="mt-5"><CandidateRoleplayAction label="Continuar Roleplay" /></div>
+            ) : canRetryRoleplay ? (
+              <div className="mt-5 space-y-3">
+                <p className="text-sm text-slate-300">Tu evaluación permite realizar otro intento con los escenarios asignados.</p>
+                <CandidateRoleplayAction label="Reintentar Roleplay" />
+              </div>
             ) : !roleplayFinished && ['ROLEPLAY_PENDING', 'ROLEPLAY_IN_PROGRESS', 'ROLEPLAY_REVIEW'].includes(status) ? (
               <div className="mt-5"><CandidateRoleplayAction /></div>
             ) : roleplayFinished ? (
