@@ -16,6 +16,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import LocalVadAssistant from './LocalVadAssistant';
 import StudioConsecutivePreview from './StudioConsecutivePreview';
 import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
@@ -518,6 +519,31 @@ export default function RoleplayStudioPage() {
               />
             )}
             <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
+            {audio && (
+              <LocalVadAssistant
+                key={url}
+                file={audio}
+                duration={duration}
+              remaining={Math.max(0, ROLEPLAY_MAX_SCENARIOS - segments.length)}
+              onApply={(detected) => {
+                subtitleImportRevision.current += 1;
+                setSegments(prev => {
+                  const additions = detected.slice(0, Math.max(0, ROLEPLAY_MAX_SCENARIOS - prev.length));
+                  return [...prev, ...additions.map((item, index) => ({
+                    id: crypto.randomUUID(),
+                    title: 'Intervención ' + (prev.length + index + 1),
+                    start: item.start,
+                    end: item.end,
+                    scriptPrompt: '',
+                    responseLimit: 120,
+                    speakerRole: 'unknown' as const,
+                    language: 'unknown' as const,
+                  }))];
+                });
+                setNotice('Cortes VAD añadidos. Verifica hablantes, idioma y límites antes de exportar.');
+              }}
+              />
+            )}
             <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
               <h2 className="text-sm font-bold text-violet-100">Asistente gratuito de pausas</h2>
               <p className="mt-2 text-xs leading-5 text-slate-300">
