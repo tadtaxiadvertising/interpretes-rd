@@ -59,8 +59,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     return NextResponse.json({ success: true, data: { sessionId: id, status: 'CANCELLED' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Cancel Roleplay API Error:', message);
+    // Database errors can contain connection strings, tokens or private paths.
+    // Log a fixed classification rather than an exception message or object.
+    console.error('Cancel Roleplay API Error:', error instanceof Error ? 'Error' : 'UnknownError');
     return NextResponse.json({ success: false, error: 'Failed to cancel roleplay' }, { status: 500 });
   }
 }
