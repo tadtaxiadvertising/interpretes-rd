@@ -96,7 +96,7 @@ function parseArchive(buffer: ArrayBuffer): Map<string, ZipEntry> {
       centralStart + centralSize !== end) invalid();
 
   const result = new Map<string, ZipEntry>();
-  const intervals: Array<{ start: number; end: number }> = [];
+  const intervals: Array<{ start: number; end: number; flags: number; crc: number; compressedSize: number; size: number }> = [];
   let cursor = centralStart;
   for (let i = 0; i < count; i++) {
     if (cursor + 46 > end || u32(cursor) !== CENTRAL) invalid();
@@ -136,21 +136,43 @@ function parseArchive(buffer: ArrayBuffer): Map<string, ZipEntry> {
     try { localName = decoder.decode(bytes.subarray(localOffset + 30, localOffset + 30 + localNameLength)); }
     catch { invalid(); }
     if (localName !== name) invalid();
-    // With a data descriptor, central-directory values are authoritative;
-    // otherwise the local CRC and sizes MUST match.
-    if ((flags & 0x0008) === 0 &&
-        (u32(localOffset + 14) !== crc ||
-         u32(localOffset + 18) !== compressedSize ||
-         u32(localOffset + 22) !== size)) invalid();
+    // A descriptor permits zeroed local CRC/sizes, but never contradictory
+    // nonzero values. The descriptor itself is checked against central values
+    // after entries are ordered by physical position below.
+    const localCrc = u32(localOffset + 14);
+    const localCompressed = u32(localOffset + 18);
+    const localSize = u32(localOffset + 22);
+    if ((flags & 0x0008) === 0
+      ? (localCrc !== crc || localCompressed !== compressedSize || localSize !== size)
+      : ((localCrc !== 0 && localCrc !== crc) ||
+         (localCompressed !== 0 && localCompressed !== compressedSize) ||
+         (localSize !== 0 && localSize !== size))) invalid();
 
-    intervals.push({ start: localOffset, end: dataEnd });
+    intervals.push({ start: localOffset, end: dataEnd, flags, crc, compressedSize, size });
     result.set(key, { name, method, flags, compressedSize, size, crc, dataStart, dataEnd, localOffset });
     cursor = next;
   }
   if (cursor !== end || !result.has('manifest.json')) invalid();
+  // Every byte before the central directory must belong to an entry, or
+  // to its required 12/16-byte data descriptor. Without this check corrupt
+  // descriptors and undeclared payloads were silently accepted.
   intervals.sort((a, b) => a.start - b.start);
-  if (intervals[0].start !== 0 ||
-      intervals.some((current, i) => i > 0 && current.start < intervals[i - 1].end)) invalid();
+  if (intervals[0].start !== 0) invalid();
+  for (let i = 0; i < intervals.length; i++) {
+    const current = intervals[i];
+    const nextStart = i + 1 < intervals.length ? intervals[i + 1].start : centralStart;
+    const trailerLength = nextStart - current.end;
+    if ((current.flags & 0x0008) !== 0) {
+      if (trailerLength !== 12 && trailerLength !== 16) invalid();
+      const descriptorStart = current.end + (trailerLength === 16 ? 4 : 0);
+      if (trailerLength === 16 && u32(current.end) !== 0x08074b50) invalid();
+      if (u32(descriptorStart) !== current.crc ||
+          u32(descriptorStart + 4) !== current.compressedSize ||
+          u32(descriptorStart + 8) !== current.size) invalid();
+    } else if (trailerLength !== 0) {
+      invalid();
+    }
+  }
   return result;
 }
 
