@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -16,6 +16,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import StudioConsecutivePreview from './StudioConsecutivePreview';
 import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
 } from '@/lib/roleplay-studio/draft';
@@ -47,6 +48,7 @@ export default function RoleplayStudioPage() {
   const [url, setUrl] = useState('');
   const [duration, setDuration] = useState(0);
   const [playhead, setPlayhead] = useState(0);
+  const [editorPlaybackRevision, setEditorPlaybackRevision] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [busy, setBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
@@ -63,6 +65,7 @@ export default function RoleplayStudioPage() {
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
   const player = useRef<HTMLAudioElement>(null);
+  const pauseEditorialAudio = useCallback(() => { player.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
@@ -486,6 +489,7 @@ export default function RoleplayStudioPage() {
         {url && (
           <div className="mt-5 space-y-3">
             <audio ref={player} src={url} controls preload="metadata" className="w-full"
+              onPlay={() => setEditorPlaybackRevision(n => n + 1)}
               onLoadedMetadata={event => {
                 const length = event.currentTarget.duration;
                 setDuration(Number.isFinite(length) ? length : 0);
@@ -785,6 +789,15 @@ export default function RoleplayStudioPage() {
               </div>
             </article>
           ))}
+          {segments.length > 0 && (
+            <StudioConsecutivePreview
+              sourceUrl={url}
+              sourceDuration={duration}
+              segments={segments}
+              interruptRevision={editorPlaybackRevision}
+              onStart={pauseEditorialAudio}
+            />
+          )}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || analyzingSilences || !segments.length}
