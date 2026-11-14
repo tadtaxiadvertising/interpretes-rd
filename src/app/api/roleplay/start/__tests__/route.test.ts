@@ -262,6 +262,24 @@ describe('POST /api/roleplay/start race protection', () => {
     }
   });
 
+  it('keeps invalid and expired legacy invitation responses private', async () => {
+    const invalid = await POST(makeRequest('x'.repeat(513)));
+    expect(invalid.status).toBe(400);
+    expect(invalid.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(invalid.headers.get('Vary')).toBe('Cookie');
+
+    const access = await m.accessFindUnique();
+    m.accessFindUnique.mockResolvedValueOnce({
+      ...access,
+      expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+    });
+    const expired = await POST(makeRequest());
+    expect(expired.status).toBe(400);
+    expect(expired.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(expired.headers.get('Vary')).toBe('Cookie');
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
   it('never caches a successful start response containing the audio URL', async () => {
     const response = await POST(makeRequest());
     expect(response.status).toBe(200);
