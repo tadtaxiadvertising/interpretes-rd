@@ -1,4 +1,5 @@
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { adaptExternalAudioStudioManifest } from '@/lib/roleplay-external-studio-manifest';
 
 export interface ImportedRoleplayScenario {
   title: string;
@@ -51,11 +52,24 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
     throw new Error('Selecciona exactamente un manifest.json junto con todos los archivos MP3.');
   }
 
+  if (manifests[0].size > 1024 * 1024) {
+    throw new Error('El manifest.json supera el límite de 1 MiB.');
+  }
+
   let raw: unknown;
   try {
     raw = JSON.parse(await manifests[0].text());
   } catch {
     throw new Error('El archivo manifest.json no contiene JSON válido.');
+  }
+  // Legacy Google AI Studio export is a DIFFERENT manifest contract. Only
+  // its individual MP3 clips become scenarios; speaker tracks/master audio
+  // are ignored and texts/notes/names never enter candidate-visible fields.
+  let audioFiles = files.filter((file) => file !== manifests[0]);
+  if (isRecord(raw) && Object.prototype.hasOwnProperty.call(raw, 'roleplayAudioStudioVersion')) {
+    const translated = adaptExternalAudioStudioManifest(raw, audioFiles);
+    raw = { segments: translated.segments };
+    audioFiles = translated.audioFiles;
   }
   if (!isRecord(raw) || !Array.isArray(raw.segments)) {
     throw new Error('El manifiesto no contiene un arreglo de segmentos.');
@@ -72,7 +86,6 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
     throw new Error('El orden de los segmentos debe comenzar en 0 y ser consecutivo.');
   }
 
-  const audioFiles = files.filter((file) => file !== manifests[0]);
   const byName = new Map<string, File>();
   for (const audio of audioFiles) {
     if (!/\.mp3$/i.test(audio.name) || !['', 'audio/mpeg', 'audio/mp3'].includes(audio.type)) {
