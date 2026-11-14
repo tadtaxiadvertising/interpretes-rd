@@ -44,7 +44,7 @@ function isValidSegment(value: unknown): value is ManifestSegment {
   if (value.sha256 !== undefined && (typeof value.sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(value.sha256))) return false;
   if (value.duration_limit_sec !== undefined && (typeof value.duration_limit_sec !== 'number' || !Number.isSafeInteger(value.duration_limit_sec) || value.duration_limit_sec < 0 || value.duration_limit_sec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC)) return false;
   if (value.script_prompt !== undefined && (typeof value.script_prompt !== 'string' || value.script_prompt.length > 5000)) return false;
-  if (value.studio_turn !== undefined && (typeof value.studio_turn !== 'number' || !Number.isSafeInteger(value.studio_turn) || value.studio_turn < 1)) return false;
+  if (value.studio_turn !== undefined && (typeof value.studio_turn !== 'number' || !Number.isSafeInteger(value.studio_turn) || value.studio_turn < 1 || value.studio_turn > 10000)) return false;
   if (value.studio_speaker !== undefined && !['speaker_1', 'speaker_2', 'speaker_3'].includes(String(value.studio_speaker))) return false;
   if (value.studio_language !== undefined && !['en', 'es', 'mixed'].includes(String(value.studio_language))) return false;
   if (value.source_start_sec !== undefined && (typeof value.source_start_sec !== 'number' || !Number.isFinite(value.source_start_sec) || value.source_start_sec < 0 || value.source_start_sec > 7200)) return false;
