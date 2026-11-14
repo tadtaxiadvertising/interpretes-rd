@@ -165,8 +165,12 @@ function actorFromCurrentActor(actor: CurrentActor): ApiActor {
  * request is anonymous or the credential cannot be verified.
  */
 export async function resolveApiActor(req: Request): Promise<ApiActor | null> {
-  const bearerActor = await actorFromBearer(req);
-  if (bearerActor) return bearerActor;
+  // An explicit Authorization header chooses Bearer authentication. If the
+  // token is invalid, expired or malformed, fail closed: do not silently
+  // authenticate a different actor through an unrelated browser cookie.
+  if (req.headers.has('authorization')) {
+    return actorFromBearer(req);
+  }
 
   try {
     const actor = await getCurrentActor();
