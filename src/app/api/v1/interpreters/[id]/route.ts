@@ -80,7 +80,19 @@ export async function PATCH(
         include: { userProfile: true }
       });
 
-      if (interpreter?.userProfile) {
+      if (!interpreter) {
+        return privateAdminJson(
+          { success: false, error: 'Interpreter not found.' },
+          { status: 404 }
+        );
+      }
+      if (!interpreter.userProfile) {
+        return privateAdminJson(
+          { success: false, error: 'Cannot change password without a linked authentication account. Contact support.' },
+          { status: 409 }
+        );
+      }
+      {
         const { supabaseAdmin, ADMIN_UNAVAILABLE_MESSAGE, isAdminUnavailableError } = await import('@/lib/supabase/admin');
         try {
           const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(
