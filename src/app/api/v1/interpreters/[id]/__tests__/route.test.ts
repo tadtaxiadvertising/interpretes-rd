@@ -27,6 +27,7 @@ vi.mock('@/lib/cache/revalidate-interpreter', () => ({
 vi.mock('@/lib/interpreters/delete-interpreter', () => ({
   deleteInterpreterDatabaseRecords: m.deleteRecords,
   InterpreterNotFoundError: class InterpreterNotFoundError extends Error {},
+  InterpreterHasHistoricalRecordsError: class InterpreterHasHistoricalRecordsError extends Error {},
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: { get auth() { return m.adminAuth(); } },
@@ -118,6 +119,20 @@ describe('interpreter detail admin API privacy', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
     expect(await res.json()).toEqual({ success: true });
+  });
+
+  it('rejects deletion with historical references before deleting Auth', async () => {
+    const { InterpreterHasHistoricalRecordsError } = await import('@/lib/interpreters/delete-interpreter');
+    m.transaction.mockRejectedValueOnce(new InterpreterHasHistoricalRecordsError());
+    const res = await DELETE(deleteRequest(), params);
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Authorization');
+    expect(await res.json()).toEqual({
+      success: false,
+      error: 'Cannot delete an interpreter with historical records. Deactivate the account instead.',
+    });
+    expect(m.deleteUser).not.toHaveBeenCalled();
   });
 
   it('does not report success for a provider error with the former not-found text', async () => {
