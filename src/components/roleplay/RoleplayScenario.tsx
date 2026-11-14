@@ -73,6 +73,9 @@ export function RoleplayScenario({
     audio.pause();
     audio.currentTime = 0;
     setCurrentTime(0);
+    // Do not display the previous clip's duration while metadata for the
+    // new audio is still loading.
+    setDuration(0);
     setIsBasePlaying(false);
     setHasListened(false);
     setAudioError(null);
