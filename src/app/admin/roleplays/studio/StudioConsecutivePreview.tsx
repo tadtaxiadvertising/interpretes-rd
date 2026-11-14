@@ -247,7 +247,14 @@ export default function StudioConsecutivePreview({
               // timeupdate may be skipped at the physical MP3 boundary.
               // Reaching a cut ending at that boundary is normal completion,
               // not an early media failure.
-              if (event.currentTarget.currentTime >= current.end - 0.025) {
+              const position = event.currentTarget.currentTime;
+              // The cut planner permits up to 100 ms of duration rounding
+              // beyond the MP3 metadata; do not flag that valid boundary.
+              const endAtSourceBoundary =
+                current.end >= sourceDuration &&
+                current.end <= sourceDuration + 0.1 &&
+                position >= sourceDuration - 0.025;
+              if (position >= current.end - 0.025 || endAtSourceBoundary) {
                 finishTurn();
                 return;
               }
