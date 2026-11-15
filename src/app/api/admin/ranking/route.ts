@@ -1,20 +1,32 @@
-import { NextResponse } from 'next/server';
-import { getCurrentActor, requireActor, requireRole } from '@/lib/auth/current-actor';
+import { guardApiAuth } from '@/lib/api-auth';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { getAdminLeaderboard } from '@/lib/ranking/calculate';
 
-export async function GET() {
+/**
+ * Ranking includes interpreter names, production minutes and private QA
+ * scores. Resolve the same API actor as the middleware (explicit Bearer
+ * takes precedence), and never cache or log sensitive provider diagnostics.
+ */
+export async function GET(request: Request) {
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) {
+    denied.headers.set('Cache-Control', 'private, no-store');
+    denied.headers.set('Vary', 'Cookie, Authorization');
+    return denied;
+  }
+
   try {
-    const actor = await getCurrentActor();
-    const authed = requireRole(requireActor(actor), ['admin']);
-
     const leaderboard = await getAdminLeaderboard();
-
-    return NextResponse.json({ success: true, data: leaderboard });
-  } catch (error) {
-    console.error('[API] Admin ranking error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
+    return privateRoleplayResponse(
+      { success: true, data: leaderboard },
+      { headers: { Vary: 'Authorization' } },
+    );
+  } catch {
+    // Never log raw Prisma/network exceptions; they may contain DSNs or PII.
+    console.error('[ADMIN_RANKING] Failed to calculate leaderboard');
+    return privateRoleplayResponse(
+      { success: false, error: 'No fue posible calcular el ranking administrativo.' },
+      { status: 500, headers: { Vary: 'Authorization' } },
     );
   }
 }
