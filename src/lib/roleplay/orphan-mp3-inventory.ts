@@ -163,11 +163,18 @@ export function summarizeRoleplayAudioInventory(
 export function summarizeRoleplayMp3Inventory(
   paths: readonly string[],
   responses: readonly AudioResponseReference[],
+  jobs: readonly { sourceAudioPath: string }[] = [],
 ): { scannedMp3Objects: number; referencedMp3Objects: number; unreferencedMp3Candidates: number } {
   const referenced = new Set<string>();
   for (const response of responses) {
     if (response.sourceAudioPath) referenced.add(response.sourceAudioPath);
     if (response.processedAudioPath) referenced.add(response.processedAudioPath);
+  }
+  // Match the all-format inventory's protection: conversion jobs also own
+  // source objects, including when a response has not yet been committed or
+  // has been removed by a separate lifecycle operation.
+  for (const job of jobs) {
+    if (job.sourceAudioPath) referenced.add(job.sourceAudioPath);
   }
   const uniquePaths = new Set(paths);
   let referencedCount = 0;

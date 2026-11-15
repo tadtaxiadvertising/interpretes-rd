@@ -60,6 +60,29 @@ describe('read-only Roleplay MP3 inventory', () => {
     expect(JSON.stringify(summary)).not.toContain('responses/session');
   });
 
+  it('treats MP3 files referenced by conversion jobs as owned instead of orphan candidates', () => {
+    const mp3 = 'responses/session-1/scenario-2/original.mp3';
+    const summary = summarizeRoleplayMp3Inventory(
+      [mp3, 'responses/session-1/scenario-2/unreferenced.mp3'],
+      [],
+      [{ sourceAudioPath: mp3 }],
+    );
+    expect(summary).toEqual({
+      scannedMp3Objects: 2,
+      referencedMp3Objects: 1,
+      unreferencedMp3Candidates: 1,
+    });
+    expect(JSON.stringify(summary)).not.toContain(mp3);
+  });
+
+  it('preserves backwards-compatible MP3 summary calls with no job array', () => {
+    expect(summarizeRoleplayMp3Inventory(['responses/orphan.mp3'], [])).toEqual({
+      scannedMp3Objects: 1,
+      referencedMp3Objects: 0,
+      unreferencedMp3Candidates: 1,
+    });
+  });
+
   it('does not surface Storage error messages or private tokens when listing fails', async () => {
     const list = vi.fn().mockResolvedValue({
       data: null, error: { message: 'https://internal.invalid?token=PRIVATE_TOKEN' },
