@@ -1,0 +1,63 @@
+import { describe, expect, it, vi } from 'vitest';
+import { resolveInvitationBaseAudioUrl } from './invitation-base-audio';
+
+const origin = 'https://project.supabase.co';
+const path = 'base/session-a/0.mp3';
+const legacy = `${origin}/storage/v1/object/public/roleplay-audio/${path}`;
+
+describe('resolveInvitationBaseAudioUrl', () => {
+  it('signs the canonical session path after invitation authorization', async () => {
+    const sign = vi.fn().mockResolvedValue('https://signed.test/canonical.mp3');
+    const url = await resolveInvitationBaseAudioUrl({
+      baseAudioPath: path, baseAudioUrl: 'https://expired.example/old',
+    }, origin, sign);
+    expect(url).toBe('https://signed.test/canonical.mp3');
+    expect(sign).toHaveBeenCalledWith(path, 3600);
+  });
+
+  it('signs a first-party legacy base audio URL', async () => {
+    const sign = vi.fn().mockResolvedValue('https://signed.test/legacy.mp3');
+    const url = await resolveInvitationBaseAudioUrl({ baseAudioUrl: legacy }, origin, sign);
+    expect(url).toBe('https://signed.test/legacy.mp3');
+    expect(sign).toHaveBeenCalledWith(path, 3600);
+  });
+
+  it('keeps unrelated third-party assets for backwards compatibility', async () => {
+    const sign = vi.fn();
+    const url = 'https://assets.example.test/legacy.wav';
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: url }, origin, sign)).toBe(url);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('does not return untrusted first-party signed or encoded Storage URLs', async () => {
+    const sign = vi.fn();
+    const urls = [
+      `${legacy}?token=expired`,
+      `${origin}/storage/v1/object/public/roleplay-audio/base/%2e%2e/0.mp3`,
+      `${origin}/storage/v1/object/public/other-bucket/base/session-a/0.mp3`,
+    ];
+    for (const url of urls) {
+      expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: url }, origin, sign)).toBeNull();
+    }
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('fails closed for malformed canonical keys and failed Storage signatures', async () => {
+    const sign = vi.fn().mockRejectedValue(new Error('Storage signing failed'));
+    expect(await resolveInvitationBaseAudioUrl({
+      baseAudioPath: 'base/../session-a/0.mp3', baseAudioUrl: legacy,
+    }, origin, sign)).toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+
+    const url = await resolveInvitationBaseAudioUrl({ baseAudioUrl: legacy }, origin, sign);
+    expect(url).toBeNull();
+    expect(sign).toHaveBeenCalledOnce();
+  });
+
+  it('handles missing or empty source references', async () => {
+    const sign = vi.fn();
+    expect(await resolveInvitationBaseAudioUrl({}, origin, sign)).toBeNull();
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: '' }, origin, sign)).toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+  });
+});
