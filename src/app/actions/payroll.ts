@@ -6,6 +6,7 @@ import { refreshPayrollRecord } from '@/services/PayrollService';
 import { revalidatePath } from 'next/cache';
 import type { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { z } from 'zod';
 
 const db = prisma;
@@ -74,10 +75,9 @@ export async function generatePayrollPeriod(
           continue;
         }
         failureCount++;
-        console.error(
-          `[PAYROLL] Generation failed for interpreter ${interpreter.id}:`,
-          err instanceof Error ? err.message : 'Unknown error'
-        );
+        // Prisma errors can contain connection strings and payroll details.
+        // Log only a safe fixed category, never the exception or identifier.
+        console.error('[PAYROLL] Generation failed:', safeServerErrorCategory(err));
       }
     }
 
@@ -94,9 +94,11 @@ export async function generatePayrollPeriod(
       data: { message: `Se generaron ${successCount} registros de nómina nuevos; los registros existentes se conservaron.` }
     };
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to generate payroll:', message);
-    return { success: false, error: message };
+    if (error instanceof z.ZodError) {
+      return { success: false, error: 'Invalid payroll period input', code: 'VALIDATION_ERROR' };
+    }
+    console.error('Failed to generate payroll:', safeServerErrorCategory(error));
+    return { success: false, error: 'Failed to generate payroll', code: 'INTERNAL_ERROR' };
   }
 }
 
