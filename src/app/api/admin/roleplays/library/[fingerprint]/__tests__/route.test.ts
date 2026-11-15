@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/auth/actions', () => ({ validateAction: vi.fn() }));
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: vi.fn() }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -13,6 +14,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { POST, DELETE } from '../route';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
@@ -68,6 +70,43 @@ describe('admin roleplay library visibility', () => {
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('Vary')).toBe('Cookie');
     expect(prisma.roleplayLibraryArchive.upsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['interpreter', { userId: 'interpreter-2', role: 'interpreter' }],
+    ['different admin', { userId: 'admin-other', role: 'admin' }],
+    ['invalid token', null],
+  ])('does not archive a library snapshot with mismatched Bearer: %s', async (_label, actor) => {
+    (actorFromBearer as any).mockResolvedValue(actor);
+    const req = archiveRequest();
+    req.headers.set('Authorization', 'Bearer explicit-user-token');
+    const res = await POST(req, context());
+    expect(res.status).toBe(403);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(prisma.roleplaySession.findUnique).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not restore an archived snapshot with another user Bearer', async () => {
+    (actorFromBearer as any).mockResolvedValue({ userId: 'other-admin', role: 'admin' });
+    const req = restoreRequest();
+    req.headers.set('Authorization', 'Bearer other-admin-token');
+    const res = await DELETE(req, context());
+    expect(res.status).toBe(403);
+    expect(prisma.roleplayLibraryArchive.updateMany).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows a verified same-admin Bearer for archive and restore', async () => {
+    (actorFromBearer as any).mockResolvedValue({ userId: 'admin-1', role: 'admin' });
+    const post = archiveRequest();
+    post.headers.set('Authorization', 'Bearer same-admin-token');
+    expect((await POST(post, context())).status).toBe(200);
+    const del = restoreRequest();
+    del.headers.set('Authorization', 'Bearer same-admin-token');
+    expect((await DELETE(del, context())).status).toBe(200);
+    expect(prisma.roleplayLibraryArchive.upsert).toHaveBeenCalledOnce();
+    expect(prisma.roleplayLibraryArchive.updateMany).toHaveBeenCalledOnce();
   });
 
   it('rejects an invalid fingerprint', async () => {
