@@ -86,7 +86,9 @@ export async function requeueFailedRoleplayAudioJob(
 
     return { success: true, jobId };
   } catch (error) {
-    console.error('Requeue Roleplay audio job error:', error instanceof Error ? error.message : 'Unknown error');
+    // Database and storage exceptions can contain credentials or private
+    // audio object paths. Never log the raw message or exception object.
+    console.error('Requeue Roleplay audio job error:', error instanceof Error ? 'Error' : 'UnknownError');
     return { success: false, error: 'Failed to requeue audio job', code: 'INTERNAL_ERROR' };
   }
 }
