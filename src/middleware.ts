@@ -193,15 +193,17 @@ export async function middleware(req: NextRequest) {
   // verified Supabase session OR a verified Supabase Bearer token. Route
   // handlers remain responsible for role / ownership authorization.
   if (pathname.startsWith('/api/') && !isPublicApiPath(pathname)) {
-    // Coarse edge gate: a refreshed Supabase session, an Auth.js session
-    // cookie, or a verified Supabase Bearer token. Route handlers still
-    // enforce role / ownership (see src/lib/api-auth.ts).
-    let apiAuthenticated = hasActiveSupabaseSession || hasValidNextAuthSession;
-    if (!apiAuthenticated) {
+    // Match resolveApiActor's fail-closed precedence: an explicit
+    // Authorization header selects bearer authentication. If it is malformed,
+    // invalid or expired, a simultaneous browser cookie must NOT silently
+    // substitute another (potentially privileged) identity at the Edge gate.
+    // Route handlers still enforce role and session ownership.
+    let apiAuthenticated: boolean;
+    if (req.headers.has('authorization')) {
       const bearer = extractBearer(req);
-      if (bearer) {
-        apiAuthenticated = await verifySupabaseAccessToken(bearer);
-      }
+      apiAuthenticated = bearer ? await verifySupabaseAccessToken(bearer) : false;
+    } else {
+      apiAuthenticated = hasActiveSupabaseSession || hasValidNextAuthSession;
     }
 
     if (!apiAuthenticated) {
