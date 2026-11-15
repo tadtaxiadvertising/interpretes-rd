@@ -600,6 +600,51 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('failure cleanup', () => {
+    it('preserves uploaded base audio when the transaction commits but its acknowledgment fails', async () => {
+      const transaction = prisma.$transaction as any;
+      const original = transaction.getMockImplementation();
+      let attempt = 0;
+      transaction.mockImplementation(async (callback: any) => {
+        const result = await original(callback);
+        attempt++;
+        if (attempt === 2) {
+          // Simulates a lost connection after COMMIT or an ambiguous
+          // post-commit result; the scenarios may already reference the audio.
+          throw new Error('synthetic lost transaction acknowledgment');
+        }
+        return result;
+      });
+
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(500);
+      expect(mockUpload).toHaveBeenCalledOnce();
+      expect(prisma.roleplayScenario.create).toHaveBeenCalledOnce();
+      expect(mockRemove).not.toHaveBeenCalled();
+    });
+
+    it('defers base-audio cleanup when a transaction fails before the commit outcome is known', async () => {
+      const transaction = prisma.$transaction as any;
+      const original = transaction.getMockImplementation();
+      let attempt = 0;
+      transaction.mockImplementation(async (callback: any) => {
+        attempt++;
+        if (attempt === 2) throw new Error('synthetic database transaction failure');
+        return original(callback);
+      });
+
+      const res = await POST(buildRequest({
+        participantType: 'candidate', participantId: '9',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(500);
+      expect(mockUpload).toHaveBeenCalledOnce();
+      expect(prisma.roleplayScenario.create).not.toHaveBeenCalled();
+      expect(mockRemove).not.toHaveBeenCalled();
+    });
+
     it('preserves a newly reserved draft when an audio upload fails', async () => {
       mockUpload.mockResolvedValue({ error: { message: 'boom' } });
 
