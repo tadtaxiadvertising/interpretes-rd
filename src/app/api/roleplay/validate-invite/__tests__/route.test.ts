@@ -72,14 +72,14 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     const invalid = await POST(makeRequest('A'.repeat(513)));
     expect(invalid.status).toBe(400);
     expect(invalid.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(invalid.headers.get('Vary')).toBe('Cookie');
+    expect(invalid.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.setCookie).not.toHaveBeenCalled();
 
     m.accessFindUnique.mockResolvedValueOnce(null);
     const unknown = await POST(makeRequest());
     expect(unknown.status).toBe(404);
     expect(unknown.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(unknown.headers.get('Vary')).toBe('Cookie');
+    expect(unknown.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.setCookie).not.toHaveBeenCalled();
   });
 
@@ -202,7 +202,7 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     const response = await POST(makeRequest());
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(response.headers.get('Vary')).toBe('Cookie');
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('rejects oversized invite tokens before accessing the database', async () => {
