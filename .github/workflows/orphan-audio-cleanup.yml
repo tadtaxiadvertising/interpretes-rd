@@ -1,4 +1,4 @@
-name: 🔎 Roleplay response-audio inventory (read-only)
+name: 🔎 Roleplay audio inventory (read-only)
 
 # No deletion option: all Storage reconciliation is read-only until issue
 # #408 defines age-gated, concurrency-safe cleanup for recordings.
@@ -9,7 +9,7 @@ on:
 
 jobs:
   audit:
-    name: Read-only Roleplay response-audio inventory
+    name: Read-only Roleplay audio inventory
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DIRECT_URL }}
@@ -20,15 +20,19 @@ jobs:
       # Resolve optional credentials in a step and skip all work when absent.
       - name: Check audit credentials
         id: credentials
-        env:
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          if [ -n "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-          else
+          # The service-role key is optional for repositories that do not run
+          # this audit. Once enabled, ALL three connections are mandatory.
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Roleplay audio inventory skipped: SUPABASE_SERVICE_ROLE_KEY is not configured."
+            echo "Roleplay audio inventory skipped: Storage audit not enabled."
+            exit 0
           fi
+          if [ -z "${DATABASE_URL:-}" ] || [ -z "${NEXT_PUBLIC_SUPABASE_URL:-}" ]; then
+            echo "::error::Roleplay audio inventory configuration incomplete (DATABASE_URL and project URL required)."
+            exit 1
+          fi
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
 
       - name: Checkout code
         if: steps.credentials.outputs.enabled == 'true'
@@ -45,6 +49,6 @@ jobs:
         if: steps.credentials.outputs.enabled == 'true'
         run: npm ci --legacy-peer-deps
 
-      - name: Run Roleplay response-audio inventory (read-only)
+      - name: Run Roleplay audio inventory (read-only)
         if: steps.credentials.outputs.enabled == 'true'
         run: npx tsx scripts/audit_orphan_audio.ts
