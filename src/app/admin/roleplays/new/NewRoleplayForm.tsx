@@ -68,6 +68,20 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // can edit a draft while a ZIP/SHA-256 validation is still awaiting.
   const importRevision = useRef(0);
   const importPending = useRef(false);
+  // Object URLs are browser resources. Track every preview created by this
+  // editor, including previews awaiting React state commits. Releasing only
+  // on replace/remove leaks them when navigating away from the form.
+  const previewUrls = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      // Cancel async ZIP/SHA-256 work from committing after unmount.
+      importRevision.current += 1;
+      importPending.current = false;
+      for (const url of previewUrls.current) URL.revokeObjectURL(url);
+      previewUrls.current.clear();
+    };
+  }, []);
 
   const invalidatePendingImport = useCallback(() => {
     // Increment on every draft edit, including one React processes after an
@@ -121,16 +135,22 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     invalidatePendingImport();
     setScenarios(prev => {
       const removed = prev.find((scenario) => scenario.id === id);
-      if (removed?.baseAudioPreview) URL.revokeObjectURL(removed.baseAudioPreview);
+      if (removed?.baseAudioPreview) {
+        previewUrls.current.delete(removed.baseAudioPreview);
+        URL.revokeObjectURL(removed.baseAudioPreview);
+      }
       return prev.filter((scenario) => scenario.id !== id);
     });
   }, [invalidatePendingImport]);
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
     invalidatePendingImport();
+    // Track new URLs before state commits so unmount can still release them.
+    if (updates.baseAudioPreview?.startsWith('blob:')) previewUrls.current.add(updates.baseAudioPreview);
     setScenarios(prev => prev.map((scenario) => {
       if (scenario.id !== id) return scenario;
       if (updates.baseAudioPreview && scenario.baseAudioPreview && updates.baseAudioPreview !== scenario.baseAudioPreview) {
+        previewUrls.current.delete(scenario.baseAudioPreview);
         URL.revokeObjectURL(scenario.baseAudioPreview);
       }
       return { ...scenario, ...updates };
@@ -182,20 +202,26 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const prepared = await prepareRoleplayManifestImport(files);
       // Never overwrite a newer ZIP import or edits made during validation.
       if (revision !== importRevision.current) return;
-      const next = prepared.map((scenario) => ({
-        ...scenario,
-        id: generateId(),
-        baseAudioPreview: URL.createObjectURL(scenario.baseAudioFile),
-      }));
+      const next = prepared.map((scenario) => {
+        const baseAudioPreview = URL.createObjectURL(scenario.baseAudioFile);
+        previewUrls.current.add(baseAudioPreview);
+        return { ...scenario, id: generateId(), baseAudioPreview };
+      });
       // A failed import never touches existing edits. Revoke old previews
       // only after every selected file has been verified.
       setScenarios((prev) => {
         if (revision !== importRevision.current) {
-          next.forEach((scenario) => URL.revokeObjectURL(scenario.baseAudioPreview));
+          next.forEach((scenario) => {
+            previewUrls.current.delete(scenario.baseAudioPreview);
+            URL.revokeObjectURL(scenario.baseAudioPreview);
+          });
           return prev;
         }
         prev.forEach((scenario) => {
-          if (scenario.baseAudioPreview) URL.revokeObjectURL(scenario.baseAudioPreview);
+          if (scenario.baseAudioPreview) {
+            previewUrls.current.delete(scenario.baseAudioPreview);
+            URL.revokeObjectURL(scenario.baseAudioPreview);
+          }
         });
         return next;
       });
