@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
+import { actorFromBearer } from '@/lib/api-auth';
 import { spawn } from 'node:child_process';
 import ffmpegPath from 'ffmpeg-static';
 import { validateAction } from '@/lib/auth/actions';
@@ -94,37 +96,46 @@ async function detectSilences(input: Buffer, signal: AbortSignal): Promise<Silen
 /** CPU-bounded, admin-only signal analysis; no uploads, storage or transcription. */
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
-  if ('error' in auth) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if ('error' in auth) return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+  // When a Bearer is supplied, it must represent the same administrator as
+  // the cookie-based action guard. Never charge quota or decode audio for a
+  // mismatched identity, even when the Edge middleware verified the token.
+  if (req.headers.has('authorization')) {
+    const bearer = await actorFromBearer(req);
+    if (!bearer || bearer.role !== 'admin' || bearer.userId !== auth.user.userId) {
+      return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+    }
+  }
   const quota = applyRateLimit(
     req,
     { ...RATE_LIMITS.audioUpload, maxRequests: 2, keyPrefix: 'studio-silence' },
     auth.user.userId,
   );
   if (!quota.success) {
-    return NextResponse.json({ error: 'Demasiados análisis de audio.' }, {
+    return privateRoleplayResponse({ error: 'Demasiados análisis de audio.' }, {
       status: 429, headers: { ...createRateLimitHeaders(quota), 'Cache-Control': 'private, no-store' },
     });
   }
   const declaredSize = Number(req.headers.get('content-length') ?? 0);
   if (Number.isFinite(declaredSize) && declaredSize > MAX_MP3_BYTES + 100_000) {
-    return NextResponse.json({ error: 'El MP3 supera 15 MiB.' }, { status: 413 });
+    return privateRoleplayResponse({ error: 'El MP3 supera 15 MiB.' }, { status: 413 });
   }
   if (activeAnalyses >= MAX_ACTIVE_ANALYSES) {
-    return NextResponse.json({ error: 'Hay otro análisis en curso. Inténtalo de nuevo.' }, {
+    return privateRoleplayResponse({ error: 'Hay otro análisis en curso. Inténtalo de nuevo.' }, {
       status: 503, headers: { 'Retry-After': '10', 'Cache-Control': 'private, no-store' },
     });
   }
   activeAnalyses++;
   try {
-    if (req.signal.aborted) return NextResponse.json({ error: 'Solicitud cancelada' }, { status: 499 });
+    if (req.signal.aborted) return privateRoleplayResponse({ error: 'Solicitud cancelada' }, { status: 499 });
     const data = await req.formData();
     const audio = data.get('audio');
     if (!(audio instanceof File) || audio.size < 1 || audio.size > MAX_MP3_BYTES ||
         !['', 'audio/mpeg', 'audio/mp3'].includes(audio.type) || !/\.mp3$/i.test(audio.name)) {
-      return NextResponse.json({ error: 'Selecciona un MP3 válido de hasta 15 MiB.' }, { status: 400 });
+      return privateRoleplayResponse({ error: 'Selecciona un MP3 válido de hasta 15 MiB.' }, { status: 400 });
     }
     const result = await detectSilences(Buffer.from(await audio.arrayBuffer()), req.signal);
-    return NextResponse.json(
+    return privateRoleplayResponse(
       {
         success: true,
         ...result,
@@ -136,7 +147,7 @@ export async function POST(req: NextRequest) {
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch {
-    return NextResponse.json(
+    return privateRoleplayResponse(
       { error: 'No fue posible analizar las pausas. Revisa el MP3 y vuelve a intentarlo.' },
       { status: 422, headers: { 'Cache-Control': 'private, no-store' } },
     );
