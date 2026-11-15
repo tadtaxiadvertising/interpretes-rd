@@ -1,62 +1,61 @@
 /**
- * Audits (and optionally removes) orphaned MP3 objects in the
- * `roleplay-audio` bucket: files under `responses/` whose path is not present
- * in `roleplay_responses.processed_audio_path`.
+ * Read-only Roleplay MP3 object inventory.
  *
- * Dry-run by default. Pass `--delete` to remove the orphans.
- * Never deletes source WebM/MP4 objects, only unreferenced MP3 conversions.
+ * Do NOT delete objects from this audit: live uploads/conversions make
+ * storage listing and database reads non-atomic. This script is intentionally
+ * not a source-recording cleanup mechanism (see issue #408).
+ *
+ * Paths and private audio identifiers must never be printed to CI logs.
  */
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import prisma from '../src/lib/prisma';
-
-const BUCKET = 'roleplay-audio';
-const deleteMode = process.argv.includes('--delete');
-
-async function listMp3Objects(storage: any, prefix = 'responses'): Promise<string[]> {
-  const out: string[] = [];
-  const { data, error } = await storage.storage.from(BUCKET).list(prefix, { limit: 1000 });
-  if (error) throw new Error(`list ${prefix}: ${error.message}`);
-  for (const entry of data ?? []) {
-    const path = `${prefix}/${entry.name}`;
-    if (!entry.metadata || entry.id === null) {
-      out.push(...(await listMp3Objects(storage, path)));
-    } else if (entry.name.toLowerCase().endsWith('.mp3')) {
-      out.push(path);
-    }
-  }
-  return out;
-}
+import {
+  listRoleplayMp3Paths,
+  summarizeRoleplayMp3Inventory,
+} from '../src/lib/roleplay/orphan-mp3-inventory';
 
 async function main() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) throw new Error('Supabase env vars missing');
+  if (!url || !key) throw new Error('Missing Storage configuration');
+
   const storage = createClient(url, key, { auth: { persistSession: false } });
+  const responses = await prisma.roleplayResponse.findMany({
+    select: { sourceAudioPath: true, processedAudioPath: true },
+  });
+  const paths = await listRoleplayMp3Paths(storage);
+  const counts = summarizeRoleplayMp3Inventory(paths, responses);
 
-  const referenced = new Set(
-    (await prisma.roleplayResponse.findMany({ select: { processedAudioPath: true } }))
-      .map((r) => r.processedAudioPath)
-      .filter((p): p is string => !!p),
-  );
-
-  const all = await listMp3Objects(storage);
-  const orphans = all.filter((p) => !referenced.has(p));
-
+  // Read-only aggregates; never output source paths, session identifiers,
+  // patient information, tokens, or exception messages from providers.
   console.log(JSON.stringify({
-    mode: deleteMode ? 'delete' : 'dry-run',
-    totalMp3Objects: all.length,
-    referenced: referenced.size,
-    orphans: orphans.length,
-    sample: orphans.slice(0, 20),
+    mode: 'read-only',
+    ...counts,
+    objectsDeleted: 0,
   }, null, 2));
-
-  if (deleteMode && orphans.length > 0) {
-    const { error } = await storage.storage.from(BUCKET).remove(orphans);
-    console.log(JSON.stringify({ deleted: orphans.length, error: error?.message ?? null }));
-  }
-
-  await prisma.$disconnect();
 }
 
-main().catch((e) => { console.error(e); process.exitCode = 1; });
+async function run() {
+  try {
+    await main();
+  } catch {
+    console.error('Roleplay MP3 audit failed; no objects were modified.');
+    process.exitCode = 1;
+  } finally {
+    try {
+      await prisma.$disconnect();
+    } catch {
+      process.exitCode = 1;
+    }
+  }
+}
+
+// An old workflow may still invoke --delete. Fail rather than silently
+// accepting a destructive mode or implying that any cleanup ran.
+if (process.argv.slice(2).length > 0) {
+  console.error('Unsupported options: Roleplay MP3 audit is read-only.');
+  process.exitCode = 1;
+} else {
+  void run();
+}
