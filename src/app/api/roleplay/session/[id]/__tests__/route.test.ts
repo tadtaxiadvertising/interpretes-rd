@@ -284,7 +284,7 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(res.status).toBe(200);
     expect(body.data.scenarios[0].responses[0].sourceAudioUrl)
       .toBe('https://signed.test/source.webm');
-    expect(m.getSignedAudioUrl.mock.calls.map(([path]: [string]) => path)).toEqual([
+    expect(m.getSignedAudioUrl.mock.calls.map((args: unknown[]) => args[0])).toEqual([
       'responses/sess-1/converted.mp3',
       'responses/sess-1/original.webm',
     ]);
