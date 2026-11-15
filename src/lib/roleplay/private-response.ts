@@ -11,9 +11,18 @@ export function privateRoleplayResponse<T extends object>(
 ): NextResponse<T> {
   const headers = new Headers(init.headers);
   headers.set('Cache-Control', 'private, no-store');
-  const vary = headers.get('Vary');
-  if (!vary?.split(',').some((part) => part.trim().toLowerCase() === 'cookie')) {
-    headers.set('Vary', vary ? `${vary}, Cookie` : 'Cookie');
+  // A request may carry an explicit Bearer credential as well as cookies.
+  // Keep both dimensions in Vary so intermediary caches never conflate
+  // responses belonging to different authentication contexts.
+  const varyParts = (headers.get('Vary') ?? '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+  for (const required of ['Cookie', 'Authorization']) {
+    if (!varyParts.some((part) => part.toLowerCase() === required.toLowerCase())) {
+      varyParts.push(required);
+    }
   }
+  headers.set('Vary', varyParts.join(', '));
   return NextResponse.json(body, { ...init, headers });
 }
