@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  listRoleplayAudioObjects,
   listRoleplayMp3Paths,
+  summarizeRoleplayAudioInventory,
   summarizeRoleplayMp3Inventory,
 } from './orphan-mp3-inventory';
 
@@ -84,5 +86,98 @@ describe('read-only Roleplay MP3 inventory', () => {
       referencedMp3Objects: 0,
       unreferencedMp3Candidates: 0,
     });
+  });
+});
+
+
+describe('read-only inventory for all Roleplay response audio formats', () => {
+  it('visits nested folders and includes supported source formats with Storage timestamps', async () => {
+    const list = vi.fn(async (prefix: string) => {
+      if (prefix === 'responses') return {
+        data: [{ name: 'session-1', id: null, metadata: null }], error: null,
+      };
+      if (prefix === 'responses/session-1') return {
+        data: [
+          { name: 'capture.webm', id: 'a', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' },
+          { name: 'capture.MP4', id: 'b', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-01T00:00:00Z' },
+          { name: 'capture.ogg', id: 'c', created_at: null, updated_at: null },
+          { name: 'capture.mp3', id: 'd', created_at: '2026-10-01T00:00:00Z', updated_at: '2026-10-02T00:00:00Z' },
+          { name: 'metadata.json', id: 'e' },
+        ], error: null,
+      };
+      throw new Error('Unexpected folder');
+    });
+    const items = await listRoleplayAudioObjects(readerWithList(list));
+    expect(items).toHaveLength(4);
+    expect(items.map((item) => item.path)).toEqual([
+      'responses/session-1/capture.webm',
+      'responses/session-1/capture.MP4',
+      'responses/session-1/capture.ogg',
+      'responses/session-1/capture.mp3',
+    ]);
+    expect(items[0].createdAt).toBe('2026-10-01T00:00:00Z');
+    expect(items[2].updatedAt).toBeNull();
+  });
+
+  it('protects confirmed sources, conversions and all queued or completed audio jobs', () => {
+    const timestamp = '2026-10-01T00:00:00Z';
+    const now = Date.parse('2026-11-15T00:00:00Z');
+    const file = (path: string, createdAt: string | null = timestamp, updatedAt: string | null = timestamp) =>
+      ({ path, createdAt, updatedAt });
+    const objects = [
+      file('responses/a/original.webm'),
+      file('responses/a/conversion.mp3'),
+      file('responses/b/pending.ogg'),
+      file('responses/c/old-unreferenced.mp4'),
+      file('responses/c/new-unreferenced.webm', '2026-11-14T00:00:00Z', '2026-11-14T00:00:00Z'),
+      file('responses/c/missing-timestamp.mp3', null, null),
+      file('responses/c/future.mp4', '2026-11-17T00:00:00Z', '2026-11-17T00:00:00Z'),
+      file('responses/c/updated-recently.webm', timestamp, '2026-11-14T00:00:00Z'),
+    ];
+    const summary = summarizeRoleplayAudioInventory(
+      objects,
+      [{ sourceAudioPath: 'responses/a/original.webm', processedAudioPath: 'responses/a/conversion.mp3' }],
+      [{ sourceAudioPath: 'responses/b/pending.ogg' }],
+      now,
+    );
+    expect(summary).toEqual({
+      scannedAudioObjects: 8,
+      referencedAudioObjects: 3,
+      unreferencedYoungerThan14Days: 2,
+      unreferencedUnknownAge: 2,
+      unreferencedOlderThan14Days: 1,
+    });
+    expect(JSON.stringify(summary)).not.toContain('responses/');
+  });
+
+  it('never treats inconsistent duplicate listings as reliable age evidence', () => {
+    const file = (date: string) => ({
+      path: 'responses/s/scenario/duplicate.webm',
+      createdAt: date,
+      updatedAt: date,
+    });
+    const now = Date.parse('2026-11-15T00:00:00Z');
+    const summary = summarizeRoleplayAudioInventory([
+      file('2026-10-01T00:00:00Z'),
+      file('2026-11-14T00:00:00Z'),
+    ], [], [], now);
+    expect(summary.unreferencedOlderThan14Days).toBe(0);
+    expect(summary.unreferencedUnknownAge).toBe(1);
+    expect(summary.scannedAudioObjects).toBe(1);
+  });
+
+  it('does not classify invalid dates or missing timestamps as aged orphans', () => {
+    const summary = summarizeRoleplayAudioInventory([
+      { path: 'responses/a/x.webm', createdAt: 'invalid', updatedAt: 'invalid' },
+      { path: 'responses/a/y.mp3', createdAt: null, updatedAt: '2026-01-01T00:00:00Z' },
+    ], [], [], Date.parse('2026-11-15T00:00:00Z'));
+    expect(summary.unreferencedOlderThan14Days).toBe(0);
+    expect(summary.unreferencedUnknownAge).toBe(2);
+  });
+
+  it('rejects provider listing errors without reflecting a path or bearer token', async () => {
+    const list = vi.fn().mockRejectedValue(new Error('https://secret.invalid/audio?token=SECRET'));
+    await expect(listRoleplayAudioObjects(readerWithList(list)))
+      .rejects.toThrow('Roleplay audio inventory could not list Storage objects');
   });
 });
