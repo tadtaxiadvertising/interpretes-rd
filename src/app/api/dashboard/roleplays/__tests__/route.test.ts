@@ -72,7 +72,7 @@ describe('GET /api/dashboard/roleplays — interpreter ownership and minimal exp
     expect(JSON.stringify(body)).not.toContain('private-storage');
     expect(JSON.stringify(body)).not.toContain('recruitmentCandidateId');
     expect(result.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(result.headers.get('Vary')).toBe('Cookie');
+    expect(result.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('rejects a candidate/admin-inappropriate role before querying session data', async () => {
@@ -81,7 +81,7 @@ describe('GET /api/dashboard/roleplays — interpreter ownership and minimal exp
     const result = await GET();
     expect(result.status).toBe(403);
     expect(result.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(result.headers.get('Vary')).toBe('Cookie');
+    expect(result.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.findMany).not.toHaveBeenCalled();
   });
 
@@ -98,7 +98,7 @@ describe('GET /api/dashboard/roleplays — interpreter ownership and minimal exp
       expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_|postgresql:/);
       expect(log).toHaveBeenCalledWith('Get My Roleplays Error:', 'Error');
       expect(result.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(result.headers.get('Vary')).toBe('Cookie');
+      expect(result.headers.get('Vary')).toBe('Cookie, Authorization');
     } finally {
       log.mockRestore();
     }
