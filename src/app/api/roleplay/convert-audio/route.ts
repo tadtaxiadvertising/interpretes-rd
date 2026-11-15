@@ -103,34 +103,6 @@ function normalizeMimeType(mime: string): string {
   return normalized;
 }
 
-/**
- * Compensation is best-effort and must never delete an audio object already
- * referenced by a committed response. Confirmation can commit before a later
- * cache/revalidation step reports failure.
- *
- * If we cannot verify persistence, leave the object for the orphan cleanup
- * workflow rather than risking the loss of a participant recording.
- */
-async function cleanupUnconfirmedUpload(scenarioId: string, sourcePath: string): Promise<void> {
-  try {
-    const persisted = await prisma.roleplayResponse.findUnique({
-      where: { scenarioId },
-      select: { sourceAudioPath: true },
-    });
-    if (persisted?.sourceAudioPath === sourcePath) return;
-  } catch {
-    console.error('Roleplay audio cleanup skipped:', 'PersistenceCheckError');
-    return;
-  }
-
-  try {
-    const { error } = await getSupabaseAdmin().storage.from(BUCKET).remove([sourcePath]);
-    if (error) console.error('Failed to clean up unconfirmed Roleplay audio:', 'StorageError');
-  } catch {
-    console.error('Failed to clean up unconfirmed Roleplay audio:', 'StorageError');
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
     // Apply rate limiting
@@ -256,13 +228,19 @@ export async function POST(req: NextRequest) {
         sourceAudioPath: sourcePath,
       });
     } catch {
-      // Do not leak exception details or discard an already committed audio.
-      await cleanupUnconfirmedUpload(scenarioId, sourcePath);
+      // Transaction outcome may be unknown (for example, commit succeeded
+      // but a post-commit revalidation failed). Never synchronously remove an
+      // immutable source recording on an ambiguous confirmation result.
+      // Reconcile older, unreferenced objects only through a separate
+      // reviewed audit with an in-flight grace period (issue #408).
       return privateJson({ success: false, error: 'Unable to process audio upload' }, { status: 500 });
     }
 
     if (!confirmation.success || !confirmation.data) {
-      await cleanupUnconfirmedUpload(scenarioId, sourcePath);
+      // An immediate read of roleplayResponse is not sufficient proof that
+      // no concurrent transaction is about to commit this exact source path.
+      // Preserve the object for safe, age-gated orphan reconciliation.
+
       const status = confirmation.code === 'CONFLICT' ? 409
         : confirmation.code === 'FORBIDDEN' || confirmation.code === 'UNAUTHORIZED' ? 403
         : 400;
