@@ -1,38 +1,22 @@
-import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
-import { apiError } from '@/lib/api-responses';
+import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 
+/**
+ * This legacy GET endpoint previously ran ALTER TABLE statements in
+ * production. Database schema changes must only run through reviewed,
+ * versioned migrations and the deployment pipeline. GET is intentionally
+ * non-mutating and this endpoint is permanently retired.
+ */
 export async function GET(request: Request) {
-  try {
-    const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+  const denied = await guardApiAuth(request, 'admin');
+  if (denied) return denied;
 
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE interpreters 
-      ADD COLUMN IF NOT EXISTS payment_frequency TEXT DEFAULT 'Monthly',
-      ADD COLUMN IF NOT EXISTS payment_day TEXT DEFAULT '1';
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE production_logs 
-      ADD COLUMN IF NOT EXISTS verified_minutes INTEGER;
-    `);
-
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE payroll_records 
-      ADD COLUMN IF NOT EXISTS verified_minutes INTEGER,
-      ADD COLUMN IF NOT EXISTS incentives_total DECIMAL(10, 2) DEFAULT 0,
-      ADD COLUMN IF NOT EXISTS paid_at TIMESTAMP(3),
-      ADD COLUMN IF NOT EXISTS transaction_reference TEXT,
-      ADD COLUMN IF NOT EXISTS reconciliation_hash TEXT UNIQUE;
-    `);
-
-    return NextResponse.json({
-      success: true,
-      message: "Database schema successfully patched with all missing columns!",
-    });
-  } catch (error) {
-    return apiError({ error, fallback: 'Database schema patch failed' });
-  }
+  return privateRoleplayResponse(
+    {
+      success: false,
+      code: 'SCHEMA_PATCH_ENDPOINT_RETIRED',
+      error: 'Database schema changes are managed by versioned migrations.',
+    },
+    { status: 410 },
+  );
 }
