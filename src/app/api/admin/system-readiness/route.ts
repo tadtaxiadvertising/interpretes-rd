@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
-import { validateAction } from '@/lib/auth/actions';
+import { guardApiAuth } from '@/lib/api-auth';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 
@@ -13,6 +13,8 @@ interface SchemaReadinessRow {
   responseSourceAudioPath: boolean;
   audioJobSourcePath: boolean;
   libraryArchiveTable: boolean;
+  roleplayStudioColumns: boolean;
+  roleplayStudioConstraints: boolean;
 }
 
 /**
@@ -20,9 +22,13 @@ interface SchemaReadinessRow {
  * /api/health must remain unconditional liveness.
  */
 export async function GET(req: NextRequest) {
-  const auth = await validateAction('admin');
-  if ('error' in auth) {
-    return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
+  // Use the same Bearer-first actor resolution as the Edge API gate.
+  // A cookie belonging to another admin must not override Authorization.
+  const denied = await guardApiAuth(req, 'admin');
+  if (denied) {
+    denied.headers.set('Cache-Control', 'private, no-store');
+    denied.headers.set('Vary', 'Cookie, Authorization');
+    return denied;
   }
 
   const limit = applyRateLimit(req, RATE_LIMITS.sessionAccess);
@@ -56,7 +62,36 @@ export async function GET(req: NextRequest) {
         EXISTS (
           SELECT 1 FROM information_schema.tables
           WHERE table_schema = 'public' AND table_name = 'roleplay_library_archives'
-        ) AS "libraryArchiveTable"
+        ) AS "libraryArchiveTable",
+        (
+          SELECT COUNT(*) = 5
+          FROM (VALUES
+            ('studio_turn', 'integer'),
+            ('studio_speaker', 'text'),
+            ('studio_language', 'text'),
+            ('source_start_sec', 'double precision'),
+            ('source_end_sec', 'double precision')
+          ) AS expected(column_name, column_type)
+          JOIN information_schema.columns AS actual
+            ON actual.table_schema = 'public'
+           AND actual.table_name = 'roleplay_scenarios'
+           AND actual.column_name = expected.column_name
+           AND actual.data_type = expected.column_type
+           AND actual.is_nullable = 'YES'
+        ) AS "roleplayStudioColumns",
+        (
+          SELECT COUNT(*) = 4
+          FROM pg_constraint
+          WHERE conrelid = to_regclass('public.roleplay_scenarios')
+            AND contype = 'c'
+            AND convalidated
+            AND conname IN (
+              'roleplay_scenarios_studio_turn_positive',
+              'roleplay_scenarios_studio_speaker_valid',
+              'roleplay_scenarios_studio_language_valid',
+              'roleplay_scenarios_source_time_pair_valid'
+            )
+        ) AS "roleplayStudioConstraints"
     `;
 
     if (!state) {
