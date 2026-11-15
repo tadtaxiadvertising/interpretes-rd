@@ -4,6 +4,7 @@ import ffmpegPath from 'ffmpeg-static';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/auth/actions', () => ({ validateAction: vi.fn() }));
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: vi.fn() }));
 vi.mock('@/lib/security/rate-limit', () => ({
   applyRateLimit: vi.fn(),
   createRateLimitHeaders: vi.fn(() => ({})),
@@ -12,6 +13,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
 
 import { POST } from '../route';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit } from '@/lib/security/rate-limit';
 
 function request(file = new File(['NOT-MP3'], 'recording.mp3', { type: 'audio/mpeg' })) {
@@ -37,6 +39,33 @@ describe('admin FFmpeg silence analysis boundaries', () => {
     const result = await POST(request() as never);
     expect(result.status).toBe(403);
     expect(applyRateLimit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['interpreter Bearer', { userId: 'interpreter', role: 'interpreter' }],
+    ['different admin Bearer', { userId: 'another-admin', role: 'admin' }],
+    ['invalid explicit token', null],
+  ])('rejects %s with admin cookie before reading the MP3 or applying quota', async (_name, bearer) => {
+    vi.mocked(actorFromBearer).mockResolvedValue(bearer as never);
+    const req = request();
+    req.headers.set('Authorization', 'Bearer explicit-user-token');
+    const parsed = vi.spyOn(req, 'formData');
+    const result = await POST(req as never);
+    expect(result.status).toBe(403);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toContain('Cookie');
+    expect(parsed).not.toHaveBeenCalled();
+    expect(applyRateLimit).not.toHaveBeenCalled();
+  });
+
+  it('accepts only a matching verified admin Bearer and preserves normal input validation', async () => {
+    vi.mocked(actorFromBearer).mockResolvedValue({ userId: 'admin', role: 'admin' } as never);
+    const req = request(new File(['RIFF'], 'recording.wav', { type: 'audio/wav' }));
+    req.headers.set('Authorization', 'Bearer matching-admin-token');
+    const result = await POST(req as never);
+    expect(result.status).toBe(400);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(applyRateLimit).toHaveBeenCalledOnce();
   });
 
   it('rate-limits CPU-intensive analyses', async () => {
