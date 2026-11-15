@@ -158,6 +158,20 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     expect(m.setCookie).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ['legacy six-character invitation', 'a1b2c3', 'A1B2C3'],
+    ['new 96-bit invitation', 'abcdef1234567890abcdef12', 'ABCDEF1234567890ABCDEF12'],
+  ])('continues to accept %s after upgrading code entropy', async (_label, input, expected) => {
+    const response = await POST(makeRequest(input));
+    expect(response.status).toBe(200);
+    expect(m.findUnique).toHaveBeenCalledWith({
+      where: { inviteCode: expected },
+      include: { session: true },
+    });
+    expect(m.setCookie).toHaveBeenCalledWith('sess-1');
+    expect(m.accessUpdate).toHaveBeenCalledOnce();
+  });
+
   it('binds the cookie and starts a DRAFT session without consuming the invitation', async () => {
     const res = await POST(makeRequest('ABCD1234'));
     const body = await res.json();
