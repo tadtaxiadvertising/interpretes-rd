@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
@@ -26,6 +27,25 @@ export async function GET(
     const identity = await resolveCurrentIdentity();
     if (!identity) {
       return privateRoleplayResponse({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // The browser session is the authoritative identity for this route.
+    // An explicit Bearer must verify as the same user and role; otherwise a
+    // request can cross identities (e.g. admin cookie + interpreter token).
+    // Never fall back to cookie authorization for a rejected Bearer.
+    if (req.headers.has('authorization')) {
+      const bearer = await actorFromBearer(req);
+      if (!bearer) {
+        return privateRoleplayResponse({ success: false, error: 'Not authenticated' }, { status: 401 });
+      }
+      if (
+        bearer.userId !== identity.userId ||
+        bearer.role !== identity.role ||
+        (identity.role === 'candidate' && bearer.candidateId !== identity.candidateId) ||
+        (identity.role === 'interpreter' && bearer.interpreterId !== identity.interpreterId)
+      ) {
+        return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
+      }
     }
 
     const session = await db.roleplaySession.findUnique({

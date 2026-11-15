@@ -6,11 +6,14 @@ const m = vi.hoisted(() => ({
   session: null as any,
   findUnique: vi.fn(),
   getSignedAudioUrl: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: async () => m.identity,
 }));
+
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: { roleplaySession: { findUnique: m.findUnique } },
@@ -26,10 +29,13 @@ vi.mock('@/lib/roleplay', () => ({ getSignedAudioUrl: m.getSignedAudioUrl }));
 
 import { GET } from '@/app/api/roleplay/session/[id]/route';
 
-function makeRequest(cookieSessionId?: string) {
+function makeRequest(cookieSessionId?: string, authorization?: string) {
   return new NextRequest('http://localhost/api/roleplay/session/sess-1', {
     method: 'GET',
-    headers: cookieSessionId ? { cookie: `roleplay_session=${cookieSessionId}` } : {},
+    headers: {
+      ...(cookieSessionId ? { cookie: `roleplay_session=${cookieSessionId}` } : {}),
+      ...(authorization !== undefined ? { Authorization: authorization } : {}),
+    },
   });
 }
 
@@ -52,10 +58,63 @@ function candidateSession(status: string) {
 describe('GET /api/roleplay/session/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'candidate', interpreterId: null, candidateId: 5 };
+    m.identity = { userId: 'cookie-owner', role: 'candidate', interpreterId: null, candidateId: 5 };
+    m.actorFromBearer.mockResolvedValue(null);
     m.session = candidateSession('STARTED');
     m.findUnique.mockImplementation(async () => m.session);
     m.getSignedAudioUrl.mockImplementation(async (path: string) => `https://signed.test/${path}`);
+  });
+
+  it('keeps cookie-only playback without requiring a Bearer token', async () => {
+    const res = await GET(makeRequest('sess-1'), { params });
+    expect(res.status).toBe(200);
+    expect(m.actorFromBearer).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid explicit Bearer even when the candidate cookie is valid', async () => {
+    const res = await GET(makeRequest('sess-1', 'Bearer invalid-token'), { params });
+    expect(res.status).toBe(401);
+    expect(m.actorFromBearer).toHaveBeenCalledOnce();
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Bearer from another candidate before retrieving the session', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'other-person', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const res = await GET(makeRequest('sess-1', 'Bearer other-candidate'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects mismatched candidate ownership despite the same Bearer user and role', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'cookie-owner', role: 'candidate', candidateId: 99, interpreterId: null,
+    });
+    const res = await GET(makeRequest('sess-1', 'Bearer mismatched-candidate'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects an interpreter Bearer alongside an admin cookie before accessing evaluator keys', async () => {
+    m.identity = { userId: 'admin-user', role: 'admin', interpreterId: null, candidateId: null };
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'interpreter-user', role: 'interpreter', candidateId: null, interpreterId: 21,
+    });
+    const res = await GET(makeRequest(undefined, 'Bearer interpreter-token'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it('allows a verified Bearer matching the cookie owner and candidate ID', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'cookie-owner', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const res = await GET(makeRequest('sess-1', 'Bearer matching-token'), { params });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.id).toBe('sess-1');
   });
 
   it('rejects a candidate without the bound session cookie', async () => {
