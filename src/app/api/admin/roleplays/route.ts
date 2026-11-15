@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { privateRoleplayResponse as privateRoleplayJson } from '@/lib/roleplay/private-response';
 import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
@@ -14,18 +15,6 @@ import {
 } from '@/lib/roleplay-assignment-ownership';
 
 const db = prisma;
-
-// Admin responses can contain invitation links, participant identifiers and
-// workflow state. Disallow storage by shared caches even for validation errors.
-function privateRoleplayJson<T extends object>(body: T, init: ResponseInit = {}): NextResponse<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Cache-Control', 'private, no-store');
-  const vary = headers.get('Vary');
-  if (!vary?.split(',').some(value => value.trim().toLowerCase() === 'cookie')) {
-    headers.set('Vary', vary ? `${vary}, Cookie` : 'Cookie');
-  }
-  return NextResponse.json(body, { ...init, headers });
-}
 
 /**
  * This admin route historically authorizes a browser cookie via validateAction.
