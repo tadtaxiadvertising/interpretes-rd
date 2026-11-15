@@ -13,11 +13,13 @@ const m = vi.hoisted(() => ({
   confirmResponse: vi.fn(),
   queueMp3Conversion: vi.fn(),
   rateLimit: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: vi.fn(async () => m.identity),
 }));
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: m.sessionFindUnique },
