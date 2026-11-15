@@ -156,6 +156,49 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('input validation', () => {
+    it.each([
+      ['missing', null],
+      ['legacy HTTP host', 'http://legacy-domain.test'],
+      ['URL with credentials', 'https://user:private-password@front.test'],
+      ['URL with query', 'https://front.test/?redirect=private-token'],
+      ['non-root path', 'https://front.test/unexpected'],
+      ['newline injection', 'https://front.test/\\n'],
+    ])('fails closed on %s FRONTEND_ORIGIN before creating a participant roleplay', async (_case, configured) => {
+      if (configured === null) delete process.env.FRONTEND_ORIGIN;
+      else process.env.FRONTEND_ORIGIN = configured;
+      const res = await POST(buildRequest({
+        participantType: 'candidate', participantId: '9',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(503);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(JSON.stringify(await res.json())).not.toMatch(/private-password|private-token|legacy-domain/);
+      expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
+    it('does not require a participant invite origin for bulk assignments', async () => {
+      delete process.env.FRONTEND_ORIGIN;
+      const res = await POST(buildRequest({
+        participantType: 'all-active-interpreters',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.createdCount).toBe(2);
+    });
+
+    it('normalizes a configured HTTPS origin without copying its trailing slash into invite links', async () => {
+      process.env.FRONTEND_ORIGIN = 'https://front.test/';
+      const res = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.inviteLink).toBe('https://front.test/roleplays/sess-1');
+    });
+
     it('rejects missing required fields', async () => {
       const res = await POST(buildRequest({ participantType: 'interpreter' }) as any);
       expect(res.status).toBe(400);
