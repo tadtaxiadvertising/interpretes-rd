@@ -103,6 +103,34 @@ function normalizeMimeType(mime: string): string {
   return normalized;
 }
 
+/**
+ * Compensation is best-effort and must never delete an audio object already
+ * referenced by a committed response. Confirmation can commit before a later
+ * cache/revalidation step reports failure.
+ *
+ * If we cannot verify persistence, leave the object for the orphan cleanup
+ * workflow rather than risking the loss of a participant recording.
+ */
+async function cleanupUnconfirmedUpload(scenarioId: string, sourcePath: string): Promise<void> {
+  try {
+    const persisted = await prisma.roleplayResponse.findUnique({
+      where: { scenarioId },
+      select: { sourceAudioPath: true },
+    });
+    if (persisted?.sourceAudioPath === sourcePath) return;
+  } catch {
+    console.error('Roleplay audio cleanup skipped:', 'PersistenceCheckError');
+    return;
+  }
+
+  try {
+    const { error } = await getSupabaseAdmin().storage.from(BUCKET).remove([sourcePath]);
+    if (error) console.error('Failed to clean up unconfirmed Roleplay audio:', 'StorageError');
+  } catch {
+    console.error('Failed to clean up unconfirmed Roleplay audio:', 'StorageError');
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Apply rate limiting
@@ -219,20 +247,22 @@ export async function POST(req: NextRequest) {
     // stored object, persists the response, and enqueues WebM conversion in
     // the same transaction. Previously this endpoint returned a URL/path only,
     // leaving an uploaded object with no response row and no worker job.
-    const confirmation = await confirmRoleplayResponse({
-      sessionId,
-      scenarioId,
-      recordedAudioUrl: sourcePath,
-      sourceAudioPath: sourcePath,
-    });
+    let confirmation: Awaited<ReturnType<typeof confirmRoleplayResponse>>;
+    try {
+      confirmation = await confirmRoleplayResponse({
+        sessionId,
+        scenarioId,
+        recordedAudioUrl: sourcePath,
+        sourceAudioPath: sourcePath,
+      });
+    } catch {
+      // Do not leak exception details or discard an already committed audio.
+      await cleanupUnconfirmedUpload(scenarioId, sourcePath);
+      return privateJson({ success: false, error: 'Unable to process audio upload' }, { status: 500 });
+    }
 
     if (!confirmation.success || !confirmation.data) {
-      const { error: cleanupError } = await getSupabaseAdmin().storage
-        .from(BUCKET)
-        .remove([sourcePath]);
-      if (cleanupError) {
-        console.error('Failed to clean up unconfirmed Roleplay audio:', 'StorageError');
-      }
+      await cleanupUnconfirmedUpload(scenarioId, sourcePath);
       const status = confirmation.code === 'CONFLICT' ? 409
         : confirmation.code === 'FORBIDDEN' || confirmation.code === 'UNAUTHORIZED' ? 403
         : 400;
