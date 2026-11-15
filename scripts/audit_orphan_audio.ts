@@ -35,7 +35,7 @@ async function main() {
     .filter((object) => object.path.toLowerCase().endsWith('.mp3'))
     .map((object) => object.path);
 
-  const mp3Counts = summarizeRoleplayMp3Inventory(mp3Paths, responses);
+  const mp3Counts = summarizeRoleplayMp3Inventory(mp3Paths, responses, jobs);
   const audioCounts = summarizeRoleplayAudioInventory(objects, responses, jobs);
 
   // Aged entries are candidates to investigate, NEVER safe-to-delete items.
