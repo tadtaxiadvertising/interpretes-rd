@@ -260,14 +260,30 @@ export async function runDeploymentPreflight(
                 'roleplay_scenarios_studio_language_valid',
                 'roleplay_scenarios_source_time_pair_valid'
               )
-          ) AS roleplay_studio_constraints
+          ) AS roleplay_studio_constraints,
+          (
+            SELECT COUNT(*) = 5
+            FROM (VALUES
+              ('studio_turn', 'integer'),
+              ('studio_speaker', 'text'),
+              ('studio_language', 'text'),
+              ('source_start_sec', 'double precision'),
+              ('source_end_sec', 'double precision')
+            ) AS expected(column_name, column_type)
+            JOIN information_schema.columns AS actual
+              ON actual.table_schema = 'public'
+             AND actual.table_name = 'roleplay_scenarios'
+             AND actual.column_name = expected.column_name
+             AND actual.data_type = expected.column_type
+             AND actual.is_nullable = 'YES'
+          ) AS roleplay_studio_column_types
       `);
       const status = integrity.rows[0];
       if (!status || ![
         'account_unique', 'legacy_unique_absent', 'client_fk', 'client_rls',
         'roleplay_queue_table', 'roleplay_queue_enum', 'roleplay_queue_unique',
         'roleplay_queue_foreign_keys', 'roleplay_base_audio_path', 'library_archive_rls',
-        'roleplay_studio_constraints',
+        'roleplay_studio_constraints', 'roleplay_studio_column_types',
       ].every((key) => status[key] === true)) {
         throw new Error('Client-directory or Roleplay audio database constraints are incomplete.');
       }
