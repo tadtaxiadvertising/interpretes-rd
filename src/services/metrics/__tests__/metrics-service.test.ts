@@ -68,6 +68,25 @@ describe('Metrics Service', () => {
       });
     });
 
+    it('preserves a valid zero QA score after monthly metrics are updated', async () => {
+      mockPrisma.interpreter.findUnique.mockResolvedValue({
+        id: 1,
+        productionLogs: [],
+        qaScores: [{ totalScore: 0 }],
+      });
+      mockPrisma.interpreterMonthlyMetrics.upsert.mockResolvedValue({
+        interpreterId: 1,
+        period: '2026-10',
+        interpretedMinutes: 0,
+        qaScore: 0,
+        rankingPosition: null,
+        totalInterpreters: 1,
+      });
+
+      const result = await updateInterpreterMetrics(1, '2026-10');
+      expect(result).toMatchObject({ qaScore: 0 });
+    });
+
     it('should handle interpreter with no production logs', async () => {
       const mockInterpreter = {
         id: 2,
@@ -148,6 +167,24 @@ describe('Metrics Service', () => {
       });
     });
 
+    it('distinguishes zero QA from an absent score in interpreter metrics', async () => {
+      mockPrisma.interpreterMonthlyMetrics.findUnique.mockResolvedValue({
+        interpretedMinutes: 0,
+        qaScore: 0,
+        rankingPosition: 10,
+        totalInterpreters: 10,
+      });
+      expect(await getInterpreterMetrics(1, '2026-10')).toMatchObject({ qaScore: 0 });
+
+      mockPrisma.interpreterMonthlyMetrics.findUnique.mockResolvedValue({
+        interpretedMinutes: 0,
+        qaScore: null,
+        rankingPosition: 10,
+        totalInterpreters: 10,
+      });
+      expect(await getInterpreterMetrics(1, '2026-10')).toMatchObject({ qaScore: null });
+    });
+
     it('should return null for non-existent metrics', async () => {
       mockPrisma.interpreterMonthlyMetrics.findUnique.mockResolvedValue(null);
 
@@ -158,6 +195,22 @@ describe('Metrics Service', () => {
   });
 
   describe('getLeaderboard', () => {
+    it('shows zero QA as a measured score in the leaderboard rather than missing data', async () => {
+      mockPrisma.interpreterMonthlyMetrics.findMany.mockResolvedValue([
+        {
+          interpreterId: 1, interpretedMinutes: 10, qaScore: 0,
+          rankingPosition: 2, interpreter: { name: 'Interpreter with zero QA' },
+        },
+        {
+          interpreterId: 2, interpretedMinutes: 9, qaScore: null,
+          rankingPosition: 3, interpreter: { name: 'Interpreter without QA' },
+        },
+      ]);
+
+      const leaderboard = await getLeaderboard('2026-10', 2);
+      expect(leaderboard.map((entry) => entry.qaScore)).toEqual([0, null]);
+    });
+
     it('should return top interpreters ordered by minutes and QA', async () => {
       const mockMetrics = [
         { interpreterId: 1, interpretedMinutes: 500, qaScore: 90, rankingPosition: 1, interpreter: { name: 'Top Interpreter' } },
