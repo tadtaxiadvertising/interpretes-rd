@@ -7,7 +7,8 @@ type InvitationAudioSession = {
 
 function canonicalBasePath(value: string): string | null {
   const segments = value.split('/');
-  if (segments.length < 3 || segments[0] !== 'base') return null;
+  // Some older sessions store a flat base/<filename> object key.
+  if (segments.length < 2 || segments[0] !== 'base') return null;
   if (segments.some((segment) =>
     !segment || segment === '.' || segment === '..' || !/^[A-Za-z0-9._-]+$/.test(segment)
   )) return null;
