@@ -13,7 +13,7 @@ vi.mock('./ScenarioCard', () => ({
     scenario: { id: string };
     onUpdate: (id: string, data: { baseAudioPreview: string }) => void;
   }) => (
-    <button type="button" onClick={() => onUpdate(scenario.id, 'blob:manual-preview' && { baseAudioPreview: 'blob:manual-preview' })}>
+    <button type="button" onClick={() => onUpdate(scenario.id, { baseAudioPreview: 'blob:manual-preview' })}>
       Añadir vista previa
     </button>
   ),
