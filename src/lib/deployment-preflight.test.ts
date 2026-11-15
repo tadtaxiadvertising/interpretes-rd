@@ -190,7 +190,7 @@ describe('deployment credential boundary', () => {
     const { client, createClient } = fakeConnection();
     client.query.mockImplementation(async (sql: string) => ({
       rows: sql.includes('AS account_unique')
-        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true, library_archive_rls: true }]
+        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true, library_archive_rls: true, roleplay_studio_constraints: true, roleplay_studio_column_types: true }]
         : [],
     }));
     await expect(runDeploymentPreflight(validEnv, createClient, true)).rejects.toThrow(
