@@ -1,13 +1,15 @@
 # yaml-language-server: $schema=https://json.schemastore.org/github-workflow
 name: ⏰ Cron — Shift Reminders
 
-# Invokes the CRON_SECRET-protected endpoint on a schedule.
-# The endpoint fails closed (401) when CRON_SECRET is not configured, so this
-# workflow safely no-ops until the `CRON_SECRET` repository secret is set.
+# Intentionally manual-only until shift reminder delivery is implemented.
+# The authenticated endpoint currently returns HTTP 501
+# (SHIFT_REMINDERS_NOT_CONFIGURED), so scheduling this every 30 minutes only
+# creates recurring failures without sending a single notification.
+# Re-enable schedule only after issue #381 has a verified delivery provider,
+# idempotency, opt-out handling, timezone logic and production smoke tests.
+# Manual dispatch remains available and will fail visibly with 501 while
+# the feature is not implemented. Never treat this as a successful delivery.
 on:
-  schedule:
-    # Every 30 minutes
-    - cron: '*/30 * * * *'
   workflow_dispatch:
 
 jobs:
