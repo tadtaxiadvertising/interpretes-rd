@@ -165,8 +165,9 @@ export async function middleware(req: NextRequest) {
       response = refreshResult.response;
       hasActiveSupabaseSession = refreshResult.hasValidSession;
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.warn('[MIDDLEWARE] Supabase session refresh failed:', errorMsg);
+      // Authentication errors can contain private cookie/token or upstream
+      // URL details. Never log the raw exception message or object.
+      console.warn('[MIDDLEWARE] Supabase session refresh failed:', err instanceof Error ? 'Error' : 'UnknownError');
       response = NextResponse.next({ request: req });
       hasActiveSupabaseSession = false;
     }
