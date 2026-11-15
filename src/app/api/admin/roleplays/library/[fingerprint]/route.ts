@@ -4,6 +4,7 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
 const FINGERPRINT_RE = /^[a-f0-9]{64}$/;
@@ -20,6 +21,12 @@ export async function POST(
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return privateRoleplayResponse({ success: false, error: auth.error }, { status: 403 });
+    if (req.headers.has('authorization')) {
+      const bearer = await actorFromBearer(req);
+      if (!bearer || bearer.role !== 'admin' || bearer.userId !== auth.user.userId) {
+        return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+    }
 
     const { fingerprint } = await params;
     if (!FINGERPRINT_RE.test(fingerprint)) {
@@ -69,12 +76,18 @@ export async function POST(
 
 /** Restore a previously withdrawn snapshot. Old sessions were never removed. */
 export async function DELETE(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ fingerprint: string }> },
 ) {
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return privateRoleplayResponse({ success: false, error: auth.error }, { status: 403 });
+    if (req.headers.has('authorization')) {
+      const bearer = await actorFromBearer(req);
+      if (!bearer || bearer.role !== 'admin' || bearer.userId !== auth.user.userId) {
+        return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+    }
 
     const { fingerprint } = await params;
     if (!FINGERPRINT_RE.test(fingerprint)) {
