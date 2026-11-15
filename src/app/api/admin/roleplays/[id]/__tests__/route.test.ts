@@ -5,6 +5,10 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
 
+vi.mock('@/lib/api-auth', () => ({
+  actorFromBearer: vi.fn(),
+}));
+
 vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: vi.fn(), updateMany: vi.fn() },
@@ -13,6 +17,7 @@ vi.mock('@/lib/prisma', () => ({
 
 import { PATCH } from '../route';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 
 const adminAuth = {
@@ -24,8 +29,11 @@ function context(id = 'sess-1') {
   return { params: Promise.resolve({ id }) } as any;
 }
 
-function request() {
-  return new Request('http://localhost/api/admin/roleplays/sess-1', { method: 'PATCH' }) as any;
+function request(authorization?: string) {
+  return new Request('http://localhost/api/admin/roleplays/sess-1', {
+    method: 'PATCH',
+    headers: authorization ? { authorization } : {},
+  }) as any;
 }
 
 describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
@@ -44,6 +52,36 @@ describe('PATCH /api/admin/roleplays/[id] (cancel)', () => {
     expect(res.status).toBe(403);
     expect(prisma.roleplaySession.findUnique).not.toHaveBeenCalled();
     expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['interpreter', { userId: 'interpreter-user', role: 'interpreter' }],
+    ['different admin', { userId: 'other-admin', role: 'admin' }],
+    ['invalid token', null],
+  ])('denies mixed identities (%s) before reading or cancelling a session', async (_case, bearerActor) => {
+    (actorFromBearer as any).mockResolvedValue(bearerActor);
+    const res = await PATCH(request('Bearer explicit-user-token'), context());
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('Forbidden');
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Cookie');
+    expect(prisma.roleplaySession.findUnique).not.toHaveBeenCalled();
+    expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows a Bearer token only if it is verified as the same admin cookie actor', async () => {
+    (actorFromBearer as any).mockResolvedValue({ userId: 'a1', role: 'admin' });
+    const res = await PATCH(request('Bearer same-admin-token'), context());
+    expect(res.status).toBe(200);
+    expect(prisma.roleplaySession.updateMany).toHaveBeenCalledOnce();
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('keeps cancelled session details private, even with a cookie-only admin', async () => {
+    const res = await PATCH(request(), context());
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Cookie');
   });
 
   it('rejects an empty id', async () => {
