@@ -18,12 +18,12 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-vi.mock('@/app/actions/settings', () => ({
+vi.mock('@/lib/system-config', () => ({
   getSystemConfig: vi.fn((key: string) => Promise.resolve(systemConfigValues[key] || '0')),
 }));
 
 import prisma from '@/lib/prisma';
-import { getSystemConfig } from '@/app/actions/settings';
+import { getSystemConfig } from '@/lib/system-config';
 
 describe('Ranking Calculation', () => {
   beforeEach(() => {

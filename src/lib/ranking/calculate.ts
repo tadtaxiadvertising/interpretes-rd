@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { getSystemConfig } from '@/app/actions/settings';
+import { getSystemConfig } from '@/lib/system-config';
 import { getMonthBounds } from '@/lib/interpreter-metrics';
 
 export interface InterpreterRankingSummary {

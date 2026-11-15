@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { Phone, Clock, DollarSign, TrendingUp, ShieldCheck, RefreshCw, LogIn, Plus, Trophy } from 'lucide-react';
-import { getSystemConfig } from '@/app/actions/settings';
+import { getSystemConfig } from '@/lib/system-config';
 import { cn } from '@/lib/utils';
 import { PresenceBadge } from '@/components/PresenceBadge';
 import { CallTimer } from '@/components/CallTimer';

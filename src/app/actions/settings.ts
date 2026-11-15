@@ -1,6 +1,6 @@
 'use server';
 
-import { revalidatePath, unstable_cache } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 import { ActionResult } from '@/lib/types';
@@ -27,6 +27,9 @@ export async function updateSystemConfig(key: string, value: string): Promise<Ac
       select: { key: true }
     });
 
+    // These paths render values supplied by an unstable_cache-tagged reader.
+    // Path invalidation alone does not immediately invalidate that data cache.
+    revalidateTag('system-config');
     revalidatePath('/admin');
     revalidatePath('/dashboard');
     return { success: true };
@@ -36,30 +39,3 @@ export async function updateSystemConfig(key: string, value: string): Promise<Ac
   }
 }
 
-/**
- * CACHED FETCH: Get system config value
- * Optimized with unstable_cache for high-performance reads.
- */
-const getSystemConfigCached = unstable_cache(
-  async (key: string, defaultValue: string = '') => {
-    try {
-      const config = await db.systemConfig.findUnique({
-        where: { key },
-        select: { value: true }
-      });
-      return config ? config.value : defaultValue;
-    } catch (error) {
-      console.error('Error fetching system config:', safeServerErrorCategory(error));
-      return defaultValue;
-    }
-  },
-  ['system-config'],
-  { tags: ['system-config'], revalidate: 3600 }
-);
-
-/**
- * Legacy wrapper for compatibility
- */
-export async function getSystemConfig(key: string, defaultValue: string = ''): Promise<string> {
-  return getSystemConfigCached(key, defaultValue);
-}
