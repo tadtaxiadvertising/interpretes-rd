@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
@@ -46,6 +46,7 @@ const session = () => ({
 });
 
 describe('authorized scenario base-audio playback', () => {
+  afterEach(() => vi.unstubAllEnvs());
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', origin);
