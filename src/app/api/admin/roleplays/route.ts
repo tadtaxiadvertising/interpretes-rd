@@ -544,7 +544,12 @@ export async function POST(req: NextRequest) {
       const { randomBytes, createHash } = await import('crypto');
       const rawToken = randomBytes(32).toString('hex');
       const tokenHash = createHash('sha256').update(rawToken).digest('hex');
-      const inviteCode = randomBytes(4).toString('base64url').slice(0, 8).toUpperCase();
+      // Use 96 bits of entropy for new public invitation codes. Uppercasing
+      // base64url reduced the effective entropy of the previous 4-byte code,
+      // making collisions and online guessing more plausible as volume grows.
+      // Hex remains uppercase for the existing /r/[code] validator; old short
+      // codes remain readable and no invitations need to be migrated.
+      const inviteCode = randomBytes(12).toString('hex').toUpperCase();
       candidateAccess = { tokenHash, inviteCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
       inviteLink = `${frontendOrigin}/r/${inviteCode}`;
     }
