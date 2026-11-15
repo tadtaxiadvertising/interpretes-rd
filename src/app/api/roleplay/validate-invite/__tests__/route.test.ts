@@ -10,11 +10,14 @@ const m = vi.hoisted(() => ({
   sessionUpdateMany: vi.fn(),
   sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: async () => m.identity,
 }));
+
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -42,10 +45,10 @@ vi.mock('@/lib/security/rate-limit', () => ({
 
 import { POST } from '@/app/api/roleplay/validate-invite/route';
 
-function makeRequest(token = 'secret-token') {
+function makeRequest(token = 'secret-token', authorization?: string) {
   return new NextRequest('http://localhost/api/roleplay/validate-invite', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(authorization !== undefined ? { Authorization: authorization } : {}) },
     body: JSON.stringify({ token }),
   });
 }
@@ -53,7 +56,8 @@ function makeRequest(token = 'secret-token') {
 describe('POST /api/roleplay/validate-invite race protection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+    m.identity = { userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null };
+    m.actorFromBearer.mockResolvedValue(null);
     m.access = {
       id: 'access-1',
       sessionId: 'session-1',
@@ -66,6 +70,34 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  it('rejects an invalid Bearer before reading invitations or binding a session', async () => {
+    const response = await POST(makeRequest('secret-token', 'Bearer invalid'));
+    expect(response.status).toBe(401);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Bearer of a different candidate before any writes', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'other-user', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const response = await POST(makeRequest('secret-token', 'Bearer other-user'));
+    expect(response.status).toBe(403);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('binds an invitation when cookie and Bearer represent the same candidate', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const response = await POST(makeRequest('secret-token', 'Bearer same-user'));
+    expect(response.status).toBe(200);
+    expect(m.setCookie).toHaveBeenCalledWith('session-1');
   });
 
   it('keeps malformed or unknown invitation responses private without binding cookies', async () => {
