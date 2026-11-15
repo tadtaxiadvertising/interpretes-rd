@@ -180,6 +180,74 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     ]));
   });
 
+  it('does not delete audio already committed if confirmation later reports failure', async () => {
+    mocks.confirm.mockResolvedValue({
+      success: false,
+      error: 'Unable to confirm uploaded audio',
+      code: 'INTERNAL_ERROR',
+    });
+    mocks.findResponse
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(async () => ({ sourceAudioPath: mocks.upload.mock.calls[0][0] }));
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(400);
+    expect(mocks.findResponse).toHaveBeenCalledTimes(2);
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it('removes the unreferenced upload when confirmation throws before persisting', async () => {
+    mocks.confirm.mockRejectedValue(new Error('synthetic confirmation failure'));
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(500);
+    expect(mocks.remove).toHaveBeenCalledWith([
+      mocks.upload.mock.calls[0][0],
+    ]);
+  });
+
+  it('preserves a committed recording even if confirmation throws after commit', async () => {
+    mocks.confirm.mockRejectedValue(new Error('synthetic post-commit failure'));
+    mocks.findResponse
+      .mockResolvedValueOnce(null)
+      .mockImplementationOnce(async () => ({ sourceAudioPath: mocks.upload.mock.calls[0][0] }));
+
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(500);
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it('skips cleanup if it cannot verify whether the uploaded recording was committed', async () => {
+    const secret = 'postgresql://private:token@internal.invalid/db';
+    mocks.confirm.mockResolvedValue({ success: false, error: 'Unable to confirm uploaded audio', code: 'INTERNAL_ERROR' });
+    mocks.findResponse.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error(secret));
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest({ cookie: 'session-1' }));
+      expect(response.status).toBe(400);
+      expect(mocks.remove).not.toHaveBeenCalled();
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('private:token');
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('internal.invalid');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
+  it('does not turn a failed storage cleanup into an unhandled error or leak provider tokens', async () => {
+    mocks.confirm.mockResolvedValue({ success: false, code: 'CONFLICT', error: 'Audio already confirmed' });
+    mocks.remove.mockRejectedValue(new Error('https://storage.invalid/?token=private-token'));
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(makeRequest({ cookie: 'session-1' }));
+      expect(response.status).toBe(409);
+      expect(mocks.remove).toHaveBeenCalledOnce();
+      expect(JSON.stringify(await response.json())).not.toContain('private-token');
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('private-token');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
   it('rejects a scenario outside the supplied session before uploading', async () => {
     mocks.findScenario.mockResolvedValue(null);
 
