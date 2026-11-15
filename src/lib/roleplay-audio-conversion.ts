@@ -169,7 +169,9 @@ async function convertToMp3(inputPath: string, outputPath: string): Promise<void
   });
 }
 
-export async function convertAndStoreMp3(sessionId: string, scenarioId: string, sourcePath: string): Promise<string> {
+// Retain positional arguments for existing job callers. These identifiers are
+// private recording metadata and must not be written to shared worker logs.
+export async function convertAndStoreMp3(_sessionId: string, _scenarioId: string, sourcePath: string): Promise<string> {
   const tempDir = tmpdir();
   const attemptId = randomUUID();
   const inputPath = join(tempDir, `${attemptId}_input.webm`);
@@ -211,7 +213,9 @@ export async function convertAndStoreMp3(sessionId: string, scenarioId: string, 
     // Each attempt has an immutable path: a stale worker cannot overwrite the
     // current owner's object. The worker publishes only its own path after its
     // database lease is verified; orphan cleanup can run independently.
-    console.log(`[ASYNC CONVERSION] Uploaded MP3 for ${sessionId}/${scenarioId}`);
+    // Log only a stable event category, never participant/session/scenario IDs
+    // or storage object paths. Error categories are sanitized by the worker.
+    console.log('[ASYNC CONVERSION] Processed audio upload completed');
     return mp3Path;
   } catch (error) {
     throw error;
