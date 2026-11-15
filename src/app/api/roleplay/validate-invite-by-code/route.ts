@@ -1,5 +1,7 @@
 import { NextRequest } from 'next/server';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
+import { getSignedAudioUrl } from '@/lib/roleplay';
+import { resolveInvitationBaseAudioUrl } from '@/lib/roleplay/invitation-base-audio';
 import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
@@ -149,7 +151,7 @@ export async function POST(req: NextRequest) {
         success: true, 
         data: { 
           sessionId: access.session.id,
-          baseAudioUrl: access.session.baseAudioUrl,
+          baseAudioUrl: await resolveInvitationBaseAudioUrl(access.session, process.env.NEXT_PUBLIC_SUPABASE_URL, getSignedAudioUrl),
         } 
       },
       { headers: { ...createRateLimitHeaders(rateLimitResult), 'Cache-Control': 'private, no-store', Vary: 'Cookie' } }
