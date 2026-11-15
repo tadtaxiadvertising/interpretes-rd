@@ -41,4 +41,11 @@ describe('private roleplay invitation response', () => {
     });
     expect(response.headers.get('Vary')).toBe('Origin, AUTHORIZATION, cookie');
   });
+  it('preserves wildcard Vary semantics', () => {
+    const response = privateRoleplayResponse({ ok: true }, {
+      headers: { Vary: '*' },
+    });
+    expect(response.headers.get('Vary')).toBe('*');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
 });
