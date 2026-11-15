@@ -1,4 +1,4 @@
-name: 🔎 Roleplay MP3 inventory (read-only)
+name: 🔎 Roleplay response-audio inventory (read-only)
 
 # No deletion option: all Storage reconciliation is read-only until issue
 # #408 defines age-gated, concurrency-safe cleanup for recordings.
@@ -9,7 +9,7 @@ on:
 
 jobs:
   audit:
-    name: Read-only Roleplay MP3 inventory
+    name: Read-only Roleplay response-audio inventory
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DIRECT_URL }}
@@ -45,6 +45,6 @@ jobs:
         if: steps.credentials.outputs.enabled == 'true'
         run: npm ci --legacy-peer-deps
 
-      - name: Run Roleplay MP3 inventory (read-only)
+      - name: Run Roleplay response-audio inventory (read-only)
         if: steps.credentials.outputs.enabled == 'true'
         run: npx tsx scripts/audit_orphan_audio.ts
