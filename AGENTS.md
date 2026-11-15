@@ -3,12 +3,16 @@
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Heed deprecation notices and follow the established project patterns.
 
-## Pinned Version (Verified by Easypanel success log)
+## Dependency versions (use package.json and package-lock.json as the source of truth)
 
-- **Next.js**: `15.2.6` (Strictly Required)
-- **React**: `19.0.0` (React 19)
-- **Prisma**: `7.8.0` (with `@prisma/adapter-pg`)
-- **Tailwind CSS**: `v4`
+As of 2026-11-15 the repository declares the following versions. Verify the
+current manifests and lockfile before changing APIs, commands or deployment
+images. **Never downgrade dependencies merely to match this document.**
+
+- **Next.js**: `15.5.28` (exact package.json dependency)
+- **React**: `19.0.3` (React 19)
+- **Prisma**: `^7.10.1` for `prisma` and `@prisma/client` (with `@prisma/adapter-pg`)
+- **Tailwind CSS**: `^4`
 
 ## Critical Breaking Changes (Next.js 15+)
 
@@ -17,7 +21,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 In Next.js 15+, `params` in dynamic route handlers (`[id]`, `[slug]`, etc.) and layouts are now a **Promise**. You must `await` them before accessing properties.
 
 ```typescript
-// ✅ CORRECT — Next.js 15.2.6 convention
+// ✅ CORRECT — Next.js 15 asynchronous params convention
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
   const id = resolvedParams.id;
