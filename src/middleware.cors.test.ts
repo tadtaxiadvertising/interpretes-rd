@@ -1,6 +1,12 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+
+const m = vi.hoisted(() => ({ updateSession: vi.fn() }));
+vi.mock('@/lib/supabase/middleware', () => ({
+  updateSession: m.updateSession,
+}));
+
 import { middleware } from './middleware';
 
 const request = (method: string, path: string, origin?: string) => new NextRequest(
@@ -10,6 +16,8 @@ const request = (method: string, path: string, origin?: string) => new NextReque
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  vi.clearAllMocks();
 });
 
 describe('middleware credentialed CORS response boundary', () => {
@@ -49,6 +57,27 @@ describe('middleware credentialed CORS response boundary', () => {
     expect(response.headers.get('Access-Control-Allow-Origin')).toBe('https://interpretes.rd.ibusiness.com.do');
     expect(response.headers.get('Access-Control-Allow-Credentials')).toBe('true');
     expect(response.headers.get('Vary')).toContain('Origin');
+  });
+
+  it('redacts session refresh exceptions instead of logging tokens or URLs', async () => {
+    vi.stubEnv('FRONTEND_ORIGIN', 'https://interpretes.rd.ibusiness.com.do');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://supabase.example.test');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', 'public-anon-test');
+    const error = new Error('postgresql://internal:SECRET_CREDENTIAL@private.db.test/refresh?token=SECRET_CREDENTIAL');
+    m.updateSession.mockRejectedValueOnce(error);
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const req = new NextRequest('http://localhost/api/private', {
+      method: 'GET',
+      headers: {
+        origin: 'https://interpretes.rd.ibusiness.com.do',
+        cookie: 'sb-access-token=SECRET_CREDENTIAL',
+      },
+    });
+    const response = await middleware(req);
+    expect(response.status).toBe(401);
+    expect(m.updateSession).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith('[MIDDLEWARE] Supabase session refresh failed:', 'Error');
+    expect(JSON.stringify(spy.mock.calls)).not.toMatch(/SECRET_CREDENTIAL|private\.db\.test|postgresql:/);
   });
 
   it('never advertises credentialed CORS for a rejected API origin', async () => {
