@@ -99,7 +99,6 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
 }
 
 export async function POST(req: NextRequest) {
-  let databaseCommitted = false;
   let draftConflict = false;
   let libraryArchivedDuringAssignment = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
@@ -442,7 +441,6 @@ export async function POST(req: NextRequest) {
           skippedCount: bulkResult.skippedCount,
         }, { status: 409 });
       }
-      databaseCommitted = true;
 
       revalidatePath('/admin/roleplays');
       revalidatePath('/admin/roleplays/new');
@@ -627,7 +625,6 @@ export async function POST(req: NextRequest) {
         });
       }
     });
-    databaseCommitted = true;
 
     revalidatePath('/admin/roleplays');
     revalidatePath('/admin/roleplays/new');
@@ -641,15 +638,12 @@ export async function POST(req: NextRequest) {
     // or infrastructure details; preserve an error category, not its payload.
     console.error('Create Roleplay API Error:', error instanceof Error ? 'Error' : 'UnknownError');
 
-    // Audio paths are unique per request. Never delete/reset a shared draft
-    // here: another administrator may have completed it concurrently.
-    if (!databaseCommitted && supabaseAdmin && uploadedPaths.length > 0) {
-      try {
-        await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
-      } catch (cleanupError) {
-        console.error('Create Roleplay storage cleanup failed:', cleanupError instanceof Error ? 'Error' : 'UnknownError');
-      }
-    }
+    // A failed/ambiguous transaction response does not prove rollback: the
+    // database may have committed the session while the acknowledgment was
+    // lost. NEVER delete unique base audio objects in this catch block, as
+    // doing so could leave committed Roleplay scenarios with missing audio.
+    // Unreferenced uploads must be reconciled later with an age-gated,
+    // read-only-first audit and manual review (see issue #408).
 
     if (libraryArchivedDuringAssignment) {
       return privateRoleplayJson({
