@@ -105,7 +105,7 @@ export async function updateInterpreterMetrics(
       interpreterId: metrics.interpreterId,
       period: metrics.period,
       interpretedMinutes: metrics.interpretedMinutes,
-      qaScore: metrics.qaScore ? Number(metrics.qaScore) : null,
+      qaScore: metrics.qaScore == null ? null : Number(metrics.qaScore),
       rankingPosition: metrics.rankingPosition,
       totalInterpreters: metrics.totalInterpreters ?? 0,
     };
@@ -231,7 +231,7 @@ export async function getInterpreterMetrics(
 
   return {
     interpretedMinutes: metrics.interpretedMinutes,
-    qaScore: metrics.qaScore ? Number(metrics.qaScore) : null,
+    qaScore: metrics.qaScore == null ? null : Number(metrics.qaScore),
     rankingPosition: metrics.rankingPosition,
     totalInterpreters: metrics.totalInterpreters,
   };
@@ -271,7 +271,7 @@ export async function getLeaderboard(period?: string, limit = 10): Promise<Array
     interpreterId: m.interpreterId,
     name: m.interpreter?.name || 'Unknown',
     interpretedMinutes: m.interpretedMinutes,
-    qaScore: m.qaScore ? Number(m.qaScore) : null,
+    qaScore: m.qaScore == null ? null : Number(m.qaScore),
     rankingPosition: m.rankingPosition || 0,
   }));
 }
