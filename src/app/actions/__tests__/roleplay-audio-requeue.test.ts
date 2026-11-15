@@ -105,6 +105,22 @@ describe('requeueFailedRoleplayAudioJob', () => {
     });
   });
 
+  it('never logs a raw connection string, token or private path when a database operation fails', async () => {
+    const secret = 'postgresql://db:PRIVATE_SECRET@internal-db.invalid/audio?token=PRIVATE_SECRET';
+    m.audioJobFindUnique.mockRejectedValueOnce(new Error(secret));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await requeueFailedRoleplayAudioJob({ jobId: 'job-1' });
+      expect(res).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(JSON.stringify(res)).not.toContain('PRIVATE_SECRET');
+      expect(log).toHaveBeenCalledWith('Requeue Roleplay audio job error:', 'Error');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_SECRET');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('internal-db.invalid');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('returns CONFLICT if the compare-and-set loses the race', async () => {
     m.audioJobUpdateMany.mockResolvedValue({ count: 0 });
     const res = await requeueFailedRoleplayAudioJob({ jobId: 'job-1' });
