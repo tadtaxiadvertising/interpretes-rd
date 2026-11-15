@@ -5,6 +5,7 @@
  */
 
 import prisma from '@/lib/prisma';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getMonthBounds, getMonthBoundsForPeriod, sumEffectiveLogMinutes } from '@/lib/interpreter-metrics';
 
 const db = prisma;
@@ -110,8 +111,9 @@ export async function updateInterpreterMetrics(
       totalInterpreters: metrics.totalInterpreters ?? 0,
     };
   } catch (error) {
-    console.error('[METRICS] updateInterpreterMetrics error:', error);
-    return { error: error instanceof Error ? error.message : 'Unknown error' };
+    // Provider exceptions can contain DSNs, internal SQL or interpreter PII.
+    console.error('[METRICS] updateInterpreterMetrics error:', safeServerErrorCategory(error));
+    return { error: 'Failed to update interpreter metrics' };
   }
 }
 
@@ -154,7 +156,7 @@ export async function recalculateRankings(period?: string): Promise<number> {
 
     return totalInterpreters;
   } catch (error) {
-    console.error('[METRICS] recalculateRankings error:', error);
+    console.error('[METRICS] recalculateRankings error:', safeServerErrorCategory(error));
     return 0;
   }
 }
@@ -179,7 +181,8 @@ export async function refreshAllMetrics(): Promise<{ updated: number; errors: nu
       const result = await updateInterpreterMetrics(interpreter.id, period);
       if ('error' in result) {
         errors++;
-        console.error(`[METRICS] Error updating interpreter ${interpreter.id}:`, result.error);
+        // Never write individual interpreter IDs or raw error messages to logs.
+        console.error('[METRICS] Interpreter metric refresh failed');
       } else {
         updated++;
       }
@@ -190,7 +193,7 @@ export async function refreshAllMetrics(): Promise<{ updated: number; errors: nu
 
     return { updated, errors };
   } catch (error) {
-    console.error('[METRICS] refreshAllMetrics error:', error);
+    console.error('[METRICS] refreshAllMetrics error:', safeServerErrorCategory(error));
     return { updated, errors: errors + 1 };
   }
 }
