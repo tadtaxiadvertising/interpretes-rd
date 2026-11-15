@@ -27,22 +27,22 @@ export async function listRoleplayMp3Paths(
     if (depth > MAX_FOLDER_DEPTH) throw new Error('Roleplay audio inventory exceeded folder depth');
     let offset = 0;
     while (true) {
-      let data: Awaited<ReturnType<ReturnType<StorageReader['storage']['from']>['list']>>['data'];
-      let error: unknown;
+      let result;
       try {
-        ({ data, error } = await client.storage.from(bucket).list(folder, {
+        result = await client.storage.from(bucket).list(folder, {
           limit: PAGE_SIZE,
           offset,
           sortBy: { column: 'name', order: 'asc' },
-        }));
+        });
       } catch {
         throw new Error('Roleplay audio inventory could not list Storage objects');
       }
 
-      if (error || !Array.isArray(data)) {
+      if (result.error || !Array.isArray(result.data)) {
         throw new Error('Roleplay audio inventory could not list Storage objects');
       }
 
+      const data = result.data;
       for (const item of data) {
         if (!item.name || item.name === '.' || item.name === '..') {
           throw new Error('Roleplay audio inventory received an invalid entry');
