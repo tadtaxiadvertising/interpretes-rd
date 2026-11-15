@@ -126,6 +126,30 @@ export async function POST(req: NextRequest) {
       return privateRoleplayJson({ success: false, error: 'Invalid participant type' }, { status: 400 });
     }
 
+    // Participant invitations must use the configured canonical application
+    // origin. A fallback to an unrelated legacy domain can produce dead or
+    // misleading links *after* database/storage writes have committed.
+    // Bulk assignments do not generate a participant-specific invite URL.
+    let frontendOrigin: string | null = null;
+    if (!isBulk) {
+      const configured = process.env.FRONTEND_ORIGIN;
+      try {
+        if (!configured || /[\s\u0000-\u001f\u007f]/u.test(configured)) throw new Error('invalid origin');
+        const url = new URL(configured);
+        const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+        if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback && process.env.NODE_ENV !== 'production')) ||
+            url.username || url.password || url.search || url.hash || url.pathname !== '/') {
+          throw new Error('invalid origin');
+        }
+        frontendOrigin = url.origin;
+      } catch {
+        return privateRoleplayJson(
+          { success: false, error: 'El origen público de la plataforma no está configurado correctamente. No se creó el roleplay.' },
+          { status: 503 }
+        );
+      }
+    }
+
     let parsedParticipantId: number | null = null;
     if (!isBulk) {
       if (typeof participantId !== 'string') {
@@ -513,8 +537,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const origin = process.env.FRONTEND_ORIGIN || 'https://freeinterpreters.com';
-    let inviteLink = `${origin}/roleplays/${session.id}`;
+    // Non-bulk assignments cannot reach this point without a canonical origin.
+    let inviteLink = `${frontendOrigin}/roleplays/${session.id}`;
     let candidateAccess: { tokenHash: string; inviteCode: string; expiresAt: Date } | null = null;
     if (participantType === 'candidate') {
       const { randomBytes, createHash } = await import('crypto');
@@ -522,7 +546,7 @@ export async function POST(req: NextRequest) {
       const tokenHash = createHash('sha256').update(rawToken).digest('hex');
       const inviteCode = randomBytes(4).toString('base64url').slice(0, 8).toUpperCase();
       candidateAccess = { tokenHash, inviteCode, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
-      inviteLink = `${origin}/r/${inviteCode}`;
+      inviteLink = `${frontendOrigin}/r/${inviteCode}`;
     }
 
     await db.$transaction(async (tx) => {
