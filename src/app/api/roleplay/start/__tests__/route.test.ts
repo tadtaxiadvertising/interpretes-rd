@@ -266,7 +266,7 @@ describe('POST /api/roleplay/start race protection', () => {
     const invalid = await POST(makeRequest('x'.repeat(513)));
     expect(invalid.status).toBe(400);
     expect(invalid.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(invalid.headers.get('Vary')).toBe('Cookie');
+    expect(invalid.headers.get('Vary')).toBe('Cookie, Authorization');
 
     const access = await m.accessFindUnique();
     m.accessFindUnique.mockResolvedValueOnce({
@@ -276,7 +276,7 @@ describe('POST /api/roleplay/start race protection', () => {
     const expired = await POST(makeRequest());
     expect(expired.status).toBe(400);
     expect(expired.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(expired.headers.get('Vary')).toBe('Cookie');
+    expect(expired.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.setCookie).not.toHaveBeenCalled();
   });
 
@@ -284,7 +284,7 @@ describe('POST /api/roleplay/start race protection', () => {
     const response = await POST(makeRequest());
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(response.headers.get('Vary')).toBe('Cookie');
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('rate-limits legacy token starts before a database lookup', async () => {
