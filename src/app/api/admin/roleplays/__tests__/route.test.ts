@@ -157,7 +157,7 @@ describe('POST /api/admin/roleplays', () => {
       const res = await POST(req as any);
       expect(res.status).toBe(403);
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
       expect(prisma.roleplaySession.findUnique).not.toHaveBeenCalled();
@@ -202,7 +202,7 @@ describe('POST /api/admin/roleplays', () => {
 
       expect(res.status).toBe(403);
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
     });
   });
@@ -224,7 +224,7 @@ describe('POST /api/admin/roleplays', () => {
       }) as any);
       expect(res.status).toBe(503);
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       expect(JSON.stringify(await res.json())).not.toMatch(/private-password|private-token|legacy-domain/);
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
@@ -255,7 +255,7 @@ describe('POST /api/admin/roleplays', () => {
       const res = await POST(buildRequest({ participantType: 'interpreter' }) as any);
       expect(res.status).toBe(400);
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       expect((await res.json()).error).toMatch(/Missing required fields/);
     });
 
@@ -568,7 +568,7 @@ describe('POST /api/admin/roleplays', () => {
         expect(JSON.stringify(body)).not.toContain('storage-internal.example');
         expect(JSON.stringify(logs.mock.calls)).not.toContain('secret-provider-token');
         expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-        expect(res.headers.get('Vary')).toBe('Cookie');
+        expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       } finally {
         logs.mockRestore();
       }
@@ -592,7 +592,7 @@ describe('POST /api/admin/roleplays', () => {
         expect(JSON.stringify(logs.mock.calls)).not.toContain('PRIVATE_ADMIN_UPLOAD_TOKEN');
         expect(logs).toHaveBeenCalledWith('Create Roleplay API Error:', 'Error');
         expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-        expect(res.headers.get('Vary')).toBe('Cookie');
+        expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       } finally {
         logs.mockRestore();
       }
@@ -625,7 +625,7 @@ describe('POST /api/admin/roleplays', () => {
       expect(body.sessionId).toBe('sess-old');
       expect(body.status).toBe('INVITED');
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
     });
@@ -874,7 +874,7 @@ describe('GET /api/admin/roleplays privacy', () => {
     expect(res.status).toBe(200);
     expect(body.data[0].id).toBe('sess-1');
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(res.headers.get('Vary')).toBe('Cookie');
+    expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('does not expose database exception details in an administrator response or logs', async () => {
@@ -906,7 +906,7 @@ describe('GET /api/admin/roleplays privacy', () => {
       expect(JSON.stringify(logs.mock.calls)).not.toContain('PRIVATE_DATABASE_CONNECTION_TOKEN');
       expect(logs).toHaveBeenCalledWith('Get Roleplays Error:', 'Error');
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
     } finally {
       logs.mockRestore();
     }
