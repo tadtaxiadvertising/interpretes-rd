@@ -9,11 +9,14 @@ const m = vi.hoisted(() => ({
   sessionUpdateMany: vi.fn(),
   sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: async () => m.identity,
 }));
+
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -38,10 +41,10 @@ vi.mock('@/lib/security/rate-limit', () => ({
 
 import { POST } from '@/app/api/roleplay/validate-invite-by-code/route';
 
-function makeRequest(inviteCode: string) {
+function makeRequest(inviteCode: string, authorization?: string) {
   return new Request('http://localhost/api/roleplay/validate-invite-by-code', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(authorization !== undefined ? { Authorization: authorization } : {}) },
     body: JSON.stringify({ inviteCode }),
   });
 }
@@ -49,7 +52,8 @@ function makeRequest(inviteCode: string) {
 describe('POST /api/roleplay/validate-invite-by-code', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+    m.identity = { userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null };
+    m.actorFromBearer.mockResolvedValue(null);
     m.access = {
       id: 'acc-1',
       sessionId: 'sess-1',
@@ -62,6 +66,34 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  it('rejects an invalid Bearer before looking up an invitation code', async () => {
+    const response = await POST(makeRequest('ABCD1234', 'Bearer invalid'));
+    expect(response.status).toBe(401);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects an explicit Bearer belonging to a different candidate', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'other-user', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const response = await POST(makeRequest('ABCD1234', 'Bearer other'));
+    expect(response.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('accepts matching Bearer and cookie identity for an invitation code', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const response = await POST(makeRequest('ABCD1234', 'Bearer matching'));
+    expect(response.status).toBe(200);
+    expect(m.setCookie).toHaveBeenCalledWith('sess-1');
   });
 
   it('keeps malformed or unknown invitation responses private without binding cookies', async () => {

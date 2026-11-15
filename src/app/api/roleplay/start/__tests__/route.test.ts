@@ -9,11 +9,14 @@ const m = vi.hoisted(() => ({
   sessionFindUnique: vi.fn(),
   setCookie: vi.fn(),
   applyRateLimit: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: async () => m.identity,
 }));
+
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -39,10 +42,10 @@ vi.mock('@/lib/security/rate-limit', () => ({
 
 import { POST } from '@/app/api/roleplay/start/route';
 
-function makeRequest(token = 'secret-token') {
+function makeRequest(token = 'secret-token', authorization?: string) {
   return new NextRequest('http://localhost/api/roleplay/start', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...(authorization !== undefined ? { Authorization: authorization } : {}) },
     body: JSON.stringify({ token }),
   });
 }
@@ -50,7 +53,8 @@ function makeRequest(token = 'secret-token') {
 describe('POST /api/roleplay/start race protection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+    m.identity = { userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null };
+    m.actorFromBearer.mockResolvedValue(null);
     m.applyRateLimit.mockReturnValue({ success: true });
     m.accessFindUnique.mockResolvedValue({
       id: 'access-1',
@@ -66,6 +70,34 @@ describe('POST /api/roleplay/start race protection', () => {
     m.accessUpdate.mockResolvedValue({ id: 'access-1' });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  it('rejects an invalid explicit Bearer before reading or changing invitations', async () => {
+    const res = await POST(makeRequest('secret-token', 'Bearer invalid'));
+    expect(res.status).toBe(401);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('rejects a Bearer for a different candidate before starting a session', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'another-user', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const res = await POST(makeRequest('secret-token', 'Bearer another'));
+    expect(res.status).toBe(403);
+    expect(m.accessFindUnique).not.toHaveBeenCalled();
+    expect(m.accessUpdate).not.toHaveBeenCalled();
+    expect(m.setCookie).not.toHaveBeenCalled();
+  });
+
+  it('allows a Bearer matching the cookie identity for a valid invitation', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const res = await POST(makeRequest('secret-token', 'Bearer same-candidate'));
+    expect(res.status).toBe(200);
+    expect(m.setCookie).toHaveBeenCalledOnce();
   });
 
   it('requires authentication before looking up a bearer invitation', async () => {

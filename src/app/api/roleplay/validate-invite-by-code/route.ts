@@ -3,6 +3,7 @@ import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { verifyRoleplayCookieBearer } from '@/lib/roleplay/cookie-bearer-guard';
 import { canBindRoleplayInvitation } from '@/lib/roleplay/invite-ownership';
 import { setRoleplaySessionCookie } from '@/lib/roleplay/session-cookie';
 import { z } from 'zod';
@@ -52,6 +53,16 @@ export async function POST(req: NextRequest) {
       return privateRoleplayResponse(
         { success: false, error: 'Not authenticated' },
         { status: 401, headers: { 'Cache-Control': 'private, no-store' } },
+      );
+    }
+
+    // Do not bind an invitation or transition session state on behalf of
+    // a different identity supplied in an explicit Authorization header.
+    const credential = await verifyRoleplayCookieBearer(req, identity);
+    if (credential !== 'ok') {
+      return privateRoleplayResponse(
+        { success: false, error: credential === 'unauthorized' ? 'Not authenticated' : 'Access denied' },
+        { status: credential === 'unauthorized' ? 401 : 403 },
       );
     }
 
