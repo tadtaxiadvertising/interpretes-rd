@@ -50,7 +50,11 @@ describe('private SystemConfig reader', () => {
     }
   });
 
-  it('registers the existing cache tag and one-hour fallback expiry', () => {
+  it('registers the existing cache tag and one-hour fallback expiry', async () => {
+    // Vitest clears mock history between test cases. Re-import the module so
+    // we assert its import-time unstable_cache registration deterministically.
+    vi.resetModules();
+    await import('./system-config');
     expect(m.unstableCache).toHaveBeenCalledWith(
       expect.any(Function),
       ['system-config'],
