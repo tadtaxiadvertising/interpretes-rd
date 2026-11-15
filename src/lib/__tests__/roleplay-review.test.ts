@@ -51,7 +51,7 @@ describe('resolveResponseAudioUrl', () => {
     expect(url).toBe('https://legacy/url');
   });
 
-  it('falls back to the persisted URL when signing fails', async () => {
+  it('never returns the old persisted URL when signing a canonical path fails', async () => {
     const sign = vi.fn(async () => {
       throw new Error('object not found');
     });
@@ -61,7 +61,54 @@ describe('resolveResponseAudioUrl', () => {
       sign
     );
 
-    expect(url).toBe('https://persisted/url');
+    expect(url).toBeNull();
+    expect(sign).toHaveBeenCalledWith('responses/s/1.webm');
+  });
+
+  it('falls back to signing the original when converted MP3 is unavailable', async () => {
+    const sign = vi.fn(async (path: string) => {
+      if (path.endsWith('.mp3')) throw new Error('converted file missing');
+      return 'https://signed.test/original.webm';
+    });
+
+    const url = await resolveResponseAudioUrl({
+      processedAudioPath: 'responses/s/converted.mp3',
+      sourceAudioPath: 'responses/s/original.webm',
+      sourceAudioUrl: 'https://old.example/expired',
+    }, sign);
+
+    expect(url).toBe('https://signed.test/original.webm');
+    expect(sign.mock.calls.map(([path]) => path)).toEqual([
+      'responses/s/converted.mp3', 'responses/s/original.webm',
+    ]);
+  });
+
+  it('does not return stale URLs or leak provider errors if both signatures fail', async () => {
+    const sign = vi.fn().mockRejectedValue(new Error('https://private.invalid?token=SECRET'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const url = await resolveResponseAudioUrl({
+        processedAudioPath: 'responses/s/converted.mp3',
+        sourceAudioPath: 'responses/s/source.webm',
+        sourceAudioUrl: 'https://persisted.invalid?token=OLD',
+      }, sign);
+      expect(url).toBeNull();
+      expect(sign).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(log.mock.calls)).not.toContain('SECRET');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('OLD');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('signs a duplicate canonical path only once', async () => {
+    const sign = vi.fn().mockRejectedValue(new Error('temporary failure'));
+    const url = await resolveResponseAudioUrl({
+      processedAudioPath: 'responses/s/audio.mp3',
+      sourceAudioPath: 'responses/s/audio.mp3',
+    }, sign);
+    expect(url).toBeNull();
+    expect(sign).toHaveBeenCalledOnce();
   });
 
   it('returns null when there is neither a path nor a persisted URL', async () => {

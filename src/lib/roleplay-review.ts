@@ -14,23 +14,30 @@ export function selectResponseAudioPath(response: ResponseAudioPaths): string | 
 }
 
 /**
- * Resolve a playable URL for admin review.
+ * Resolve a playable URL for authorized admin review.
  *
- * A stored path is re-signed on demand so playback does not depend on the
- * short-lived signed URL captured at submission time. If there is no stored
- * path (legacy rows) or signing fails, fall back to the persisted URL.
+ * Prefer converted audio, with the original recording as a fallback when
+ * conversion output is missing. A failed Storage signature must never fall
+ * back to a stale or potentially public persisted URL when a canonical path
+ * exists. Legacy rows with no path retain their original URL for compatibility.
+ * The caller is responsible for admin authorization.
  */
 export async function resolveResponseAudioUrl(
   response: ResponseAudioPaths,
   signPath: (path: string) => Promise<string>
 ): Promise<string | null> {
-  const path = selectResponseAudioPath(response);
-  if (path) {
-    try {
-      return await signPath(path);
-    } catch {
-      // fall through to the persisted URL (may be expired)
+  const paths = [response.processedAudioPath, response.sourceAudioPath]
+    .filter((path): path is string => Boolean(path));
+  if (paths.length > 0) {
+    for (const path of new Set(paths)) {
+      try {
+        return await signPath(path);
+      } catch {
+        // A processed file can be missing while the original still exists.
+        // Never log provider details or return a previously persisted URL.
+      }
     }
+    return null;
   }
   return response.sourceAudioUrl ?? response.processedAudioUrl ?? null;
 }
