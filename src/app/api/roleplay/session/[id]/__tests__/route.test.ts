@@ -261,6 +261,66 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('processedAudioPath');
   });
 
+  it('recovers playback from the original when processed MP3 signing fails', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      scenarios: [{
+        id: 'scenario-1', order: 0, title: 'Clinical case',
+        baseAudioUrl: '', durationLimitSec: 120, scriptPrompt: null,
+        responses: [{
+          sourceAudioPath: 'responses/sess-1/original.webm',
+          processedAudioPath: 'responses/sess-1/converted.mp3',
+          sourceAudioUrl: 'https://expired.example/old',
+          durationSec: 30, selfScore: null, selfNotes: null,
+        }],
+      }],
+    };
+    m.getSignedAudioUrl.mockImplementation(async (path: string) => {
+      if (path.endsWith('.mp3')) throw new Error('converted output missing');
+      return 'https://signed.test/source.webm';
+    });
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.scenarios[0].responses[0].sourceAudioUrl)
+      .toBe('https://signed.test/source.webm');
+    expect(m.getSignedAudioUrl.mock.calls.map(([path]: [string]) => path)).toEqual([
+      'responses/sess-1/converted.mp3',
+      'responses/sess-1/original.webm',
+    ]);
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('sourceAudioPath');
+    expect(body.data.scenarios[0].responses[0]).not.toHaveProperty('processedAudioPath');
+  });
+
+  it('does not return the original persisted URL when both audio signatures fail', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      scenarios: [{
+        id: 'scenario-1', order: 0, title: 'Clinical case',
+        baseAudioUrl: '', durationLimitSec: 120, scriptPrompt: null,
+        responses: [{
+          sourceAudioPath: 'responses/sess-1/original.webm',
+          processedAudioPath: 'responses/sess-1/converted.mp3',
+          sourceAudioUrl: 'https://expired.example/old',
+          durationSec: 30, selfScore: null, selfNotes: null,
+        }],
+      }],
+    };
+    m.getSignedAudioUrl.mockRejectedValue(new Error('private provider detail'));
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await GET(makeRequest('sess-1'), { params });
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.scenarios[0].responses[0].sourceAudioUrl).toBeNull();
+      expect(m.getSignedAudioUrl).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(body)).not.toContain('expired.example');
+      expect(JSON.stringify(logs.mock.calls)).not.toContain('private provider detail');
+    } finally {
+      logs.mockRestore();
+    }
+  });
+
   it('redacts legacy and signed response audio for an unvalidated candidate invitation', async () => {
     const original = candidateSession('SUBMITTED');
     m.session = {
