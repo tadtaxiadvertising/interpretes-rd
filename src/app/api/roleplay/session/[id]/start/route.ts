@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
 
@@ -28,6 +29,24 @@ export async function POST(
     if (!identity) {
       return privateRoleplayResponse({ success: false, error: 'Not authenticated' }, { status: 401 });
     }
+
+    // Starting or resuming changes the participant's session state. An
+    // explicit Bearer cannot silently authorize a different cookie identity.
+    if (req.headers.has('authorization')) {
+      const bearer = await actorFromBearer(req);
+      if (!bearer) {
+        return privateRoleplayResponse({ success: false, error: 'Not authenticated' }, { status: 401 });
+      }
+      if (
+        bearer.userId !== identity.userId ||
+        bearer.role !== identity.role ||
+        (identity.role === 'candidate' && bearer.candidateId !== identity.candidateId) ||
+        (identity.role === 'interpreter' && bearer.interpreterId !== identity.interpreterId)
+      ) {
+        return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
+      }
+    }
+
     const session = await db.roleplaySession.findUnique({
       where: { id },
       select: {

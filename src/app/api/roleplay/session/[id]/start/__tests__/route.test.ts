@@ -8,11 +8,14 @@ const m = vi.hoisted(() => ({
   updateMany: vi.fn(),
   accessUpdateMany: vi.fn(),
   applicationFindUnique: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: async () => m.identity,
 }));
+
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -30,10 +33,13 @@ vi.mock('@/lib/security/rate-limit', () => ({
 
 import { POST } from '@/app/api/roleplay/session/[id]/start/route';
 
-function makeRequest(cookieSessionId?: string) {
+function makeRequest(cookieSessionId?: string, authorization?: string) {
   return new NextRequest('http://localhost/api/roleplay/session/sess-1/start', {
     method: 'POST',
-    headers: cookieSessionId ? { cookie: `roleplay_session=${cookieSessionId}` } : {},
+    headers: {
+      ...(cookieSessionId ? { cookie: `roleplay_session=${cookieSessionId}` } : {}),
+      ...(authorization !== undefined ? { Authorization: authorization } : {}),
+    },
   });
 }
 
@@ -57,12 +63,69 @@ const INTERPRETER_SESSION = {
 describe('POST /api/roleplay/session/[id]/start', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    m.identity = { role: 'interpreter', interpreterId: 7 };
+    m.identity = { userId: 'interpreter-user', role: 'interpreter', interpreterId: 7 };
+    m.actorFromBearer.mockResolvedValue(null);
     m.session = INTERPRETER_SESSION;
     m.findUnique.mockImplementation(async () => m.session);
     m.updateMany.mockResolvedValue({ count: 1 });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.applicationFindUnique.mockResolvedValue(null);
+  });
+
+  it('preserves cookie-only interpreter starts', async () => {
+    const res = await POST(makeRequest(), { params });
+    expect(res.status).toBe(200);
+    expect(m.actorFromBearer).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid explicit Bearer before loading or mutating a session', async () => {
+    const res = await POST(makeRequest(undefined, 'Bearer invalid'), { params });
+    expect(res.status).toBe(401);
+    expect(m.actorFromBearer).toHaveBeenCalledOnce();
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('denies a Bearer of another interpreter even if the cookie owns the roleplay', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'other-interpreter', role: 'interpreter', interpreterId: 7, candidateId: null,
+    });
+    const res = await POST(makeRequest(undefined, 'Bearer other'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('denies a matching user ID with a different interpreter record', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'interpreter-user', role: 'interpreter', interpreterId: 99, candidateId: null,
+    });
+    const res = await POST(makeRequest(undefined, 'Bearer wrong-ownership'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('allows matching cookie and verified Bearer identity for an interpreter', async () => {
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'interpreter-user', role: 'interpreter', interpreterId: 7, candidateId: null,
+    });
+    const res = await POST(makeRequest(undefined, 'Bearer same-interpreter'), { params });
+    expect(res.status).toBe(200);
+    expect(m.updateMany).toHaveBeenCalledOnce();
+    expect(m.accessUpdateMany).toHaveBeenCalledOnce();
+  });
+
+  it('denies mixed admin cookie and interpreter Bearer before touching a session', async () => {
+    m.identity = { userId: 'admin-user', role: 'admin', interpreterId: null, candidateId: null };
+    m.actorFromBearer.mockResolvedValue({
+      userId: 'worker-user', role: 'interpreter', interpreterId: 7, candidateId: null,
+    });
+    const res = await POST(makeRequest(undefined, 'Bearer worker'), { params });
+    expect(res.status).toBe(403);
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.updateMany).not.toHaveBeenCalled();
   });
 
   it('rejects unauthenticated callers before touching the database', async () => {
