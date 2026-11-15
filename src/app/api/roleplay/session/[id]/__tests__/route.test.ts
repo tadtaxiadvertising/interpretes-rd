@@ -111,6 +111,19 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(JSON.stringify(body)).not.toContain('CONFIDENTIAL QA ANSWER');
     expect(JSON.stringify(body)).not.toContain('speaker_2');
     expect(JSON.stringify(body)).not.toContain('123.45');
+    expect(m.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        scenarios: expect.objectContaining({
+          select: expect.objectContaining({
+            studioTurn: false,
+            studioSpeaker: false,
+            studioLanguage: false,
+            sourceStartSec: false,
+            sourceEndSec: false,
+          }),
+        }),
+      }),
+    }));
   });
 
   it('does not expose internal Studio metadata to the interpreter owning a session', async () => {
@@ -343,6 +356,19 @@ describe('GET /api/roleplay/session/[id]', () => {
       sourceStartSec: 123.45,
       sourceEndSec: 146.78,
     });
+    expect(m.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        scenarios: expect.objectContaining({
+          select: expect.objectContaining({
+            studioTurn: true,
+            studioSpeaker: true,
+            studioLanguage: true,
+            sourceStartSec: true,
+            sourceEndSec: true,
+          }),
+        }),
+      }),
+    }));
   });
 
   it('lets the bound candidate reload a submitted attempt (read-only)', async () => {
