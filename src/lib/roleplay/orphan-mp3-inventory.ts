@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 const PAGE_SIZE = 1000;
 const MAX_FOLDER_DEPTH = 12;
 const SOURCE_GRACE_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
-const RECORDING_EXTENSION = /\.(?:webm|mp4|ogg|mp3)$/i;
+const RECORDING_EXTENSION = /\.(?:webm|mp4|ogg|mp3|wav)$/i;
 
 type StorageReader = Pick<SupabaseClient, 'storage'>;
 type AudioResponseReference = {
@@ -18,7 +18,7 @@ export type RoleplayAudioObject = {
 };
 
 /**
- * Read-only traversal of response audio formats accepted by the application.
+ * Read-only traversal of response and base audio formats accepted by the application.
  * Every folder is paginated, and the list is only an approximate inventory:
  * a paginated Storage list is NOT a snapshot or authorization to delete.
  */
