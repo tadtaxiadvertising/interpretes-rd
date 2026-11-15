@@ -10,7 +10,7 @@ describe('private roleplay invitation response', () => {
       );
       expect(response.status).toBe(status);
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(response.headers.get('Vary')).toBe('Cookie');
+      expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
       expect((await response.json()).error).toBe('test');
     }
   });
@@ -25,7 +25,7 @@ describe('private roleplay invitation response', () => {
       },
     });
     expect(response.headers.get('Retry-After')).toBe('40');
-    expect(response.headers.get('Vary')).toBe('Accept-Encoding, Cookie');
+    expect(response.headers.get('Vary')).toBe('Accept-Encoding, Cookie, Authorization');
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
   });
 
@@ -33,6 +33,19 @@ describe('private roleplay invitation response', () => {
     const response = privateRoleplayResponse({ ok: true }, {
       headers: { Vary: 'Accept-Encoding, cookie' },
     });
-    expect(response.headers.get('Vary')).toBe('Accept-Encoding, cookie');
+    expect(response.headers.get('Vary')).toBe('Accept-Encoding, cookie, Authorization');
+  });
+  it('does not duplicate Authorization Vary irrespective of casing', () => {
+    const response = privateRoleplayResponse({ ok: true }, {
+      headers: { Vary: 'Origin, AUTHORIZATION, cookie' },
+    });
+    expect(response.headers.get('Vary')).toBe('Origin, AUTHORIZATION, cookie');
+  });
+  it('preserves wildcard Vary semantics', () => {
+    const response = privateRoleplayResponse({ ok: true }, {
+      headers: { Vary: '*' },
+    });
+    expect(response.headers.get('Vary')).toBe('*');
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
   });
 });
