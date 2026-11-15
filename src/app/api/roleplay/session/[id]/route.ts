@@ -200,17 +200,21 @@ export async function GET(
         processedAudioPath,
         ...response
       }) => {
-        const playbackPath = processedAudioPath ?? sourceAudioPath;
-        if (!playbackPath) return response;
-        try {
-          return { ...response, sourceAudioUrl: await getSignedAudioUrl(playbackPath, 60 * 60) };
-        } catch (error) {
-          console.error(
-            'Roleplay response playback URL could not be refreshed:',
-            error instanceof Error ? 'Error' : 'UnknownError',
-          );
-          return { ...response, sourceAudioUrl: null };
+        const playbackPaths = [processedAudioPath, sourceAudioPath]
+          .filter((path): path is string => Boolean(path));
+        if (playbackPaths.length === 0) return response;
+        // Converted MP3 can be missing while the original upload is intact.
+        // Try signing only canonical paths already selected for this authorized
+        // session. A failed signature must never return the persisted URL.
+        for (const path of new Set(playbackPaths)) {
+          try {
+            return { ...response, sourceAudioUrl: await getSignedAudioUrl(path, 60 * 60) };
+          } catch {
+            // A failed or missing processed object may be recovered from source.
+          }
         }
+        console.error('Roleplay response playback URL could not be refreshed:', 'StorageError');
+        return { ...response, sourceAudioUrl: null };
       })),
       };
     }));
