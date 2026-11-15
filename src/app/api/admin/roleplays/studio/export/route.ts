@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import ffmpegPath from 'ffmpeg-static';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { parseFinalFfmpegOutputSeconds } from '@/lib/roleplay-studio/ffmpeg-progress';
@@ -155,6 +156,15 @@ async function sliceMp3(input: Buffer, segment: Segment, deadline: number, signa
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+  // Edge's explicit Bearer verification and this cookie-bound admin guard
+  // must represent the same identity before consuming rate-limit quota or
+  // spawning expensive FFmpeg jobs.
+  if (req.headers.has('authorization')) {
+    const bearer = await actorFromBearer(req);
+    if (!bearer || bearer.role !== 'admin' || bearer.userId !== auth.user.userId) {
+      return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+    }
+  }
   // A real authenticated actor is a more stable quota key than a proxy header.
   const limit = applyRateLimit(
     req,
