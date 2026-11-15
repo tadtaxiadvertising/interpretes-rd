@@ -18,6 +18,9 @@ export function privateRoleplayResponse<T extends object>(
     .split(',')
     .map((part) => part.trim())
     .filter(Boolean);
+  if (varyParts.includes('*')) {
+    return NextResponse.json(body, { ...init, headers });
+  }
   for (const required of ['Cookie', 'Authorization']) {
     if (!varyParts.some((part) => part.toLowerCase() === required.toLowerCase())) {
       varyParts.push(required);
