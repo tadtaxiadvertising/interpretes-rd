@@ -109,7 +109,7 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
       // commit output from this worker; a later claim may safely retry it.
       leaseLost = true;
       console.error(
-        `[ROLEPLAY AUDIO WORKER] Lease renewal failed for job ${job.id}:`,
+        '[ROLEPLAY AUDIO WORKER] Lease renewal failed:',
         error instanceof Error ? 'Error' : 'UnknownError',
       );
     } finally {
@@ -180,7 +180,7 @@ async function processJob(job: ClaimedAudioJob): Promise<void> {
       throw new Error('Audio conversion lease was lost before the job could be committed');
     }
 
-    console.info(`[ROLEPLAY AUDIO WORKER] Completed job ${job.id}`);
+    console.info('[ROLEPLAY AUDIO WORKER] Audio conversion job completed');
   } finally {
     clearInterval(heartbeat);
   }
@@ -215,18 +215,18 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
     return true;
   });
   if (!updated) {
-    console.warn(`[ROLEPLAY AUDIO WORKER] Skipped failure update for job ${job.id}; its lease is no longer owned by this worker`);
+    console.warn('[ROLEPLAY AUDIO WORKER] Failure update skipped: job lease not owned');
     return;
   }
 
   console.error(
-    `[ROLEPLAY AUDIO WORKER] Job ${job.id} failed (attempt ${job.attempts}/${job.maxAttempts}); ${shouldRetry ? `retry in ${backoffSeconds}s` : 'retries exhausted'}:`,
+    `[ROLEPLAY AUDIO WORKER] Conversion failed (attempt ${job.attempts}/${job.maxAttempts}); ${shouldRetry ? `retry in ${backoffSeconds}s` : 'retries exhausted'}:`,
     message,
   );
 }
 
 async function run(): Promise<void> {
-  console.info(`[ROLEPLAY AUDIO WORKER] Started as ${workerId}; concurrency=1`);
+  console.info('[ROLEPLAY AUDIO WORKER] Started; concurrency=1');
 
   while (!stopping) {
     try {
