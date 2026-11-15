@@ -7,6 +7,7 @@ import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/secur
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { getSignedAudioUrl } from '@/lib/roleplay';
+import { getReusableBaseAudioPath } from '@/lib/roleplay-library';
 
 const db = prisma;
 
@@ -137,15 +138,21 @@ export async function GET(
       }
     }
 
-    // New sessions retain the canonical Storage path separately from the legacy URL.
-    // Mint a fresh short-lived URL on every authorized read so recordings do not
-    // stop playing when the original seven-day confirmation URL expires.
-    if (baseAudioUrl && session.baseAudioPath) {
-      try {
-        baseAudioUrl = await getSignedAudioUrl(session.baseAudioPath, 60 * 60);
-      } catch (error) {
-        console.error('Roleplay base audio playback URL could not be refreshed:', error instanceof Error ? 'Error' : 'UnknownError');
-        baseAudioUrl = null;
+    // Existing base recordings can be stored as canonical keys or legacy
+    // getPublicUrl() URLs from this exact project's Storage bucket. Authorize
+    // the session FIRST, then mint a short-lived URL to support private buckets.
+    // Never follow external URLs, signed query strings or arbitrary paths.
+    const supabaseProjectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+    if (baseAudioUrl) {
+      const path = session.baseAudioPath ??
+        getReusableBaseAudioPath(baseAudioUrl, supabaseProjectUrl);
+      if (path) {
+        try {
+          baseAudioUrl = await getSignedAudioUrl(path, 60 * 60);
+        } catch {
+          console.error('Roleplay base audio playback URL could not be refreshed:', 'StorageError');
+          baseAudioUrl = null;
+        }
       }
     }
 
@@ -168,8 +175,26 @@ export async function GET(
     // Persist canonical Storage paths and mint short-lived playback URLs on
     // demand. The legacy sourceAudioUrl may be a seven-day signed URL and must
     // not become the permanent source of truth for candidate/admin playback.
-    const playbackScenarios = await Promise.all(scenarios.map(async (scenario) => ({
+    const playbackScenarios = await Promise.all(scenarios.map(async (scenario) => {
+      let scenarioBaseAudioUrl = scenario.baseAudioUrl;
+      // Scenario clips are persisted as legacy first-party public URLs, even
+      // when the bucket itself is private. Signing only those trusted object
+      // keys preserves existing external/legacy references without rewriting
+      // database rows. Never sign redacted/unvalidated invitation audio.
+      const basePath = scenarioBaseAudioUrl
+        ? getReusableBaseAudioPath(scenarioBaseAudioUrl, supabaseProjectUrl)
+        : null;
+      if (basePath) {
+        try {
+          scenarioBaseAudioUrl = await getSignedAudioUrl(basePath, 60 * 60);
+        } catch {
+          console.error('Roleplay scenario base audio URL could not be refreshed:', 'StorageError');
+          scenarioBaseAudioUrl = '';
+        }
+      }
+      return {
       ...scenario,
+      baseAudioUrl: scenarioBaseAudioUrl,
       responses: await Promise.all(scenario.responses.map(async ({
         sourceAudioPath,
         processedAudioPath,
@@ -187,7 +212,8 @@ export async function GET(
           return { ...response, sourceAudioUrl: null };
         }
       })),
-    })));
+      };
+    }));
 
     return privateRoleplayResponse(
       {
