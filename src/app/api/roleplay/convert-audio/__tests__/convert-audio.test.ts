@@ -165,87 +165,42 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     expect(mocks.remove).not.toHaveBeenCalled();
   });
 
-  it('removes the uploaded object when transactional confirmation fails', async () => {
+  it('does not immediately delete an unreferenced source after confirmation fails', async () => {
     mocks.confirm.mockResolvedValue({
-      success: false,
-      error: 'Response already recorded for this scenario',
-      code: 'INTERNAL_ERROR',
+      success: false, error: 'Response already recorded for this scenario', code: 'CONFLICT',
     });
-
     const response = await POST(makeRequest({ cookie: 'session-1' }));
 
-    expect(response.status).toBe(400);
-    expect(mocks.remove).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.stringMatching(/^responses\/session-1\/scenario-1\//),
-    ]));
-  });
-
-  it('does not delete audio already committed if confirmation later reports failure', async () => {
-    mocks.confirm.mockResolvedValue({
-      success: false,
-      error: 'Unable to confirm uploaded audio',
-      code: 'INTERNAL_ERROR',
-    });
-    mocks.findResponse
-      .mockResolvedValueOnce(null)
-      .mockImplementationOnce(async () => ({ sourceAudioPath: mocks.upload.mock.calls[0][0] }));
-
-    const response = await POST(makeRequest({ cookie: 'session-1' }));
-    expect(response.status).toBe(400);
-    expect(mocks.findResponse).toHaveBeenCalledTimes(2);
+    expect(response.status).toBe(409);
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(mocks.confirm).toHaveBeenCalledOnce();
     expect(mocks.remove).not.toHaveBeenCalled();
+    // A single pre-upload read cannot rule out an in-flight confirmation.
+    expect(mocks.findResponse).toHaveBeenCalledTimes(1);
   });
 
-  it('removes the unreferenced upload when confirmation throws before persisting', async () => {
-    mocks.confirm.mockRejectedValue(new Error('synthetic confirmation failure'));
-
+  it('preserves a recording when confirmation reports an ambiguous internal error', async () => {
+    mocks.confirm.mockResolvedValue({
+      success: false, error: 'Unable to confirm uploaded audio', code: 'INTERNAL_ERROR',
+    });
     const response = await POST(makeRequest({ cookie: 'session-1' }));
-    expect(response.status).toBe(500);
-    expect(mocks.remove).toHaveBeenCalledWith([
-      mocks.upload.mock.calls[0][0],
-    ]);
+
+    expect(response.status).toBe(400);
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.findResponse).toHaveBeenCalledTimes(1);
   });
 
-  it('preserves a committed recording even if confirmation throws after commit', async () => {
+  it('does not remove an uploaded source when confirmation throws', async () => {
     mocks.confirm.mockRejectedValue(new Error('synthetic post-commit failure'));
-    mocks.findResponse
-      .mockResolvedValueOnce(null)
-      .mockImplementationOnce(async () => ({ sourceAudioPath: mocks.upload.mock.calls[0][0] }));
-
     const response = await POST(makeRequest({ cookie: 'session-1' }));
+
     expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      success: false, error: 'Unable to process audio upload',
+    });
+    expect(mocks.upload).toHaveBeenCalledOnce();
     expect(mocks.remove).not.toHaveBeenCalled();
-  });
-
-  it('skips cleanup if it cannot verify whether the uploaded recording was committed', async () => {
-    const secret = 'postgresql://private:token@internal.invalid/db';
-    mocks.confirm.mockResolvedValue({ success: false, error: 'Unable to confirm uploaded audio', code: 'INTERNAL_ERROR' });
-    mocks.findResponse.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error(secret));
-    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const response = await POST(makeRequest({ cookie: 'session-1' }));
-      expect(response.status).toBe(400);
-      expect(mocks.remove).not.toHaveBeenCalled();
-      expect(JSON.stringify(logs.mock.calls)).not.toContain('private:token');
-      expect(JSON.stringify(logs.mock.calls)).not.toContain('internal.invalid');
-    } finally {
-      logs.mockRestore();
-    }
-  });
-
-  it('does not turn a failed storage cleanup into an unhandled error or leak provider tokens', async () => {
-    mocks.confirm.mockResolvedValue({ success: false, code: 'CONFLICT', error: 'Audio already confirmed' });
-    mocks.remove.mockRejectedValue(new Error('https://storage.invalid/?token=private-token'));
-    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      const response = await POST(makeRequest({ cookie: 'session-1' }));
-      expect(response.status).toBe(409);
-      expect(mocks.remove).toHaveBeenCalledOnce();
-      expect(JSON.stringify(await response.json())).not.toContain('private-token');
-      expect(JSON.stringify(logs.mock.calls)).not.toContain('private-token');
-    } finally {
-      logs.mockRestore();
-    }
   });
 
   it('rejects a scenario outside the supplied session before uploading', async () => {
@@ -326,21 +281,19 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     }
   });
 
-  it('does not log provider tokens when cleanup of an unconfirmed upload fails', async () => {
+  it('does not invoke Storage cleanup or expose provider errors on conflict', async () => {
     mocks.confirm.mockResolvedValue({
-      success: false,
-      code: 'CONFLICT',
-      error: 'Response already recorded for this scenario',
+      success: false, code: 'CONFLICT', error: 'Response already recorded for this scenario',
     });
-    mocks.remove.mockResolvedValue({ error: { message: 'https://storage.invalid?token=PRIVATE_TOKEN' } });
+    mocks.remove.mockRejectedValue(new Error('https://storage.invalid?token=PRIVATE_TOKEN'));
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const response = await POST(makeRequest({ cookie: 'session-1' }));
       expect(response.status).toBe(409);
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(mocks.remove).not.toHaveBeenCalled();
       expect(JSON.stringify(await response.json())).not.toContain('PRIVATE_TOKEN');
       expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_TOKEN');
-      expect(JSON.stringify(log.mock.calls)).not.toContain('storage.invalid');
     } finally {
       log.mockRestore();
     }
