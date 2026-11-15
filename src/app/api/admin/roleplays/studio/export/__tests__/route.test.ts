@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/auth/actions', () => ({ validateAction: vi.fn() }));
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: vi.fn() }));
 vi.mock('@/lib/security/rate-limit', () => ({
   applyRateLimit: vi.fn(),
   createRateLimitHeaders: vi.fn(() => ({})),
@@ -10,6 +11,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
 
 import { POST } from '../route';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit } from '@/lib/security/rate-limit';
 
 const validSegment = {
@@ -38,6 +40,40 @@ describe('admin roleplay studio export security and input boundaries', () => {
     expect(result.headers.get('Cache-Control')).toBe('private, no-store');
     expect(result.headers.get('Vary')).toBe('Cookie');
     expect(applyRateLimit).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['interpreter', { userId: 'interpreter-1', role: 'interpreter' }],
+    ['different admin', { userId: 'admin-other', role: 'admin' }],
+    ['invalid Bearer', null],
+  ])('rejects mismatched %s Bearer before decoding or applying the export quota', async (_label, bearer) => {
+    vi.mocked(validateAction).mockResolvedValue({
+      user: { userId: 'admin-export', role: 'admin' },
+      profile: { userId: 'admin-export', role: 'admin' },
+    } as never);
+    vi.mocked(actorFromBearer).mockResolvedValue(bearer as never);
+    const req = request([validSegment]);
+    req.headers.set('Authorization', 'Bearer supplied-token');
+    const form = vi.spyOn(req, 'formData');
+    const result = await POST(req as never);
+    expect(result.status).toBe(403);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toContain('Cookie');
+    expect(applyRateLimit).not.toHaveBeenCalled();
+    expect(form).not.toHaveBeenCalled();
+  });
+
+  it('accepts a matching verified admin Bearer and proceeds to input validation', async () => {
+    vi.mocked(validateAction).mockResolvedValue({
+      user: { userId: 'admin-export', role: 'admin' },
+      profile: { userId: 'admin-export', role: 'admin' },
+    } as never);
+    vi.mocked(actorFromBearer).mockResolvedValue({ userId: 'admin-export', role: 'admin' } as never);
+    const req = request([]);
+    req.headers.set('Authorization', 'Bearer same-admin-token');
+    const result = await POST(req as never);
+    expect(result.status).toBe(400);
+    expect(applyRateLimit).toHaveBeenCalledOnce();
   });
 
   it('rate-limits CPU-intensive audio jobs', async () => {
