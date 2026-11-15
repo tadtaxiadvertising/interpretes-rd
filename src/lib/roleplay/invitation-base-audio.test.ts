@@ -15,6 +15,15 @@ describe('resolveInvitationBaseAudioUrl', () => {
     expect(sign).toHaveBeenCalledWith(path, 3600);
   });
 
+  it('retains legacy flat base recording paths', async () => {
+    const sign = vi.fn().mockResolvedValue('https://signed.test/flat.mp3');
+    const result = await resolveInvitationBaseAudioUrl({
+      baseAudioPath: 'base/legacy-recording.mp3',
+    }, origin, sign);
+    expect(result).toBe('https://signed.test/flat.mp3');
+    expect(sign).toHaveBeenCalledWith('base/legacy-recording.mp3', 3600);
+  });
+
   it('signs a first-party legacy base audio URL', async () => {
     const sign = vi.fn().mockResolvedValue('https://signed.test/legacy.mp3');
     const url = await resolveInvitationBaseAudioUrl({ baseAudioUrl: legacy }, origin, sign);
