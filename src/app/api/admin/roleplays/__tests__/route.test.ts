@@ -409,7 +409,12 @@ describe('POST /api/admin/roleplays', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-Z0-9_-]+$/);
+      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-F0-9]{24}$/);
+      // The short link reflects the exact 96-bit code persisted in the
+      // invitation record. Old, shorter codes remain accepted by the validator.
+      const inviteCode = (prisma.roleplayAccess.create as any).mock.calls[0][0].data.inviteCode as string;
+      expect(inviteCode).toMatch(/^[A-F0-9]{24}$/);
+      expect(body.data.inviteLink).toBe(`https://front.test/r/${inviteCode}`);
       expect(prisma.roleplaySession.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ recruitmentCandidateId: 9, interpreterId: null }),
@@ -701,7 +706,9 @@ describe('POST /api/admin/roleplays', () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-Z0-9_-]+$/);
+      expect(body.data.inviteLink).toMatch(/^https:\/\/front\.test\/r\/[A-F0-9]{24}$/);
+      const inviteCode = (prisma.roleplayAccess.create as any).mock.calls[0][0].data.inviteCode as string;
+      expect(body.data.inviteLink).toBe(`https://front.test/r/${inviteCode}`);
       expect(mockUpload).not.toHaveBeenCalled();
       expect(prisma.roleplayAccess.create).toHaveBeenCalledTimes(1);
     });
