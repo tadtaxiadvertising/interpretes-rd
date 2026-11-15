@@ -51,11 +51,14 @@ export async function GET(
             baseAudioUrl: true,
             durationLimitSec: true,
             scriptPrompt: true,
-            studioTurn: true,
-            studioSpeaker: true,
-            studioLanguage: true,
-            sourceStartSec: true,
-            sourceEndSec: true,
+            // Internal curation fields are never queried for participants.
+            // The response redaction below additionally protects mocks and
+            // future adapters that return more fields than selected.
+            studioTurn: identity.role === 'admin',
+            studioSpeaker: identity.role === 'admin',
+            studioLanguage: identity.role === 'admin',
+            sourceStartSec: identity.role === 'admin',
+            sourceEndSec: identity.role === 'admin',
             // Expected keys are evaluator-only material. Do not even retrieve
             // them for candidates/interpreters, not merely hide them in the UI.
             expectedKeys: identity.role === 'admin',
