@@ -123,7 +123,7 @@ describe('GET /api/admin/roleplays/eligibility', () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_PROVIDER_TOKEN');
       expect(log).toHaveBeenCalledWith('Get Roleplay Eligibility Error:', 'Error');
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(response.headers.get('Vary')).toBe('Cookie');
+      expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
     } finally {
       log.mockRestore();
     }

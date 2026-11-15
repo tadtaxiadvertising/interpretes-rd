@@ -72,7 +72,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
 
     expect(res.status).toBe(401);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(res.headers.get('Vary')).toBe('Cookie');
+    expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.findUnique).not.toHaveBeenCalled();
   });
 
@@ -284,7 +284,7 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(body.data.status).toBe('IN_PROGRESS');
     expect(body.data.resumed).toBe(true);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(res.headers.get('Vary')).toBe('Cookie');
+    expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.updateMany).not.toHaveBeenCalled();
   });
 

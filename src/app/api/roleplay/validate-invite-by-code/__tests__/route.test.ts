@@ -68,14 +68,14 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     const invalid = await POST(makeRequest('A'.repeat(65)));
     expect(invalid.status).toBe(400);
     expect(invalid.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(invalid.headers.get('Vary')).toBe('Cookie');
+    expect(invalid.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.setCookie).not.toHaveBeenCalled();
 
     m.findUnique.mockResolvedValueOnce(null);
     const unknown = await POST(makeRequest('ABCD1234'));
     expect(unknown.status).toBe(404);
     expect(unknown.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(unknown.headers.get('Vary')).toBe('Cookie');
+    expect(unknown.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(m.setCookie).not.toHaveBeenCalled();
   });
 
@@ -254,7 +254,7 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     const response = await POST(makeRequest('ABCD1234'));
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(response.headers.get('Vary')).toBe('Cookie');
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('rejects oversized invitation codes before database access', async () => {

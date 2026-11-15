@@ -68,7 +68,7 @@ describe('admin roleplay library visibility', () => {
     const response = await POST(archiveRequest(), context());
     expect(response.status).toBe(403);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(response.headers.get('Vary')).toBe('Cookie');
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(prisma.roleplayLibraryArchive.upsert).not.toHaveBeenCalled();
   });
 
@@ -131,7 +131,7 @@ describe('admin roleplay library visibility', () => {
     expect(response.status).toBe(200);
     expect((await response.json()).archived).toBe(true);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(response.headers.get('Vary')).toBe('Cookie');
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(prisma.roleplayLibraryArchive.upsert).toHaveBeenCalledWith(expect.objectContaining({
       where: { fingerprint },
       create: expect.objectContaining({ fingerprint }),

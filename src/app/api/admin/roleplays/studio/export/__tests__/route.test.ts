@@ -38,7 +38,7 @@ describe('admin roleplay studio export security and input boundaries', () => {
     const result = await POST(request([validSegment]) as never);
     expect(result.status).toBe(403);
     expect(result.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(result.headers.get('Vary')).toBe('Cookie');
+    expect(result.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(applyRateLimit).not.toHaveBeenCalled();
   });
 
@@ -81,7 +81,7 @@ describe('admin roleplay studio export security and input boundaries', () => {
     const result = await POST(request([validSegment]) as never);
     expect(result.status).toBe(429);
     expect(result.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(result.headers.get('Vary')).toBe('Cookie');
+    expect(result.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it.each([
@@ -113,7 +113,7 @@ describe('admin roleplay studio export security and input boundaries', () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_');
       expect(log).toHaveBeenCalledWith('[ROLEPLAY STUDIO] Export failed:', 'Error');
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
     } finally {
       log.mockRestore();
     }
