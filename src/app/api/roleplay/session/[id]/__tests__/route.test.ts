@@ -535,7 +535,7 @@ describe('GET /api/roleplay/session/[id]', () => {
       expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_DB_TOKEN');
       expect(log).toHaveBeenCalledWith('Get Session Error:', 'Error');
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
     } finally {
       log.mockRestore();
     }
@@ -546,13 +546,13 @@ describe('GET /api/roleplay/session/[id]', () => {
     const unauthorized = await GET(makeRequest('sess-1'), { params });
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(unauthorized.headers.get('Vary')).toBe('Cookie');
+    expect(unauthorized.headers.get('Vary')).toBe('Cookie, Authorization');
 
     m.identity = { role: 'candidate', candidateId: 99, interpreterId: null };
     const denied = await GET(makeRequest('sess-1'), { params });
     expect(denied.status).toBe(403);
     expect(denied.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(denied.headers.get('Vary')).toBe('Cookie');
+    expect(denied.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('marks authorized session responses private and uncacheable', async () => {
@@ -560,7 +560,7 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(res.headers.get('Vary')).toBe('Cookie');
+    expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
   });
 
   it('returns 401 to an anonymous user before accessing a private session', async () => {
