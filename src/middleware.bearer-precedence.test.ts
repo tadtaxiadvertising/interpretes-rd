@@ -5,10 +5,15 @@ import { NextRequest } from 'next/server';
 const m = vi.hoisted(() => ({
   createClient: vi.fn(),
   getUser: vi.fn(),
+  updateSession: vi.fn(),
 }));
 
 vi.mock('@supabase/supabase-js', () => ({
   createClient: (...args: unknown[]) => m.createClient(...args),
+}));
+
+vi.mock('@/lib/supabase/middleware', () => ({
+  updateSession: m.updateSession,
 }));
 
 import { middleware } from './middleware';
@@ -67,6 +72,17 @@ describe('Edge API gate credential precedence', () => {
     const response = await middleware(request('Bearer verified-token', 'authjs.session-token=other-cookie-user'));
     expect(response.status).toBe(200);
     expect(m.getUser).toHaveBeenCalledWith('verified-token');
+  });
+
+  it('does not refresh an unrelated Supabase browser cookie on an explicitly Bearer-authenticated API request', async () => {
+    m.getUser.mockResolvedValueOnce({
+      data: { user: { id: 'verified-bearer-user' } },
+      error: null,
+    });
+    const response = await middleware(request('Bearer verified-token', 'sb-access-token=other-user-session'));
+    expect(response.status).toBe(200);
+    expect(m.getUser).toHaveBeenCalledWith('verified-token');
+    expect(m.updateSession).not.toHaveBeenCalled();
   });
 
   it('rejects explicit Bearer if verification configuration is unavailable, even with a cookie', async () => {
