@@ -91,6 +91,11 @@ describe('GET /api/roleplay/session/[id]', () => {
         durationLimitSec: 120,
         scriptPrompt: 'Candidate-facing prompt',
         expectedKeys: ['CONFIDENTIAL QA ANSWER'],
+        studioTurn: 17,
+        studioSpeaker: 'speaker_2',
+        studioLanguage: 'es',
+        sourceStartSec: 123.45,
+        sourceEndSec: 146.78,
         responses: [],
       }],
     };
@@ -100,7 +105,37 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
+    for (const key of ['studioTurn', 'studioSpeaker', 'studioLanguage', 'sourceStartSec', 'sourceEndSec']) {
+      expect(body.data.scenarios[0]).not.toHaveProperty(key);
+    }
     expect(JSON.stringify(body)).not.toContain('CONFIDENTIAL QA ANSWER');
+    expect(JSON.stringify(body)).not.toContain('speaker_2');
+    expect(JSON.stringify(body)).not.toContain('123.45');
+  });
+
+  it('does not expose internal Studio metadata to the interpreter owning a session', async () => {
+    m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
+    m.session = {
+      ...candidateSession('STARTED'),
+      recruitmentCandidateId: null,
+      interpreterId: 7,
+      scenarios: [{
+        id: 'scenario-1', order: 0, title: 'Scenario 1',
+        baseAudioUrl: 'https://x/base.webm',
+        durationLimitSec: 120, scriptPrompt: null,
+        studioTurn: 17, studioSpeaker: 'speaker_2', studioLanguage: 'es',
+        sourceStartSec: 123.45, sourceEndSec: 146.78,
+        expectedKeys: ['ADMIN QA KEY'],
+        responses: [],
+      }],
+    };
+    const res = await GET(makeRequest(), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    for (const key of ['expectedKeys', 'studioTurn', 'studioSpeaker', 'studioLanguage', 'sourceStartSec', 'sourceEndSec']) {
+      expect(body.data.scenarios[0]).not.toHaveProperty(key);
+    }
+    expect(body.data.scenarios[0].title).toBe('Scenario 1');
   });
 
   it('refreshes base audio playback URLs from the canonical Storage path', async () => {
@@ -287,6 +322,11 @@ describe('GET /api/roleplay/session/[id]', () => {
         durationLimitSec: 120,
         scriptPrompt: 'Candidate-facing prompt',
         expectedKeys: ['ADMIN QA KEY'],
+        studioTurn: 17,
+        studioSpeaker: 'speaker_2',
+        studioLanguage: 'es',
+        sourceStartSec: 123.45,
+        sourceEndSec: 146.78,
         responses: [],
       }],
     };
@@ -296,6 +336,13 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.scenarios[0].expectedKeys).toEqual(['ADMIN QA KEY']);
+    expect(body.data.scenarios[0]).toMatchObject({
+      studioTurn: 17,
+      studioSpeaker: 'speaker_2',
+      studioLanguage: 'es',
+      sourceStartSec: 123.45,
+      sourceEndSec: 146.78,
+    });
   });
 
   it('lets the bound candidate reload a submitted attempt (read-only)', async () => {
