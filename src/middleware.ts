@@ -162,7 +162,10 @@ export async function middleware(req: NextRequest) {
   // anonymous visitor turns a Supabase connectivity issue into repeated Edge
   // Runtime `fetch failed` errors. Protected routes are redirected below when
   // neither authentication system has a valid session.
-  if (HAS_SUPABASE_ENV && hasSupabaseCookie) {
+  // A request explicitly using API Bearer credentials must not refresh an
+  // unrelated Supabase browser cookie before the Bearer is verified.
+  const explicitApiAuthorization = pathname.startsWith('/api/') && req.headers.has('authorization');
+  if (HAS_SUPABASE_ENV && hasSupabaseCookie && !explicitApiAuthorization) {
     try {
       const { updateSession } = await import('@/lib/supabase/middleware');
       const refreshResult = await updateSession(req);
