@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
     if (!isBulk) {
       const configured = process.env.FRONTEND_ORIGIN;
       try {
-        if (!configured || /[\\s\\u0000-\\u001f\\u007f]/u.test(configured)) throw new Error('invalid origin');
+        if (!configured || /[\s\u0000-\u001f\u007f]/u.test(configured)) throw new Error('invalid origin');
         const url = new URL(configured);
         const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
         if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback && process.env.NODE_ENV !== 'production')) ||
