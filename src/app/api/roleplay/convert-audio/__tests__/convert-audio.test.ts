@@ -10,11 +10,13 @@ const mocks = vi.hoisted(() => ({
   upload: vi.fn(),
   remove: vi.fn(),
   confirm: vi.fn(),
+  actorFromBearer: vi.fn(),
 }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: async () => mocks.identity,
 }));
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: mocks.actorFromBearer }));
 vi.mock('@/lib/prisma', () => ({
   default: {
     roleplaySession: { findUnique: mocks.findSession },
@@ -45,6 +47,7 @@ function makeRequest(options: {
   mimeType?: string;
   cookie?: string;
   scenarioId?: string;
+  authorization?: string;
 } = {}) {
   const form = new FormData();
   form.set('audio', new File([new Uint8Array([1, 2, 3, 4])], 'response.webm', {
@@ -55,14 +58,18 @@ function makeRequest(options: {
   return new NextRequest('http://localhost/api/roleplay/convert-audio', {
     method: 'POST',
     body: form,
-    headers: options.cookie ? { cookie: `roleplay_session=${options.cookie}` } : {},
+    headers: {
+      ...(options.cookie ? { cookie: `roleplay_session=${options.cookie}` } : {}),
+      ...(options.authorization !== undefined ? { Authorization: options.authorization } : {}),
+    },
   });
 }
 
 describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.identity = { role: 'candidate', candidateId: 5, interpreterId: null };
+    mocks.identity = { userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null };
+    mocks.actorFromBearer.mockResolvedValue(null);
     mocks.findSession.mockResolvedValue({
       id: 'session-1',
       interpreterId: null,
@@ -80,13 +87,71 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     });
   });
 
+  it('rejects an explicit invalid Bearer despite a valid session cookie', async () => {
+    const response = await POST(makeRequest({ cookie: 'session-1', authorization: 'Bearer invalid' }));
+    expect(response.status).toBe(401);
+    expect(mocks.actorFromBearer).toHaveBeenCalledOnce();
+    expect(mocks.findSession).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it('rejects a valid Bearer of another candidate before any recording writes', async () => {
+    mocks.actorFromBearer.mockResolvedValue({
+      userId: 'other-candidate', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const response = await POST(makeRequest({ cookie: 'session-1', authorization: 'Bearer other' }));
+    expect(response.status).toBe(403);
+    expect(mocks.findSession).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it('rejects mismatched candidate ownership for the same authenticated user ID', async () => {
+    mocks.actorFromBearer.mockResolvedValue({
+      userId: 'candidate-owner', role: 'candidate', candidateId: 99, interpreterId: null,
+    });
+    const response = await POST(makeRequest({ cookie: 'session-1', authorization: 'Bearer wrong-candidate' }));
+    expect(response.status).toBe(403);
+    expect(mocks.findSession).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects a mixed admin cookie and interpreter Bearer before uploading', async () => {
+    mocks.identity = { userId: 'admin-user', role: 'admin', candidateId: null, interpreterId: null };
+    mocks.actorFromBearer.mockResolvedValue({
+      userId: 'interpreter-user', role: 'interpreter', candidateId: null, interpreterId: 7,
+    });
+    const response = await POST(makeRequest({ cookie: 'session-1', authorization: 'Bearer participant' }));
+    expect(response.status).toBe(403);
+    expect(mocks.findSession).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('allows an explicit Bearer that matches the cookie-bound candidate owner', async () => {
+    mocks.actorFromBearer.mockResolvedValue({
+      userId: 'candidate-owner', role: 'candidate', candidateId: 5, interpreterId: null,
+    });
+    const response = await POST(makeRequest({ cookie: 'session-1', authorization: 'Bearer matching' }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(mocks.confirm).toHaveBeenCalledOnce();
+  });
+
+  it('preserves cookie-only participant recording without Bearer verification', async () => {
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(200);
+    expect(mocks.actorFromBearer).not.toHaveBeenCalled();
+  });
+
   it('persists a legacy multipart upload through the canonical confirmation action', async () => {
     const response = await POST(makeRequest({ cookie: 'session-1' }));
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(response.headers.get('Vary')).toBe('Cookie');
+    expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
     expect(body).toMatchObject({
       success: true,
       data: { sourceUrl: 'https://signed.test/response', audioStatus: 'UPLOADED' },
@@ -184,7 +249,7 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
       expect(response.status).toBe(500);
       expect(body).toEqual({ success: false, error: 'Unable to process audio upload' });
       expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-      expect(response.headers.get('Vary')).toBe('Cookie');
+      expect(response.headers.get('Vary')).toBe('Cookie, Authorization');
       expect(JSON.stringify(body)).not.toContain('password');
       expect(JSON.stringify(log.mock.calls)).not.toContain('password');
       expect(JSON.stringify(log.mock.calls)).not.toContain('db.internal.invalid');

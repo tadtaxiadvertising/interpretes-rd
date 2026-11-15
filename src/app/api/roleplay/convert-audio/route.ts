@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { privateRoleplayResponse as privateJson } from '@/lib/roleplay/private-response';
+import { actorFromBearer } from '@/lib/api-auth';
 import { randomUUID } from 'node:crypto';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
@@ -6,18 +8,6 @@ import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/secur
 import { BUCKET, getSupabaseAdmin } from '@/lib/roleplay-audio-conversion';
 import { confirmRoleplayResponse } from '@/app/actions/roleplay';
 import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
-
-// This endpoint returns participant-scoped audio URLs. Prevent intermediary
-// caches from retaining signed recordings, even for errors or rate limits.
-function privateJson<T extends object>(body: T, init: ResponseInit = {}): NextResponse<T> {
-  const headers = new Headers(init.headers);
-  headers.set('Cache-Control', 'private, no-store');
-  const vary = headers.get('Vary');
-  if (!vary?.split(',').some(value => value.trim().toLowerCase() === 'cookie')) {
-    headers.set('Vary', vary ? `${vary}, Cookie` : 'Cookie');
-  }
-  return NextResponse.json(body, { ...init, headers });
-}
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_MIME_TYPES = [
@@ -128,6 +118,24 @@ export async function POST(req: NextRequest) {
     const identity = await resolveCurrentIdentity();
     if (!identity) {
       return privateJson({ success: false, error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // This upload endpoint is cookie-bound (including the confirmation action).
+    // Never let an explicit Bearer of a different identity piggyback on
+    // browser cookies and create private recording objects.
+    if (req.headers.has('authorization')) {
+      const bearer = await actorFromBearer(req);
+      if (!bearer) {
+        return privateJson({ success: false, error: 'Not authenticated' }, { status: 401 });
+      }
+      if (
+        bearer.userId !== identity.userId ||
+        bearer.role !== identity.role ||
+        (identity.role === 'candidate' && bearer.candidateId !== identity.candidateId) ||
+        (identity.role === 'interpreter' && bearer.interpreterId !== identity.interpreterId)
+      ) {
+        return privateJson({ success: false, error: 'Access denied' }, { status: 403 });
+      }
     }
 
     const formData = await req.formData();
