@@ -1,4 +1,8 @@
-'use server';
+/**
+ * Internal server-side metrics implementation; never expose these database
+ * mutation helpers as callable Next.js Server Actions. Any public API/action
+ * must authorize the caller explicitly before calling this service.
+ */
 
 import prisma from '@/lib/prisma';
 import { getMonthBounds, getMonthBoundsForPeriod, sumEffectiveLogMinutes } from '@/lib/interpreter-metrics';
