@@ -20,7 +20,9 @@ import { getSystemConfig } from './system-config';
 
 describe('private SystemConfig reader', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    // The cache wrapper is constructed once at module import. Preserve its
+    // setup call while resetting only database mock behavior between cases.
+    m.findUnique.mockReset();
   });
 
   it('reads an internal configuration key without publishing it as a Server Action', async () => {
