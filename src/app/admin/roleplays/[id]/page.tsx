@@ -4,8 +4,11 @@ import { notFound } from 'next/navigation';
 import prisma from '@/lib/prisma';
 import { getAdminReviewUrl } from '@/lib/roleplay';
 import { resolveResponseAudioUrl } from '@/lib/roleplay-review';
+import { resolveAdminBaseAudioPlaybackUrl } from '@/lib/roleplay/admin-base-audio-playback';
 import { RoleplayEvaluationClient } from './RoleplayEvaluationClient';
 import { formatDate } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'Roleplay Evaluation',
@@ -36,11 +39,18 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
     notFound();
   }
 
-  // Re-sign stored audio paths so admin review does not depend on the
-  // short-lived signed URL captured at submission time (ISSUE-021).
+  // Sign first-party base clips as well as participant responses. The
+  // originally stored public URL is not a reliable playback URL for private
+  // Storage buckets, and this page must never cache short-lived signatures.
+  const storageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.SUPABASE_URL;
   const scenarios = await Promise.all(
     session.scenarios.map(async (scenario) => ({
       ...scenario,
+      baseAudioUrl: await resolveAdminBaseAudioPlaybackUrl(
+        scenario.baseAudioUrl,
+        storageUrl,
+        getAdminReviewUrl,
+      ),
       responses: await Promise.all(
         scenario.responses.map(async (response) => ({
           ...response,
@@ -199,11 +209,17 @@ function ScenarioEvaluationCard({
             </span>
             Base Audio
           </h4>
-          <audio 
-            src={scenario.baseAudioUrl} 
-            controls 
-            className="w-full"
-          />
+          {scenario.baseAudioUrl ? (
+            <audio
+              src={scenario.baseAudioUrl}
+              controls
+              className="w-full"
+            />
+          ) : (
+            <p className="text-sm text-amber-300" role="alert">
+              Base audio unavailable for playback.
+            </p>
+          )}
         </div>
 
         {/* Response Audio */}
