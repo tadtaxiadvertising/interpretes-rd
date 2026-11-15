@@ -67,8 +67,10 @@ export default async function RoleplayLibraryDetailPage({
     let audioUrl: string | null = null;
     try {
       audioUrl = await getAdminReviewUrl(paths[index]!);
-    } catch (error) {
-      console.error('[ADMIN ROLEPLAY LIBRARY] Preview audio unavailable:', scenario.id, error instanceof Error ? error.message : 'Unknown error');
+    } catch {
+      // Storage exceptions may embed signed URLs or object keys. Log only
+      // a stable category, never participant/scenario IDs or provider details.
+      console.error('[ADMIN ROLEPLAY LIBRARY] Preview audio unavailable:', 'StorageError');
     }
     preview.push({
       title: scenario.title,
