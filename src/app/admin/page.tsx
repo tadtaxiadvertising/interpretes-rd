@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import prismaClient from '@/lib/prisma';
 import LiveRosterPanel from '@/components/admin/LiveRosterPanel';
 import { GlobalGoalsButton } from '@/components/GlobalGoalsButton';
-import { getSystemConfig } from '@/app/actions/settings';
+import { getSystemConfig } from '@/lib/system-config';
 import { getMonthBounds } from '@/lib/interpreter-metrics';
 
 export const revalidate = 120;
