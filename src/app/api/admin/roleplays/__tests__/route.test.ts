@@ -162,7 +162,7 @@ describe('POST /api/admin/roleplays', () => {
       ['URL with credentials', 'https://user:private-password@front.test'],
       ['URL with query', 'https://front.test/?redirect=private-token'],
       ['non-root path', 'https://front.test/unexpected'],
-      ['newline injection', 'https://front.test/\\n'],
+      ['newline injection', 'https://front.test/\n'],
     ])('fails closed on %s FRONTEND_ORIGIN before creating a participant roleplay', async (_case, configured) => {
       if (configured === null) delete process.env.FRONTEND_ORIGIN;
       else process.env.FRONTEND_ORIGIN = configured;
