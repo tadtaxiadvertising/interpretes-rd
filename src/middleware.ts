@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { isPublicApiPath } from '@/lib/security/public-api-path';
+import { addCorsVary, trustedCorsOrigin } from '@/lib/security/cors-origin';
 
 /**
  * UNIFIED MIDDLEWARE — FREE INTERPRETERS OS
@@ -28,9 +29,9 @@ import { isPublicApiPath } from '@/lib/security/public-api-path';
  * ============================================================
  */
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://freeinterpreters.com";
-
-// Production CORS allowlist — never include .easypanel.host or arbitrary origins
+// Do not evaluate FRONTEND_ORIGIN once at module load: Easypanel may inject
+// configuration when the runtime starts. A missing configuration must not
+// silently authorize the historical freeinterpreters.com origin.
 const isProduction = process.env.NODE_ENV === "production";
 const AUTH_SESSION_COOKIE_NAMES = [
   'authjs.session-token',
@@ -112,24 +113,19 @@ export async function middleware(req: NextRequest) {
   }
 
   // ── 1. CORS PREFLIGHT ─────────────────────────────────────
-  const isLocalhostOrigin = origin?.includes('localhost') || origin?.includes('127.0.0.1');
-  const isTrustedOrigin = !isProduction
-    ? origin === FRONTEND_ORIGIN || isLocalhostOrigin
-    : origin === FRONTEND_ORIGIN;
-
-  const corsOrigin = isTrustedOrigin && origin ? origin : FRONTEND_ORIGIN;
+  const corsOrigin = trustedCorsOrigin(origin, process.env.FRONTEND_ORIGIN, isProduction);
 
   if (req.method === 'OPTIONS') {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': corsOrigin,
-        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Requested-With',
-        'Access-Control-Allow-Credentials': isTrustedOrigin ? 'true' : 'false',
-        'Access-Control-Max-Age': '86400',
-      },
-    });
+    const headers = new Headers();
+    addCorsVary(headers);
+    if (corsOrigin) {
+      headers.set('Access-Control-Allow-Origin', corsOrigin);
+      headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      headers.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+      headers.set('Access-Control-Allow-Credentials', 'true');
+      headers.set('Access-Control-Max-Age', '86400');
+    }
+    return new NextResponse(null, { status: 204, headers });
   }
 
   // ── 2. SUPABASE SESSION REFRESH ───────────────────────────
@@ -209,21 +205,24 @@ export async function middleware(req: NextRequest) {
         { success: false, error: 'Unauthorized', code: 'UNAUTHORIZED' },
         { status: 401 }
       );
-      unauthorized.headers.set('Access-Control-Allow-Origin', corsOrigin);
-      unauthorized.headers.set(
-        'Access-Control-Allow-Credentials',
-        isTrustedOrigin ? 'true' : 'false'
-      );
+      addCorsVary(unauthorized.headers);
+      if (corsOrigin) {
+        unauthorized.headers.set('Access-Control-Allow-Origin', corsOrigin);
+        unauthorized.headers.set('Access-Control-Allow-Credentials', 'true');
+      }
       return unauthorized;
     }
   }
 
   // ── 4. API CORS HEADERS ───────────────────────────────────
   if (pathname.startsWith('/api/')) {
-    response.headers.set('Access-Control-Allow-Origin', corsOrigin);
-    response.headers.set('Access-Control-Allow-Credentials', isTrustedOrigin ? 'true' : 'false');
-    response.headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+    addCorsVary(response.headers);
+    if (corsOrigin) {
+      response.headers.set('Access-Control-Allow-Origin', corsOrigin);
+      response.headers.set('Access-Control-Allow-Credentials', 'true');
+      response.headers.set('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+      response.headers.set('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With');
+    }
   }
 
   return response;
