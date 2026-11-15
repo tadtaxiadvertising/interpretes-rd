@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { revalidatePath } from 'next/cache';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -24,6 +25,27 @@ function privateRoleplayJson<T extends object>(body: T, init: ResponseInit = {})
     headers.set('Vary', vary ? `${vary}, Cookie` : 'Cookie');
   }
   return NextResponse.json(body, { ...init, headers });
+}
+
+/**
+ * This admin route historically authorizes a browser cookie via validateAction.
+ * If the caller explicitly supplies Authorization, require that verified
+ * Bearer to represent the exact same admin identity as the cookie. Otherwise
+ * the middleware could verify an interpreter Bearer while the handler uses a
+ * different, privileged cookie identity.
+ */
+async function guardRoleplayAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const auth = await validateAction('admin');
+  if ('error' in auth) {
+    return privateRoleplayJson({ success: false, error: 'Forbidden' }, { status: 403 });
+  }
+  if (req.headers.has('authorization')) {
+    const bearer = await actorFromBearer(req);
+    if (!bearer || bearer.role !== 'admin' || bearer.userId !== auth.user.userId) {
+      return privateRoleplayJson({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
+  }
+  return null;
 }
 
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -95,8 +117,8 @@ export async function POST(req: NextRequest) {
   const uploadedPaths: string[] = [];
 
   try {
-    const auth = await validateAction('admin');
-    if ('error' in auth) return privateRoleplayJson({ success: false, error: auth.error }, { status: 403 });
+    const forbidden = await guardRoleplayAdmin(req);
+    if (forbidden) return forbidden;
 
     const formData = await req.formData();
     const participantType = formData.get('participantType');
@@ -662,13 +684,10 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const auth = await validateAction('admin');
-    if ('error' in auth) return privateRoleplayJson(
-      { success: false, error: 'Forbidden' },
-      { status: 403, headers: { 'Cache-Control': 'private, no-store' } },
-    );
+    const forbidden = await guardRoleplayAdmin(req);
+    if (forbidden) return forbidden;
 
     const sessions = await db.roleplaySession.findMany({
       orderBy: { createdAt: 'desc' },

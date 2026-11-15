@@ -17,6 +17,10 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
 
+vi.mock('@/lib/api-auth', () => ({
+  actorFromBearer: vi.fn(),
+}));
+
 vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
@@ -49,6 +53,7 @@ vi.mock('@supabase/supabase-js', () => ({
 
 import { POST, GET } from '../route';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
@@ -143,6 +148,53 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('authorization', () => {
+    it('rejects an interpreter Bearer even when an admin cookie is present, before any upload or DB query', async () => {
+      (actorFromBearer as any).mockResolvedValue({
+        userId: 'interpreter-bearer', role: 'interpreter', email: 'interpreter@test.invalid',
+      });
+      const req = buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] });
+      req.headers.set('Authorization', 'Bearer verified-interpreter-token');
+      const res = await POST(req as any);
+      expect(res.status).toBe(403);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toBe('Cookie');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid or malformed explicit Authorization with an admin cookie', async () => {
+      (actorFromBearer as any).mockResolvedValue(null);
+      const req = buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] });
+      req.headers.set('Authorization', 'Bearer expired-token');
+      const res = await POST(req as any);
+      expect(res.status).toBe(403);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
+    it('rejects a different admin identity when Bearer and cookie disagree', async () => {
+      (actorFromBearer as any).mockResolvedValue({
+        userId: 'another-admin', role: 'admin', email: 'different@test.invalid',
+      });
+      const req = buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] });
+      req.headers.set('Authorization', 'Bearer another-admin-token');
+      const res = await POST(req as any);
+      expect(res.status).toBe(403);
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
+    it('accepts a matching explicitly authenticated admin identity', async () => {
+      (actorFromBearer as any).mockResolvedValue({
+        userId: 'a1', role: 'admin', email: 'admin@x.com',
+      });
+      const req = buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] });
+      req.headers.set('Authorization', 'Bearer same-admin-token');
+      const res = await POST(req as any);
+      expect(res.status).toBe(200);
+      expect(mockUpload).toHaveBeenCalledOnce();
+    });
+
     it('rejects a non-admin without creating anything', async () => {
       (validateAction as any).mockResolvedValue({ error: 'Access denied: insufficient permissions', code: 'UNAUTHORIZED' });
 
@@ -784,6 +836,30 @@ describe('POST /api/admin/roleplays', () => {
 });
 
 describe('GET /api/admin/roleplays privacy', () => {
+  it('does not list sensitive candidate details when a valid interpreter Bearer accompanies an admin cookie', async () => {
+    (validateAction as any).mockResolvedValue(adminAuth);
+    (actorFromBearer as any).mockResolvedValue({ userId: 'interpreter-1', role: 'interpreter' });
+    const req = new Request('http://localhost/api/admin/roleplays', {
+      headers: { Authorization: 'Bearer verified-interpreter-token' },
+    });
+    const res = await GET(req as any);
+    expect(res.status).toBe(403);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(prisma.roleplaySession.findMany).not.toHaveBeenCalled();
+  });
+
+  it('lists sessions with a matching explicit admin Bearer and admin cookie', async () => {
+    (validateAction as any).mockResolvedValue(adminAuth);
+    (actorFromBearer as any).mockResolvedValue({ userId: 'a1', role: 'admin' });
+    (prisma.roleplaySession.findMany as any).mockResolvedValue([]);
+    const req = new Request('http://localhost/api/admin/roleplays', {
+      headers: { Authorization: 'Bearer verified-admin-token' },
+    });
+    const res = await GET(req as any);
+    expect(res.status).toBe(200);
+    expect(prisma.roleplaySession.findMany).toHaveBeenCalledOnce();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     (validateAction as any).mockResolvedValue(adminAuth);
@@ -793,7 +869,7 @@ describe('GET /api/admin/roleplays privacy', () => {
     (prisma.roleplaySession.findMany as any).mockResolvedValue([
       { id: 'sess-1', recruitmentCandidate: { email: 'sensitive@example.test' } },
     ]);
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/admin/roleplays') as any);
     const body = await res.json();
     expect(res.status).toBe(200);
     expect(body.data[0].id).toBe('sess-1');
@@ -807,7 +883,7 @@ describe('GET /api/admin/roleplays privacy', () => {
     );
     const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const res = await GET();
+      const res = await GET(new Request('http://localhost/api/admin/roleplays') as any);
       const body = await res.json();
       expect(res.status).toBe(500);
       expect(body.error).toBe('No fue posible consultar los roleplays.');
@@ -825,7 +901,7 @@ describe('GET /api/admin/roleplays privacy', () => {
     (prisma.roleplaySession.findMany as any).mockRejectedValueOnce(injected);
     const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const res = await GET();
+      const res = await GET(new Request('http://localhost/api/admin/roleplays') as any);
       expect(res.status).toBe(500);
       expect(JSON.stringify(logs.mock.calls)).not.toContain('PRIVATE_DATABASE_CONNECTION_TOKEN');
       expect(logs).toHaveBeenCalledWith('Get Roleplays Error:', 'Error');
@@ -841,7 +917,7 @@ describe('GET /api/admin/roleplays privacy', () => {
       error: 'Access denied for private-user-id',
       code: 'UNAUTHORIZED',
     });
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/admin/roleplays') as any);
     const body = await res.json();
     expect(res.status).toBe(403);
     expect(body.error).toBe('Forbidden');
