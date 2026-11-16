@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import RoleplayStudioPage from './page';
 
 vi.mock('next/link', () => ({
@@ -62,6 +62,27 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByLabelText('Inicio (segundos)')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Vista detallada' }));
     expect(screen.getAllByLabelText('Inicio (segundos)')).toHaveLength(6);
+  });
+
+  it('preserves editor-only SRT reference for both halves after splitting', async () => {
+    const player = loadAudio(90);
+    const captions = '1\\n00:00:00,000 --> 00:00:10,000\\nDoctor: Review instructions';
+    const file = new File(['srt'], 'reference.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => captions,
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    player.currentTime = 5;
+    fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1 en cursor/ }));
+    expect(screen.getByText(/Intervenciones \\(2\\/25\\)/)).toBeTruthy();
+    expect(screen.getAllByText('Doctor: Review instructions')).toHaveLength(2);
+    const prompts = screen.getAllByLabelText('Instrucciones para el participante') as HTMLTextAreaElement[];
+    expect(prompts.map(item => item.value)).toEqual(['', '']);
   });
 
   it('splits at the playhead and merges adjacent compatible intervals', () => {
