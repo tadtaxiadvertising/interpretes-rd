@@ -95,7 +95,12 @@ function validateAudioFile(file: File): { valid: boolean; error?: string } {
 }
 
 function normalizeMimeType(mime: string): string {
-  const normalized = mime.trim().toLowerCase();
+  // RFC-compliant media-type parameters permit optional spaces around ; and =.
+  // Normalize only that whitespace; unknown codecs and extra parameters must
+  // still fail the existing allowlist rather than broadening accepted audio.
+  const normalized = mime.trim().toLowerCase()
+    .replace(/[ \\t]*;[ \\t]*/g, ';')
+    .replace(/[ \\t]*=[ \\t]*/g, '=');
   if (['audio/webm', 'audio/webm;codecs=opus', 'audio/webm;codecs=pcm'].includes(normalized)) return 'audio/webm';
   if (normalized === 'audio/mp4') return 'audio/mp4';
   if (normalized === 'audio/ogg') return 'audio/ogg';
