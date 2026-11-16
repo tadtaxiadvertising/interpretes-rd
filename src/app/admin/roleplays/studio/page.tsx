@@ -782,8 +782,26 @@ export default function RoleplayStudioPage() {
             escenarios. Revisa cualquier solapamiento o diálogo del intérprete antes de aplicar.
             Esta acción reemplaza las intervenciones actuales del editor.
           </p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
+            <span>Mostrando {cuePage * CUES_PER_PAGE + 1}–
+              {Math.min((cuePage + 1) * CUES_PER_PAGE, reviewCues.length)} de {reviewCues.length} turnos</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setCuePage(page => Math.max(0, page - 1))}
+                disabled={cuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                Anterior
+              </button>
+              <span>Página {cuePage + 1}/{pageCount}</span>
+              <button type="button" onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
+                disabled={cuePage >= pageCount - 1}
+                className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                Siguiente
+              </button>
+            </div>
+          </div>
           <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3">
-            {reviewCues.map((cue, index) => (
+            {visibleCues.map((cue, offset) => {
+              const index = cuePage * CUES_PER_PAGE + offset;
+              return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-white/5 p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
                   aria-label={`Seleccionar turno ${index + 1}`}
@@ -806,7 +824,7 @@ export default function RoleplayStudioPage() {
                   Escuchar
                 </button>
               </div>
-            ))}
+            ); })}
           </div>
           <button type="button" onClick={applyCueSelection}
             className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30">
@@ -818,10 +836,11 @@ export default function RoleplayStudioPage() {
         <section className="space-y-3 rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-5">
           <h2 className="text-lg font-bold text-white">Proyecto de edición</h2>
           <p className="text-sm leading-6 text-slate-300">
-            Guarda y recupera los cortes y perfiles sin volver a empezar. El proyecto JSON
-            se verifica contra el MP3 original mediante SHA-256; no guarda el audio
-            ni las transcripciones. Sí incluye los títulos e instrucciones que hayas redactado,
-            por lo que debes protegerlo si contiene información sensible.
+            {localOnly
+              ? 'Guarda los tiempos y perfiles sin subir el archivo. El proyecto se vincula a la fuente mediante tamaño, duración y SHA-256 de muestras: no es una verificación de todos sus bytes.'
+              : 'Guarda los cortes y perfiles. El proyecto se verifica contra el MP3 original mediante SHA-256 completo.'}
+            El JSON no contiene audio, video ni transcripción, pero sí títulos e instrucciones:
+            protégelo si contienen información sensible.
           </p>
           <div className="flex flex-wrap items-end gap-4">
             <button type="button" onClick={() => void saveDraft()}
@@ -830,7 +849,7 @@ export default function RoleplayStudioPage() {
               {draftBusy ? 'Verificando proyecto…' : 'Guardar proyecto JSON'}
             </button>
             <label className="block text-sm text-indigo-100">
-              Abrir proyecto del MP3 seleccionado
+              {localOnly ? 'Abrir proyecto del archivo local seleccionado' : 'Abrir proyecto del MP3 seleccionado'}
               <input type="file" accept=".json,application/json"
                 disabled={busy || draftBusy}
                 onChange={event => {
@@ -1028,7 +1047,7 @@ export default function RoleplayStudioPage() {
               )}
             </article>
           ))}
-          {segments.length > 0 && (
+          {segments.length > 0 && !localOnly && (
             <StudioConsecutivePreview
               sourceUrl={url}
               sourceDuration={duration}
@@ -1041,12 +1060,17 @@ export default function RoleplayStudioPage() {
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
-            <Download size={18} /> {busy ? 'Procesando segmentos…' : 'Exportar MP3 + manifiesto ZIP'}
+            <Download size={18} /> {busy
+              ? 'Procesando segmentos…'
+              : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP'}
           </button>
         </section>
       )}
       {error && (!audio || !duration) && <p role="alert" className="text-sm text-red-300">{error}</p>}
-      <p className="text-xs leading-5 text-slate-500">Solo administración · La grabación original no se guarda en la biblioteca durante la preparación. Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.</p>
+      <p className="text-xs leading-5 text-slate-500">
+        Solo administración · Los archivos originales locales no se guardan en la biblioteca.
+        Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.
+      </p>
     </main>
   );
 }
