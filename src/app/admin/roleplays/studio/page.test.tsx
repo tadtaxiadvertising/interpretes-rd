@@ -211,7 +211,7 @@ describe('Audio Studio clip review player', () => {
 
 
   it('requires explicit per-file consent before the optional server uploads MP3 audio', async () => {
-    const request = vi.fn(async () => ({
+    const request = vi.fn(async (_url: string, _options?: RequestInit) => ({
       ok: true,
       json: async () => ({
         durationSeconds: 90,
