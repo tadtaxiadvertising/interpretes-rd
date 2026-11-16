@@ -41,6 +41,29 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByRole('button', { name: /Añadir intervención/i })).toBeTruthy();
   });
 
+  it('still downloads a ZIP when the audio and edits remain unchanged', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'unchanged.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    const fetchMock = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) =>
+      Promise.resolve({ ok: true, blob: async () => new Blob(['valid-zip']) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Exportar MP3/i }));
+      await Promise.resolve();
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Paquete generado/)).toBeTruthy();
+  });
+
   it('aborts an old ZIP export when the administrator selects a different MP3', async () => {
     const { container } = render(<RoleplayStudioPage />);
     const input = screen.getByLabelText(/Grabación original MP3/i);
