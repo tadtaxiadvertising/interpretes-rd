@@ -144,4 +144,16 @@ describe('browser-local AudioWorklet PCM capture', () => {
       .rejects.toThrow('LOCAL_PCM_TRANSPORT_OVERFLOW');
   });
 
+  it('releases microphone immediately when an audio consumer breaks iteration', async () => {
+    const capture = await startLocalPcmCapture();
+    const node = FakeAudioWorkletNode.instances[0];
+    node.receive(Float32Array.from([1, 2]));
+    for await (const frame of capture.frames) {
+      expect(Array.from(frame)).toEqual([1, 2]);
+      break;
+    }
+    expect(micStop).toHaveBeenCalledTimes(1);
+    expect(FakeAudioContext.instances[0].close).toHaveBeenCalledTimes(1);
+  });
+
 });
