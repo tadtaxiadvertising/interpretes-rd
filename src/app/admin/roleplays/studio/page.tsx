@@ -10,6 +10,7 @@ import {
 } from '@/lib/roleplay-studio/transcript';
 import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
+import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -650,6 +651,14 @@ export default function RoleplayStudioPage() {
   const visibleCues = filteredCueEntries.slice(
     currentCuePage * CUES_PER_PAGE, (currentCuePage + 1) * CUES_PER_PAGE);
 
+  const coverage = useMemo(
+    () => summarizeStudioCoverage(duration, segments), [duration, segments],
+  );
+  const largestGaps = coverage.gaps
+    .filter(gap => gap.duration >= 5)
+    .sort((a, b) => b.duration - a.duration)
+    .slice(0, 8);
+
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
@@ -764,6 +773,48 @@ export default function RoleplayStudioPage() {
               Duración: {formatTime(duration)} · Navega por la línea de tiempo
               y marca los límites en el cursor. El zoom no decodifica el archivo completo.
             </p>
+            {segments.length > 0 && (
+              <section aria-label="Resumen de cortes y espacios" className="rounded-lg border border-cyan-300/15 bg-slate-950/50 p-2.5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                  <span className="font-semibold text-cyan-100">
+                    Seleccionado: {formatTime(coverage.selectedSeconds)}
+                  </span>
+                  <span className="text-slate-300">
+                    Fuera de cortes: {formatTime(coverage.excludedSeconds)}
+                  </span>
+                  <span className="text-slate-400">
+                    {segments.length} intervenciones
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-slate-400">
+                  El paquete reúne únicamente los cortes seleccionados, sin los espacios intermedios.
+                  Los intervalos fuera de cortes pueden contener conversaciones: no son silencios detectados.
+                </p>
+                {coverage.hasOverlaps && (
+                  <p className="mt-1 text-xs font-semibold text-amber-200">
+                    Hay intervenciones solapadas. Corrige sus límites antes de exportar.
+                  </p>
+                )}
+                {largestGaps.length > 0 && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-xs font-medium text-cyan-200">
+                      Revisar los {largestGaps.length} espacios sin cortes más extensos (al menos 5 s)
+                    </summary>
+                    <div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
+                      {largestGaps.map(gap => (
+                        <button key={`${gap.start}-${gap.end}`} type="button"
+                          onClick={() => seekAudio(gap.start + Math.min(2, gap.duration / 2))}
+                          aria-label={`Escuchar espacio sin cortes desde ${formatTime(gap.start)}`}
+                          className="rounded border border-white/15 px-2 py-1 text-xs text-slate-300 hover:border-cyan-300/40">
+                          {formatTime(gap.start)}–{formatTime(gap.end)}
+                          <span className="ml-1 text-cyan-200">({formatTime(gap.duration)})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </section>
+            )}
             {audio && !localOnly && (
               <LocalVadAssistant
                 key={url}
