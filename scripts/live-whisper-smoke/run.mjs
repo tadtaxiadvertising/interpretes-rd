@@ -1,6 +1,8 @@
 import { chromium } from '@playwright/test';
-import { createServer } from 'vite';
-import { resolve } from 'node:path';
+import { build, preview } from 'vite';
+import { resolve, join } from 'node:path';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 
 const HOST = '127.0.0.1';
 const PORT = 4177;
@@ -12,19 +14,29 @@ const allowedModelHost = (host) =>
   host.endsWith('.hf.co') ||
   host.endsWith('.xethub.hf.co');
 
-const server = await createServer({
-  configFile: false,
-  root: process.cwd(),
-  publicDir: resolve('public'),
-  server: { host: HOST, port: PORT, strictPort: true },
-  optimizeDeps: { exclude: ['@huggingface/transformers'] },
-});
+const fixtureRoot = resolve('scripts/live-whisper-smoke');
+const outDir = mkdtempSync(join(tmpdir(), 'fi-live-whisper-smoke-'));
+let server = null;
 let browser = null;
 const pageErrors = [];
 const remoteRequests = [];
 
 try {
-  await server.listen();
+  // Vite dev intentionally rejects importing executable .mjs out of public/.
+  // Test the production-like build instead: public ONNX WASM+MJS assets are
+  // copied as static files and served unchanged by Vite preview.
+  await build({
+    configFile: false,
+    root: fixtureRoot,
+    publicDir: resolve('public'),
+    build: { outDir, emptyOutDir: true, sourcemap: false },
+  });
+  server = await preview({
+    configFile: false,
+    root: fixtureRoot,
+    build: { outDir },
+    preview: { host: HOST, port: PORT, strictPort: true },
+  });
   browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   const page = await browser.newPage();
   page.setDefaultTimeout(700_000);
@@ -36,7 +48,7 @@ try {
     }
   });
 
-  await page.goto(ORIGIN + '/scripts/live-whisper-smoke/index.html', {
+  await page.goto(ORIGIN + '/', {
     waitUntil: 'domcontentloaded',
   });
   // Even importing the UI/Worker wrapper must not download model weights
@@ -81,5 +93,10 @@ try {
   process.exitCode = 1;
 } finally {
   await browser?.close();
-  await server.close();
+  if (server) {
+    await new Promise((resolve, reject) => {
+      server.httpServer.close((error) => error ? reject(error) : resolve());
+    });
+  }
+  rmSync(outDir, { recursive: true, force: true });
 }
