@@ -65,7 +65,7 @@ describe('Audio Studio transcript review search', () => {
     });
     expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 85' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }));
-    expect(screen.getByText(/26 seleccionados/)).toBeTruthy();
+    expect(screen.getByText(/25 seleccionados/)).toBeTruthy();
 
     // The selection limit rejects the 26th cue until another is unchecked.
     expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }) as HTMLInputElement).checked).toBe(false);
