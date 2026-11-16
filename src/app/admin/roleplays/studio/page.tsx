@@ -443,7 +443,9 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     const id = crypto.randomUUID();
     setSegments(prev => [...prev, {
-      id, title: 'Intervención ' + (prev.length + 1),
+      id, title: segments.some(item => item.start > interval.start)
+        ? 'Corte ' + formatTime(interval.start)
+        : 'Intervención ' + (prev.length + 1),
       ...interval,
       scriptPrompt: '', responseLimit: 120, speakerRole: 'unknown', language: 'unknown',
     }]);
@@ -461,7 +463,8 @@ export default function RoleplayStudioPage() {
     if (!audio || !duration || busy || draftBusy) return;
     const revision = subtitleImportRevision.current;
     const operation = ++draftOperationRevision.current;
-    const snapshot = [...segments];
+    // Persist in timeline order even if a new gap was filled after later clips.
+    const snapshot = [...segments].sort((a, b) => a.start - b.start);
     setDraftBusy(true);
     setError('');
     setNotice('');
@@ -649,12 +652,13 @@ export default function RoleplayStudioPage() {
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
-  const visibleSegments = segments.map((segment, index) => ({ segment, index }))
+  const visibleSegments = [...segments]
+    .sort((a, b) => a.start - b.start)
+    .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => !query ||
       [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language]
-        .some(value => value.toLocaleLowerCase().includes(query)))
-    .sort((a, b) => a.segment.start - b.segment.start);
+        .some(value => value.toLocaleLowerCase().includes(query)));
 
   const mediaHandlers = {
     onPlay: () => setEditorPlaybackRevision(n => n + 1),
