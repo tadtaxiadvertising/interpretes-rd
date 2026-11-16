@@ -184,4 +184,43 @@ describe('voluntary, local-only Whisper interface', () => {
     expect(screen.getByText('Modelo no cargado.')).toBeTruthy();
   });
 
+  it('shows a safety warning and never publishes runaway Whisper words', async () => {
+    vi.stubGlobal('isSecureContext', true);
+    vi.stubGlobal('Worker', class {});
+    vi.stubGlobal('AudioWorkletNode', class {});
+    vi.stubGlobal('WebAssembly', {});
+    vi.stubGlobal('navigator', { mediaDevices: { getUserMedia: vi.fn() } });
+
+    mocks.load.mockResolvedValue({ close: mocks.closeModel, transcribe: mocks.transcribe });
+    mocks.transcribe.mockRejectedValue(new Error('LOCAL_WHISPER_SUSPICIOUS_OUTPUT'));
+    mocks.startCapture.mockResolvedValue({
+      stop: mocks.stopCapture,
+      sampleRate: 48_000,
+      frames: { async *[Symbol.asyncIterator]() {} },
+    });
+    mocks.prepareChunks.mockImplementation(async function* () {
+      yield {
+        samples: new Float32Array(16_000).fill(0.3),
+        startMs: 0,
+        endMs: 10_000,
+        kind: 'full',
+        sampleRate: 16_000,
+        startSample: 0,
+        endSample: 16_000,
+      };
+    });
+
+    const { onFinalTranscript, onMicrophoneActive } = mount();
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Descargar y preparar Whisper local' }));
+    await screen.findByText('Modelo preparado en este equipo.');
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar transcripción Whisper' }));
+
+    expect((await screen.findByRole('alert')).textContent).toContain('cantidad anormal de texto');
+    expect(onFinalTranscript).not.toHaveBeenCalled();
+    expect(mocks.closeModel).toHaveBeenCalledTimes(1);
+    expect(mocks.stopCapture).toHaveBeenCalledTimes(1);
+    expect(onMicrophoneActive).toHaveBeenLastCalledWith(false);
+  });
+
 });
