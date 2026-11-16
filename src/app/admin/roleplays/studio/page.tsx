@@ -427,9 +427,12 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      const digest = await sha256StudioAudio(audio);
+      const localOnly = usesLocalLongMode(audio, duration);
+      const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
-      const draft = createStudioDraft(audio.size, digest, snapshot, duration);
+      const draft = localOnly
+        ? createLongMediaDraft(audio.size, digest, snapshot, duration)
+        : createStudioDraft(audio.size, digest, snapshot, duration);
       const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' });
       if (blob.size > MAX_STUDIO_DRAFT_CHARS) {
         throw new Error('El proyecto supera 180 KB. Reduce las instrucciones antes de guardarlo.');
@@ -437,12 +440,15 @@ export default function RoleplayStudioPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = 'roleplay-studio-proyecto.json';
+      link.download = usesLocalLongMode(audio, duration)
+        ? 'roleplay-studio-proyecto-largo.json' : 'roleplay-studio-proyecto.json';
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice('Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
+      setNotice(usesLocalLongMode(audio, duration)
+        ? 'Plan de cortes local descargado. Conserva la grabación original; el JSON no contiene audio ni video ni transcripción. La huella es parcial y no verifica cada byte.'
+        : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No fue posible guardar el proyecto.');
@@ -465,14 +471,19 @@ export default function RoleplayStudioPage() {
       }
       const json = await file.text();
       if (revision !== subtitleImportRevision.current) return;
-      const digest = await sha256StudioAudio(audio);
+      const localOnly = usesLocalLongMode(audio, duration);
+      const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
-      const restored = openStudioDraft(json, audio.size, digest, duration);
+      const restored = localOnly
+        ? openLongMediaDraft(json, audio.size, digest, duration)
+        : openStudioDraft(json, audio.size, digest, duration);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
       setChosenCueIndices([]);
-      setNotice(`Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
+      setNotice(localOnly
+        ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El archivo original no se ha subido.`
+        : `Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No se pudo abrir el proyecto.');
@@ -526,6 +537,12 @@ export default function RoleplayStudioPage() {
       setError('El paquete no puede superar 15 minutos de audio acumulado.');
       return;
     }
+    // Large files stay local: the legacy export endpoint reads its entire
+    // MP3 request into memory and must never receive a video or large source.
+    if (usesLocalLongMode(audio, duration)) {
+      await saveDraft();
+      return;
+    }
     setBusy(true);
     try {
       const form = new FormData();
@@ -557,6 +574,11 @@ export default function RoleplayStudioPage() {
       setBusy(false);
     }
   };
+
+  const localOnly = audio !== null && usesLocalLongMode(audio, duration);
+  const videoSource = audio !== null && mediaKind(audio) === 'video';
+  const pageCount = Math.max(1, Math.ceil(reviewCues.length / CUES_PER_PAGE));
+  const visibleCues = reviewCues.slice(cuePage * CUES_PER_PAGE, (cuePage + 1) * CUES_PER_PAGE);
 
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? segments.length >= 6;
