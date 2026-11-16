@@ -85,6 +85,37 @@ describe('authorized scenario base-audio playback', () => {
     expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
   });
 
+  it('never returns malformed first-party Storage links from scenarios', async () => {
+    const untrusted = [
+      `${legacy}?token=EXPIRED_PRIVATE_TOKEN`,
+      `${origin}/storage/v1/object/public/other-bucket/base/session-a/0.mp3`,
+      `${origin}/storage/v1/object/public/roleplay-audio/base/%2e%2e/other.mp3`,
+      `${origin}/storage/v1/object/public/roleplay-audio/base/../other.mp3`,
+    ];
+    for (const url of untrusted) {
+      m.getSignedAudioUrl.mockClear();
+      m.session.baseAudioUrl = null;
+      m.session.baseAudioPath = null;
+      m.session.scenarios[0].baseAudioUrl = url;
+      const response = await GET(request(), params);
+      const body = await response.json();
+      expect(response.status).toBe(200);
+      expect(body.data.scenarios[0].baseAudioUrl).toBe('');
+      expect(JSON.stringify(body)).not.toContain('EXPIRED_PRIVATE_TOKEN');
+      expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+    }
+  });
+
+  it('never re-exposes rejected first-party audio for a consumed invitation', async () => {
+    m.session.access.usedAt = new Date();
+    m.session.scenarios[0].baseAudioUrl = `${legacy}?token=PRIVATE_TOKEN`;
+    const response = await GET(request(), params);
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body.data.scenarios[0].baseAudioUrl).toBe('');
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
   it('leaves unrelated external legacy references untouched', async () => {
     m.session.baseAudioUrl = 'https://assets.example.test/unrelated.mp3';
     m.session.scenarios[0].baseAudioUrl = 'https://assets.example.test/unrelated.mp3';
@@ -106,7 +137,7 @@ describe('authorized scenario base-audio playback', () => {
       expect(body.data.baseAudioUrl).toBeNull();
       expect(body.data.scenarios[0].baseAudioUrl).toBe('');
       expect(body.data.scenarios[0].baseAudioUrl).not.toBe(legacy);
-      expect(log).toHaveBeenCalled();
+      expect(JSON.stringify(log.mock.calls)).not.toContain('Storage signing unavailable');
     } finally {
       log.mockRestore();
     }
