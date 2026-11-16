@@ -134,9 +134,15 @@ export async function startLocalPcmCapture(
       // frame. This bounds Worklet->main-thread messages even if ASR stalls.
       frames: {
         async *[Symbol.asyncIterator]() {
-          for await (const frame of activeQueue) {
-            yield frame;
-            if (!stopped) node?.port.postMessage({ type: 'credit' });
+          try {
+            for await (const frame of activeQueue) {
+              yield frame;
+              if (!stopped) node?.port.postMessage({ type: 'credit' });
+            }
+          } finally {
+            // Early consumer return/break must also release the microphone,
+            // not wait for the Worklet to exhaust its credits.
+            cleanup();
           }
         },
       },
