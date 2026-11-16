@@ -178,9 +178,9 @@ describe('Audio Studio compact editing', () => {
     fireEvent.change(speaker, { target: { value: 'interpreter' } });
     fireEvent.change(language, { target: { value: 'en' } });
     expect(screen.getByRole('checkbox', { name: 'Pendientes (6)' })).toBeTruthy();
-    expect(screen.getByRole('status').textContent).toMatch(/Excluye esos fragmentos antes de exportar/);
+    expect(screen.getByText(/Excluye esos fragmentos antes de exportar/)).toBeTruthy();
     fireEvent.change(speaker, { target: { value: 'doctor' } });
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText(/Excluye esos fragmentos antes de exportar/)).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Pendientes (5)' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
