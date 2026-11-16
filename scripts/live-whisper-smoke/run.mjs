@@ -22,6 +22,8 @@ const outDir = mkdtempSync(join(tmpdir(), 'fi-live-whisper-smoke-'));
 let server = null;
 let browser = null;
 const pageErrors = [];
+const workerUrls = [];
+const browserRequestFailures = [];
 const remoteRequests = [];
 
 try {
@@ -47,6 +49,19 @@ try {
   const page = await browser.newPage();
   page.setDefaultTimeout(700_000);
   page.on('pageerror', (error) => { pageErrors.push(error.message.slice(0, 1000)); });
+  page.on('worker', (worker) => {
+    const url = new URL(worker.url());
+    // Log only origin and asset basename: no conversation or model payloads.
+    workerUrls.push(url.origin + '/' + url.pathname.split('/').pop());
+  });
+  page.on('requestfailed', (request) => {
+    const url = new URL(request.url());
+    browserRequestFailures.push({
+      host: url.host,
+      asset: url.pathname.split('/').pop()?.slice(0, 80) ?? '',
+      failure: request.failure()?.errorText?.slice(0, 180) ?? 'unknown',
+    });
+  });
   page.on('request', (request) => {
     const url = new URL(request.url());
     if ((url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== ORIGIN) {
@@ -120,6 +135,11 @@ try {
 } catch (error) {
   console.error('FAIL: ' + String(error));
   if (pageErrors.length) console.error('Browser errors: ' + JSON.stringify(pageErrors.slice(0, 5)));
+  if (workerUrls.length) console.error('Observed Worker script basenames: ' + JSON.stringify(workerUrls.slice(0, 8)));
+  if (browserRequestFailures.length) {
+    console.error('Failed browser resources (no query strings): ' +
+      JSON.stringify(browserRequestFailures.slice(0, 8)));
+  }
   if (remoteRequests.length) {
     console.error('Observed remote request hosts (not paths): ' +
       JSON.stringify([...new Set(remoteRequests.map(({ host, method }) => method + ' ' + host))]));
