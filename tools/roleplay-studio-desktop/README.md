@@ -1,10 +1,10 @@
 # Roleplay Audio Studio — exportador local de escritorio
 
-Herramienta **opcional y separada** de Intérpretes RD para convertir cortes de una grabación larga a un ZIP compatible con el importador de roleplays. El video/audio original, los tiempos del proyecto y los clips **se procesan exclusivamente en el equipo del administrador**. No abre puertos, no usa cuentas externas y no envía datos a servidores.
+Herramienta **opcional y separada** de Intérpretes RD para convertir cortes de grabaciones cortas o largas a un ZIP compatible con el importador de roleplays. El video/audio original, los tiempos del proyecto y los clips **se procesan exclusivamente en el equipo del administrador**. No abre puertos, no usa cuentas externas y no envía datos a servidores.
 
 ## Uso
 
-1. En Audio Studio del administrador, abre el video/audio original, prepara las intervenciones y selecciona **Descargar plan local de cortes (JSON)**.
+1. En Audio Studio del administrador, abre la grabación y prepara las intervenciones. Para MP3 cortos, el modo **Local (predeterminado)** genera un JSON sin subir audio; si se selecciona explícitamente **Servidor (opcional)**, el ZIP se genera en la plataforma mediante una transferencia del MP3. Para videos y fuentes extensas, solo se permite el modo local. Selecciona **Descargar plan local de cortes (JSON)**.
 2. Descarga el ejecutable compilado correspondiente a Windows, macOS o Linux desde un **artefacto verificado de GitHub Actions**, una vez que un mantenedor haya ejecutado y revisado el empaquetado manual.
 3. Abre **RoleplayStudioLocal**. Selecciona **Grabación original** y **Proyecto JSON**. Pulsa **Validar proyecto** para revisar, sin conversiones, el número de intervenciones y su duración total.
 4. Elige una ruta nueva para **ZIP de salida** y presiona **Generar ZIP local**. La aplicación muestra el progreso, desactiva los campos durante el proceso y permite cancelar, eliminando temporales.
