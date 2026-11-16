@@ -24,6 +24,7 @@ COPY src/lib/roleplay-limits.ts ./src/lib/roleplay-limits.ts
 COPY src/lib/roleplay-audio-conversion.ts ./src/lib/roleplay-audio-conversion.ts
 COPY src/lib/roleplay-audio-worker-lease.ts ./src/lib/roleplay-audio-worker-lease.ts
 COPY src/lib/roleplay-audio-worker-config.ts ./src/lib/roleplay-audio-worker-config.ts
+COPY src/lib/roleplay-audio-worker-errors.ts ./src/lib/roleplay-audio-worker-errors.ts
 COPY scripts/roleplay-audio-worker.ts ./scripts/roleplay-audio-worker.ts
 
 # Catch missing local runtime modules during image build, not only at container startup.
