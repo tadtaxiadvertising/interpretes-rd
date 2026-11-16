@@ -129,6 +129,14 @@ class StudioDesktopTests(unittest.TestCase):
             self.assertEqual(archive.namelist(), ["manifest.json", "segment-01.mp3"])
             self.assertTrue(all(info.compress_type == zipfile.ZIP_STORED
                                 for info in archive.infolist()))
+            # The platform's strict native ZIP reader insists on flag 0x0800
+            # in both local and central records, even for ASCII filenames.
+            self.assertTrue(all(info.flag_bits == 0x0800
+                                for info in archive.infolist()))
+            raw = self.output.read_bytes()
+            self.assertEqual(struct.unpack_from("<H", raw, 6)[0], 0x0800)
+            central = raw.index(b"PK\\x01\\x02".decode("unicode_escape").encode("latin1"))
+            self.assertEqual(struct.unpack_from("<H", raw, central + 8)[0], 0x0800)
             self.assertIsNone(archive.testzip())
             manifest = json.loads(archive.read("manifest.json"))
             segment = manifest["segments"][0]
