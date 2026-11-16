@@ -147,6 +147,6 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 ### Comprobación de CSP por artefacto compilado
 
 - `src/modules/live-engine/core/whisper-tiny-client.ts` fija el nombre de entrada Worker con el comentario de Webpack `webpackChunkName`; el hash sigue protegiendo caché e integridad de despliegues.
-- `next.config.ts` concede descargas únicamente a `/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js` cuando el flag del piloto está activado; la CSP del documento `/live` y los demás bundles sigue sin esas excepciones.
+- `next.config.ts` concede descargas únicamente a `/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js` cuando el flag del piloto está activado; la CSP del documento `/live` y los demás bundles sigue sin esas excepciones.
 - `.github/workflows/live-whisper-csp-build.yml` ejecuta un build Next.js aislado con el flag `true`, identifica un único Worker emitido y comprueba las cabeceras HTTP contra el artefacto standalone. La compilación habitual de producción mantiene el flag ausente y el piloto apagado.
 - Esta validación **no sustituye** un smoke de descarga e inferencia sobre la ruta autenticada de producción ni valida sistemas operativos/dispositivos físicos; no habilitar públicamente hasta completar esas comprobaciones.
