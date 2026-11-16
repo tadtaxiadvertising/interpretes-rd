@@ -76,7 +76,7 @@ describe('Audio Studio clip review player', () => {
     });
     expect(click).not.toHaveBeenCalled();
     expect(screen.queryByText(/Paquete generado/)).toBeNull();
-    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
   });
 
   it('does not download a completed export when segment edits invalidate its snapshot', async () => {
