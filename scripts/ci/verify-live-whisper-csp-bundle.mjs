@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, cpSync, mkdirSync } from 'node:f
 import { join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
-const WORKER_NAME = /^live-whisper-asr-worker-[a-f0-9]+\.js$/;
+const WORKER_NAME = /^live-whisper-asr-worker\.[a-f0-9]+\.js$/;
 const EXPECTED_SOURCE = '/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js';
 const MODEL_ORIGINS = ['https://huggingface.co', 'https://us.aws.cdn.hf.co'];
 const PORT = 4186;
