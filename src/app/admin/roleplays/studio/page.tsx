@@ -9,6 +9,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
+import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -427,17 +428,30 @@ export default function RoleplayStudioPage() {
   };
 
   const addSegment = () => {
+    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
+      setError('Se alcanzó el límite de intervenciones exportables.');
+      return;
+    }
+    // Insert in the gap at/after the playhead, not only after the last clip.
+    const interval = availableStudioInterval(
+      duration, player.current?.currentTime ?? 0, segments,
+    );
+    if (!interval) {
+      setError('No hay al menos 0,1 segundos libres desde el cursor. Muévelo a un espacio sin intervenciones.');
+      return;
+    }
     subtitleImportRevision.current += 1;
-    const start = segments.length > 0
-      ? Math.max(...segments.map(segment => Number.isFinite(segment.end) ? segment.end : 0))
-      : (player.current?.currentTime || 0);
-    const end = Math.min(duration, start + 30);
-    if (segments.length >= ROLEPLAY_MAX_SCENARIOS || end - start < 0.1) return;
+    const id = crypto.randomUUID();
     setSegments(prev => [...prev, {
-      id: crypto.randomUUID(), title: 'Intervención ' + (prev.length + 1),
-      start: Number(start.toFixed(2)), end: Number(end.toFixed(2)),
+      id, title: segments.some(item => item.start > interval.start)
+        ? 'Corte ' + formatTime(interval.start)
+        : 'Intervención ' + (prev.length + 1),
+      ...interval,
       scriptPrompt: '', responseLimit: 120, speakerRole: 'unknown', language: 'unknown',
     }]);
+    setExpandedSegmentId(id);
+    setError('');
+    setNotice('Intervención creada cerca del cursor sin solaparse con otros turnos. Revisa hablante, idioma y límites.');
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
@@ -449,7 +463,8 @@ export default function RoleplayStudioPage() {
     if (!audio || !duration || busy || draftBusy) return;
     const revision = subtitleImportRevision.current;
     const operation = ++draftOperationRevision.current;
-    const snapshot = [...segments];
+    // Persist in timeline order even if a new gap was filled after later clips.
+    const snapshot = [...segments].sort((a, b) => a.start - b.start);
     setDraftBusy(true);
     setError('');
     setNotice('');
@@ -536,7 +551,7 @@ export default function RoleplayStudioPage() {
   };
 
   const exportPackage = async () => {
-    if (!audio || !duration || !segments.length || busy || exportAbort.current) return;
+    if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
     if (segments.some(segment => segment.speakerRole === 'interpreter')) {
@@ -564,18 +579,19 @@ export default function RoleplayStudioPage() {
       setError('El paquete no puede superar 15 minutos de audio acumulado.');
       return;
     }
+    // Long recordings create only a local JSON draft. Do not allocate a
+    // remote ZIP AbortController for this branch: otherwise the early return
+    // locks all subsequent downloads until an edit resets exportAbort.
+    if (usesLocalLongMode(audio, duration)) {
+      await saveDraft();
+      return;
+    }
     const operation = ++exportRevision.current;
     const editorRevision = subtitleImportRevision.current;
     const controller = new AbortController();
     exportAbort.current = controller;
     const isCurrent = () => operation === exportRevision.current &&
       editorRevision === subtitleImportRevision.current && !controller.signal.aborted;
-    // Large files stay local: the legacy export endpoint reads its entire
-    // MP3 request into memory and must never receive a video or large source.
-    if (usesLocalLongMode(audio, duration)) {
-      await saveDraft();
-      return;
-    }
     setBusy(true);
     try {
       const form = new FormData();
@@ -637,12 +653,13 @@ export default function RoleplayStudioPage() {
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
-  const visibleSegments = segments.map((segment, index) => ({ segment, index }))
+  const visibleSegments = [...segments]
+    .sort((a, b) => a.start - b.start)
+    .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => !query ||
       [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language]
-        .some(value => value.toLocaleLowerCase().includes(query)))
-    .sort((a, b) => a.segment.start - b.segment.start);
+        .some(value => value.toLocaleLowerCase().includes(query)));
 
   const mediaHandlers = {
     onPlay: () => setEditorPlaybackRevision(n => n + 1),
@@ -1063,6 +1080,14 @@ export default function RoleplayStudioPage() {
                 <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
                   subtitleImportRevision.current += 1;
                   setSegments(prev => prev.filter(s => s.id !== segment.id));
+                  // Discard the deleted turn's private transcript reference.
+                  setCaptionTexts(prev => {
+                    if (!Object.prototype.hasOwnProperty.call(prev, segment.id)) return prev;
+                    const next = { ...prev };
+                    delete next[segment.id];
+                    return next;
+                  });
+                  setExpandedSegmentId(prev => prev === segment.id ? null : prev);
                 }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
