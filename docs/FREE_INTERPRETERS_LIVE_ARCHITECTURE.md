@@ -24,7 +24,7 @@ Objetivo: coste variable de inferencia de Free Interpreters cercano a cero. No e
 
 - **Web UI:** `src/app/live`; entrada común para intérpretes y otros roles autenticados.
 - **Core:** contratos de proveedores, detección de capacidades y ciclo de vida de audio en `src/modules/live-engine/core`.
-- **ASR local (experimental):** adaptador Web Speech estrictamente on-device con comprobación e instalación voluntaria de paquetes de idioma ES/EN. No habilita fallback remoto. Whisper.cpp/WebAssembly cuantizado queda como alternativa posterior para navegadores sin capacidad local nativa; requiere pruebas de memoria, latencia, precisión y licencia.
+- **ASR local (experimental):** adaptador Web Speech estrictamente on-device con comprobación e instalación voluntaria de paquetes de idioma ES/EN. Se solicita calidad `dictation` para frases prolongadas; si el navegador carece de ese paquete o nivel de calidad se informa indisponibilidad, sin fallback remoto. Whisper.cpp/WebAssembly cuantizado queda como alternativa posterior para navegadores sin capacidad local nativa; requiere pruebas de memoria, latencia, precisión y licencia.
 - **Traducción local (siguiente fase):** evaluar Argos Translate/WASM o motor compatible; probar ES↔EN y terminología de dominio. No asumir calidad profesional.
 - **Proveedores del usuario (fase posterior):** adaptadores aislados, consentimiento por finalidad, límites y visualización de costes/cuotas.
 - **Persistencia local (fase posterior):** IndexedDB para sesiones y glosarios. La exportación TXT explícita del texto final se realiza ya en el navegador; no existe sincronización automática.
@@ -61,3 +61,9 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - El archivo `.txt` se construye mediante Blob/Object URL y se descarga desde el navegador; la plataforma no recibe ni almacena el contenido.
 - La aplicación no genera SRT/VTT sin marcas temporales reales; inventar tiempos perjudicaría el entrenamiento de interpretación.
 - La transcripción actual se pierde al recargar la página salvo que el usuario descargue el TXT; no se promete recuperación o persistencia.
+## Diagnóstico de reconocimiento local
+
+- Web Speech `available()` e `install()` consultan explícitamente `processLocally: true` y `quality: 'dictation'`. La compatibilidad con estas opciones es experimental y depende del navegador y del idioma.
+- La política `on-device-speech-recognition` tiene `self` como lista de permisos predeterminada; no activar orígenes cruzados sin una revisión de seguridad.
+- Si el navegador informa un error de reconocimiento se termina la sesión y el usuario debe reiniciarla manualmente; no hay reintento silencioso mediante proveedor remoto.
+- La prueba del micrófono y el reconocedor nativo disponen de controles separados y no deben mantenerse activos simultáneamente hasta completar la unificación de captura.

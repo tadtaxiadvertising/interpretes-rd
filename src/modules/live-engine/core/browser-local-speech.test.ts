@@ -41,11 +41,11 @@ describe('on-device Web Speech boundary', () => {
     vi.stubGlobal('SpeechRecognition', MockRecognizer);
     expect(await checkOnDeviceSpeechPack('en-US')).toBe('available');
     expect(MockRecognizer.available).toHaveBeenCalledWith({
-      langs: ['en-US'], processLocally: true,
+      langs: ['en-US'], processLocally: true, quality: 'dictation',
     });
     await installOnDeviceSpeechPack('es-ES');
     expect(MockRecognizer.install).toHaveBeenCalledWith({
-      langs: ['es-ES'], processLocally: true,
+      langs: ['es-ES'], processLocally: true, quality: 'dictation',
     });
   });
 
