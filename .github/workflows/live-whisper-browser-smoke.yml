@@ -5,6 +5,9 @@ on:
     branches: [main]
     paths:
       - 'scripts/live-whisper-smoke/**'
+      - 'src/modules/live-engine/core/whisper-tiny-runtime.ts'
+      - 'src/modules/live-engine/core/whisper-tiny-client.ts'
+      - 'src/modules/live-engine/core/whisper-transcript-guard.ts'
       - '.github/workflows/live-whisper-browser-smoke.yml'
   workflow_dispatch:
 
