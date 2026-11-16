@@ -55,13 +55,13 @@ def _number(value):
 
 
 def _int(value):
-    return type(value) is int
+    return _number(value) and abs(value) <= 9007199254740991 and float(value).is_integer()
 
 
 def validate_project(project, source_size):
     """Mirror the established Node exporter's safety/manifest constraints."""
     if (not _obj(project) or project.get("format") != FORMAT or
-            project.get("version") != 1 or type(project.get("version")) is not int or
+            project.get("version") != 1 or type(project.get("version")) is bool or
             not _int(project.get("sourceSizeBytes")) or
             project["sourceSizeBytes"] != source_size or
             not isinstance(project.get("sourceSampleSha256"), str) or
@@ -176,7 +176,7 @@ def transcode_clip(source, destination, clip, ffmpeg, cancelled):
             if time.monotonic() >= deadline:
                 raise ExportError("FFmpeg excedió el tiempo permitido para un corte.")
             try:
-                output, _ = process.communicate(timeout=0.4)
+                _, output = process.communicate(timeout=0.4)
                 break
             except subprocess.TimeoutExpired:
                 continue
