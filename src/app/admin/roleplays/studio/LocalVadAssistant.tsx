@@ -41,7 +41,7 @@ export default function LocalVadAssistant({
           {status === 'loading' ? 'Preparando audio local…' : 'Revisar actividad local'}
         </button>
         {ready && <span className="text-xs text-slate-300">
-          {snapshot.segments.length} regiones con actividad detectadas
+          {snapshot?.segments.length ?? 0} regiones con actividad detectadas
         </span>}
       </div>
       {status === 'limited' && (
