@@ -24,7 +24,10 @@ export type BaseAudioInventorySummary = {
 function resolveBasePath(value: string, supabaseUrl: string): string | null {
   if (value.startsWith('base/')) {
     const parts = value.split('/');
-    if (parts.length < 3 || parts.some((part) =>
+    // The platform's legacy getBaseAudioPath() produces base/<session>.<ext>
+    // (two components); modern admin uploads use nested keys. Recognize
+    // both while rejecting empty, traversal, and non-ASCII path segments.
+    if (parts.length < 2 || parts.some((part) =>
       !part || part === '.' || part === '..' || !/^[a-zA-Z0-9._-]+$/.test(part)
     )) return null;
     return value;
