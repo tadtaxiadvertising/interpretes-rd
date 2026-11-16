@@ -18,8 +18,13 @@ jobs:
     name: Real model load + inference in Chromium
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
     env:
       NODE_OPTIONS: --max-old-space-size=4096
+      FI_LIVE_BROWSER: ${{ matrix.browser }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -32,9 +37,17 @@ jobs:
         run: npm ci --legacy-peer-deps
       - name: Self-host pinned ONNX Runtime WASM files
         run: npm run prepare:live-wasm
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Execute browser-only Whisper smoke
+      - name: Install selected Playwright browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Execute browser-only Whisper smoke and measure inference
         # Synthetic PCM only. No credentials, personal content or microphones.
-        # Uses Vite for the isolated browser harness, not the authenticated app.
+        # Uses a production-like Vite build, not the authenticated app.
         run: node scripts/live-whisper-smoke/run.mjs
+      - name: Upload sanitized per-browser latency measurements
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: whisper-${{ matrix.browser }}-latency
+          path: test-results/whisper-${{ matrix.browser }}-metrics.json
+          if-no-files-found: ignore
+          retention-days: 14

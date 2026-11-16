@@ -5,6 +5,15 @@ interface SmokeResult {
   en: string | null;
   es: string | null;
   modelId: string;
+  timings?: {
+    modelLoadMs: number;
+    shortEnglishMs: number;
+    shortSpanishMs: number;
+    longEnglishMs: number;
+    shortAudioMs: number;
+    longAudioMs: number;
+    longWindowRealtimeFactor: number;
+  };
   error?: string;
 }
 
@@ -24,11 +33,11 @@ function report(value: string) {
   output.textContent = value;
 }
 
-function makeSyntheticVoiceLikePcm(): Float32Array {
+function makeSyntheticVoiceLikePcm(seconds = 2): Float32Array {
   // Deliberately non-silent and fully generated. This does NOT test word
   // accuracy, which requires an authorized recorded-voice fixture.
   const rate = 16_000;
-  const length = rate * 2;
+  const length = rate * seconds;
   const samples = new Float32Array(length);
   for (let i = 0; i < length; i += 1) {
     const t = i / rate;
@@ -49,19 +58,52 @@ run.addEventListener('click', () => {
 
   void (async () => {
     try {
+      const loadStart = performance.now();
       model = await loadLocalWhisperTiny({
         language: 'en',
         onProgress: () => { /* Do not log per-file download URLs or payloads. */ },
-      });
+      }, () => new Worker(
+        // Vite test-only Worker factory: builds the EXACT real entrypoint and
+        // runtime while keeping Next's webpackChunkName hint in production.
+        // The session injection is already supported by the production client.
+        new URL('../../src/modules/live-engine/core/whisper-tiny.worker.ts', import.meta.url),
+        { type: 'module', name: 'free-interpreters-whisper-tiny-smoke' },
+      ));
+      const modelLoadMs = performance.now() - loadStart;
       report('model-ready');
       const pcm = makeSyntheticVoiceLikePcm();
+      const englishStart = performance.now();
       const en = await model.transcribe(pcm, 'en');
+      const shortEnglishMs = performance.now() - englishStart;
+      const spanishStart = performance.now();
       const es = await model.transcribe(pcm, 'es');
+      const shortSpanishMs = performance.now() - spanishStart;
+
+      // The user-facing PCM chunker emits 10-second windows with one second
+      // of overlap. This measures a realistic *window duration* in the actual
+      // model, without claiming synthetic tones prove speech accuracy.
+      const longPcm = makeSyntheticVoiceLikePcm(10);
+      report('long-window-inference');
+      const longStart = performance.now();
+      const longEnglish = await model.transcribe(longPcm, 'en');
+      const longEnglishMs = performance.now() - longStart;
+      if (typeof longEnglish !== 'string') {
+        throw new Error('LOCAL_WHISPER_INVALID_LONG_OUTPUT');
+      }
       window.__whisperSmoke = {
         loaded: true,
         modelId: model.modelId,
         en,
         es,
+        timings: {
+          modelLoadMs,
+          shortEnglishMs,
+          shortSpanishMs,
+          longEnglishMs,
+          shortAudioMs: 2_000,
+          longAudioMs: 10_000,
+          longWindowRealtimeFactor: longEnglishMs / 10_000,
+        },
       };
       report('inference-complete');
     } catch (error) {
