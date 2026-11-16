@@ -103,6 +103,17 @@ export default function RoleplayStudioPage() {
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
+  const [turnActionFeedback, setTurnActionFeedback] = useState<{
+    id: string; message: string; error: boolean;
+  } | null>(null);
+
+  const reportTurnAction = (id: string, message: string, error = false) => {
+    // The global notification sits after all rows and is easy to miss in
+    // long projects. Keep operation feedback beside the clicked turn.
+    setError('');
+    setNotice('');
+    setTurnActionFeedback({ id, message, error });
+  };
 
   const stopPreview = () => {
     previewEnd.current = null;
@@ -201,6 +212,7 @@ export default function RoleplayStudioPage() {
     setSegmentSearch('');
     setShowPendingReview(false);
     setExpandedSegmentId(null);
+    setTurnActionFeedback(null);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
@@ -390,15 +402,29 @@ export default function RoleplayStudioPage() {
 
   const splitAtPlayhead = (id: string) => {
     const segment = segments.find(item => item.id === id);
-    const cursor = player.current?.currentTime;
-    if (!segment || cursor === undefined || !Number.isFinite(cursor)) return;
-    const midpoint = Number(cursor.toFixed(2));
+    if (!segment) return;
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
-      setError('Se alcanzó el máximo de intervenciones exportables.');
+      reportTurnAction(id, `Límite de ${ROLEPLAY_MAX_SCENARIOS} intervenciones. Elimina un turno antes de dividir.`, true);
       return;
     }
-    if (midpoint - segment.start < 0.1 || segment.end - midpoint < 0.1) {
-      setError('Sitúa el cursor dentro de la intervención, dejando al menos 0,1 s por lado.');
+    const span = segment.end - segment.start;
+    if (!Number.isFinite(span) || !Number.isFinite(segment.start) ||
+        !Number.isFinite(segment.end) || span < 0.2 - 1e-6 ||
+        segment.start < 0 || segment.end > duration + 0.1) {
+      reportTurnAction(id, 'El fragmento debe durar al menos 0,2 segundos y tener límites válidos para dividirlo.', true);
+      return;
+    }
+    const cursor = player.current?.currentTime;
+    // A click without manually positioning the cursor previously looked like
+    // a broken button. Prefer a precise cursor cut; otherwise use the midpoint
+    // and explain the fallback. Keep both resulting clips >= 0.1 s.
+    const cursorPoint = Number.isFinite(cursor) ? Number((cursor as number).toFixed(2)) : NaN;
+    const atCursor = Number.isFinite(cursorPoint) &&
+      cursorPoint - segment.start >= 0.1 - 1e-6 &&
+      segment.end - cursorPoint >= 0.1 - 1e-6;
+    const midpoint = atCursor ? cursorPoint : Number(((segment.start + segment.end) / 2).toFixed(2));
+    if (midpoint - segment.start < 0.1 - 1e-6 || segment.end - midpoint < 0.1 - 1e-6) {
+      reportTurnAction(id, 'El fragmento es demasiado corto para crear dos cortes válidos.', true);
       return;
     }
     subtitleImportRevision.current += 1;
@@ -408,13 +434,14 @@ export default function RoleplayStudioPage() {
       { ...item, id: secondId, start: midpoint,
         title: item.title.slice(0, 185) + ' (parte 2)' },
     ] : [item]));
-    // Preserve the original transcript as editor-only reference for both
-    // halves. We cannot infer a word-level split from a timestamp alone.
+    // Transcript remains private reference material in both halves; never
+    // infer a word-level split or copy it to participant instructions.
     setCaptionTexts(previous => previous[id]
       ? { ...previous, [secondId]: previous[id] } : previous);
     setExpandedSegmentId(secondId);
-    setError('');
-    setNotice('Corte dividido. La transcripción original se conserva en ambas partes como referencia; revisa dónde se separa el diálogo.');
+    reportTurnAction(id, atCursor
+      ? `Dividido en ${formatTime(midpoint)} (posición del cursor). Revisa ambas partes.`
+      : `El cursor estaba fuera del corte; dividido en su punto medio (${formatTime(midpoint)}). Ajusta si lo necesitas.`);
   };
 
   const mergeWithNext = (id: string) => {
@@ -422,19 +449,39 @@ export default function RoleplayStudioPage() {
     const current = ordered.findIndex(item => item.id === id);
     const first = ordered[current];
     const second = ordered[current + 1];
-    if (!first || !second) { setError('No hay una intervención posterior.'); return; }
-    if (first.speakerRole !== second.speakerRole || first.language !== second.language) {
-      setError('La unión exige el mismo perfil del hablante e idioma.'); return;
+    if (!first || !second) {
+      reportTurnAction(id, 'Este es el último turno; no existe otro después para unir.', true);
+      return;
     }
-    if (second.start < first.end || second.start - first.end > 2 ||
-        second.end - first.start > 300) {
-      setError('La unión no permite solapamientos, pausas mayores de 2 s ni cortes de más de 5 minutos.');
+    if ((showPendingReview && !needsReview(second)) ||
+        (segmentSearch.trim() && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
+          second.speakerRole, second.language].some(value =>
+          value.toLocaleLowerCase().includes(segmentSearch.trim().toLocaleLowerCase())))) {
+      reportTurnAction(id, 'El turno siguiente está oculto por un filtro. Limpia los filtros antes de unir.', true);
+      return;
+    }
+    if (first.speakerRole !== second.speakerRole || first.language !== second.language) {
+      reportTurnAction(id, 'No se pueden unir voces o idiomas distintos. Revisa el hablante y el idioma de ambos turnos.', true);
+      return;
+    }
+    if (second.start < first.end - 1e-6) {
+      reportTurnAction(id, 'Los turnos se solapan. Ajusta sus límites antes de unirlos.', true);
+      return;
+    }
+    const gap = second.start - first.end;
+    if (gap > 2 + 1e-6) {
+      reportTurnAction(id, `Hay ${formatTime(gap)} de separación. Reduce el espacio a 2 segundos o menos antes de unir, para evitar incluir una pausa larga.`, true);
+      return;
+    }
+    if (second.end - first.start > 300) {
+      reportTurnAction(id, 'La unión superaría los 5 minutos por intervención. Reduce los límites antes de unir.', true);
       return;
     }
     const prompts = [first.scriptPrompt, second.scriptPrompt].filter(Boolean);
     const mergedPrompt = [...new Set(prompts)].join('\n\n');
     if (mergedPrompt.length > 5000) {
-      setError('Las instrucciones combinadas exceden 5.000 caracteres.'); return;
+      reportTurnAction(id, 'Las instrucciones combinadas exceden 5.000 caracteres.', true);
+      return;
     }
     subtitleImportRevision.current += 1;
     setSegments(previous => previous.filter(item => item.id !== second.id)
@@ -442,15 +489,15 @@ export default function RoleplayStudioPage() {
         ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
     setCaptionTexts(previous => {
       const next = { ...previous };
-      // A previously split cue retains the same reference in both halves;
-      // rejoining it must not duplicate private transcript text.
+      // Rejoining previously split cues must not duplicate private text.
       const references = [previous[first.id], previous[second.id]].filter(Boolean);
-      next[first.id] = [...new Set(references)].join(' ');
+      if (references.length) next[first.id] = [...new Set(references)].join(' ');
+      else delete next[first.id];
       delete next[second.id];
       return next;
     });
-    setError('');
-    setNotice('Intervenciones unidas. Verifica audio, tiempos y texto antes de exportar.');
+    setExpandedSegmentId(prev => prev === second.id ? first.id : prev);
+    reportTurnAction(id, `Unidas las intervenciones ${current + 1} y ${current + 2}. Verifica el audio resultante.`);
   };
 
   const addSegment = () => {
@@ -467,6 +514,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     subtitleImportRevision.current += 1;
+    setTurnActionFeedback(null);
     const id = crypto.randomUUID();
     setSegments(prev => [...prev, {
       id, title: segments.some(item => item.start > interval.start)
@@ -481,6 +529,7 @@ export default function RoleplayStudioPage() {
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
+    setTurnActionFeedback(null);
     subtitleImportRevision.current += 1;
     setSegments(prev => prev.map(segment => segment.id === id ? { ...segment, ...patch } : segment));
   };
@@ -1199,6 +1248,13 @@ export default function RoleplayStudioPage() {
               {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
             </p>
           )}
+          {segments.length > 0 && (
+            <p className="text-xs text-slate-400">
+              Cursor: <span className="font-medium text-cyan-200">{formatTime(playhead)}</span>.
+              {' '}«Dividir» corta en el cursor cuando está dentro del turno; fuera de él usa el punto medio.
+              {' '}«Unir» combina con el siguiente turno visible solo cuando son compatibles y están próximos.
+            </p>
+          )}
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
             <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
@@ -1237,12 +1293,14 @@ export default function RoleplayStudioPage() {
                   Ir al inicio
                 </button>
                 <button type="button" onClick={() => splitAtPlayhead(segment.id)}
-                  aria-label={'Dividir intervención ' + (index + 1) + ' en cursor'}
+                  aria-label={'Dividir intervención ' + (index + 1) + ' en cursor o punto medio'}
+                  title="Divide en el cursor si está dentro del turno; si no, en el punto medio"
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
                   Dividir
                 </button>
                 <button type="button" onClick={() => mergeWithNext(segment.id)}
                   aria-label={'Unir intervención ' + (index + 1) + ' con siguiente'}
+                  title="Une con el siguiente turno visible si comparten hablante e idioma, están separados por 2 s o menos y no superan 5 minutos"
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
                   Unir
                 </button>
@@ -1271,9 +1329,19 @@ export default function RoleplayStudioPage() {
                     return next;
                   });
                   setExpandedSegmentId(prev => prev === segment.id ? null : prev);
+                  setTurnActionFeedback(null);
                 }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
+              {turnActionFeedback?.id === segment.id && (
+                <p
+                  role={turnActionFeedback.error ? 'alert' : 'status'}
+                  className={turnActionFeedback.error
+                    ? 'rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100'
+                    : 'rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100'}>
+                  {turnActionFeedback.message}
+                </p>
+              )}
               {compactRows && expandedSegmentId !== segment.id && (
                 <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
                   <label className="flex min-w-[180px] flex-1 items-center gap-2 text-xs text-slate-300">

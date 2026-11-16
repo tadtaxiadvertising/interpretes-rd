@@ -213,4 +213,63 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByText(/Intervenciones \(1\/25\)/)).toBeNull();
   });
 
+  it('divides at the midpoint when the player is outside the selected intervention', () => {
+    const player = loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+
+    // This was previously a no-op, with the error located below the list.
+    player.currentTime = 100;
+    fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1 en cursor/ }));
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
+    expect(ends.map(input => Number(input.value))).toEqual([15, 30, 60]);
+    expect(screen.getByText(/dividido en su punto medio/i)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.getByText(/Unidas las intervenciones 1 y 2/)).toBeTruthy();
+  });
+
+  it('reports incompatible speakers beside the row and preserves both turns', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[0], {
+      target: { value: 'doctor' },
+    });
+    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], {
+      target: { value: 'patient' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toMatch(/No se pueden unir voces o idiomas distintos/);
+    expect(alert.closest('article')?.textContent).toMatch(/Intervención 1/);
+  });
+
+  it('explains a long gap and does not silently include it in a merge', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], {
+      target: { value: '40' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByRole('alert').textContent).toMatch(/de separación/);
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+  });
+
+  it('never merges a hidden next turn when review filters are active', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByRole('alert').textContent).toMatch(/oculto por un filtro/);
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+  });
+
 });
