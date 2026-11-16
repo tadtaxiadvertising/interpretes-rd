@@ -81,6 +81,19 @@ describe('resolveInvitationBaseAudioUrl', () => {
     expect(sign).not.toHaveBeenCalled();
   });
 
+  it('blocks raw same-project Storage traversal before URL() normalizes the path', async () => {
+    const sign = vi.fn();
+    const unsafe = [
+      `${origin}/storage/v1/object/../../../private.mp3?token=LEGACY_SECRET`,
+      `${origin}/storage/v1/object/../private.mp3`,
+    ];
+    for (const url of unsafe) {
+      expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: url }, origin, sign))
+        .toBeNull();
+    }
+    expect(sign).not.toHaveBeenCalled();
+  });
+
   it('fails closed for malformed canonical keys and failed Storage signatures', async () => {
     const sign = vi.fn().mockRejectedValue(new Error('Storage signing failed'));
     expect(await resolveInvitationBaseAudioUrl({
