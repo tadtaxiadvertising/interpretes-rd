@@ -37,6 +37,8 @@ describe('resolveInvitationBaseAudioUrl', () => {
       legacy,
       `${legacy}?token=LEGACY_SECRET`,
       'https://other.supabase.co/storage/v1/object/public/other-bucket/private/audio.mp3',
+      `${origin}/storage/v1/object/../../../archive.mp3?token=SECRET`,
+      `${origin}/storage/v1/object/../private.mp3`,
     ];
     for (const url of stored) {
       expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: url }, undefined, sign))
@@ -51,6 +53,10 @@ describe('resolveInvitationBaseAudioUrl', () => {
     expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: external }, undefined, sign))
       .toBe(external);
     expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: 'not a url' }, undefined, sign))
+      .toBeNull();
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: 'javascript:alert(1)' }, undefined, sign))
+      .toBeNull();
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: 'http://assets.example.test/audio.wav' }, undefined, sign))
       .toBeNull();
     expect(sign).not.toHaveBeenCalled();
   });
