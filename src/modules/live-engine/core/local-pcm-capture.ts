@@ -90,15 +90,23 @@ export async function startLocalPcmCapture(
       maxFrameSamples: 1024,
     });
     source = context.createMediaStreamSource(stream);
+    // The processor itself must have a bounded number of in-flight messages;
+    // a JavaScript queue alone cannot bound pending MessagePort messages.
+    const packetCredits = Math.min(256, Math.max(1, Math.ceil(context.sampleRate * 2 / 1024)));
     node = new AudioWorkletNode(context, 'free-interpreters-live-pcm', {
       numberOfInputs: 1,
       numberOfOutputs: 1,
       outputChannelCount: [1],
+      processorOptions: { packetCredits },
     });
 
     node.port.onmessage = (event: MessageEvent<unknown>) => {
       if (stopped || !queue) return;
       const data = event.data as { type?: unknown; samples?: unknown } | null;
+      if (data?.type === 'overflow') {
+        cleanup(new Error('LOCAL_PCM_TRANSPORT_OVERFLOW'));
+        return;
+      }
       if (data?.type !== 'pcm' || !(data.samples instanceof Float32Array)) {
         cleanup(new Error('INVALID_LOCAL_PCM_MESSAGE'));
         return;
@@ -122,7 +130,16 @@ export async function startLocalPcmCapture(
     const sampleRate = context.sampleRate;
     return {
       sampleRate,
-      frames: activeQueue,
+      // Return credits only after the consumer actually moves to the next
+      // frame. This bounds Worklet->main-thread messages even if ASR stalls.
+      frames: {
+        async *[Symbol.asyncIterator]() {
+          for await (const frame of activeQueue) {
+            yield frame;
+            if (!stopped) node?.port.postMessage({ type: 'credit' });
+          }
+        },
+      },
       getStats: () => activeQueue.getStats(),
       stop: () => cleanup(),
     };
