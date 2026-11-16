@@ -30,14 +30,14 @@ jobs:
   package:
     name: Package offline desktop (${{ matrix.os }})
     # One-time RC packaging for PR 443; revert to manual-only after verifying.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 443 && matrix.os == 'windows-latest')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 443)
     needs: offline-tests
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["windows-latest","macos-latest","ubuntu-latest"]' || '["windows-latest"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
