@@ -5,10 +5,14 @@ import StudioWaveform from './StudioWaveform';
 
 const originalAudioContext = Object.getOwnPropertyDescriptor(window, 'AudioContext');
 function stubBrowserDecoder(factory: unknown) {
-  // The component reads window.AudioContext, not bare globalThis.AudioContext.
+  // Keep both browser access paths in sync across jsdom/Vitest realms.
+  // The component reads window.AudioContext while jsdom may expose the
+  // constructor through the global object separately.
+  vi.stubGlobal('AudioContext', factory);
   Object.defineProperty(window, 'AudioContext', {
     configurable: true, writable: true, value: factory,
   });
+  expect(window.AudioContext).toBe(factory);
 }
 
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
