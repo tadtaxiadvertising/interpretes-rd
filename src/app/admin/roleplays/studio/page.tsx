@@ -72,6 +72,8 @@ export default function RoleplayStudioPage() {
   const draftOperationRevision = useRef(0);
   const silenceRevision = useRef(0);
   const silenceAbort = useRef<AbortController | null>(null);
+  const exportRevision = useRef(0);
+  const exportAbort = useRef<AbortController | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
@@ -123,13 +125,32 @@ export default function RoleplayStudioPage() {
   };
 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
-  useEffect(() => () => { silenceAbort.current?.abort(); }, []);
+  useEffect(() => () => {
+    silenceAbort.current?.abort();
+    exportRevision.current += 1;
+    exportAbort.current?.abort();
+  }, []);
+
+  // Edits invalidate the ZIP snapshot immediately: never download an older
+  // package as if it reflected the current set of interventions.
+  useEffect(() => {
+    if (!exportAbort.current) return;
+    exportRevision.current += 1;
+    exportAbort.current.abort();
+    exportAbort.current = null;
+    setBusy(false);
+    setError('La exportación se canceló porque cambiaron las intervenciones. Exporta nuevamente.');
+  }, [segments]);
 
   const chooseAudio = (file: File | undefined) => {
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
     draftOperationRevision.current += 1;
     silenceRevision.current += 1;
+    exportRevision.current += 1;
+    exportAbort.current?.abort();
+    exportAbort.current = null;
+    setBusy(false);
     silenceAbort.current?.abort();
     silenceAbort.current = null;
     setAnalyzingSilences(false);
@@ -479,7 +500,7 @@ export default function RoleplayStudioPage() {
   };
 
   const exportPackage = async () => {
-    if (!audio || !duration || !segments.length) return;
+    if (!audio || !duration || !segments.length || busy || exportAbort.current) return;
     setError('');
     setNotice('');
     if (segments.some(segment => segment.speakerRole === 'interpreter')) {
@@ -507,6 +528,12 @@ export default function RoleplayStudioPage() {
       setError('El paquete no puede superar 15 minutos de audio acumulado.');
       return;
     }
+    const operation = ++exportRevision.current;
+    const editorRevision = subtitleImportRevision.current;
+    const controller = new AbortController();
+    exportAbort.current = controller;
+    const isCurrent = () => operation === exportRevision.current &&
+      editorRevision === subtitleImportRevision.current && !controller.signal.aborted;
     setBusy(true);
     try {
       const form = new FormData();
@@ -516,13 +543,16 @@ export default function RoleplayStudioPage() {
         scriptPrompt: segment.scriptPrompt, responseLimit: segment.responseLimit,
       }))));
       const response = await fetch('/api/admin/roleplays/studio/export', {
-        method: 'POST', credentials: 'same-origin', body: form,
+        method: 'POST', credentials: 'same-origin', body: form, signal: controller.signal,
       });
+      if (!isCurrent()) return;
       if (!response.ok) {
         const body = await response.json().catch(() => null);
+        if (!isCurrent()) return;
         throw new Error(body?.error || 'No se pudo exportar.');
       }
       const blob = await response.blob();
+      if (!isCurrent()) return;
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -533,9 +563,14 @@ export default function RoleplayStudioPage() {
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
       setNotice('Paquete generado. Ve a Crear roleplay, importa directamente este ZIP y elige el candidato o intérprete destinatario.');
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Error al preparar el paquete.');
+      if (isCurrent()) {
+        setError(cause instanceof Error ? cause.message : 'Error al preparar el paquete.');
+      }
     } finally {
-      setBusy(false);
+      if (operation === exportRevision.current) {
+        exportAbort.current = null;
+        setBusy(false);
+      }
     }
   };
 
