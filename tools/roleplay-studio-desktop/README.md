@@ -43,7 +43,7 @@ Antes de redistribuir FFmpeg integrado, revisa y cumple las licencias, avisos de
 Desde la raíz del repositorio, con Python 3.12+:
 
 ~~~sh
-python -m pip install "imageio-ffmpeg>=0.6,<1"
+python -m pip install "imageio-ffmpeg==0.8.1"
 python -m unittest discover -s tools/roleplay-studio-desktop -p 'test_*.py' -v
 python tools/roleplay-studio-desktop/desktop_exporter.py
 ~~~
