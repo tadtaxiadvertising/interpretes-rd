@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   calculateWaveformPeaks,
   canRenderWaveform,
@@ -29,8 +29,11 @@ const HALF_HEIGHT = CHART_HEIGHT / 2;
 
 function timeLabel(seconds: number): string {
   const value = Math.max(0, Math.floor(seconds));
-  return String(Math.floor(value / 60)).padStart(2, '0') + ':' +
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor(value / 60) % 60;
+  const tail = String(minutes).padStart(2, '0') + ':' +
     String(value % 60).padStart(2, '0');
+  return hours ? String(hours).padStart(2, '0') + ':' + tail : tail;
 }
 
 /**
@@ -42,6 +45,8 @@ export default function StudioWaveform({
 }: StudioWaveformProps) {
   const [peaks, setPeaks] = useState<number[]>([]);
   const [status, setStatus] = useState<PreviewStatus>('loading');
+  const [zoom, setZoom] = useState<1 | 4 | 12 | 60>(1);
+  const [requestedStart, setRequestedStart] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,8 +95,27 @@ export default function StudioWaveform({
 
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 1;
   const safeTime = Math.min(safeDuration, Math.max(0, Number.isFinite(currentTime) ? currentTime : 0));
-  const progressX = safeTime / safeDuration * CHART_WIDTH;
-  const bars = status === 'ready' ? peaks : new Array<number>(WAVEFORM_BAR_COUNT).fill(0.04);
+  // Zoom changes only the viewport, never the underlying audio or decoding budget.
+  const windowSeconds = safeDuration / zoom;
+  const maxStart = safeDuration - windowSeconds;
+  const windowStart = Math.min(maxStart, Math.max(0, requestedStart));
+  const windowEnd = windowStart + windowSeconds;
+  const playheadVisible = safeTime >= windowStart && safeTime <= windowEnd;
+  const progressX = (safeTime - windowStart) / windowSeconds * CHART_WIDTH;
+  const bars = useMemo(() => Array.from({ length: WAVEFORM_BAR_COUNT }, (_, index) => {
+    if (status !== 'ready' || !peaks.length) return 0.04;
+    const at = windowStart + (index + 0.5) / WAVEFORM_BAR_COUNT * windowSeconds;
+    const sourceIndex = Math.min(peaks.length - 1, Math.floor(at / safeDuration * peaks.length));
+    return peaks[sourceIndex];
+  }), [status, peaks, safeDuration, windowSeconds, windowStart]);
+  const centerOnPlayhead = (scale: 1 | 4 | 12 | 60) => {
+    const span = safeDuration / scale;
+    setRequestedStart(Math.min(safeDuration - span, Math.max(0, safeTime - span / 2)));
+    setZoom(scale);
+  };
+  const pan = (direction: -1 | 1) => {
+    setRequestedStart(Math.min(maxStart, Math.max(0, windowStart + direction * windowSeconds * 0.75)));
+  };
 
   return (
     <div className="rounded-xl border border-white/10 bg-slate-950/80 p-4" data-testid="audio-studio-waveform">
@@ -102,6 +126,35 @@ export default function StudioWaveform({
             status === 'loading' ? 'Preparando ondas…' :
             status === 'limited' ? 'Vista de tiempo simplificada' : 'Vista de ondas no disponible'}
         </p>
+      </div>
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <label className="flex items-center gap-2 text-slate-300">
+          Detalle
+          <select
+            aria-label="Zoom de la línea de tiempo"
+            value={zoom}
+            onChange={event => centerOnPlayhead(Number(event.currentTarget.value) as 1 | 4 | 12 | 60)}
+            className="rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white"
+          >
+            <option value={1}>Completo</option>
+            <option value={4}>4×</option>
+            <option value={12}>12×</option>
+            <option value={60}>60×</option>
+          </select>
+        </label>
+        <button type="button" onClick={() => pan(-1)} disabled={zoom === 1 || windowStart <= 0}
+          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
+          Anterior
+        </button>
+        <button type="button" onClick={() => pan(1)} disabled={zoom === 1 || windowStart >= maxStart}
+          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
+          Siguiente
+        </button>
+        <button type="button" onClick={() => centerOnPlayhead(zoom)} disabled={zoom === 1}
+          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
+          Ir al cursor
+        </button>
+        <span className="text-slate-400">Ventana: {timeLabel(windowStart)}–{timeLabel(windowEnd)}</span>
       </div>
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
@@ -123,23 +176,26 @@ export default function StudioWaveform({
         })}
         {segments.filter(segment =>
           Number.isFinite(segment.start) && Number.isFinite(segment.end) &&
-          segment.start >= 0 && segment.end > segment.start && segment.end <= safeDuration
+          segment.start >= 0 && segment.end > segment.start && segment.end <= safeDuration &&
+          segment.end > windowStart && segment.start < windowEnd
         ).map(segment => (
-          <rect key={segment.id}
-            x={segment.start / safeDuration * CHART_WIDTH} y={0}
-            width={(segment.end - segment.start) / safeDuration * CHART_WIDTH}
+          <rect key={segment.id} data-testid="studio-window-segment"
+            x={(Math.max(segment.start, windowStart) - windowStart) / windowSeconds * CHART_WIDTH} y={0}
+            width={(Math.min(segment.end, windowEnd) - Math.max(segment.start, windowStart)) / windowSeconds * CHART_WIDTH}
             height={CHART_HEIGHT} className="fill-emerald-400/25"/>
         ))}
-        <line x1={progressX} y1={0} x2={progressX} y2={CHART_HEIGHT}
-          strokeWidth={2.5} className="stroke-amber-300"/>
+        {playheadVisible && (
+          <line x1={progressX} y1={0} x2={progressX} y2={CHART_HEIGHT}
+            strokeWidth={2.5} className="stroke-amber-300"/>
+        )}
       </svg>
       <input
         aria-label="Posición del reproductor en segundos"
         type="range"
-        min={0}
-        max={safeDuration}
+        min={windowStart}
+        max={windowEnd}
         step={0.1}
-        value={safeTime}
+        value={Math.min(windowEnd, Math.max(windowStart, safeTime))}
         onChange={event => {
           const value = event.currentTarget.valueAsNumber;
           if (Number.isFinite(value)) onSeek(Math.min(safeDuration, Math.max(0, value)));
@@ -150,6 +206,9 @@ export default function StudioWaveform({
         <span>{timeLabel(safeTime)}</span>
         <span>{timeLabel(safeDuration)}</span>
       </div>
+      {!playheadVisible && (
+        <p className="mt-1 text-xs text-amber-200">El cursor está fuera de esta ventana. Usa «Ir al cursor» para localizarlo.</p>
+      )}
       {status === 'limited' && (
         <p className="mt-3 text-xs leading-5 text-amber-200">
           Para proteger la memoria del navegador, las ondas solo se calculan en grabaciones
