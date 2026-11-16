@@ -62,7 +62,13 @@ run.addEventListener('click', () => {
       model = await loadLocalWhisperTiny({
         language: 'en',
         onProgress: () => { /* Do not log per-file download URLs or payloads. */ },
-      });
+      }, () => new Worker(
+        // Vite test-only Worker factory: builds the EXACT real entrypoint and
+        // runtime while keeping Next's webpackChunkName hint in production.
+        // The session injection is already supported by the production client.
+        new URL('../../src/modules/live-engine/core/whisper-tiny.worker.ts', import.meta.url),
+        { type: 'module', name: 'free-interpreters-whisper-tiny-smoke' },
+      ));
       const modelLoadMs = performance.now() - loadStart;
       report('model-ready');
       const pcm = makeSyntheticVoiceLikePcm();
