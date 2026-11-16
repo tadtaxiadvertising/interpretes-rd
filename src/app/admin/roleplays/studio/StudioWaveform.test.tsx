@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import StudioWaveform from './StudioWaveform';
 
 describe('Roleplay Studio accessible waveform timeline', () => {
@@ -118,6 +118,97 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     expect(slider.min).toBe('0');
     expect(slider.max).toBe('90');
     expect([...zoom.options].map(option => option.value)).toEqual(['1', '4']);
+  });
+
+
+  it('decodes a short MP3 only once for both waveform and VAD, without network', async () => {
+    const source = audio();
+    const read = vi.fn(async () => new ArrayBuffer(16));
+    Object.defineProperty(source, 'arrayBuffer', { configurable: true, value: read });
+    const samples = new Float32Array(16000 * 3);
+    for (let index = 16000; index < 16000 * 2; index++) {
+      samples[index] = Math.sin(index / 8) * 0.2;
+    }
+    const decode = vi.fn(async () => ({
+      duration: 3,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      getChannelData: () => samples,
+    }));
+    const close = vi.fn(async () => {});
+    const makeContext = vi.fn(() => ({ decodeAudioData: decode, close }));
+    const fetcher = vi.fn();
+    vi.stubGlobal('AudioContext', makeContext);
+    vi.stubGlobal('fetch', fetcher);
+    const notify = vi.fn();
+    const seek = vi.fn();
+
+    const { rerender } = render(<StudioWaveform
+      file={source} duration={3} currentTime={0} segments={[]}
+      onSeek={seek} onLocalVadResult={notify}/>);
+    await waitFor(() => {
+      expect(notify.mock.calls.some(([, result]) => result.status === 'ready')).toBe(true);
+    });
+    const latest = notify.mock.calls.at(-1)?.[1];
+    expect(latest.segments.length).toBeGreaterThan(0);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(decode).toHaveBeenCalledTimes(1);
+    expect(makeContext).toHaveBeenCalledTimes(1);
+    expect(close).toHaveBeenCalledTimes(1);
+    rerender(<StudioWaveform
+      file={source} duration={3} currentTime={2} segments={[]}
+      onSeek={seek} onLocalVadResult={notify}/>);
+    expect(decode).toHaveBeenCalledTimes(1);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('never decodes a source above 4 minutes or 8 MiB', () => {
+    const source = audio();
+    const read = vi.fn();
+    Object.defineProperty(source, 'arrayBuffer', { configurable: true, value: read });
+    const decode = vi.fn();
+    vi.stubGlobal('AudioContext', decode);
+    const notify = vi.fn();
+    render(<StudioWaveform file={source} duration={300}
+      currentTime={0} segments={[]} onSeek={vi.fn()} onLocalVadResult={notify}/>);
+    expect(read).not.toHaveBeenCalled();
+    expect(decode).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(source, { status: 'limited', segments: [] });
+  });
+
+  it('ignores results of a replaced MP3 and reports browser decoder failure', async () => {
+    const first = audio();
+    const second = new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' });
+    let release: ((decoded: unknown) => void) | undefined;
+    const oldResult = new Promise(resolve => { release = resolve; });
+    Object.defineProperty(first, 'arrayBuffer', {
+      configurable: true, value: vi.fn(async () => new ArrayBuffer(4)),
+    });
+    Object.defineProperty(second, 'arrayBuffer', {
+      configurable: true, value: vi.fn(async () => new ArrayBuffer(8)),
+    });
+    const decode = vi.fn((bytes: ArrayBuffer) =>
+      bytes.byteLength === 4 ? oldResult : Promise.reject(new Error('unsupported codec')));
+    const close = vi.fn(async () => {});
+    vi.stubGlobal('AudioContext', vi.fn(() => ({ decodeAudioData: decode, close })));
+    const notify = vi.fn();
+    const { rerender } = render(<StudioWaveform
+      file={first} duration={3} currentTime={0} segments={[]}
+      onSeek={vi.fn()} onLocalVadResult={notify}/>);
+    await waitFor(() => expect(decode).toHaveBeenCalledTimes(1));
+    rerender(<StudioWaveform
+      file={second} duration={3} currentTime={0} segments={[]}
+      onSeek={vi.fn()} onLocalVadResult={notify}/>);
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(second, { status: 'unavailable', segments: [] });
+    });
+    release?.({
+      duration: 3, sampleRate: 16000, numberOfChannels: 1,
+      getChannelData: () => new Float32Array(16000 * 3),
+    });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(notify.mock.calls.some(([source, result]) =>
+      source === first && result.status === 'ready')).toBe(false);
   });
 
 });
