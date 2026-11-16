@@ -41,7 +41,7 @@ describe('Crear roleplay: selección y resumen simplificados', () => {
     fireEvent.change(selector, { target: { value: '2' } });
     expect(screen.getByText(/Luis Pérez · Intérprete/)).toBeTruthy();
 
-    fireEvent.change(search, { target: { value: 'maría' } });
+    fireEvent.change(search, { target: { value: 'maria' } });
     // Selected option stays accessible even when it does not match the search.
     expect(screen.getByRole('option', { name: /Luis Pérez/ })).toBeTruthy();
     expect(screen.getByRole('option', { name: /María García/ })).toBeTruthy();
