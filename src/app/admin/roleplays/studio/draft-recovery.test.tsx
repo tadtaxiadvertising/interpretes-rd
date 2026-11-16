@@ -86,7 +86,7 @@ describe('Roleplay Studio editable project recovery', () => {
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/Abrir proyecto del archivo local seleccionado/i), {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
         target: { files: [file] },
       });
     });
@@ -98,14 +98,76 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('opens an older complete-SHA256 project without leaving local-first mode or uploading the MP3', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('radio', { name: /Local \\(predeterminado\\)/i }));
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Paciente · antiguo')] },
+      });
+    });
+    expect(screen.getByText(/Proyecto verificado con SHA-256 completo y restaurado: 1 intervenciones/)).toBeTruthy();
+    expect((screen.getByRole('radio', { name: /Local \\(predeterminado\\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Paciente · antiguo');
+    expect(vi.mocked(sha256StudioAudio)).toHaveBeenCalledOnce();
+    expect(vi.mocked(fingerprintLocalMedia)).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('opens a sampled local project even when the MP3 server mode is selected', async () => {
+    selectSource(); // Existing compatibility mode: server selected.
+    const draft = createLongMediaDraft(3, hash, [{
+      title: 'Doctor · sampled', start: 4, end: 6,
+      scriptPrompt: '', responseLimit: 120,
+      speakerRole: 'doctor', language: 'en',
+    }], 90);
+    const file = new File(['local project'], 'project.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => JSON.stringify(draft),
+    });
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/Proyecto vinculado por tamaño, duración y huella parcial/)).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Doctor · sampled');
+    expect((screen.getByRole('radio', { name: /Servidor \\(opcional\\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect(vi.mocked(fingerprintLocalMedia)).toHaveBeenCalledOnce();
+    expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown project formats before hashing media or overwriting current edits', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    const file = new File(['unsupported'], 'project.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => JSON.stringify({ format: 'different-product', version: 1 }),
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(/no es compatible/);
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Intervención 1');
+    expect(vi.mocked(fingerprintLocalMedia)).not.toHaveBeenCalled();
+    expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
+  });
+
   it('restores verified segment metadata from a project without restoring private captions', async () => {
     selectSource();
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/Abrir proyecto del MP3 seleccionado/i), {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
         target: { files: [project()] },
       });
     });
-    expect(screen.getByText(/Proyecto verificado con SHA-256 y restaurado: 1 intervenciones/)).toBeTruthy();
+    expect(screen.getByText(/Proyecto verificado con SHA-256 completo y restaurado: 1 intervenciones/)).toBeTruthy();
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Paciente · 1 (ES)');
     expect(screen.getByDisplayValue('Interpretar con fidelidad')).toBeTruthy();
     expect(screen.queryByText(/Transcripción de referencia · solo editor/)).toBeNull();
@@ -117,7 +179,7 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
 
     await act(async () => {
-      fireEvent.change(screen.getByLabelText(/Abrir proyecto del MP3 seleccionado/i), {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
         target: { files: [project('Incompatible', 'cd'.repeat(32))] },
       });
     });
@@ -132,7 +194,7 @@ describe('Roleplay Studio editable project recovery', () => {
     const hashPending = new Promise<string>(resolve => { finishHash = resolve; });
     vi.mocked(sha256StudioAudio).mockImplementationOnce(() => hashPending);
 
-    fireEvent.change(screen.getByLabelText(/Abrir proyecto del MP3 seleccionado/i), {
+    fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
       target: { files: [project()] },
     });
     await act(async () => { await Promise.resolve(); });
