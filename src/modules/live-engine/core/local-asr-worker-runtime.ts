@@ -96,7 +96,12 @@ export function attachLocalAsrAudioWorker(endpoint: LocalAsrWorkerEndpoint): voi
         return;
       }
       const chunk = result.value;
-      endpoint.postMessage({ type: 'chunk', chunk }, [chunk.samples.buffer]);
+      const buffer = chunk.samples.buffer;
+      if (!(buffer instanceof ArrayBuffer)) {
+        fail(new Error('LOCAL_ASR_INVALID_WORKER_BUFFER'));
+        return;
+      }
+      endpoint.postMessage({ type: 'chunk', chunk }, [buffer]);
     }).catch(fail);
   }
 
