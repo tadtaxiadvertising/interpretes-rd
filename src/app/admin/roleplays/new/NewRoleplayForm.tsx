@@ -56,7 +56,7 @@ function generateId() {
 // Searches are editorial only: normalize accents without changing IDs or
 // stored participant names. This lets "Maria" find "María" in Spanish lists.
 function normalizeParticipantSearch(value: string): string {
-  return value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleLowerCase('es').trim();
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
 export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource }: NewRoleplayFormProps) {
