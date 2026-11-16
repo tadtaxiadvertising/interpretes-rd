@@ -80,7 +80,7 @@ export default function StudioWaveform({
   useEffect(() => {
     let cancelled = false;
     const send = (result: LocalVadSnapshot) => {
-      if (!cancelled && /\\.mp3$/i.test(file.name)) {
+      if (!cancelled && /\.mp3$/i.test(file.name)) {
         vadNotification.current?.(file, result);
       }
     };
@@ -126,7 +126,7 @@ export default function StudioWaveform({
         if (!cancelled) {
           // Only one PCM decoding feeds BOTH the waveform and the local VAD.
           // Retain small timing metadata, never decoded channels or full media.
-          const speech = /\\.mp3$/i.test(file.name)
+          const speech = /\.mp3$/i.test(file.name)
             ? detectLocalSpeech(channels, decoded.sampleRate) : [];
           setPeaks(result);
           setStatus(result.length ? 'ready' : 'unavailable');
