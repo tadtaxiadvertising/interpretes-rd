@@ -50,6 +50,7 @@ describe('captured local speech preparation pipeline', () => {
     const { capture, stop } = fakeCapture([new Float32Array(48_000).fill(0.1)]);
     const iterator = prepareCapturedLocalAsrChunks(capture, {
       chunkDurationMs: 500,
+      overlapDurationMs: 100,
       signal: abort.signal,
     });
     expect((await iterator.next()).done).toBe(false);
