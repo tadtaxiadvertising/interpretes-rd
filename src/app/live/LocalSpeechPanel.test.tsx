@@ -6,7 +6,7 @@ import {
   startOnDeviceSpeech,
 } from '@/modules/live-engine/core/browser-local-speech';
 
-const stopRecognizer = vi.fn();
+const { stopRecognizer } = vi.hoisted(() => ({ stopRecognizer: vi.fn() }));
 
 vi.mock('@/modules/live-engine/core/browser-local-speech', () => ({
   checkOnDeviceSpeechPack: vi.fn(),
