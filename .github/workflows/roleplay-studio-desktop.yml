@@ -29,7 +29,8 @@ jobs:
   # minutes for every platform PR. Never auto-release unsigned executables.
   package:
     name: Package offline desktop (${{ matrix.os }})
-    if: github.event_name == 'workflow_dispatch'
+    # One-time RC packaging for PR 443; revert to manual-only after verifying.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 443)
     needs: offline-tests
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
@@ -56,6 +57,18 @@ jobs:
             --name RoleplayStudioLocal \
             --collect-all imageio_ffmpeg \
             tools/roleplay-studio-desktop/desktop_exporter.py
+      - name: Validate packaged FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & ./dist/RoleplayStudioLocal/RoleplayStudioLocal.exe --self-check
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: Validate packaged FFmpeg on macOS
+        if: runner.os == 'macOS'
+        run: dist/RoleplayStudioLocal.app/Contents/MacOS/RoleplayStudioLocal --self-check
+      - name: Validate packaged FFmpeg on Linux
+        if: runner.os == 'Linux'
+        run: dist/RoleplayStudioLocal/RoleplayStudioLocal --self-check
       - name: Archive Windows application
         if: runner.os == 'Windows'
         shell: pwsh
