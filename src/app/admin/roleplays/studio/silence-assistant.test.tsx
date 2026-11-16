@@ -54,11 +54,12 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     }));
     vi.stubGlobal('fetch', fetchMock);
     loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
     expect(screen.getByText(/Intervenciones \(1\/25\)/i)).toBeTruthy();
 
     await act(async () => {
-      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas del MP3/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0][0]).toBe('/api/admin/roleplays/studio/silences');
@@ -79,8 +80,9 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     const responsePending = new Promise<unknown>(resolve => { finish = resolve; });
     vi.stubGlobal('fetch', vi.fn(() => responsePending));
     const { input, player } = loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
 
-    fireEvent.click(screen.getByRole('button', { name: /Detectar pausas del MP3/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
     fireEvent.change(input, {
       target: { files: [new File(['ID4'], 'second.mp3', { type: 'audio/mpeg' })] },
     });
