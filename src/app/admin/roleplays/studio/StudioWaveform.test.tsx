@@ -7,6 +7,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   const audio = () => new File(['ID3'], 'recording.mp3', { type: 'audio/mpeg' });
