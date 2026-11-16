@@ -12,7 +12,7 @@ import { BoundedLocalPcmQueue } from './bounded-pcm-queue';
 
 class InMemoryAsrWorker implements LocalAsrWorkerHandle {
   onmessage: ((event: MessageEvent<LocalAsrWorkerToHost>) => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
+  onerror: ((event: ErrorEvent) => void) | null = null;
   onmessageerror: ((event: MessageEvent) => void) | null = null;
   terminated = false;
   messagesFromHost: HostToLocalAsrWorker[] = [];
@@ -142,7 +142,7 @@ describe('off-main-thread local ASR audio preparation protocol', () => {
     const iterator = prepareCapturedLocalAsrChunksInWorker(capture, {}, () => worker);
     const pending = iterator.next();
     for (let i = 0; i < 5; i += 1) await Promise.resolve();
-    worker.onerror?.(new Event('error'));
+    worker.onerror?.(new ErrorEvent('error'));
     await expect(pending).rejects.toThrow('LOCAL_ASR_WORKER_CRASHED');
     expect(worker.terminated).toBe(true);
     expect(stop).toHaveBeenCalledTimes(1);
