@@ -83,6 +83,9 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getAllByText('Doctor: Review instructions')).toHaveLength(2);
     const prompts = screen.getAllByLabelText('Instrucciones para el participante') as HTMLTextAreaElement[];
     expect(prompts.map(item => item.value)).toEqual(['', '']);
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getAllByText('Doctor: Review instructions')).toHaveLength(1);
   });
 
   it('splits at the playhead and merges adjacent compatible intervals', () => {
