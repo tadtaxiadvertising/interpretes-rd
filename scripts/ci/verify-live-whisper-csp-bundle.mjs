@@ -27,7 +27,22 @@ async function main() {
   const root = resolve('.next/static/chunks');
   const files = listFiles(root);
   const workers = files.filter(file => WORKER_NAME.test(relative(root, file)));
-  assert(workers.length === 1, 'expected exactly one named Whisper Worker output, found ' + workers.length);
+  if (workers.length !== 1) {
+    // Print only candidate filenames; never include model, app or session data.
+    const candidates = listFiles(resolve('.next/static')).filter(file => {
+      if (!file.endsWith('.js')) return false;
+      const rel = relative(resolve('.next/static'), file);
+      if (/whisper|worker/i.test(rel)) return true;
+      const source = readFileSync(file, 'utf8');
+      return source.includes('LOCAL_WHISPER_MODEL_LOAD_FAILED') ||
+        source.includes('free-interpreters-whisper-tiny') ||
+        source.includes('onnx-community/whisper-tiny');
+    });
+    console.error('Generated Worker-like static asset names: ' +
+      JSON.stringify(candidates.slice(0, 24).map(file =>
+        relative(resolve('.next/static'), file))));
+    fail('expected exactly one named Whisper Worker output, found ' + workers.length);
+  }
 
   const publicPath = '/_next/static/chunks/' + relative(root, workers[0]).replaceAll('\\', '/');
   const manifest = JSON.parse(readFileSync('.next/routes-manifest.json', 'utf8'));
