@@ -142,6 +142,21 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('rejects an old complete-hash project for a long MP3 before allocating the whole source', async () => {
+    const { player } = selectSource();
+    Object.defineProperty(player, 'duration', { configurable: true, value: 7201 });
+    fireEvent.loadedMetadata(player);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Legacy long')] },
+      });
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(/solo admite MP3 de hasta 15 MiB y 2 horas/);
+    expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
+    expect(vi.mocked(fingerprintLocalMedia)).not.toHaveBeenCalled();
+    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+  });
+
   it('rejects unknown project formats before hashing media or overwriting current edits', async () => {
     selectSource();
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
