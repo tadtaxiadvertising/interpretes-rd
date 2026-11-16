@@ -28,8 +28,8 @@ type BrowserRecognizer = {
 };
 type BrowserRecognizerConstructor = {
   new (): BrowserRecognizer;
-  available(options: { langs: string[]; processLocally: true }): Promise<'available' | 'downloadable' | 'downloading' | 'unavailable'>;
-  install(options: { langs: string[]; processLocally: true }): Promise<boolean>;
+  available(options: { langs: string[]; processLocally: true; quality: 'dictation' }): Promise<'available' | 'downloadable' | 'downloading' | 'unavailable'>;
+  install(options: { langs: string[]; processLocally: true; quality: 'dictation' }): Promise<boolean>;
 };
 
 function getRecognizer(): BrowserRecognizerConstructor | null {
@@ -49,14 +49,14 @@ export async function checkOnDeviceSpeechPack(language: LocalSpeechLanguage): Pr
   const recognition = getRecognizer();
   if (!recognition) return 'unsupported';
   // Never use processLocally=false, even as a fallback.
-  return recognition.available({ langs: [language], processLocally: true });
+  return recognition.available({ langs: [language], processLocally: true, quality: 'dictation' });
 }
 
 /** Must only be called after a separate, explicit user interaction. */
 export async function installOnDeviceSpeechPack(language: LocalSpeechLanguage): Promise<boolean> {
   const recognition = getRecognizer();
   if (!recognition) throw new Error('ON_DEVICE_SPEECH_UNSUPPORTED');
-  return recognition.install({ langs: [language], processLocally: true });
+  return recognition.install({ langs: [language], processLocally: true, quality: 'dictation' });
 }
 
 export interface LocalSpeechSession {

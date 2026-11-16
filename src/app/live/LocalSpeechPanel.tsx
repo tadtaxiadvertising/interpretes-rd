@@ -91,7 +91,12 @@ export default function LocalSpeechPanel() {
           } else setInterim(text);
         },
         (message) => {
-          if (token === requestRef.current) setError('Reconocimiento local: ' + message);
+          if (token !== requestRef.current) return;
+          // Browser errors can terminate recognition without a reliable end event.
+          // Release the recognizer and update UI immediately; never auto-retry
+          // through a cloud-backed recognizer.
+          stop();
+          setError('Reconocimiento local: ' + message);
         },
         () => {
           if (token !== requestRef.current) return;
