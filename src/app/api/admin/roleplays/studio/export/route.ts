@@ -212,7 +212,7 @@ export async function POST(req: NextRequest) {
         'Content-Type': 'application/zip',
         'Content-Disposition': 'attachment; filename="roleplay-studio.zip"',
         'Cache-Control': 'private, no-store',
-        Vary: 'Cookie',
+        Vary: 'Cookie, Authorization',
         'X-Content-Type-Options': 'nosniff',
       },
     });
