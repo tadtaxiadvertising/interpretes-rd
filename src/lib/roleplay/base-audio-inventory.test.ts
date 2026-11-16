@@ -37,6 +37,44 @@ describe('read-only base-audio inventory', () => {
     expect(JSON.stringify(counts)).not.toContain('base/');
   });
 
+  it('recognizes legacy flat canonical base keys and their trusted URL references', () => {
+    const flat = 'base/cklegacy-session.mp3';
+    const result = summarizeRoleplayBaseAudioInventory(
+      [object(flat), object('base/unreferenced.wav')],
+      [{ baseAudioPath: flat, baseAudioUrl: publicUrl(flat) }],
+      [{ baseAudioUrl: publicUrl(flat) }],
+      origin, now,
+    );
+    expect(result).toEqual({
+      scannedBaseAudioObjects: 2,
+      referencedBaseAudioObjects: 1,
+      unverifiableBaseAudioReferences: 0,
+      classificationBlocked: false,
+      unclassifiableBaseAudioObjects: 0,
+      unreferencedBaseAudioYoungerThan14Days: 0,
+      unreferencedBaseAudioUnknownAge: 0,
+      unreferencedBaseAudioOlderThan14Days: 1,
+    });
+    expect(JSON.stringify(result)).not.toContain(flat);
+  });
+
+  it('continues blocking malformed flat keys instead of marking objects safe to delete', () => {
+    const invalidPaths = [
+      'base/', 'base/..', 'base/.', 'base//recording.mp3',
+      'base/../recording.mp3', 'base/recording%2Fsecret.mp3',
+    ];
+    for (const baseAudioPath of invalidPaths) {
+      const result = summarizeRoleplayBaseAudioInventory(
+        [object('base/unrelated.mp3')],
+        [{ baseAudioPath }], [],
+        origin, now,
+      );
+      expect(result.classificationBlocked).toBe(true);
+      expect(result.unreferencedBaseAudioOlderThan14Days).toBe(0);
+      expect(result.unverifiableBaseAudioReferences).toBe(1);
+    }
+  });
+
   it('never classifies an object as aged when any reference is external or signed', () => {
     const files = [object('base/free/0.wav'), object('base/reused/1.mp3')];
     const result = summarizeRoleplayBaseAudioInventory(files,
