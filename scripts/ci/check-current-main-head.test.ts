@@ -20,13 +20,16 @@ function checkHead(options: {
   const fakeGit = join(dir, 'git');
   const outputFile = join(dir, 'github-output');
   writeFileSync(outputFile, '');
-  writeFileSync(fakeGit, `#!/usr/bin/env bash
-if [[ "${1:-}" != "ls-remote" || "${2:-}" != "--exit-code" || "${3:-}" != "origin" || "${4:-}" != "refs/heads/main" ]]; then
-  exit 64
-fi
-if [[ "${MOCK_GIT_FAIL:-}" == "yes" ]]; then exit 70; fi
-printf '%s\\trefs/heads/main\\n' "${MOCK_HEAD:-}"
-`);
+  // Keep literal Bash parameter expansion separate from JS template literals.
+  const fakeGitSource = [
+    '#!/usr/bin/env bash',
+    'if [[ "${1:-}" != "ls-remote" || "${2:-}" != "--exit-code" || "${3:-}" != "origin" || "${4:-}" != "refs/heads/main" ]]; then',
+    '  exit 64',
+    'fi',
+    'if [[ "${MOCK_GIT_FAIL:-}" == "yes" ]]; then exit 70; fi',
+    'echo "${MOCK_HEAD:-} refs/heads/main"',
+  ].join('\\n') + '\\n';
+  writeFileSync(fakeGit, fakeGitSource);
   chmodSync(fakeGit, 0o755);
 
   const child = spawnSync('bash', [script], {
