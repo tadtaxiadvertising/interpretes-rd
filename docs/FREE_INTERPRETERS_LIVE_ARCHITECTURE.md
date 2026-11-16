@@ -27,7 +27,7 @@ Objetivo: coste variable de inferencia de Free Interpreters cercano a cero. No e
 - **ASR local (experimental):** adaptador Web Speech estrictamente on-device con comprobación e instalación voluntaria de paquetes de idioma ES/EN. No habilita fallback remoto. Whisper.cpp/WebAssembly cuantizado queda como alternativa posterior para navegadores sin capacidad local nativa; requiere pruebas de memoria, latencia, precisión y licencia.
 - **Traducción local (siguiente fase):** evaluar Argos Translate/WASM o motor compatible; probar ES↔EN y terminología de dominio. No asumir calidad profesional.
 - **Proveedores del usuario (fase posterior):** adaptadores aislados, consentimiento por finalidad, límites y visualización de costes/cuotas.
-- **Persistencia local (fase posterior):** IndexedDB para sesiones y glosarios; exportación explícita. Nada de sincronización automática.
+- **Persistencia local (fase posterior):** IndexedDB para sesiones y glosarios. La exportación TXT explícita del texto final se realiza ya en el navegador; no existe sincronización automática.
 - **Servidor:** identidad, permisos, configuración no sensible, entrega de versiones/modelos y sincronización opt-in. No procesa audio en el camino predeterminado.
 
 ## Estrategia para equipos básicos
@@ -49,8 +49,15 @@ Objetivo: coste variable de inferencia de Free Interpreters cercano a cero. No e
 
 ## Estado de esta entrega
 
-Implementado: ruta autenticada `/live`, prueba de micrófono sin grabación/transmisión, detección de capacidades, contratos tipados y transcripción experimental mediante reconocimiento **obligatoriamente local** del navegador en idiomas compatibles, activado por el usuario. El texto vive en memoria de la pestaña y no se sincroniza.
+Implementado: ruta autenticada `/live`, prueba de micrófono sin grabación/transmisión, detección de capacidades, contratos tipados, exportación TXT local y transcripción experimental mediante reconocimiento **obligatoriamente local** del navegador en idiomas compatibles, activado por el usuario. El texto vive en memoria de la pestaña y no se sincroniza.
 
-Pendiente: motor ASR local portable (por ejemplo, Whisper.cpp), traducción local, VAD/chunking, glosario, almacenamiento IndexedDB, consentimiento persistente auditable, sincronización opt-in, integración UI en navegación y pruebas de rendimiento/precisión.
+Pendiente: motor ASR local portable (por ejemplo, Whisper.cpp), traducción local, VAD/chunking, glosario, almacenamiento IndexedDB, exportación SRT/VTT con timestamps verificados, consentimiento persistente auditable, sincronización opt-in, integración UI en navegación y pruebas de rendimiento/precisión.
 
 La transcripción local es **experimental y limitada a navegadores con `SpeechRecognition.available()` y `processLocally=true`**; no declarar transcripción universal ni traducción en tiempo real disponible hasta que las fases pendientes estén implementadas y verificadas. La instalación del paquete puede descargar datos desde el proveedor del navegador, pero la inferencia de audio debe ejecutarse localmente. El navegador puede solicitar permisos de micrófono. No se deben introducir claves de API ni grabaciones por defecto.
+
+## Exportación privada de texto
+
+- Solo se exportan segmentos finales aceptados por el reconocedor; las hipótesis intermedias no se incluyen.
+- El archivo `.txt` se construye mediante Blob/Object URL y se descarga desde el navegador; la plataforma no recibe ni almacena el contenido.
+- La aplicación no genera SRT/VTT sin marcas temporales reales; inventar tiempos perjudicaría el entrenamiento de interpretación.
+- La transcripción actual se pierde al recargar la página salvo que el usuario descargue el TXT; no se promete recuperación o persistencia.
