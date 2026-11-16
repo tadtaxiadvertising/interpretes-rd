@@ -68,6 +68,31 @@ describe('resolveInvitationBaseAudioUrl', () => {
     expect(sign).not.toHaveBeenCalled();
   });
 
+  it('never returns another project Storage URL even when project origin is configured', async () => {
+    const sign = vi.fn();
+    const foreign = [
+      'https://other.supabase.co/storage/v1/object/public/other-bucket/base/0.mp3',
+      'https://other.supabase.co/storage/v1/object/sign/other-bucket/base/0.mp3?token=PRIVATE',
+      'https://other.supabase.co/storage/v1/object/../../../export.mp3?token=PRIVATE',
+    ];
+    for (const url of foreign) {
+      expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: url }, origin, sign))
+        .toBeNull();
+    }
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('continues allowing ordinary third-party HTTPS recordings and signing trusted project objects', async () => {
+    const sign = vi.fn().mockResolvedValue('https://signed.example/clip.mp3');
+    const external = 'https://assets.example.test/legacy/clip.mp3';
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: external }, origin, sign))
+      .toBe(external);
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: legacy }, origin, sign))
+      .toBe('https://signed.example/clip.mp3');
+    expect(sign).toHaveBeenCalledOnce();
+    expect(sign).toHaveBeenCalledWith(path, 3600);
+  });
+
   it('does not return untrusted first-party signed or encoded Storage URLs', async () => {
     const sign = vi.fn();
     const urls = [
