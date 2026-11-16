@@ -85,3 +85,13 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - El texto de la sesión se mantiene en memoria. `Cargar transcripción confirmada` copia a una caja editable los últimos 1,800 caracteres finales; `Traducir en este equipo` requiere un clic separado. El texto parcial no se transfiere ni se traduce.
 - El traductor se destruye al desactivar, cerrar la página o cambiar el idioma. Los trabajos iniciados se cancelan mediante AbortSignal y las respuestas tardías se ignoran.
 - La API está limitada a navegadores compatibles y HTTPS. La traducción no es validación médica/jurídica; dosis, negaciones, cifras y nombres requieren revisión humana. La compatibilidad y calidad deben verificarse en dispositivos reales.
+
+## Etapa de captura PCM con AudioWorklet (infraestructura, no UI)
+
+- `public/live-pcm-capture-worklet.js` ejecuta el capturador en el hilo de audio del navegador. Mezcla canales a mono y envía paquetes de 1024 muestras a la pestaña mediante `MessagePort`. Su salida al dispositivo de audio es siempre silencio, evitando retorno audible del micrófono.
+- `startLocalPcmCapture()` es una **API experimental de infraestructura**, no se ejecuta automáticamente ni está conectada todavía a un botón de Live. Requiere un contexto seguro, `getUserMedia` y soporte AudioWorklet.
+- El modelo de permisos se mantiene: petición explícita, liberación de pistas incluso si se cancela mientras el navegador muestra el diálogo, cierre de `AudioContext` y desconexión del grafo al finalizar.
+- `BoundedLocalPcmQueue` copia los frames para preservar propiedad de memoria; la capacidad está limitada a aproximadamente dos segundos de muestras a la frecuencia real del `AudioContext`. Ante retraso sostenido o error se detiene la captura con `LOCAL_PCM_QUEUE_OVERFLOW` en vez de descartar audio sin avisar o generar timestamps incorrectos.
+- Las muestras se procesan localmente y se olvidan al cerrar. No hay `fetch`, WebSocket, MediaRecorder, almacenamiento, ni un modelo ASR contratado.
+- El `AudioContext.sampleRate` se entrega al consumidor; **todavía no hay remuestreo a 16 kHz ni inferencia**. Antes de conectar a Whisper/WASM, medir rendimiento y decidir si una pausa por carga puede admitirse: **en interpretación profesional no se debe ocultar pérdida de audio**.
+- Debe verificarse el archivo estático del worklet en el artefacto desplegado, la política CSP y el comportamiento de micrófono en los navegadores objetivo. La disponibilidad del worklet por sí sola no acredita compatibilidad completa.
