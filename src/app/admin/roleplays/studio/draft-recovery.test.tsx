@@ -154,7 +154,7 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/solo admite MP3 de hasta 15 MiB y 2 horas/);
     expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
     expect(vi.mocked(fingerprintLocalMedia)).not.toHaveBeenCalled();
-    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
   });
 
   it('rejects unknown project formats before hashing media or overwriting current edits', async () => {
