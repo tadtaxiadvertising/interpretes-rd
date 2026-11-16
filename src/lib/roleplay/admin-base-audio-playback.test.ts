@@ -21,12 +21,18 @@ describe('resolveAdminBaseAudioPlaybackUrl', () => {
     expect(sign).not.toHaveBeenCalled();
   });
 
-  it('never signs encoded or query-bearing first-party URLs', async () => {
+  it('never returns malformed, signed or otherwise untrusted Storage URLs', async () => {
     const sign = vi.fn();
-    const encoded = `${origin}/storage/v1/object/public/roleplay-audio/base/%2e%2e/clip.mp3`;
-    const query = `${publicUrl}?token=old`;
-    expect(await resolveAdminBaseAudioPlaybackUrl(encoded, origin, sign)).toBe(encoded);
-    expect(await resolveAdminBaseAudioPlaybackUrl(query, origin, sign)).toBe(query);
+    const unsafe = [
+      `${origin}/storage/v1/object/public/roleplay-audio/base/%2e%2e/clip.mp3`,
+      `${origin}/storage/v1/object/public/roleplay-audio/base/../clip.mp3`,
+      `${publicUrl}?token=old`,
+      `${origin}/storage/v1/object/public/other-bucket/base/clip.mp3`,
+      'https://other.supabase.co/storage/v1/object/public/roleplay-audio/base/clip.mp3',
+    ];
+    for (const url of unsafe) {
+      expect(await resolveAdminBaseAudioPlaybackUrl(url, origin, sign)).toBeNull();
+    }
     expect(sign).not.toHaveBeenCalled();
   });
 
@@ -37,9 +43,26 @@ describe('resolveAdminBaseAudioPlaybackUrl', () => {
     expect(sign).toHaveBeenCalledOnce();
   });
 
-  it('does not derive first-party paths without the configured project origin', async () => {
+  it('blocks Storage links without the configured project origin', async () => {
     const sign = vi.fn();
-    expect(await resolveAdminBaseAudioPlaybackUrl(publicUrl, undefined, sign)).toBe(publicUrl);
+    expect(await resolveAdminBaseAudioPlaybackUrl(publicUrl, undefined, sign)).toBeNull();
+    expect(await resolveAdminBaseAudioPlaybackUrl(`${publicUrl}?token=SECRET`, undefined, sign))
+      .toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed or unsafe-scheme URLs without calling Storage', async () => {
+    const sign = vi.fn();
+    for (const url of ['not a url', 'javascript:alert(1)', 'http://assets.example/legacy.wav']) {
+      expect(await resolveAdminBaseAudioPlaybackUrl(url, origin, sign)).toBeNull();
+    }
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('retains unrelated HTTPS legacy assets if project URL is not configured', async () => {
+    const sign = vi.fn();
+    const external = 'https://assets.example/legacy.wav';
+    expect(await resolveAdminBaseAudioPlaybackUrl(external, undefined, sign)).toBe(external);
     expect(sign).not.toHaveBeenCalled();
   });
 });
