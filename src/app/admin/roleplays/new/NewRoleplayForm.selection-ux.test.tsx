@@ -81,7 +81,7 @@ describe('Crear roleplay: selección y resumen simplificados', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Todos los intérpretes activos' }));
 
     expect(await screen.findByText(/Vista previa \(solo lectura\): 1 elegibles/)).toBeTruthy();
-    expect(screen.getByText(/1 intérpretes elegibles de 2 activos/)).toBeTruthy();
+    expect(screen.getByText(/1 intérprete elegible de 2 activos/)).toBeTruthy();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(fetchSpy.mock.calls[0][0]).toBe('/api/admin/roleplays/eligibility');
     expect(fetchSpy.mock.calls[0][1]).toMatchObject({ credentials: 'same-origin' });
