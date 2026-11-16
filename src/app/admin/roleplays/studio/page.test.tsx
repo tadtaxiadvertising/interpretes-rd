@@ -171,4 +171,42 @@ describe('Audio Studio clip review player', () => {
     expect(screen.queryByRole('button', { name: 'Detener fragmento' })).toBeNull();
     expect(pause).toHaveBeenCalledTimes(1);
   });
+
+  it('can download the same long-source JSON plan twice without sending the video to a server', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    const source = new File(['ID3'], 'long-video.mp4', { type: 'video/mp4' });
+    // jsdom File slices are replaced with a bounded local sample; the test
+    // verifies the control flow, not the browser's native file decoder.
+    vi.spyOn(source, 'slice').mockImplementation(() => ({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }) as unknown as Blob);
+    vi.stubGlobal('crypto', {
+      randomUUID: () => 'long-cut-1',
+      subtle: {
+        digest: vi.fn(async () => new Uint8Array(32).buffer),
+      },
+    });
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [source] },
+    });
+    const player = container.querySelector('video')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 7201 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+
+    const downloadClick = vi.spyOn(HTMLAnchorElement.prototype, 'click')
+      .mockImplementation(() => {});
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    for (let i = 0; i < 2; i++) {
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: /Descargar plan local/i }));
+        await Promise.resolve();
+      });
+    }
+    expect(downloadClick).toHaveBeenCalledTimes(2);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
 });
