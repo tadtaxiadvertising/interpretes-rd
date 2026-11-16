@@ -37,8 +37,10 @@ export async function loadWhisperTinyWasm(
   lib.env.allowRemoteModels = true;
   lib.env.allowLocalModels = false;
   lib.env.useBrowserCache = true;
-  lib.env.backends.onnx.wasm.numThreads = 1;
-  lib.env.backends.onnx.wasm.wasmPaths = '/live-onnx-runtime/';
+  const wasm = lib.env.backends.onnx.wasm;
+  if (!wasm) throw new Error('LOCAL_WHISPER_WASM_UNAVAILABLE');
+  wasm.numThreads = 1;
+  wasm.wasmPaths = '/live-onnx-runtime/';
 
   const loaded = await lib.pipeline('automatic-speech-recognition', WHISPER_TINY_MODEL, {
     device: 'wasm',
