@@ -56,7 +56,11 @@ describe('Audio Studio compact editing', () => {
     for (let i = 0; i < 6; i++) {
       fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     }
-    expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(6);
+    // Newly created sixth turn opens for editing even as compact mode begins.
+    expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(5);
+    expect(screen.getByRole('button', { name: 'Contraer' })).toBeTruthy();
+    expect(screen.getByLabelText('Inicio (segundos)')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer' }));
     expect(screen.queryByLabelText('Inicio (segundos)')).toBeNull();
     fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[2]);
     expect(screen.getByLabelText('Inicio (segundos)')).toBeTruthy();
