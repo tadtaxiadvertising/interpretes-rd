@@ -30,9 +30,13 @@ export default function LocalTranslatorPanel({ sourceLanguage, finalTranscript }
   const sessionRef = useRef<LocalTranslatorSession | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const generationRef = useRef(0);
+  const translationIdRef = useRef(0);
+  const translationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => {
     generationRef.current += 1;
+    translationIdRef.current += 1;
+    translationAbortRef.current?.abort();
     abortRef.current?.abort();
     sessionRef.current?.close();
     abortRef.current = null;
@@ -41,6 +45,9 @@ export default function LocalTranslatorPanel({ sourceLanguage, finalTranscript }
 
   function deactivate() {
     generationRef.current += 1;
+    translationIdRef.current += 1;
+    translationAbortRef.current?.abort();
+    translationAbortRef.current = null;
     abortRef.current?.abort();
     sessionRef.current?.close();
     abortRef.current = null;
@@ -106,25 +113,40 @@ export default function LocalTranslatorPanel({ sourceLanguage, finalTranscript }
       return;
     }
     const token = generationRef.current;
+    const translationId = ++translationIdRef.current;
+    translationAbortRef.current?.abort();
+    const controller = new AbortController();
+    translationAbortRef.current = controller;
     setTranslating(true);
     setError(null);
     setOutput('');
     try {
-      const translated = await session.translate(text, abortRef.current?.signal);
-      if (token === generationRef.current) setOutput(translated);
+      const translated = await session.translate(text, controller.signal);
+      if (token === generationRef.current && translationId === translationIdRef.current && !controller.signal.aborted) setOutput(translated);
     } catch {
-      if (token === generationRef.current) setError('No se pudo traducir localmente. Comprueba el idioma y la cuota del navegador.');
+      if (token === generationRef.current && translationId === translationIdRef.current && !controller.signal.aborted) {
+        setError('No se pudo traducir localmente. Comprueba el idioma y la cuota del navegador.');
+      }
     } finally {
-      if (token === generationRef.current) setTranslating(false);
+      if (translationAbortRef.current === controller) translationAbortRef.current = null;
+      if (token === generationRef.current && translationId === translationIdRef.current) setTranslating(false);
     }
+  }
+
+  function invalidateTranslation() {
+    translationIdRef.current += 1;
+    translationAbortRef.current?.abort();
+    translationAbortRef.current = null;
+    setTranslating(false);
+    setOutput('');
   }
 
   function loadFinalTranscript() {
     const final = finalTranscript.trim();
     if (!final) return;
     const tail = final.slice(-1800);
+    invalidateTranslation();
     setInput(tail);
-    setOutput('');
     setError(final.length > 1800
       ? 'Solo se cargaron los últimos 1,800 caracteres. Puedes editar el texto antes de traducir.'
       : null);
@@ -175,7 +197,7 @@ export default function LocalTranslatorPanel({ sourceLanguage, finalTranscript }
       <div className="mt-4">
         <label htmlFor="live-local-translation-input" className="block text-sm font-medium text-slate-700">Texto para traducir</label>
         <textarea id="live-local-translation-input" value={input}
-          onChange={(event) => { setInput(event.target.value); setOutput(''); }}
+          onChange={(event) => { invalidateTranslation(); setInput(event.target.value); }}
           maxLength={1800} rows={3}
           className="mt-1 w-full rounded-lg border border-slate-300 bg-white p-3 text-sm text-slate-900"
           placeholder="Escribe o carga una transcripción final para traducirla localmente." />
