@@ -85,4 +85,31 @@ describe('opt-in browser-local translation interface', () => {
     expect(mocks.create).not.toHaveBeenCalled();
     expect((screen.getByLabelText('Texto para traducir') as HTMLTextAreaElement).value).toBe('');
   });
+  it('discards an in-flight translation when the user edits source text', async () => {
+    mocks.check.mockResolvedValue('available');
+    mocks.create.mockResolvedValue({ translate: mocks.translate, close: mocks.close });
+    let finish!: (text: string) => void;
+    const pending = new Promise<string>(resolve => { finish = resolve; });
+    mocks.translate.mockReturnValue(pending);
+    render(<LocalTranslatorPanel sourceLanguage="es" finalTranscript="" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Comprobar traducción local' }));
+    await screen.findByText('Modelo local disponible para activar.');
+    fireEvent.click(screen.getByRole('button', { name: 'Activar traducción local' }));
+    await screen.findByText('Traductor local listo.');
+
+    const textarea = screen.getByLabelText('Texto para traducir');
+    fireEvent.change(textarea, { target: { value: 'Primera frase' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Traducir en este equipo' }));
+    expect(mocks.translate).toHaveBeenCalledTimes(1);
+    const signal = mocks.translate.mock.calls[0]?.[1] as AbortSignal;
+    expect(signal.aborted).toBe(false);
+
+    fireEvent.change(textarea, { target: { value: 'Frase corregida' } });
+    expect(signal.aborted).toBe(true);
+    await act(async () => { finish('Outdated translation'); await pending; });
+    expect(screen.queryByText('Outdated translation')).toBeNull();
+    expect((textarea as HTMLTextAreaElement).value).toBe('Frase corregida');
+  });
+
 });
