@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { exportLocal, fingerprintFile, parseArgs, validateProject } from './export-studio-long-local.mjs';
+import { exportLocal, fingerprintFile, parseArgs, validateProject, writeExclusiveZip } from './export-studio-long-local.mjs';
 
 function wavFixture() {
   const frames = 16000 * 3;
@@ -87,4 +87,32 @@ test('invalid or unsafe selection cannot become a local package', () => {
   assert.throws(() => validateProject(base, 2000), /no corresponde/);
   assert.throws(() => parseArgs(['--source', 'a.mp4', '--output', 'a.mp4',
     '--project', 'b.json']), /rutas deben ser distintas/);
+});
+
+
+test('exclusive ZIP writer removes incomplete output if disk writing fails', async () => {
+  const dir = await fs.mkdtemp(join(tmpdir(), 'studio-write-failure-'));
+  try {
+    const output = join(dir, 'incomplete.zip');
+    const archive = Buffer.from('synthetic ZIP bytes for fault injection');
+    await assert.rejects(
+      writeExclusiveZip(output, archive, async (handle, bytes) => {
+        await handle.writeFile(bytes.subarray(0, 8));
+        throw new Error('simulated disk full');
+      }),
+      /simulated disk full/,
+    );
+    await assert.rejects(fs.stat(output), { code: 'ENOENT' });
+    // A retry must be possible without manual deletion.
+    await writeExclusiveZip(output, archive);
+    assert.deepEqual(await fs.readFile(output), archive);
+    if (process.platform !== 'win32') {
+      assert.equal((await fs.stat(output)).mode & 0o777, 0o600);
+    }
+    // A failed duplicate write must never erase the existing archive.
+    await assert.rejects(writeExclusiveZip(output, Buffer.from('overwrite')), { code: 'EEXIST' });
+    assert.deepEqual(await fs.readFile(output), archive);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
