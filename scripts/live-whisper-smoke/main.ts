@@ -1,4 +1,5 @@
 import { loadLocalWhisperTiny } from '../../src/modules/live-engine/core/whisper-tiny-client';
+import { wordErrorRate } from './wer';
 
 interface SmokeResult {
   loaded: boolean;
@@ -13,6 +14,15 @@ interface SmokeResult {
     shortAudioMs: number;
     longAudioMs: number;
     longWindowRealtimeFactor: number;
+  };
+  speech?: {
+    enWer: number;
+    esWer: number;
+    enInferenceMs: number;
+    esInferenceMs: number;
+    enAudioMs: number;
+    esAudioMs: number;
+    syntheticTtsOnly: true;
   };
   error?: string;
 }
@@ -47,6 +57,23 @@ function makeSyntheticVoiceLikePcm(seconds = 2): Float32Array {
       0.33 * Math.sin(2 * Math.PI * 570 * t) +
       0.17 * Math.sin(2 * Math.PI * 950 * t)
     );
+  }
+  return samples;
+}
+
+async function syntheticSpeechFixture(language: 'en' | 'es'): Promise<Float32Array> {
+  const response = await fetch('/live-whisper-fixture/' + language + '.f32', {
+    cache: 'no-store',
+  });
+  if (!response.ok) throw new Error('WHISPER_SYNTHETIC_SPEECH_FIXTURE_MISSING');
+  const raw = await response.arrayBuffer();
+  if (!raw.byteLength || raw.byteLength % Float32Array.BYTES_PER_ELEMENT !== 0 ||
+      raw.byteLength > 30 * 16_000 * Float32Array.BYTES_PER_ELEMENT) {
+    throw new Error('WHISPER_SYNTHETIC_SPEECH_FIXTURE_INVALID');
+  }
+  const samples = new Float32Array(raw);
+  if (!samples.every(Number.isFinite)) {
+    throw new Error('WHISPER_SYNTHETIC_SPEECH_FIXTURE_NONFINITE');
   }
   return samples;
 }
@@ -90,11 +117,41 @@ run.addEventListener('click', () => {
       if (typeof longEnglish !== 'string') {
         throw new Error('LOCAL_WHISPER_INVALID_LONG_OUTPUT');
       }
+      report('synthetic-speech-inference');
+      // Entirely generated in CI with espeak-ng; no user's spoken content,
+      // cloud TTS or third-party voice recordings. WER is diagnostic only.
+      const enSpeechPcm = await syntheticSpeechFixture('en');
+      const esSpeechPcm = await syntheticSpeechFixture('es');
+      const enSpeechStart = performance.now();
+      const enSpeech = await model.transcribe(enSpeechPcm, 'en');
+      const enSpeechMs = performance.now() - enSpeechStart;
+      const esSpeechStart = performance.now();
+      const esSpeech = await model.transcribe(esSpeechPcm, 'es');
+      const esSpeechMs = performance.now() - esSpeechStart;
+      const enWer = wordErrorRate(
+        'The patient has a fever and needs to see the doctor.', enSpeech,
+      );
+      const esWer = wordErrorRate(
+        'El paciente tiene fiebre y necesita ver al doctor.', esSpeech,
+      );
+      if (!Number.isFinite(enWer) || !Number.isFinite(esWer)) {
+        throw new Error('WHISPER_SYNTHETIC_SPEECH_INVALID_WER');
+      }
+
       window.__whisperSmoke = {
         loaded: true,
         modelId: model.modelId,
         en,
         es,
+        speech: {
+          enWer,
+          esWer,
+          enInferenceMs: enSpeechMs,
+          esInferenceMs: esSpeechMs,
+          enAudioMs: enSpeechPcm.length / 16,
+          esAudioMs: esSpeechPcm.length / 16,
+          syntheticTtsOnly: true,
+        },
         timings: {
           modelLoadMs,
           shortEnglishMs,
