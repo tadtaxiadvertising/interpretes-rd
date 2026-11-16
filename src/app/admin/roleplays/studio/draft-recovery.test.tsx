@@ -41,6 +41,10 @@ describe('Roleplay Studio editable project recovery', () => {
     const player = container.querySelector('audio')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
     fireEvent.loadedMetadata(player);
+    // These tests verify compatibility with the previous complete-SHA256
+    // server ZIP project format. The production editor now defaults to a
+    // local short-MP3 project, so opt into the legacy mode explicitly.
+    fireEvent.click(screen.getByRole('radio', { name: /Servidor \(opcional\)/i }));
     return { upload, player };
   }
 
