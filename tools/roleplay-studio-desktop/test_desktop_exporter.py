@@ -2,6 +2,8 @@
 import importlib.util
 import json
 import math
+import os
+import stat
 from pathlib import Path
 import shutil
 import struct
@@ -94,6 +96,32 @@ class StudioDesktopTests(unittest.TestCase):
         fractional_json["segments"][0]["responseLimit"] = 120.0
         module.validate_project(fractional_json, source_size)
 
+    def test_preflight_shows_safe_summary_without_ffmpeg(self):
+        checked = module.inspect_project(self.source, self.project)
+        self.assertEqual(len(checked["clips"]), 1)
+        self.assertAlmostEqual(checked["duration_seconds"], 1.6)
+        self.assertEqual(checked["source_hash"], self.draft["sourceSampleSha256"])
+        self.assertFalse(self.output.exists())
+
+    def test_preflight_detects_wrong_source_with_same_length(self):
+        # Deliberately corrupt the first sampled byte without changing size.
+        with self.source.open("r+b") as original:
+            original.seek(60)
+            original.write(b"Q")
+        with self.assertRaisesRegex(module.ExportError, "huella"):
+            module.inspect_project(self.source, self.project)
+
+    def test_refuses_output_symlink_without_touching_target(self):
+        link_target = self.output.parent / "protected-data.bin"
+        link_target.write_bytes(b"confidential")
+        try:
+            self.output.symlink_to(link_target)
+        except (OSError, NotImplementedError):
+            self.skipTest("This Windows runner does not allow unprivileged symlinks")
+        with self.assertRaises(module.ExportError):
+            module.export_project(self.source, self.project, self.output)
+        self.assertEqual(link_target.read_bytes(), b"confidential")
+
     def test_invalid_fingerprint_rejected(self):
         self.draft["sourceSampleSha256"] = "0" * 64
         self.project.write_text(json.dumps(self.draft), encoding="utf-8")
@@ -125,6 +153,10 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertEqual(updates, [(1, 1)])
         self.assertEqual(result["clips"], 1)
         self.assertLessEqual(self.output.stat().st_size, module.MAX_ZIP_BYTES)
+        if os.name == "posix":
+            self.assertEqual(
+                stat.S_IMODE(self.output.stat().st_mode), 0o600,
+                "Confidential roleplay ZIP must be owner-readable only on POSIX.")
         with zipfile.ZipFile(self.output) as archive:
             self.assertEqual(archive.namelist(), ["manifest.json", "segment-01.mp3"])
             self.assertTrue(all(info.compress_type == zipfile.ZIP_STORED
