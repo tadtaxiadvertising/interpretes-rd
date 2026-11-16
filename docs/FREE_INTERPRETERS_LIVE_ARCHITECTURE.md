@@ -66,7 +66,7 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - Web Speech `available()` e `install()` consultan explícitamente `processLocally: true` y `quality: 'dictation'`. La compatibilidad con estas opciones es experimental y depende del navegador y del idioma.
 - La política `on-device-speech-recognition` tiene `self` como lista de permisos predeterminada; no activar orígenes cruzados sin una revisión de seguridad.
 - Si el navegador informa un error de reconocimiento se termina la sesión y el usuario debe reiniciarla manualmente; no hay reintento silencioso mediante proveedor remoto.
-- La prueba del micrófono y el reconocedor nativo disponen de controles separados y no deben mantenerse activos simultáneamente hasta completar la unificación de captura.
+- La prueba del micrófono y el reconocedor nativo tienen controles separados, pero la UI impide capturar a la vez: mientras la prueba ocupa el micrófono se bloquea la transcripción y viceversa. La unificación del motor de captura sigue pendiente.
 
 ## Preparación para audio largo — fragmentación PCM local
 

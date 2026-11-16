@@ -13,6 +13,7 @@ export default function LiveWorkspace({ backHref = '/dashboard' }: { backHref?: 
   // Invalidates pending permission requests on cancellation or unmount.
   const requestIdRef = useRef(0);
   const [micState, setMicState] = useState<MicState>('idle');
+  const [speechListening, setSpeechListening] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<DeviceCapabilities | null>(null);
 
@@ -26,6 +27,7 @@ export default function LiveWorkspace({ backHref = '/dashboard' }: { backHref?: 
   }, []);
 
   async function toggleMicrophone() {
+    if (speechListening) return;
     if (micState === 'active' || micState === 'requesting') {
       // Permissions dialogs cannot be aborted, but late streams are stopped.
       requestIdRef.current += 1;
@@ -79,7 +81,9 @@ export default function LiveWorkspace({ backHref = '/dashboard' }: { backHref?: 
           <button
             type="button"
             onClick={toggleMicrophone}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            disabled={speechListening}
+            aria-label={speechListening ? 'Detén la transcripción antes de probar el micrófono' : undefined}
+            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             {micState === 'requesting' ? 'Cancelar solicitud' : micState === 'active' ? 'Detener micrófono' : 'Probar micrófono'}
           </button>
@@ -109,7 +113,10 @@ export default function LiveWorkspace({ backHref = '/dashboard' }: { backHref?: 
         ) : <p className="mt-4 text-sm text-slate-500">Detectando capacidades…</p>}
       </section>
 
-      <LocalSpeechPanel />
+      <LocalSpeechPanel
+        microphoneProbeBusy={micState === 'requesting' || micState === 'active'}
+        onListeningChange={setSpeechListening}
+      />
 
       <section className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
         <h2 className="font-semibold text-slate-900">Privacidad y proveedores externos</h2>
