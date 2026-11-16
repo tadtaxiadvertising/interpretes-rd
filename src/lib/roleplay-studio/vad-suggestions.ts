@@ -47,7 +47,7 @@ export function proposeLocalVadCuts(
     const start = Math.max(0, Math.ceil((cut.start - 1e-8) * 100) / 100);
     const end = Math.floor((cut.end + 1e-8) * 100) / 100;
     const seconds = end - start;
-    if (seconds < 1.25 || seconds > 300 || clips.length + current.length >= ROLEPLAY_MAX_SCENARIOS ||
+    if (seconds < 1.25 - 1e-8 || seconds > 300 || clips.length + current.length >= ROLEPLAY_MAX_SCENARIOS ||
         selectedTotal + seconds > 900 + 1e-8 ||
         current.some(existing => start < existing.end && end > existing.start)) {
       omittedCount += 1;
