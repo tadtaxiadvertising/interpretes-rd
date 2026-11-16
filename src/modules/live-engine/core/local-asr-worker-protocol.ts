@@ -31,7 +31,7 @@ export interface LocalAsrWorkerEndpoint {
 
 export interface LocalAsrWorkerHandle {
   onmessage: ((event: MessageEvent<LocalAsrWorkerToHost>) => void) | null;
-  onerror: ((event: Event) => void) | null;
+  onerror: ((event: ErrorEvent) => void) | null;
   onmessageerror: ((event: MessageEvent) => void) | null;
   postMessage(message: HostToLocalAsrWorker, transfer?: Transferable[]): void;
   terminate(): void;
