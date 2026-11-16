@@ -39,4 +39,23 @@ describe('LocalSpeechPanel error handling', () => {
     expect(screen.getByRole('button', { name: 'Iniciar transcripción local' })).toBeTruthy();
     expect(startOnDeviceSpeech).toHaveBeenCalledTimes(1);
   });
+  it('never offers provisional recognition hypotheses for translation', async () => {
+    vi.mocked(checkOnDeviceSpeechPack).mockResolvedValue('available');
+    render(<LocalSpeechPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Comprobar idioma local' }));
+    await screen.findByText('Paquete local disponible.');
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar transcripción local' }));
+
+    const reportText = vi.mocked(startOnDeviceSpeech).mock.calls[0][1];
+    act(() => reportText('Borrador provisional', false));
+    const load = screen.getByRole('button', { name: 'Cargar transcripción confirmada' }) as HTMLButtonElement;
+    expect(load.disabled).toBe(true);
+
+    act(() => reportText('Texto confirmado', true));
+    expect(load.disabled).toBe(false);
+    fireEvent.click(load);
+    expect((screen.getByLabelText('Texto para traducir') as HTMLTextAreaElement).value).toBe('Texto confirmado');
+  });
+
 });
