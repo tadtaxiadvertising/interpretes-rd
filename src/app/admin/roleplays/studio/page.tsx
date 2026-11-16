@@ -21,6 +21,7 @@ import StudioWaveform from './StudioWaveform';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import LocalVadAssistant from './LocalVadAssistant';
 import StudioConsecutivePreview from './StudioConsecutivePreview';
+import { detectStudioProjectFormat } from '@/lib/roleplay-studio/project-format';
 import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
 } from '@/lib/roleplay-studio/draft';
@@ -532,19 +533,26 @@ export default function RoleplayStudioPage() {
       }
       const json = await file.text();
       if (revision !== subtitleImportRevision.current) return;
-      const localOnly = usesLocalLongMode(audio, duration) || !allowServerZipExport;
-      const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
+      // Read the declared project format, never the editor's export mode.
+      // Legacy projects should remain reopenable in today's local-first UI,
+      // without silently selecting (or sending audio to) the remote exporter.
+      const projectFormat = detectStudioProjectFormat(json);
+      const sampledProject = projectFormat === 'sampled-local';
+      if (!sampledProject && usesLocalLongMode(audio, duration)) {
+        throw new Error('El proyecto antiguo con SHA-256 completo solo admite MP3 de hasta 15 MiB y 2 horas. Abre su grabación MP3 original.');
+      }
+      const digest = sampledProject ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
-      const restored = localOnly
+      const restored = sampledProject
         ? openLongMediaDraft(json, audio.size, digest, duration)
         : openStudioDraft(json, audio.size, digest, duration);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
       setChosenCueIndices([]);
-      setNotice(localOnly
-        ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El archivo original no se ha subido.`
-        : `Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
+      setNotice(sampledProject
+        ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El audio no se ha subido y el modo de exportación no ha cambiado.`
+        : `Proyecto verificado con SHA-256 completo y restaurado: ${restored.length} intervenciones. Sin subir audio ni cambiar el modo de exportación; la transcripción no forma parte del borrador.`);
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No se pudo abrir el proyecto.');
@@ -1103,7 +1111,7 @@ export default function RoleplayStudioPage() {
               {draftBusy ? 'Verificando proyecto…' : 'Guardar proyecto JSON'}
             </button>
             <label className="block text-sm text-indigo-100">
-              {localOnly ? 'Abrir proyecto del archivo local seleccionado' : 'Abrir proyecto del MP3 seleccionado'}
+              Abrir proyecto JSON de la grabación seleccionada
               <input type="file" accept=".json,application/json"
                 disabled={busy || draftBusy}
                 onChange={event => {
