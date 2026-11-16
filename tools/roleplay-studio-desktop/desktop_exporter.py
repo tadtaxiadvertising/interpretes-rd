@@ -301,6 +301,7 @@ def inspect_project(source, project_file):
         "clips": clips,
         "source_hash": source_hash,
         "duration_seconds": sum(clip["end"] - clip["start"] for clip in clips),
+        "unreviewed_roles": sum(clip["speakerRole"] == "unknown" for clip in clips),
     }
 
 
@@ -463,6 +464,15 @@ def run_desktop():
     status = tk.StringVar(value="Selecciona el audio/video y el proyecto JSON.")
     ttk.Label(frame, textvariable=status, wraplength=580).grid(
         row=5, column=0, columnspan=3, sticky="w", pady=6)
+
+    def invalidate_previous_summary(*_):
+        if not busy:
+            bar["value"] = 0
+            status.set("Archivos modificados. Valida el proyecto o genera el ZIP.")
+
+    for field in fields:
+        field.trace_add("write", invalidate_previous_summary)
+
     controls = ttk.Frame(frame)
     controls.grid(row=6, column=0, columnspan=3, sticky="e", pady=10)
 
@@ -478,7 +488,8 @@ def run_desktop():
                 events.put(("cancelled",))
             else:
                 events.put(("inspected", len(inspection["clips"]),
-                            inspection["duration_seconds"]))
+                            inspection["duration_seconds"],
+                            inspection["unreviewed_roles"]))
         except (ExportError, OSError) as exc:
             events.put(("error", str(exc)))
         except Exception:
@@ -554,11 +565,14 @@ def run_desktop():
             inspect_button.configure(state="normal")
             cancel_button.configure(state="disabled")
             if kind == "inspected":
-                _, count, seconds = message
+                _, count, seconds, unreviewed = message
                 status.set(
-                    f"Proyecto válido: {count} intervenciones, "
+                    f"Coincidencia de archivos verificada: {count} intervenciones, "
                     f"{seconds / 60:.1f} min seleccionados. "
-                    "Puedes elegir el ZIP de salida y generar el paquete.")
+                    + (f"Atención: {unreviewed} hablante(s) sin identificar; "
+                       "revisa si corresponde excluir al intérprete. "
+                       if unreviewed else "")
+                    + "La pista de audio se comprobará al generar el ZIP.")
             elif kind == "success":
                 result = message[1]
                 bar["value"] = 100
