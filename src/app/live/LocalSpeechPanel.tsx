@@ -10,6 +10,7 @@ import {
   type LocalSpeechPackStatus,
   type LocalSpeechSession,
 } from '@/modules/live-engine/core/browser-local-speech';
+import { downloadLocalTranscript } from '@/modules/live-engine/core/export-local-transcript';
 
 export default function LocalSpeechPanel() {
   const [language, setLanguage] = useState<LocalSpeechLanguage>('es-ES');
@@ -107,6 +108,14 @@ export default function LocalSpeechPanel() {
     }
   }
 
+  function exportFinalText() {
+    try {
+      downloadLocalTranscript({ transcript, language, createdAt: new Date() });
+    } catch {
+      setError('No fue posible descargar el texto desde este navegador.');
+    }
+  }
+
   const busy = status === 'checking' || status === 'installing';
   return (
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -161,10 +170,18 @@ export default function LocalSpeechPanel() {
         {transcript}{interim && <span className="text-slate-500"> {interim}</span>}
         {!transcript && !interim && <span className="text-slate-500">La transcripción aparecerá aquí. No se guardará automáticamente.</span>}
       </div>
-      {(transcript || interim) && (
-        <button type="button" onClick={() => { setTranscript(''); setInterim(''); }}
-          className="mt-3 text-sm font-semibold text-slate-700 underline">Limpiar texto local</button>
-      )}
+      <div className="mt-3 flex flex-wrap items-center gap-4">
+        {transcript.trim() && (
+          <button type="button" onClick={exportFinalText}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800">
+            Descargar TXT (texto confirmado)
+          </button>
+        )}
+        {(transcript || interim) && (
+          <button type="button" onClick={() => { setTranscript(''); setInterim(''); }}
+            className="text-sm font-semibold text-slate-700 underline">Limpiar texto local</button>
+        )}
+      </div>
     </section>
   );
 }
