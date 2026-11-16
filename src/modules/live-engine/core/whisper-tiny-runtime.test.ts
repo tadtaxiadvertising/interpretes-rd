@@ -41,7 +41,7 @@ describe('local Whisper tiny Worker safety', () => {
     send({ type: 'transcribe', id: 1, language: 'es', samples: pcm });
     await tick();
     expect(engine).toHaveBeenCalledWith(pcm, 'es');
-    expect(messages).toContainEqual({ type: 'result', id: 1, text: ' Hola. ' });
+    expect(messages).toContainEqual({ type: 'result', id: 1, text: 'Hola.' });
   });
 
   it('filters silence before calling the model to prevent hallucinated words', async () => {
