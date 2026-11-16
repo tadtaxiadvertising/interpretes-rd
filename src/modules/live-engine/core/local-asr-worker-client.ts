@@ -40,6 +40,9 @@ export async function* prepareCapturedLocalAsrChunksInWorker(
     readyResolve = resolve;
     readyReject = reject;
   });
+  // If Worker construction fails before `await ready`, shutdown will reject
+  // this promise. Attach a handler now to prevent an unhandled rejection.
+  void ready.catch(() => undefined);
   let pendingChunk: {
     resolve: (value: IteratorResult<LocalPcmChunk, void>) => void;
     reject: (reason: Error) => void;
