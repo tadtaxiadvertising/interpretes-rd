@@ -5,6 +5,7 @@ import {
   type WhisperRequest,
   type WhisperWorkerPort,
 } from './whisper-tiny-protocol';
+import { validateWhisperTranscript } from './whisper-transcript-guard';
 
 export type WhisperInferenceEngine = (
   samples: Float32Array,
@@ -67,8 +68,9 @@ export async function loadWhisperTinyWasm(
       throw new Error('LOCAL_WHISPER_INVALID_OUTPUT');
     }
     const text = result.text;
-    if (typeof text !== 'string') throw new Error('LOCAL_WHISPER_INVALID_OUTPUT');
-    return text.trim().slice(0, 8_000);
+    // Never silently truncate hallucinated repetitions. Excessive output
+    // fails closed; the microphone session stops and no words are confirmed.
+    return validateWhisperTranscript(text, samples.length);
   };
 }
 
@@ -137,8 +139,12 @@ export function attachWhisperTinyWorker(
       return;
     }
     void engine(message.samples, message.language).then((text) => {
+      // Validate output at the Worker protocol boundary too, including
+      // injected/custom model engines. This prevents runaway output leaking
+      // back into review/exports if the loader implementation changes.
+      const reviewed = validateWhisperTranscript(text, message.samples.length);
       busy = false;
-      port.postMessage({ type: 'result', id: message.id, text });
+      port.postMessage({ type: 'result', id: message.id, text: reviewed });
     }).catch((cause) => {
       busy = false;
       port.postMessage({ type: 'error', code: normalizeWhisperError(cause), id: message.id });
