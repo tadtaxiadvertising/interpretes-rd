@@ -17,7 +17,7 @@ if (!source) {
   process.exit(1);
 }
 const files = readdirSync(source).filter((name) =>
-  /^ort-wasm[\\w.-]*\\.(?:mjs|wasm)$/.test(name),
+  name.startsWith('ort-wasm') && (name.endsWith('.mjs') || name.endsWith('.wasm')),
 );
 if (!files.some((name) => name.endsWith('.wasm')) || !files.some((name) => name.endsWith('.mjs'))) {
   console.error('LOCAL_ASR_ONNX_RUNTIME_INCOMPLETE: expected matching WASM and ESM files.');
