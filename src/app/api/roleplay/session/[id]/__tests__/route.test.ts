@@ -210,6 +210,66 @@ describe('GET /api/roleplay/session/[id]', () => {
     expect(body.data.scenarios[0].title).toBe('Scenario 1');
   });
 
+  it('signs canonical base audio when a session has no legacy URL', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      baseAudioUrl: null,
+      baseAudioPath: 'base/sess-1/original.webm',
+    };
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.baseAudioUrl).toBe('https://signed.test/base/sess-1/original.webm');
+    expect(m.getSignedAudioUrl).toHaveBeenCalledWith('base/sess-1/original.webm', 3600);
+  });
+
+  it('never signs path-only base audio for an unvalidated or consumed invitation', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      baseAudioUrl: null,
+      baseAudioPath: 'base/sess-1/original.webm',
+      access: { validatedAt: null, usedAt: null },
+    };
+    const invalid = await GET(makeRequest('sess-1'), { params });
+    expect(invalid.status).toBe(200);
+    expect((await invalid.json()).data.baseAudioUrl).toBeNull();
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+
+    m.session.access = { validatedAt: new Date(), usedAt: new Date() };
+    const consumed = await GET(makeRequest('sess-1'), { params });
+    expect(consumed.status).toBe(200);
+    expect((await consumed.json()).data.baseAudioUrl).toBeNull();
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it('signs path-only base audio for its assigned interpreter', async () => {
+    m.identity = { userId: 'interpreter-user', role: 'interpreter', interpreterId: 7, candidateId: null };
+    m.session = {
+      ...candidateSession('STARTED'),
+      interpreterId: 7,
+      recruitmentCandidateId: null,
+      baseAudioUrl: null,
+      baseAudioPath: 'base/interpreter-7/recording.mp3',
+    };
+    const res = await GET(makeRequest(), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.baseAudioUrl).toBe('https://signed.test/base/interpreter-7/recording.mp3');
+  });
+
+  it('refuses malformed path-only base audio and never sends its key to Storage', async () => {
+    m.session = {
+      ...candidateSession('STARTED'),
+      baseAudioUrl: null,
+      baseAudioPath: 'base/../private/recording.mp3',
+    };
+    const res = await GET(makeRequest('sess-1'), { params });
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.baseAudioUrl).toBeNull();
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
   it('refreshes base audio playback URLs from the canonical Storage path', async () => {
     m.session = {
       ...candidateSession('STARTED'),

@@ -8,6 +8,7 @@ import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessmen
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { getSignedAudioUrl } from '@/lib/roleplay';
 import { getReusableBaseAudioPath } from '@/lib/roleplay-library';
+import { resolveInvitationBaseAudioUrl } from '@/lib/roleplay/invitation-base-audio';
 
 const db = prisma;
 
@@ -109,6 +110,7 @@ export async function GET(
     }
 
     let baseAudioUrl: string | null = session.baseAudioUrl;
+    let mayExposeBaseAudio = true;
     let recordedAudioUrl: string | null = session.recordedAudioUrl;
     let scenarios = session.scenarios;
 
@@ -116,6 +118,7 @@ export async function GET(
       const invitationValidated = Boolean(session.access?.validatedAt);
       const invitationConsumed = Boolean(session.access?.usedAt);
       if (!invitationValidated || invitationConsumed) {
+        mayExposeBaseAudio = false;
         baseAudioUrl = null;
         recordedAudioUrl = null;
         scenarios = scenarios.map((scenario) => ({ ...scenario, baseAudioUrl: '' }));
@@ -138,22 +141,16 @@ export async function GET(
       }
     }
 
-    // Existing base recordings can be stored as canonical keys or legacy
-    // getPublicUrl() URLs from this exact project's Storage bucket. Authorize
-    // the session FIRST, then mint a short-lived URL to support private buckets.
-    // Never follow external URLs, signed query strings or arbitrary paths.
+    // A session may have a canonical base object key but no legacy URL.
+    // Reuse the same strict resolver as invitation entry, only AFTER ownership
+    // checks and invitation redaction. Never re-sign hidden candidate audio.
     const supabaseProjectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-    if (baseAudioUrl) {
-      const path = session.baseAudioPath ??
-        getReusableBaseAudioPath(baseAudioUrl, supabaseProjectUrl);
-      if (path) {
-        try {
-          baseAudioUrl = await getSignedAudioUrl(path, 60 * 60);
-        } catch {
-          console.error('Roleplay base audio playback URL could not be refreshed:', 'StorageError');
-          baseAudioUrl = null;
-        }
-      }
+    if (mayExposeBaseAudio) {
+      baseAudioUrl = await resolveInvitationBaseAudioUrl(
+        { baseAudioPath: session.baseAudioPath, baseAudioUrl },
+        supabaseProjectUrl,
+        getSignedAudioUrl,
+      );
     }
 
     // Participant responses must not reveal evaluator keys or Audio Studio's
