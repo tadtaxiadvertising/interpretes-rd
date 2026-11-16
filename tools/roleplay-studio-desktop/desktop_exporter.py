@@ -17,6 +17,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -505,5 +506,25 @@ def run_desktop():
     root.mainloop()
 
 
+def self_check():
+    """Non-GUI packaging smoke check; returns nonzero if FFmpeg is unavailable."""
+    binary = resolve_ffmpeg()
+    try:
+        probe = subprocess.run([binary, "-hide_banner", "-version"],
+                               stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=10, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ExportError("El ejecutable FFmpeg incluido no funciona.") from exc
+    if probe.returncode != 0:
+        raise ExportError("El ejecutable FFmpeg incluido no funciona.")
+
+
 if __name__ == "__main__":
+    if len(sys.argv) == 2 and sys.argv[1] == "--self-check":
+        try:
+            self_check()
+        except ExportError:
+            sys.exit(1)
+        sys.exit(0)
     run_desktop()
