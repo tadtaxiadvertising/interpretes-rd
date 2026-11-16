@@ -268,6 +268,42 @@ def write_studio_store_zip(target: Path, manifest: dict, clip_files):
             raise ExportError("El ZIP excede 16 MiB. Reduce los cortes seleccionados.")
 
 
+def inspect_project(source, project_file):
+    """Validate the project, source and sampled fingerprint without decoding media.
+
+    This quick, offline preflight can be called from the GUI before conversion.
+    Export always repeats it, so a stale validation cannot authorize publication.
+    """
+    source = Path(source).expanduser().resolve()
+    project_file = Path(project_file).expanduser().resolve()
+    if (source == project_file or
+            source.suffix.lower().lstrip(".") not in EXTENSIONS or
+            project_file.suffix.lower() != ".json" or
+            not source.is_file() or not project_file.is_file()):
+        raise ExportError("Selecciona la grabación original y un proyecto JSON válido.")
+    info = source.stat()
+    project_size = project_file.stat().st_size
+    if not 0 < info.st_size <= MAX_SOURCE_BYTES or not 0 < project_size <= MAX_PROJECT_BYTES:
+        raise ExportError("Archivo fuente o proyecto vacío o por encima de los límites.")
+    try:
+        with project_file.open("r", encoding="utf-8") as file:
+            project = json.load(file)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ExportError("El proyecto JSON no se pudo leer.") from exc
+    clips = validate_project(project, info.st_size)
+    source_hash = fingerprint_file(source, info.st_size)
+    if source_hash != project["sourceSampleSha256"].lower():
+        raise ExportError("La huella parcial no coincide: selecciona la grabación original.")
+    return {
+        "source": source,
+        "project": project_file,
+        "info": info,
+        "clips": clips,
+        "source_hash": source_hash,
+        "duration_seconds": sum(clip["end"] - clip["start"] for clip in clips),
+    }
+
+
 def export_project(source, project_file, output, *, ffmpeg=None,
                    on_progress=None, cancelled=None):
     """Export a STORE ZIP consumable by the existing Intérpretes RD importer.
@@ -275,33 +311,18 @@ def export_project(source, project_file, output, *, ffmpeg=None,
     The full input video is never decoded/buffered. The original is not uploaded.
     Existing output files are never overwritten (including symlinks).
     """
-    source = Path(source).expanduser().resolve()
-    project_file = Path(project_file).expanduser().resolve()
     output = Path(output).expanduser().absolute()
-    if (len({str(source), str(project_file), str(output)}) != 3 or
-            source.suffix.lower().lstrip(".") not in EXTENSIONS or
-            project_file.suffix.lower() != ".json" or
-            output.suffix.lower() != ".zip"):
-        raise ExportError("Selecciona una grabación, un proyecto JSON y un ZIP de salida distintos.")
-    if not source.is_file() or not project_file.is_file():
-        raise ExportError("No se encontró la grabación o el proyecto JSON.")
-    info = source.stat()
-    project_size = project_file.stat().st_size
-    if not 0 < info.st_size <= MAX_SOURCE_BYTES or not 0 < project_size <= MAX_PROJECT_BYTES:
-        raise ExportError("Archivo fuente o proyecto vacío o por encima de los límites.")
-    # Reject the destination before spending CPU; exclusive create repeats this.
+    if output.suffix.lower() != ".zip" or output.resolve(strict=False) in (
+            Path(source).expanduser().resolve(), Path(project_file).expanduser().resolve()):
+        raise ExportError("Selecciona una salida ZIP distinta de la grabación y del proyecto.")
+    # Fail before processing; the exclusive create below repeats this protection.
     if output.exists() or output.is_symlink():
         raise ExportError("El ZIP de salida ya existe. Elige un nombre nuevo.")
-
-    try:
-        with project_file.open("r", encoding="utf-8") as file:
-            project = json.load(file)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ExportError("El proyecto JSON no se pudo leer.") from exc
-    clips = validate_project(project, info.st_size)
-    before_hash = fingerprint_file(source, info.st_size)
-    if before_hash != project["sourceSampleSha256"].lower():
-        raise ExportError("La huella parcial no coincide: selecciona la grabación original.")
+    inspected = inspect_project(source, project_file)
+    source = inspected["source"]
+    info = inspected["info"]
+    clips = inspected["clips"]
+    before_hash = inspected["source_hash"]
 
     ffmpeg = ffmpeg or resolve_ffmpeg()
     cancelled = cancelled or threading.Event()
@@ -353,8 +374,13 @@ def export_project(source, project_file, output, *, ffmpeg=None,
         # a pre-existing symbolic link. Remove only files we created on failure.
         created = False
         try:
-            with output.open("xb") as destination:
-                created = True
+            # Python Path.open('xb') uses mode 0o666 before umask, which may
+            # expose confidential medical recordings on shared POSIX machines.
+            # Create exclusively with 0o600 instead (Windows inherits ACLs).
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+            fd = os.open(output, flags, 0o600)
+            created = True
+            with os.fdopen(fd, "wb") as destination:
                 with temp_zip.open("rb") as file:
                     shutil.copyfileobj(file, destination, length=1024 * 1024)
             if cancelled.is_set():
