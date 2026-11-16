@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   calculateWaveformPeaks,
   canRenderWaveform,
@@ -47,6 +47,7 @@ export default function StudioWaveform({
   const [status, setStatus] = useState<PreviewStatus>('loading');
   const [zoom, setZoom] = useState(1);
   const [windowStart, setWindowStart] = useState(0);
+  const lastFollowedTime = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,6 +104,9 @@ export default function StudioWaveform({
   // Follow the playhead only when it leaves the visible time window, so manual
   // scrolling and inspecting another passage are not constantly overridden.
   useEffect(() => {
+    // Panning while paused must not snap the viewport back to the old cursor.
+    if (lastFollowedTime.current === safeTime) return;
+    lastFollowedTime.current = safeTime;
     if (safeTime < start || safeTime > end) {
       setWindowStart(Math.max(0, Math.min(safeDuration - span, safeTime - span / 4)));
     }
