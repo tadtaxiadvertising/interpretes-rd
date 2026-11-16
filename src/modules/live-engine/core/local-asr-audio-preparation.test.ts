@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { prepareCapturedLocalAsrChunks } from './local-asr-audio-preparation';
 import type { LocalPcmCapture } from './local-pcm-capture';
+import { BoundedLocalPcmQueue } from './bounded-pcm-queue';
 
 function fakeCapture(data: Float32Array[], sampleRate = 48_000) {
   const stop = vi.fn();
@@ -63,4 +64,25 @@ describe('captured local speech preparation pipeline', () => {
     await expect(iterator.next()).rejects.toThrow('NON_FINITE_LOCAL_PCM_SAMPLE');
     expect(stop).toHaveBeenCalledTimes(1);
   });
+  it('wakes a stalled PCM reader immediately when the user cancels', async () => {
+    const queue = new BoundedLocalPcmQueue({
+      maxBufferedSamples: 1024,
+      maxFrameSamples: 1024,
+    });
+    const stop = vi.fn(() => queue.close());
+    const capture = {
+      sampleRate: 48_000,
+      frames: queue,
+      stop,
+      getStats: () => queue.getStats(),
+    } satisfies LocalPcmCapture;
+    const controller = new AbortController();
+    const iterator = prepareCapturedLocalAsrChunks(capture, { signal: controller.signal });
+    const pending = iterator.next();
+    controller.abort();
+    await expect(pending).rejects.toThrow(/CANCELLED/);
+    expect(stop).toHaveBeenCalled();
+    expect(queue.getStats().closed).toBe(true);
+  });
+
 });
