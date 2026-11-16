@@ -25,7 +25,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     expect(slider.getAttribute('value')).toBe('20');
     fireEvent.change(slider, { target: { value: '25.5' } });
     expect(seek).toHaveBeenCalledWith(25.5);
-    expect(screen.getByText('01:30')).toBeTruthy();
+    expect(screen.getByText('Línea de tiempo · 01:30')).toBeTruthy();
   });
 
   it('keeps navigation available for long recordings without allocating decoded PCM', () => {
