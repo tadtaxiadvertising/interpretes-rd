@@ -10,6 +10,9 @@ vi.mock('next/link', () => ({
 
 describe('Audio Studio clip review player', () => {
   let pause: ReturnType<typeof vi.spyOn>;
+  const selectServerZip = () => fireEvent.click(screen.getByRole('radio', {
+    name: /Servidor \(opcional\): el MP3 se subirá/i,
+  }));
 
   beforeEach(() => {
     vi.stubGlobal('crypto', { randomUUID: (() => { let n = 0; return () => `clip-${++n}`; })() });
@@ -46,6 +49,47 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByRole('button', { name: /Añadir intervención/i })).toBeTruthy();
   });
 
+  it('prepares a short MP3 locally by default without posting media to the server', async () => {
+    const source = new File(['ID3'], 'private-short.mp3', { type: 'audio/mpeg' });
+    vi.spyOn(source, 'slice').mockImplementation(() => ({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }) as unknown as Blob);
+    vi.stubGlobal('crypto', {
+      randomUUID: () => 'private-segment',
+      subtle: { digest: vi.fn(async () => new Uint8Array(32).buffer) },
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [source] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    expect((screen.getByRole('radio', { name: /Local \(predeterminado\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByText(/Actividad de voz en este equipo/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Detectar pausas en servidor/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/i }));
+      await Promise.resolve();
+    });
+    expect(download).toHaveBeenCalledTimes(1);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(screen.getByText(/Plan de cortes local descargado/i)).toBeTruthy();
+
+    selectServerZip();
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(true);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'next-source.mp3', { type: 'audio/mpeg' })] },
+    });
+    expect((screen.getByRole('radio', { name: /Local \(predeterminado\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('still downloads a ZIP when the audio and edits remain unchanged', async () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
@@ -61,6 +105,7 @@ describe('Audio Studio clip review player', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     await act(async () => {
+      selectServerZip();
       fireEvent.click(screen.getByRole('button', { name: /Exportar MP3/i }));
       await Promise.resolve();
     });
@@ -89,7 +134,8 @@ describe('Audio Studio clip review player', () => {
     vi.stubGlobal('fetch', fetchMock);
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
-    fireEvent.click(screen.getByRole('button', { name: /Exportar MP3/i }));
+    selectServerZip();
+      fireEvent.click(screen.getByRole('button', { name: /Exportar MP3/i }));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const signal = fetchMock.mock.calls[0][1]?.signal as AbortSignal;
     expect(signal.aborted).toBe(false);
@@ -125,6 +171,7 @@ describe('Audio Studio clip review player', () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
 
     await act(async () => {
+      selectServerZip();
       fireEvent.click(screen.getByRole('button', { name: /Exportar MP3/i }));
       await Promise.resolve();
     });
