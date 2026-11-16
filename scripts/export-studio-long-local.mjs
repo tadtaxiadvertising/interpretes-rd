@@ -12,7 +12,8 @@
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { basename, extname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import ffmpegStatic from 'ffmpeg-static';
 
@@ -142,12 +143,15 @@ async function transcodeClip(source, target, clip) {
     const child = spawn(ffmpegStatic, args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let settled = false;
     let stderr = '';
+    const abort = () => child.kill('SIGKILL');
+    process.once('SIGINT', abort);
     const timeout = setTimeout(() => child.kill('SIGKILL'),
       Math.min(300_000, 90_000 + (clip.end - clip.start) * 1000));
     const finish = error => {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      process.removeListener('SIGINT', abort);
       if (error) reject(error);
       else done();
     };
@@ -279,7 +283,7 @@ async function exportLocal({ source, project, output }) {
   }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
+if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
   exportLocal(parseArgs(process.argv.slice(2))).catch(error => {
     process.stderr.write('Error: ' + (error instanceof Error ? error.message : 'fallo desconocido') + '\n');
     process.exitCode = 1;
