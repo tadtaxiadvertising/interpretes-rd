@@ -175,8 +175,12 @@ describe('Audio Studio compact editing', () => {
     }
     const speaker = screen.getByRole('combobox', { name: 'Hablante rápido intervención 1' });
     const language = screen.getByRole('combobox', { name: 'Idioma rápido intervención 1' });
-    fireEvent.change(speaker, { target: { value: 'doctor' } });
+    fireEvent.change(speaker, { target: { value: 'interpreter' } });
     fireEvent.change(language, { target: { value: 'en' } });
+    expect(screen.getByRole('checkbox', { name: 'Pendientes (6)' })).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toMatch(/Excluye esos fragmentos antes de exportar/);
+    fireEvent.change(speaker, { target: { value: 'doctor' } });
+    expect(screen.queryByRole('status')).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Pendientes (5)' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
