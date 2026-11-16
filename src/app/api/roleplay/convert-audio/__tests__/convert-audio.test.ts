@@ -255,6 +255,31 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     expect(mocks.upload).not.toHaveBeenCalled();
   });
 
+  it.each([
+    'audio/webm; codecs=opus',
+    'audio/webm ; codecs = OpUs',
+    'audio/webm; codecs=pcm',
+  ])('accepts optional MIME parameter whitespace without weakening codec validation: %s', async (mimeType) => {
+    const response = await POST(makeRequest({ cookie: 'session-1', mimeType }));
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.success).toBe(true);
+    expect(mocks.upload).toHaveBeenCalledOnce();
+    expect(mocks.upload.mock.calls[0][0]).toMatch(/^responses\\/session-1\\/scenario-1\\/.+\\.webm$/);
+    expect(mocks.confirm).toHaveBeenCalledOnce();
+  });
+
+  it('rejects an unknown WebM codec even with optional parameter whitespace', async () => {
+    const response = await POST(makeRequest({
+      cookie: 'session-1',
+      mimeType: 'audio/webm ; codecs = unknown',
+    }));
+    expect(response.status).toBe(400);
+    expect(mocks.upload).not.toHaveBeenCalled();
+    expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
   it('rejects unsupported WebM codec parameters', async () => {
     const response = await POST(makeRequest({ cookie: 'session-1', mimeType: 'audio/webm;codecs=unknown' }));
 
