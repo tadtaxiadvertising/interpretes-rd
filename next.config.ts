@@ -107,7 +107,7 @@ const nextConfig: NextConfig = {
               // The app's normal page bundles, unrelated Workers, and /live
               // itself retain the restrictive global CSP.
               // CI proves the named output bundle exists when pilot is built.
-              source: '/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js',
+              source: '/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js',
               headers: [{
                 key: 'Content-Security-Policy',
                 value: baseCsp.replace(
