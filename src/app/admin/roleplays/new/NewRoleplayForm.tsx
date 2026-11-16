@@ -56,6 +56,7 @@ function generateId() {
 export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
+  const [participantSearch, setParticipantSearch] = useState('');
   const [scenarios, setScenarios] = useState<Scenario[]>([
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
@@ -99,6 +100,31 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const participants = participantType === 'candidate' ? candidates : interpreters;
   const isBulk = participantType === 'all-active-interpreters';
   const activeInterpreterCount = interpreters.filter((participant) => participant.status === 'Activo').length;
+  const selectedParticipant = participants.find((participant) => String(participant.id) === selectedParticipantId);
+  const search = participantSearch.trim().toLocaleLowerCase('es');
+  const matchingParticipants = search
+    ? participants.filter((participant) => [
+        participant.name, participant.email, participant.externalId, participant.emailCorporativo,
+      ].some((value) => (value ?? '').toLocaleLowerCase('es').includes(search)))
+    : participants;
+  // Do not silently drop the selected option when the administrator searches
+  // for someone else: the user should explicitly choose a different target.
+  const visibleParticipants = selectedParticipant &&
+    !matchingParticipants.some((participant) => participant.id === selectedParticipant.id)
+    ? [selectedParticipant, ...matchingParticipants] : matchingParticipants;
+  const scenarioCount = librarySource?.scenarios.length ?? scenarios.length;
+  const readyScenarioCount = librarySource?.scenarios.length ??
+    scenarios.filter((scenario) => scenario.title.trim() && scenario.baseAudioFile).length;
+
+  const changeParticipantType = (nextType: typeof participantType) => {
+    if (nextType === participantType) return;
+    setParticipantType(nextType);
+    setSelectedParticipantId('');
+    setParticipantSearch('');
+    setEligibility(null);
+    setEligibilityError(null);
+    setError(null);
+  };
 
   useEffect(() => {
     if (!isBulk) return;
@@ -360,12 +386,14 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   }
 
   return (
-    <div className="glass p-8 rounded-3xl border border-white/5 space-y-8">
+    <div className="glass rounded-3xl border border-white/5 p-4 sm:p-6 space-y-5">
       <div>
-        <h3 className="text-lg font-bold text-white mb-4">Participant Type</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <h3 className="text-lg font-bold text-white mb-2">¿A quién se asignará?</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <button
-            onClick={() => { setParticipantType('interpreter'); setSelectedParticipantId(''); setError(null); }}
+            type="button"
+            aria-pressed={participantType === 'interpreter'}
+            onClick={() => changeParticipantType('interpreter')}
             className={cn(
               "p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-3",
               participantType === 'interpreter'
@@ -375,11 +403,13 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           >
             <User size={24} className={cn(participantType === 'interpreter' ? 'text-blue-400' : 'text-gray-400')} />
             <span className={cn(participantType === 'interpreter' ? 'text-blue-400' : 'text-gray-300')}>
-              Interpreter
+              Intérprete
             </span>
           </button>
           <button
-            onClick={() => { setParticipantType('candidate'); setSelectedParticipantId(''); setError(null); }}
+            type="button"
+            aria-pressed={participantType === 'candidate'}
+            onClick={() => changeParticipantType('candidate')}
             className={cn(
               "p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-3",
               participantType === 'candidate'
@@ -389,30 +419,32 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           >
             <UserPlus size={24} className={cn(participantType === 'candidate' ? 'text-green-400' : 'text-gray-400')} />
             <span className={cn(participantType === 'candidate' ? 'text-green-400' : 'text-gray-300')}>
-              Candidate
+              Candidato
             </span>
           </button>
           <button
-            onClick={() => { setParticipantType('all-active-interpreters'); setSelectedParticipantId(''); setError(null); }}
+            type="button"
+            aria-pressed={isBulk}
+            onClick={() => changeParticipantType('all-active-interpreters')}
             className={cn(
               "p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2",
               isBulk ? "border-blue-500 bg-blue-500/10" : "border-white/10 hover:border-white/20"
             )}
           >
             <UserPlus size={24} className={cn(isBulk ? 'text-blue-400' : 'text-gray-400')} />
-            <span className={cn("text-center", isBulk ? 'text-blue-400' : 'text-gray-300')}>All active interpreters</span>
+            <span className={cn("text-center", isBulk ? 'text-blue-400' : 'text-gray-300')}>Todos los intérpretes activos</span>
           </button>
         </div>
       </div>
 
       {isBulk ? (
         <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
-          <p className="font-semibold text-white">Bulk assignment</p>
+          <p className="font-semibold text-white">Asignación masiva</p>
           <p className="text-sm text-gray-300 mt-1">
-            The roleplay will be created for every interpreter whose status is exactly “Activo”.
-            {activeInterpreterCount > 0 ? ` ${activeInterpreterCount} active interpreter(s) are listed in the editor.` : ' The server will verify the active count before creating anything.'}
+            Se creará una sesión para los intérpretes elegibles con estado «Activo».
+            {activeInterpreterCount > 0 ? ` Hay ${activeInterpreterCount} activos en la lista.` : ' El servidor verificará el total antes de crear sesiones.'}
           </p>
-          <p className="text-xs text-gray-400 mt-2">Previous drafts, active sessions and evaluated sessions are currently excluded. Audio files are uploaded once and reused across eligible sessions.</p>
+          <p className="text-xs text-gray-400 mt-2">Se omiten las sesiones anteriores que impidan una nueva asignación. Los audios se cargan una sola vez y se reutilizan según la elegibilidad verificada en el servidor.</p>
           {eligibilityLoading && <p role="status" className="mt-3 text-sm text-blue-200">Verificando destinatarios elegibles…</p>}
           {eligibility && !eligibilityLoading && (
             <p role="status" className="mt-3 text-sm font-medium text-blue-100">
@@ -423,20 +455,44 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <p className="mt-2 text-xs text-slate-400">Esta vista previa puede cambiar; al crear, el servidor vuelve a comprobar la elegibilidad.</p>
         </div>
       ) : (
-        <div>
-          <h3 className="text-lg font-bold text-white mb-4">Select Participant</h3>
+        <div className="space-y-2">
+          <label htmlFor="roleplay-participant-search" className="block text-sm font-semibold text-white">
+            Buscar {participantType === 'candidate' ? 'candidato' : 'intérprete'}
+          </label>
+          <input
+            id="roleplay-participant-search"
+            type="search"
+            autoComplete="off"
+            value={participantSearch}
+            onChange={(event) => setParticipantSearch(event.currentTarget.value)}
+            placeholder="Nombre, correo o identificador…"
+            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-blue-500"
+          />
+          <label htmlFor="roleplay-participant-select" className="block text-sm text-slate-300">
+            Destinatario · {matchingParticipants.length} coincidencia(s)
+          </label>
           <select
+            id="roleplay-participant-select"
             value={selectedParticipantId}
-            onChange={(e) => setSelectedParticipantId(e.target.value)}
-            className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-blue-500 transition-colors"
+            onChange={(event) => { setSelectedParticipantId(event.currentTarget.value); setError(null); }}
+            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-blue-500"
           >
-            <option value="">Choose a {participantType}...</option>
-            {participants.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.email || p.externalId || p.emailCorporativo})
-              </option>
-            ))}
+            <option value="">Selecciona un {participantType === 'candidate' ? 'candidato' : 'intérprete'}…</option>
+            {visibleParticipants.map((participant) => {
+              const identifier = participant.email || participant.externalId || participant.emailCorporativo;
+              return (
+                <option key={participant.id} value={participant.id}>
+                  {participant.name}{identifier ? ` (${identifier})` : ''}
+                </option>
+              );
+            })}
           </select>
+          {search && matchingParticipants.length === 0 && (
+            <p className="text-xs text-amber-200">
+              Sin coincidencias. Prueba otro nombre, correo o identificador.
+              {selectedParticipant ? ' El destinatario seleccionado se conserva.' : ''}
+            </p>
+          )}
         </div>
       )}
 
@@ -469,14 +525,19 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Importar roleplay preparado (ZIP de Audio Studio o manifest.json + MP3)
           </label>
           <p className="mt-1 text-xs text-slate-300">
-            Puedes importar el ZIP del estudio integrado o el ZIP exportado
-             por Audio Studio externo (archivos planos STORE/DEFLATE, sin cifrado).
-             También puedes seleccionar manifest.json y todos los MP3 individuales.
-             En los ZIP externos se omiten las pistas por hablante y el audio masterizado.
-             Los nombres, transcripciones y notas internas nunca se publican como instrucciones.
-             Las huellas SHA-256 se calculan antes de crear escenarios. La importación
-             reemplaza el borrador, pero nunca publica automáticamente.
-           </p>
+            Importa un ZIP o manifest.json con sus MP3. Se sustituirá el borrador,
+            pero no se creará ninguna sesión hasta que confirmes la asignación.
+          </p>
+          <details className="mt-2 text-xs text-slate-300">
+            <summary className="cursor-pointer text-blue-200">Formatos admitidos y privacidad</summary>
+            <p className="mt-2 leading-5">
+              Se admiten paquetes ZIP del estudio integrado o externo (STORE/DEFLATE, sin cifrado),
+              o manifest.json con todos los MP3 individuales. En los ZIP externos se omiten
+              pistas por hablante y el audio masterizado. Los nombres, transcripciones y notas
+              internas no se publican como instrucciones. Se verifican las huellas SHA-256
+              antes de crear escenarios; importar no publica automáticamente.
+            </p>
+          </details>
           <input
             id="manifest-roleplay-upload"
             type="file"
@@ -529,6 +590,33 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       </div>
 
       )}
+
+      <section aria-label="Resumen de asignación" className="rounded-xl border border-white/10 bg-slate-950/60 p-3 sm:p-4 space-y-2">
+        <h3 className="text-sm font-semibold text-white">Revisión antes de crear</h3>
+        <p className="text-sm text-slate-300">
+          Destinatario: <span className="font-medium text-white">
+            {isBulk
+              ? eligibility && !eligibilityLoading
+                ? `${eligibility.eligibleCount} intérpretes elegibles de ${eligibility.activeCount} activos`
+                : 'Intérpretes activos (elegibilidad pendiente de verificación)'
+              : selectedParticipant
+                ? `${selectedParticipant.name} · ${participantType === 'candidate' ? 'Candidato' : 'Intérprete'}`
+                : 'Sin seleccionar'}
+          </span>
+        </p>
+        <p className="text-sm text-slate-300">
+          Escenarios listos: <span className="font-medium text-white">{readyScenarioCount} de {scenarioCount}</span>
+        </p>
+        {(!isBulk && !selectedParticipantId) ? (
+          <p className="text-xs text-amber-200">Elige un destinatario para habilitar la creación.</p>
+        ) : readyScenarioCount !== scenarioCount || scenarioCount === 0 ? (
+          <p className="text-xs text-amber-200">Completa el título y audio de cada escenario antes de crear.</p>
+        ) : (
+          <p className="text-xs text-slate-400">
+            Revisa la selección antes de crear. El servidor validará los permisos y la elegibilidad.
+          </p>
+        )}
+      </section>
 
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3">
