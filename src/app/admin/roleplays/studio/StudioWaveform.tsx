@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { detectLocalSpeech, type LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import {
   calculateWaveformPeaks,
   canRenderWaveform,
@@ -21,6 +22,7 @@ export interface StudioWaveformProps {
   currentTime: number;
   segments: readonly WaveformInterval[];
   onSeek: (time: number) => void;
+  onLocalVadResult?: (source: File, result: LocalVadSnapshot) => void;
 }
 
 const CHART_WIDTH = 720;
@@ -58,12 +60,15 @@ function timeLabel(seconds: number): string {
  * remains the source of truth for seeking and segment-preview boundaries.
  */
 export default function StudioWaveform({
-  file, duration, currentTime, segments, onSeek,
+  file, duration, currentTime, segments, onSeek, onLocalVadResult,
 }: StudioWaveformProps) {
   const [peaks, setPeaks] = useState<number[]>([]);
   const [status, setStatus] = useState<PreviewStatus>('loading');
   const [zoom, setZoom] = useState<number>(1);
   const [requestedStart, setRequestedStart] = useState(0);
+  // Keep notifications current without re-decoding whenever the parent renders.
+  const vadNotification = useRef(onLocalVadResult);
+  vadNotification.current = onLocalVadResult;
 
   // Opening another file must not inherit a narrow viewport from the prior
   // multi-hour recording, especially if its zoom choice is now unavailable.
@@ -74,19 +79,29 @@ export default function StudioWaveform({
 
   useEffect(() => {
     let cancelled = false;
+    const send = (result: LocalVadSnapshot) => {
+      if (!cancelled && /\\.mp3$/i.test(file.name)) {
+        vadNotification.current?.(file, result);
+      }
+    };
     if (!canRenderWaveform(duration, file.size)) {
       setPeaks([]);
       setStatus('limited');
+      send({ status: 'limited', segments: [] });
       return () => { cancelled = true; };
     }
 
+    send({ status: 'loading', segments: [] });
     setStatus('loading');
     setPeaks([]);
     const load = async () => {
       let context: AudioContext | null = null;
       try {
         if (typeof window.AudioContext !== 'function') {
-          if (!cancelled) setStatus('unavailable');
+          if (!cancelled) {
+            setStatus('unavailable');
+            send({ status: 'unavailable', segments: [] });
+          }
           return;
         }
         const data = await file.arrayBuffer();
@@ -94,8 +109,13 @@ export default function StudioWaveform({
         context = new window.AudioContext();
         const decoded = await context.decodeAudioData(data);
         if (cancelled) return;
-        if (decoded.duration > 240 || decoded.numberOfChannels < 1) {
-          setStatus('limited');
+        if (decoded.duration <= 0 || decoded.duration > 240 ||
+            decoded.numberOfChannels < 1 || decoded.sampleRate < 8000 ||
+            decoded.sampleRate > 192000) {
+          if (!cancelled) {
+            setStatus('unavailable');
+            send({ status: 'unavailable', segments: [] });
+          }
           return;
         }
         const channels: Float32Array[] = [];
@@ -104,11 +124,22 @@ export default function StudioWaveform({
         }
         const result = calculateWaveformPeaks(channels, WAVEFORM_BAR_COUNT);
         if (!cancelled) {
+          // Only one PCM decoding feeds BOTH the waveform and the local VAD.
+          // Retain small timing metadata, never decoded channels or full media.
+          const speech = /\\.mp3$/i.test(file.name)
+            ? detectLocalSpeech(channels, decoded.sampleRate) : [];
           setPeaks(result);
           setStatus(result.length ? 'ready' : 'unavailable');
+          send({
+            status: result.length ? 'ready' : 'unavailable',
+            segments: speech,
+          });
         }
       } catch {
-        if (!cancelled) setStatus('unavailable');
+        if (!cancelled) {
+          setStatus('unavailable');
+          send({ status: 'unavailable', segments: [] });
+        }
       } finally {
         if (context) await context.close().catch(() => {});
       }
