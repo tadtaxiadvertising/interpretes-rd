@@ -168,4 +168,49 @@ describe('Audio Studio compact editing', () => {
     expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
   });
 
+  it('edits compact rows without opening their detailed editors', () => {
+    loadAudio(240);
+    for (let i = 0; i < 6; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    }
+    const speaker = screen.getByRole('combobox', { name: 'Hablante rápido intervención 1' });
+    const language = screen.getByRole('combobox', { name: 'Idioma rápido intervención 1' });
+    fireEvent.change(speaker, { target: { value: 'interpreter' } });
+    fireEvent.change(language, { target: { value: 'en' } });
+    expect(screen.getByRole('checkbox', { name: 'Pendientes (6)' })).toBeTruthy();
+    expect(screen.getByText(/Excluye esos fragmentos antes de exportar/)).toBeTruthy();
+    fireEvent.change(speaker, { target: { value: 'doctor' } });
+    expect(screen.queryByText(/Excluye esos fragmentos antes de exportar/)).toBeNull();
+    expect(screen.getByRole('checkbox', { name: 'Pendientes (5)' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
+    expect(screen.queryByRole('combobox', { name: 'Hablante rápido intervención 1' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Hablante rápido intervención 2' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vista detallada' }));
+
+    const fullSpeakers = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
+    const fullLanguages = screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[];
+    expect(fullSpeakers[0].value).toBe('doctor');
+    expect(fullLanguages[0].value).toBe('en');
+    expect(screen.queryByRole('combobox', { name: 'Hablante rápido intervención 1' })).toBeNull();
+  });
+
+  it('clears stale review filters when the source recording changes', () => {
+    const player = loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'not visible' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (1)' }));
+
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' })] },
+    });
+    fireEvent.loadedMetadata(player);
+    expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('checkbox', { name: 'Pendientes (0)' }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByText(/Intervenciones \(1\/25\)/)).toBeNull();
+  });
+
 });
