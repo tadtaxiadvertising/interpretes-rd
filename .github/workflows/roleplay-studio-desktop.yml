@@ -1,0 +1,102 @@
+name: Roleplay Audio Studio - local desktop exporter
+
+on:
+  pull_request:
+    paths:
+      - 'tools/roleplay-studio-desktop/**'
+      - '.github/workflows/roleplay-studio-desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-tests:
+    name: Offline exporter tests (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install bundled FFmpeg dependency
+        run: python -m pip install --disable-pip-version-check 'imageio-ffmpeg==0.8.1'
+      - name: Run deterministic validation and real FFmpeg ZIP tests
+        run: python -m unittest discover -s tools/roleplay-studio-desktop -p 'test_*.py' -v
+
+  # Builds are intentionally manual: no large binary artifacts or billing
+  # minutes for every platform PR. Never auto-release unsigned executables.
+  package:
+    name: Package offline desktop (${{ matrix.os }})
+    # Builds are opt-in; pull requests run offline tests only.
+    if: github.event_name == 'workflow_dispatch'
+    needs: offline-tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Provide tkinter on Ubuntu builder
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+      - name: Install standalone packaging requirements
+        run: python -m pip install --disable-pip-version-check 'imageio-ffmpeg==0.8.1' 'pyinstaller==6.22.3' 'pyinstaller-hooks-contrib==2026.10'
+      - name: Smoke test actual FFmpeg and manifest on platform
+        run: python -m unittest discover -s tools/roleplay-studio-desktop -p 'test_*.py' -v
+      - name: Build unsigned desktop application
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Console bootloader is needed for reliable FFmpeg startup on Windows.
+            # The GUI hides its terminal after initializing (not during --self-check).
+            python -m PyInstaller --noconfirm --clean --console \
+              --name RoleplayStudioLocal --collect-all imageio_ffmpeg \
+              tools/roleplay-studio-desktop/desktop_exporter.py
+          else
+            python -m PyInstaller --noconfirm --clean --windowed \
+              --name RoleplayStudioLocal --collect-all imageio_ffmpeg \
+              tools/roleplay-studio-desktop/desktop_exporter.py
+          fi
+      - name: Validate packaged FFmpeg on Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:ROLEPLAY_STUDIO_SELF_CHECK_LOG = Join-Path $env:RUNNER_TEMP 'roleplay-studio-self-check.log'
+          & ./dist/RoleplayStudioLocal/RoleplayStudioLocal.exe --self-check
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $env:ROLEPLAY_STUDIO_SELF_CHECK_LOG) {
+              Get-Content $env:ROLEPLAY_STUDIO_SELF_CHECK_LOG
+            }
+            exit 1
+          }
+      - name: Validate packaged FFmpeg on macOS
+        if: runner.os == 'macOS'
+        run: dist/RoleplayStudioLocal.app/Contents/MacOS/RoleplayStudioLocal --self-check
+      - name: Validate packaged FFmpeg on Linux
+        if: runner.os == 'Linux'
+        run: dist/RoleplayStudioLocal/RoleplayStudioLocal --self-check
+      - name: Archive Windows application
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path 'dist/RoleplayStudioLocal/*' -DestinationPath 'RoleplayStudioLocal-windows.zip'
+      - name: Archive macOS application
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent dist/RoleplayStudioLocal.app RoleplayStudioLocal-macos.zip
+      - name: Archive Linux application
+        if: runner.os == 'Linux'
+        run: tar -czf RoleplayStudioLocal-linux.tar.gz -C dist RoleplayStudioLocal
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roleplay-studio-${{ runner.os }}
+          path: |
+            RoleplayStudioLocal-*.zip
+            RoleplayStudioLocal-*.tar.gz
+          if-no-files-found: error
+          retention-days: 7

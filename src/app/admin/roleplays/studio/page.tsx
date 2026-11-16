@@ -714,12 +714,23 @@ export default function RoleplayStudioPage() {
                 <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
                   <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
                   <p className="mt-2">
-                    En un equipo con Node.js y el repositorio instalado, ejecuta el exportador
-                    indicando las rutas del video, el JSON y el ZIP de salida.
+                    Opción con interfaz gráfica: cuando el mantenedor haya generado y verificado
+                    la aplicación de escritorio, ábrela y selecciona la grabación original, el
+                    proyecto JSON y el ZIP de salida. No requiere comandos ni subir el archivo.
                   </p>
-                  <code className="mt-1 block break-all rounded bg-slate-950/70 p-2 text-[11px] text-slate-200">
-                    node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
-                  </code>
+                  <a
+                    href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
+                    target="_blank" rel="noopener noreferrer"
+                    className="mt-1 inline-block font-semibold text-cyan-200 underline underline-offset-2">
+                    Instrucciones para obtener el exportador local
+                  </a>
+                  <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
+                    <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
+                    <p className="mt-1">En un equipo con el repositorio instalado, ejecuta:</p>
+                    <code className="mt-1 block break-all rounded bg-slate-950/70 p-2 text-[11px] text-slate-200">
+                      node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
+                    </code>
+                  </details>
                 </details>
               </div>
             )}
