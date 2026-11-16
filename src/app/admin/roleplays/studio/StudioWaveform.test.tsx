@@ -152,7 +152,9 @@ describe('Roleplay Studio accessible waveform timeline', () => {
       getChannelData: () => samples,
     }));
     const close = vi.fn(async () => {});
-    const makeContext = vi.fn(() => ({ decodeAudioData: decode, close }));
+    const makeContext = vi.fn(function FakeAudioContext() {
+      return { decodeAudioData: decode, close };
+    });
     const fetcher = vi.fn();
     stubBrowserDecoder(makeContext);
     vi.stubGlobal('fetch', fetcher);
@@ -206,7 +208,9 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     const decode = vi.fn((bytes: ArrayBuffer) =>
       bytes.byteLength === 4 ? oldResult : Promise.reject(new Error('unsupported codec')));
     const close = vi.fn(async () => {});
-    stubBrowserDecoder(vi.fn(() => ({ decodeAudioData: decode, close })));
+    stubBrowserDecoder(vi.fn(function FakeAudioContext() {
+      return { decodeAudioData: decode, close };
+    }));
     const notify = vi.fn((_source: File, _result: LocalVadSnapshot) => {});
     const { rerender } = render(<StudioWaveform
       file={first} duration={3} currentTime={0} segments={[]}
