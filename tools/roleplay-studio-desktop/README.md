@@ -6,8 +6,8 @@ Herramienta **opcional y separada** de Intérpretes RD para convertir cortes de 
 
 1. En Audio Studio del administrador, abre el video/audio original, prepara las intervenciones y selecciona **Descargar plan local de cortes (JSON)**.
 2. Descarga el ejecutable compilado correspondiente a Windows, macOS o Linux desde un **artefacto verificado de GitHub Actions**, una vez que un mantenedor haya ejecutado y revisado el empaquetado manual.
-3. Abre **RoleplayStudioLocal**. Selecciona **Grabación original**, **Proyecto JSON** y una ruta nueva para **ZIP de salida**.
-4. Presiona **Generar ZIP local**. La aplicación muestra el progreso de los cortes y permite cancelar, eliminando temporales.
+3. Abre **RoleplayStudioLocal**. Selecciona **Grabación original** y **Proyecto JSON**. Pulsa **Validar proyecto** para revisar, sin conversiones, el número de intervenciones y su duración total.
+4. Elige una ruta nueva para **ZIP de salida** y presiona **Generar ZIP local**. La aplicación muestra el progreso, desactiva los campos durante el proceso y permite cancelar, eliminando temporales.
 5. En Intérpretes RD, ve al formulario **Crear roleplay**, importa el ZIP y asígnalo al participante autorizado.
 
 El usuario final **no necesita instalar Node.js ni escribir comandos** cuando utiliza el ejecutable empaquetado. El desarrollador sí necesita herramientas de compilación para construirlo.
@@ -20,6 +20,7 @@ El usuario final **no necesita instalar Node.js ni escribir comandos** cuando ut
 - Se verifica tamaño, formato y **huella SHA-256 de tres muestras** de la fuente, más una segunda comprobación al finalizar. **No es una huella de todo el archivo** y no detecta cualquier cambio fuera de las muestras.
 - El ZIP contiene MP3 mono de 24 kHz / 64 kb/s, manifest.json y hashes SHA-256 completos de cada corte; se utiliza compresión STORE compatible con el importador.
 - Se rechazan intervalos solapados, datos inválidos, intervenciones del intérprete original, cortes incompletos, fuentes sin audio y archivos ZIP existentes.
+- En macOS y Linux, el ZIP se crea con permisos `0600` (lectura/escritura solo para su propietario), independientemente de los permisos habituales de archivos nuevos. En Windows, se utilizan las listas de control de acceso heredadas de la carpeta de destino: elige una carpeta privada del usuario.
 - No realiza transcripción automática, traducción ni identificación biométrica. Revisa el consentimiento y excluye datos sensibles antes de publicar.
 
 ## Distribución (solo mantenedores)

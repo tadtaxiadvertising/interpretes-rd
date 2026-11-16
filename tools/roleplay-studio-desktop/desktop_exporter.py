@@ -268,6 +268,43 @@ def write_studio_store_zip(target: Path, manifest: dict, clip_files):
             raise ExportError("El ZIP excede 16 MiB. Reduce los cortes seleccionados.")
 
 
+def inspect_project(source, project_file):
+    """Validate the project, source and sampled fingerprint without decoding media.
+
+    This quick, offline preflight can be called from the GUI before conversion.
+    Export always repeats it, so a stale validation cannot authorize publication.
+    """
+    source = Path(source).expanduser().resolve()
+    project_file = Path(project_file).expanduser().resolve()
+    if (source == project_file or
+            source.suffix.lower().lstrip(".") not in EXTENSIONS or
+            project_file.suffix.lower() != ".json" or
+            not source.is_file() or not project_file.is_file()):
+        raise ExportError("Selecciona la grabación original y un proyecto JSON válido.")
+    info = source.stat()
+    project_size = project_file.stat().st_size
+    if not 0 < info.st_size <= MAX_SOURCE_BYTES or not 0 < project_size <= MAX_PROJECT_BYTES:
+        raise ExportError("Archivo fuente o proyecto vacío o por encima de los límites.")
+    try:
+        with project_file.open("r", encoding="utf-8") as file:
+            project = json.load(file)
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise ExportError("El proyecto JSON no se pudo leer.") from exc
+    clips = validate_project(project, info.st_size)
+    source_hash = fingerprint_file(source, info.st_size)
+    if source_hash != project["sourceSampleSha256"].lower():
+        raise ExportError("La huella parcial no coincide: selecciona la grabación original.")
+    return {
+        "source": source,
+        "project": project_file,
+        "info": info,
+        "clips": clips,
+        "source_hash": source_hash,
+        "duration_seconds": sum(clip["end"] - clip["start"] for clip in clips),
+        "unreviewed_roles": sum(clip["speakerRole"] == "unknown" for clip in clips),
+    }
+
+
 def export_project(source, project_file, output, *, ffmpeg=None,
                    on_progress=None, cancelled=None):
     """Export a STORE ZIP consumable by the existing Intérpretes RD importer.
@@ -275,33 +312,18 @@ def export_project(source, project_file, output, *, ffmpeg=None,
     The full input video is never decoded/buffered. The original is not uploaded.
     Existing output files are never overwritten (including symlinks).
     """
-    source = Path(source).expanduser().resolve()
-    project_file = Path(project_file).expanduser().resolve()
     output = Path(output).expanduser().absolute()
-    if (len({str(source), str(project_file), str(output)}) != 3 or
-            source.suffix.lower().lstrip(".") not in EXTENSIONS or
-            project_file.suffix.lower() != ".json" or
-            output.suffix.lower() != ".zip"):
-        raise ExportError("Selecciona una grabación, un proyecto JSON y un ZIP de salida distintos.")
-    if not source.is_file() or not project_file.is_file():
-        raise ExportError("No se encontró la grabación o el proyecto JSON.")
-    info = source.stat()
-    project_size = project_file.stat().st_size
-    if not 0 < info.st_size <= MAX_SOURCE_BYTES or not 0 < project_size <= MAX_PROJECT_BYTES:
-        raise ExportError("Archivo fuente o proyecto vacío o por encima de los límites.")
-    # Reject the destination before spending CPU; exclusive create repeats this.
+    if output.suffix.lower() != ".zip" or output.resolve(strict=False) in (
+            Path(source).expanduser().resolve(), Path(project_file).expanduser().resolve()):
+        raise ExportError("Selecciona una salida ZIP distinta de la grabación y del proyecto.")
+    # Fail before processing; the exclusive create below repeats this protection.
     if output.exists() or output.is_symlink():
         raise ExportError("El ZIP de salida ya existe. Elige un nombre nuevo.")
-
-    try:
-        with project_file.open("r", encoding="utf-8") as file:
-            project = json.load(file)
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ExportError("El proyecto JSON no se pudo leer.") from exc
-    clips = validate_project(project, info.st_size)
-    before_hash = fingerprint_file(source, info.st_size)
-    if before_hash != project["sourceSampleSha256"].lower():
-        raise ExportError("La huella parcial no coincide: selecciona la grabación original.")
+    inspected = inspect_project(source, project_file)
+    source = inspected["source"]
+    info = inspected["info"]
+    clips = inspected["clips"]
+    before_hash = inspected["source_hash"]
 
     ffmpeg = ffmpeg or resolve_ffmpeg()
     cancelled = cancelled or threading.Event()
@@ -353,8 +375,13 @@ def export_project(source, project_file, output, *, ffmpeg=None,
         # a pre-existing symbolic link. Remove only files we created on failure.
         created = False
         try:
-            with output.open("xb") as destination:
-                created = True
+            # Python Path.open('xb') uses mode 0o666 before umask, which may
+            # expose confidential medical recordings on shared POSIX machines.
+            # Create exclusively with 0o600 instead (Windows inherits ACLs).
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+            fd = os.open(output, flags, 0o600)
+            created = True
+            with os.fdopen(fd, "wb") as destination:
                 with temp_zip.open("rb") as file:
                     shutil.copyfileobj(file, destination, length=1024 * 1024)
             if cancelled.is_set():
@@ -401,6 +428,8 @@ def run_desktop():
         ("Paquete de salida", [("Paquete ZIP", "*.zip")]),
     )
     fields = [tk.StringVar(), tk.StringVar(), tk.StringVar()]
+    input_widgets = []
+    browse_buttons = []
     busy = False
     cancelled = threading.Event()
     events = queue.Queue()
@@ -420,10 +449,13 @@ def run_desktop():
 
     for index, (label, _) in enumerate(labels):
         ttk.Label(frame, text=label).grid(row=index, column=0, sticky="w", pady=8)
-        ttk.Entry(frame, textvariable=fields[index], width=58).grid(
-            row=index, column=1, sticky="ew", padx=(12, 8))
-        ttk.Button(frame, text="Examinar…",
-                   command=lambda i=index: pick(i)).grid(row=index, column=2)
+        entry = ttk.Entry(frame, textvariable=fields[index], width=58)
+        entry.grid(row=index, column=1, sticky="ew", padx=(12, 8))
+        input_widgets.append(entry)
+        browse = ttk.Button(frame, text="Examinar…",
+                            command=lambda i=index: pick(i))
+        browse.grid(row=index, column=2)
+        browse_buttons.append(browse)
 
     ttk.Label(frame, text="Sin subidas · FFmpeg en tu equipo · ZIP compatible con Intérpretes RD",
               foreground="#24635b").grid(row=3, column=0, columnspan=3, sticky="w", pady=(16, 8))
@@ -432,8 +464,36 @@ def run_desktop():
     status = tk.StringVar(value="Selecciona el audio/video y el proyecto JSON.")
     ttk.Label(frame, textvariable=status, wraplength=580).grid(
         row=5, column=0, columnspan=3, sticky="w", pady=6)
+
+    def invalidate_previous_summary(*_):
+        if not busy:
+            bar["value"] = 0
+            status.set("Archivos modificados. Valida el proyecto o genera el ZIP.")
+
+    for field in fields:
+        field.trace_add("write", invalidate_previous_summary)
+
     controls = ttk.Frame(frame)
     controls.grid(row=6, column=0, columnspan=3, sticky="e", pady=10)
+
+    def set_editable(enabled):
+        state = "normal" if enabled else "disabled"
+        for widget in input_widgets + browse_buttons:
+            widget.configure(state=state)
+
+    def inspect_worker(paths):
+        try:
+            inspection = inspect_project(paths[0], paths[1])
+            if cancelled.is_set():
+                events.put(("cancelled",))
+            else:
+                events.put(("inspected", len(inspection["clips"]),
+                            inspection["duration_seconds"],
+                            inspection["unreviewed_roles"]))
+        except (ExportError, OSError) as exc:
+            events.put(("error", str(exc)))
+        except Exception:
+            events.put(("error", "No fue posible verificar el proyecto."))
 
     def worker(paths):
         try:
@@ -448,28 +508,38 @@ def run_desktop():
         except Exception:
             events.put(("error", "Error inesperado del exportador local."))
 
-    def begin():
+    def begin_job(kind):
         nonlocal busy
         if busy:
             return
         paths = [field.get().strip() for field in fields]
-        if not all(paths):
-            messagebox.showwarning("Faltan archivos", "Selecciona los tres archivos.")
+        if not paths[0] or not paths[1] or (kind == "export" and not paths[2]):
+            messagebox.showwarning(
+                "Faltan archivos",
+                "Selecciona la grabación y el JSON; para exportar, también el ZIP de salida.")
             return
         cancelled.clear()
         bar["value"] = 0
-        status.set("Preparando los fragmentos en este equipo…")
+        status.set("Verificando el proyecto sin subir archivos…" if kind == "inspect"
+                   else "Preparando los fragmentos en este equipo…")
         busy = True
+        set_editable(False)
         start_button.configure(state="disabled")
+        inspect_button.configure(state="disabled")
         cancel_button.configure(state="normal")
-        threading.Thread(target=worker, args=(paths,), daemon=True).start()
+        target = inspect_worker if kind == "inspect" else worker
+        threading.Thread(target=target, args=(paths,), daemon=True).start()
 
     def cancel():
         if busy:
             cancelled.set()
             status.set("Cancelando FFmpeg y limpiando temporales…")
 
-    start_button = ttk.Button(controls, text="Generar ZIP local", command=begin)
+    inspect_button = ttk.Button(
+        controls, text="Validar proyecto", command=lambda: begin_job("inspect"))
+    inspect_button.pack(side="left", padx=6)
+    start_button = ttk.Button(
+        controls, text="Generar ZIP local", command=lambda: begin_job("export"))
     start_button.pack(side="left", padx=6)
     cancel_button = ttk.Button(controls, text="Cancelar", command=cancel, state="disabled")
     cancel_button.pack(side="left")
@@ -490,9 +560,20 @@ def run_desktop():
                 status.set(f"Preparados {done} de {total} fragmentos.")
                 continue
             busy = False
+            set_editable(True)
             start_button.configure(state="normal")
+            inspect_button.configure(state="normal")
             cancel_button.configure(state="disabled")
-            if kind == "success":
+            if kind == "inspected":
+                _, count, seconds, unreviewed = message
+                status.set(
+                    f"Coincidencia de archivos verificada: {count} intervenciones, "
+                    f"{seconds / 60:.1f} min seleccionados. "
+                    + (f"Atención: {unreviewed} hablante(s) sin identificar; "
+                       "revisa si corresponde excluir al intérprete. "
+                       if unreviewed else "")
+                    + "La pista de audio se comprobará al generar el ZIP.")
+            elif kind == "success":
                 result = message[1]
                 bar["value"] = 100
                 status.set(f"ZIP generado: {result['clips']} fragmentos. El video original permanece local.")
