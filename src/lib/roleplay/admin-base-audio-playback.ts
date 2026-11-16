@@ -17,10 +17,30 @@ export async function resolveAdminBaseAudioPlaybackUrl(
   const path = supabaseUrl
     ? getReusableBaseAudioPath(originalUrl, supabaseUrl)
     : null;
-  if (!path) return originalUrl;
+  if (path) {
+    try {
+      return await signPath(path);
+    } catch {
+      return null;
+    }
+  }
+
+  // The stored URL was not validated as one of our base recordings. Never
+  // render an unverified Storage URL into the admin page: it may include an
+  // expired signed token or a public path from another bucket/project.
+  // Check the raw URL as well as the parsed pathname; URL() normalizes raw
+  // dot-segment traversal before exposing pathname.
   try {
-    return await signPath(path);
+    const asset = new URL(originalUrl);
+    if (
+      asset.protocol !== 'https:' ||
+      originalUrl.includes('/storage/v1/object/') ||
+      asset.pathname.includes('/storage/v1/object/')
+    ) return null;
   } catch {
     return null;
   }
+
+  // Preserve unrelated HTTPS legacy audio for backward compatibility.
+  return originalUrl;
 }
