@@ -5,7 +5,7 @@ import LocalTranslatorPanel from './LocalTranslatorPanel';
 const mocks = vi.hoisted(() => ({
   check: vi.fn(),
   create: vi.fn(),
-  translate: vi.fn(),
+  translate: vi.fn((_text?: string, _signal?: AbortSignal) => Promise.resolve('')),
   close: vi.fn(),
 }));
 
