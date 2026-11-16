@@ -7,7 +7,17 @@ import { loadLocalWhisperTiny, type LocalWhisperSession } from '@/modules/live-e
 import type { WhisperLanguage } from '@/modules/live-engine/core/whisper-tiny-protocol';
 
 type Phase = 'idle' | 'loading' | 'ready' | 'requesting' | 'recording';
-type TranscriptWindow = { startMs: number; endMs: number; text: string };
+type TranscriptWindow = {
+  id: number;
+  startMs: number;
+  endMs: number;
+  text: string;
+  reviewedText: string;
+  confirmed: boolean;
+};
+// Never silently discard unreviewed medical/legal utterances.
+const MAX_UNREVIEWED_WINDOWS = 48;
+const MAX_RETAINED_CONFIRMED_WINDOWS = 12;
 
 interface WhisperWasmPanelProps {
   language: WhisperLanguage;
@@ -36,6 +46,9 @@ export default function WhisperWasmPanel({
   const captureRef = useRef<LocalPcmCapture | null>(null);
   const generationRef = useRef(0);
   const runIdRef = useRef(0);
+  const nextWindowIdRef = useRef(0);
+  const unreviewedCountRef = useRef(0);
+  const confirmedWindowIdsRef = useRef(new Set<number>());
   const phaseRef = useRef<Phase>('idle');
 
   function setPhaseSafe(next: Phase) {
@@ -67,9 +80,13 @@ export default function WhisperWasmPanel({
     runRef.current = null;
     captureRef.current?.stop();
     captureRef.current = null;
+    // Abort the model Worker too: inference might otherwise keep the CPU busy
+    // long after the microphone has stopped. Cached weights can be reloaded
+    // with a new explicit action.
+    sessionRef.current?.close();
+    sessionRef.current = null;
     onMicrophoneActive(false);
-    if (sessionRef.current) setPhaseSafe('ready');
-    else setPhaseSafe('idle');
+    setPhaseSafe('idle');
   }
 
   function deactivate() {
@@ -143,22 +160,41 @@ export default function WhisperWasmPanel({
         const text = (await session.transcribe(chunk.samples, language)).trim();
         if (runId !== runIdRef.current || controller.signal.aborted) break;
         if (text) {
-          // Each window is independently labeled: overlapping words have not
-          // yet been deduplicated, and timestamps are window-level only.
-          setWindows((previous) => [
-            ...previous.slice(-359),
-            { startMs: chunk.startMs, endMs: chunk.endMs, text },
-          ]);
-          onFinalTranscript(text);
+          // Do not append raw overlapping ASR output to "confirmed" text.
+          // Human review is mandatory; dropping any unreviewed window when
+          // memory limits are reached would silently lose spoken content.
+          if (unreviewedCountRef.current >= MAX_UNREVIEWED_WINDOWS) {
+            throw new Error('LOCAL_WHISPER_REVIEW_QUEUE_FULL');
+          }
+          unreviewedCountRef.current += 1;
+          const id = ++nextWindowIdRef.current;
+          setWindows((previous) => {
+            const confirmed = previous.filter((item) => item.confirmed);
+            const pending = previous.filter((item) => !item.confirmed);
+            return [
+              ...confirmed.slice(-MAX_RETAINED_CONFIRMED_WINDOWS),
+              ...pending,
+              {
+                id,
+                startMs: chunk.startMs,
+                endMs: chunk.endMs,
+                text,
+                reviewedText: text,
+                confirmed: false,
+              },
+            ];
+          });
         }
       }
     } catch (cause) {
       if (runId !== runIdRef.current || controller.signal.aborted) return;
       const code = cause instanceof Error ? cause.message : '';
       setError(
-        code.includes('OVERFLOW')
-          ? 'Este equipo no alcanzó el ritmo del audio. Se detuvo la captura sin ocultar pérdida de voz.'
-          : 'El reconocimiento local se detuvo. Comprueba permisos y capacidad de CPU/RAM.',
+        code === 'LOCAL_WHISPER_REVIEW_QUEUE_FULL'
+          ? 'Hay demasiadas ventanas sin revisar. Se detuvo la captura para no descartar transcripciones pendientes.'
+          : code.includes('OVERFLOW')
+            ? 'Este equipo no alcanzó el ritmo del audio. Se detuvo la captura sin ocultar pérdida de voz.'
+            : 'El reconocimiento local se detuvo. Comprueba permisos y capacidad de CPU/RAM.',
       );
     } finally {
       capture?.stop();
@@ -166,9 +202,32 @@ export default function WhisperWasmPanel({
         captureRef.current = null;
         runRef.current = null;
         onMicrophoneActive(false);
-        setPhaseSafe('ready');
+        // If inference failed, release the model as well as the microphone.
+        sessionRef.current?.close();
+        sessionRef.current = null;
+        setPhaseSafe('idle');
       }
     }
+  }
+
+  function updateReview(id: number, reviewedText: string) {
+    if (confirmedWindowIdsRef.current.has(id)) return;
+    setWindows((previous) => previous.map((window) =>
+      window.id === id && !window.confirmed ? { ...window, reviewedText } : window,
+    ));
+  }
+
+  function confirmReview(id: number) {
+    if (confirmedWindowIdsRef.current.has(id)) return;
+    const item = windows.find((window) => window.id === id && !window.confirmed);
+    const reviewed = item?.reviewedText.trim();
+    if (!reviewed) return;
+    confirmedWindowIdsRef.current.add(id);
+    unreviewedCountRef.current = Math.max(0, unreviewedCountRef.current - 1);
+    setWindows((previous) => previous.map((window) =>
+      window.id === id ? { ...window, confirmed: true } : window,
+    ));
+    onFinalTranscript(reviewed);
   }
 
   const active = phase === 'recording' || phase === 'requesting';
@@ -183,7 +242,8 @@ export default function WhisperWasmPanel({
       </p>
       <p className="mt-1 text-xs font-medium text-amber-900">
         No apto aún para interpretación profesional en tiempo real. Los fragmentos se solapan
-        y pueden repetir palabras; revisa dosis, negaciones y cifras.
+        y pueden repetir palabras. Nada se añade al texto confirmado o a TXT hasta que
+        revises manualmente cada ventana, especialmente dosis, negaciones y cifras.
       </p>
       {!supported && (
         <p role="status" className="mt-3 text-sm text-red-700">
@@ -215,7 +275,7 @@ export default function WhisperWasmPanel({
         {active && (
           <button type="button" onClick={stopCapture}
             className="rounded-lg border border-amber-500 px-3 py-2 text-sm font-semibold">
-            Detener audio
+            Detener audio y liberar modelo
           </button>
         )}
         {phase !== 'idle' && (
@@ -230,16 +290,41 @@ export default function WhisperWasmPanel({
           phase === 'loading' ? 'Preparando modelo local' + (progress !== null ? ' · ' + progress + '%' : '…') :
           phase === 'ready' ? 'Modelo preparado en este equipo.' :
           phase === 'requesting' ? 'Esperando autorización del micrófono…' :
-          'Micrófono activo; procesando fragmentos de 10 segundos.'}
+          'Micrófono activo; procesando fragmentos de 10 segundos. Revisa cada ventana.'}
       </p>
       {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
       {windows.length > 0 && (
-        <div className="mt-3 max-h-40 overflow-y-auto rounded-lg bg-white p-3 text-xs text-slate-700">
-          <p className="mb-2 font-semibold">Últimos fragmentos (ventanas con posible repetición)</p>
-          {windows.slice(-5).map((item, index) => (
-            <p className="mt-1" key={index}>
-              {Math.floor(item.startMs / 1000)}–{Math.floor(item.endMs / 1000)} s: {item.text}
-            </p>
+        <div className="mt-3 max-h-72 overflow-y-auto rounded-lg bg-white p-3 text-xs text-slate-700">
+          <p className="mb-2 font-semibold">Ventanas pendientes de revisión humana</p>
+          {windows.map((item) => (
+            <div className="mt-3 border-t border-slate-200 pt-2" key={item.id}>
+              <p className="font-medium">
+                {Math.floor(item.startMs / 1000)}–{Math.floor(item.endMs / 1000)} s
+                {item.confirmed ? ' · Revisada y añadida' : ' · Pendiente'}
+              </p>
+              {item.confirmed ? (
+                <p className="mt-1 whitespace-pre-wrap">{item.reviewedText}</p>
+              ) : (
+                <>
+                  <label htmlFor={'review-whisper-' + item.id}
+                    className="mt-2 block font-medium">
+                    Revisar y corregir texto de esta ventana
+                  </label>
+                  <textarea id={'review-whisper-' + item.id}
+                    value={item.reviewedText}
+                    onChange={(event) => updateReview(item.id, event.target.value)}
+                    rows={2} maxLength={8000}
+                    className="mt-1 w-full rounded border border-slate-300 bg-white p-2"
+                  />
+                  <button type="button"
+                    onClick={() => confirmReview(item.id)}
+                    disabled={!item.reviewedText.trim()}
+                    className="mt-2 rounded border border-slate-400 px-3 py-2 font-semibold disabled:opacity-50">
+                    Añadir texto revisado a la transcripción confirmada
+                  </button>
+                </>
+              )}
+            </div>
           ))}
         </div>
       )}
