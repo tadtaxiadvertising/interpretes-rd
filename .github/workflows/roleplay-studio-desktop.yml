@@ -29,15 +29,15 @@ jobs:
   # minutes for every platform PR. Never auto-release unsigned executables.
   package:
     name: Package offline desktop (${{ matrix.os }})
-    # One-time RC packaging for PR 443; revert to manual-only after verifying.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 443)
+    # Builds are opt-in; pull requests run offline tests only.
+    if: github.event_name == 'workflow_dispatch'
     needs: offline-tests
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(github.event_name == 'workflow_dispatch' && '["windows-latest","macos-latest","ubuntu-latest"]' || '["windows-latest"]') }}
+        os: [windows-latest, macos-latest, ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,7 +54,8 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            # Console build is a diagnostic RC: show hidden bootloader errors.
+            # Console bootloader is needed for reliable FFmpeg startup on Windows.
+            # The GUI hides its terminal after initializing (not during --self-check).
             python -m PyInstaller --noconfirm --clean --console \
               --name RoleplayStudioLocal --collect-all imageio_ffmpeg \
               tools/roleplay-studio-desktop/desktop_exporter.py
