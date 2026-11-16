@@ -77,3 +77,6 @@ migration.sql
 
 # Generated locally from pinned onnxruntime-web dependency
 /public/live-onnx-runtime/
+
+# CI-only generated synthetic speech (never user recordings)
+/public/live-whisper-fixture/

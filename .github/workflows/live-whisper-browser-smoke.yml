@@ -39,6 +39,11 @@ jobs:
         run: npm run prepare:live-wasm
       - name: Install selected Playwright browser
         run: npx playwright install --with-deps ${{ matrix.browser }}
+      - name: Generate private-free spoken voice fixtures (offline TTS)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends espeak-ng ffmpeg
+          bash scripts/live-whisper-smoke/make-fixtures.sh
       - name: Execute browser-only Whisper smoke and measure inference
         # Synthetic PCM only. No credentials, personal content or microphones.
         # Uses a production-like Vite build, not the authenticated app.

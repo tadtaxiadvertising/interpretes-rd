@@ -102,6 +102,13 @@ try {
   if (timings.shortAudioMs !== 2000 || timings.longAudioMs !== 10000) {
     throw new Error('WHISPER_BROWSER_INVALID_AUDIO_DURATION');
   }
+  const speech = result.speech;
+  if (!speech || speech.syntheticTtsOnly !== true ||
+    !['enWer', 'esWer', 'enInferenceMs', 'esInferenceMs', 'enAudioMs', 'esAudioMs']
+      .every(key => Number.isFinite(speech[key]) && speech[key] >= 0) ||
+    speech.enAudioMs <= 0 || speech.esAudioMs <= 0) {
+    throw new Error('WHISPER_BROWSER_INVALID_SPEECH_SCORE');
+  }
   const unexpected = remoteRequests.filter((item) =>
     !allowedModelHost(item.host) || !['GET', 'HEAD', 'OPTIONS'].includes(item.method),
   );
@@ -124,6 +131,14 @@ try {
     longAudioMs: timings.longAudioMs,
     remoteModelRequestCount: remoteRequests.length,
     syntheticSignalOnly: true,
+    syntheticSpeechOnly: true,
+    // WER is diagnostic on eSpeak TTS, NOT spontaneous or medical speech.
+    enSyntheticTtsWer: Number(speech.enWer.toFixed(3)),
+    esSyntheticTtsWer: Number(speech.esWer.toFixed(3)),
+    enSyntheticTtsInferenceMs: Math.round(speech.enInferenceMs),
+    esSyntheticTtsInferenceMs: Math.round(speech.esInferenceMs),
+    enSyntheticTtsAudioMs: Math.round(speech.enAudioMs),
+    esSyntheticTtsAudioMs: Math.round(speech.esAudioMs),
   };
   mkdirSync(resolve('test-results'), { recursive: true });
   writeFileSync(resolve('test-results', 'whisper-' + browserName + '-metrics.json'),
@@ -131,7 +146,7 @@ try {
   console.log('PASS: ' + browserName + ' loaded the pinned Whisper tiny model and completed ES/EN and 10s local inference calls.');
   console.log('PASS: All observed remote browser requests used read-only methods on model-asset hosts.');
   console.log('WHISPER_PERFORMANCE_JSON: ' + JSON.stringify(report));
-  console.log('LIMITATION: Single-run synthetic tones do not prove WER, clinical accuracy, RAM, microphone stability or sustained real-time performance.');
+  console.log('LIMITATION: TTS WER measures eSpeak-generated phrases, NOT WER on real accents, clinical accuracy, RAM, microphone stability or sustained real-time performance.');
 } catch (error) {
   console.error('FAIL: ' + String(error));
   if (pageErrors.length) console.error('Browser errors: ' + JSON.stringify(pageErrors.slice(0, 5)));
