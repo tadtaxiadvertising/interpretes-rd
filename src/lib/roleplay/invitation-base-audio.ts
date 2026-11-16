@@ -41,7 +41,18 @@ export async function resolveInvitationBaseAudioUrl(
   }
 
   if (!storedUrl) return null;
-  if (!projectUrl) return storedUrl;
+  if (!projectUrl) {
+    // Without the configured project origin we cannot confirm ownership of
+    // any Storage object. Never return a persisted Storage URL which may
+    // contain a historical signing token or point to a public recording.
+    // Retain only ordinary non-Storage legacy assets for compatibility.
+    try {
+      if (new URL(storedUrl).pathname.includes('/storage/v1/object/')) return null;
+    } catch {
+      return null;
+    }
+    return storedUrl;
+  }
 
   const path = getReusableBaseAudioPath(storedUrl, projectUrl);
   if (path) {
