@@ -89,8 +89,10 @@ try {
   if (!result?.loaded) {
     throw new Error('WHISPER_BROWSER_MODEL_FAILED: ' + (result?.error ?? 'unknown'));
   }
+  const esToneValidated = typeof result.es === 'string' ||
+    (result.es === null && result.esToneSafetyRejected === true);
   if (result.modelId !== 'onnx-community/whisper-tiny' ||
-      typeof result.en !== 'string' || typeof result.es !== 'string') {
+      typeof result.en !== 'string' || !esToneValidated) {
     throw new Error('WHISPER_BROWSER_INVALID_OUTPUT');
   }
   const timings = result.timings;
@@ -103,9 +105,13 @@ try {
     throw new Error('WHISPER_BROWSER_INVALID_AUDIO_DURATION');
   }
   const speech = result.speech;
+  const spanishSafetyOutcome = speech?.esSafetyRejected === true
+    ? speech.esWer === null
+    : Number.isFinite(speech?.esWer) && speech.esWer >= 0;
   if (!speech || speech.syntheticTtsOnly !== true ||
-    !['enWer', 'esWer', 'enInferenceMs', 'esInferenceMs', 'enAudioMs', 'esAudioMs']
+    !['enWer', 'enInferenceMs', 'esInferenceMs', 'enAudioMs', 'esAudioMs']
       .every(key => Number.isFinite(speech[key]) && speech[key] >= 0) ||
+    !spanishSafetyOutcome ||
     speech.enAudioMs <= 0 || speech.esAudioMs <= 0) {
     throw new Error('WHISPER_BROWSER_INVALID_SPEECH_SCORE');
   }
@@ -134,7 +140,9 @@ try {
     syntheticSpeechOnly: true,
     // WER is diagnostic on eSpeak TTS, NOT spontaneous or medical speech.
     enSyntheticTtsWer: Number(speech.enWer.toFixed(3)),
-    esSyntheticTtsWer: Number(speech.esWer.toFixed(3)),
+    esSyntheticTtsWer: speech.esWer === null ? null : Number(speech.esWer.toFixed(3)),
+    esSyntheticTtsSafetyRejected: speech.esSafetyRejected,
+    esSyntheticToneSafetyRejected: result.esToneSafetyRejected === true,
     enSyntheticTtsInferenceMs: Math.round(speech.enInferenceMs),
     esSyntheticTtsInferenceMs: Math.round(speech.esInferenceMs),
     enSyntheticTtsAudioMs: Math.round(speech.enAudioMs),
@@ -143,7 +151,10 @@ try {
   mkdirSync(resolve('test-results'), { recursive: true });
   writeFileSync(resolve('test-results', 'whisper-' + browserName + '-metrics.json'),
     JSON.stringify(report, null, 2) + '\n');
-  console.log('PASS: ' + browserName + ' loaded the pinned Whisper tiny model and completed ES/EN and 10s local inference calls.');
+  console.log('PASS: ' + browserName + ' loaded the pinned Whisper model and completed EN, ES safety-check and 10s local inference calls.');
+  if (speech.esSafetyRejected) {
+    console.warn('QUALITY-BLOCKER: Spanish synthesized voice triggered runaway-output fail-closed protection. Do not enable professional pilot.');
+  }
   console.log('PASS: All observed remote browser requests used read-only methods on model-asset hosts.');
   console.log('WHISPER_PERFORMANCE_JSON: ' + JSON.stringify(report));
   console.log('LIMITATION: TTS WER measures eSpeak-generated phrases, NOT WER on real accents, clinical accuracy, RAM, microphone stability or sustained real-time performance.');
