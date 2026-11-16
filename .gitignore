@@ -74,3 +74,6 @@ SOUL.md
 
 # ad-hoc SQL migrations (not part of prisma/migrations/)
 migration.sql
+
+# Generated locally from pinned onnxruntime-web dependency
+/public/live-onnx-runtime/

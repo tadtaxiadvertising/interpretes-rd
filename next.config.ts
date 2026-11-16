@@ -39,6 +39,19 @@ const nextConfig: NextConfig = {
    * maneja el preflight OPTIONS explícitamente.
    */
   async headers() {
+    const baseCsp = [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob:",
+              "font-src 'self'",
+              "connect-src 'self' https://kzbkygppplknynrwmtmf.supabase.co wss://kzbkygppplknynrwmtmf.supabase.co https://freeinterpreters.com https://app.freeinterpreters.com ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
+              "media-src 'self' https://kzbkygppplknynrwmtmf.supabase.co blob:",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self' https://app.freeinterpreters.com https://freeinterpreters.com ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
+            ].join('; ');
+
     return [
       {
         // CORS headers para assets estáticos (fuentes, imágenes)
@@ -78,20 +91,33 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob:",
-              "font-src 'self'",
-              "connect-src 'self' https://kzbkygppplknynrwmtmf.supabase.co wss://kzbkygppplknynrwmtmf.supabase.co https://freeinterpreters.com https://app.freeinterpreters.com ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
-              "media-src 'self' https://kzbkygppplknynrwmtmf.supabase.co blob:",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self' https://app.freeinterpreters.com https://freeinterpreters.com ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
-            ].join('; '),
+            value: baseCsp,
           },
         ],
+      },
+      {
+        // Dedicated bundled Worker scripts receive this narrowly scoped CSP.
+        // Ordinary pages still inherit the original restrictive page policy.
+        source: '/_next/static/chunks/:path*',
+        headers: [{
+          key: 'Content-Security-Policy',
+          value: baseCsp.replace(
+            "connect-src 'self'",
+            "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
+          ),
+        }],
+      },
+      {
+        // Model weights are downloaded only on /live after user consent.
+        // No other application route gains these outgoing hosts.
+        source: '/live',
+        headers: [{
+          key: 'Content-Security-Policy',
+          value: baseCsp.replace(
+            "connect-src 'self'",
+            "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
+          ),
+        }],
       },
     ];
   },
