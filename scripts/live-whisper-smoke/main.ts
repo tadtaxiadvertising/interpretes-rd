@@ -5,6 +5,7 @@ interface SmokeResult {
   loaded: boolean;
   en: string | null;
   es: string | null;
+  esToneSafetyRejected?: boolean;
   modelId: string;
   timings?: {
     modelLoadMs: number;
@@ -17,7 +18,8 @@ interface SmokeResult {
   };
   speech?: {
     enWer: number;
-    esWer: number;
+    esWer: number | null;
+    esSafetyRejected: boolean;
     enInferenceMs: number;
     esInferenceMs: number;
     enAudioMs: number;
@@ -78,6 +80,21 @@ async function syntheticSpeechFixture(language: 'en' | 'es'): Promise<Float32Arr
   return samples;
 }
 
+async function transcribeWithSafetyGuard(
+  model: Awaited<ReturnType<typeof loadLocalWhisperTiny>>,
+  samples: Float32Array,
+  language: 'es' | 'en',
+): Promise<{ text: string | null; safetyRejected: boolean }> {
+  try {
+    return { text: await model.transcribe(samples, language), safetyRejected: false };
+  } catch (error) {
+    if (error instanceof Error && error.message === 'LOCAL_WHISPER_SUSPICIOUS_OUTPUT') {
+      return { text: null, safetyRejected: true };
+    }
+    throw error;
+  }
+}
+
 run.addEventListener('click', () => {
   run.disabled = true;
   report('loading');
@@ -103,7 +120,8 @@ run.addEventListener('click', () => {
       const en = await model.transcribe(pcm, 'en');
       const shortEnglishMs = performance.now() - englishStart;
       const spanishStart = performance.now();
-      const es = await model.transcribe(pcm, 'es');
+      const esTone = await transcribeWithSafetyGuard(model, pcm, 'es');
+      const es = esTone.text;
       const shortSpanishMs = performance.now() - spanishStart;
 
       // The user-facing PCM chunker emits 10-second windows with one second
@@ -126,15 +144,15 @@ run.addEventListener('click', () => {
       const enSpeech = await model.transcribe(enSpeechPcm, 'en');
       const enSpeechMs = performance.now() - enSpeechStart;
       const esSpeechStart = performance.now();
-      const esSpeech = await model.transcribe(esSpeechPcm, 'es');
+      const esSpeech = await transcribeWithSafetyGuard(model, esSpeechPcm, 'es');
       const esSpeechMs = performance.now() - esSpeechStart;
       const enWer = wordErrorRate(
         'The patient has a fever and needs to see the doctor.', enSpeech,
       );
-      const esWer = wordErrorRate(
-        'El paciente tiene fiebre y necesita ver al doctor.', esSpeech,
+      const esWer = esSpeech.text === null ? null : wordErrorRate(
+        'El paciente tiene fiebre y necesita ver al doctor.', esSpeech.text,
       );
-      if (!Number.isFinite(enWer) || !Number.isFinite(esWer)) {
+      if (!Number.isFinite(enWer) || (esWer !== null && !Number.isFinite(esWer))) {
         throw new Error('WHISPER_SYNTHETIC_SPEECH_INVALID_WER');
       }
 
@@ -143,9 +161,11 @@ run.addEventListener('click', () => {
         modelId: model.modelId,
         en,
         es,
+        esToneSafetyRejected: esTone.safetyRejected,
         speech: {
           enWer,
           esWer,
+          esSafetyRejected: esSpeech.safetyRejected,
           enInferenceMs: enSpeechMs,
           esInferenceMs: esSpeechMs,
           enAudioMs: enSpeechPcm.length / 16,
