@@ -123,9 +123,9 @@ const nextConfig: NextConfig = {
                   "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
                 ),
               }],
+            },
           ]
         : []),
-      },
     ];
   },
 };
