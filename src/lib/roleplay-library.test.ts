@@ -23,7 +23,10 @@ describe('getReusableBaseAudioPath', () => {
       'base/%2e%2e/private.mp3',
       'base/../private.mp3',
       'base/./private.mp3',
+      'base/..' + String.fromCharCode(92) + 'private.mp3',
+      'base/.' + String.fromCharCode(92) + 'private.mp3',
       'base/',
+
       'base//private.mp3',
     ]) {
       expect(getReusableBaseAudioPath(url(key), origin)).toBeNull();
