@@ -8,7 +8,7 @@ import {
 const translation = vi.fn(async (_text: string) => 'Hello');
 const destroy = vi.fn();
 const availability = vi.fn(async () => 'available');
-const create = vi.fn(async () => ({ translate: translation, destroy }));
+const create = vi.fn(async (_options: unknown) => ({ translate: translation, destroy }));
 
 beforeEach(() => {
   vi.stubGlobal('isSecureContext', true);
