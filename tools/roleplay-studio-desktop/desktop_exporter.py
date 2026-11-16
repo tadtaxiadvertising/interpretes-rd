@@ -15,11 +15,12 @@ from pathlib import Path
 import queue
 import re
 import shutil
+import struct
 import subprocess
 import tempfile
 import threading
 import time
-import zipfile
+import zlib
 
 FORMAT = "interpretes-rd-studio-long-local-project"
 MAX_SOURCE_BYTES = 8 * 1024**3
@@ -196,6 +197,76 @@ def transcode_clip(source, destination, clip, ffmpeg, cancelled):
         raise ExportError("Un corte termina fuera de la pista de audio o quedó truncado.")
 
 
+
+def write_studio_store_zip(target: Path, manifest: dict, clip_files):
+    """Produce canonical Audio Studio ZIP headers, not generic Python ZIPs.
+
+    extractStudioZip() rejects archives lacking the UTF-8 filename flag 0x0800,
+    even for ASCII names. Python zipfile does not set it for ASCII names. Emit
+    bounded, strict STORE records with matching local/central flags and CRCs.
+    """
+    records = [("manifest.json", json.dumps(
+        manifest, ensure_ascii=False, indent=2).encode("utf-8"))] + list(clip_files)
+    if not 2 <= len(records) <= 26:
+        raise ExportError("Cantidad de archivos ZIP inválida.")
+    central = []
+    with target.open("xb") as archive:
+        for name, source in records:
+            if not (name == "manifest.json" or
+                    re.fullmatch(r"segment-(?:0[1-9]|1[0-9]|2[0-5])\.mp3", name)):
+                raise ExportError("Nombre de archivo ZIP no permitido.")
+            encoded = name.encode("utf-8")
+            is_manifest = isinstance(source, bytes)
+            if is_manifest:
+                length = len(source)
+                checksum = zlib.crc32(source) & 0xFFFFFFFF
+            else:
+                length = source.stat().st_size
+                checksum = 0
+                with source.open("rb") as data_file:
+                    while True:
+                        block = data_file.read(1024 * 1024)
+                        if not block:
+                            break
+                        checksum = zlib.crc32(block, checksum) & 0xFFFFFFFF
+            limit = 500_000 if is_manifest else MAX_CLIP_BYTES
+            if not 0 < length <= limit:
+                raise ExportError("Archivo del paquete fuera del tamaño permitido.")
+            offset = archive.tell()
+            archive.write(struct.pack(
+                "<IHHHHHIIIHH", 0x04034B50, 20, 0x0800, 0, 0, 0,
+                checksum, length, length, len(encoded), 0))
+            archive.write(encoded)
+            if is_manifest:
+                archive.write(source)
+            else:
+                written = 0
+                copied_crc = 0
+                with source.open("rb") as data_file:
+                    while True:
+                        block = data_file.read(1024 * 1024)
+                        if not block:
+                            break
+                        archive.write(block)
+                        written += len(block)
+                        copied_crc = zlib.crc32(block, copied_crc) & 0xFFFFFFFF
+                if written != length or copied_crc != checksum:
+                    raise ExportError("Un clip temporal cambió al crear el ZIP.")
+            central.append(struct.pack(
+                "<IHHHHHHIIIHHHHHII", 0x02014B50, 20, 20, 0x0800, 0,
+                0, 0, checksum, length, length, len(encoded), 0, 0,
+                0, 0, 0, offset) + encoded)
+        central_start = archive.tell()
+        for record in central:
+            archive.write(record)
+        central_size = archive.tell() - central_start
+        archive.write(struct.pack(
+            "<IHHHHIIH", 0x06054B50, 0, 0, len(central), len(central),
+            central_size, central_start, 0))
+        if archive.tell() > MAX_ZIP_BYTES:
+            raise ExportError("El ZIP excede 16 MiB. Reduce los cortes seleccionados.")
+
+
 def export_project(source, project_file, output, *, ffmpeg=None,
                    on_progress=None, cancelled=None):
     """Export a STORE ZIP consumable by the existing Intérpretes RD importer.
@@ -268,14 +339,7 @@ def export_project(source, project_file, output, *, ffmpeg=None,
                 on_progress(index + 1, len(clips))
 
         temp_zip = work / "roleplay-studio.zip"
-        with zipfile.ZipFile(temp_zip, mode="w", compression=zipfile.ZIP_STORED,
-                             allowZip64=False) as archive:
-            archive.writestr("manifest.json", json.dumps(
-                manifest, ensure_ascii=False, indent=2).encode("utf-8"))
-            for name, path in clip_files:
-                archive.write(path, arcname=name, compress_type=zipfile.ZIP_STORED)
-        if temp_zip.stat().st_size > MAX_ZIP_BYTES:
-            raise ExportError("El ZIP excede 16 MiB. Reduce los cortes seleccionados.")
+        write_studio_store_zip(temp_zip, manifest, clip_files)
 
         after = source.stat()
         if (info.st_size != after.st_size or info.st_mtime_ns != after.st_mtime_ns or
