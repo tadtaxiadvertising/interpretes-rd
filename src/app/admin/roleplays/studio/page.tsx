@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -22,6 +22,10 @@ import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
 } from '@/lib/roleplay-studio/draft';
 import {
+  createLongMediaDraft, openLongMediaDraft, fingerprintLocalMedia, mediaKind,
+  usesLocalLongMode, validateLocalMedia, MAX_LOCAL_MEDIA_SECONDS,
+} from '@/lib/roleplay-studio/long-media';
+import {
   classifySpeakerRole, filterInterpreterCues, makeNeutralSegmentTitle,
   type StudioLanguage, type StudioSpeakerRole,
 } from '@/lib/roleplay-studio/speaker-profiles';
@@ -38,10 +42,16 @@ type Segment = {
 };
 
 function formatTime(value: number): string {
-  const safe = Math.max(0, value);
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe - minutes * 60;
-  return String(minutes).padStart(2, '0') + ':' + seconds.toFixed(1).padStart(4, '0');
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor(safe / 60) % 60;
+  const seconds = safe - Math.floor(safe / 60) * 60;
+  const short = String(Math.floor(safe / 60)).padStart(2, '0') + ':' +
+    seconds.toFixed(1).padStart(4, '0');
+  return hours
+    ? String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' +
+      seconds.toFixed(1).padStart(4, '0')
+    : short;
 }
 
 export default function RoleplayStudioPage() {
@@ -65,7 +75,10 @@ export default function RoleplayStudioPage() {
   const [excludeInterpreter, setExcludeInterpreter] = useState(true);
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
-  const player = useRef<HTMLAudioElement>(null);
+  const [cuePage, setCuePage] = useState(0);
+  const CUES_PER_PAGE = 60;
+  const player = useRef<HTMLMediaElement | null>(null);
+  const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
   const pauseEditorialAudio = useCallback(() => { player.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
@@ -143,12 +156,15 @@ export default function RoleplayStudioPage() {
     setCaptionTexts({});
     setReviewCues([]);
     setChosenCueIndices([]);
+    setCuePage(0);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
     if (!file) { setAudio(null); setUrl(''); return; }
-    if (!/\.mp3$/i.test(file.name) || file.size < 1 || file.size > 15 * 1024 * 1024) {
-      setError('Selecciona un MP3 válido de hasta 15 MiB.');
+    try {
+      validateLocalMedia(file);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se puede abrir este archivo.');
       setAudio(null);
       setUrl('');
       return;
@@ -278,13 +294,14 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > 1_000_000) {
-        throw new Error('Selecciona un SRT o VTT de hasta 1 MB.');
+      const subtitleMaxBytes = usesLocalLongMode(audio, duration) ? 5_000_000 : 1_000_000;
+      if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > subtitleMaxBytes) {
+        throw new Error('Selecciona un SRT o VTT dentro del tamaño permitido (1 MB normal, 5 MB local).');
       }
       const transcript = await file.text();
       // The file may have changed, or a newer import/edit may have started.
       if (revision !== subtitleImportRevision.current) return;
-      const cues = parseTimedTranscriptForReview(transcript);
+      const cues = parseTimedTranscriptForReview(transcript, usesLocalLongMode(audio, duration));
       const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
       if (!selected.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
@@ -303,8 +320,10 @@ export default function RoleplayStudioPage() {
       if (canApplyAll) {
         setReviewCues([]);
         setChosenCueIndices([]);
+        setCuePage(0);
         loadSelectedCues(selected, excludedCount);
       } else {
+        setCuePage(0);
         setReviewCues(selected);
         setChosenCueIndices(allIndices.slice(0, ROLEPLAY_MAX_SCENARIOS));
         setNotice(`${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Elige hasta ${ROLEPLAY_MAX_SCENARIOS} turnos compatibles y pulsa “Aplicar selección”. El borrador no se reemplazó.`);
