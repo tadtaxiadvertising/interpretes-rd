@@ -322,6 +322,11 @@ describe('POST /api/admin/roleplays', () => {
       expect(response.data.scenarioCount).toBe(21);
       expect(mockUpload).toHaveBeenCalledTimes(21);
       expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(2);
+      const firstUploadPath = mockUpload.mock.calls[0][0];
+      for (const [args] of (prisma.roleplaySession.create as any).mock.calls) {
+        expect(args.data.baseAudioPath).toBe(firstUploadPath);
+        expect(args.data.baseAudioUrl).toBe('https://cdn.test/base/0.webm');
+      }
     });
 
     it('rejects more than 25 scenarios before uploading audio', async () => {
@@ -414,7 +419,13 @@ describe('POST /api/admin/roleplays', () => {
         })
       );
       expect(prisma.roleplaySession.update).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 'sess-1' }, data: { baseAudioUrl: 'https://cdn.test/base/0.webm' } })
+        expect.objectContaining({
+          where: { id: 'sess-1' },
+          data: {
+            baseAudioUrl: 'https://cdn.test/base/0.webm',
+            baseAudioPath: mockUpload.mock.calls[0][0],
+          },
+        })
       );
       expect(prisma.roleplayAccess.create).not.toHaveBeenCalled();
     });
@@ -824,6 +835,11 @@ describe('POST /api/admin/roleplays', () => {
       expect((await res.json()).data.scenarioCount).toBe(1);
       expect(mockInfo).toHaveBeenCalledWith('base/bulk-source/0.mp3');
       expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { baseAudioUrl: libraryAudio, baseAudioPath: 'base/bulk-source/0.mp3' },
+        })
+      );
       expect(prisma.roleplayScenario.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           title: libraryScenario.title,
