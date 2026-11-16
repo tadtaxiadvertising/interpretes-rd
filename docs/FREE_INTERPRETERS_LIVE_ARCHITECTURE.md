@@ -25,7 +25,7 @@ Objetivo: coste variable de inferencia de Free Interpreters cercano a cero. No e
 - **Web UI:** `src/app/live`; acceso a los perfiles administrador e intérprete autenticados (no candidato), enlazado desde el menú de ambos roles. La ruta independiente muestra un enlace de regreso al panel correspondiente.
 - **Core:** contratos de proveedores, detección de capacidades y ciclo de vida de audio en `src/modules/live-engine/core`.
 - **ASR local (experimental):** adaptador Web Speech estrictamente on-device con comprobación e instalación voluntaria de paquetes de idioma ES/EN. Se solicita calidad `dictation` para frases prolongadas; si el navegador carece de ese paquete o nivel de calidad se informa indisponibilidad, sin fallback remoto. Whisper.cpp/WebAssembly cuantizado queda como alternativa posterior para navegadores sin capacidad local nativa; requiere pruebas de memoria, latencia, precisión y licencia.
-- **Traducción local (siguiente fase):** evaluar Argos Translate/WASM o motor compatible; probar ES↔EN y terminología de dominio. No asumir calidad profesional.
+- **Traducción local (experimental):** API Translator integrada en navegadores compatibles para ES↔EN, bajo acción voluntaria del intérprete y con paquetes descargados por el navegador. El texto final se copia manualmente a la caja editable; no se traduce automáticamente. Argos Translate/WASM u otro motor portable siguen pendientes para Firefox, Safari, móviles y equipos sin esta API. No asumir calidad profesional.
 - **Proveedores del usuario (fase posterior):** adaptadores aislados, consentimiento por finalidad, límites y visualización de costes/cuotas.
 - **Persistencia local (fase posterior):** IndexedDB para sesiones y glosarios. La exportación TXT explícita del texto final se realiza ya en el navegador; no existe sincronización automática.
 - **Servidor:** identidad, permisos, configuración no sensible, entrega de versiones/modelos y sincronización opt-in. No procesa audio en el camino predeterminado.
@@ -51,7 +51,7 @@ Objetivo: coste variable de inferencia de Free Interpreters cercano a cero. No e
 
 Implementado: ruta autenticada `/live`, prueba de micrófono sin grabación/transmisión, detección de capacidades, contratos tipados, exportación TXT local y transcripción experimental mediante reconocimiento **obligatoriamente local** del navegador en idiomas compatibles, activado por el usuario. El texto vive en memoria de la pestaña y no se sincroniza.
 
-Pendiente: motor ASR local portable (por ejemplo, Whisper.cpp), traducción local, VAD/chunking, glosario, almacenamiento IndexedDB, exportación SRT/VTT con timestamps verificados, consentimiento persistente auditable, sincronización opt-in y pruebas de rendimiento/precisión.
+Pendiente: motor ASR local portable (por ejemplo, Whisper.cpp), traducción local portable multibrowser, VAD/chunking, glosario, almacenamiento IndexedDB, exportación SRT/VTT con timestamps verificados, consentimiento persistente auditable, sincronización opt-in y pruebas de rendimiento/precisión.
 
 La transcripción local es **experimental y limitada a navegadores con `SpeechRecognition.available()` y `processLocally=true`**; no declarar transcripción universal ni traducción en tiempo real disponible hasta que las fases pendientes estén implementadas y verificadas. La instalación del paquete puede descargar datos desde el proveedor del navegador, pero la inferencia de audio debe ejecutarse localmente. El navegador puede solicitar permisos de micrófono. No se deben introducir claves de API ni grabaciones por defecto.
 
@@ -77,3 +77,11 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - Los productores de micrófono en tiempo real deberán implementar su propia cola acotada y política de pérdida de frames cuando la inferencia no alcance el ritmo de la captura. Esta función no proporciona ese puente todavía.
 - Cancelación mediante `AbortSignal`; debe combinarse con cierre del micrófono/worker en la capa superior. El procesamiento del modelo WASM todavía está pendiente.
 - No confundir esta infraestructura con transcripción, traducción ni soporte validado de vídeos largos: faltan integración del modelo, benchmark de memoria, audio-resampling, diarización, deduplicación y pruebas en equipos básicos.
+
+## Traducción local ES↔EN (experimental)
+
+- El intérprete comprueba la capacidad del navegador y, en otro clic explícito, activa el modelo local. `Translator.create()` se inicia directamente desde el gesto del usuario porque requiere activación transitoria.
+- La primera activación puede provocar una descarga del paquete de idioma desde el proveedor del navegador. La inferencia del texto corre localmente. No hay traducción en servidores Free Interpreters, API key, telemetría de contenido, ni fallback a nube.
+- El texto de la sesión se mantiene en memoria. `Cargar transcripción confirmada` copia a una caja editable los últimos 1,800 caracteres finales; `Traducir en este equipo` requiere un clic separado. El texto parcial no se transfiere ni se traduce.
+- El traductor se destruye al desactivar, cerrar la página o cambiar el idioma. Los trabajos iniciados se cancelan mediante AbortSignal y las respuestas tardías se ignoran.
+- La API está limitada a navegadores compatibles y HTTPS. La traducción no es validación médica/jurídica; dosis, negaciones, cifras y nombres requieren revisión humana. La compatibilidad y calidad deben verificarse en dispositivos reales.

@@ -11,6 +11,7 @@ import {
   type LocalSpeechSession,
 } from '@/modules/live-engine/core/browser-local-speech';
 import { downloadLocalTranscript } from '@/modules/live-engine/core/export-local-transcript';
+import LocalTranslatorPanel from './LocalTranslatorPanel';
 
 interface LocalSpeechPanelProps {
   microphoneProbeBusy?: boolean;
@@ -205,6 +206,11 @@ export default function LocalSpeechPanel({
             className="text-sm font-semibold text-slate-700 underline">Limpiar texto local</button>
         )}
       </div>
+      <LocalTranslatorPanel
+        key={language}
+        sourceLanguage={language === 'es-ES' ? 'es' : 'en'}
+        finalTranscript={transcript}
+      />
     </section>
   );
 }
