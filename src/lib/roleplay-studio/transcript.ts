@@ -12,6 +12,9 @@ const MAX_TRANSCRIPT_CHARS = 1_000_000;
 const MAX_TOTAL_DURATION = 900;
 const MAX_SOURCE_DURATION = 7200;
 const MAX_CLIP_DURATION = 300;
+const MAX_LOCAL_SOURCE_DURATION = 12 * 3600;
+const MAX_LOCAL_TRANSCRIPT_CHARS = 5_000_000;
+const MAX_LOCAL_CUES = 10_000;
 
 function decodeTimestamp(value: string): number | null {
   const parts = value.replace(',', '.').split(':');
@@ -36,6 +39,8 @@ const CUE_TIMING = /^((?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3})\s*-->\s*((?:\d{2}:)?\d{
 interface TranscriptParseLimits {
   maxCues?: number;
   maxTotalSeconds?: number;
+  maxSourceSeconds?: number;
+  maxChars?: number;
   allowOverlaps?: boolean;
 }
 
@@ -44,13 +49,17 @@ export function parseTimedTranscript(
 ): TimedTranscriptCue[] {
   const maxCues = limits.maxCues ?? ROLEPLAY_MAX_SCENARIOS;
   const maxTotalSeconds = limits.maxTotalSeconds ?? MAX_TOTAL_DURATION;
-  if (!Number.isSafeInteger(maxCues) || maxCues < 1 || maxCues > 500 ||
+  const maxSourceSeconds = limits.maxSourceSeconds ?? MAX_SOURCE_DURATION;
+  const maxChars = limits.maxChars ?? MAX_TRANSCRIPT_CHARS;
+  if (!Number.isSafeInteger(maxCues) || maxCues < 1 || maxCues > MAX_LOCAL_CUES ||
       !Number.isFinite(maxTotalSeconds) || maxTotalSeconds < 1 ||
-      maxTotalSeconds > MAX_SOURCE_DURATION) {
+      !Number.isFinite(maxSourceSeconds) || maxSourceSeconds < 1 ||
+      maxSourceSeconds > MAX_LOCAL_SOURCE_DURATION || maxTotalSeconds > maxSourceSeconds ||
+      !Number.isSafeInteger(maxChars) || maxChars < 1 || maxChars > MAX_LOCAL_TRANSCRIPT_CHARS) {
     throw new Error('Los límites de transcripción no son válidos.');
   }
-  if (!raw.trim() || raw.length > MAX_TRANSCRIPT_CHARS) {
-    throw new Error('El archivo de subtítulos está vacío o supera el límite de 1 MB.');
+  if (!raw.trim() || raw.length > maxChars) {
+    throw new Error('El archivo de subtítulos está vacío o supera el límite de tamaño permitido.');
   }
   const blocks = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split(/\n\s*\n/);
   const cues: TimedTranscriptCue[] = [];
@@ -69,7 +78,7 @@ export function parseTimedTranscript(
     const end = decodeTimestamp(timing[2]);
     if (start === null || end === null || end - start < 0.1 ||
         start < previousStart || (!limits.allowOverlaps && start < previousEnd) ||
-        end - start > MAX_CLIP_DURATION || end > MAX_SOURCE_DURATION) {
+        end - start > MAX_CLIP_DURATION || end > maxSourceSeconds) {
       throw new Error('Los subtítulos contienen tiempos superpuestos, fuera de orden o demasiado largos.');
     }
     const originalText = lines.slice(timingIndex + 1).join(' ').trim();
@@ -95,10 +104,12 @@ export function parseTimedTranscript(
 }
 
 /** Parse a source transcript for manual selection, never publish all cues automatically. */
-export function parseTimedTranscriptForReview(raw: string): TimedTranscriptCue[] {
+export function parseTimedTranscriptForReview(raw: string, longLocalSource = false): TimedTranscriptCue[] {
   return parseTimedTranscript(raw, {
-    maxCues: 500,
-    maxTotalSeconds: MAX_SOURCE_DURATION,
+    maxCues: longLocalSource ? MAX_LOCAL_CUES : 500,
+    maxTotalSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
+    maxSourceSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
+    maxChars: longLocalSource ? MAX_LOCAL_TRANSCRIPT_CHARS : MAX_TRANSCRIPT_CHARS,
     allowOverlaps: true,
   });
 }
