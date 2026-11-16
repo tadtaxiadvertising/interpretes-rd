@@ -47,6 +47,7 @@ export function parseStudioSilences(stderr: string, duration: number): StudioSil
   // FFmpeg may leave a final silence_start unmatched when the file ends.
   if (pendingStart !== null && pendingStart < duration &&
       (results.length === 0 || pendingStart >= results[results.length - 1].end)) {
+    if (results.length >= 500) throw new Error('Demasiadas pausas para esta revisión.');
     results.push({ start: pendingStart, end: duration });
   }
   return results;
