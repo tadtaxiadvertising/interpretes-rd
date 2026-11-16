@@ -110,7 +110,7 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     player.currentTime = 35;
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    expect(screen.getByText('Intervenciones (3/25)')).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
     const starts = screen.getAllByLabelText('Inicio (segundos)') as HTMLInputElement[];
     const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
     expect(starts.map(field => Number(field.value))).toEqual([0, 35, 600]);
@@ -131,7 +131,7 @@ describe('Audio Studio compact editing', () => {
     });
     expect(screen.getByText('Doctor: Fictional reference only')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
-    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
