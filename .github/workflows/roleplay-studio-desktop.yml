@@ -61,8 +61,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          $env:ROLEPLAY_STUDIO_SELF_CHECK_LOG = Join-Path $env:RUNNER_TEMP 'roleplay-studio-self-check.log'
           & ./dist/RoleplayStudioLocal/RoleplayStudioLocal.exe --self-check
-          if ($LASTEXITCODE -ne 0) { exit 1 }
+          if ($LASTEXITCODE -ne 0) {
+            if (Test-Path $env:ROLEPLAY_STUDIO_SELF_CHECK_LOG) {
+              Get-Content $env:ROLEPLAY_STUDIO_SELF_CHECK_LOG
+            }
+            exit 1
+          }
       - name: Validate packaged FFmpeg on macOS
         if: runner.os == 'macOS'
         run: dist/RoleplayStudioLocal.app/Contents/MacOS/RoleplayStudioLocal --self-check
