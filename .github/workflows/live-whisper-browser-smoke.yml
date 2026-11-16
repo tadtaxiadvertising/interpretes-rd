@@ -1,0 +1,40 @@
+name: Live Whisper Chromium model smoke (isolated)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/live-whisper-smoke/**'
+      - '.github/workflows/live-whisper-browser-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-asr-smoke:
+    # Avoid running model-weight downloads from untrusted fork PRs.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    name: Real model load + inference in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: Install pinned dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Self-host pinned ONNX Runtime WASM files
+        run: npm run prepare:live-wasm
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Execute browser-only Whisper smoke
+        # Synthetic PCM only. No credentials, personal content or microphones.
+        # Uses Vite for the isolated browser harness, not the authenticated app.
+        run: node scripts/live-whisper-smoke/run.mjs
