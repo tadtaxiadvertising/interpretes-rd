@@ -16,6 +16,7 @@ RUN npx prisma generate --schema=prisma/schema.prisma
 RUN node --input-type=commonjs -e "const p = require('ffmpeg-static'); if (!p) process.exit(1); require('node:child_process').execFileSync(p, ['-version'], { stdio: 'ignore' });"
 
 COPY tsconfig.json ./tsconfig.json
+COPY tsconfig.scripts.json ./tsconfig.scripts.json
 COPY certs/prod-ca-2021.crt ./certs/prod-ca-2021.crt
 COPY src/lib/prisma.ts ./src/lib/prisma.ts
 COPY src/lib/database-pool-config.ts ./src/lib/database-pool-config.ts
@@ -26,7 +27,7 @@ COPY src/lib/roleplay-audio-worker-config.ts ./src/lib/roleplay-audio-worker-con
 COPY scripts/roleplay-audio-worker.ts ./scripts/roleplay-audio-worker.ts
 
 # Catch missing local runtime modules during image build, not only at container startup.
-RUN node --import tsx --input-type=module -e "await import('./src/lib/roleplay-audio-worker-lease.ts'); await import('./src/lib/roleplay-audio-worker-config.ts'); await import('./src/lib/roleplay-limits.ts')"
+RUN ./node_modules/.bin/tsx --tsconfig tsconfig.scripts.json --eval "await import('./src/lib/prisma.ts'); await import('./src/lib/roleplay-audio-conversion.ts'); await import('./src/lib/roleplay-audio-worker-config.ts'); await import('./src/lib/roleplay-audio-worker-lease.ts'); await import('./src/lib/roleplay-audio-worker-errors.ts'); await import('./src/lib/roleplay-limits.ts')"
 
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=256"
@@ -37,4 +38,4 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 USER worker
 
-CMD ["./node_modules/.bin/tsx", "scripts/roleplay-audio-worker.ts"]
+CMD ["./node_modules/.bin/tsx", "--tsconfig", "tsconfig.scripts.json", "scripts/roleplay-audio-worker.ts"]
