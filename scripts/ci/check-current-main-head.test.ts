@@ -28,7 +28,7 @@ function checkHead(options: {
     'fi',
     'if [[ "${MOCK_GIT_FAIL:-}" == "yes" ]]; then exit 70; fi',
     'echo "${MOCK_HEAD:-} refs/heads/main"',
-  ].join('\\n') + '\\n';
+  ].join('\n') + '\n';
   writeFileSync(fakeGit, fakeGitSource);
   chmodSync(fakeGit, 0o755);
 
