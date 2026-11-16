@@ -237,14 +237,14 @@ async function writeExclusiveZip(output, archive, write = (handle, data) => hand
   try {
     await write(handle, archive);
     await handle.sync();
+    await handle.close();
   } catch (cause) {
-    try { await handle.close(); } finally {
-      // We created this path with wx. Clear any partially written package.
-      await fs.unlink(output).catch(() => {});
-    }
+    // Cleanup also applies if sync/close fails after the bytes were written.
+    await handle.close().catch(() => {});
+    // We created this path with wx. Do not leave a partial package behind.
+    await fs.unlink(output).catch(() => {});
     throw cause;
   }
-  await handle.close();
 }
 
 async function exportLocal({ source, project, output }) {
