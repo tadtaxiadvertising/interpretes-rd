@@ -102,4 +102,39 @@ describe('Audio Studio compact editing', () => {
     const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
     expect(Number(ends[0].value)).toBe(30);
   });
+
+  it('adds a turn near the cursor even when another turn exists much later', () => {
+    const player = loadAudio(3600);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    player.currentTime = 600;
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    player.currentTime = 35;
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    expect(screen.getByText(/Intervenciones \\(3\\/25\\)/)).toBeTruthy();
+    const starts = screen.getAllByLabelText('Inicio (segundos)') as HTMLInputElement[];
+    const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
+    expect(starts.map(field => Number(field.value))).toEqual([0, 35, 600]);
+    expect(ends.map(field => Number(field.value))).toEqual([30, 65, 630]);
+  });
+
+  it('clears a deleted turn and its editor-only transcript reference', async () => {
+    loadAudio(90);
+    const captions = '1\\n00:00:00,000 --> 00:00:10,000\\nDoctor: Fictional reference only';
+    const file = new File(['srt'], 'reference.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => captions,
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText('Doctor: Fictional reference only')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
+    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
+  });
+
 });
