@@ -183,7 +183,7 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByRole('combobox', { name: 'Hablante rápido intervención 1' })).toBeNull();
     expect(screen.getByRole('combobox', { name: 'Hablante rápido intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Vista detallada' });
+    fireEvent.click(screen.getByRole('button', { name: 'Vista detallada' }));
 
     const fullSpeakers = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
     const fullLanguages = screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[];
