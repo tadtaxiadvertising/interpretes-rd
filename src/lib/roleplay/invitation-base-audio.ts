@@ -47,7 +47,15 @@ export async function resolveInvitationBaseAudioUrl(
     // contain a historical signing token or point to a public recording.
     // Retain only ordinary non-Storage legacy assets for compatibility.
     try {
-      if (new URL(storedUrl).pathname.includes('/storage/v1/object/')) return null;
+      const asset = new URL(storedUrl);
+      // URL() normalizes raw traversal such as /storage/v1/object/../audio
+      // before exposing pathname. Inspect BOTH representations and reject
+      // non-HTTPS schemes without depending on origin configuration.
+      if (
+        asset.protocol !== 'https:' ||
+        storedUrl.includes('/storage/v1/object/') ||
+        asset.pathname.includes('/storage/v1/object/')
+      ) return null;
     } catch {
       return null;
     }
