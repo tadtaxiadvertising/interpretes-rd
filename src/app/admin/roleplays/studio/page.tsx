@@ -68,6 +68,7 @@ export default function RoleplayStudioPage() {
   const [draftBusy, setDraftBusy] = useState(false);
   const [analyzingSilences, setAnalyzingSilences] = useState(false);
   const [serverConsent, setServerConsent] = useState(false);
+  const [allowServerZipExport, setAllowServerZipExport] = useState(false);
   const [localVadSnapshot, setLocalVadSnapshot] = useState<LocalVadSnapshot | null>(null);
   const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
   const [suggestedClips, setSuggestedClips] = useState<StudioSuggestedClip[]>([]);
@@ -177,6 +178,7 @@ export default function RoleplayStudioPage() {
     silenceAbort.current = null;
     setAnalyzingSilences(false);
     setServerConsent(false);
+    setAllowServerZipExport(false);
     setLocalVadSnapshot(null);
     activeAudioFile.current = null;
     setDetectedSilences([]);
@@ -486,7 +488,7 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      const localOnly = usesLocalLongMode(audio, duration);
+      const localOnly = usesLocalLongMode(audio, duration) || !allowServerZipExport;
       const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
       const draft = localOnly
@@ -499,13 +501,13 @@ export default function RoleplayStudioPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = usesLocalLongMode(audio, duration)
+      link.download = localOnly
         ? 'roleplay-studio-proyecto-largo.json' : 'roleplay-studio-proyecto.json';
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice(usesLocalLongMode(audio, duration)
+      setNotice(localOnly
         ? 'Plan de cortes local descargado. Conserva la grabación original; el JSON no contiene audio ni video ni transcripción. La huella es parcial y no verifica cada byte.'
         : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
     } catch (cause) {
@@ -530,7 +532,7 @@ export default function RoleplayStudioPage() {
       }
       const json = await file.text();
       if (revision !== subtitleImportRevision.current) return;
-      const localOnly = usesLocalLongMode(audio, duration);
+      const localOnly = usesLocalLongMode(audio, duration) || !allowServerZipExport;
       const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
       const restored = localOnly
@@ -599,7 +601,7 @@ export default function RoleplayStudioPage() {
     // Long recordings create only a local JSON draft. Do not allocate a
     // remote ZIP AbortController for this branch: otherwise the early return
     // locks all subsequent downloads until an edit resets exportAbort.
-    if (usesLocalLongMode(audio, duration)) {
+    if (usesLocalLongMode(audio, duration) || !allowServerZipExport) {
       await saveDraft();
       return;
     }
@@ -649,7 +651,8 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const localOnly = audio !== null && usesLocalLongMode(audio, duration);
+  const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
+  const localOnly = audio !== null && (sourceRequiresLocal || !allowServerZipExport);
   const videoSource = audio !== null && mediaKind(audio) === 'video';
   // Retain the unfiltered SRT/VTT index for selections across pages.
   const filteredCueEntries = useMemo(() => {
@@ -676,7 +679,7 @@ export default function RoleplayStudioPage() {
     .slice(0, 8);
 
   // Only the selected row expands when reviewing a longer recording.
-  const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
+  const compactRows = compactPreference ?? (sourceRequiresLocal || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
   const visibleSegments = [...segments]
     .sort((a, b) => a.start - b.start)
@@ -723,7 +726,8 @@ export default function RoleplayStudioPage() {
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
             Prepara intervenciones desde una grabación de audio o video sin crear sesiones
             ni modificar audios publicados. Los MP3 pequeños permiten exportar el ZIP;
-            fuentes extensas se revisan localmente y se guardan como un proyecto de cortes.
+            fuentes extensas se revisan localmente. Los MP3 pequeños también se preparan sin subirlos,
+            salvo que selecciones expresamente la exportación en servidor.
           </p>
         </div>
         <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
@@ -747,12 +751,53 @@ export default function RoleplayStudioPage() {
                   {...mediaHandlers} className="max-h-64 w-full rounded-lg bg-black"/>
               : <audio ref={attachPlayer} src={url} controls preload="metadata"
                   {...mediaHandlers} className="w-full"/>}
+            {audio && duration > 0 && !sourceRequiresLocal && (
+              <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-white/15 bg-slate-950/60 p-3">
+                <legend className="px-1 text-sm font-semibold text-white">Dónde preparar el ZIP</legend>
+                <label className="flex items-start gap-2 text-sm text-cyan-100">
+                  <input type="radio" name="studio-export-location"
+                    checked={!allowServerZipExport}
+                    onChange={() => {
+                      subtitleImportRevision.current += 1;
+                      draftOperationRevision.current += 1;
+                      exportRevision.current += 1;
+                      exportAbort.current?.abort();
+                      exportAbort.current = null;
+                      setBusy(false);
+                      setDraftBusy(false);
+                      setAllowServerZipExport(false);
+                      setError('');
+                      setNotice('Modo local: descarga el JSON y genera el ZIP en tu equipo con el exportador de escritorio.');
+                    }}
+                    className="mt-1 accent-cyan-400"/>
+                  Local (predeterminado): no subir el MP3. Descarga el proyecto JSON y genera el ZIP en tu equipo.
+                </label>
+                <label className="mt-2 flex items-start gap-2 text-sm text-slate-200">
+                  <input type="radio" name="studio-export-location"
+                    checked={allowServerZipExport}
+                    onChange={() => {
+                      subtitleImportRevision.current += 1;
+                      draftOperationRevision.current += 1;
+                      exportRevision.current += 1;
+                      exportAbort.current?.abort();
+                      exportAbort.current = null;
+                      setBusy(false);
+                      setDraftBusy(false);
+                      setAllowServerZipExport(true);
+                      setError('');
+                      setNotice('Modo servidor seleccionado: al exportar, el MP3 se enviará para generar el ZIP.');
+                    }}
+                    className="mt-1 accent-blue-400"/>
+                  Servidor (opcional): el MP3 se subirá al exportar y consumirá recursos de la plataforma.
+                </label>
+              </fieldset>
+            )}
             {localOnly && duration > 0 && (
               <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
                 <strong>Preparación local:</strong> la grabación no se sube al servidor.
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
-                El JSON no contiene audio ni video. El ZIP requiere extraer los clips con
-                FFmpeg localmente; el navegador no convierte esta fuente extensa.
+                El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
+                FFmpeg en tu equipo; esta opción no convierte audio en el navegador.
                 <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
                   <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
                   <p className="mt-2">
@@ -834,7 +879,7 @@ export default function RoleplayStudioPage() {
                 )}
               </section>
             )}
-            {audio && !localOnly && (
+            {audio && !sourceRequiresLocal && (
               <LocalVadAssistant
                 key={url}
                 snapshot={localVadSnapshot}
@@ -857,7 +902,7 @@ export default function RoleplayStudioPage() {
                 }}
               />
             )}
-            {!localOnly && <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
+            {!sourceRequiresLocal && <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
               <h2 className="text-sm font-bold text-violet-100">Respaldo opcional: detección en servidor</h2>
               <p className="mt-2 text-xs leading-5 text-slate-300">
                 Utiliza el detector local anterior para no subir la grabación ni consumir
@@ -1089,7 +1134,7 @@ export default function RoleplayStudioPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
             </div>
           </div>
-          <details open={!localOnly} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
+          <details open={!sourceRequiresLocal} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-teal-100">
               Protocolos de interpretación consecutiva (opcional)
             </summary>
@@ -1266,7 +1311,7 @@ export default function RoleplayStudioPage() {
               )}
             </article>
           ))}
-          {segments.length > 0 && !localOnly && (
+          {segments.length > 0 && !sourceRequiresLocal && (
             <StudioConsecutivePreview
               sourceUrl={url}
               sourceDuration={duration}
@@ -1281,7 +1326,7 @@ export default function RoleplayStudioPage() {
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
             <Download size={18} /> {busy
               ? 'Procesando segmentos…'
-              : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP'}
+              : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
           </button>
         </section>
       )}
