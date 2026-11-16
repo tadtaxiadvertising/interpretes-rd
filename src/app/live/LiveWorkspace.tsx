@@ -68,7 +68,9 @@ export default function LiveWorkspace({ backHref = '/dashboard' }: { backHref?: 
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
           Espacio de trabajo de audio con procesamiento local como opción predeterminada.
           La transcripción nativa y la traducción local funcionan solo en navegadores compatibles.
-          Whisper Tiny WebAssembly es una alternativa experimental con descarga voluntaria del modelo.
+          {process.env.NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED === 'true'
+            ? 'Whisper Tiny WebAssembly es una alternativa experimental con descarga voluntaria del modelo.'
+            : 'El reconocimiento Whisper WebAssembly permanece en validación y está desactivado por defecto.'}
         </p>
       </header>
 
