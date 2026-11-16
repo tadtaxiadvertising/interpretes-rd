@@ -107,3 +107,12 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - **No se ha incorporado ningún modelo ASR**, ni descarga de pesos, ni Whisper WASM, ni ejecución real en Worker. Este filtrado todavía se ejecuta donde el consumidor llama al generador; la integración de producción deberá realizarse fuera del hilo principal, medir CPU/RAM, calidad y latencia y verificar 10/30/60 minutos en equipos reales.
 - No se deben mostrar los tiempos de los fragmentos PCM como tiempos verificados de palabras ni subtítulos. El modelo ASR deberá devolver referencias temporales reales y el reconciliador eliminar solapamientos duplicados.
 - La conversión de 8 kHz a 16 kHz no recupera los detalles que el micrófono original no captó; se considera compatible como formato, no como una mejora de calidad.
+
+## Preparación ASR en Worker (sin motor de inferencia)
+
+- `local-asr-audio.worker.ts` crea un Web Worker de módulo de origen propio: el filtro PCM a 16 kHz y la división en ventanas se ejecutan **fuera del hilo principal**, reutilizando `resampleLocalPcmTo16k` y `chunkLocalPcmFrames`. El Worker no instala, descarga ni ejecuta todavía un modelo ASR.
+- `prepareCapturedLocalAsrChunksInWorker()` es un adaptador **todavía sin conectar a la UI** que recibe la captura AudioWorklet existente. La pestaña transfiere un solo frame de entrada por petición explícita del Worker y el Worker entrega un solo chunk por cada petición del consumidor; no hay colas PCM de tamaño arbitrario entre ambos.
+- La transferencia usa `ArrayBuffer` bajo propiedad del destino y solo ocurre dentro de la página y su Worker (no WebSocket, `fetch` ni servidor). Las ventanas ya incluyen offsets de muestra, no timestamps verificados de palabras.
+- La cancelación, fallo del Worker o finalización del consumidor terminan el Worker y cierran el micrófono. Los errores de entrada, buffers y protocolo se transmiten como códigos, sin contenido de conversaciones en logs.
+- Para compatibilidad se requiere Web Worker de módulo y un navegador capaz de cargar su chunk empaquetado. Un equipo sin Worker no debe recibir una caída silenciosa al hilo principal: se informa la indisponibilidad y se cierra la captura.
+- **Próximo hito**: elegir y revisar licencia/tamaño de modelo ASR local WASM; descarga voluntaria, caché, límites RAM y aceleración opcional; benchmark de 10/30/60 minutos en equipos básicos. Un procesamiento fuera del hilo UI no garantiza tiempo real si el CPU del dispositivo no alcanza el ritmo de la llamada.
