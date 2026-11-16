@@ -73,6 +73,9 @@ export default function RoleplayStudioPage() {
   const silenceRevision = useRef(0);
   const silenceAbort = useRef<AbortController | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [segmentSearch, setSegmentSearch] = useState('');
+  const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
+  const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
 
   const stopPreview = () => {
     previewEnd.current = null;
@@ -471,8 +474,18 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  // Only the selected row expands when reviewing a longer recording.
+  const compactRows = compactPreference ?? segments.length >= 6;
+  const query = segmentSearch.trim().toLocaleLowerCase();
+  const visibleSegments = segments.map((segment, index) => ({ segment, index }))
+    .filter(({ segment }) => !query ||
+      [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
+        segment.speakerRole, segment.language]
+        .some(value => value.toLocaleLowerCase().includes(query)))
+    .sort((a, b) => a.segment.start - b.segment.start);
+
   return (
-    <main className="space-y-6">
+    <main className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
@@ -484,7 +497,7 @@ export default function RoleplayStudioPage() {
         </div>
         <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
       </header>
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
         <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">Grabación original MP3 (máximo 15 MiB)</label>
         <input id="studio-audio" type="file" accept=".mp3,audio/mpeg" className="mt-3 block w-full text-sm text-slate-300" onChange={event => chooseAudio(event.currentTarget.files?.[0])} />
         {url && (
@@ -699,11 +712,22 @@ export default function RoleplayStudioPage() {
         </section>
       )}
       {audio && duration > 0 && (
-        <section className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-white"><AudioLines size={20} /> Intervenciones ({segments.length}/{ROLEPLAY_MAX_SCENARIOS})</h2>
-            <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
-              className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
+            <div className="flex flex-wrap items-center gap-2">
+              <input type="search" aria-label="Buscar intervenciones" value={segmentSearch}
+                onChange={event => setSegmentSearch(event.currentTarget.value)}
+                placeholder="Buscar turno, hablante o nota…"
+                className="w-48 rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"/>
+              <button type="button" onClick={() => setCompactPreference(!compactRows)}
+                aria-pressed={compactRows}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200">
+                {compactRows ? 'Vista detallada' : 'Vista compacta'}
+              </button>
+              <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
+            </div>
           </div>
           <div className="space-y-3 rounded-xl border border-teal-400/20 bg-teal-400/5 p-4">
             <h3 className="font-semibold text-teal-100">Protocolos de interpretación consecutiva</h3>
@@ -734,16 +758,46 @@ export default function RoleplayStudioPage() {
             </div>
           </div>
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
-          {segments.map((segment, index) => (
-            <article key={segment.id} className="space-y-3 rounded-xl border border-white/10 bg-slate-950/70 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <h3 className="font-semibold text-white">Intervención {index + 1}</h3>
+          {segments.length > 0 && visibleSegments.length === 0 && (
+            <p className="text-sm text-slate-400">No hay intervenciones que coincidan con la búsqueda.</p>
+          )}
+          {segments.length >= 6 && (
+            <p className="text-xs text-slate-400">
+              {visibleSegments.length} de {segments.length} turnos. Abre «Editar» para
+              modificar una intervención o utiliza «Vista detallada».
+            </p>
+          )}
+          {visibleSegments.map(({ segment, index }) => (
+            <article key={segment.id} className="space-y-2 rounded-lg border border-white/10 bg-slate-950/70 p-2.5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+                  #{index + 1} · {segment.title}
+                  <span className="ml-2 text-xs font-normal text-slate-400">
+                    {formatTime(segment.start)}–{formatTime(segment.end)} · {segment.speakerRole} · {segment.language.toUpperCase()}
+                  </span>
+                </h3>
+                {compactRows && (
+                  <>
+                    <button type="button" onClick={() => previewSegment(segment)}
+                      className="rounded-md border border-emerald-400/25 px-2 py-1 text-xs text-emerald-200">
+                      {previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
+                    </button>
+                    <button type="button" onClick={() =>
+                      setExpandedSegmentId(prev => prev === segment.id ? null : segment.id)}
+                      aria-expanded={expandedSegmentId === segment.id}
+                      className="rounded-md border border-blue-400/25 px-2 py-1 text-xs text-blue-200">
+                      {expandedSegmentId === segment.id ? 'Contraer' : 'Editar'}
+                    </button>
+                  </>
+                )}
                 <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
                   subtitleImportRevision.current += 1;
                   setSegments(prev => prev.filter(s => s.id !== segment.id));
                 }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
+              {(!compactRows || expandedSegmentId === segment.id) && (
+              <div className="space-y-2 border-t border-white/5 pt-2">
               <label className="block text-sm text-slate-300">Título
                 <input value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
                   className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
@@ -816,11 +870,15 @@ export default function RoleplayStudioPage() {
                   onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
                   onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
-                <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
-                  onClick={() => previewSegment(segment)}>
-                  {previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
-                </button>
+                {!compactRows && (
+                  <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
+                    onClick={() => previewSegment(segment)}>
+                    {previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
+                  </button>
+                )}
               </div>
+              </div>
+              )}
             </article>
           ))}
           {segments.length > 0 && (
