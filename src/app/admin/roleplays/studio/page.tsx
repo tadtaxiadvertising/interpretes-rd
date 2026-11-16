@@ -224,7 +224,7 @@ export default function RoleplayStudioPage() {
       const decodedDuration = body.durationSeconds;
       if (!Number.isFinite(decodedDuration) || decodedDuration <= 0 ||
           Math.abs(decodedDuration - duration) > Math.max(1, duration * 0.03) ||
-          body.silences.length > 501) {
+          body.silences.length > 500) {
         throw new Error('La duración del MP3 no coincide o el análisis es demasiado extenso.');
       }
       const pauses: StudioSilence[] = body.silences.map((item: unknown) => {
@@ -493,8 +493,16 @@ export default function RoleplayStudioPage() {
               onPlay={() => setEditorPlaybackRevision(n => n + 1)}
               onLoadedMetadata={event => {
                 const length = event.currentTarget.duration;
-                setDuration(Number.isFinite(length) ? length : 0);
-                if (!Number.isFinite(length) || length <= 0) setError('No se pudo determinar la duración de este MP3.');
+                if (!Number.isFinite(length) || length <= 0) {
+                  setDuration(0);
+                  setError('No se pudo determinar la duración de este MP3.');
+                } else if (length > 7200) {
+                  setDuration(0);
+                  setError('El MP3 supera las 2 horas admitidas por Audio Studio.');
+                } else {
+                  setDuration(length);
+                  setError('');
+                }
               }}
               onTimeUpdate={event => {
                 setPlayhead(event.currentTarget.currentTime);
