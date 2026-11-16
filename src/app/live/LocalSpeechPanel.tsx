@@ -12,6 +12,7 @@ import {
 } from '@/modules/live-engine/core/browser-local-speech';
 import { downloadLocalTranscript } from '@/modules/live-engine/core/export-local-transcript';
 import LocalTranslatorPanel from './LocalTranslatorPanel';
+import WhisperWasmPanel from './WhisperWasmPanel';
 
 interface LocalSpeechPanelProps {
   microphoneProbeBusy?: boolean;
@@ -25,6 +26,7 @@ export default function LocalSpeechPanel({
   const [language, setLanguage] = useState<LocalSpeechLanguage>('es-ES');
   const [status, setStatus] = useState<LocalSpeechPackStatus | 'checking' | 'installing' | null>(null);
   const [listening, setListening] = useState(false);
+  const [whisperActive, setWhisperActive] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interim, setInterim] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +50,7 @@ export default function LocalSpeechPanel({
 
   function changeLanguage(next: LocalSpeechLanguage) {
     stop();
+    setWhisperActive(false);
     setLanguage(next);
     setStatus(null);
     setTranscript('');
@@ -87,7 +90,7 @@ export default function LocalSpeechPanel({
   }
 
   function start() {
-    if (microphoneProbeBusy || status !== 'available' || !supportsOnDeviceSpeech()) return;
+    if (microphoneProbeBusy || whisperActive || status !== 'available' || !supportsOnDeviceSpeech()) return;
     stop();
     const token = requestRef.current;
     setError(null);
@@ -167,7 +170,7 @@ export default function LocalSpeechPanel({
         )}
         {status === 'available' && (
           <button type="button" onClick={listening ? stop : start}
-            disabled={!listening && microphoneProbeBusy}
+            disabled={!listening && (microphoneProbeBusy || whisperActive)}
             className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {listening ? 'Detener transcripción' : 'Iniciar transcripción local'}
           </button>
@@ -206,6 +209,18 @@ export default function LocalSpeechPanel({
             className="text-sm font-semibold text-slate-700 underline">Limpiar texto local</button>
         )}
       </div>
+      <WhisperWasmPanel
+        key={'whisper-' + language}
+        language={language === 'es-ES' ? 'es' : 'en'}
+        microphoneBusy={microphoneProbeBusy || listening}
+        onMicrophoneActive={(active) => {
+          setWhisperActive(active);
+          onListeningChange?.(active);
+        }}
+        onFinalTranscript={(text) => {
+          setTranscript((previous) => previous ? previous + ' ' + text : text);
+        }}
+      />
       <LocalTranslatorPanel
         key={language}
         sourceLanguage={language === 'es-ES' ? 'es' : 'en'}
