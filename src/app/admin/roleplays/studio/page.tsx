@@ -519,6 +519,7 @@ export default function RoleplayStudioPage() {
               }} />
             {audio && duration > 0 && (
               <StudioWaveform
+                key={url}
                 file={audio}
                 duration={duration}
                 currentTime={playhead}
