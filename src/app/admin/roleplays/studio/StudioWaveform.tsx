@@ -79,6 +79,7 @@ export default function StudioWaveform({
 
   useEffect(() => {
     let cancelled = false;
+    let context: AudioContext | null = null;
     const send = (result: LocalVadSnapshot) => {
       if (!cancelled && /\.mp3$/i.test(file.name)) {
         vadNotification.current?.(file, result);
@@ -95,7 +96,6 @@ export default function StudioWaveform({
     setStatus('loading');
     setPeaks([]);
     const load = async () => {
-      let context: AudioContext | null = null;
       try {
         if (typeof window.AudioContext !== 'function') {
           if (!cancelled) {
@@ -126,7 +126,7 @@ export default function StudioWaveform({
         if (!cancelled) {
           // Only one PCM decoding feeds BOTH the waveform and the local VAD.
           // Retain small timing metadata, never decoded channels or full media.
-          const speech = /\.mp3$/i.test(file.name)
+          const speech = /\.mp3$/i.test(file.name) && vadNotification.current
             ? detectLocalSpeech(channels, decoded.sampleRate) : [];
           setPeaks(result);
           setStatus(result.length ? 'ready' : 'unavailable');
@@ -145,7 +145,12 @@ export default function StudioWaveform({
       }
     };
     void load();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      // Release a decoder promptly if an administrator swaps the source while
+      // browser decoding is still in progress. The async finally also closes.
+      if (context) void context.close().catch(() => {});
+    };
   }, [file, duration]);
 
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 1;
