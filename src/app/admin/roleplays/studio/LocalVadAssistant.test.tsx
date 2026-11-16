@@ -41,7 +41,7 @@ describe('reuse VAD results without re-decoding or uploading the MP3', () => {
       snapshot={{ status: 'limited', segments: [] }} duration={300}
       existing={[]} onApply={vi.fn()} />);
     expect(screen.getByRole('status').textContent).toContain('hasta 4 minutos y 8 MiB');
-    expect(screen.getByRole('button', { name: 'Revisar actividad local' })).toBeDisabled();
+    expect((screen.getByRole('button', { name: 'Revisar actividad local' }) as HTMLButtonElement).disabled).toBe(true);
     rerender(<LocalVadAssistant
       snapshot={{ status: 'unavailable', segments: [] }} duration={90}
       existing={[]} onApply={vi.fn()} />);
