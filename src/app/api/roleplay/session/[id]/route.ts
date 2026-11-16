@@ -7,7 +7,6 @@ import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/secur
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { getSignedAudioUrl } from '@/lib/roleplay';
-import { getReusableBaseAudioPath } from '@/lib/roleplay-library';
 import { resolveInvitationBaseAudioUrl } from '@/lib/roleplay/invitation-base-audio';
 
 const db = prisma;
@@ -173,22 +172,15 @@ export async function GET(
     // demand. The legacy sourceAudioUrl may be a seven-day signed URL and must
     // not become the permanent source of truth for candidate/admin playback.
     const playbackScenarios = await Promise.all(scenarios.map(async (scenario) => {
-      let scenarioBaseAudioUrl = scenario.baseAudioUrl;
-      // Scenario clips are persisted as legacy first-party public URLs, even
-      // when the bucket itself is private. Signing only those trusted object
-      // keys preserves existing external/legacy references without rewriting
-      // database rows. Never sign redacted/unvalidated invitation audio.
-      const basePath = scenarioBaseAudioUrl
-        ? getReusableBaseAudioPath(scenarioBaseAudioUrl, supabaseProjectUrl)
-        : null;
-      if (basePath) {
-        try {
-          scenarioBaseAudioUrl = await getSignedAudioUrl(basePath, 60 * 60);
-        } catch {
-          console.error('Roleplay scenario base audio URL could not be refreshed:', 'StorageError');
-          scenarioBaseAudioUrl = '';
-        }
-      }
+      // The invitation resolver already fails closed for malformed or
+      // signed first-party Storage URLs, including another bucket or encoded
+      // object path. Reuse that policy after access and invitation redaction;
+      // preserve only unrelated third-party legacy recordings.
+      const scenarioBaseAudioUrl = (await resolveInvitationBaseAudioUrl(
+        { baseAudioUrl: scenario.baseAudioUrl },
+        supabaseProjectUrl,
+        getSignedAudioUrl,
+      )) ?? '';
       return {
       ...scenario,
       baseAudioUrl: scenarioBaseAudioUrl,
