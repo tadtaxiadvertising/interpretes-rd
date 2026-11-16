@@ -369,7 +369,10 @@ export default function RoleplayStudioPage() {
         ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
     setCaptionTexts(previous => {
       const next = { ...previous };
-      next[first.id] = [previous[first.id], previous[second.id]].filter(Boolean).join(' ');
+      // A previously split cue retains the same reference in both halves;
+      // rejoining it must not duplicate private transcript text.
+      const references = [previous[first.id], previous[second.id]].filter(Boolean);
+      next[first.id] = [...new Set(references)].join(' ');
       delete next[second.id];
       return next;
     });
