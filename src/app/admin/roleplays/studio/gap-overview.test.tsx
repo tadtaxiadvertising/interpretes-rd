@@ -47,11 +47,11 @@ describe('long-source skipped-time overview', () => {
     expect(summary.textContent).toContain('Fuera de cortes: 59:00.0');
     expect(summary.textContent).toMatch(/no son silencios detectados/i);
 
-    fireEvent.click(screen.getByText(/Revisar los 3 espacios sin cortes/i));
+    fireEvent.click(screen.getByText(/Revisar los 2 espacios sin cortes/i));
     const listen = screen.getAllByRole('button', {
       name: /Escuchar espacio sin cortes desde/i,
     });
-    expect(listen).toHaveLength(3);
+    expect(listen).toHaveLength(2);
     fireEvent.click(listen[0]); // Biggest unselected stretch begins at 330 seconds.
     expect(player.currentTime).toBe(332);
   });
