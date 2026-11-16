@@ -12,7 +12,15 @@ import {
 } from '@/modules/live-engine/core/browser-local-speech';
 import { downloadLocalTranscript } from '@/modules/live-engine/core/export-local-transcript';
 
-export default function LocalSpeechPanel() {
+interface LocalSpeechPanelProps {
+  microphoneProbeBusy?: boolean;
+  onListeningChange?: (active: boolean) => void;
+}
+
+export default function LocalSpeechPanel({
+  microphoneProbeBusy = false,
+  onListeningChange,
+}: LocalSpeechPanelProps) {
   const [language, setLanguage] = useState<LocalSpeechLanguage>('es-ES');
   const [status, setStatus] = useState<LocalSpeechPackStatus | 'checking' | 'installing' | null>(null);
   const [listening, setListening] = useState(false);
@@ -33,6 +41,7 @@ export default function LocalSpeechPanel() {
     sessionRef.current?.stop();
     sessionRef.current = null;
     setListening(false);
+    onListeningChange?.(false);
     setInterim('');
   }
 
@@ -77,7 +86,7 @@ export default function LocalSpeechPanel() {
   }
 
   function start() {
-    if (status !== 'available' || !supportsOnDeviceSpeech()) return;
+    if (microphoneProbeBusy || status !== 'available' || !supportsOnDeviceSpeech()) return;
     stop();
     const token = requestRef.current;
     setError(null);
@@ -103,12 +112,15 @@ export default function LocalSpeechPanel() {
           if (token !== requestRef.current) return;
           sessionRef.current = null;
           setListening(false);
+          onListeningChange?.(false);
           setInterim('');
         },
       );
       setListening(true);
+      onListeningChange?.(true);
     } catch {
       setListening(false);
+      onListeningChange?.(false);
       setError('No se pudo iniciar el reconocimiento local. Verifica los permisos del micrófono.');
     }
   }
@@ -154,11 +166,17 @@ export default function LocalSpeechPanel() {
         )}
         {status === 'available' && (
           <button type="button" onClick={listening ? stop : start}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white">
+            disabled={!listening && microphoneProbeBusy}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
             {listening ? 'Detener transcripción' : 'Iniciar transcripción local'}
           </button>
         )}
       </div>
+      {microphoneProbeBusy && !listening && (
+        <p className="mt-3 text-sm text-amber-700">
+          Detén la prueba del micrófono antes de iniciar la transcripción.
+        </p>
+      )}
       <p role="status" className="mt-4 text-sm text-slate-600">
         {status === null ? 'Comprueba la disponibilidad antes de iniciar.' :
          status === 'checking' ? 'Comprobando compatibilidad…' :
