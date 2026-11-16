@@ -41,7 +41,26 @@ export async function resolveInvitationBaseAudioUrl(
   }
 
   if (!storedUrl) return null;
-  if (!projectUrl) return storedUrl;
+  if (!projectUrl) {
+    // Without the configured project origin we cannot confirm ownership of
+    // any Storage object. Never return a persisted Storage URL which may
+    // contain a historical signing token or point to a public recording.
+    // Retain only ordinary non-Storage legacy assets for compatibility.
+    try {
+      const asset = new URL(storedUrl);
+      // URL() normalizes raw traversal such as /storage/v1/object/../audio
+      // before exposing pathname. Inspect BOTH representations and reject
+      // non-HTTPS schemes without depending on origin configuration.
+      if (
+        asset.protocol !== 'https:' ||
+        storedUrl.includes('/storage/v1/object/') ||
+        asset.pathname.includes('/storage/v1/object/')
+      ) return null;
+    } catch {
+      return null;
+    }
+    return storedUrl;
+  }
 
   const path = getReusableBaseAudioPath(storedUrl, projectUrl);
   if (path) {
@@ -55,10 +74,15 @@ export async function resolveInvitationBaseAudioUrl(
   try {
     const project = new URL(projectUrl);
     const asset = new URL(storedUrl);
+    // Legacy audio must be a normal HTTPS resource, never a javascript:,
+    // data:, blob: or other unsafe URL stored in a legacy record.
+    if (asset.protocol !== 'https:') return null;
     // Prevent unrecognized, signed, or malformed same-project bucket links
     // from bypassing short-lived signing in the invitation response.
-    if (asset.origin === project.origin &&
-      asset.pathname.includes('/storage/v1/object/')) return null;
+    if (asset.origin === project.origin && (
+      storedUrl.includes('/storage/v1/object/') ||
+      asset.pathname.includes('/storage/v1/object/')
+    )) return null;
   } catch {
     return null;
   }
