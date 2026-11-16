@@ -9,7 +9,7 @@ describe('Whisper pilot Content Security Policy', () => {
     const rules = await config.headers?.();
     expect(rules).toBeDefined();
     expect(rules?.some((rule) => rule.source === '/live')).toBe(false);
-    expect(rules?.some((rule) => rule.source === '/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js')).toBe(false);
+    expect(rules?.some((rule) => rule.source === '/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js')).toBe(false);
     const csp = rules?.find((rule) => rule.source === '/:path*')?.headers
       .find((header) => header.key === 'Content-Security-Policy')?.value;
     expect(csp).not.toContain('huggingface.co');
@@ -26,7 +26,7 @@ describe('Whisper pilot Content Security Policy', () => {
     expect(siteCsp).not.toContain('huggingface.co');
     expect(siteCsp).not.toContain('us.aws.cdn.hf.co');
 
-    const chunks = rules?.find((rule) => rule.source === '/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js');
+    const chunks = rules?.find((rule) => rule.source === '/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js');
     const workerCsp = chunks?.headers.find((header) => header.key === 'Content-Security-Policy')?.value;
     expect(workerCsp).toContain('https://huggingface.co');
     // Observed in the passing real Chromium / Hugging Face download smoke.
@@ -35,7 +35,7 @@ describe('Whisper pilot Content Security Policy', () => {
     expect(workerCsp).not.toContain('https://*.cdn.hf.co');
     // No generalized permission on unrelated static bundles.
     expect(rules?.some((rule) => rule.source === '/_next/static/chunks/:path*')).toBe(false);
-    expect(chunks?.source).toBe('/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js');
+    expect(chunks?.source).toBe('/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js');
   });
 
   it('rejects alternative flag values and does not widen CSP unintentionally', async () => {
@@ -43,7 +43,7 @@ describe('Whisper pilot Content Security Policy', () => {
       vi.stubEnv('NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED', flag);
       const rules = await config.headers?.();
       expect(rules?.some((rule) => rule.source === '/live')).toBe(false);
-      expect(rules?.some((rule) => rule.source === '/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js')).toBe(false);
+      expect(rules?.some((rule) => rule.source === '/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js')).toBe(false);
     }
   });
 });
