@@ -47,7 +47,7 @@ export function availableStudioInterval(
   for (const gap of gaps) {
     if (gap.end <= position + MIN_CUT_SECONDS - TOLERANCE) continue;
     const candidateStart = Math.max(gap.start, position);
-    const start = Math.ceil((candidateStart - TOLERANCE) * HUNDREDTH) / HUNDREDTH;
+    const start = Math.max(0, Math.ceil((candidateStart - TOLERANCE) * HUNDREDTH) / HUNDREDTH);
     const end = Math.floor(
       (Math.min(gap.end, candidateStart + DEFAULT_CUT_SECONDS) + TOLERANCE)
       * HUNDREDTH,
