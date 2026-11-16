@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import StudioWaveform from './StudioWaveform';
+import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 
 describe('Roleplay Studio accessible waveform timeline', () => {
   afterEach(() => {
@@ -141,7 +142,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     const fetcher = vi.fn();
     vi.stubGlobal('AudioContext', makeContext);
     vi.stubGlobal('fetch', fetcher);
-    const notify = vi.fn();
+    const notify = vi.fn((_source: File, _result: LocalVadSnapshot) => {});
     const seek = vi.fn();
 
     const { rerender } = render(<StudioWaveform
@@ -169,7 +170,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     Object.defineProperty(source, 'arrayBuffer', { configurable: true, value: read });
     const decode = vi.fn();
     vi.stubGlobal('AudioContext', decode);
-    const notify = vi.fn();
+    const notify = vi.fn((_source: File, _result: LocalVadSnapshot) => {});
     render(<StudioWaveform file={source} duration={300}
       currentTime={0} segments={[]} onSeek={vi.fn()} onLocalVadResult={notify}/>);
     expect(read).not.toHaveBeenCalled();
@@ -192,7 +193,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
       bytes.byteLength === 4 ? oldResult : Promise.reject(new Error('unsupported codec')));
     const close = vi.fn(async () => {});
     vi.stubGlobal('AudioContext', vi.fn(() => ({ decodeAudioData: decode, close })));
-    const notify = vi.fn();
+    const notify = vi.fn((_source: File, _result: LocalVadSnapshot) => {});
     const { rerender } = render(<StudioWaveform
       file={first} duration={3} currentTime={0} segments={[]}
       onSeek={vi.fn()} onLocalVadResult={notify}/>);
