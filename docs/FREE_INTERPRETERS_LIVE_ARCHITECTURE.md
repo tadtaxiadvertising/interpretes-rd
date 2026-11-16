@@ -165,3 +165,11 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - La métrica WER se almacena en JSON numérico, junto a tiempos, idioma y navegador. **No** se incluyen texto transcrito ni audio en los artefactos de GitHub.
 - Un WER obtenido con eSpeak no representa acentos reales, ruido de llamadas, solapamientos, terminología médica ni calidad clínica. Es un diagnóstico reproducible para detectar regresiones y seleccionar el siguiente conjunto de pruebas con voz humana autorizada; no se usa todavía como umbral que certifique la disponibilidad profesional.
 - Para compilar esta prueba con Vite se inyecta una fábrica de Worker con ruta estática al módulo `whisper-tiny.worker.ts`. Se utiliza el código real del Worker y modelo, mientras que la prueba de CSP específica verifica por separado el Worker con nombre fijo generado por Next/Webpack.
+
+## Protección ante generaciones anormales de Whisper
+
+- La evaluación reproducible con voces sintéticas de `espeak-ng` observó un WER de 0 en inglés, pero 49,333 en español en Chromium y Firefox (casi 4.933% de error por repeticiones o palabras adicionales). No es calidad profesional ni prueba que toda voz española falle: sí muestra un riesgo grave y reproducible que bloquea la activación pública.
+- `validateWhisperTranscript()` rechaza texto anormalmente largo para el conteo real de muestras; usa umbrales amplios (mínimo 30 palabras y aproximadamente 10 palabras por segundo, más un límite de caracteres) diseñados para detectar **generación descontrolada**, no habla normal.
+- El Worker valida la salida antes de responder; la función del modelo también aplica el límite. En lugar de truncar silenciosamente a 8.000 caracteres, se emite `LOCAL_WHISPER_SUSPICIOUS_OUTPUT`. La interfaz detiene la captura e informa del problema sin incorporar esa ventana a la transcripción confirmada.
+- Las transcripciones breves con errores o alucinaciones todavía son posibles y exigen revisión humana. El límite no comprueba exactitud, dosis, negaciones ni intención del hablante.
+- No habilitar `NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED` hasta verificar WER aceptable con voces reales autorizadas en varios acentos, latencia, RAM y estabilidad a largo plazo.
