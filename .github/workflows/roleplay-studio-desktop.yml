@@ -30,7 +30,7 @@ jobs:
   package:
     name: Package offline desktop (${{ matrix.os }})
     # One-time RC packaging for PR 443; revert to manual-only after verifying.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 443)
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 443 && matrix.os == 'windows-latest')
     needs: offline-tests
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
@@ -53,10 +53,16 @@ jobs:
       - name: Build unsigned desktop application
         shell: bash
         run: |
-          python -m PyInstaller --noconfirm --clean --windowed \
-            --name RoleplayStudioLocal \
-            --collect-all imageio_ffmpeg \
-            tools/roleplay-studio-desktop/desktop_exporter.py
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            # Console build is a diagnostic RC: show hidden bootloader errors.
+            python -m PyInstaller --noconfirm --clean --console \
+              --name RoleplayStudioLocal --collect-all imageio_ffmpeg \
+              tools/roleplay-studio-desktop/desktop_exporter.py
+          else
+            python -m PyInstaller --noconfirm --clean --windowed \
+              --name RoleplayStudioLocal --collect-all imageio_ffmpeg \
+              tools/roleplay-studio-desktop/desktop_exporter.py
+          fi
       - name: Validate packaged FFmpeg on Windows
         if: runner.os == 'Windows'
         shell: pwsh
