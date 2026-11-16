@@ -375,7 +375,11 @@ def run_desktop():
         try:
             import ctypes
             console = ctypes.windll.kernel32.GetConsoleWindow()
-            if console:
+            process_ids = (ctypes.c_ulong * 8)()
+            # Hide only a new private console created for this EXE. A user
+            # launching it from PowerShell must never lose their terminal.
+            attached = ctypes.windll.kernel32.GetConsoleProcessList(process_ids, 8)
+            if console and attached == 1:
                 ctypes.windll.user32.ShowWindow(console, 0)
         except (AttributeError, OSError):
             pass
