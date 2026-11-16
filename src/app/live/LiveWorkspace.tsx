@@ -8,29 +8,44 @@ type MicState = 'idle' | 'requesting' | 'active' | 'error';
 
 export default function LiveWorkspace() {
   const streamRef = useRef<MediaStream | null>(null);
+  // Invalidates pending permission requests on cancellation or unmount.
+  const requestIdRef = useRef(0);
   const [micState, setMicState] = useState<MicState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [capabilities, setCapabilities] = useState<DeviceCapabilities | null>(null);
 
   useEffect(() => {
     setCapabilities(detectDeviceCapabilities());
-    return () => releaseMicrophone(streamRef.current);
+    return () => {
+      requestIdRef.current += 1;
+      releaseMicrophone(streamRef.current);
+      streamRef.current = null;
+    };
   }, []);
 
   async function toggleMicrophone() {
-    if (micState === 'active') {
+    if (micState === 'active' || micState === 'requesting') {
+      // Permissions dialogs cannot be aborted, but late streams are stopped.
+      requestIdRef.current += 1;
       releaseMicrophone(streamRef.current);
       streamRef.current = null;
       setMicState('idle');
       return;
     }
 
+    const requestId = ++requestIdRef.current;
     setError(null);
     setMicState('requesting');
     try {
-      streamRef.current = await acquireMicrophone();
+      const stream = await acquireMicrophone();
+      if (requestId !== requestIdRef.current) {
+        releaseMicrophone(stream);
+        return;
+      }
+      streamRef.current = stream;
       setMicState('active');
     } catch (cause) {
+      if (requestId !== requestIdRef.current) return;
       const message = cause instanceof Error ? cause.message : 'MICROPHONE_ACCESS_FAILED';
       setError(message);
       setMicState('error');
@@ -58,10 +73,9 @@ export default function LiveWorkspace() {
           <button
             type="button"
             onClick={toggleMicrophone}
-            disabled={micState === 'requesting'}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-wait disabled:opacity-60"
+            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
-            {micState === 'requesting' ? 'Solicitando permiso…' : micState === 'active' ? 'Detener micrófono' : 'Probar micrófono'}
+            {micState === 'requesting' ? 'Cancelar solicitud' : micState === 'active' ? 'Detener micrófono' : 'Probar micrófono'}
           </button>
         </div>
 
