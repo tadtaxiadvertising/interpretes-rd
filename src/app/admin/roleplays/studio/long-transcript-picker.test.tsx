@@ -58,6 +58,11 @@ describe('Audio Studio manual selection from long SRT transcripts', () => {
     expect(last.checked).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor/i }));
     expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
-    expect(screen.getAllByText('Doctor: Review line 30').length).toBeGreaterThan(1);
+    // Twenty-five turns are compacted by default; reveal the selected final
+    // turn rather than assuming every transcript detail is always mounted.
+    expect(screen.queryByText('Transcripción de referencia · solo editor')).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Editar' })[24]);
+    expect(screen.getByText('Transcripción de referencia · solo editor')).toBeTruthy();
+    expect(screen.getAllByText('Doctor: Review line 30').length).toBeGreaterThan(0);
   });
 });
