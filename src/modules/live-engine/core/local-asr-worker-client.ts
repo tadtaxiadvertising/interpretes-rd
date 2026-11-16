@@ -21,7 +21,7 @@ function makeError(code: string): Error {
  * Consumes the bounded AudioWorklet source with exactly one PCM frame request
  * and one returned ASR window in flight. PCM is transferred (never uploaded).
  *
- * The model and resampling execute in a Worker, not on the UI thread.
+ * Resampling and PCM chunking execute in a Worker, not on the UI thread.
  * This module does NOT load ASR model weights or run speech recognition.
  */
 export async function* prepareCapturedLocalAsrChunksInWorker(
