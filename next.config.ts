@@ -95,32 +95,24 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      // Do not expand outgoing model download permissions at all in the
-      // production default build. The sandbox pilot must be explicitly enabled
-      // at build time AND validated in real browsers before a rollout.
+      // The model is fetched *inside the dedicated Whisper Worker*, not by the
+      // document. Keep /live itself on the unmodified site CSP, even when the
+      // experimental build flag is enabled. See MDN: CSP in Workers.
+      // Only an explicitly enabled experimental build can expand network hosts
+      // for bundled Worker scripts. Do not enable for general production use.
       ...(process.env.NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED === 'true'
         ? [
             {
-              // Dedicated bundled Worker scripts receive this narrowly scoped CSP.
-              // Ordinary pages still inherit the original restrictive page policy.
-              source: '/_next/static/chunks/:path*',
+              // Only the named Whisper Worker receives model-download rights.
+              // The app's normal page bundles, unrelated Workers, and /live
+              // itself retain the restrictive global CSP.
+              // CI proves the named output bundle exists when pilot is built.
+              source: '/_next/static/chunks/live-whisper-asr-worker.:hash([a-f0-9]+).js',
               headers: [{
                 key: 'Content-Security-Policy',
                 value: baseCsp.replace(
                   "connect-src 'self'",
-                  "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
-                ),
-              }],
-            },
-            {
-              // Model weights are downloaded only on /live after user consent.
-              // No other application route gains these outgoing hosts.
-              source: '/live',
-              headers: [{
-                key: 'Content-Security-Policy',
-                value: baseCsp.replace(
-                  "connect-src 'self'",
-                  "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
+                  "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://us.aws.cdn.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
                 ),
               }],
             },
