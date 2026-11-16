@@ -597,7 +597,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           Destinatario: <span className="font-medium text-white">
             {isBulk
               ? eligibility && !eligibilityLoading
-                ? `${eligibility.eligibleCount} intérpretes elegibles de ${eligibility.activeCount} activos`
+                ? `${eligibility.eligibleCount} ${eligibility.eligibleCount === 1 ? 'intérprete elegible' : 'intérpretes elegibles'} de ${eligibility.activeCount} activos`
                 : 'Intérpretes activos (elegibilidad pendiente de verificación)'
               : selectedParticipant
                 ? `${selectedParticipant.name} · ${participantType === 'candidate' ? 'Candidato' : 'Intérprete'}`
