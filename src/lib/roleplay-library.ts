@@ -34,7 +34,11 @@ export function getReusableBaseAudioPath(audioUrl: string, supabaseUrl: string):
     if (!candidate.pathname.startsWith(prefix)) return null;
 
     const segments = candidate.pathname.slice(prefix.length).split('/');
-    if (segments.length < 2 || segments.some((part) =>
+    // Legacy getBaseAudioPath(sessionId, ext) produces flat
+    // base/<sessionId>.<ext> keys. Newer Studio imports may use nested
+    // base/<uploadId>/<filename> keys. Both are first-party immutable
+    // objects; never accept an empty segment, traversal or encoded key.
+    if (segments.length < 1 || segments.some((part) =>
       !part || part === '.' || part === '..' || !/^[a-zA-Z0-9._-]+$/.test(part)
     )) return null;
     return `base/${segments.join('/')}`;
