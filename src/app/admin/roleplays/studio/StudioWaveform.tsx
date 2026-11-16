@@ -65,6 +65,13 @@ export default function StudioWaveform({
   const [zoom, setZoom] = useState<number>(1);
   const [requestedStart, setRequestedStart] = useState(0);
 
+  // Opening another file must not inherit a narrow viewport from the prior
+  // multi-hour recording, especially if its zoom choice is now unavailable.
+  useEffect(() => {
+    setZoom(1);
+    setRequestedStart(0);
+  }, [file]);
+
   useEffect(() => {
     let cancelled = false;
     if (!canRenderWaveform(duration, file.size)) {
