@@ -69,7 +69,12 @@ export function parseTimedTranscript(
 
   for (const block of blocks) {
     const lines = block.split('\n').map(line => line.trim()).filter(Boolean);
-    if (!lines.length || /^(?:WEBVTT|NOTE|STYLE|REGION)(?:\s|$)/i.test(lines[0])) continue;
+    if (!lines.length || /^(?:NOTE|STYLE|REGION)(?:\s|$)/i.test(lines[0])) continue;
+    // Valid WebVTT files may place the first timing cue immediately after
+    // the WEBVTT header without an empty separator. Discard only the header,
+    // never the entire block containing that first intervention.
+    if (/^WEBVTT(?:\s|$)/i.test(lines[0])) lines.shift();
+    if (!lines.length) continue;
     const timingIndex = lines.findIndex(line => line.includes('-->'));
     if (timingIndex < 0) continue;
     const timing = CUE_TIMING.exec(lines[timingIndex]);

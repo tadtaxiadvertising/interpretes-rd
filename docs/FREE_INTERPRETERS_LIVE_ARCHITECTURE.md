@@ -67,3 +67,13 @@ La transcripción local es **experimental y limitada a navegadores con `SpeechRe
 - La política `on-device-speech-recognition` tiene `self` como lista de permisos predeterminada; no activar orígenes cruzados sin una revisión de seguridad.
 - Si el navegador informa un error de reconocimiento se termina la sesión y el usuario debe reiniciarla manualmente; no hay reintento silencioso mediante proveedor remoto.
 - La prueba del micrófono y el reconocedor nativo tienen controles separados, pero la UI impide que ambos capturen a la vez: mientras la prueba posee el micrófono, iniciar transcripción está deshabilitado; durante la transcripción, probar el micrófono está deshabilitado. La unificación completa del motor de captura sigue pendiente.
+
+## Preparación para audio largo — fragmentación PCM local
+
+- `chunkLocalPcmFrames()` prepara ventanas mono PCM de duración controlada (por defecto 20 segundos, máximo 30) con solapamiento de 1 segundo, sin grabar audio ni llamar servicios externos.
+- Recibe un flujo `AsyncIterable<Float32Array>` de pequeños frames ya decodificados: no lee un archivo entero en memoria ni realiza remuestreo. La captura, decodificación y normalización a la frecuencia requerida por cada modelo son responsabilidades separadas.
+- Cada ventana incluye el índice, los offsets exactos de muestras y tiempos calculados a partir de la frecuencia de muestreo, que pueden alimentar una futura reconciliación de transcripciones; **no son timestamps de palabras ni subtítulos verificados**.
+- Se emiten ventanas secuencialmente mediante iteración asíncrona. El consumidor debe procesar o desechar cada ventana antes de solicitar la siguiente, evitando acumulación del audio completo.
+- Los productores de micrófono en tiempo real deberán implementar su propia cola acotada y política de pérdida de frames cuando la inferencia no alcance el ritmo de la captura. Esta función no proporciona ese puente todavía.
+- Cancelación mediante `AbortSignal`; debe combinarse con cierre del micrófono/worker en la capa superior. El procesamiento del modelo WASM todavía está pendiente.
+- No confundir esta infraestructura con transcripción, traducción ni soporte validado de vídeos largos: faltan integración del modelo, benchmark de memoria, audio-resampling, diarización, deduplicación y pruebas en equipos básicos.

@@ -33,6 +33,34 @@ cue2
     ]);
   });
 
+  it('keeps the first cue when WebVTT header has no blank separator', () => {
+    const vtt = `WEBVTT
+00:00:00.500 --> 00:00:01.500
+<v Doctor>First intervention</v>
+
+00:00:01.500 --> 00:00:02.500
+<v Patient>Second intervention</v>`;
+    expect(parseTimedTranscript(vtt)).toEqual([
+      { start: 0.5, end: 1.5, speaker: 'Doctor', text: 'First intervention' },
+      { start: 1.5, end: 2.5, speaker: 'Patient', text: 'Second intervention' },
+    ]);
+  });
+
+  it('still ignores WebVTT NOTE and STYLE blocks, including embedded arrows', () => {
+    const vtt = `WEBVTT
+
+NOTE cue --> this is commentary, not actual timing
+
+STYLE
+::cue { color: yellow; }
+
+00:00:01.000 --> 00:00:02.000
+<v Doctor>Real cue</v>`;
+    expect(parseTimedTranscript(vtt)).toEqual([
+      { start: 1, end: 2, speaker: 'Doctor', text: 'Real cue' },
+    ]);
+  });
+
   it('does not expose source dialogue to a participant in publishable metadata', () => {
     const cues = parseTimedTranscript(`1
 00:00:00,500 --> 00:00:02,000
