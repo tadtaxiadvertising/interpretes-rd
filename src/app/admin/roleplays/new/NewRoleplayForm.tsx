@@ -53,6 +53,12 @@ function generateId() {
   return Math.random().toString(36).substring(2, 10);
 }
 
+// Searches are editorial only: normalize accents without changing IDs or
+// stored participant names. This lets "Maria" find "María" in Spanish lists.
+function normalizeParticipantSearch(value: string): string {
+  return value.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toLocaleLowerCase('es').trim();
+}
+
 export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
@@ -101,11 +107,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const isBulk = participantType === 'all-active-interpreters';
   const activeInterpreterCount = interpreters.filter((participant) => participant.status === 'Activo').length;
   const selectedParticipant = participants.find((participant) => String(participant.id) === selectedParticipantId);
-  const search = participantSearch.trim().toLocaleLowerCase('es');
+  const search = normalizeParticipantSearch(participantSearch);
   const matchingParticipants = search
     ? participants.filter((participant) => [
         participant.name, participant.email, participant.externalId, participant.emailCorporativo,
-      ].some((value) => (value ?? '').toLocaleLowerCase('es').includes(search)))
+      ].some((value) => normalizeParticipantSearch(value ?? '').includes(search)))
     : participants;
   // Do not silently drop the selected option when the administrator searches
   // for someone else: the user should explicitly choose a different target.
