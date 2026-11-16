@@ -1,4 +1,8 @@
 export type LocalVadSegment = { start: number; end: number; signalLevel: number };
+export type LocalVadSnapshot = {
+  status: 'loading' | 'ready' | 'limited' | 'unavailable';
+  segments: LocalVadSegment[];
+};
 export type LocalVadOptions = {
   thresholdRms?: number;
   minSilenceDurationSec?: number;

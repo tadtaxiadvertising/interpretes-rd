@@ -209,4 +209,73 @@ describe('Audio Studio clip review player', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+
+  it('requires explicit per-file consent before the optional server uploads MP3 audio', async () => {
+    const request = vi.fn(async (_url: string, _options?: RequestInit) => ({
+      ok: true,
+      json: async () => ({
+        durationSeconds: 90,
+        silences: [{ start: 2, end: 3 }],
+      }),
+    }));
+    vi.stubGlobal('fetch', request);
+    const { container } = render(<RoleplayStudioPage />);
+    const sourceInput = screen.getByLabelText(/Grabación original MP3/i);
+    fireEvent.change(sourceInput, {
+      target: { files: [new File(['ID3'], 'first.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+
+    const consent = screen.getByRole('checkbox', {
+      name: 'Autorizo subir este MP3 al servidor para detectar pausas',
+    }) as HTMLInputElement;
+    const serverButton = screen.getByRole('button', { name: 'Detectar pausas en servidor' }) as HTMLButtonElement;
+    expect(consent.checked).toBe(false);
+    expect(serverButton.disabled).toBe(true);
+    expect(request).not.toHaveBeenCalled();
+
+    fireEvent.click(consent);
+    expect(serverButton.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(serverButton);
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0]).toBe('/api/admin/roleplays/studio/silences');
+    expect((request.mock.calls[0][1] as RequestInit).body).toBeInstanceOf(FormData);
+
+    fireEvent.change(sourceInput, {
+      target: { files: [new File(['ID3'], 'second.mp3', { type: 'audio/mpeg' })] },
+    });
+    expect(consent.checked).toBe(false);
+    expect(serverButton.disabled).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('revoking server consent aborts the in-flight upload request', async () => {
+    let capturedSignal: AbortSignal | undefined;
+    const request = vi.fn((_url: string, options: RequestInit) => {
+      capturedSignal = options.signal as AbortSignal;
+      return new Promise<Response>(() => {});
+    });
+    vi.stubGlobal('fetch', request);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'revoked.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    const consent = screen.getByRole('checkbox', {
+      name: 'Autorizo subir este MP3 al servidor para detectar pausas',
+    });
+    fireEvent.click(consent);
+    fireEvent.click(screen.getByRole('button', { name: 'Detectar pausas en servidor' }));
+    expect(capturedSignal?.aborted).toBe(false);
+    fireEvent.click(consent);
+    expect(capturedSignal?.aborted).toBe(true);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
 });
