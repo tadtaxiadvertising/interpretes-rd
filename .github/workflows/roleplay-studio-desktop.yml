@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Install bundled FFmpeg dependency
-        run: python -m pip install --disable-pip-version-check 'imageio-ffmpeg>=0.6,<1'
+        run: python -m pip install --disable-pip-version-check 'imageio-ffmpeg==0.8.1'
       - name: Run deterministic validation and real FFmpeg ZIP tests
         run: python -m unittest discover -s tools/roleplay-studio-desktop -p 'test_*.py' -v
 
@@ -47,7 +47,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y python3-tk
       - name: Install standalone packaging requirements
-        run: python -m pip install --disable-pip-version-check 'imageio-ffmpeg>=0.6,<1' 'pyinstaller>=6.12,<7'
+        run: python -m pip install --disable-pip-version-check 'imageio-ffmpeg==0.8.1' 'pyinstaller==6.22.3' 'pyinstaller-hooks-contrib==2026.10'
       - name: Smoke test actual FFmpeg and manifest on platform
         run: python -m unittest discover -s tools/roleplay-studio-desktop -p 'test_*.py' -v
       - name: Build unsigned desktop application
