@@ -551,7 +551,7 @@ export default function RoleplayStudioPage() {
   };
 
   const exportPackage = async () => {
-    if (!audio || !duration || !segments.length || busy || exportAbort.current) return;
+    if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
     if (segments.some(segment => segment.speakerRole === 'interpreter')) {
@@ -579,18 +579,19 @@ export default function RoleplayStudioPage() {
       setError('El paquete no puede superar 15 minutos de audio acumulado.');
       return;
     }
+    // Long recordings create only a local JSON draft. Do not allocate a
+    // remote ZIP AbortController for this branch: otherwise the early return
+    // locks all subsequent downloads until an edit resets exportAbort.
+    if (usesLocalLongMode(audio, duration)) {
+      await saveDraft();
+      return;
+    }
     const operation = ++exportRevision.current;
     const editorRevision = subtitleImportRevision.current;
     const controller = new AbortController();
     exportAbort.current = controller;
     const isCurrent = () => operation === exportRevision.current &&
       editorRevision === subtitleImportRevision.current && !controller.signal.aborted;
-    // Large files stay local: the legacy export endpoint reads its entire
-    // MP3 request into memory and must never receive a video or large source.
-    if (usesLocalLongMode(audio, duration)) {
-      await saveDraft();
-      return;
-    }
     setBusy(true);
     try {
       const form = new FormData();
