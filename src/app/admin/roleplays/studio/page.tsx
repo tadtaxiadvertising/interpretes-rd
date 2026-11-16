@@ -18,6 +18,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import LocalVadAssistant from './LocalVadAssistant';
 import StudioConsecutivePreview from './StudioConsecutivePreview';
 import {
@@ -66,6 +67,8 @@ export default function RoleplayStudioPage() {
   const [busy, setBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
   const [analyzingSilences, setAnalyzingSilences] = useState(false);
+  const [serverConsent, setServerConsent] = useState(false);
+  const [localVadSnapshot, setLocalVadSnapshot] = useState<LocalVadSnapshot | null>(null);
   const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
   const [suggestedClips, setSuggestedClips] = useState<StudioSuggestedClip[]>([]);
   const [omittedSuggestions, setOmittedSuggestions] = useState(0);
@@ -82,6 +85,8 @@ export default function RoleplayStudioPage() {
   const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
   const CUES_PER_PAGE = 60;
   const player = useRef<HTMLMediaElement | null>(null);
+  // Source identity prevents a delayed decode from updating a replacement MP3.
+  const activeAudioFile = useRef<File | null>(null);
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
   const pauseEditorialAudio = useCallback(() => { player.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
@@ -171,6 +176,9 @@ export default function RoleplayStudioPage() {
     silenceAbort.current?.abort();
     silenceAbort.current = null;
     setAnalyzingSilences(false);
+    setServerConsent(false);
+    setLocalVadSnapshot(null);
+    activeAudioFile.current = null;
     setDetectedSilences([]);
     setSuggestedClips([]);
     setOmittedSuggestions(0);
@@ -196,6 +204,7 @@ export default function RoleplayStudioPage() {
       setUrl('');
       return;
     }
+    activeAudioFile.current = file;
     setAudio(file);
     setUrl(URL.createObjectURL(file));
   };
@@ -238,7 +247,14 @@ export default function RoleplayStudioPage() {
   };
 
   const analyzeSilences = async () => {
-    if (!audio || !duration || busy || draftBusy || analyzingSilences) return;
+    if (!audio || !duration || busy || draftBusy || analyzingSilences ||
+        usesLocalLongMode(audio, duration)) return;
+    // The server path is never an automatic fallback. Explicit consent for
+    // this exact source is necessary before any FormData audio upload occurs.
+    if (!serverConsent) {
+      setError('Debes autorizar expresamente el envío del MP3 al servidor.');
+      return;
+    }
     const revision = ++silenceRevision.current;
     const controller = new AbortController();
     silenceAbort.current?.abort();
@@ -286,7 +302,7 @@ export default function RoleplayStudioPage() {
       setDetectedSilences(pauses);
       setSuggestedClips(proposal.clips);
       setOmittedSuggestions(proposal.omittedCount);
-      setNotice(`Análisis local del servidor completado: ${pauses.length} pausas y ${proposal.clips.length} cortes sugeridos. Escucha y revisa cada intervención antes de publicarla.`);
+      setNotice(`Análisis en servidor completado: ${pauses.length} pausas y ${proposal.clips.length} cortes sugeridos. Escucha y revisa cada intervención antes de publicarla.`);
     } catch (cause) {
       if (revision === silenceRevision.current && !controller.signal.aborted) {
         setError(cause instanceof Error ? cause.message : 'No fue posible analizar el MP3.');
@@ -767,6 +783,9 @@ export default function RoleplayStudioPage() {
                 currentTime={playhead}
                 segments={segments}
                 onSeek={seekAudio}
+                onLocalVadResult={(source, snapshot) => {
+                  if (activeAudioFile.current === source) setLocalVadSnapshot(snapshot);
+                }}
               />
             )}
             <p className="text-xs text-slate-400">
@@ -818,14 +837,13 @@ export default function RoleplayStudioPage() {
             {audio && !localOnly && (
               <LocalVadAssistant
                 key={url}
-                file={audio}
+                snapshot={localVadSnapshot}
                 duration={duration}
-              remaining={Math.max(0, ROLEPLAY_MAX_SCENARIOS - segments.length)}
-              onApply={(detected) => {
-                subtitleImportRevision.current += 1;
-                setSegments(prev => {
-                  const additions = detected.slice(0, Math.max(0, ROLEPLAY_MAX_SCENARIOS - prev.length));
-                  return [...prev, ...additions.map((item, index) => ({
+                existing={segments}
+                onApply={(detected) => {
+                  if (!detected.length) return;
+                  subtitleImportRevision.current += 1;
+                  setSegments(prev => [...prev, ...detected.map((item, index) => ({
                     id: crypto.randomUUID(),
                     title: 'Intervención ' + (prev.length + index + 1),
                     start: item.start,
@@ -834,23 +852,44 @@ export default function RoleplayStudioPage() {
                     responseLimit: 120,
                     speakerRole: 'unknown' as const,
                     language: 'unknown' as const,
-                  }))];
-                });
-                setNotice('Cortes VAD añadidos. Verifica hablantes, idioma y límites antes de exportar.');
-              }}
+                  }))]);
+                  setNotice('Cortes VAD añadidos sin solaparse con los anteriores. Revisa hablantes, idioma y límites antes de exportar.');
+                }}
               />
             )}
             {!localOnly && <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
-              <h2 className="text-sm font-bold text-violet-100">Asistente gratuito de pausas</h2>
+              <h2 className="text-sm font-bold text-violet-100">Respaldo opcional: detección en servidor</h2>
               <p className="mt-2 text-xs leading-5 text-slate-300">
-                FFmpeg puede localizar silencios del MP3 para sugerir posibles cortes.
-                No transcribe, distingue inglés y español ni identifica médico, paciente o intérprete.
-                La grabación se procesa temporalmente en nuestro servidor y no se guarda en la biblioteca.
+                Utiliza el detector local anterior para no subir la grabación ni consumir
+                recursos del servidor. Si el navegador no puede decodificar el MP3,
+                puedes autorizar un análisis temporal con FFmpeg en nuestro servidor.
+                No transcribe ni identifica al médico, paciente o intérprete.
+                No se guarda en la biblioteca, pero el archivo sí se transmite para procesarlo.
               </p>
+              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-200">
+                <input type="checkbox" className="mt-1 accent-violet-400"
+                  checked={serverConsent}
+                  onChange={event => {
+                    const allowed = event.currentTarget.checked;
+                    setServerConsent(allowed);
+                    if (!allowed) {
+                      silenceRevision.current += 1;
+                      silenceAbort.current?.abort();
+                      silenceAbort.current = null;
+                      setAnalyzingSilences(false);
+                      setDetectedSilences([]);
+                      setSuggestedClips([]);
+                      setOmittedSuggestions(0);
+                    }
+                  }}
+                  aria-label="Autorizo subir este MP3 al servidor para detectar pausas" />
+                Autorizo enviar este MP3 al servidor únicamente para detectar pausas.
+                La autorización no se conserva al cambiar de grabación.
+              </label>
               <button type="button" onClick={() => void analyzeSilences()}
-                disabled={analyzingSilences || busy || draftBusy}
+                disabled={!serverConsent || analyzingSilences || busy || draftBusy}
                 className="mt-3 rounded-lg border border-violet-300/30 bg-violet-500/20 px-4 py-2 text-sm font-semibold text-violet-100 disabled:opacity-50">
-                {analyzingSilences ? 'Analizando pausas…' : 'Detectar pausas del MP3'}
+                {analyzingSilences ? 'Analizando pausas…' : 'Detectar pausas en servidor'}
               </button>
               {detectedSilences.length > 0 && (
                 <div className="mt-3 space-y-2">
