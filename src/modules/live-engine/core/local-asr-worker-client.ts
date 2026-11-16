@@ -149,20 +149,21 @@ export async function* prepareCapturedLocalAsrChunksInWorker(
     if (!createWorker && (typeof window === 'undefined' || typeof Worker === 'undefined')) {
       throw new Error('LOCAL_ASR_WORKER_UNSUPPORTED');
     }
-    worker = createWorker
+    const activeWorker: LocalAsrWorkerHandle = createWorker
       ? createWorker()
       : new Worker(new URL('./local-asr-audio.worker.ts', import.meta.url), {
           type: 'module',
           name: 'free-interpreters-local-audio',
         });
+    worker = activeWorker;
     source = capture.frames[Symbol.asyncIterator]();
-    worker.onmessage = onWorkerMessage;
-    worker.onerror = () => shutdown(new Error('LOCAL_ASR_WORKER_CRASHED'));
-    worker.onmessageerror = () => shutdown(new Error('LOCAL_ASR_WORKER_MESSAGE_ERROR'));
+    activeWorker.onmessage = onWorkerMessage;
+    activeWorker.onerror = () => shutdown(new Error('LOCAL_ASR_WORKER_CRASHED'));
+    activeWorker.onmessageerror = () => shutdown(new Error('LOCAL_ASR_WORKER_MESSAGE_ERROR'));
     options.signal?.addEventListener('abort', onAbort, { once: true });
     if (options.signal?.aborted) throw new Error('LOCAL_ASR_WORKER_CANCELLED');
 
-    worker.postMessage({
+    activeWorker.postMessage({
       type: 'init',
       sourceSampleRate: capture.sampleRate,
       chunkDurationMs: options.chunkDurationMs,
