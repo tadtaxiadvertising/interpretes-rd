@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import LocalSpeechPanel from './LocalSpeechPanel';
 import { acquireMicrophone, releaseMicrophone } from '@/modules/live-engine/core/audio-capture';
 import { detectDeviceCapabilities, type DeviceCapabilities } from '@/modules/live-engine/core/contracts';
 
@@ -59,8 +60,8 @@ export default function LiveWorkspace() {
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Live</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
           Espacio de trabajo de audio con procesamiento local como opción predeterminada.
-          Esta primera fase comprueba el micrófono y las capacidades del navegador; todavía no
-          transcribe ni traduce conversaciones.
+          La transcripción local experimental funciona únicamente en navegadores compatibles;
+          la traducción todavía no está disponible.
         </p>
       </header>
 
@@ -102,6 +103,8 @@ export default function LiveWorkspace() {
           </dl>
         ) : <p className="mt-4 text-sm text-slate-500">Detectando capacidades…</p>}
       </section>
+
+      <LocalSpeechPanel />
 
       <section className="mt-6 rounded-2xl border border-blue-100 bg-blue-50/60 p-5">
         <h2 className="font-semibold text-slate-900">Privacidad y proveedores externos</h2>
