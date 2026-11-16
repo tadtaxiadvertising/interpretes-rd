@@ -695,9 +695,15 @@ export default function RoleplayStudioPage() {
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? (sourceRequiresLocal || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
+  // Original-interpreter turns are not exportable, even when their speaker is
+  // identified and their language is known; keep them in the pending queue.
   const needsReview = (segment: Segment) =>
-    segment.speakerRole === 'unknown' || segment.language === 'unknown';
+    segment.speakerRole === 'unknown' || segment.speakerRole === 'interpreter' ||
+    segment.language === 'unknown';
   const pendingReviewCount = segments.filter(needsReview).length;
+  const originalInterpreterCount = segments.filter(
+    segment => segment.speakerRole === 'interpreter',
+  ).length;
   const visibleSegments = [...segments]
     .sort((a, b) => a.start - b.start)
     .map((segment, index) => ({ segment, index }))
@@ -1187,6 +1193,12 @@ export default function RoleplayStudioPage() {
               </label>
             </div>
           </details>
+          {originalInterpreterCount > 0 && (
+            <p role="status" className="rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
+              {originalInterpreterCount} {originalInterpreterCount === 1 ? 'turno identificado' : 'turnos identificados'}
+              {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
+            </p>
+          )}
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
             <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
