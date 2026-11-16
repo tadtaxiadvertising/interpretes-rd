@@ -12,7 +12,8 @@ type WorkletInstance = {
 };
 
 function createProcessor(credits: number) {
-  let Constructor: (new (options: { processorOptions: { packetCredits: number } }) => WorkletInstance) | null = null;
+  type ProcessorConstructor = new (options: { processorOptions: { packetCredits: number } }) => WorkletInstance;
+  const registration: { ctor: ProcessorConstructor | null } = { ctor: null };
   const basePostMessage = vi.fn();
   const source = readFileSync(resolve(process.cwd(), 'public/live-pcm-capture-worklet.js'), 'utf8');
   runInNewContext(source, {
@@ -20,11 +21,12 @@ function createProcessor(credits: number) {
     AudioWorkletProcessor: class {
       port = { postMessage: basePostMessage, onmessage: null };
     },
-    registerProcessor(name: string, constructor: typeof Constructor) {
+    registerProcessor(name: string, constructor: ProcessorConstructor) {
       expect(name).toBe('free-interpreters-live-pcm');
-      Constructor = constructor;
+      registration.ctor = constructor;
     },
   });
+  const Constructor = registration.ctor;
   if (!Constructor) throw new Error('WORKLET_NOT_REGISTERED');
   const processor = new Constructor({ processorOptions: { packetCredits: credits } });
   return { processor, postMessage: basePostMessage };
