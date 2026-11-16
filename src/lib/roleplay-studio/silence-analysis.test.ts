@@ -33,6 +33,16 @@ describe('FFmpeg silence log validation for admin editorial cues', () => {
     expect(parseStudioSilences('silence_start: 1', 7201)).toEqual([]);
   });
 
+  it('enforces the 500-pause ceiling even for an unmatched trailing event', () => {
+    const completed = Array.from({ length: 500 }, (_, n) => [
+      'silence_start: ' + n * 3,
+      'silence_end: ' + (n * 3 + 1) + ' | silence_duration: 1',
+    ].join('\n')).join('\n');
+    expect(parseStudioSilences(completed, 1502)).toHaveLength(500);
+    expect(() => parseStudioSilences(completed + '\nsilence_start: 1500', 1502))
+      .toThrow('Demasiadas pausas para esta revisión.');
+  });
+
   it('suggests up to 25 bounded, non-overlapping speech intervals', () => {
     const result = suggestStudioClips([{ start: 2, end: 3 }, { start: 7, end: 8 }], 11);
     expect(result).toEqual({ clips: [
