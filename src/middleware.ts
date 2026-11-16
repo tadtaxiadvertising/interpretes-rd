@@ -88,7 +88,7 @@ async function verifySupabaseAccessToken(token: string): Promise<boolean> {
 // Pre-check logic moved inside middleware to avoid missing env vars at module load in dev mode.
 
 /** Routes exclusively managed by Supabase Auth */
-const SUPABASE_SECURE_PREFIXES = ['/dashboard', '/admin', '/payroll', '/qa', '/production', '/recruitment', '/settings', '/interpreters'] as const;
+const SUPABASE_SECURE_PREFIXES = ['/dashboard', '/admin', '/payroll', '/qa', '/production', '/recruitment', '/settings', '/interpreters', '/live'] as const;
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
