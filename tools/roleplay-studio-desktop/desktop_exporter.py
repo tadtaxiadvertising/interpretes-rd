@@ -369,6 +369,16 @@ def export_project(source, project_file, output, *, ffmpeg=None,
 
 
 def run_desktop():
+    # The Windows console bootloader is more reliable with the bundled FFmpeg.
+    # Hide its terminal only in packaged GUI mode; keep it visible for diagnostics.
+    if os.name == "nt" and getattr(sys, "frozen", False):
+        try:
+            import ctypes
+            console = ctypes.windll.kernel32.GetConsoleWindow()
+            if console:
+                ctypes.windll.user32.ShowWindow(console, 0)
+        except (AttributeError, OSError):
+            pass
     # Lazy import: headless unit tests and CI must not require a GUI/display.
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
