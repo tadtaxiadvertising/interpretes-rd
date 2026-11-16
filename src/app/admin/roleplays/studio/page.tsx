@@ -100,6 +100,7 @@ export default function RoleplayStudioPage() {
   const exportAbort = useRef<AbortController | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
+  const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
 
@@ -689,13 +690,16 @@ export default function RoleplayStudioPage() {
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? (sourceRequiresLocal || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
+  const needsReview = (segment: Segment) =>
+    segment.speakerRole === 'unknown' || segment.language === 'unknown';
+  const pendingReviewCount = segments.filter(needsReview).length;
   const visibleSegments = [...segments]
     .sort((a, b) => a.start - b.start)
     .map((segment, index) => ({ segment, index }))
-    .filter(({ segment }) => !query ||
-      [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
+    .filter(({ segment }) => (!showPendingReview || needsReview(segment)) &&
+      (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language]
-        .some(value => value.toLocaleLowerCase().includes(query)));
+        .some(value => value.toLocaleLowerCase().includes(query))));
 
   const mediaHandlers = {
     onPlay: () => setEditorPlaybackRevision(n => n + 1),
@@ -1133,6 +1137,12 @@ export default function RoleplayStudioPage() {
                 onChange={event => setSegmentSearch(event.currentTarget.value)}
                 placeholder="Buscar turno, hablante o nota…"
                 className="w-48 rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"/>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-200">
+                <input type="checkbox" checked={showPendingReview}
+                  onChange={event => setShowPendingReview(event.currentTarget.checked)}
+                  className="accent-blue-500"/>
+                Pendientes ({pendingReviewCount})
+              </label>
               <button type="button" onClick={() => setCompactPreference(!compactRows)}
                 aria-pressed={compactRows}
                 className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200">
@@ -1174,7 +1184,15 @@ export default function RoleplayStudioPage() {
           </details>
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
-            <p className="text-sm text-slate-400">No hay intervenciones que coincidan con la búsqueda.</p>
+            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+              <span>{showPendingReview && pendingReviewCount === 0
+                ? 'Todas las intervenciones tienen hablante e idioma revisados.'
+                : 'No hay intervenciones que coincidan con los filtros.'}</span>
+              {(showPendingReview || segmentSearch) && (
+                <button type="button" onClick={() => { setShowPendingReview(false); setSegmentSearch(''); }}
+                  className="rounded-md border border-white/15 px-2 py-1 text-blue-200">Limpiar filtros</button>
+              )}
+            </div>
           )}
           {segments.length >= 6 && (
             <p className="text-xs text-slate-400">
@@ -1196,6 +1214,11 @@ export default function RoleplayStudioPage() {
                     </span>
                   )}
                 </h3>
+                <button type="button" onClick={() => seekAudio(segment.start)}
+                  aria-label={'Ir al inicio de intervención ' + (index + 1)}
+                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
+                  Ir al inicio
+                </button>
                 <button type="button" onClick={() => splitAtPlayhead(segment.id)}
                   aria-label={'Dividir intervención ' + (index + 1) + ' en cursor'}
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">

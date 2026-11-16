@@ -141,4 +141,31 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
   });
 
+  it('filters interventions pending speaker/language review and restores the complete list', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[0], {
+      target: { value: 'doctor' },
+    });
+    fireEvent.change(screen.getAllByLabelText('Idioma de la intervención')[0], {
+      target: { value: 'en' },
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
+    expect(screen.queryByText(/#1 · Intervención 1/)).toBeNull();
+    expect(screen.getByText(/#2 · Intervención 2/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
+    expect(screen.getByText(/#1 · Intervención 1/)).toBeTruthy();
+  });
+
+  it('seeks directly to an intervention without playing or changing the editor', () => {
+    const player = loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ir al inicio de intervención 2' }));
+    expect(player.currentTime).toBe(30);
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
+
 });
