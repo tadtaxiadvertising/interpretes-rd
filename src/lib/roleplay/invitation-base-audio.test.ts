@@ -31,6 +31,30 @@ describe('resolveInvitationBaseAudioUrl', () => {
     expect(sign).toHaveBeenCalledWith(path, 3600);
   });
 
+  it('fails closed for Storage URLs if the project origin is not configured', async () => {
+    const sign = vi.fn();
+    const stored = [
+      legacy,
+      `${legacy}?token=LEGACY_SECRET`,
+      'https://other.supabase.co/storage/v1/object/public/other-bucket/private/audio.mp3',
+    ];
+    for (const url of stored) {
+      expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: url }, undefined, sign))
+        .toBeNull();
+    }
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('still permits ordinary external legacy audio without the project origin', async () => {
+    const sign = vi.fn();
+    const external = 'https://assets.example.test/audio/legacy.wav';
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: external }, undefined, sign))
+      .toBe(external);
+    expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: 'not a url' }, undefined, sign))
+      .toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+  });
+
   it('keeps unrelated third-party assets for backwards compatibility', async () => {
     const sign = vi.fn();
     const url = 'https://assets.example.test/legacy.wav';
