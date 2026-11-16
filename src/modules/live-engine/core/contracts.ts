@@ -79,10 +79,16 @@ export function detectDeviceCapabilities(): DeviceCapabilities {
  */
 export function assertProviderConsent(
   provider: SpeechProvider | TranslationProvider,
+  purpose: ProviderConsent['purpose'],
   consent: ProviderConsent | undefined,
 ): void {
   if (provider.processingLocation === 'device') return;
-  if (!consent || consent.accepted !== true || consent.providerId !== provider.id) {
+  if (
+    !consent ||
+    consent.accepted !== true ||
+    consent.providerId !== provider.id ||
+    consent.purpose !== purpose
+  ) {
     throw new Error('EXPLICIT_PROVIDER_CONSENT_REQUIRED');
   }
 }
