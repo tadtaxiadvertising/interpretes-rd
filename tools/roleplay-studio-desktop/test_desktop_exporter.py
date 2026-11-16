@@ -101,7 +101,16 @@ class StudioDesktopTests(unittest.TestCase):
         self.assertEqual(len(checked["clips"]), 1)
         self.assertAlmostEqual(checked["duration_seconds"], 1.6)
         self.assertEqual(checked["source_hash"], self.draft["sourceSampleSha256"])
+        self.assertEqual(checked["unreviewed_roles"], 0)
         self.assertFalse(self.output.exists())
+
+    def test_preflight_warns_about_unreviewed_speaker(self):
+        self.draft["segments"][0]["speakerRole"] = "unknown"
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        result = module.inspect_project(self.source, self.project)
+        self.assertEqual(result["unreviewed_roles"], 1)
+        # Existing publication contract permits "unknown": warn instead of
+        # unilaterally changing that policy in the local export tool.
 
     def test_preflight_detects_wrong_source_with_same_length(self):
         # Deliberately corrupt the first sampled byte without changing size.
