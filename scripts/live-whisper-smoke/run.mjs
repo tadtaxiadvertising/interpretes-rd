@@ -112,7 +112,7 @@ try {
   };
   mkdirSync(resolve('test-results'), { recursive: true });
   writeFileSync(resolve('test-results', 'whisper-' + browserName + '-metrics.json'),
-    JSON.stringify(report, null, 2) + '\\n');
+    JSON.stringify(report, null, 2) + '\n');
   console.log('PASS: ' + browserName + ' loaded the pinned Whisper tiny model and completed ES/EN and 10s local inference calls.');
   console.log('PASS: All observed remote browser requests used read-only methods on model-asset hosts.');
   console.log('WHISPER_PERFORMANCE_JSON: ' + JSON.stringify(report));
