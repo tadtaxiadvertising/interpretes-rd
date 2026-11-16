@@ -100,7 +100,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('opens an older complete-SHA256 project without leaving local-first mode or uploading the MP3', async () => {
     selectSource();
-    fireEvent.click(screen.getByRole('radio', { name: /Local \\(predeterminado\\)/i }));
+    fireEvent.click(screen.getByRole('radio', { name: /Local \(predeterminado\)/i }));
     const request = vi.fn();
     vi.stubGlobal('fetch', request);
     await act(async () => {
@@ -109,7 +109,7 @@ describe('Roleplay Studio editable project recovery', () => {
       });
     });
     expect(screen.getByText(/Proyecto verificado con SHA-256 completo y restaurado: 1 intervenciones/)).toBeTruthy();
-    expect((screen.getByRole('radio', { name: /Local \\(predeterminado\\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /Local \(predeterminado\)/i }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Paciente · antiguo');
     expect(vi.mocked(sha256StudioAudio)).toHaveBeenCalledOnce();
     expect(vi.mocked(fingerprintLocalMedia)).not.toHaveBeenCalled();
@@ -136,7 +136,7 @@ describe('Roleplay Studio editable project recovery', () => {
     });
     expect(screen.getByText(/Proyecto vinculado por tamaño, duración y huella parcial/)).toBeTruthy();
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Doctor · sampled');
-    expect((screen.getByRole('radio', { name: /Servidor \\(opcional\\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(true);
     expect(vi.mocked(fingerprintLocalMedia)).toHaveBeenCalledOnce();
     expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
     expect(request).not.toHaveBeenCalled();
