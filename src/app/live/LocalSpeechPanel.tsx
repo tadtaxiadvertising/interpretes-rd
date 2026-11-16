@@ -209,6 +209,7 @@ export default function LocalSpeechPanel({
             className="text-sm font-semibold text-slate-700 underline">Limpiar texto local</button>
         )}
       </div>
+      {process.env.NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED === 'true' && (
       <WhisperWasmPanel
         key={'whisper-' + language}
         language={language === 'es-ES' ? 'es' : 'en'}
@@ -218,9 +219,11 @@ export default function LocalSpeechPanel({
           onListeningChange?.(active);
         }}
         onFinalTranscript={(text) => {
+          // Whisper windows only become final after explicit human review.
           setTranscript((previous) => previous ? previous + ' ' + text : text);
         }}
       />
+      )}
       <LocalTranslatorPanel
         key={language}
         sourceLanguage={language === 'es-ES' ? 'es' : 'en'}

@@ -21,6 +21,17 @@ afterEach(() => {
 });
 
 describe('LocalSpeechPanel error handling', () => {
+  it('keeps the unvalidated Whisper pilot hidden unless explicitly enabled', () => {
+    vi.stubEnv('NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED', '');
+    try {
+      render(<LocalSpeechPanel />);
+      expect(screen.queryByLabelText('Whisper local experimental')).toBeNull();
+    } finally {
+      cleanup();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('stops recognition immediately after a browser error without retrying remotely', async () => {
     vi.mocked(checkOnDeviceSpeechPack).mockResolvedValue('available');
     render(<LocalSpeechPanel />);
