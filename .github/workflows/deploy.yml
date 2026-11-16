@@ -10,11 +10,12 @@ on:
       - main
   workflow_dispatch:
 
-# Keep migration, frontend and backend from different main runs from interleaving.
-# Never cancel a running migration. PR validation uses its own ref/group.
+# Keep migrations, frontend and backend deployments on main serialized;
+# never cancel a production migration. PR checks are isolated from production:
+# discard superseded validation runs when a branch receives a newer commit.
 concurrency:
   group: interpreters-cicd-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   validate:
