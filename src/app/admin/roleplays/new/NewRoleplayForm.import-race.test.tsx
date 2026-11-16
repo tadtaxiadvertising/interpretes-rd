@@ -92,6 +92,7 @@ describe('Admin roleplay import concurrency', () => {
 
     expect(screen.getByText('Segmento aprobado')).toBeTruthy();
     expect(screen.getAllByTestId('draft-scenario')).toHaveLength(1);
+    expect(screen.getByText('1 de 1')).toBeTruthy();
     expect(screen.queryByText(/Verificando archivos/)).toBeNull();
   });
 
