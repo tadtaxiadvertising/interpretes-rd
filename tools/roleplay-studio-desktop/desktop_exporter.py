@@ -524,7 +524,16 @@ if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "--self-check":
         try:
             self_check()
-        except ExportError:
+        except Exception as exc:
+            # A Windows --windowed build has no console. Diagnostics are
+            # permitted only in opt-in CI smoke tests, never during editing.
+            diagnostic = os.environ.get("ROLEPLAY_STUDIO_SELF_CHECK_LOG")
+            if diagnostic:
+                try:
+                    Path(diagnostic).write_text(
+                        f"{type(exc).__name__}: {str(exc)}\\n", encoding="utf-8")
+                except OSError:
+                    pass
             sys.exit(1)
         sys.exit(0)
     run_desktop()
