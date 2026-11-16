@@ -427,6 +427,8 @@ def run_desktop():
         ("Paquete de salida", [("Paquete ZIP", "*.zip")]),
     )
     fields = [tk.StringVar(), tk.StringVar(), tk.StringVar()]
+    input_widgets = []
+    browse_buttons = []
     busy = False
     cancelled = threading.Event()
     events = queue.Queue()
@@ -446,10 +448,13 @@ def run_desktop():
 
     for index, (label, _) in enumerate(labels):
         ttk.Label(frame, text=label).grid(row=index, column=0, sticky="w", pady=8)
-        ttk.Entry(frame, textvariable=fields[index], width=58).grid(
-            row=index, column=1, sticky="ew", padx=(12, 8))
-        ttk.Button(frame, text="Examinar…",
-                   command=lambda i=index: pick(i)).grid(row=index, column=2)
+        entry = ttk.Entry(frame, textvariable=fields[index], width=58)
+        entry.grid(row=index, column=1, sticky="ew", padx=(12, 8))
+        input_widgets.append(entry)
+        browse = ttk.Button(frame, text="Examinar…",
+                            command=lambda i=index: pick(i))
+        browse.grid(row=index, column=2)
+        browse_buttons.append(browse)
 
     ttk.Label(frame, text="Sin subidas · FFmpeg en tu equipo · ZIP compatible con Intérpretes RD",
               foreground="#24635b").grid(row=3, column=0, columnspan=3, sticky="w", pady=(16, 8))
@@ -460,6 +465,24 @@ def run_desktop():
         row=5, column=0, columnspan=3, sticky="w", pady=6)
     controls = ttk.Frame(frame)
     controls.grid(row=6, column=0, columnspan=3, sticky="e", pady=10)
+
+    def set_editable(enabled):
+        state = "normal" if enabled else "disabled"
+        for widget in input_widgets + browse_buttons:
+            widget.configure(state=state)
+
+    def inspect_worker(paths):
+        try:
+            inspection = inspect_project(paths[0], paths[1])
+            if cancelled.is_set():
+                events.put(("cancelled",))
+            else:
+                events.put(("inspected", len(inspection["clips"]),
+                            inspection["duration_seconds"]))
+        except (ExportError, OSError) as exc:
+            events.put(("error", str(exc)))
+        except Exception:
+            events.put(("error", "No fue posible verificar el proyecto."))
 
     def worker(paths):
         try:
@@ -474,28 +497,38 @@ def run_desktop():
         except Exception:
             events.put(("error", "Error inesperado del exportador local."))
 
-    def begin():
+    def begin_job(kind):
         nonlocal busy
         if busy:
             return
         paths = [field.get().strip() for field in fields]
-        if not all(paths):
-            messagebox.showwarning("Faltan archivos", "Selecciona los tres archivos.")
+        if not paths[0] or not paths[1] or (kind == "export" and not paths[2]):
+            messagebox.showwarning(
+                "Faltan archivos",
+                "Selecciona la grabación y el JSON; para exportar, también el ZIP de salida.")
             return
         cancelled.clear()
         bar["value"] = 0
-        status.set("Preparando los fragmentos en este equipo…")
+        status.set("Verificando el proyecto sin subir archivos…" if kind == "inspect"
+                   else "Preparando los fragmentos en este equipo…")
         busy = True
+        set_editable(False)
         start_button.configure(state="disabled")
+        inspect_button.configure(state="disabled")
         cancel_button.configure(state="normal")
-        threading.Thread(target=worker, args=(paths,), daemon=True).start()
+        target = inspect_worker if kind == "inspect" else worker
+        threading.Thread(target=target, args=(paths,), daemon=True).start()
 
     def cancel():
         if busy:
             cancelled.set()
             status.set("Cancelando FFmpeg y limpiando temporales…")
 
-    start_button = ttk.Button(controls, text="Generar ZIP local", command=begin)
+    inspect_button = ttk.Button(
+        controls, text="Validar proyecto", command=lambda: begin_job("inspect"))
+    inspect_button.pack(side="left", padx=6)
+    start_button = ttk.Button(
+        controls, text="Generar ZIP local", command=lambda: begin_job("export"))
     start_button.pack(side="left", padx=6)
     cancel_button = ttk.Button(controls, text="Cancelar", command=cancel, state="disabled")
     cancel_button.pack(side="left")
@@ -516,9 +549,17 @@ def run_desktop():
                 status.set(f"Preparados {done} de {total} fragmentos.")
                 continue
             busy = False
+            set_editable(True)
             start_button.configure(state="normal")
+            inspect_button.configure(state="normal")
             cancel_button.configure(state="disabled")
-            if kind == "success":
+            if kind == "inspected":
+                _, count, seconds = message
+                status.set(
+                    f"Proyecto válido: {count} intervenciones, "
+                    f"{seconds / 60:.1f} min seleccionados. "
+                    "Puedes elegir el ZIP de salida y generar el paquete.")
+            elif kind == "success":
                 result = message[1]
                 bar["value"] = 100
                 status.set(f"ZIP generado: {result['clips']} fragmentos. El video original permanece local.")
