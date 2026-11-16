@@ -315,6 +315,64 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const splitAtPlayhead = (id: string) => {
+    const segment = segments.find(item => item.id === id);
+    const cursor = player.current?.currentTime;
+    if (!segment || cursor === undefined || !Number.isFinite(cursor)) return;
+    const midpoint = Number(cursor.toFixed(2));
+    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
+      setError('Se alcanzó el máximo de intervenciones exportables.');
+      return;
+    }
+    if (midpoint - segment.start < 0.1 || segment.end - midpoint < 0.1) {
+      setError('Sitúa el cursor dentro de la intervención, dejando al menos 0,1 s por lado.');
+      return;
+    }
+    subtitleImportRevision.current += 1;
+    const secondId = crypto.randomUUID();
+    setSegments(previous => previous.flatMap(item => item.id === id ? [
+      { ...item, end: midpoint },
+      { ...item, id: secondId, start: midpoint,
+        title: item.title.slice(0, 185) + ' (parte 2)' },
+    ] : [item]));
+    setExpandedSegmentId(secondId);
+    setError('');
+    setNotice('Corte dividido. Revisa la transcripción y las instrucciones de las dos partes.');
+  };
+
+  const mergeWithNext = (id: string) => {
+    const ordered = [...segments].sort((a, b) => a.start - b.start);
+    const current = ordered.findIndex(item => item.id === id);
+    const first = ordered[current];
+    const second = ordered[current + 1];
+    if (!first || !second) { setError('No hay una intervención posterior.'); return; }
+    if (first.speakerRole !== second.speakerRole || first.language !== second.language) {
+      setError('La unión exige el mismo perfil del hablante e idioma.'); return;
+    }
+    if (second.start < first.end || second.start - first.end > 2 ||
+        second.end - first.start > 300) {
+      setError('La unión no permite solapamientos, pausas mayores de 2 s ni cortes de más de 5 minutos.');
+      return;
+    }
+    const prompts = [first.scriptPrompt, second.scriptPrompt].filter(Boolean);
+    const mergedPrompt = [...new Set(prompts)].join('\n\n');
+    if (mergedPrompt.length > 5000) {
+      setError('Las instrucciones combinadas exceden 5.000 caracteres.'); return;
+    }
+    subtitleImportRevision.current += 1;
+    setSegments(previous => previous.filter(item => item.id !== second.id)
+      .map(item => item.id === first.id
+        ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
+    setCaptionTexts(previous => {
+      const next = { ...previous };
+      next[first.id] = [previous[first.id], previous[second.id]].filter(Boolean).join(' ');
+      delete next[second.id];
+      return next;
+    });
+    setError('');
+    setNotice('Intervenciones unidas. Verifica audio, tiempos y texto antes de exportar.');
+  };
+
   const addSegment = () => {
     subtitleImportRevision.current += 1;
     const start = segments.length > 0
@@ -776,6 +834,16 @@ export default function RoleplayStudioPage() {
                     {formatTime(segment.start)}–{formatTime(segment.end)} · {segment.speakerRole} · {segment.language.toUpperCase()}
                   </span>
                 </h3>
+                <button type="button" onClick={() => splitAtPlayhead(segment.id)}
+                  aria-label={'Dividir intervención ' + (index + 1) + ' en cursor'}
+                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
+                  Dividir
+                </button>
+                <button type="button" onClick={() => mergeWithNext(segment.id)}
+                  aria-label={'Unir intervención ' + (index + 1) + ' con siguiente'}
+                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
+                  Unir
+                </button>
                 {compactRows && (
                   <>
                     <button type="button" onClick={() => previewSegment(segment)}
