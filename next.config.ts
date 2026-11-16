@@ -103,12 +103,11 @@ const nextConfig: NextConfig = {
       ...(process.env.NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED === 'true'
         ? [
             {
-              // Bundled Workers fetch public model assets themselves.
-              // CAUTION: this matches the shared Next.js chunks directory; it
-              // is ONLY allowed behind the off-by-default build flag.
-              // Before any public rollout, identify the exact Worker bundle and
-              // narrow this rule to that asset rather than all chunks.
-              source: '/_next/static/chunks/:path*',
+              // Only the named Whisper Worker receives model-download rights.
+              // The app's normal page bundles, unrelated Workers, and /live
+              // itself retain the restrictive global CSP.
+              // CI proves the named output bundle exists when pilot is built.
+              source: '/_next/static/chunks/live-whisper-asr-worker-:hash([a-f0-9]+).js',
               headers: [{
                 key: 'Content-Security-Policy',
                 value: baseCsp.replace(
