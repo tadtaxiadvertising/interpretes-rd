@@ -581,7 +581,7 @@ export default function RoleplayStudioPage() {
   const visibleCues = reviewCues.slice(cuePage * CUES_PER_PAGE, (cuePage + 1) * CUES_PER_PAGE);
 
   // Only the selected row expands when reviewing a longer recording.
-  const compactRows = compactPreference ?? segments.length >= 6;
+  const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
   const visibleSegments = segments.map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => !query ||
@@ -657,6 +657,16 @@ export default function RoleplayStudioPage() {
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
                 El JSON no contiene audio ni video. El ZIP requiere extraer los clips con
                 FFmpeg localmente; el navegador no convierte esta fuente extensa.
+                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
+                  <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
+                  <p className="mt-2">
+                    En un equipo con Node.js y el repositorio instalado, ejecuta el exportador
+                    indicando las rutas del video, el JSON y el ZIP de salida.
+                  </p>
+                  <code className="mt-1 block break-all rounded bg-slate-950/70 p-2 text-[11px] text-slate-200">
+                    node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
+                  </code>
+                </details>
               </div>
             )}
             {audio && duration > 0 && (
@@ -790,7 +800,19 @@ export default function RoleplayStudioPage() {
                 disabled={cuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
                 Anterior
               </button>
-              <span>Página {cuePage + 1}/{pageCount}</span>
+              <label className="flex items-center gap-1">
+                Página
+                <input type="number" aria-label="Página de intervenciones SRT"
+                  min={1} max={pageCount} value={cuePage + 1}
+                  onChange={event => {
+                    const requested = Number(event.currentTarget.value);
+                    if (Number.isSafeInteger(requested) && requested >= 1 && requested <= pageCount) {
+                      setCuePage(requested - 1);
+                    }
+                  }}
+                  className="w-14 rounded border border-white/15 bg-slate-900 px-1 py-1 text-center text-xs text-white"/>
+                / {pageCount}
+              </label>
               <button type="button" onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
                 disabled={cuePage >= pageCount - 1}
                 className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
@@ -880,8 +902,10 @@ export default function RoleplayStudioPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
             </div>
           </div>
-          <div className="space-y-3 rounded-xl border border-teal-400/20 bg-teal-400/5 p-4">
-            <h3 className="font-semibold text-teal-100">Protocolos de interpretación consecutiva</h3>
+          <details open={!localOnly} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-teal-100">
+              Protocolos de interpretación consecutiva (opcional)
+            </summary>
             <p className="text-xs leading-5 text-slate-300">
               Plantillas opcionales de apertura, petición de repetición y cierre.
               Solo se insertan en las instrucciones de la intervención que elijas;
@@ -907,7 +931,7 @@ export default function RoleplayStudioPage() {
                 </select>
               </label>
             </div>
-          </div>
+          </details>
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
             <p className="text-sm text-slate-400">No hay intervenciones que coincidan con la búsqueda.</p>
