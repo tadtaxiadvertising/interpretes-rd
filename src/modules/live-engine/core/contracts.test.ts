@@ -65,6 +65,6 @@ describe('Live provider consent boundary', () => {
       acceptedAt: new Date().toISOString(),
     };
 
-    expect(() => assertProviderConsent(remoteProvider, consent)).not.toThrow();
+    expect(() => assertProviderConsent(remoteProvider, 'transcription', consent)).not.toThrow();
   });
 });
