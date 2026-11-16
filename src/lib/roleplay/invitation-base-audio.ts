@@ -76,8 +76,10 @@ export async function resolveInvitationBaseAudioUrl(
     const asset = new URL(storedUrl);
     // Prevent unrecognized, signed, or malformed same-project bucket links
     // from bypassing short-lived signing in the invitation response.
-    if (asset.origin === project.origin &&
-      asset.pathname.includes('/storage/v1/object/')) return null;
+    if (asset.origin === project.origin && (
+      storedUrl.includes('/storage/v1/object/') ||
+      asset.pathname.includes('/storage/v1/object/')
+    )) return null;
   } catch {
     return null;
   }
