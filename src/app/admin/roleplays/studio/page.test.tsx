@@ -86,6 +86,9 @@ describe('Audio Studio clip review player', () => {
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [new File(['ID3'], 'next-source.mp3', { type: 'audio/mpeg' })] },
     });
+    const replacementPlayer = container.querySelector('audio')!;
+    Object.defineProperty(replacementPlayer, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(replacementPlayer);
     expect((screen.getByRole('radio', { name: /Local \(predeterminado\)/i }) as HTMLInputElement).checked).toBe(true);
     expect(fetcher).not.toHaveBeenCalled();
   });
