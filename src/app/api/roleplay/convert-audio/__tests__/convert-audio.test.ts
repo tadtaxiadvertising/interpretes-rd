@@ -266,7 +266,7 @@ describe('POST /api/roleplay/convert-audio legacy compatibility', () => {
     expect(response.status).toBe(200);
     expect(body.success).toBe(true);
     expect(mocks.upload).toHaveBeenCalledOnce();
-    expect(mocks.upload.mock.calls[0][0]).toMatch(/^responses\\/session-1\\/scenario-1\\/.+\\.webm$/);
+    expect(mocks.upload.mock.calls[0][0]).toMatch(/^responses[/]session-1[/]scenario-1[/].+[.]webm$/);
     expect(mocks.confirm).toHaveBeenCalledOnce();
   });
 
