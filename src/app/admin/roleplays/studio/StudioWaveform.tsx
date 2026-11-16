@@ -189,7 +189,7 @@ export default function StudioWaveform({
       <div className="mt-1 flex justify-between font-mono text-[11px] text-slate-400">
         <span>{timeLabel(start)}</span>
         <span>Ventana: {timeLabel(span)}</span>
-        <span>{timeLabel(end)}</span>
+        <span>Hasta {timeLabel(end)}</span>
       </div>
       <input aria-label="Posición del reproductor en segundos" type="range" min={0}
         max={safeDuration} step={0.1} value={safeTime}
