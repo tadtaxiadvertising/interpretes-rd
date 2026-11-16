@@ -18,7 +18,10 @@
     "anomaly:detect": "tsx scripts/detect-anomalies.ts",
     "audit:onboarding": "tsx scripts/audit-onboarding.ts",
     "typecheck:audit": "tsc --noEmit -p tsconfig.audit.json",
-    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json"
+    "typecheck:scripts": "tsc --noEmit -p tsconfig.scripts.json",
+    "prepare:live-wasm": "node scripts/prepare-local-ort-assets.mjs",
+    "prebuild": "npm run prepare:live-wasm",
+    "predev": "npm run prepare:live-wasm"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
