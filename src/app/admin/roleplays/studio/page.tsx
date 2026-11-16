@@ -335,9 +335,13 @@ export default function RoleplayStudioPage() {
       { ...item, id: secondId, start: midpoint,
         title: item.title.slice(0, 185) + ' (parte 2)' },
     ] : [item]));
+    // Preserve the original transcript as editor-only reference for both
+    // halves. We cannot infer a word-level split from a timestamp alone.
+    setCaptionTexts(previous => previous[id]
+      ? { ...previous, [secondId]: previous[id] } : previous);
     setExpandedSegmentId(secondId);
     setError('');
-    setNotice('Corte dividido. Revisa la transcripción y las instrucciones de las dos partes.');
+    setNotice('Corte dividido. La transcripción original se conserva en ambas partes como referencia; revisa dónde se separa el diálogo.');
   };
 
   const mergeWithNext = (id: string) => {
