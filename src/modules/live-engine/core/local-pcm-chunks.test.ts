@@ -58,7 +58,8 @@ describe('bounded local PCM chunking', () => {
     }
     const iterator = chunkLocalPcmFrames(source(), options);
     const first = await iterator.next();
-    expect(first.value?.kind).toBe('full');
+    if (first.done) throw new Error('Expected a full PCM chunk');
+    expect(first.value.kind).toBe('full');
     expect(fetched).toBe(1);
     await iterator.return();
     expect(fetched).toBe(1);
@@ -70,7 +71,9 @@ describe('bounded local PCM chunking', () => {
       frames(Float32Array.from([0, 1, 2, 3, 4, 5, 6])),
       { ...options, signal: controller.signal },
     );
-    expect((await iterator.next()).value?.kind).toBe('full');
+    const first = await iterator.next();
+    if (first.done) throw new Error('Expected a full PCM chunk');
+    expect(first.value.kind).toBe('full');
     controller.abort();
     await expect(iterator.next()).rejects.toThrow('LOCAL_PCM_PROCESSING_CANCELLED');
   });
