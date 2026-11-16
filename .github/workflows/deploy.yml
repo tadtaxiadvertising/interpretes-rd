@@ -135,6 +135,11 @@ jobs:
       - name: Run Tests
         run: npm test
 
+      - name: Verify local long-video FFmpeg export
+        run: |
+          node --check scripts/export-studio-long-local.mjs
+          node --test scripts/export-studio-long-local.test.mjs
+
       - name: Build
         run: npm run build
 

@@ -25,7 +25,7 @@ describe('Audio Studio clip review player', () => {
     vi.unstubAllGlobals();
   });
 
-  it('rejects MP3 metadata beyond two hours before enabling editing', () => {
+  it('opens MP3 above two hours in local mode and rejects media above twelve hours', () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [new File(['ID3'], 'source.mp3', { type: 'audio/mpeg' })] },
@@ -33,7 +33,12 @@ describe('Audio Studio clip review player', () => {
     const player = container.querySelector('audio')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 7200.1 });
     fireEvent.loadedMetadata(player);
-    expect(screen.getByText(/El MP3 supera las 2 horas admitidas/i)).toBeTruthy();
+    expect(screen.getByText(/Preparación local:/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Añadir intervención/i })).toBeTruthy();
+
+    Object.defineProperty(player, 'duration', { configurable: true, value: 43200.1 });
+    fireEvent.loadedMetadata(player);
+    expect(screen.getByText(/supera las 12 horas admitidas/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Añadir intervención/i })).toBeNull();
 
     Object.defineProperty(player, 'duration', { configurable: true, value: 7200 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -22,6 +22,10 @@ import {
   createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
 } from '@/lib/roleplay-studio/draft';
 import {
+  createLongMediaDraft, openLongMediaDraft, fingerprintLocalMedia, mediaKind,
+  usesLocalLongMode, validateLocalMedia, MAX_LOCAL_MEDIA_SECONDS,
+} from '@/lib/roleplay-studio/long-media';
+import {
   classifySpeakerRole, filterInterpreterCues, makeNeutralSegmentTitle,
   type StudioLanguage, type StudioSpeakerRole,
 } from '@/lib/roleplay-studio/speaker-profiles';
@@ -38,10 +42,16 @@ type Segment = {
 };
 
 function formatTime(value: number): string {
-  const safe = Math.max(0, value);
-  const minutes = Math.floor(safe / 60);
-  const seconds = safe - minutes * 60;
-  return String(minutes).padStart(2, '0') + ':' + seconds.toFixed(1).padStart(4, '0');
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor(safe / 60) % 60;
+  const seconds = safe - Math.floor(safe / 60) * 60;
+  const short = String(Math.floor(safe / 60)).padStart(2, '0') + ':' +
+    seconds.toFixed(1).padStart(4, '0');
+  return hours
+    ? String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' +
+      seconds.toFixed(1).padStart(4, '0')
+    : short;
 }
 
 export default function RoleplayStudioPage() {
@@ -65,7 +75,10 @@ export default function RoleplayStudioPage() {
   const [excludeInterpreter, setExcludeInterpreter] = useState(true);
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
-  const player = useRef<HTMLAudioElement>(null);
+  const [cuePage, setCuePage] = useState(0);
+  const CUES_PER_PAGE = 60;
+  const player = useRef<HTMLMediaElement | null>(null);
+  const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
   const pauseEditorialAudio = useCallback(() => { player.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
@@ -164,12 +177,15 @@ export default function RoleplayStudioPage() {
     setCaptionTexts({});
     setReviewCues([]);
     setChosenCueIndices([]);
+    setCuePage(0);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
     if (!file) { setAudio(null); setUrl(''); return; }
-    if (!/\.mp3$/i.test(file.name) || file.size < 1 || file.size > 15 * 1024 * 1024) {
-      setError('Selecciona un MP3 válido de hasta 15 MiB.');
+    try {
+      validateLocalMedia(file);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se puede abrir este archivo.');
       setAudio(null);
       setUrl('');
       return;
@@ -299,13 +315,14 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > 1_000_000) {
-        throw new Error('Selecciona un SRT o VTT de hasta 1 MB.');
+      const subtitleMaxBytes = usesLocalLongMode(audio, duration) ? 5_000_000 : 1_000_000;
+      if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > subtitleMaxBytes) {
+        throw new Error('Selecciona un SRT o VTT dentro del tamaño permitido (1 MB normal, 5 MB local).');
       }
       const transcript = await file.text();
       // The file may have changed, or a newer import/edit may have started.
       if (revision !== subtitleImportRevision.current) return;
-      const cues = parseTimedTranscriptForReview(transcript);
+      const cues = parseTimedTranscriptForReview(transcript, usesLocalLongMode(audio, duration));
       const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
       if (!selected.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
@@ -324,8 +341,10 @@ export default function RoleplayStudioPage() {
       if (canApplyAll) {
         setReviewCues([]);
         setChosenCueIndices([]);
+        setCuePage(0);
         loadSelectedCues(selected, excludedCount);
       } else {
+        setCuePage(0);
         setReviewCues(selected);
         setChosenCueIndices(allIndices.slice(0, ROLEPLAY_MAX_SCENARIOS));
         setNotice(`${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Elige hasta ${ROLEPLAY_MAX_SCENARIOS} turnos compatibles y pulsa “Aplicar selección”. El borrador no se reemplazó.`);
@@ -429,9 +448,12 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      const digest = await sha256StudioAudio(audio);
+      const localOnly = usesLocalLongMode(audio, duration);
+      const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
-      const draft = createStudioDraft(audio.size, digest, snapshot, duration);
+      const draft = localOnly
+        ? createLongMediaDraft(audio.size, digest, snapshot, duration)
+        : createStudioDraft(audio.size, digest, snapshot, duration);
       const blob = new Blob([JSON.stringify(draft, null, 2)], { type: 'application/json' });
       if (blob.size > MAX_STUDIO_DRAFT_CHARS) {
         throw new Error('El proyecto supera 180 KB. Reduce las instrucciones antes de guardarlo.');
@@ -439,12 +461,15 @@ export default function RoleplayStudioPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = 'roleplay-studio-proyecto.json';
+      link.download = usesLocalLongMode(audio, duration)
+        ? 'roleplay-studio-proyecto-largo.json' : 'roleplay-studio-proyecto.json';
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice('Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
+      setNotice(usesLocalLongMode(audio, duration)
+        ? 'Plan de cortes local descargado. Conserva la grabación original; el JSON no contiene audio ni video ni transcripción. La huella es parcial y no verifica cada byte.'
+        : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No fue posible guardar el proyecto.');
@@ -467,14 +492,19 @@ export default function RoleplayStudioPage() {
       }
       const json = await file.text();
       if (revision !== subtitleImportRevision.current) return;
-      const digest = await sha256StudioAudio(audio);
+      const localOnly = usesLocalLongMode(audio, duration);
+      const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
-      const restored = openStudioDraft(json, audio.size, digest, duration);
+      const restored = localOnly
+        ? openLongMediaDraft(json, audio.size, digest, duration)
+        : openStudioDraft(json, audio.size, digest, duration);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
       setChosenCueIndices([]);
-      setNotice(`Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
+      setNotice(localOnly
+        ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El archivo original no se ha subido.`
+        : `Proyecto verificado con SHA-256 y restaurado: ${restored.length} intervenciones. La transcripción no forma parte del borrador.`);
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No se pudo abrir el proyecto.');
@@ -534,6 +564,12 @@ export default function RoleplayStudioPage() {
     exportAbort.current = controller;
     const isCurrent = () => operation === exportRevision.current &&
       editorRevision === subtitleImportRevision.current && !controller.signal.aborted;
+    // Large files stay local: the legacy export endpoint reads its entire
+    // MP3 request into memory and must never receive a video or large source.
+    if (usesLocalLongMode(audio, duration)) {
+      await saveDraft();
+      return;
+    }
     setBusy(true);
     try {
       const form = new FormData();
@@ -574,8 +610,13 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const localOnly = audio !== null && usesLocalLongMode(audio, duration);
+  const videoSource = audio !== null && mediaKind(audio) === 'video';
+  const pageCount = Math.max(1, Math.ceil(reviewCues.length / CUES_PER_PAGE));
+  const visibleCues = reviewCues.slice(cuePage * CUES_PER_PAGE, (cuePage + 1) * CUES_PER_PAGE);
+
   // Only the selected row expands when reviewing a longer recording.
-  const compactRows = compactPreference ?? segments.length >= 6;
+  const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
   const query = segmentSearch.trim().toLocaleLowerCase();
   const visibleSegments = segments.map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => !query ||
@@ -584,6 +625,34 @@ export default function RoleplayStudioPage() {
         .some(value => value.toLocaleLowerCase().includes(query)))
     .sort((a, b) => a.segment.start - b.segment.start);
 
+  const mediaHandlers = {
+    onPlay: () => setEditorPlaybackRevision(n => n + 1),
+    onLoadedMetadata: (event: SyntheticEvent<HTMLMediaElement>) => {
+      const length = event.currentTarget.duration;
+      if (!Number.isFinite(length) || length <= 0) {
+        setDuration(0);
+        setError('No se pudo determinar la duración de la grabación. Verifica el formato.');
+      } else if (length > MAX_LOCAL_MEDIA_SECONDS) {
+        setDuration(0);
+        setError('El archivo supera las 12 horas admitidas en modo local.');
+      } else {
+        setDuration(length);
+        setError('');
+      }
+    },
+    onTimeUpdate: (event: SyntheticEvent<HTMLMediaElement>) => {
+      setPlayhead(event.currentTarget.currentTime);
+      if (previewEnd.current !== null &&
+          event.currentTarget.currentTime >= previewEnd.current) stopPreview();
+    },
+    onPause: () => { previewEnd.current = null; setPreviewingId(null); },
+    onEnded: () => { previewEnd.current = null; setPreviewingId(null); },
+    onError: () => {
+      setDuration(0);
+      setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');
+    },
+  };
+
   return (
     <main className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -591,45 +660,50 @@ export default function RoleplayStudioPage() {
           <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
           <h1 className="text-3xl font-bold text-white">Roleplay Audio Studio</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Prepara intervenciones desde una grabación MP3 sin crear sesiones ni modificar audios publicados.
-            Los paquetes se importan después desde el formulario administrativo, donde se asignan a candidatos o intérpretes.
+            Prepara intervenciones desde una grabación de audio o video sin crear sesiones
+            ni modificar audios publicados. Los MP3 pequeños permiten exportar el ZIP;
+            fuentes extensas se revisan localmente y se guardan como un proyecto de cortes.
           </p>
         </div>
         <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
       </header>
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-        <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">Grabación original MP3 (máximo 15 MiB)</label>
-        <input id="studio-audio" type="file" accept=".mp3,audio/mpeg" className="mt-3 block w-full text-sm text-slate-300" onChange={event => chooseAudio(event.currentTarget.files?.[0])} />
+        <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">
+          Grabación original MP3 o video/audio largo (local, hasta 8 GiB)
+        </label>
+        <input id="studio-audio" type="file"
+          accept=".mp3,.m4a,.wav,.aac,.ogg,.oga,.opus,.flac,.mp4,.m4v,.mov,.webm,.mkv,audio/*,video/*"
+          className="mt-2 block w-full text-sm text-slate-300"
+          onChange={event => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            chooseAudio(file);
+          }} />
         {url && (
           <div className="mt-5 space-y-3">
-            <audio ref={player} src={url} controls preload="metadata" className="w-full"
-              onPlay={() => setEditorPlaybackRevision(n => n + 1)}
-              onLoadedMetadata={event => {
-                const length = event.currentTarget.duration;
-                if (!Number.isFinite(length) || length <= 0) {
-                  setDuration(0);
-                  setError('No se pudo determinar la duración de este MP3.');
-                } else if (length > 7200) {
-                  setDuration(0);
-                  setError('El MP3 supera las 2 horas admitidas por Audio Studio.');
-                } else {
-                  setDuration(length);
-                  setError('');
-                }
-              }}
-              onTimeUpdate={event => {
-                setPlayhead(event.currentTarget.currentTime);
-                if (previewEnd.current !== null &&
-                    event.currentTarget.currentTime >= previewEnd.current) stopPreview();
-              }}
-              onPause={() => {
-                previewEnd.current = null;
-                setPreviewingId(null);
-              }}
-              onEnded={() => {
-                previewEnd.current = null;
-                setPreviewingId(null);
-              }} />
+            {videoSource
+              ? <video ref={attachPlayer} src={url} controls preload="metadata" playsInline
+                  {...mediaHandlers} className="max-h-64 w-full rounded-lg bg-black"/>
+              : <audio ref={attachPlayer} src={url} controls preload="metadata"
+                  {...mediaHandlers} className="w-full"/>}
+            {localOnly && duration > 0 && (
+              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
+                <strong>Preparación local:</strong> la grabación no se sube al servidor.
+                Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
+                El JSON no contiene audio ni video. El ZIP requiere extraer los clips con
+                FFmpeg localmente; el navegador no convierte esta fuente extensa.
+                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
+                  <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
+                  <p className="mt-2">
+                    En un equipo con Node.js y el repositorio instalado, ejecuta el exportador
+                    indicando las rutas del video, el JSON y el ZIP de salida.
+                  </p>
+                  <code className="mt-1 block break-all rounded bg-slate-950/70 p-2 text-[11px] text-slate-200">
+                    node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
+                  </code>
+                </details>
+              </div>
+            )}
             {audio && duration > 0 && (
               <StudioWaveform
                 file={audio}
@@ -639,8 +713,11 @@ export default function RoleplayStudioPage() {
                 onSeek={seekAudio}
               />
             )}
-            <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
-            {audio && (
+            <p className="text-xs text-slate-400">
+              Duración: {formatTime(duration)} · Navega por la línea de tiempo
+              y marca los límites en el cursor. El zoom no decodifica el archivo completo.
+            </p>
+            {audio && !localOnly && (
               <LocalVadAssistant
                 key={url}
                 file={audio}
@@ -665,7 +742,7 @@ export default function RoleplayStudioPage() {
               }}
               />
             )}
-            <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
+            {!localOnly && <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
               <h2 className="text-sm font-bold text-violet-100">Asistente gratuito de pausas</h2>
               <p className="mt-2 text-xs leading-5 text-slate-300">
                 FFmpeg puede localizar silencios del MP3 para sugerir posibles cortes.
@@ -710,7 +787,7 @@ export default function RoleplayStudioPage() {
                   </button>
                 </div>
               )}
-            </div>
+            </div>}
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
@@ -750,8 +827,38 @@ export default function RoleplayStudioPage() {
             escenarios. Revisa cualquier solapamiento o diálogo del intérprete antes de aplicar.
             Esta acción reemplaza las intervenciones actuales del editor.
           </p>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
+            <span>Mostrando {cuePage * CUES_PER_PAGE + 1}–
+              {Math.min((cuePage + 1) * CUES_PER_PAGE, reviewCues.length)} de {reviewCues.length} turnos</span>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setCuePage(page => Math.max(0, page - 1))}
+                disabled={cuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                Anterior
+              </button>
+              <label className="flex items-center gap-1">
+                Página
+                <input type="number" aria-label="Página de intervenciones SRT"
+                  min={1} max={pageCount} value={cuePage + 1}
+                  onChange={event => {
+                    const requested = Number(event.currentTarget.value);
+                    if (Number.isSafeInteger(requested) && requested >= 1 && requested <= pageCount) {
+                      setCuePage(requested - 1);
+                    }
+                  }}
+                  className="w-14 rounded border border-white/15 bg-slate-900 px-1 py-1 text-center text-xs text-white"/>
+                / {pageCount}
+              </label>
+              <button type="button" onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
+                disabled={cuePage >= pageCount - 1}
+                className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                Siguiente
+              </button>
+            </div>
+          </div>
           <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3">
-            {reviewCues.map((cue, index) => (
+            {visibleCues.map((cue, offset) => {
+              const index = cuePage * CUES_PER_PAGE + offset;
+              return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-white/5 p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
                   aria-label={`Seleccionar turno ${index + 1}`}
@@ -774,7 +881,7 @@ export default function RoleplayStudioPage() {
                   Escuchar
                 </button>
               </div>
-            ))}
+            ); })}
           </div>
           <button type="button" onClick={applyCueSelection}
             className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30">
@@ -786,10 +893,11 @@ export default function RoleplayStudioPage() {
         <section className="space-y-3 rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-5">
           <h2 className="text-lg font-bold text-white">Proyecto de edición</h2>
           <p className="text-sm leading-6 text-slate-300">
-            Guarda y recupera los cortes y perfiles sin volver a empezar. El proyecto JSON
-            se verifica contra el MP3 original mediante SHA-256; no guarda el audio
-            ni las transcripciones. Sí incluye los títulos e instrucciones que hayas redactado,
-            por lo que debes protegerlo si contiene información sensible.
+            {localOnly
+              ? 'Guarda los tiempos y perfiles sin subir el archivo. El proyecto se vincula a la fuente mediante tamaño, duración y SHA-256 de muestras: no es una verificación de todos sus bytes.'
+              : 'Guarda los cortes y perfiles. El proyecto se verifica contra el MP3 original mediante SHA-256 completo.'}
+            El JSON no contiene audio, video ni transcripción, pero sí títulos e instrucciones:
+            protégelo si contienen información sensible.
           </p>
           <div className="flex flex-wrap items-end gap-4">
             <button type="button" onClick={() => void saveDraft()}
@@ -798,7 +906,7 @@ export default function RoleplayStudioPage() {
               {draftBusy ? 'Verificando proyecto…' : 'Guardar proyecto JSON'}
             </button>
             <label className="block text-sm text-indigo-100">
-              Abrir proyecto del MP3 seleccionado
+              {localOnly ? 'Abrir proyecto del archivo local seleccionado' : 'Abrir proyecto del MP3 seleccionado'}
               <input type="file" accept=".json,application/json"
                 disabled={busy || draftBusy}
                 onChange={event => {
@@ -829,8 +937,10 @@ export default function RoleplayStudioPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
             </div>
           </div>
-          <div className="space-y-3 rounded-xl border border-teal-400/20 bg-teal-400/5 p-4">
-            <h3 className="font-semibold text-teal-100">Protocolos de interpretación consecutiva</h3>
+          <details open={!localOnly} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
+            <summary className="cursor-pointer text-sm font-semibold text-teal-100">
+              Protocolos de interpretación consecutiva (opcional)
+            </summary>
             <p className="text-xs leading-5 text-slate-300">
               Plantillas opcionales de apertura, petición de repetición y cierre.
               Solo se insertan en las instrucciones de la intervención que elijas;
@@ -856,7 +966,7 @@ export default function RoleplayStudioPage() {
                 </select>
               </label>
             </div>
-          </div>
+          </details>
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
             <p className="text-sm text-slate-400">No hay intervenciones que coincidan con la búsqueda.</p>
@@ -996,7 +1106,7 @@ export default function RoleplayStudioPage() {
               )}
             </article>
           ))}
-          {segments.length > 0 && (
+          {segments.length > 0 && !localOnly && (
             <StudioConsecutivePreview
               sourceUrl={url}
               sourceDuration={duration}
@@ -1009,12 +1119,17 @@ export default function RoleplayStudioPage() {
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
-            <Download size={18} /> {busy ? 'Procesando segmentos…' : 'Exportar MP3 + manifiesto ZIP'}
+            <Download size={18} /> {busy
+              ? 'Procesando segmentos…'
+              : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP'}
           </button>
         </section>
       )}
       {error && (!audio || !duration) && <p role="alert" className="text-sm text-red-300">{error}</p>}
-      <p className="text-xs leading-5 text-slate-500">Solo administración · La grabación original no se guarda en la biblioteca durante la preparación. Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.</p>
+      <p className="text-xs leading-5 text-slate-500">
+        Solo administración · Los archivos originales locales no se guardan en la biblioteca.
+        Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.
+      </p>
     </main>
   );
 }
