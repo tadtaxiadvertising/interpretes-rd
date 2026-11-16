@@ -192,7 +192,9 @@ export default function WhisperWasmPanel({
       setError(
         code === 'LOCAL_WHISPER_REVIEW_QUEUE_FULL'
           ? 'Hay demasiadas ventanas sin revisar. Se detuvo la captura para no descartar transcripciones pendientes.'
-          : code.includes('OVERFLOW')
+          : code === 'LOCAL_WHISPER_SUSPICIOUS_OUTPUT'
+            ? 'Whisper generó una cantidad anormal de texto para la duración del audio. Se detuvo la sesión y no se añadieron esas palabras a la transcripción.'
+            : code.includes('OVERFLOW')
             ? 'Este equipo no alcanzó el ritmo del audio. Se detuvo la captura sin ocultar pérdida de voz.'
             : 'El reconocimiento local se detuvo. Comprueba permisos y capacidad de CPU/RAM.',
       );
