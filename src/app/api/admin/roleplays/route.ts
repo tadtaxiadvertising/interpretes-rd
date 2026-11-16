@@ -98,6 +98,18 @@ function parseScenarios(raw: string): ScenarioInput[] | null {
   return scenarios;
 }
 
+function firstTrustedBaseAudioPath(
+  uploadedPaths: readonly string[],
+  audioUrls: readonly string[],
+  projectUrl: string | undefined,
+): string | null {
+  // A newly uploaded base object has the canonical path from Storage. For
+  // library reuse, validate the original URL against this project's bucket
+  // (the same invariant checked before assigning a library snapshot).
+  return uploadedPaths[0] ??
+    (audioUrls[0] && projectUrl ? getReusableBaseAudioPath(audioUrls[0], projectUrl) : null);
+}
+
 export async function POST(req: NextRequest) {
   let draftConflict = false;
   let libraryArchivedDuringAssignment = false;
@@ -368,6 +380,13 @@ export async function POST(req: NextRequest) {
 
       }
 
+      const firstBaseAudioPath = firstTrustedBaseAudioPath(
+        uploadedPaths, audioUrls, process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+      );
+      if (!firstBaseAudioPath) {
+        throw new Error('Roleplay base audio path could not be resolved');
+      }
+
       const bulkResult = await db.$transaction(async (tx) => {
         if (useLibrary) {
           const fingerprint = rawLibraryFingerprint as string;
@@ -407,6 +426,7 @@ export async function POST(req: NextRequest) {
               interpreterId: interpreter.id,
               recruitmentCandidateId: null,
               baseAudioUrl: audioUrls[0],
+              baseAudioPath: firstBaseAudioPath,
               status: 'INVITED',
               scenarios: {
                 create: scenarios.map((scenario, index) => ({
@@ -546,6 +566,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Store the same immutable object key used for playback, rather than
+    // requiring callers to parse a persisted legacy URL in the future.
+    const firstBaseAudioPath = firstTrustedBaseAudioPath(
+      uploadedPaths, audioUrls, process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
+    );
+    if (!firstBaseAudioPath) throw new Error('Roleplay base audio path could not be resolved');
+
     // Non-bulk assignments cannot reach this point without a canonical origin.
     let inviteLink = `${frontendOrigin}/roleplays/${session.id}`;
     let candidateAccess: { tokenHash: string; inviteCode: string; expiresAt: Date } | null = null;
@@ -617,7 +644,7 @@ export async function POST(req: NextRequest) {
       }
       await tx.roleplaySession.update({
         where: { id: session.id },
-        data: { baseAudioUrl: audioUrls[0] },
+        data: { baseAudioUrl: audioUrls[0], baseAudioPath: firstBaseAudioPath },
       });
       if (candidateAccess) {
         await tx.roleplayAccess.create({
