@@ -50,6 +50,7 @@ export const adminMenu: MenuItem[] = [
   { icon: UserPlus, label: 'Reclutamiento', href: '/recruitment', section: 'Personas' },
   { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays', section: 'Operaciones' },
   { icon: AudioLines, label: 'Audio Studio', href: '/admin/roleplays/studio', section: 'Operaciones' },
+  { icon: AudioLines, label: 'Live (IA local)', href: '/live', exact: true, section: 'Operaciones' },
   { icon: Library, label: 'Biblioteca roleplays', href: '/admin/roleplays/library', section: 'Operaciones' },
   { icon: Clock, label: 'Producción', href: '/production', section: 'Operaciones' },
   { icon: Users, label: 'Clientes', href: '/admin/clients', section: 'Operaciones' },
@@ -71,6 +72,7 @@ export const adminMenu: MenuItem[] = [
 export const interpreterMenu: MenuItem[] = [
   { icon: LayoutDashboard, label: 'Mi Dashboard', href: '/dashboard', exact: true },
   { icon: Mic2, label: 'Mis Roleplays', href: '/dashboard/roleplays' },
+  { icon: AudioLines, label: 'Live (IA local)', href: '/live', exact: true },
   { icon: Clock, label: 'Calendario de Metas', href: '/dashboard/calendar' },
   { icon: Trophy, label: 'Mi Ranking', href: '/dashboard/ranking' },
   { icon: DollarSign, label: 'Mis Ganancias', href: '/dashboard/earnings' },
