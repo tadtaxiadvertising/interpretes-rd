@@ -66,4 +66,58 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     fireEvent.change(screen.getByRole('slider'), { target: { value: '900' } });
     expect(seek).toHaveBeenCalledWith(900);
   });
+
+  it('zooms to a ten-second window for twelve-hour video without decoding the source', () => {
+    const video = new File(['fictitious bytes'], 'long-source.mp4', { type: 'video/mp4' });
+    const decode = vi.spyOn(video, 'arrayBuffer');
+    const seek = vi.fn();
+    const { container } = render(
+      <StudioWaveform file={video} duration={43200} currentTime={21600}
+        segments={[{ id: 'clip', start: 21599, end: 21602 }]}
+        onSeek={seek} />,
+    );
+    const select = screen.getByRole('combobox', { name: 'Zoom de la línea de tiempo' });
+    fireEvent.change(select, { target: { value: '4320' } });
+    const slider = screen.getByRole('slider', { name: 'Posición del reproductor en segundos' });
+    expect(slider.getAttribute('min')).toBe('21595');
+    expect(slider.getAttribute('max')).toBe('21605');
+    expect(slider.getAttribute('step')).toBe('0.01');
+    expect(screen.getByText('06:00:00.00')).toBeTruthy();
+    expect(screen.getAllByTestId('studio-window-segment')).toHaveLength(1);
+
+    const graphic = container.querySelector('svg')!;
+    vi.spyOn(graphic, 'getBoundingClientRect').mockReturnValue({
+      left: 0, width: 720,
+    } as DOMRect);
+    fireEvent.click(graphic, { clientX: 540 });
+    expect(seek).toHaveBeenCalledWith(21602.5);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retroceder cinco segundos' }));
+    expect(seek).toHaveBeenCalledWith(21595);
+    fireEvent.click(screen.getByRole('button', { name: 'Avanzar cinco segundos' }));
+    expect(seek).toHaveBeenCalledWith(21605);
+    fireEvent.change(slider, { target: { value: '21600.25' } });
+    expect(seek).toHaveBeenCalledWith(21600.25);
+    expect(decode).not.toHaveBeenCalled();
+  });
+
+  it('resets the timeline when replacing a long video with a short recording', () => {
+    const longVideo = new File(['video'], 'long.mp4');
+    const shortAudio = new File(['ID3'], 'short.mp3');
+    const seek = vi.fn();
+    const { rerender } = render(<StudioWaveform
+      file={longVideo} duration={43200} currentTime={21600} segments={[]} onSeek={seek}/>);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Zoom de la línea de tiempo' }), {
+      target: { value: '4320' },
+    });
+    rerender(<StudioWaveform
+      file={shortAudio} duration={90} currentTime={0} segments={[]} onSeek={seek}/>);
+    const zoom = screen.getByRole('combobox', { name: 'Zoom de la línea de tiempo' }) as HTMLSelectElement;
+    expect(zoom.value).toBe('1');
+    const slider = screen.getByRole('slider') as HTMLInputElement;
+    expect(slider.min).toBe('0');
+    expect(slider.max).toBe('90');
+    expect([...zoom.options].map(option => option.value)).toEqual(['1', '4']);
+  });
+
 });
