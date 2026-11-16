@@ -501,6 +501,7 @@ export default function RoleplayStudioPage() {
                   setError('El MP3 supera las 2 horas admitidas por Audio Studio.');
                 } else {
                   setDuration(length);
+                  setError('');
                 }
               }}
               onTimeUpdate={event => {
