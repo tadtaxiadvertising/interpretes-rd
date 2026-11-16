@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStudioDraft, sha256StudioAudio } from '@/lib/roleplay-studio/draft';
+import { createLongMediaDraft, fingerprintLocalMedia } from '@/lib/roleplay-studio/long-media';
 import RoleplayStudioPage from './page';
 
 const hash = 'ab'.repeat(32);
@@ -17,6 +18,12 @@ vi.mock('@/lib/roleplay-studio/draft', async () => {
   );
   return { ...actual, sha256StudioAudio: vi.fn(async () => hash) };
 });
+vi.mock('@/lib/roleplay-studio/long-media', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/roleplay-studio/long-media')>(
+    '@/lib/roleplay-studio/long-media',
+  );
+  return { ...actual, fingerprintLocalMedia: vi.fn(async () => hash) };
+});
 
 describe('Roleplay Studio editable project recovery', () => {
   beforeEach(() => {
@@ -27,6 +34,9 @@ describe('Roleplay Studio editable project recovery', () => {
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     vi.mocked(sha256StudioAudio).mockResolvedValue(hash);
+    vi.mocked(sha256StudioAudio).mockClear();
+    vi.mocked(fingerprintLocalMedia).mockResolvedValue(hash);
+    vi.mocked(fingerprintLocalMedia).mockClear();
   });
   afterEach(() => {
     cleanup();
@@ -58,6 +68,35 @@ describe('Roleplay Studio editable project recovery', () => {
     Object.defineProperty(file, 'text', { configurable: true, value: async () => JSON.stringify(draft) });
     return file;
   }
+
+  it('reopens a short MP3 as a local project without uploading or restoring captions', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('radio', { name: /Local \(predeterminado\)/i }));
+    const source = createLongMediaDraft(3, hash, [{
+      title: 'Médico · local', start: 1.5, end: 5.5,
+      scriptPrompt: 'Interpretar', responseLimit: 120,
+      speakerRole: 'doctor', language: 'es',
+    }], 90);
+    const file = new File(['local project'], 'roleplay-studio-proyecto-largo.json', {
+      type: 'application/json',
+    });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => JSON.stringify(source),
+    });
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto del archivo local seleccionado/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/Proyecto vinculado por tamaño, duración y huella parcial/i)).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Médico · local');
+    expect(screen.queryByText(/Transcripción de referencia · solo editor/i)).toBeNull();
+    expect(vi.mocked(fingerprintLocalMedia)).toHaveBeenCalledOnce();
+    expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
 
   it('restores verified segment metadata from a project without restoring private captions', async () => {
     selectSource();
