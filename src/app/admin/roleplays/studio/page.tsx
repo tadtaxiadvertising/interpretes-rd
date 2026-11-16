@@ -196,6 +196,11 @@ export default function RoleplayStudioPage() {
     setCuePage(0);
     setCueSearch('');
     setShowOnlySelectedCues(false);
+    // Filters and the expanded editor belong to the previous source.
+    // Do not let a replacement recording appear to have missing interventions.
+    setSegmentSearch('');
+    setShowPendingReview(false);
+    setExpandedSegmentId(null);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
@@ -1196,8 +1201,8 @@ export default function RoleplayStudioPage() {
           )}
           {segments.length >= 6 && (
             <p className="text-xs text-slate-400">
-              {visibleSegments.length} de {segments.length} turnos. Abre «Editar» para
-              modificar una intervención o utiliza «Vista detallada».
+              {visibleSegments.length} de {segments.length} turnos. Identifica hablante e idioma
+              en la fila compacta; abre «Editar» para ajustar tiempos e instrucciones.
             </p>
           )}
           {visibleSegments.map(({ segment, index }) => (
@@ -1257,6 +1262,39 @@ export default function RoleplayStudioPage() {
                 }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
+              {compactRows && expandedSegmentId !== segment.id && (
+                <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
+                  <label className="flex min-w-[180px] flex-1 items-center gap-2 text-xs text-slate-300">
+                    <span className="shrink-0">Hablante</span>
+                    <select aria-label={'Hablante rápido intervención ' + (index + 1)}
+                      value={segment.speakerRole}
+                      onChange={event => update(segment.id, {
+                        speakerRole: event.target.value as StudioSpeakerRole,
+                      })}
+                      className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                      <option value="unknown">Por identificar</option>
+                      <option value="doctor">Médico</option>
+                      <option value="patient">Paciente</option>
+                      <option value="nurse">Enfermería</option>
+                      <option value="operator">Operador</option>
+                      <option value="interpreter">Intérprete original — excluir</option>
+                    </select>
+                  </label>
+                  <label className="flex min-w-[140px] flex-1 items-center gap-2 text-xs text-slate-300">
+                    <span className="shrink-0">Idioma</span>
+                    <select aria-label={'Idioma rápido intervención ' + (index + 1)}
+                      value={segment.language}
+                      onChange={event => update(segment.id, {
+                        language: event.target.value as StudioLanguage,
+                      })}
+                      className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                      <option value="unknown">Por revisar</option>
+                      <option value="en">Inglés (EN)</option>
+                      <option value="es">Español (ES)</option>
+                    </select>
+                  </label>
+                </div>
+              )}
               {(!compactRows || expandedSegmentId === segment.id) && (
               <div className="space-y-2 border-t border-white/5 pt-2">
               <label className="block text-sm text-slate-300">Título
