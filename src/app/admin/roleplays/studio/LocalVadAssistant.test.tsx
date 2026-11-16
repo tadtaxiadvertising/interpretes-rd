@@ -1,44 +1,62 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import LocalVadAssistant from './LocalVadAssistant';
 
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
-describe('local VAD audio preflight', () => {
-  const fakeFile = {
-    size: 1024,
-    arrayBuffer: vi.fn(async () => new ArrayBuffer(4)),
-  } as unknown as File;
+describe('reuse VAD results without re-decoding or uploading the MP3', () => {
+  it('reviews cached timing metadata and adds only non-overlapping cuts', () => {
+    const fetchMock = vi.fn(() => { throw new Error('No network allowed in local mode'); });
+    const decoder = vi.fn(() => { throw new Error('No second AudioContext allowed'); });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('AudioContext', decoder);
+    const apply = vi.fn();
 
-  it('rejects an audio file over four minutes without allocating decoded audio', async () => {
-    const createContext = vi.fn(() => { throw new Error('decoder must not be constructed'); });
-    vi.stubGlobal('AudioContext', createContext);
-
-    render(<LocalVadAssistant file={fakeFile} duration={301} remaining={5} onApply={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Analizar voz localmente' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('hasta 4 minutos');
-    });
-    expect(createContext).not.toHaveBeenCalled();
-    expect(fakeFile.arrayBuffer).not.toHaveBeenCalled();
+    render(<LocalVadAssistant
+      snapshot={{ status: 'ready', segments: [
+        { start: 1, end: 4, signalLevel: 0.8 },
+        { start: 10, end: 14, signalLevel: 0.8 },
+      ] }}
+      duration={20}
+      existing={[{ start: 9, end: 15 }]}
+      onApply={apply}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    expect(screen.getByText(/regiones omitidas por duración, solapamientos o cuota/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir 1 cortes revisables' }));
+    expect(apply).toHaveBeenCalledWith([{ start: 1, end: 4 }]);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(decoder).not.toHaveBeenCalled();
   });
 
-  it('does not decode audio before metadata duration is available', async () => {
-    const createContext = vi.fn(() => { throw new Error('decoder must not be constructed'); });
-    vi.stubGlobal('AudioContext', createContext);
+  it('explains limited memory and missing browser decoding without trying the server', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { rerender } = render(<LocalVadAssistant
+      snapshot={{ status: 'limited', segments: [] }} duration={300}
+      existing={[]} onApply={vi.fn()} />);
+    expect(screen.getByRole('status').textContent).toContain('hasta 4 minutos y 8 MiB');
+    expect(screen.getByRole('button', { name: 'Revisar actividad local' })).toBeDisabled();
+    rerender(<LocalVadAssistant
+      snapshot={{ status: 'unavailable', segments: [] }} duration={90}
+      existing={[]} onApply={vi.fn()} />);
+    expect(screen.getByRole('status').textContent).toContain('no pudo decodificar');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 
-    render(<LocalVadAssistant file={fakeFile} duration={0} remaining={5} onApply={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Analizar voz localmente' }));
-
-    await waitFor(() => {
-      expect(screen.getByRole('status').textContent).toContain('Espera a que se cargue la duración');
-    });
-    expect(createContext).not.toHaveBeenCalled();
-    expect(fakeFile.arrayBuffer).not.toHaveBeenCalled();
+  it('does not invent speech when the decoder returned only silence', () => {
+    const apply = vi.fn();
+    render(<LocalVadAssistant
+      snapshot={{ status: 'ready', segments: [] }} duration={30}
+      existing={[]} onApply={apply} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    expect(screen.getByRole('status').textContent).toContain('No hay cortes adicionales');
+    expect(screen.queryByText(/Añadir \d+ cortes revisables/)).toBeNull();
+    expect(apply).not.toHaveBeenCalled();
   });
 });
