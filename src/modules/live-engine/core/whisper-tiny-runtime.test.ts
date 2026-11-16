@@ -82,4 +82,19 @@ describe('local Whisper tiny Worker safety', () => {
     await tick();
     expect(messages).toContainEqual({ type: 'result', id: 5, text: 'Listo' });
   });
+  it('fails closed if the model hallucinates an implausibly long transcript', async () => {
+    const engine = vi.fn(async () => new Array(150).fill('fiebre').join(' '));
+    const { send, messages } = setup(vi.fn(async () => engine));
+    send({ type: 'load', language: 'es' });
+    await tick();
+    send({ type: 'transcribe', id: 77, language: 'es', samples: new Float32Array(4 * 16_000).fill(0.25) });
+    await tick();
+    expect(messages).toContainEqual({
+      type: 'error',
+      id: 77,
+      code: 'LOCAL_WHISPER_SUSPICIOUS_OUTPUT',
+    });
+    expect(messages).not.toContainEqual(expect.objectContaining({ type: 'result', id: 77 }));
+  });
+
 });
