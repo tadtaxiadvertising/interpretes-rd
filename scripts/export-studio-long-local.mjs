@@ -225,6 +225,28 @@ function makeStoreZip(entries) {
   return Buffer.concat([...local, ...central, ending]);
 }
 
+/**
+ * Never leave an apparently usable but truncated ZIP if the local disk fills.
+ * Exclusive creation protects existing user files, and 0600 is retained on
+ * POSIX systems. On Windows, the containing directory's ACL still applies.
+ */
+async function writeExclusiveZip(output, archive, write = (handle, data) => handle.writeFile(data)) {
+  // Opening outside the try block is important: EEXIST must not cause the
+  // cleanup path to delete a ZIP created by a different process or a symlink.
+  const handle = await fs.open(output, 'wx', 0o600);
+  try {
+    await write(handle, archive);
+    await handle.sync();
+    await handle.close();
+  } catch (cause) {
+    // Cleanup also applies if sync/close fails after the bytes were written.
+    await handle.close().catch(() => {});
+    // We created this path with wx. Do not leave a partial package behind.
+    await fs.unlink(output).catch(() => {});
+    throw cause;
+  }
+}
+
 async function exportLocal({ source, project, output }) {
   const sourceInfo = await fs.stat(source);
   const projectInfo = await fs.stat(project);
@@ -276,7 +298,7 @@ async function exportLocal({ source, project, output }) {
         sourceHash !== await fingerprintFile(source, after.size)) {
       fail('La grabación original cambió durante la exportación. Repite el proceso.');
     }
-    await fs.writeFile(output, archive, { flag: 'wx', mode: 0o600 });
+    await writeExclusiveZip(output, archive);
     process.stdout.write('ZIP local generado: ' + basename(output) + '\n');
   } finally {
     await fs.rm(workdir, { recursive: true, force: true });
@@ -290,4 +312,4 @@ if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import
   });
 }
 
-export { parseArgs, validateProject, fingerprintFile, makeStoreZip, exportLocal };
+export { parseArgs, validateProject, fingerprintFile, makeStoreZip, writeExclusiveZip, exportLocal };
