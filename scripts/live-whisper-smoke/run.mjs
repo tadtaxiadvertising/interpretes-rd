@@ -39,6 +39,12 @@ try {
   await page.goto(ORIGIN + '/scripts/live-whisper-smoke/index.html', {
     waitUntil: 'domcontentloaded',
   });
+  // Even importing the UI/Worker wrapper must not download model weights
+  // before a real user interaction.
+  await page.waitForTimeout(800);
+  if (remoteRequests.length !== 0) {
+    throw new Error('WHISPER_BROWSER_MODEL_DOWNLOAD_BEFORE_USER_CLICK');
+  }
   // The only model-loading operation occurs from a user click.
   await page.getByRole('button', { name: 'Run explicit local model smoke' }).click();
   await page.waitForFunction(() => {
