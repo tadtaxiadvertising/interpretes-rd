@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
+import { webcrypto } from 'node:crypto';
 import {
   createLongMediaDraft, fingerprintLocalMedia, mediaKind, openLongMediaDraft,
   usesLocalLongMode, validateLocalMedia,
@@ -37,6 +38,7 @@ describe('local-only long media projects', () => {
   });
 
   it('fingerprints only bounded slices and never calls file.arrayBuffer on the whole source', async () => {
+    vi.stubGlobal('crypto', webcrypto);
     const file = new File([new Uint8Array(512 * 1024)], 'long.webm');
     const wholeRead = vi.spyOn(file, 'arrayBuffer').mockRejectedValue(new Error('unexpected full read'));
     const digest = await fingerprintLocalMedia(file);
@@ -44,5 +46,6 @@ describe('local-only long media projects', () => {
     expect(wholeRead).not.toHaveBeenCalled();
     expect(await fingerprintLocalMedia(file)).toBe(digest);
     wholeRead.mockRestore();
+    vi.unstubAllGlobals();
   });
 });
