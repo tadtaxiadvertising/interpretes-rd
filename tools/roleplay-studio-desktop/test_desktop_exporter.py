@@ -135,7 +135,7 @@ class StudioDesktopTests(unittest.TestCase):
                                 for info in archive.infolist()))
             raw = self.output.read_bytes()
             self.assertEqual(struct.unpack_from("<H", raw, 6)[0], 0x0800)
-            central = raw.index(b"PK\\x01\\x02".decode("unicode_escape").encode("latin1"))
+            central = raw.index(bytes((0x50, 0x4B, 0x01, 0x02)))
             self.assertEqual(struct.unpack_from("<H", raw, central + 8)[0], 0x0800)
             self.assertIsNone(archive.testzip())
             manifest = json.loads(archive.read("manifest.json"))
