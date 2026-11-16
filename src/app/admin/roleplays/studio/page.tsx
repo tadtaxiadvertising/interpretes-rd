@@ -833,6 +833,11 @@ export default function RoleplayStudioPage() {
                   <span className="ml-2 text-xs font-normal text-slate-400">
                     {formatTime(segment.start)}–{formatTime(segment.end)} · {segment.speakerRole} · {segment.language.toUpperCase()}
                   </span>
+                  {captionTexts[segment.id] && compactRows && (
+                    <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-amber-200/80">
+                      {captionTexts[segment.id]}
+                    </span>
+                  )}
                 </h3>
                 <button type="button" onClick={() => splitAtPlayhead(segment.id)}
                   aria-label={'Dividir intervención ' + (index + 1) + ' en cursor'}
