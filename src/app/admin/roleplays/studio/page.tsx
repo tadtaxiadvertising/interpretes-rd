@@ -590,6 +590,34 @@ export default function RoleplayStudioPage() {
         .some(value => value.toLocaleLowerCase().includes(query)))
     .sort((a, b) => a.segment.start - b.segment.start);
 
+  const mediaHandlers = {
+    onPlay: () => setEditorPlaybackRevision(n => n + 1),
+    onLoadedMetadata: (event: SyntheticEvent<HTMLMediaElement>) => {
+      const length = event.currentTarget.duration;
+      if (!Number.isFinite(length) || length <= 0) {
+        setDuration(0);
+        setError('No se pudo determinar la duración de la grabación. Verifica el formato.');
+      } else if (length > MAX_LOCAL_MEDIA_SECONDS) {
+        setDuration(0);
+        setError('El archivo supera las 12 horas admitidas en modo local.');
+      } else {
+        setDuration(length);
+        setError('');
+      }
+    },
+    onTimeUpdate: (event: SyntheticEvent<HTMLMediaElement>) => {
+      setPlayhead(event.currentTarget.currentTime);
+      if (previewEnd.current !== null &&
+          event.currentTarget.currentTime >= previewEnd.current) stopPreview();
+    },
+    onPause: () => { previewEnd.current = null; setPreviewingId(null); },
+    onEnded: () => { previewEnd.current = null; setPreviewingId(null); },
+    onError: () => {
+      setDuration(0);
+      setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');
+    },
+  };
+
   return (
     <main className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -597,45 +625,40 @@ export default function RoleplayStudioPage() {
           <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
           <h1 className="text-3xl font-bold text-white">Roleplay Audio Studio</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Prepara intervenciones desde una grabación MP3 sin crear sesiones ni modificar audios publicados.
-            Los paquetes se importan después desde el formulario administrativo, donde se asignan a candidatos o intérpretes.
+            Prepara intervenciones desde una grabación de audio o video sin crear sesiones
+            ni modificar audios publicados. Los MP3 pequeños permiten exportar el ZIP;
+            fuentes extensas se revisan localmente y se guardan como un proyecto de cortes.
           </p>
         </div>
         <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
       </header>
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-        <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">Grabación original MP3 (máximo 15 MiB)</label>
-        <input id="studio-audio" type="file" accept=".mp3,audio/mpeg" className="mt-3 block w-full text-sm text-slate-300" onChange={event => chooseAudio(event.currentTarget.files?.[0])} />
+        <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">
+          Grabación original MP3 o video/audio largo (local, hasta 8 GiB)
+        </label>
+        <input id="studio-audio" type="file"
+          accept=".mp3,.m4a,.wav,.aac,.ogg,.oga,.opus,.flac,.mp4,.m4v,.mov,.webm,.mkv,audio/*,video/*"
+          className="mt-2 block w-full text-sm text-slate-300"
+          onChange={event => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = '';
+            chooseAudio(file);
+          }} />
         {url && (
           <div className="mt-5 space-y-3">
-            <audio ref={player} src={url} controls preload="metadata" className="w-full"
-              onPlay={() => setEditorPlaybackRevision(n => n + 1)}
-              onLoadedMetadata={event => {
-                const length = event.currentTarget.duration;
-                if (!Number.isFinite(length) || length <= 0) {
-                  setDuration(0);
-                  setError('No se pudo determinar la duración de este MP3.');
-                } else if (length > 7200) {
-                  setDuration(0);
-                  setError('El MP3 supera las 2 horas admitidas por Audio Studio.');
-                } else {
-                  setDuration(length);
-                  setError('');
-                }
-              }}
-              onTimeUpdate={event => {
-                setPlayhead(event.currentTarget.currentTime);
-                if (previewEnd.current !== null &&
-                    event.currentTarget.currentTime >= previewEnd.current) stopPreview();
-              }}
-              onPause={() => {
-                previewEnd.current = null;
-                setPreviewingId(null);
-              }}
-              onEnded={() => {
-                previewEnd.current = null;
-                setPreviewingId(null);
-              }} />
+            {videoSource
+              ? <video ref={attachPlayer} src={url} controls preload="metadata" playsInline
+                  {...mediaHandlers} className="max-h-64 w-full rounded-lg bg-black"/>
+              : <audio ref={attachPlayer} src={url} controls preload="metadata"
+                  {...mediaHandlers} className="w-full"/>}
+            {localOnly && duration > 0 && (
+              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
+                <strong>Preparación local:</strong> la grabación no se sube al servidor.
+                Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
+                El JSON no contiene audio ni video. El ZIP requiere extraer los clips con
+                FFmpeg localmente; el navegador no convierte esta fuente extensa.
+              </div>
+            )}
             {audio && duration > 0 && (
               <StudioWaveform
                 file={audio}
@@ -645,8 +668,11 @@ export default function RoleplayStudioPage() {
                 onSeek={seekAudio}
               />
             )}
-            <p className="text-sm text-slate-400">Duración: {formatTime(duration)} · Navega con la línea de tiempo y usa “Marcar inicio” / “Marcar fin” para fijar cada intervención.</p>
-            {audio && (
+            <p className="text-xs text-slate-400">
+              Duración: {formatTime(duration)} · Navega por la línea de tiempo
+              y marca los límites en el cursor. El zoom no decodifica el archivo completo.
+            </p>
+            {audio && !localOnly && (
               <LocalVadAssistant
                 key={url}
                 file={audio}
@@ -671,7 +697,7 @@ export default function RoleplayStudioPage() {
               }}
               />
             )}
-            <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
+            {!localOnly && <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
               <h2 className="text-sm font-bold text-violet-100">Asistente gratuito de pausas</h2>
               <p className="mt-2 text-xs leading-5 text-slate-300">
                 FFmpeg puede localizar silencios del MP3 para sugerir posibles cortes.
@@ -716,7 +742,7 @@ export default function RoleplayStudioPage() {
                   </button>
                 </div>
               )}
-            </div>
+            </div>}
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
