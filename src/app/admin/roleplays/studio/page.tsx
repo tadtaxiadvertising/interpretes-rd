@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -76,6 +76,8 @@ export default function RoleplayStudioPage() {
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
   const [cuePage, setCuePage] = useState(0);
+  const [cueSearch, setCueSearch] = useState('');
+  const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
   const CUES_PER_PAGE = 60;
   const player = useRef<HTMLMediaElement | null>(null);
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
@@ -157,6 +159,8 @@ export default function RoleplayStudioPage() {
     setReviewCues([]);
     setChosenCueIndices([]);
     setCuePage(0);
+    setCueSearch('');
+    setShowOnlySelectedCues(false);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
@@ -302,6 +306,8 @@ export default function RoleplayStudioPage() {
       // The file may have changed, or a newer import/edit may have started.
       if (revision !== subtitleImportRevision.current) return;
       const cues = parseTimedTranscriptForReview(transcript, usesLocalLongMode(audio, duration));
+      setCueSearch('');
+      setShowOnlySelectedCues(false);
       const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
       if (!selected.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
@@ -577,8 +583,21 @@ export default function RoleplayStudioPage() {
 
   const localOnly = audio !== null && usesLocalLongMode(audio, duration);
   const videoSource = audio !== null && mediaKind(audio) === 'video';
-  const pageCount = Math.max(1, Math.ceil(reviewCues.length / CUES_PER_PAGE));
-  const visibleCues = reviewCues.slice(cuePage * CUES_PER_PAGE, (cuePage + 1) * CUES_PER_PAGE);
+  // Retain the unfiltered SRT/VTT index for selections across pages.
+  const filteredCueEntries = useMemo(() => {
+    const query = cueSearch.trim().toLocaleLowerCase();
+    const selectedIndices = new Set(chosenCueIndices);
+    return reviewCues.flatMap((cue, index) => {
+      if (showOnlySelectedCues && !selectedIndices.has(index)) return [];
+      if (query && ![cue.text, cue.speaker || '', String(index + 1)]
+        .some(value => value.toLocaleLowerCase().includes(query))) return [];
+      return [{ cue, index }];
+    });
+  }, [reviewCues, cueSearch, showOnlySelectedCues, chosenCueIndices]);
+  const pageCount = Math.max(1, Math.ceil(filteredCueEntries.length / CUES_PER_PAGE));
+  const currentCuePage = Math.min(cuePage, pageCount - 1);
+  const visibleCues = filteredCueEntries.slice(
+    currentCuePage * CUES_PER_PAGE, (currentCuePage + 1) * CUES_PER_PAGE);
 
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = compactPreference ?? (localOnly || segments.length >= 6);
@@ -792,18 +811,34 @@ export default function RoleplayStudioPage() {
             escenarios. Revisa cualquier solapamiento o diálogo del intérprete antes de aplicar.
             Esta acción reemplaza las intervenciones actuales del editor.
           </p>
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+            <input type="search" aria-label="Buscar turnos en transcripción"
+              value={cueSearch} placeholder="Buscar texto, hablante o número…"
+              onChange={event => { setCueSearch(event.currentTarget.value); setCuePage(0); }}
+              className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white placeholder:text-slate-500"/>
+            <label className="flex shrink-0 items-center gap-1.5">
+              <input type="checkbox" checked={showOnlySelectedCues}
+                onChange={event => { setShowOnlySelectedCues(event.currentTarget.checked); setCuePage(0); }}
+                className="h-4 w-4 accent-amber-400"/>
+              Solo seleccionados
+            </label>
+          </div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
-            <span>Mostrando {cuePage * CUES_PER_PAGE + 1}–
-              {Math.min((cuePage + 1) * CUES_PER_PAGE, reviewCues.length)} de {reviewCues.length} turnos</span>
+            <span>
+              {filteredCueEntries.length
+                ? `Mostrando ${currentCuePage * CUES_PER_PAGE + 1}–${Math.min((currentCuePage + 1) * CUES_PER_PAGE, filteredCueEntries.length)} de ${filteredCueEntries.length} turnos`
+                : 'Ningún turno coincide con los filtros'}
+              {filteredCueEntries.length !== reviewCues.length ? ` · ${reviewCues.length} en origen` : ''}
+            </span>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setCuePage(page => Math.max(0, page - 1))}
-                disabled={cuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                disabled={currentCuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
                 Anterior
               </button>
               <label className="flex items-center gap-1">
                 Página
                 <input type="number" aria-label="Página de intervenciones SRT"
-                  min={1} max={pageCount} value={cuePage + 1}
+                  min={1} max={pageCount} value={currentCuePage + 1}
                   onChange={event => {
                     const requested = Number(event.currentTarget.value);
                     if (Number.isSafeInteger(requested) && requested >= 1 && requested <= pageCount) {
@@ -814,15 +849,14 @@ export default function RoleplayStudioPage() {
                 / {pageCount}
               </label>
               <button type="button" onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
-                disabled={cuePage >= pageCount - 1}
+                disabled={currentCuePage >= pageCount - 1}
                 className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
                 Siguiente
               </button>
             </div>
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3">
-            {visibleCues.map((cue, offset) => {
-              const index = cuePage * CUES_PER_PAGE + offset;
+            {visibleCues.map(({ cue, index }) => {
               return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-white/5 p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
