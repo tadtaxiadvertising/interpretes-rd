@@ -21,10 +21,15 @@ export interface ReusableRoleplayScenario {
  */
 export function getReusableBaseAudioPath(audioUrl: string, supabaseUrl: string): string | null {
   try {
-    // URL.pathname normalizes encoded dot segments (e.g. %2e%2e), so reject
-    // encoded paths before URL parsing instead of trusting the normalized result.
-    // Our own object keys are ASCII-only and never need percent encoding.
-    if (/%[0-9a-f]{2}/i.test(audioUrl)) return null;
+    // URL() normalizes both raw and percent-encoded dot-segment traversal
+    // before exposing pathname, and may also treat backslashes as separators.
+    // Reject them on the RAW input first. Immutable project keys are ASCII
+    // and never contain encoded characters or path separator escapes.
+    if (
+      /%[0-9a-f]{2}/i.test(audioUrl) ||
+      /\\/.test(audioUrl) ||
+      /\/\.{1,2}(?:\/|[?#]|$)/.test(audioUrl)
+    ) return null;
     const origin = new URL(supabaseUrl);
     const candidate = new URL(audioUrl);
     if (candidate.origin !== origin.origin || candidate.protocol !== 'https:' || candidate.search || candidate.hash) {
@@ -34,7 +39,11 @@ export function getReusableBaseAudioPath(audioUrl: string, supabaseUrl: string):
     if (!candidate.pathname.startsWith(prefix)) return null;
 
     const segments = candidate.pathname.slice(prefix.length).split('/');
-    if (segments.length < 2 || segments.some((part) =>
+    // Legacy getBaseAudioPath(sessionId, ext) produces flat
+    // base/<sessionId>.<ext> keys. Newer Studio imports may use nested
+    // base/<uploadId>/<filename> keys. Both are first-party immutable
+    // objects; never accept an empty segment, traversal or encoded key.
+    if (segments.length < 1 || segments.some((part) =>
       !part || part === '.' || part === '..' || !/^[a-zA-Z0-9._-]+$/.test(part)
     )) return null;
     return `base/${segments.join('/')}`;
