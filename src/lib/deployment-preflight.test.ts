@@ -396,12 +396,16 @@ describe('production deployment workflow', () => {
     expect(() => normalizeDirectDatabaseUrl(`${validEnv.DIRECT_URL}?pool_mode=transaction`)).toThrow('pooler');
   });
 
-  it('serializes the whole pipeline without cancelling an active migration', () => {
+  it('serializes production migrations while cancelling superseded PR checks only', () => {
     const workflow = readFileSync('.github/workflows/deploy.yml', 'utf8');
     const beforeJobs = workflow.split('\njobs:')[0];
     expect(beforeJobs).toContain('concurrency:');
-    expect(beforeJobs).toContain('github.ref');
-    expect(beforeJobs).toContain('cancel-in-progress: false');
+    expect(beforeJobs).toContain('group: interpreters-cicd-${{ github.ref }}');
+    // A conditional evaluated false for push/main and workflow_dispatch.
+    // Production migration runs are therefore never interrupted by new pushes.
+    expect(beforeJobs).toContain(
+      "cancel-in-progress: ${{ github.event_name == 'pull_request' }}",
+    );
   });
 });
 
