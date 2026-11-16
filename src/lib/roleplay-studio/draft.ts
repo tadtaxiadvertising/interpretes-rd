@@ -22,7 +22,8 @@ interface StudioDraft {
 export const MAX_STUDIO_DRAFT_CHARS = 180_000;
 const MAX_ORIGINAL_AUDIO_BYTES = 15 * 1024 * 1024;
 const MAX_ORIGINAL_AUDIO_SECONDS = 7200;
-const FORMAT = 'interpretes-rd-audio-studio-draft';
+export const STUDIO_DRAFT_FORMAT = 'interpretes-rd-audio-studio-draft';
+const FORMAT = STUDIO_DRAFT_FORMAT;
 const ROLES: readonly StudioSpeakerRole[] = ['doctor', 'patient', 'interpreter', 'nurse', 'operator', 'unknown'];
 const LANGUAGES: readonly StudioLanguage[] = ['en', 'es', 'unknown'];
 
