@@ -95,29 +95,36 @@ const nextConfig: NextConfig = {
           },
         ],
       },
-      {
-        // Dedicated bundled Worker scripts receive this narrowly scoped CSP.
-        // Ordinary pages still inherit the original restrictive page policy.
-        source: '/_next/static/chunks/:path*',
-        headers: [{
-          key: 'Content-Security-Policy',
-          value: baseCsp.replace(
-            "connect-src 'self'",
-            "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
-          ),
-        }],
-      },
-      {
-        // Model weights are downloaded only on /live after user consent.
-        // No other application route gains these outgoing hosts.
-        source: '/live',
-        headers: [{
-          key: 'Content-Security-Policy',
-          value: baseCsp.replace(
-            "connect-src 'self'",
-            "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
-          ),
-        }],
+      // Do not expand outgoing model download permissions at all in the
+      // production default build. The sandbox pilot must be explicitly enabled
+      // at build time AND validated in real browsers before a rollout.
+      ...(process.env.NEXT_PUBLIC_LIVE_WHISPER_PILOT_ENABLED === 'true'
+        ? [
+            {
+              // Dedicated bundled Worker scripts receive this narrowly scoped CSP.
+              // Ordinary pages still inherit the original restrictive page policy.
+              source: '/_next/static/chunks/:path*',
+              headers: [{
+                key: 'Content-Security-Policy',
+                value: baseCsp.replace(
+                  "connect-src 'self'",
+                  "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
+                ),
+              }],
+            },
+            {
+              // Model weights are downloaded only on /live after user consent.
+              // No other application route gains these outgoing hosts.
+              source: '/live',
+              headers: [{
+                key: 'Content-Security-Policy',
+                value: baseCsp.replace(
+                  "connect-src 'self'",
+                  "connect-src 'self' https://huggingface.co https://cdn-lfs.hf.co https://cas-bridge.xethub.hf.co https://cas-server.xethub.hf.co",
+                ),
+              }],
+          ]
+        : []),
       },
     ];
   },
