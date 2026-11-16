@@ -175,20 +175,29 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: production
+    outputs:
+      is_current: ${{ steps.recheck_head.outputs.current }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Check main HEAD before database operations
+        id: check_head
+        run: bash scripts/ci/check-current-main-head.sh
+
       - name: Setup Node.js
+        if: steps.check_head.outputs.current == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: 'npm'
 
       - name: Install migration dependencies
+        if: steps.check_head.outputs.current == 'true'
         run: npm ci --legacy-peer-deps
 
       - name: Preflight production credentials and read-only connection
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
@@ -196,58 +205,74 @@ jobs:
         run: npx tsx scripts/deployment-preflight.ts
 
       - name: Apply client directory migration before ownership constraints
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261105140000_client_directory/migration.sql --apply --transaction
 
       - name: Apply account ownership migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261105150000_account_names_per_client/migration.sql --apply --transaction
 
       - name: Apply canonical client directory constraints
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261105180000_client_directory/migration.sql --apply --transaction
 
       - name: Apply Roleplay audio conversion queue migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261108143000_roleplay_audio_job_queue/migration.sql --apply --transaction
 
       - name: Apply Roleplay base audio path migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261108170000_roleplay_base_audio_path/migration.sql --apply --transaction
 
       - name: Apply operational account holder details migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261108120000_operational_account_holder_details/migration.sql --apply --transaction
 
       - name: Apply per-session call production ledger migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261111090000_call_production_ledger/migration.sql --apply --transaction
 
       - name: Apply roleplay library archive migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261112220000_roleplay_library_archives/migration.sql --apply --transaction
 
       - name: Apply Roleplay Studio turn metadata migration
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
         run: npm run migrate -- prisma/migrations/20261114233000_roleplay_studio_turn_metadata/migration.sql --apply --transaction
 
       - name: Verify production client directory schema after migrations
+        if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
           EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
         run: npx tsx scripts/deployment-preflight.ts --verify-schema
 
+      - name: Recheck main HEAD before Easypanel webhook
+        id: recheck_head
+        if: steps.check_head.outputs.current == 'true'
+        run: bash scripts/ci/check-current-main-head.sh
+
       - name: Call Easypanel Webhook — interpreters
+        if: steps.recheck_head.outputs.current == 'true'
         run: |
           set -euo pipefail
           echo "Deploying interpreters (Next.js) to Easypanel..."
@@ -270,11 +295,19 @@ jobs:
   deploy-roleplay-audio-worker:
     name: Deploy Roleplay audio worker (optional)
     needs: [validate, deploy-interpreters]
-    if: github.ref == 'refs/heads/main' && vars.ENABLE_ROLEPLAY_AUDIO_WORKER == 'true'
+    if: github.ref == 'refs/heads/main' && vars.ENABLE_ROLEPLAY_AUDIO_WORKER == 'true' && needs.deploy-interpreters.outputs.is_current == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check main HEAD before worker webhook
+        id: head
+        run: bash scripts/ci/check-current-main-head.sh
+
       - name: Call Easypanel Webhook — Roleplay audio worker
+        if: steps.head.outputs.current == 'true'
         env:
           EASYPANEL_WEBHOOK_ROLEPLAY_WORKER: ${{ secrets.EASYPANEL_WEBHOOK_ROLEPLAY_WORKER }}
         run: |
@@ -295,11 +328,19 @@ jobs:
   deploy-interpreters-api:
     name: Deploy interpreters-api (Backend)
     needs: [validate, deploy-interpreters]
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && needs.deploy-interpreters.outputs.is_current == 'true'
     runs-on: ubuntu-latest
     environment: production
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check main HEAD before backend webhook
+        id: head
+        run: bash scripts/ci/check-current-main-head.sh
+
       - name: Call Easypanel Webhook — interpreters-api
+        if: steps.head.outputs.current == 'true'
         run: |
           set -euo pipefail
           echo "Deploying interpreters-api (Backend) to Easypanel..."
