@@ -26,6 +26,23 @@ export interface StudioWaveformProps {
 const CHART_WIDTH = 720;
 const CHART_HEIGHT = 96;
 const HALF_HEIGHT = CHART_HEIGHT / 2;
+// Fixed ratios preserve existing zoom controls, with ~10-second inspection
+// windows even for twelve-hour sources. Only coordinates change; no PCM decode.
+const ZOOM_LEVELS = [1, 4, 12, 60, 240, 720, 2400, 4320] as const;
+const MIN_VIEW_SECONDS = 10;
+
+function preciseTimeLabel(seconds: number): string {
+  const safe = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const centiseconds = Math.round(safe * 100);
+  const wholeSeconds = Math.floor(centiseconds / 100);
+  const hours = Math.floor(wholeSeconds / 3600);
+  const minutes = String(Math.floor(wholeSeconds / 60) % 60).padStart(2, '0');
+  const secondsPart = String(wholeSeconds % 60).padStart(2, '0');
+  const fraction = String(centiseconds % 100).padStart(2, '0');
+  return hours
+    ? `${String(hours).padStart(2, '0')}:${minutes}:${secondsPart}.${fraction}`
+    : `${String(Math.floor(wholeSeconds / 60)).padStart(2, '0')}:${secondsPart}.${fraction}`;
+}
 
 function timeLabel(seconds: number): string {
   const value = Math.max(0, Math.floor(seconds));
@@ -45,8 +62,15 @@ export default function StudioWaveform({
 }: StudioWaveformProps) {
   const [peaks, setPeaks] = useState<number[]>([]);
   const [status, setStatus] = useState<PreviewStatus>('loading');
-  const [zoom, setZoom] = useState<1 | 4 | 12 | 60>(1);
+  const [zoom, setZoom] = useState<number>(1);
   const [requestedStart, setRequestedStart] = useState(0);
+
+  // Opening another file must not inherit a narrow viewport from the prior
+  // multi-hour recording, especially if its zoom choice is now unavailable.
+  useEffect(() => {
+    setZoom(1);
+    setRequestedStart(0);
+  }, [file]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +118,8 @@ export default function StudioWaveform({
   }, [file, duration]);
 
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 1;
+  const availableZoomLevels = ZOOM_LEVELS.filter(level =>
+    level === 1 || safeDuration / level >= MIN_VIEW_SECONDS);
   const safeTime = Math.min(safeDuration, Math.max(0, Number.isFinite(currentTime) ? currentTime : 0));
   // Zoom changes only the viewport, never the underlying audio or decoding budget.
   const windowSeconds = safeDuration / zoom;
@@ -108,7 +134,9 @@ export default function StudioWaveform({
     const sourceIndex = Math.min(peaks.length - 1, Math.floor(at / safeDuration * peaks.length));
     return peaks[sourceIndex];
   }), [status, peaks, safeDuration, windowSeconds, windowStart]);
-  const centerOnPlayhead = (scale: 1 | 4 | 12 | 60) => {
+  const centerOnPlayhead = (scale: number) => {
+    // Never expose an unusably narrow window on short recordings.
+    if (!availableZoomLevels.includes(scale as typeof ZOOM_LEVELS[number])) return;
     const span = safeDuration / scale;
     setRequestedStart(Math.min(safeDuration - span, Math.max(0, safeTime - span / 2)));
     setZoom(scale);
@@ -133,13 +161,14 @@ export default function StudioWaveform({
           <select
             aria-label="Zoom de la línea de tiempo"
             value={zoom}
-            onChange={event => centerOnPlayhead(Number(event.currentTarget.value) as 1 | 4 | 12 | 60)}
+            onChange={event => centerOnPlayhead(Number(event.currentTarget.value))}
             className="rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white"
           >
-            <option value={1}>Completo</option>
-            <option value={4}>4×</option>
-            <option value={12}>12×</option>
-            <option value={60}>60×</option>
+{availableZoomLevels.map(level => (
+              <option key={level} value={level}>
+                {level === 1 ? 'Completo' : `${level}× · ${timeLabel(safeDuration / level)}`}
+              </option>
+            ))}
           </select>
         </label>
         <button type="button" onClick={() => pan(-1)} disabled={zoom === 1 || windowStart <= 0}
@@ -154,13 +183,29 @@ export default function StudioWaveform({
           className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
           Ir al cursor
         </button>
+        <button type="button" onClick={() => onSeek(Math.max(0, safeTime - 5))}
+          aria-label="Retroceder cinco segundos"
+          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200">
+          −5 s
+        </button>
+        <button type="button" onClick={() => onSeek(Math.min(safeDuration, safeTime + 5))}
+          aria-label="Avanzar cinco segundos"
+          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200">
+          +5 s
+        </button>
         <span className="text-slate-400">Ventana: {timeLabel(windowStart)}–{timeLabel(windowEnd)}</span>
       </div>
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         preserveAspectRatio="none"
         aria-hidden="true"
-        className="block h-24 w-full overflow-hidden rounded-lg bg-slate-900"
+        className="block h-24 w-full cursor-crosshair overflow-hidden rounded-lg bg-slate-900"
+        onClick={event => {
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (!(bounds.width > 0)) return;
+          const fraction = Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width));
+          onSeek(Math.min(safeDuration, Math.max(0, windowStart + fraction * windowSeconds)));
+        }}
       >
         <line x1={0} y1={HALF_HEIGHT} x2={CHART_WIDTH} y2={HALF_HEIGHT}
           stroke="currentColor" className="text-slate-700" strokeWidth={1}/>
@@ -194,7 +239,7 @@ export default function StudioWaveform({
         type="range"
         min={windowStart}
         max={windowEnd}
-        step={0.1}
+        step={0.01}
         value={Math.min(windowEnd, Math.max(windowStart, safeTime))}
         onChange={event => {
           const value = event.currentTarget.valueAsNumber;
@@ -203,7 +248,7 @@ export default function StudioWaveform({
         className="mt-2 w-full cursor-pointer accent-blue-400"
       />
       <div className="flex items-center justify-between text-xs text-slate-400">
-        <span>{timeLabel(safeTime)}</span>
+        <span aria-label="Tiempo exacto del cursor">{preciseTimeLabel(safeTime)}</span>
         <span>{timeLabel(safeDuration)}</span>
       </div>
       {!playheadVisible && (
@@ -212,8 +257,8 @@ export default function StudioWaveform({
       {status === 'limited' && (
         <p className="mt-3 text-xs leading-5 text-amber-200">
           Para proteger la memoria del navegador, las ondas solo se calculan en grabaciones
-          de hasta 4 minutos y 8 MiB. Los marcadores de fragmentos y la navegación temporal
-          siguen disponibles para audios más largos.
+          de hasta 4 minutos y 8 MiB. Los marcadores de fragmentos y la navegación temporal con zoom fino
+          siguen disponibles para audios y videos más largos.
         </p>
       )}
       {status === 'unavailable' && (
