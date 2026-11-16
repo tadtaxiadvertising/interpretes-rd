@@ -26,6 +26,7 @@ class FakeAudioContext {
 }
 class FakeAudioWorkletNode {
   static instances: FakeAudioWorkletNode[] = [];
+  static lastOptions: unknown = null;
   port = {
     onmessage: null as ((event: MessageEvent) => void) | null,
     postMessage: vi.fn(),
@@ -34,7 +35,10 @@ class FakeAudioWorkletNode {
   onprocessorerror: (() => void) | null = null;
   connect = vi.fn();
   disconnect = vi.fn();
-  constructor() { FakeAudioWorkletNode.instances.push(this); }
+  constructor(_context?: unknown, _name?: string, options?: unknown) {
+    FakeAudioWorkletNode.instances.push(this);
+    FakeAudioWorkletNode.lastOptions = options;
+  }
 
   receive(samples: unknown) {
     this.port.onmessage?.({ data: { type: 'pcm', samples } } as MessageEvent);
@@ -53,6 +57,7 @@ afterEach(() => {
   vi.clearAllMocks();
   FakeAudioContext.instances.length = 0;
   FakeAudioWorkletNode.instances.length = 0;
+  FakeAudioWorkletNode.lastOptions = null;
 });
 
 describe('browser-local AudioWorklet PCM capture', () => {
@@ -63,6 +68,9 @@ describe('browser-local AudioWorklet PCM capture', () => {
     expect(getUserMedia).toHaveBeenCalledTimes(1);
     expect(ctx.audioWorklet.addModule).toHaveBeenCalledWith('/live-pcm-capture-worklet.js');
     expect(capture.sampleRate).toBe(1600);
+    expect(FakeAudioWorkletNode.lastOptions).toMatchObject({
+      processorOptions: { packetCredits: 4 },
+    });
     const frame = Float32Array.from([1, 2, 3]);
     node.receive(frame);
     frame[0] = 99;
@@ -114,4 +122,26 @@ describe('browser-local AudioWorklet PCM capture', () => {
     expect(micStop).toHaveBeenCalledTimes(1);
     await expect(capture.frames[Symbol.asyncIterator]().next()).rejects.toThrow('LOCAL_PCM_PROCESSOR_FAILED');
   });
+  it('returns packet credits only when the consumer advances', async () => {
+    const capture = await startLocalPcmCapture();
+    const node = FakeAudioWorkletNode.instances[0];
+    const reader = capture.frames[Symbol.asyncIterator]();
+    node.receive(Float32Array.from([1]));
+    expect((await reader.next()).value?.[0]).toBe(1);
+    expect(node.port.postMessage).not.toHaveBeenCalledWith({ type: 'credit' });
+    node.receive(Float32Array.from([2]));
+    expect((await reader.next()).value?.[0]).toBe(2);
+    expect(node.port.postMessage).toHaveBeenCalledWith({ type: 'credit' });
+    capture.stop();
+  });
+
+  it('reports transport overflow instead of silently dropping microphone audio', async () => {
+    const capture = await startLocalPcmCapture();
+    const node = FakeAudioWorkletNode.instances[0];
+    node.port.onmessage?.({ data: { type: 'overflow' } } as MessageEvent);
+    expect(micStop).toHaveBeenCalledTimes(1);
+    await expect(capture.frames[Symbol.asyncIterator]().next())
+      .rejects.toThrow('LOCAL_PCM_TRANSPORT_OVERFLOW');
+  });
+
 });
