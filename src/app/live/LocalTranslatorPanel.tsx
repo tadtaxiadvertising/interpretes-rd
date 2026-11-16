@@ -16,7 +16,9 @@ interface LocalTranslatorPanelProps {
 
 export default function LocalTranslatorPanel({ sourceLanguage, finalTranscript }: LocalTranslatorPanelProps) {
   const targetLanguage: LocalTranslationLanguage = sourceLanguage === 'es' ? 'en' : 'es';
-  const direction = { sourceLanguage, targetLanguage } as const;
+  const direction = sourceLanguage === 'es'
+    ? ({ sourceLanguage: 'es', targetLanguage: 'en' } as const)
+    : ({ sourceLanguage: 'en', targetLanguage: 'es' } as const);
   const [status, setStatus] = useState<LocalTranslationStatus | 'checking' | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [ready, setReady] = useState(false);
