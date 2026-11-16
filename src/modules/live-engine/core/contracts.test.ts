@@ -25,11 +25,11 @@ const remoteProvider: SpeechProvider = {
 
 describe('Live provider consent boundary', () => {
   it('allows on-device providers without remote consent', () => {
-    expect(() => assertProviderConsent(localProvider, undefined)).not.toThrow();
+    expect(() => assertProviderConsent(localProvider, 'transcription', undefined)).not.toThrow();
   });
 
   it('blocks remote providers when consent is missing', () => {
-    expect(() => assertProviderConsent(remoteProvider, undefined))
+    expect(() => assertProviderConsent(remoteProvider, 'transcription', undefined))
       .toThrow('EXPLICIT_PROVIDER_CONSENT_REQUIRED');
   });
 
@@ -41,7 +41,19 @@ describe('Live provider consent boundary', () => {
       acceptedAt: new Date().toISOString(),
     };
 
-    expect(() => assertProviderConsent(remoteProvider, consent))
+    expect(() => assertProviderConsent(remoteProvider, 'transcription', consent))
+      .toThrow('EXPLICIT_PROVIDER_CONSENT_REQUIRED');
+  });
+
+  it('does not reuse transcription consent for translation', () => {
+    const consent: ProviderConsent = {
+      accepted: true,
+      providerId: remoteProvider.id,
+      purpose: 'transcription',
+      acceptedAt: new Date().toISOString(),
+    };
+
+    expect(() => assertProviderConsent(remoteProvider, 'translation', consent))
       .toThrow('EXPLICIT_PROVIDER_CONSENT_REQUIRED');
   });
 
