@@ -25,7 +25,13 @@ export async function* prepareCapturedLocalAsrChunks(
 ): AsyncGenerator<LocalPcmChunk, void, void> {
   // Aborting while waiting for an input frame must unblock the reader. A mere
   // token check in the resampler would not wake a stalled async iterator.
-  const onAbort = () => capture.stop();
+  let released = false;
+  const releaseCapture = () => {
+    if (released) return;
+    released = true;
+    capture.stop();
+  };
+  const onAbort = () => releaseCapture();
   options.signal?.addEventListener('abort', onAbort, { once: true });
   try {
     if (options.signal?.aborted) throw new Error('LOCAL_PCM_PROCESSING_CANCELLED');
@@ -43,6 +49,6 @@ export async function* prepareCapturedLocalAsrChunks(
     );
   } finally {
     options.signal?.removeEventListener('abort', onAbort);
-    capture.stop();
+    releaseCapture();
   }
 }
