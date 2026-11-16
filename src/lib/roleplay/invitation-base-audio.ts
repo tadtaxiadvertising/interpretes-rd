@@ -74,6 +74,9 @@ export async function resolveInvitationBaseAudioUrl(
   try {
     const project = new URL(projectUrl);
     const asset = new URL(storedUrl);
+    // Legacy audio must be a normal HTTPS resource, never a javascript:,
+    // data:, blob: or other unsafe URL stored in a legacy record.
+    if (asset.protocol !== 'https:') return null;
     // Prevent unrecognized, signed, or malformed same-project bucket links
     // from bypassing short-lived signing in the invitation response.
     if (asset.origin === project.origin && (
