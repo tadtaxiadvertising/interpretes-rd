@@ -41,8 +41,11 @@ export async function loadLocalWhisperTiny(
   const worker = makeWorker
     ? makeWorker()
     : new Worker(
-        /* webpackChunkName: "live-whisper-asr-worker" */
-        new URL('./whisper-tiny.worker.ts', import.meta.url),
+        new URL(
+          /* webpackChunkName: "live-whisper-asr-worker" */
+          './whisper-tiny.worker.ts',
+          import.meta.url,
+        ),
         {
           type: 'module',
           name: 'free-interpreters-whisper-tiny',
