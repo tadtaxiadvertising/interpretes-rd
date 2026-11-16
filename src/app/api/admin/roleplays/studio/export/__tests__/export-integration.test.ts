@@ -59,6 +59,10 @@ describe('Audio Studio creates a real, re-importable MP3 archive', () => {
     const result = await POST(request as never);
     expect(result.status).toBe(200);
     expect(result.headers.get('content-type')).toBe('application/zip');
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toBe('Cookie, Authorization');
+    expect(result.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(result.headers.get('Content-Disposition')).toContain('attachment;');
     const zip = readStoredZip(Buffer.from(await result.arrayBuffer()));
     expect([...zip.keys()]).toEqual(['manifest.json', 'segment-01.mp3', 'segment-02.mp3']);
 
