@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import LocalSpeechPanel from './LocalSpeechPanel';
 import { acquireMicrophone, releaseMicrophone } from '@/modules/live-engine/core/audio-capture';
 import { detectDeviceCapabilities, type DeviceCapabilities } from '@/modules/live-engine/core/contracts';
 
 type MicState = 'idle' | 'requesting' | 'active' | 'error';
 
-export default function LiveWorkspace() {
+export default function LiveWorkspace({ backHref = '/dashboard' }: { backHref?: '/dashboard' | '/admin' }) {
   const streamRef = useRef<MediaStream | null>(null);
   // Invalidates pending permission requests on cancellation or unmount.
   const requestIdRef = useRef(0);
@@ -26,7 +27,6 @@ export default function LiveWorkspace() {
   }, []);
 
   async function toggleMicrophone() {
-    // The speech recognizer owns the mic while running. Do not double-capture.
     if (speechListening) return;
     if (micState === 'active' || micState === 'requesting') {
       // Permissions dialogs cannot be aborted, but late streams are stopped.
@@ -59,6 +59,10 @@ export default function LiveWorkspace() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-6">
       <header className="mb-8">
+        <Link href={backHref}
+          className="mb-4 inline-flex items-center text-sm font-medium text-blue-700 underline-offset-4 hover:underline">
+          ← Volver al panel
+        </Link>
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-600">Free Interpreters</p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-950">Live</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
@@ -78,7 +82,7 @@ export default function LiveWorkspace() {
             type="button"
             onClick={toggleMicrophone}
             disabled={speechListening}
-            aria-label={speechListening ? "Detén la transcripción antes de probar el micrófono" : undefined}
+            aria-label={speechListening ? 'Detén la transcripción antes de probar el micrófono' : undefined}
             className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             {micState === 'requesting' ? 'Cancelar solicitud' : micState === 'active' ? 'Detener micrófono' : 'Probar micrófono'}

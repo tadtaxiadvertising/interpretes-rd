@@ -9,5 +9,5 @@ export default async function LivePage() {
   if (!identity) redirect('/login');
   if (identity.role === 'candidate') notFound();
 
-  return <LiveWorkspace />;
+  return <LiveWorkspace backHref={identity.role === 'admin' ? '/admin' : '/dashboard'} />;
 }
