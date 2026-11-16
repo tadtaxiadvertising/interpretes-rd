@@ -193,7 +193,7 @@ describe('Audio Studio compact editing', () => {
   });
 
   it('clears stale review filters when the source recording changes', () => {
-    loadAudio(120);
+    const player = loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'not visible' },
@@ -203,6 +203,7 @@ describe('Audio Studio compact editing', () => {
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' })] },
     });
+    fireEvent.loadedMetadata(player);
     expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value).toBe('');
     expect((screen.getByRole('checkbox', { name: 'Pendientes (0)' }) as HTMLInputElement).checked).toBe(false);
     expect(screen.queryByText(/Intervenciones \(1\/25\)/)).toBeNull();
