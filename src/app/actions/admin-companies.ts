@@ -13,6 +13,19 @@ const schema = z.object({
   billingEmail: z.union([z.literal(''), z.email()]).optional(),
   country: z.string().trim().max(100).optional(),
 });
+ 
+// These calls happen only after Prisma has successfully committed a change.
+// A cache refresh failure must not report "save failed" and trigger duplicate
+// attempts; refresh other affected routes even if the first one fails.
+function revalidateCommittedCompanyPaths(paths: readonly string[]) {
+  for (const path of paths) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.warn('[COMPANIES] Cache refresh failed', safeServerErrorCategory(error));
+    }
+  }
+}
 export async function createCompany(formData: FormData) {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== 'admin') return { success: false, error: 'No autorizado.' };
@@ -20,7 +33,7 @@ export async function createCompany(formData: FormData) {
   if (!parsed.success) return { success: false, error: 'Datos de compañía inválidos.' };
   try {
     await prisma.company.create({ data: parsed.data });
-    revalidatePath('/admin/companies');
+    revalidateCommittedCompanyPaths(['/admin/companies']);
     return { success: true };
   } catch (error) {
     console.error('[COMPANIES] Create failed', safeServerErrorCategory(error));
@@ -38,8 +51,7 @@ export async function assignAccountToCompany(formData: FormData) {
   }
   try {
     await prisma.account.update({ where: { id: accountId }, data: { companyId } });
-    revalidatePath('/admin/companies');
-    revalidatePath('/admin/accounts');
+    revalidateCommittedCompanyPaths(['/admin/companies', '/admin/accounts']);
     return { success: true };
   } catch (error) {
     console.error('[COMPANIES] Assign failed', safeServerErrorCategory(error));
