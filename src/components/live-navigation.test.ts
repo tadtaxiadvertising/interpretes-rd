@@ -6,7 +6,7 @@ describe('Live workspace navigation', () => {
     const links = adminMenu.filter(item => item.href === '/live');
     expect(links).toHaveLength(1);
     expect(links[0]).toMatchObject({
-      label: 'Live (IA local)',
+      label: 'Interpretación en vivo (IA local)',
       exact: true,
       section: 'Operaciones',
     });
@@ -15,7 +15,7 @@ describe('Live workspace navigation', () => {
   it('makes Live discoverable from the interpreter sidebar and mobile shortcuts', () => {
     const links = interpreterMenu.filter(item => item.href === '/live');
     expect(links).toHaveLength(1);
-    expect(links[0]).toMatchObject({ label: 'Live (IA local)', exact: true });
+    expect(links[0]).toMatchObject({ label: 'Interpretación en vivo (IA local)', exact: true });
     expect(interpreterMenu.slice(0, 5).some(item => item.href === '/live')).toBe(true);
   });
 });
