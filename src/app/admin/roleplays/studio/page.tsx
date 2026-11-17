@@ -1095,7 +1095,7 @@ export default function RoleplayStudioPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
-          <h1 className="text-3xl font-bold text-white">Roleplay Audio Studio</h1>
+          <h1 className="text-3xl font-bold text-white">Estudio de audio para roleplays</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
             Prepara intervenciones desde una grabación de audio o video sin crear sesiones
             ni modificar audios publicados. Los MP3 pequeños permiten exportar el ZIP;
@@ -1563,7 +1563,7 @@ export default function RoleplayStudioPage() {
                 </button>
               )}
               <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir fragmento</button>
             </div>
           </div>
           <details open={!sourceRequiresLocal} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
