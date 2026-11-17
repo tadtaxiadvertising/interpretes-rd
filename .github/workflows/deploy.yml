@@ -79,6 +79,12 @@ jobs:
           CI: 'true'
         run: npx tsx scripts/verify-account-platform-vpn-guard.ts
 
+      # Secret storage and the opt-in MP3 proxy need explicit regression
+      # evidence even while the upstream advisory blocks broader CI.
+      # This never bypasses or relaxes the supply-chain audit.
+      - name: Verify HappyScribe encrypted settings and admin permissions
+        run: npx vitest run src/lib/roleplay/happyscribe-settings.test.ts src/app/actions/__tests__/audio-studio-settings.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
