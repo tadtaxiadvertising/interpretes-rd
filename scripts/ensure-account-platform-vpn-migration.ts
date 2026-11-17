@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
-import { classifyVpnSchema, VPN_COLUMN_TYPES } from './account-platform-vpn-schema';
+import { classifyVpnSchema, matchesVpnPortConstraint, VPN_COLUMN_TYPES } from './account-platform-vpn-schema';
 
 /**
  * Deploy-only, repeatable migration guard. Existing complete schemas are
@@ -24,13 +24,16 @@ async function readSchemaState(client: Client) {
        AND column_name = ANY($1::text[])`,
     [Object.keys(VPN_COLUMN_TYPES)],
   );
-  const constraint = await client.query(
-    `SELECT 1 FROM pg_constraint
+  const constraint = await client.query<{ definition: string }>(
+    `SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint
      WHERE conrelid = 'public.account_platforms'::regclass
        AND conname = 'account_platforms_vpn_port_range'
        AND contype = 'c' AND convalidated`,
   );
-  return classifyVpnSchema(columns.rows, (constraint.rowCount ?? 0) > 0);
+  // A CHECK (true) with the right name is NOT the port-range guarantee.
+  const validConstraint = constraint.rows.length === 1 &&
+    matchesVpnPortConstraint(constraint.rows[0]?.definition);
+  return classifyVpnSchema(columns.rows, validConstraint);
 }
 
 async function main() {
