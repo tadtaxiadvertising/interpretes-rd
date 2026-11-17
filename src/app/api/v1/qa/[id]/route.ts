@@ -26,9 +26,22 @@ export async function GET(
 
     const score = await prisma.qAScore.findUnique({
       where: { id },
+      // QA detail should not serialize the full interpreter (banking data,
+      // national ID, IP, pay rate) or production log (payroll linkage, notes).
+      // Select only the relation context needed to review the evaluation.
       include: {
-        interpreter: true,
-        productionLog: true,
+        interpreter: { select: { id: true, externalId: true, name: true } },
+        productionLog: {
+          select: {
+            id: true,
+            interpreterId: true,
+            date: true,
+            campaign: true,
+            interpretedMinutes: true,
+            callsAttended: true,
+            status: true,
+          },
+        },
       }
     });
 
