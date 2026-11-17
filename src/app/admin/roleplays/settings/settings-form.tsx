@@ -66,9 +66,10 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
         <input type="checkbox" checked={media} disabled={!status.proxyAvailable} onChange={e => setMedia(e.target.checked)} />
         <span><strong>Permitir importar MP3 por el servidor</strong><span className="mt-1 block text-slate-400">Consume ancho de banda del VPS. Desactivado de forma predeterminada; solo disponible si el operador habilita el proxy en el despliegue.</span></span>
       </label></div>
+    <p className="text-xs text-slate-400">La prueba utiliza la configuración ya guardada. Guarda primero cualquier cambio de clave u organización.</p>
     {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
     <div className="flex flex-wrap items-center gap-3"><button disabled={pending || checking} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
-      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !org.trim()} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
+      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
       <a href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</a></div>
   </form>;
 }
