@@ -31,7 +31,10 @@ function txMock() {
         .mockResolvedValueOnce({ ...log, verifiedMinutes: 47 }),
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
-    payrollRecord: { findFirst: vi.fn().mockResolvedValue(null) },
+    payrollRecord: {
+      findFirst: vi.fn().mockResolvedValue(null),
+      findMany: vi.fn().mockResolvedValue([]),
+    },
   };
   mocks.transaction.mockImplementation(
     async (work: (tx: typeof tx) => Promise<unknown>) => work(tx),
@@ -103,6 +106,57 @@ describe('shared payroll reconciliation uses one serializable transaction', () =
       }) }),
     );
     expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('does not edit a log when two pending payroll periods overlap its day', async () => {
+    const tx = txMock();
+    tx.payrollRecord.findMany.mockResolvedValueOnce([{ id: 'pay-a' }, { id: 'pay-b' }]);
+    expect(await reconcileProductionMinutes(73, 47)).toEqual({ kind: 'OVERLAPPING_PAYROLLS' });
+    expect(tx.payrollRecord.findMany).toHaveBeenCalledWith({
+      where: {
+        interpreterId: 11,
+        periodStart: { lte: log.date },
+        periodEnd: { gte: log.date },
+        status: { in: ['PENDING', 'Pendiente'] },
+        paidAt: null,
+      },
+      select: { id: true },
+      take: 2,
+    });
+    expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it('rejects a log whose linked payroll does not match its date or identifier', async () => {
+    const tx = txMock();
+    tx.productionLog.findUnique.mockReset().mockResolvedValueOnce({
+      ...log, payrollRecordId: 'pay-original',
+    });
+    tx.payrollRecord.findMany.mockResolvedValueOnce([{ id: 'pay-other' }]);
+    expect(await reconcileProductionMinutes(73, 47)).toEqual({ kind: 'PAYROLL_LINK_MISMATCH' });
+    expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it('rejects an orphaned payroll association even when there is no pending period', async () => {
+    const tx = txMock();
+    tx.productionLog.findUnique.mockReset().mockResolvedValueOnce({
+      ...log, payrollRecordId: 'pay-no-period',
+    });
+    expect(await reconcileProductionMinutes(73, 47)).toEqual({ kind: 'PAYROLL_LINK_MISMATCH' });
+    expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('continues to reconcile a linked log in its single matching pending period', async () => {
+    const tx = txMock();
+    tx.productionLog.findUnique.mockReset()
+      .mockResolvedValueOnce({ ...log, payrollRecordId: 'pay-pending' })
+      .mockResolvedValueOnce({ ...log, payrollRecordId: 'pay-pending', verifiedMinutes: 47 });
+    tx.payrollRecord.findMany.mockResolvedValueOnce([{ id: 'pay-pending' }]);
+    expect(await reconcileProductionMinutes(73, 47)).toMatchObject({
+      kind: 'UPDATED', log: { id: 73, verifiedMinutes: 47 },
+    });
+    expect(mocks.refresh).toHaveBeenCalledWith(11, log.date, tx);
   });
 
   it('blocks a concurrent settled change when updateMany finds no editable row', async () => {
