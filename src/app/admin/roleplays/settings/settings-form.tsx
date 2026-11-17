@@ -1,5 +1,6 @@
 'use client';
 import { useState, useTransition } from 'react';
+import Link from 'next/link';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
   hasToken: boolean; credentialUsable: boolean; tokenSource: string; organizationId: string;
@@ -107,6 +108,6 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
     <div className="flex flex-wrap items-center gap-3"><button disabled={pending || checking} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
       <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
-      <a href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</a></div>
+      <Link href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</Link></div>
   </form>;
 }
