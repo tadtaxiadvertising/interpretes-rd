@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
       }];
     });
     return privateRoleplayResponse(
-      { success: true, data: items, page, hasMore: Boolean((payload as { _links?: { next?: unknown } })._links?.next) },
+      { success: true, data: items, page, hasMore: Boolean((payload as { _links?: { next?: unknown } })._links?.next), mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true' },
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch {
