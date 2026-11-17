@@ -14,6 +14,7 @@ vi.mock('./ScenarioCard', () => ({
     onRemove: (id: string) => void;
   }) => (
     <div>
+      <span data-testid="scenario-id">{scenario.id}</span>
       <span data-testid="preview-url">{scenario.baseAudioPreview}</span>
       <button type="button" onClick={() => onUpdate(scenario.id, { baseAudioPreview: 'blob:first' })}>
         Elegir primera vista
@@ -69,6 +70,49 @@ describe('audio preview URL lifecycle across committed React updates', () => {
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
     view.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('undoes deletion of an imported MP3 without reusing a revoked blob URL', async () => {
+    const file = new File(['ID3'], 'clinic-clip.mp3', { type: 'audio/mpeg' });
+    m.importManifest.mockResolvedValueOnce([{
+      title: 'Consulta', baseAudioFile: file,
+      durationLimitSec: 120, scriptPrompt: 'Instrucciones',
+      sha256: 'a'.repeat(64),
+    }]);
+    vi.mocked(URL.createObjectURL)
+      .mockReturnValueOnce('blob:original-import')
+      .mockReturnValueOnce('blob:undo-recovery');
+    const view = editor();
+    const input = document.getElementById('manifest-roleplay-upload') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, {
+        target: { files: [new File(['{}'], 'manifest.json', { type: 'application/json' })] },
+      });
+    });
+    const originalId = screen.getByTestId('scenario-id').textContent;
+    expect(screen.getByTestId('preview-url').textContent).toBe('blob:original-import');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Borrar intervención' }));
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:original-import'));
+    expect(screen.queryByTestId('preview-url')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer eliminación de escenario' }));
+
+    expect(screen.getByTestId('scenario-id').textContent).toBe(originalId);
+    expect(screen.getByTestId('preview-url').textContent).toBe('blob:undo-recovery');
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+    expect(URL.createObjectURL).toHaveBeenLastCalledWith(file);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalledWith('blob:undo-recovery');
+    view.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:undo-recovery');
+  });
+
+  it('discards the removal undo after the administrator starts a new scenario', () => {
+    editor();
+    fireEvent.click(screen.getByRole('button', { name: 'Borrar intervención' }));
+    expect(screen.getByRole('button', { name: 'Deshacer eliminación de escenario' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Add Scenario' }));
+    expect(screen.queryByRole('button', { name: 'Deshacer eliminación de escenario' })).toBeNull();
+    expect(screen.getAllByTestId('scenario-id')).toHaveLength(1);
   });
 
   it('releases old previews after a successful manifest import, preserving the newly selected audio', async () => {
