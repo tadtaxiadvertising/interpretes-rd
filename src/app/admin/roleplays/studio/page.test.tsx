@@ -533,11 +533,13 @@ describe('Audio Studio clip review player', () => {
 
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
-    expect(screen.getByText(/Intervenciones \(0\/25\)/i)).toBeTruthy();
+    // Loading the new source resets its duration; the intervention panel is
+    // rendered again only after the audio element reads metadata.
+    expect(screen.getByText(/Audio original importado desde HappyScribe/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
-  it('rechecks consent if new edits appear while the MP3 is downloading', async () => {
+  it('discards a stale MP3 if new interventions appear while downloading', async () => {
     let complete!: (response: Response) => void;
     const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') return new Promise<Response>(resolve => { complete = resolve; });
@@ -566,7 +568,8 @@ describe('Audio Studio clip review player', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
     expect(window.confirm).toHaveBeenCalledOnce();
 
-    // A new intervention was added after the initial consent; protect it.
+    // A new intervention invalidates the original source revision. Do not
+    // attach the obsolete MP3 or ask for another confirmation unnecessarily.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     vi.mocked(window.confirm).mockReturnValue(false);
     await act(async () => {
@@ -574,7 +577,7 @@ describe('Audio Studio clip review player', () => {
       await Promise.resolve();
     });
 
-    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(window.confirm).toHaveBeenCalledOnce();
     expect(screen.getByText(/Intervenciones \(2\/25\)/i)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Audio original importado desde HappyScribe/)).toBeNull();
