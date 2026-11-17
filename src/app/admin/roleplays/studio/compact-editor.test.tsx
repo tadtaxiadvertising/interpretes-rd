@@ -226,6 +226,10 @@ describe('Audio Studio compact editing', () => {
       target: { files: [new File(['ID3'], 'accepted-replacement.mp3', { type: 'audio/mpeg' })] },
     });
     expect(window.confirm).toHaveBeenCalledTimes(2);
+    // The editor hides the timeline until metadata from the new source is known.
+    const newPlayer = document.querySelector('audio') as HTMLAudioElement;
+    Object.defineProperty(newPlayer, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(newPlayer);
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
