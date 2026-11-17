@@ -1455,7 +1455,8 @@ export default function RoleplayStudioPage() {
             <p className="text-xs text-slate-400">
               Cursor: <span className="font-medium text-cyan-200">{formatTime(playhead)}</span>.
               {' '}«Dividir» corta en el cursor cuando está dentro del turno; fuera de él usa el punto medio.
-              {' '}«Unir» combina con el siguiente turno visible solo cuando son compatibles y están próximos.
+              {' '}«Unir» combina turnos compatibles. Si están separados por más de 2 s,
+              crea un único MP3 sin la pausa al exportar localmente el proyecto v2.
             </p>
           )}
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
@@ -1482,7 +1483,10 @@ export default function RoleplayStudioPage() {
                 <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
                   #{index + 1} · {segment.title}
                   <span className="ml-2 text-xs font-normal text-slate-400">
-                    {formatTime(segment.start)}–{formatTime(segment.end)} · {segment.speakerRole} · {segment.language.toUpperCase()}
+                    {segment.ranges
+                      ? segment.ranges.map(range => formatTime(range.start) + '–' + formatTime(range.end)).join(' + ')
+                      : formatTime(segment.start) + '–' + formatTime(segment.end)}
+                    {' · '}{segment.speakerRole} · {segment.language.toUpperCase()}
                   </span>
                   {captionTexts[segment.id] && compactRows && (
                     <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-amber-200/80">
@@ -1496,17 +1500,27 @@ export default function RoleplayStudioPage() {
                   Ir al inicio
                 </button>
                 <button type="button" onClick={() => splitAtPlayhead(segment.id)}
+                  disabled={Boolean(segment.ranges)}
                   aria-label={'Dividir intervención ' + (index + 1) + ' en cursor o punto medio'}
-                  title="Divide en el cursor si está dentro del turno; si no, en el punto medio"
+                  title={segment.ranges ? 'Separa los dos cortes antes de dividir' : 'Divide en cursor o punto medio'}
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
                   Dividir
                 </button>
                 <button type="button" onClick={() => mergeWithNext(segment.id)}
+                  disabled={Boolean(segment.ranges)}
                   aria-label={'Unir intervención ' + (index + 1) + ' con siguiente'}
-                  title="Une con el siguiente turno visible si comparten hablante e idioma, están separados por 2 s o menos y no superan 5 minutos"
+                  title={segment.ranges ? 'Separa los dos cortes antes de añadir otro' : 'Une con el siguiente turno visible; omite pausas largas en el MP3 local'}
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
-                  Unir
+                  {orderedSegments[index + 1] &&
+                    orderedSegments[index + 1].start - segment.end > 2 ? 'Unir sin pausa' : 'Unir'}
                 </button>
+                {segment.ranges && (
+                  <button type="button" onClick={() => separateCompound(segment.id)}
+                    aria-label={'Separar cortes de intervención ' + (index + 1)}
+                    className="rounded-md border border-amber-400/30 px-2 py-1 text-xs text-amber-100">
+                    Separar cortes
+                  </button>
+                )}
                 {orderedSegments[index + 1] &&
                   visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
                   planGaplessPair(segment, orderedSegments[index + 1], duration) && (
@@ -1514,7 +1528,7 @@ export default function RoleplayStudioPage() {
                       onClick={() => previewPairWithoutGap(segment.id)}
                       aria-label={'Preescuchar intervenciones ' + (index + 1) + ' y ' + (index + 2) + ' sin pausa'}
                       aria-pressed={pairPreviewId === segment.id}
-                      title="Preescucha dos cortes compatibles saltando la pausa; el proyecto y el ZIP no cambian"
+                      title="Preescucha dos cortes; usa Unir sin pausa para generar una intervención física en el proyecto v2"
                       className="rounded-md border border-cyan-400/30 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-400/10">
                       {pairPreviewId === segment.id ? 'Detener preescucha' : 'Escuchar sin pausa'}
                     </button>
@@ -1523,7 +1537,9 @@ export default function RoleplayStudioPage() {
                   <>
                     <button type="button" onClick={() => previewSegment(segment)}
                       className="rounded-md border border-emerald-400/25 px-2 py-1 text-xs text-emerald-200">
-                      {previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
+                      {segment.ranges
+                        ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
+                        : previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
                     </button>
                     <button type="button" onClick={() =>
                       setExpandedSegmentId(prev => prev === segment.id ? null : segment.id)}
@@ -1555,9 +1571,17 @@ export default function RoleplayStudioPage() {
                 planGaplessPair(segment, orderedSegments[index + 1], duration) && (
                   <p className="text-xs text-cyan-200/80">
                     Pausa entre ambos cortes: {formatTime(orderedSegments[index + 1].start - segment.end)}.
-                    La preescucha la omite localmente, pero al exportar siguen siendo dos clips separados.
+                    Puedes preescucharlos o pulsar «Unir sin pausa» para generar un único MP3 en el exportador local.
                   </p>
                 )}
+              {segment.ranges && (
+                <p className="text-xs text-amber-100">
+                  Intervención compuesta · {formatTime(studioSelectedSeconds(segment.ranges))} de audio útil;
+                  pausa de {formatTime(segment.ranges[1].start - segment.ranges[0].end)} excluida.
+                  El proyecto v2 se exporta como un único MP3 con el exportador local actualizado.
+                  Para ajustar los tiempos, selecciona «Separar cortes».
+                </p>
+              )}
               {turnActionFeedback?.id === segment.id && (
                 <p
                   role={turnActionFeedback.error ? 'alert' : 'status'}
@@ -1609,11 +1633,13 @@ export default function RoleplayStudioPage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="text-sm text-slate-300">Inicio (segundos)
                   <input type="number" min={0} max={duration} step="0.1" value={segment.start}
+                    disabled={Boolean(segment.ranges)}
                     onChange={event => update(segment.id, {start: event.target.valueAsNumber})}
                     className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
                 </label>
                 <label className="text-sm text-slate-300">Final (segundos)
                   <input type="number" min={0} max={duration} step="0.1" value={segment.end}
+                    disabled={Boolean(segment.ranges)}
                     onChange={event => update(segment.id, {end: event.target.valueAsNumber})}
                     className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
                 </label>
@@ -1671,13 +1697,17 @@ export default function RoleplayStudioPage() {
               </button>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                  disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                  disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
                 {!compactRows && (
                   <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
                     onClick={() => previewSegment(segment)}>
-                    {previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
+                    {segment.ranges
+                      ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
+                      : previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
                   </button>
                 )}
               </div>
