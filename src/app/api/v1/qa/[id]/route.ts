@@ -4,6 +4,8 @@ import { QAScorePatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
+import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const METHODS = 'GET, PATCH, DELETE, OPTIONS';
 
@@ -17,7 +19,7 @@ export async function GET(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id } = numericIdParamSchema.parse(await params);
 
@@ -30,16 +32,15 @@ export async function GET(
     });
 
     if (!score) {
-      return NextResponse.json({ success: false, error: 'Scorecard not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Scorecard not found' }, { status: 404 });
     }
 
-    return NextResponse.json(score, {
+    return privateAdminJson(score, {
       headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
-    console.error('Error fetching scorecard:', error);
-    const message = error instanceof Error ? error.message : 'Error fetching scorecard';
-    return apiError({ error, fallback: message });
+    console.error('Error fetching scorecard:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Error fetching scorecard', exposeMessage: false }));
   }
 }
 
@@ -49,7 +50,7 @@ export async function PATCH(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id } = numericIdParamSchema.parse(await params);
 
@@ -58,7 +59,7 @@ export async function PATCH(
     // Rule D: Partial validation
     const validationResult = { success: true as const, data: body };
     if (!validationResult.success) {
-      return NextResponse.json(
+      return privateAdminJson(
         { success: false, error: 'Validation failed', details: [] },
         { status: 400 }
       );
@@ -66,7 +67,7 @@ export async function PATCH(
 
     const existingScore = await prisma.qAScore.findUnique({ where: { id } });
     if (!existingScore) {
-      return NextResponse.json({ success: false, error: 'Scorecard not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Scorecard not found' }, { status: 404 });
     }
 
     const updateData = { ...validationResult.data };
@@ -100,13 +101,12 @@ export async function PATCH(
       data: updateData as any,
     });
 
-    return NextResponse.json(updatedScore, {
+    return privateAdminJson(updatedScore, {
       headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
-    console.error('🔴 QA PATCH ERROR:', error);
-    const message = error instanceof Error ? error.message : 'Error updating scorecard';
-    return apiError({ error, fallback: message });
+    console.error('QA PATCH ERROR:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Error updating scorecard', exposeMessage: false }));
   }
 }
 
@@ -117,7 +117,7 @@ export async function DELETE(
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id } = numericIdParamSchema.parse(await params);
 
@@ -125,16 +125,15 @@ export async function DELETE(
       where: { id },
     });
 
-    return NextResponse.json({ success: true, message: 'Scorecard deleted successfully' }, {
+    return privateAdminJson({ success: true, message: 'Scorecard deleted successfully' }, {
       headers: corsHeaders(request, METHODS),
     });
   } catch (error) {
-    console.error('Error deleting scorecard:', error);
+    console.error('Error deleting scorecard:', safeServerErrorCategory(error));
     const isPrismaError = error && typeof error === 'object' && 'code' in error;
     if (isPrismaError && error.code === 'P2025') {
-      return NextResponse.json({ success: false, error: 'Scorecard not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Scorecard not found' }, { status: 404 });
     }
-    const message = error instanceof Error ? error.message : 'Error deleting scorecard';
-    return apiError({ error, fallback: message });
+    return privateAdminResponse(apiError({ error, fallback: 'Error deleting scorecard', exposeMessage: false }));
   }
 }
