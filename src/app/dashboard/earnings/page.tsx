@@ -7,12 +7,16 @@ import {
   Clock, 
   Calendar, 
   FileText, 
-  Download,
   AlertCircle
 } from 'lucide-react';
 import prisma from '@/lib/prisma';
 
 export const dynamic = 'force-dynamic';
+
+function maskAccount(account: string | null | undefined): string {
+  if (!account) return 'No configurada';
+  return `•••• ${account.slice(-4)}`;
+}
 
 export default async function EarningsPage() {
   const userData = await getCurrentUser();
@@ -52,7 +56,7 @@ export default async function EarningsPage() {
       <header>
         <h2 className="text-3xl font-bold text-white flex items-center gap-3">
           <DollarSign className="text-green-400" />
-          Earnings & Payments
+          Ingresos y pagos
         </h2>
         <p className="text-gray-400 mt-2">Consulta tus ingresos, tarifas e historial de pagos.</p>
       </header>
@@ -83,7 +87,7 @@ export default async function EarningsPage() {
           <div className="flex items-center gap-3 mt-2">
             <h3 className="text-xl font-bold text-white">{interpreter.metodoPago || 'No configurado'}</h3>
           </div>
-          <div className="mt-4 text-xs text-gray-500 truncate">{interpreter.cuentaPago || 'Add your payment details in Settings'}</div>
+          <div className="mt-4 text-xs text-gray-500 truncate">{maskAccount(interpreter.cuentaPago)}</div>
         </div>
       </div>
 
@@ -103,7 +107,7 @@ export default async function EarningsPage() {
                 <th className="p-6">Bonificaciones / Deducciones</th>
                 <th className="p-6">Total neto</th>
                 <th className="p-6">Estado</th>
-                <th className="p-6 text-right">Comprobante</th>
+                <th className="p-6 text-right">Referencia</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -117,8 +121,8 @@ export default async function EarningsPage() {
                   <td className="p-6 text-gray-400">{(record.totalMinutes / 60).toFixed(2)}h</td>
                   <td className="p-6 text-gray-400">RD${record.grossTotal.toString()}</td>
                   <td className="p-6">
-                    <span className="text-green-400 text-xs">+RD$${(record.qualityBonus || 0).toString()}</span>
-                    <span className="text-red-400 text-xs ml-2">-RD$${(record.penalidades || 0).toString()}</span>
+                    <span className="text-green-400 text-xs">+RD${(record.qualityBonus || 0).toString()}</span>
+                    <span className="text-red-400 text-xs ml-2">-RD${(record.penalidades || 0).toString()}</span>
                   </td>
                   <td className="p-6 text-white font-bold">RD${record.netTotal.toString()}</td>
                   <td className="p-6">
@@ -129,9 +133,9 @@ export default async function EarningsPage() {
                     </span>
                   </td>
                   <td className="p-6 text-right">
-                    <button className="p-2 bg-white/5 rounded-xl text-gray-400 hover:text-white transition-all">
-                      <Download size={18} />
-                    </button>
+                    <span className="text-xs text-gray-400 font-mono">
+                      {record.transactionReference || '—'}
+                    </span>
                   </td>
                 </tr>
               ))}

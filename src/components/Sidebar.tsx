@@ -45,12 +45,12 @@ interface MenuItem {
 }
 
 export const adminMenu: MenuItem[] = [
-  { icon: LayoutDashboard, label: 'Command Center', href: '/admin', exact: true, section: 'Resumen' },
+  { icon: LayoutDashboard, label: 'Centro de control', href: '/admin', exact: true, section: 'Resumen' },
   { icon: Users, label: 'Intérpretes', href: '/interpreters', section: 'Personas' },
   { icon: UserPlus, label: 'Reclutamiento', href: '/recruitment', section: 'Personas' },
   { icon: Mic2, label: 'Roleplays', href: '/admin/roleplays', section: 'Operaciones' },
-  { icon: AudioLines, label: 'Audio Studio', href: '/admin/roleplays/studio', section: 'Operaciones' },
-  { icon: AudioLines, label: 'Live (IA local)', href: '/live', exact: true, section: 'Operaciones' },
+  { icon: AudioLines, label: 'Estudio de audio', href: '/admin/roleplays/studio', section: 'Operaciones' },
+  { icon: AudioLines, label: 'Interpretación en vivo (IA local)', href: '/live', exact: true, section: 'Operaciones' },
   { icon: Library, label: 'Biblioteca roleplays', href: '/admin/roleplays/library', section: 'Operaciones' },
   { icon: Clock, label: 'Producción', href: '/production', section: 'Operaciones' },
   { icon: Users, label: 'Clientes', href: '/admin/clients', section: 'Operaciones' },
@@ -70,10 +70,10 @@ export const adminMenu: MenuItem[] = [
 ];
 
 export const interpreterMenu: MenuItem[] = [
-  { icon: LayoutDashboard, label: 'Mi Dashboard', href: '/dashboard', exact: true },
+  { icon: LayoutDashboard, label: 'Mi panel', href: '/dashboard', exact: true },
   { icon: Mic2, label: 'Mis Roleplays', href: '/dashboard/roleplays' },
-  { icon: AudioLines, label: 'Live (IA local)', href: '/live', exact: true },
-  { icon: Clock, label: 'Calendario de Metas', href: '/dashboard/calendar' },
+  { icon: AudioLines, label: 'Interpretación en vivo (IA local)', href: '/live', exact: true },
+  { icon: Clock, label: 'Calendario de metas', href: '/dashboard/calendar' },
   { icon: Trophy, label: 'Mi Ranking', href: '/dashboard/ranking' },
   { icon: DollarSign, label: 'Mis Ganancias', href: '/dashboard/earnings' },
   { icon: MessageSquare, label: 'Mensajería', href: '/dashboard/messages' },
@@ -157,10 +157,10 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
         {!isCollapsed && (
           <div className="animate-in fade-in duration-500">
             <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent truncate">
-              {appName || 'Interpretes RD'}
+              {appName || 'Intérpretes RD'}
             </h1>
             <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-[0.18em] font-semibold">
-              {appSubtitle || (role === 'admin' ? 'Admin OS' : 'Portal Intérpretes')}
+              {appSubtitle || (role === 'admin' ? 'Administración' : 'Portal Intérpretes')}
             </p>
           </div>
         )}
