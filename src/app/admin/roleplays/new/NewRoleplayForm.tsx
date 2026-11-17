@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Mic2, Loader2, User, UserPlus, AlertCircle, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScenarioCard } from './ScenarioCard';
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
@@ -71,6 +71,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [bulkResponseLimitSec, setBulkResponseLimitSec] = useState(120);
   // Keep the import identity independent from React render batching. The user
   // can edit a draft while a ZIP/SHA-256 validation is still awaiting.
   const importRevision = useRef(0);
@@ -134,6 +135,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const scenarioCount = librarySource?.scenarios.length ?? scenarios.length;
   const readyScenarioCount = librarySource?.scenarios.length ??
     scenarios.filter((scenario) => scenario.title.trim() && scenario.baseAudioFile).length;
+  const defaultResponseLimitCount = librarySource ? 0 :
+    scenarios.filter(scenario => scenario.durationLimitSec === 0).length;
 
   const changeParticipantType = (nextType: typeof participantType) => {
     if (nextType === participantType) return;
@@ -175,6 +178,20 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       scriptPrompt: '' 
     }]);
   }, [invalidatePendingImport]);
+
+  const applyResponseLimitToDefaultScenarios = () => {
+    if (!Number.isSafeInteger(bulkResponseLimitSec) || bulkResponseLimitSec < 1 ||
+        bulkResponseLimitSec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) return;
+    // The bulk action is opt-in and does not overwrite individual limits or
+    // alter validated audio SHA-256 values, metadata, or prompt content.
+    invalidatePendingImport();
+    setScenarios(previous => previous.map(scenario =>
+      scenario.durationLimitSec === 0
+        ? { ...scenario, durationLimitSec: bulkResponseLimitSec }
+        : scenario,
+    ));
+    setError(null);
+  };
 
   const removeScenario = useCallback((id: string) => {
     invalidatePendingImport();
@@ -560,7 +577,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           {isImporting && <p role="status" className="mt-2 text-sm text-blue-200">Verificando archivos y huellas SHA-256…</p>}
         </div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">Scenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>
+          <h3 className="text-lg font-bold text-white">Escenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>
           <button
             onClick={addScenario}
             disabled={scenarios.length >= ROLEPLAY_MAX_SCENARIOS}
@@ -571,6 +588,26 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           </button>
         </div>
 
+        {defaultResponseLimitCount >= 2 && (
+          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3">
+            <label htmlFor="roleplay-bulk-response-limit" className="flex-1 min-w-44 text-sm text-slate-200">
+              Tiempo de respuesta para {defaultResponseLimitCount} escenarios sin límite personalizado
+              <select id="roleplay-bulk-response-limit" value={bulkResponseLimitSec}
+                onChange={event => setBulkResponseLimitSec(Number(event.target.value))}
+                className="mt-1 block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white">
+                <option value={60}>1 minuto</option>
+                <option value={90}>1 minuto y medio</option>
+                <option value={120}>2 minutos</option>
+                <option value={180}>3 minutos</option>
+                <option value={300}>5 minutos</option>
+              </select>
+            </label>
+            <button type="button" onClick={applyResponseLimitToDefaultScenarios}
+              className="rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-500/10">
+              Aplicar solo a los sin configurar
+            </button>
+          </div>
+        )}
         <div className="space-y-4">
           {scenarios.map((scenario, index) => (
             <div key={scenario.id} className="group" onDragStart={() => setDraggingId(scenario.id)} onDragEnd={() => setDraggingId(null)}>
