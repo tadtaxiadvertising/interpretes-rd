@@ -13,6 +13,7 @@ import prisma from '@/lib/prisma';
 import {
   getHappyScribeSettings,
   getHappyScribeSettingsStatus,
+  getAudioStudioEditorPreferences,
   saveHappyScribeSettings,
 } from './happyscribe-settings';
 import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from './happyscribe-import-proof';
@@ -148,6 +149,34 @@ describe('HappyScribe encrypted admin settings', () => {
     })).rejects.toThrow('TOKEN_OPERATION_CONFLICT');
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(store.size).toBe(0);
+  });
+
+  it('persists allowed Audio Studio defaults and supplies safe defaults when absent', async () => {
+    expect(await getAudioStudioEditorPreferences()).toEqual({
+      excludeInterpreterByDefault: true, compactViewDefault: 'auto',
+    });
+    await saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+    expect(await getAudioStudioEditorPreferences()).toEqual({
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+    expect(await getHappyScribeSettingsStatus()).toMatchObject({
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+    await saveHappyScribeSettings({ organizationId: '123456', mediaImportEnabled: false });
+    expect(await getAudioStudioEditorPreferences()).toEqual({
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+  });
+
+  it('rejects invalid Audio Studio editor mode before database writes', async () => {
+    await expect(saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      compactViewDefault: 'unknown' as 'auto',
+    })).rejects.toThrow('COMPACT_MODE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
 });
