@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - fix/audio-studio-admin-preferences-validated-20261117
+concurrency:
+  group: audio-studio-branch-check
+  cancel-in-progress: true
 permissions:
   contents: read
 jobs:
