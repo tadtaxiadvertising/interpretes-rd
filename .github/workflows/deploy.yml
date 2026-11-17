@@ -82,7 +82,7 @@ jobs:
       # Preserve a focused privacy regression check even when an upstream
       # dependency advisory blocks the full validation pipeline.
       - name: Verify call action error redaction
-        run: npx vitest run src/app/actions/__tests__/calls-error-redaction.test.ts
+        run: npx vitest run src/app/actions/__tests__/calls-error-redaction.test.ts src/app/api/v1/calls/manual/__tests__/route.test.ts
 
       - name: Dependency Security Audit
         run: |
