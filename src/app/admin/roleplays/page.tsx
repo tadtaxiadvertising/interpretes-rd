@@ -118,7 +118,7 @@ export default async function AdminRoleplaysPage({
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white">Roleplay Management</h2>
+          <h2 className="text-3xl font-bold text-white">Gestión de roleplays</h2>
           <p className="text-gray-400">Control de sesiones, participantes y evaluaciones</p>
         </div>
         <div className="flex flex-wrap gap-2">
