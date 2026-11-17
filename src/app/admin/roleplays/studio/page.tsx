@@ -13,6 +13,7 @@ import { availableStudioInterval } from '@/lib/roleplay-studio/available-interva
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
+import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -48,18 +49,7 @@ type Segment = {
   ranges?: StudioCutRange[];
 };
 
-function formatTime(value: number): string {
-  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
-  const hours = Math.floor(safe / 3600);
-  const minutes = Math.floor(safe / 60) % 60;
-  const seconds = safe - Math.floor(safe / 60) * 60;
-  const short = String(Math.floor(safe / 60)).padStart(2, '0') + ':' +
-    seconds.toFixed(1).padStart(4, '0');
-  return hours
-    ? String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' +
-      seconds.toFixed(1).padStart(4, '0')
-    : short;
-}
+
 
 export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
