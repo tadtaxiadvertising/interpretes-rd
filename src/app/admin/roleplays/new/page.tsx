@@ -97,8 +97,8 @@ export default async function NewRoleplayPage({
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-white">{librarySource ? 'Asignar roleplay de la biblioteca' : 'Crear sesión de roleplay'}</h1>
-            <p className="text-gray-400">{librarySource ? 'Reutiliza un ejercicio sin subir nuevamente el audio' : 'Asigna escenarios y audios a participantes'}</p>
+            <h1 className="text-3xl font-bold text-white">{librarySource ? 'Asignar ejercicio de la biblioteca' : 'Crear sesión de práctica'}</h1>
+            <p className="text-gray-400">{librarySource ? 'Reutiliza un ejercicio sin volver a cargar el audio' : 'Asigna ejercicios y audios a los participantes'}</p>
           </div>
         </div>
 
