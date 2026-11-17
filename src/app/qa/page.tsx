@@ -38,6 +38,24 @@ export default async function QAPage(props: PageProps) {
     include: { interpreter: { select: { name: true } } }
   });
 
+  // QA is linked to ProductionLog, not CallSession. Suggest only genuinely
+  // unreviewed production logs with an owner; never imply recent calls are
+  // unreviewed. This is a bounded convenience list, not a historical audit.
+  const unreviewedProduction = await prisma.productionLog.findMany({
+    where: { interpreterId: { not: null }, qaScore: { is: null } },
+    select: { id: true, interpreterId: true, date: true, status: true },
+    orderBy: [{ date: 'desc' }, { id: 'desc' }],
+    take: 100,
+  });
+  const productionLogSuggestions = unreviewedProduction.flatMap(log =>
+    log.interpreterId === null ? [] : [{
+      id: log.id,
+      interpreterId: log.interpreterId,
+      date: log.date.toISOString().slice(0, 10),
+      status: log.status,
+    }],
+  );
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header>
@@ -50,7 +68,7 @@ export default async function QAPage(props: PageProps) {
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         <div className="xl:col-span-2">
-          <QAEngine interpreters={interpreters} />
+          <QAEngine interpreters={interpreters} productionLogSuggestions={productionLogSuggestions} />
         </div>
 
         <div className="space-y-6">
