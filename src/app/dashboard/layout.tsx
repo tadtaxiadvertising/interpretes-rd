@@ -5,6 +5,7 @@ import { getResolvedIdentity } from '@/lib/auth/actions';
 import { resolveDestination } from '@/lib/identity/resolve-user';
 import { getCurrentProfile } from '@/app/actions/auth';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
+import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 import HeartbeatProvider from "@/components/HeartbeatProvider";
 import ActivityTrackerClient from "@/components/ActivityTrackerClient";
 
@@ -39,16 +40,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
     return null;
   }
 
-  const notificationUserIds = [userId];
-  if (profile?.id && profile.id !== userId) {
-    notificationUserIds.push(profile.id);
-  }
-
-  // ROBUSTNESS GUARD - Filter to real UUIDs only
-  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  const uuidUserIds = notificationUserIds.filter((id) => id && UUID_RE.test(id));
-
-  const notifications = await loadNavbarNotifications(uuidUserIds);
+  // Match the trusted recipient IDs used by markNotificationAsRead.
+  // Auth.js account UUIDs may differ from their linked profile UUIDs.
+  const recipientIds = authorizedNotificationRecipientIds(userId, profile?.id);
+  const notifications = await loadNavbarNotifications(recipientIds);
 
   // Ranking removed from layout - will be fetched client-side or via API
   // This eliminates the N+1 query problem that caused build timeouts

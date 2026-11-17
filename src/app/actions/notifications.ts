@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
 const db = prisma;
 
@@ -79,7 +80,13 @@ export async function markNotificationAsRead(id: string) {
   }
 
   const parsedId = NotificationIdSchema.safeParse(id);
-  if (!parsedId.success || !auth.user.profileId) {
+  if (!parsedId.success) {
+    return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
+  }
+  // Either trusted identity may be a notification recipient. A missing
+  // profile is safe when the authenticated account itself has a valid UUID.
+  const recipientIds = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
+  if (recipientIds.length === 0) {
     return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
   }
 
@@ -87,7 +94,9 @@ export async function markNotificationAsRead(id: string) {
     const updated = await db.notification.updateMany({
       where: {
         id: parsedId.data,
-        userId: auth.user.profileId,
+        // The dashboard lists notifications addressed to either linked ID.
+        // Never permit a recipient ID passed by the caller.
+        userId: { in: recipientIds },
       },
       data: { isRead: true },
     });
