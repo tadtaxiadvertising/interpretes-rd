@@ -1,5 +1,18 @@
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
+/**
+ * Release an upstream response we will never forward to the browser.
+ * Failure to cancel an already-rejected response must not alter the proper
+ * HTTP status (e.g. 413 for size-limit rejections).
+ */
+export async function discardHappyScribeDownload(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // Best-effort connection cleanup, never expose signed URLs or upstream details.
+  }
+}
+
 // HappyScribe may return signed AWS S3 URLs. Restrict the AWS allowlist to
 // S3 object storage; other AWS services are not legitimate export hosts.
 const S3_REGION = '[a-z]{2}(?:-gov)?-[a-z]+-[0-9]';
