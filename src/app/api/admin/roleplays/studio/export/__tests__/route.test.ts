@@ -129,4 +129,13 @@ describe('admin roleplay studio export security and input boundaries', () => {
     const result = await POST(request([validSegment], file) as never);
     expect(result.status).toBe(400);
   });
+  it('refuses v2 compound metadata instead of exporting silence from outer bounds', async () => {
+    const result = await POST(request([{
+      ...validSegment, start: 0, end: 45,
+      ranges: [{ start: 0, end: 10 }, { start: 40, end: 45 }],
+    }]) as never);
+    expect(result.status).toBe(400);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
 });
