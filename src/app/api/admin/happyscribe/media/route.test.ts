@@ -33,11 +33,20 @@ describe('HappyScribe original media import', () => {
     mocks.fetch.mockReset();
     vi.stubGlobal('fetch', mocks.fetch);
     vi.stubEnv('HAPPY_SCRIBE_API_TOKEN', 'test-only-token');
+    vi.stubEnv('HAPPY_SCRIBE_MEDIA_PROXY_ENABLED', 'true');
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();
+  });
+
+  it('does not contact the provider unless media proxy is explicitly enabled', async () => {
+    vi.stubEnv('HAPPY_SCRIBE_MEDIA_PROXY_ENABLED', 'false');
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect(await response.json()).toMatchObject({ success: false });
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
   it('streams a completed transcription MP3 without exposing its signed URL', async () => {
