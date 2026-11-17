@@ -84,7 +84,6 @@ export async function createAccountPlatform(formData: FormData) {
     }
     return { success: true };
   } catch (error) {
-    console.error('[PLATFORMS] Create failed', safeServerErrorCategory(error));
     // Provider errors may contain DB connection strings or account metadata.
     console.error('[PLATFORMS] Create failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar la plataforma. Comprueba la cuenta y el nombre.' };
