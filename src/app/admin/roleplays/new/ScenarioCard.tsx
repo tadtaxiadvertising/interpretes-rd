@@ -57,22 +57,23 @@ export function ScenarioCard({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const consumedFocusRequest = useRef<number | null>(null);
+  const focusField = focusRequest?.field;
+  const focusRequestId = focusRequest?.requestId;
 
-  // When validation finds a missing audio in a collapsed imported scenario,
-  // expand it first; the next effect focuses the newly mounted input.
+  // Reveal the missing audio before moving focus to its newly mounted input.
   useEffect(() => {
-    if (focusRequest?.field === 'audio') setExpanded(true);
-  }, [focusRequest?.requestId, focusRequest?.field]);
+    if (focusField === 'audio') setExpanded(true);
+  }, [focusField, focusRequestId]);
 
   useEffect(() => {
-    if (!focusRequest || consumedFocusRequest.current === focusRequest.requestId) return;
-    const input = focusRequest.field === 'title'
+    if (focusRequestId === undefined || consumedFocusRequest.current === focusRequestId) return;
+    const input = focusField === 'title'
       ? titleInputRef.current
-      : expanded ? fileInputRef.current : null;
+      : focusField === 'audio' && expanded ? fileInputRef.current : null;
     if (!input) return;
     input.focus();
-    consumedFocusRequest.current = focusRequest.requestId;
-  }, [focusRequest, expanded]);
+    consumedFocusRequest.current = focusRequestId;
+  }, [focusField, focusRequestId, expanded]);
 
   const handleAudioSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
