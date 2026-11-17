@@ -2172,6 +2172,11 @@ export default function RoleplayStudioPage() {
         </section>
       )}
       {error && (!audio || !duration) && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {notice && (!audio || !duration) && (
+        <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+          {notice}
+        </p>
+      )}
       <p className="text-xs leading-5 text-slate-500">
         Solo administración · Los archivos originales locales no se guardan en la biblioteca.
         Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.
