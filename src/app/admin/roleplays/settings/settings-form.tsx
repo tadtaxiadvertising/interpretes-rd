@@ -18,6 +18,10 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [status, setStatus] = useState(initial);
   const [checking, setChecking] = useState(false);
   const hasToken = status.hasToken;
+  const editingDisabled = pending || checking;
+  const hasUnsavedChanges = org !== status.organizationId || token.length > 0 || remove ||
+    media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
+    compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
   const [pending, start] = useTransition();
   function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -67,11 +71,11 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     <div><h2 className="text-xl font-semibold text-white">HappyScribe</h2>
       <p className="mt-1 text-sm text-slate-400">Solo los administradores pueden cambiar estos valores. Las claves nunca se devuelven al navegador.</p></div>
     <div><label htmlFor="happy-org" className="mb-2 block text-sm font-semibold text-slate-200">ID de organización</label>
-      <input id="happy-org" value={org} onChange={e => setOrg(e.target.value)} inputMode="numeric" pattern="[0-9]*" maxLength={30}
+      <input id="happy-org" disabled={editingDisabled} value={org} onChange={e => setOrg(e.target.value)} inputMode="numeric" pattern="[0-9]*" maxLength={30}
         placeholder="ID numérico" autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></div>
     <div><label htmlFor="happy-token" className="mb-2 block text-sm font-semibold text-slate-200">Clave API de HappyScribe</label>
       <input id="happy-token" type="password" value={token} onChange={e => setToken(e.target.value)}
-        autoComplete="new-password" maxLength={2048} disabled={remove} placeholder={hasToken ? 'Configurada · escribir para reemplazar' : 'Pegar nueva clave API'}
+        autoComplete="new-password" maxLength={2048} disabled={remove || editingDisabled} placeholder={hasToken ? 'Configurada · escribir para reemplazar' : 'Pegar nueva clave API'}
         className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" />
       <p className="mt-2 text-sm text-slate-400">Estado: {hasToken ? 'Configurada' : 'Sin configurar'} · {status.credentialUsable ? 'Clave accesible' : 'No disponible'}. Origen: {status.tokenSource}. Nunca se muestra la clave.</p>
       {hasToken && !status.credentialUsable && <p role="alert" className="mt-2 text-sm text-amber-300">
@@ -79,7 +83,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       </p>}
       {!status.encryptionReady && <p role="alert" className="mt-2 text-sm text-amber-300">Para guardar claves nuevas, configura AUDIO_STUDIO_ENCRYPTION_KEY en el servidor.</p>}
       {status.tokenSource === 'panel' && <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
-        <input type="checkbox" checked={remove} onChange={e => {
+        <input type="checkbox" disabled={editingDisabled} checked={remove} onChange={e => {
           setRemove(e.target.checked);
           if (e.target.checked) setToken('');
         }} /> Borrar la clave guardada en el panel
@@ -89,7 +93,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       </p>}</div>
     <div className="rounded-xl border border-white/10 p-4">
       <label className="flex items-start gap-3 text-sm text-white">
-        <input type="checkbox" checked={media} disabled={!status.proxyAvailable} onChange={e => setMedia(e.target.checked)} />
+        <input type="checkbox" checked={media} disabled={editingDisabled || !status.proxyAvailable} onChange={e => setMedia(e.target.checked)} />
         <span><strong>Permitir importar MP3 por el servidor</strong><span className="mt-1 block text-slate-400">Consume ancho de banda del VPS. Desactivado de forma predeterminada; solo disponible si el operador habilita el proxy en el despliegue.</span></span>
       </label></div>
     <p className="text-xs text-slate-400">La prueba utiliza la configuración ya guardada. Guarda primero cualquier cambio de clave u organización.</p>
@@ -97,23 +101,26 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       <legend className="px-1 text-lg font-semibold text-white">Preferencias del editor</legend>
       <p className="text-sm text-slate-400">Valores iniciales para nuevas sesiones. El administrador puede ajustarlos durante la edición; no cambian proyectos existentes.</p>
       <label className="flex items-center gap-3 text-sm text-slate-200">
-        <input type="checkbox" checked={excludeDefault} onChange={e => setExcludeDefault(e.target.checked)} />
+        <input type="checkbox" disabled={editingDisabled} checked={excludeDefault} onChange={e => setExcludeDefault(e.target.checked)} />
         Excluir de forma predeterminada al intérprete original al importar subtítulos
       </label>
       <label htmlFor="compact-default" className="block text-sm text-slate-200">Vista inicial de intervenciones</label>
-      <select id="compact-default" value={compactDefault} onChange={e => setCompactDefault(e.target.value as typeof compactDefault)}
+      <select id="compact-default" disabled={editingDisabled} value={compactDefault} onChange={e => setCompactDefault(e.target.value as typeof compactDefault)}
         className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white">
         <option value="auto">Automática — compacta cuando el proyecto crece</option>
         <option value="compact">Compacta</option>
         <option value="expanded">Detallada</option>
       </select>
       <label htmlFor="protocol-default" className="block text-sm text-slate-200">Idioma inicial de los protocolos</label>
-      <select id="protocol-default" value={protocolDefault} onChange={e => setProtocolDefault(e.target.value as 'en' | 'es')}
+      <select id="protocol-default" disabled={editingDisabled} value={protocolDefault} onChange={e => setProtocolDefault(e.target.value as 'en' | 'es')}
         className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white">
         <option value="en">Inglés</option>
         <option value="es">Español</option>
       </select>
     </fieldset>
+    {hasUnsavedChanges && !pending && <p role="status" className="text-sm text-amber-200">
+      Tienes cambios sin guardar. Guárdalos antes de probar la conexión o salir de esta pantalla.
+    </p>}
     {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
     <div className="flex flex-wrap items-center gap-3"><button disabled={pending || checking} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
       <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
