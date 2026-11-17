@@ -132,4 +132,22 @@ describe('HappyScribe encrypted admin settings', () => {
     })).rejects.toThrow('ORGANIZATION_INVALID');
     expect(store.get(TOKEN_KEY)).toBe(previous);
   });
+  it('does not silently reactivate a server organization after the administrator clears it', async () => {
+    process.env.HAPPY_SCRIBE_ORGANIZATION_ID = 'legacy-org-id';
+    process.env.HAPPY_SCRIBE_API_TOKEN = 'SYNTHETIC_LEGACY_TOKEN';
+    expect((await getHappyScribeSettings()).organizationId).toBe('legacy-org-id');
+    await saveHappyScribeSettings({ organizationId: '', mediaImportEnabled: false });
+    expect((await getHappyScribeSettings()).organizationId).toBe('');
+    expect((await getHappyScribeSettingsStatus()).organizationId).toBe('');
+  });
+
+  it('rejects replacing and removing the API key in the same operation without writing', async () => {
+    await expect(saveHappyScribeSettings({
+      token: testToken, removeToken: true,
+      organizationId: '123456', mediaImportEnabled: false,
+    })).rejects.toThrow('TOKEN_OPERATION_CONFLICT');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(store.size).toBe(0);
+  });
+
 });
