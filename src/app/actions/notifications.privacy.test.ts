@@ -100,10 +100,46 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     const result = await markNotificationAsRead('notification-other');
     expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
     expect(m.notificationUpdateMany).toHaveBeenCalledWith({
-      where: { id: 'notification-other', userId: profileId },
+      where: { id: 'notification-other', userId: { in: [profileId] } },
       data: { isRead: true },
     });
     expect(m.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('marks notifications addressed to the authenticated account or linked profile without client-supplied recipient IDs', async () => {
+    const authId = '48fb69c9-2ea0-497b-b599-bfd1845ea812';
+    m.validateAction.mockResolvedValueOnce({
+      user: { userId: authId, profileId, role: 'interpreter' },
+    });
+    const result = await markNotificationAsRead('notification-account');
+    expect(result).toEqual({ success: true });
+    expect(m.notificationUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'notification-account',
+        userId: { in: [authId, profileId] },
+      },
+      data: { isRead: true },
+    });
+  });
+
+  it('does not use untrusted/non-UUID actor IDs as notification recipients', async () => {
+    m.validateAction.mockResolvedValueOnce({
+      user: { userId: 'legacy-rbac-not-a-uuid', profileId, role: 'interpreter' },
+    });
+    await markNotificationAsRead('notification-1');
+    expect(m.notificationUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'notification-1', userId: { in: [profileId] } },
+      data: { isRead: true },
+    });
+  });
+
+  it('does not query notifications without a verified linked profile, even if an auth ID exists', async () => {
+    m.validateAction.mockResolvedValueOnce({
+      user: { userId: '48fb69c9-2ea0-497b-b599-bfd1845ea812', profileId: null, role: 'interpreter' },
+    });
+    const response = await markNotificationAsRead('notification-1');
+    expect(response).toMatchObject({ success: false, code: 'NOT_FOUND' });
+    expect(m.notificationUpdateMany).not.toHaveBeenCalled();
   });
 
   it('requires a valid profile and notification ID before updating read status', async () => {
