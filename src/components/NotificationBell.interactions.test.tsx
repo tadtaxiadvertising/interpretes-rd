@@ -119,6 +119,16 @@ describe('NotificationBell interactions', () => {
     expect(screen.getByText('2 sin leer')).toBeTruthy();
   });
 
+  it('does not invent a timestamp for legacy notifications with a missing or invalid date', () => {
+    render(<NotificationBell initialNotifications={[
+      { ...notifications[0], type: null, isRead: null, createdAt: null },
+      { ...notifications[1], createdAt: 'invalid-date' },
+    ]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    expect(screen.getAllByText('Fecha no disponible')).toHaveLength(2);
+    expect(screen.getByText('2 sin leer')).toBeTruthy();
+  });
+
   it('renders an empty notification state with a usable close control', () => {
     render(<NotificationBell initialNotifications={[]} />);
     fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
