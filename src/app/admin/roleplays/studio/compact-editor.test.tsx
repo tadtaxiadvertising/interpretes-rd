@@ -180,7 +180,7 @@ describe('Audio Studio compact editing', () => {
     });
 
     const apply = screen.getByRole('button', { name: 'Marcar pendientes como español' });
-    expect(screen.getByText(/2 intervenciones sin idioma/)).toBeTruthy();
+    expect(screen.getByText(/2 intervenciones visibles sin idioma/)).toBeTruthy();
     fireEvent.click(apply);
     expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
       .map(input => input.value)).toEqual(['en', 'es', 'es', 'unknown']);
@@ -199,6 +199,28 @@ describe('Audio Studio compact editing', () => {
         'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención 3', 'Intérprete · 4',
       ]);
     expect(screen.getByRole('button', { name: 'Marcar pendientes como español' })).toBeTruthy();
+  });
+
+  it('never assigns languages to turns hidden by the active search filter', () => {
+    loadAudio(180);
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    }
+    const titles = screen.getAllByLabelText('Título') as HTMLInputElement[];
+    fireEvent.change(titles[1], { target: { value: 'Solo inglés 2' } });
+    fireEvent.change(titles[3], { target: { value: 'Solo inglés 4' } });
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    fireEvent.change(search, { target: { value: 'Solo inglés' } });
+
+    expect(screen.getByText(/2 intervenciones visibles sin idioma/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar pendientes como inglés' }));
+    fireEvent.change(search, { target: { value: '' } });
+    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
+      .map(item => item.value)).toEqual(['unknown', 'en', 'unknown', 'en']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de idiomas' }));
+    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
+      .map(item => item.value)).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
   });
 
   it('adds a turn near the cursor even when another turn exists much later', () => {
