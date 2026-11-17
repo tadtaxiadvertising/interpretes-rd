@@ -8,7 +8,7 @@ export default async function InterpretersLayout({ children }: { children: React
   const profile = await getCurrentProfile();
 
   return (
-    <DashboardShell role="admin" userName={profile?.display_name || "Admin"}>
+    <DashboardShell role="admin" userName={profile?.display_name || "Administrador"}>
       {children}
     </DashboardShell>
   );
