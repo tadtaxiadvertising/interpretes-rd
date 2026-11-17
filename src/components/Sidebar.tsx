@@ -277,13 +277,13 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
         </div>
       )}
 
-      {/* Bottom section — System Status */}
+      {/* Bottom section — Estado del sistema */}
       <div className={cn("p-4 transition-all duration-500", isCollapsed ? "px-2" : "px-4")}>
         <div className={cn(
           "rounded-2xl bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/10 transition-all duration-500",
           isCollapsed ? "p-2 flex flex-col items-center" : "p-4"
         )}>
-          {!isCollapsed && <p className="text-xs text-slate-500 animate-in fade-in duration-500">System Status</p>}
+          {!isCollapsed && <p className="text-xs text-slate-500 animate-in fade-in duration-500">Estado del sistema</p>}
           <div className={cn("flex items-center gap-2", !isCollapsed && "mt-2")}>
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
             {!isCollapsed && (
