@@ -1,6 +1,6 @@
-# Development Guide — Free Interpreters OS
+# Development Guide — Intérpretes RD
 
-This guide provides the necessary information for developers working on the Free Interpreters platform.
+This guide provides the necessary information for developers working on the Intérpretes RD.
 
 ## 1. Project Overview
 
