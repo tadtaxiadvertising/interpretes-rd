@@ -8,6 +8,7 @@ import { parse } from 'csv-parse/sync';
 import { z } from 'zod';
 import { validateCompanyCsvHeaders } from '@/lib/company-csv-validation';
 import { nonNegativeIntegerInput } from '@/lib/company-report-validation';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_ROWS = 500;
@@ -74,7 +75,7 @@ export async function importCompanyReportsCsv(formData: FormData): Promise<Impor
     revalidatePath('/admin/reconciliation');
     return { success: true, inserted: result.count, duplicates: data.length - result.count };
   } catch (error) {
-    console.error('[COMPANY REPORTS] CSV import failed', error);
+    console.error('[COMPANY REPORTS] CSV import failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo importar el CSV. No se confirma ninguna importación.' };
   }
 }
