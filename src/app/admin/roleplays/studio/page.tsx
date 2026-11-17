@@ -1162,8 +1162,8 @@ export default function RoleplayStudioPage() {
           });
           return [...current, ...newItems];
         });
-        setHappyScribeSelectedId(current => current || items.find(item =>
-          ['automatic_done', 'done'].includes(item.state))?.id ?? '');
+        setHappyScribeSelectedId(current => current || (items.find(item =>
+          ['automatic_done', 'done'].includes(item.state))?.id ?? ''));
       }
       setHappyScribePage(page);
       setHappyScribeHasMore(body.hasMore === true && page < 1000);
