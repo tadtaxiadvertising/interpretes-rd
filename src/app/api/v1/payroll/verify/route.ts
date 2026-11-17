@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { recalculateWithVerifiedMinutes } from '@/services/PayrollService';
 import { PayrollVerifySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus } from '@/lib/payroll-validation';
 
 const db = prisma;
@@ -28,7 +29,7 @@ const db = prisma;
 export async function POST(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const body = await parseJsonBody(request, PayrollVerifySchema);
     const { payrollRecordId, action } = body;
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
     });
 
     if (!existing) {
-      return NextResponse.json(
+      return privateAdminJson(
         { success: false, error: `PayrollRecord ${payrollRecordId} not found` },
         { status: 404 }
       );
@@ -51,16 +52,16 @@ export async function POST(request: Request) {
     // ── ACTION: VERIFY ──
     if (action === 'verify') {
       if (verifiedMinutes == null || !Number.isSafeInteger(verifiedMinutes) || verifiedMinutes < 0 || verifiedMinutes > 100_000) {
-        return NextResponse.json(
+        return privateAdminJson(
           { success: false, error: 'verifiedMinutes must be an integer between 0 and 100000' },
           { status: 400 }
         );
       }
       if (existing.paidAt || isPaidPayrollStatus(existing.status)) {
-        return NextResponse.json({ success: false, error: 'Paid payroll records are immutable' }, { status: 409 });
+        return privateAdminJson({ success: false, error: 'Paid payroll records are immutable' }, { status: 409 });
       }
       if (!isEditablePayrollStatus(existing.status)) {
-        return NextResponse.json({ success: false, error: `Cannot verify payroll from status ${existing.status}` }, { status: 409 });
+        return privateAdminJson({ success: false, error: `Cannot verify payroll from status ${existing.status}` }, { status: 409 });
       }
 
       // Recalculation is side-effect free; the conditional write is the
@@ -78,7 +79,7 @@ export async function POST(request: Request) {
         },
       });
       if (claim.count !== 1) {
-        return NextResponse.json({ success: false, error: 'Payroll changed during verification; reload and retry' }, { status: 409 });
+        return privateAdminJson({ success: false, error: 'Payroll changed during verification; reload and retry' }, { status: 409 });
       }
 
       const updated = await db.payrollRecord.findUnique({
@@ -86,7 +87,7 @@ export async function POST(request: Request) {
         include: { interpreter: { select: { name: true, externalId: true } } },
       });
 
-      return NextResponse.json({
+      return privateAdminJson({
         success: true,
         message: `Record verified with ${verifiedMinutes} minutes`,
         record: updated,
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
     // ── ACTION: MARK PAID ──
     if (action === 'markPaid') {
       if (!isApprovedPayrollStatus(existing.status) || existing.paidAt) {
-        return NextResponse.json({ success: false, error: `Cannot mark as paid from status ${existing.status}; record must be APPROVED` }, { status: 409 });
+        return privateAdminJson({ success: false, error: `Cannot mark as paid from status ${existing.status}; record must be APPROVED` }, { status: 409 });
       }
       const now = new Date();
 
@@ -115,9 +116,9 @@ export async function POST(request: Request) {
           select: { id: true, status: true },
         });
         if (!current) {
-          return NextResponse.json({ success: false, error: `PayrollRecord ${payrollRecordId} not found` }, { status: 404 });
+          return privateAdminJson({ success: false, error: `PayrollRecord ${payrollRecordId} not found` }, { status: 404 });
         }
-        return NextResponse.json(
+        return privateAdminJson(
           { success: false, error: `Cannot mark as paid from status ${current.status}; record must be APPROVED` },
           { status: 409 }
         );
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
         },
       });
 
-      return NextResponse.json({
+      return privateAdminJson({
         success: true,
         message: `Record marked as paid at ${now.toISOString()}`,
         record: updated,
@@ -143,7 +144,7 @@ export async function POST(request: Request) {
     if (action === 'updateStatus') {
       const validStatuses = ['PENDING', 'APPROVED', 'PAID', 'REJECTED'];
       if (!status || !validStatuses.includes(status)) {
-        return NextResponse.json(
+        return privateAdminJson(
           { success: false, error: `status must be one of: ${validStatuses.join(', ')}` },
           { status: 400 }
         );
@@ -154,7 +155,7 @@ export async function POST(request: Request) {
         select: { id: true, status: true },
       });
       if (!current) {
-        return NextResponse.json({ success: false, error: `PayrollRecord ${payrollRecordId} not found` }, { status: 404 });
+        return privateAdminJson({ success: false, error: `PayrollRecord ${payrollRecordId} not found` }, { status: 404 });
       }
 
       const allowedTransitions: Record<string, string[]> = {
@@ -164,7 +165,7 @@ export async function POST(request: Request) {
         REJECTED: [],
       };
       if (!allowedTransitions[current.status as keyof typeof allowedTransitions]?.includes(status)) {
-        return NextResponse.json(
+        return privateAdminJson(
           { success: false, error: `Invalid transition from ${current.status} to ${status}` },
           { status: 409 }
         );
@@ -182,7 +183,7 @@ export async function POST(request: Request) {
       });
 
       if (claim.count === 0) {
-        return NextResponse.json(
+        return privateAdminJson(
           { success: false, error: 'Concurrent modification detected' },
           { status: 409 }
         );
@@ -197,16 +198,16 @@ export async function POST(request: Request) {
         },
       });
 
-      return NextResponse.json({
+      return privateAdminJson({
         success: true,
         message: `Status updated to ${status}`,
         record: updated,
       });
     }
 
-    return NextResponse.json({ success: false, error: 'Unhandled action' }, { status: 400 });
+    return privateAdminJson({ success: false, error: 'Unhandled action' }, { status: 400 });
   } catch (error) {
-    console.error('[POST /api/payroll/verify] Error:', error);
-    return apiError({ error, fallback: 'Internal server error' });
+    console.error('[POST /api/payroll/verify] Error:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Internal server error', exposeMessage: false }));
   }
 }
