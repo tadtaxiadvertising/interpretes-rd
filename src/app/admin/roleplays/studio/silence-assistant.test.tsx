@@ -57,7 +57,7 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     vi.stubGlobal('fetch', fetchMock);
     loadMp3();
     fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     expect(screen.getByText(/Intervenciones \(1\/25\)/i)).toBeTruthy();
 
     await act(async () => {
@@ -98,7 +98,7 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => result }));
     vi.stubGlobal('fetch', fetchMock);
     loadMp3();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Turno editado manualmente' } });
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Turno editado' },

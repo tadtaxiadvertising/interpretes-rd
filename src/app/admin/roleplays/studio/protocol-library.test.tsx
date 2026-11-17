@@ -36,7 +36,7 @@ describe('Admin bilingual interpretation protocol templates', () => {
     const player = container.querySelector('audio')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
     fireEvent.loadedMetadata(player);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
 
     const instructions = screen.getByLabelText('Instrucciones para el participante') as HTMLTextAreaElement;
     expect(instructions.value).toBe('');

@@ -49,8 +49,8 @@ describe('Audio Studio video and long source local preparation', () => {
     expect(player).toBeTruthy();
     expect(screen.getByText(/Preparación local:/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Detectar pausas en servidor/i })).toBeNull();
-    expect(screen.getByRole('button', { name: /Añadir intervención/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    expect(screen.getByRole('button', { name: /Añadir fragmento/i })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     expect(screen.getByRole('button', { name: /Descargar plan local de cortes/i })).toBeTruthy();
   });
   it('imports timecodes after 4 hours and never posts the original video to export ZIP', async () => {

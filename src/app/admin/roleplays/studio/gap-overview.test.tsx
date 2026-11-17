@@ -38,9 +38,9 @@ describe('long-source skipped-time overview', () => {
     Object.defineProperty(player, 'duration', { configurable: true, value: 3600 });
     fireEvent.loadedMetadata(player);
 
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     player.currentTime = 300;
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
 
     const summary = screen.getByRole('region', { name: 'Resumen de cortes y espacios' });
     expect(summary.textContent).toContain('Seleccionado: 01:00.0');

@@ -187,7 +187,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('rejects unknown project formats before hashing media or overwriting current edits', async () => {
     selectSource();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const file = new File(['unsupported'], 'project.json', { type: 'application/json' });
     Object.defineProperty(file, 'text', {
       configurable: true, value: async () => JSON.stringify({ format: 'different-product', version: 1 }),
@@ -219,7 +219,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('keeps existing edits when the administrator declines a valid project replacement', async () => {
     selectSource();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const originalTitle = screen.getByLabelText('Título') as HTMLInputElement;
     fireEvent.change(originalTitle, { target: { value: 'Edición sin guardar' } });
     vi.mocked(window.confirm).mockReturnValueOnce(false);
@@ -238,7 +238,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('replaces current edits only after accepting a verified project', async () => {
     selectSource();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const originalTitle = screen.getByLabelText('Título') as HTMLInputElement;
     fireEvent.change(originalTitle, { target: { value: 'Edición anterior' } });
     await act(async () => {
@@ -253,7 +253,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('never changes a prior server choice when rejecting a verified compound v2 draft', async () => {
     selectSource();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     const source = createLongMediaDraft(3, hash, [{
       title: 'Médico compuesto', start: 0, end: 45,
@@ -275,6 +275,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('stops stale clip preview only after accepting a verified JSON replacement', async () => {
     selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
     fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
@@ -302,7 +303,7 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('rejects projects bound to another MP3 and preserves existing edits', async () => {
     selectSource();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
 
     await act(async () => {
