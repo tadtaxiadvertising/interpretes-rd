@@ -88,6 +88,8 @@ export async function getHappyScribeSettingsStatus() {
   }
   return {
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
+    // Safe metadata only: removing an admin token can reactivate a server key.
+    environmentFallbackAvailable: Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
     credentialUsable,
     tokenSource: map.has(TOKEN_KEY) ? 'panel' : (process.env.HAPPY_SCRIBE_API_TOKEN?.trim() ? 'servidor' : 'ninguna'),
     organizationId: map.has(ORG_KEY) ? map.get(ORG_KEY)! : (process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || ''),
