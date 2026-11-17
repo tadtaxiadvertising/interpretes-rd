@@ -13,6 +13,7 @@ import prisma from '@/lib/prisma';
 import {
   getHappyScribeSettings,
   getHappyScribeSettingsStatus,
+  getAudioStudioEditorPreferences,
   saveHappyScribeSettings,
 } from './happyscribe-settings';
 import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from './happyscribe-import-proof';
@@ -86,6 +87,7 @@ describe('HappyScribe encrypted admin settings', () => {
     expect((await getHappyScribeSettings()).token).toBe(testToken);
     const status = await getHappyScribeSettingsStatus();
     expect(status.hasToken).toBe(true);
+    expect(status.credentialUsable).toBe(true);
     expect(status.organizationId).toBe('123456');
     expect(JSON.stringify(status)).not.toContain(testToken);
   });
@@ -132,4 +134,61 @@ describe('HappyScribe encrypted admin settings', () => {
     })).rejects.toThrow('ORGANIZATION_INVALID');
     expect(store.get(TOKEN_KEY)).toBe(previous);
   });
+  it('does not silently reactivate a server organization after the administrator clears it', async () => {
+    process.env.HAPPY_SCRIBE_ORGANIZATION_ID = 'legacy-org-id';
+    process.env.HAPPY_SCRIBE_API_TOKEN = 'SYNTHETIC_LEGACY_TOKEN';
+    expect((await getHappyScribeSettings()).organizationId).toBe('legacy-org-id');
+    await saveHappyScribeSettings({ organizationId: '', mediaImportEnabled: false });
+    expect((await getHappyScribeSettings()).organizationId).toBe('');
+    expect((await getHappyScribeSettingsStatus()).organizationId).toBe('');
+  });
+
+  it('rejects replacing and removing the API key in the same operation without writing', async () => {
+    await expect(saveHappyScribeSettings({
+      token: testToken, removeToken: true,
+      organizationId: '123456', mediaImportEnabled: false,
+    })).rejects.toThrow('TOKEN_OPERATION_CONFLICT');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(store.size).toBe(0);
+  });
+
+  it('persists allowed Audio Studio defaults and supplies safe defaults when absent', async () => {
+    expect(await getAudioStudioEditorPreferences()).toEqual({
+      excludeInterpreterByDefault: true, compactViewDefault: 'auto',
+    });
+    await saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+    expect(await getAudioStudioEditorPreferences()).toEqual({
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+    expect(await getHappyScribeSettingsStatus()).toMatchObject({
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+    await saveHappyScribeSettings({ organizationId: '123456', mediaImportEnabled: false });
+    expect(await getAudioStudioEditorPreferences()).toEqual({
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+    });
+  });
+
+  it('rejects invalid Audio Studio editor mode before database writes', async () => {
+    await expect(saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      compactViewDefault: 'unknown' as 'auto',
+    })).rejects.toThrow('COMPACT_MODE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('marks an encrypted token as unusable when the runtime decryption key is missing', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    });
+    delete process.env.AUDIO_STUDIO_ENCRYPTION_KEY;
+    const status = await getHappyScribeSettingsStatus();
+    expect(status.hasToken).toBe(true);
+    expect(status.credentialUsable).toBe(false);
+    expect(JSON.stringify(status)).not.toContain(testToken);
+  });
+
 });
