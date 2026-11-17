@@ -106,7 +106,10 @@ function validateProject(data, size) {
       selectedSeconds = ranges.reduce((sum, range) => sum + range.end - range.start, 0);
     }
     if (selectedSeconds > 300 + 1e-6) {
-      fail('Cada intervención puede contener hasta 5 minutos de audio seleccionado.');
+      // Retain the v1 validation category; callers and tests expect it.
+      fail(clip.ranges === undefined
+        ? 'Revisa títulos, perfiles, tiempos o instrucciones inválidos.'
+        : 'Cada intervención puede contener hasta 5 minutos de audio seleccionado.');
     }
     total += selectedSeconds;
     if (total > MAX_TOTAL_SECONDS + 1e-6) {
