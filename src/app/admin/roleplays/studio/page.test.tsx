@@ -418,4 +418,40 @@ describe('Audio Studio clip review player', () => {
     expect(screen.queryByRole('button', { name: 'Aplicar selección al editor' })).toBeNull();
   });
 
+  it('imports the original HappyScribe MP3 directly into the Audio Studio source', async () => {
+    const itemId = 'a'.repeat(32);
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return new Response(new Blob(['ID3-audio'], { type: 'audio/mpeg' }), {
+          status: 200, headers: { 'Content-Type': 'audio/mpeg' },
+        });
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [{ id: itemId, name: 'Practice recording.mp3', state: 'automatic_done',
+            language: 'en-US', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    const { container } = render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+      await Promise.resolve();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1][0]).toBe('/api/admin/happyscribe/media');
+    expect(screen.getByText(/Audio original importado desde HappyScribe/)).toBeTruthy();
+    const player = container.querySelector('audio');
+    expect(player?.getAttribute('src')).toMatch(/^blob:/);
+  });
+
 });
