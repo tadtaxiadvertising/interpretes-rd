@@ -104,6 +104,11 @@ jobs:
       - name: Verify financial API privacy regressions
         run: npx vitest run src/app/api/v1/payroll/__tests__/financial-privacy.test.ts src/lib/api-responses.security.test.ts
 
+      # Confirm an unanchored biweekly schedule cannot trigger payroll writes.
+      # This is independent regression evidence; supply-chain audit remains a hard gate.
+      - name: Verify biweekly payroll fail-closed guard
+        run: npx vitest run src/app/api/v1/payroll/__tests__/biweekly-schedule-guard.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
