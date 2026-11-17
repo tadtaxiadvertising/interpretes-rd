@@ -31,7 +31,9 @@ describe('HappyScribe signed import selection', () => {
     expect(verifyHappyScribeImportProof(scope, proof, now + 46 * 60_000)).toBe(false);
     expect(verifyHappyScribeImportProof(scope, proof, now - 60_000)).toBe(false);
     expect(verifyHappyScribeImportProof(scope, undefined, now)).toBe(false);
-    expect(verifyHappyScribeImportProof(scope, proof.slice(0, -1) + '0', now)).toBe(false);
+    const finalChar = proof.slice(-1);
+    const tampered = proof.slice(0, -1) + (finalChar === '0' ? '1' : '0');
+    expect(verifyHappyScribeImportProof(scope, tampered, now)).toBe(false);
     expect(verifyHappyScribeImportProof(scope, 'not-a-proof', now)).toBe(false);
   });
 
