@@ -188,6 +188,51 @@ class StudioDesktopTests(unittest.TestCase):
         else:
             self.assertIsNone(module.discover_local_companion(link))
 
+    def test_reveal_completed_zip_folder_only_on_explicit_user_action(self):
+        from unittest.mock import patch
+        self.output.write_bytes(b"completed local ZIP fixture")
+        folder = str(self.output.parent)
+
+        with (patch.object(module.sys, "platform", "linux"),
+              patch.object(module.subprocess, "Popen") as launch):
+            module.open_export_directory(self.output)
+            launch.assert_called_once()
+            args, kwargs = launch.call_args
+            self.assertEqual(args[0], ["xdg-open", folder])
+            self.assertNotIn("shell", kwargs)
+            self.assertEqual(kwargs["stdin"], subprocess.DEVNULL)
+
+        with (patch.object(module.sys, "platform", "darwin"),
+              patch.object(module.subprocess, "Popen") as launch):
+            module.open_export_directory(self.output)
+            self.assertEqual(launch.call_args.args[0], ["open", folder])
+
+        with (patch.object(module.sys, "platform", "win32"),
+              patch.object(module.os, "startfile", create=True) as launch):
+            module.open_export_directory(self.output)
+            launch.assert_called_once_with(folder)
+
+    def test_open_export_folder_never_executes_missing_symlinked_or_nonzip_file(self):
+        from unittest.mock import patch
+        self.output.write_bytes(b"complete")
+        link = self.output.parent / "link.zip"
+        try:
+            link.symlink_to(self.output)
+        except (OSError, NotImplementedError):
+            pass
+        with patch.object(module.subprocess, "Popen") as launch:
+            for path in (self.output.parent / "missing.zip",
+                         self.source, link if link.is_symlink() else self.source):
+                with self.subTest(path=path):
+                    with self.assertRaises(module.ExportError):
+                        module.open_export_directory(path)
+            launch.assert_not_called()
+        with (patch.object(module.sys, "platform", "linux"),
+              patch.object(module.subprocess, "Popen",
+                           side_effect=FileNotFoundError("xdg-open"))):
+            with self.assertRaisesRegex(module.ExportError, "explorador de archivos"):
+                module.open_export_directory(self.output)
+
     def test_zip_suggestion_avoids_existing_and_symlinked_outputs(self):
         folder = self.project.parent
         first = folder / "roleplay-studio.zip"
