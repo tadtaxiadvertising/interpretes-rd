@@ -397,6 +397,7 @@ describe('Audio Studio clip review player', () => {
       await Promise.resolve();
     });
     expect(screen.getByRole('button', { name: 'Importar transcripción' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Importar audio original' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
     expect(fetcher).toHaveBeenCalledTimes(2);
@@ -432,6 +433,7 @@ describe('Audio Studio clip review player', () => {
           success: true,
           data: [{ id: itemId, name: 'Practice recording.mp3', state: 'automatic_done',
             language: 'en-US', durationSeconds: 90, createdAt: null, folder: null }],
+          mediaImportEnabled: true,
         }),
       } as Response;
     });
