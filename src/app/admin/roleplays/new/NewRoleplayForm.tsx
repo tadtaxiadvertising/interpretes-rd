@@ -318,21 +318,30 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const validateForm = () => {
     if (!isBulk && !selectedParticipantId) {
-      setError('Please select a participant');
+      setError('Selecciona el intérprete o candidato que recibirá el roleplay.');
+      document.getElementById('roleplay-participant-select')?.focus();
       return false;
     }
-    if (librarySource) return librarySource.scenarios.length > 0;
+    if (librarySource) {
+      if (librarySource.scenarios.length === 0) {
+        setError('La plantilla no contiene escenarios. Elige otra plantilla antes de asignar.');
+        return false;
+      }
+      return true;
+    }
     if (scenarios.length === 0 || scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
-      setError(`Please add between 1 and ${ROLEPLAY_MAX_SCENARIOS} scenarios`);
+      setError(`Agrega entre 1 y ${ROLEPLAY_MAX_SCENARIOS} escenarios antes de crear el roleplay.`);
       return false;
     }
-    for (const scenario of scenarios) {
+    for (const [index, scenario] of scenarios.entries()) {
       if (!scenario.title.trim()) {
-        setError('All scenarios must have a title');
+        setError(`El escenario ${index + 1} necesita un título.`);
+        document.getElementById(`scenario-title-${scenario.id}`)?.focus();
         return false;
       }
       if (!scenario.baseAudioFile) {
-        setError('All scenarios must have a base audio file');
+        setError(`El escenario ${index + 1} necesita un audio válido.`);
+        document.getElementById(`scenario-audio-${scenario.id}`)?.focus();
         return false;
       }
     }
