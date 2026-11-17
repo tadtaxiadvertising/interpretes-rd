@@ -72,6 +72,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [lastRemoved, setLastRemoved] = useState<{ scenario: Scenario; index: number } | null>(null);
   const [bulkResponseLimitSec, setBulkResponseLimitSec] = useState(120);
   // Keep the import identity independent from React render batching. The user
   // can edit a draft while a ZIP/SHA-256 validation is still awaiting.
@@ -107,6 +108,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const invalidatePendingImport = useCallback(() => {
     setImportNotice(null);
+    // Undo only the most recent deletion; subsequent edits invalidate it.
+    setLastRemoved(null);
     // Increment on every draft edit, including one React processes after an
     // import has resolved but before its state update has committed.
     importRevision.current += 1;
@@ -196,9 +199,38 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const removeScenario = useCallback((id: string) => {
+    const index = scenarios.findIndex(scenario => scenario.id === id);
+    if (index === -1) return;
+    const removed = scenarios[index];
     invalidatePendingImport();
+    setLastRemoved({ scenario: removed, index });
     setScenarios(prev => prev.filter(scenario => scenario.id !== id));
-  }, [invalidatePendingImport]);
+  }, [invalidatePendingImport, scenarios]);
+
+  const restoreRemovedScenario = () => {
+    if (!lastRemoved) return;
+    if (scenarios.length >= ROLEPLAY_MAX_SCENARIOS ||
+        scenarios.some(scenario => scenario.id === lastRemoved.scenario.id)) {
+      setLastRemoved(null);
+      return;
+    }
+    // Removal releases the previous blob URL after the React commit. A new
+    // local object URL is needed for undo; never reuse a revoked resource.
+    const original = lastRemoved.scenario;
+    const restoredPreview = original.baseAudioFile
+      ? URL.createObjectURL(original.baseAudioFile)
+      : '';
+    if (restoredPreview) previewUrls.current.add(restoredPreview);
+    const restored = { ...original, baseAudioPreview: restoredPreview };
+    invalidatePendingImport();
+    setScenarios(previous => {
+      const next = [...previous];
+      next.splice(Math.min(lastRemoved.index, next.length), 0, restored);
+      return next;
+    });
+    setLastRemoved(null);
+    setError(null);
+  };
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
     invalidatePendingImport();
@@ -232,6 +264,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     const revision = ++importRevision.current;
     importPending.current = true;
     setIsImporting(true);
+    setLastRemoved(null);
     setError(null);
     setImportNotice(null);
     try {
@@ -632,6 +665,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             <button type="button" onClick={applyResponseLimitToDefaultScenarios}
               className="rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-500/10">
               Aplicar solo a los sin configurar
+            </button>
+          </div>
+        )}
+        {lastRemoved && (
+          <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/20 bg-amber-400/5 px-3 py-2">
+            <p className="text-sm text-amber-100">Escenario eliminado. Puedes recuperar sus datos y audio antes de editar otra cosa.</p>
+            <button type="button" onClick={restoreRemovedScenario}
+              className="rounded-lg border border-amber-300/30 px-3 py-1.5 text-sm font-semibold text-amber-100 hover:bg-amber-400/10">
+              Deshacer eliminación de escenario
             </button>
           </div>
         )}
