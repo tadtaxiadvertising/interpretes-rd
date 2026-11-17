@@ -40,7 +40,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
 
   it('seeks with the waveform slider and marks a precise segment boundary', () => {
     const player = selectAudio();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const slider = screen.getByRole('slider', { name: /Posición del reproductor/i });
     fireEvent.change(slider, { target: { value: '45.5' } });
     expect(player.currentTime).toBe(45.5);
