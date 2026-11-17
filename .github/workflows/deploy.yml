@@ -142,6 +142,9 @@ jobs:
       - name: Run Tests
         run: npm test
 
+      - name: Test runtime release SHA verifier
+        run: node --test scripts/ci/verify-easypanel-version.test.mjs
+
       - name: Verify local long-video FFmpeg export
         run: |
           node --check scripts/export-studio-long-local.mjs
@@ -303,6 +306,23 @@ jobs:
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
+
+      # A 2xx webhook does not confirm the new container is serving traffic.
+      # Gradual opt-in: configure the production environment variable and
+      # ensure Easypanel passes the source SHA as the Docker GIT_SHA build arg.
+      - name: Verify live Easypanel frontend SHA (opt-in)
+        if: steps.recheck_head.outputs.current == 'true'
+        env:
+          EASYPANEL_RELEASE_VERIFY_URL: ${{ vars.EASYPANEL_RELEASE_VERIFY_URL }}
+          EXPECTED_GIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EASYPANEL_RELEASE_VERIFY_URL:-}" ]; then
+            echo "::warning::Easypanel release SHA NOT verified: configure EASYPANEL_RELEASE_VERIFY_URL and Docker GIT_SHA to enable runtime attestation."
+            echo "Easypanel frontend SHA: unverified (no public verification URL configured)." >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          else
+            node scripts/ci/verify-easypanel-version.mjs
+          fi
 
   deploy-roleplay-audio-worker:
     name: Deploy Roleplay audio worker (optional)
