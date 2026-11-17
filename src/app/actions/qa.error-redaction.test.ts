@@ -172,6 +172,15 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     } finally { log.mockRestore(); }
   });
 
+  it.each(['', ' ', '\\t'])('rejects a blank QA dimension instead of coercing %j to zero', async (value) => {
+    const data = qaFormData();
+    data.set('protocolScore', value);
+    const result = await submitQaForm(undefined, data);
+    expect(result).toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    expect(m.transaction).not.toHaveBeenCalled();
+    expect(m.qaCreate).not.toHaveBeenCalled();
+  });
+
   it('rejects scores with more precision than PostgreSQL NUMERIC(5,2) stores', async () => {
     const data = qaFormData();
     data.set('interpretationScore', '90.005');
@@ -202,6 +211,30 @@ describe('QA Server Actions credential-safe error boundaries', () => {
       expect(m.qaCreate).toHaveBeenCalledTimes(1);
       expect(log).toHaveBeenCalledWith('QA saved but cache refresh failed:', 'Error');
       expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_CACHE_TOKEN');
+    } finally { log.mockRestore(); }
+  });
+
+  it('refreshes /admin even when /qa cache invalidation fails after form commit', async () => {
+    m.revalidatePath.mockImplementationOnce(() => { throw new Error(credentials); });
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await submitQaForm(undefined, qaFormData());
+      expect(result).toMatchObject({ success: true });
+      expect(m.revalidatePath).toHaveBeenNthCalledWith(1, '/qa');
+      expect(m.revalidatePath).toHaveBeenNthCalledWith(2, '/admin');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_PASSWORD');
+    } finally { log.mockRestore(); }
+  });
+
+  it('refreshes /dashboard even when /qa cache invalidation fails after object commit', async () => {
+    m.revalidatePath.mockImplementationOnce(() => { throw new Error(credentials); });
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await submitQaInput(input);
+      expect(result).toMatchObject({ success: true });
+      expect(m.revalidatePath).toHaveBeenNthCalledWith(1, '/qa');
+      expect(m.revalidatePath).toHaveBeenNthCalledWith(2, '/dashboard');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_PASSWORD');
     } finally { log.mockRestore(); }
   });
 
