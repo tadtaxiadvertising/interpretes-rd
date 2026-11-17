@@ -13,6 +13,17 @@ export const VPN_COLUMN_TYPES = {
   vpn_port: 'integer',
 } as const;
 
+/** Match the SQL migration's actual port range expression, not merely the
+ * name of a validated CHECK constraint (which could be CHECK (true)).
+ * pg_get_constraintdef may add parentheses, whitespace, and identifier quotes.
+ * Refuse to auto-repair any other definition, even a plausible equivalent.
+ */
+export function matchesVpnPortConstraint(definition: unknown): boolean {
+  if (typeof definition !== 'string') return false;
+  const normalized = definition.replace(/["()\\s]/gu, '').toLowerCase();
+  return normalized === 'checkvpn_portisnullorvpn_port>=1andvpn_port<=65535';
+}
+
 export type VpnSchemaStatus = 'missing' | 'complete' | 'partial';
 export type VpnColumn = { column_name: string; data_type: string; is_nullable: string };
 
