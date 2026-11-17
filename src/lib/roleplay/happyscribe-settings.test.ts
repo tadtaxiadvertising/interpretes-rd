@@ -15,6 +15,7 @@ import {
   getHappyScribeSettingsStatus,
   saveHappyScribeSettings,
 } from './happyscribe-settings';
+import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from './happyscribe-import-proof';
 
 const TOKEN_KEY = 'audio_studio_happyscribe_token_v1';
 const originalEnv = {
@@ -63,6 +64,16 @@ afterEach(() => {
 });
 
 describe('HappyScribe encrypted admin settings', () => {
+  it('validates import selections by admin, organization and expiry before the dependency audit', () => {
+    const scope = { id: 'a'.repeat(40), organizationId: '12345', userId: 'synthetic-admin', token: testToken };
+    const issued = issueHappyScribeImportProof(scope, 1_800_000_000_000);
+    expect(verifyHappyScribeImportProof(scope, issued, 1_800_000_060_000)).toBe(true);
+    expect(verifyHappyScribeImportProof({ ...scope, organizationId: '98765' }, issued, 1_800_000_060_000)).toBe(false);
+    expect(verifyHappyScribeImportProof({ ...scope, userId: 'another-admin' }, issued, 1_800_000_060_000)).toBe(false);
+    expect(verifyHappyScribeImportProof(scope, issued, 1_800_002_760_000)).toBe(false);
+  });
+
+
   it('encrypts secrets using a random IV and never returns them in status', async () => {
     const input = { token: testToken, organizationId: '123456', mediaImportEnabled: false };
     await saveHappyScribeSettings(input);
