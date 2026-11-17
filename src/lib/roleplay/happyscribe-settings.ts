@@ -7,6 +7,7 @@ const ORG_KEY = 'audio_studio_happyscribe_organization_id';
 const MEDIA_KEY = 'audio_studio_happyscribe_media_proxy';
 const EXCLUDE_KEY = 'audio_studio_exclude_interpreter_default';
 const COMPACT_KEY = 'audio_studio_compact_view_default';
+const PROTOCOL_LANGUAGE_KEY = 'audio_studio_protocol_language_default';
 
 export type AudioStudioCompactViewDefault = 'auto' | 'compact' | 'expanded';
 
@@ -16,13 +17,14 @@ function parseCompactView(value?: string): AudioStudioCompactViewDefault {
 
 export async function getAudioStudioEditorPreferences() {
   const rows = await prisma.systemConfig.findMany({
-    where: { key: { in: [EXCLUDE_KEY, COMPACT_KEY] } },
+    where: { key: { in: [EXCLUDE_KEY, COMPACT_KEY, PROTOCOL_LANGUAGE_KEY] } },
     select: { key: true, value: true },
   });
   const map = new Map(rows.map(row => [row.key, row.value]));
   return {
     excludeInterpreterByDefault: map.get(EXCLUDE_KEY) !== 'false',
     compactViewDefault: parseCompactView(map.get(COMPACT_KEY)),
+    protocolLanguageDefault: map.get(PROTOCOL_LANGUAGE_KEY) === 'es' ? 'es' as const : 'en' as const,
   };
 }
 const PREFIX = 'enc:v1:';
@@ -74,7 +76,7 @@ export async function getHappyScribeSettings() {
 
 export async function getHappyScribeSettingsStatus() {
   const rows = await prisma.systemConfig.findMany({
-    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY, EXCLUDE_KEY, COMPACT_KEY] } },
+    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY, EXCLUDE_KEY, COMPACT_KEY, PROTOCOL_LANGUAGE_KEY] } },
     select: { key: true, value: true },
   });
   const map = new Map(rows.map(row => [row.key, row.value]));
@@ -97,6 +99,7 @@ export async function getHappyScribeSettingsStatus() {
     encryptionReady: Boolean(masterKey()),
     excludeInterpreterByDefault: map.get(EXCLUDE_KEY) !== 'false',
     compactViewDefault: parseCompactView(map.get(COMPACT_KEY)),
+    protocolLanguageDefault: map.get(PROTOCOL_LANGUAGE_KEY) === 'es' ? 'es' as const : 'en' as const,
   };
 }
 
@@ -104,6 +107,7 @@ export async function saveHappyScribeSettings(input: {
   token?: string; organizationId: string; mediaImportEnabled: boolean; removeToken?: boolean;
   excludeInterpreterByDefault?: boolean;
   compactViewDefault?: AudioStudioCompactViewDefault;
+  protocolLanguageDefault?: 'en' | 'es';
   updatedBy?: string;
 }) {
   const organizationId = input.organizationId.trim();
@@ -113,6 +117,9 @@ export async function saveHappyScribeSettings(input: {
   if (input.compactViewDefault !== undefined &&
       !['auto', 'compact', 'expanded'].includes(input.compactViewDefault))
     throw new Error('COMPACT_MODE_INVALID');
+  if (input.protocolLanguageDefault !== undefined &&
+      input.protocolLanguageDefault !== 'en' && input.protocolLanguageDefault !== 'es')
+    throw new Error('PROTOCOL_LANGUAGE_INVALID');
   if (input.excludeInterpreterByDefault !== undefined &&
       typeof input.excludeInterpreterByDefault !== 'boolean')
     throw new Error('EXCLUDE_PREFERENCE_INVALID');
@@ -132,6 +139,8 @@ export async function saveHappyScribeSettings(input: {
       settings.push([EXCLUDE_KEY, String(input.excludeInterpreterByDefault)]);
     if (input.compactViewDefault !== undefined)
       settings.push([COMPACT_KEY, input.compactViewDefault]);
+    if (input.protocolLanguageDefault !== undefined)
+      settings.push([PROTOCOL_LANGUAGE_KEY, input.protocolLanguageDefault]);
     for (const [key, value] of settings) {
       await tx.systemConfig.upsert({
         where: { key }, create: { key, value, updatedBy: actor }, update: { value, updatedBy: actor },
