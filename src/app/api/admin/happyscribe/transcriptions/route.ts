@@ -84,9 +84,16 @@ export async function GET(req: NextRequest) {
       );
     }
     if (connectionCheck) {
-      // A connectivity test must not expose or transfer the operator's
-      // transcription catalog to the settings form.
-      try { await upstream.body?.cancel(); } catch { /* Best-effort cleanup. */ }
+      // Verify the provider's JSON contract, rather than treating an HTML 200
+      // as success. Request only one row and never return its contents.
+      const check: unknown = await upstream.json().catch(() => null);
+      if (!check || typeof check !== 'object' ||
+          !('results' in check) || !Array.isArray(check.results)) {
+        return privateRoleplayResponse(
+          { error: 'HappyScribe devolvió una respuesta de conexión no válida.' },
+          { status: 502 },
+        );
+      }
       return privateRoleplayResponse(
         { success: true, ready: true },
         { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } },
