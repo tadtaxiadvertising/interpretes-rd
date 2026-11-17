@@ -241,6 +241,87 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     } finally { log.mockRestore(); }
   });
 
+  it('validates object QA ownership and stored score inside one transaction', async () => {
+    const result = await submitQaInput(input);
+    expect(result).toMatchObject({ success: true, data: { id: 'qa-1' } });
+    expect(m.transaction).toHaveBeenCalledOnce();
+    expect(m.productionLogFindUnique).toHaveBeenCalledWith({
+      where: { id: 22 }, select: { id: true, interpreterId: true },
+    });
+    expect(m.qaCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ totalScore: 90, productionLogId: 22 }),
+      select: { id: true },
+    });
+    expect(m.qaFindUnique).toHaveBeenCalledWith({
+      where: { id: 'qa-1' }, select: { totalScore: true },
+    });
+    expect(m.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('90.0%') }),
+    );
+  });
+
+  it('does not create an object QA score for a log owned by a different interpreter', async () => {
+    m.productionLogFindUnique.mockResolvedValueOnce({ id: 22, interpreterId: 99 });
+    const result = await submitQaInput(input);
+    expect(result).toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    expect(m.qaCreate).not.toHaveBeenCalled();
+    expect(m.createNotification).not.toHaveBeenCalled();
+  });
+
+  it('returns a controlled object QA error when production lookup fails', async () => {
+    m.productionLogFindUnique.mockRejectedValueOnce(new Error(credentials));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaInput(input);
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.qaCreate).not.toHaveBeenCalled();
+      expect(JSON.stringify([result, log.mock.calls])).not.toContain('PRIVATE_PASSWORD');
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects an object QA score altered by an AFTER INSERT trigger by one cent', async () => {
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 90.01 });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaInput(input);
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.createNotification).not.toHaveBeenCalled();
+      expect(m.revalidatePath).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects a critical error if an incompatible trigger stores a nonzero total', async () => {
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 90 });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaInput({ ...input, criticalError: true });
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.qaCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ criticalError: true, totalScore: 0 }),
+        select: { id: true },
+      });
+      expect(m.createNotification).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects score dimensions whose precision exceeds two decimals', async () => {
+    const result = await submitQaInput({ ...input, protocolScore: 80.005 });
+    expect(result).toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    expect(m.transaction).not.toHaveBeenCalled();
+  });
+
+  it('does not falsely report unsaved QA when cache revalidation fails after commit', async () => {
+    m.revalidatePath.mockImplementationOnce(() => { throw new Error(credentials); });
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await submitQaInput(input);
+      expect(result).toMatchObject({ success: true, data: { id: 'qa-1' } });
+      expect(m.qaCreate).toHaveBeenCalledOnce();
+      expect(log).toHaveBeenCalledWith('QA saved but cache refresh failed:', 'Error');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_PASSWORD');
+    } finally { log.mockRestore(); }
+  });
+
   it('rejects an unauthorized object QA action before reading production records', async () => {
     m.validateAction.mockResolvedValueOnce({ error: 'Forbidden', code: 'UNAUTHORIZED' });
     const result = await submitQaInput(input);
