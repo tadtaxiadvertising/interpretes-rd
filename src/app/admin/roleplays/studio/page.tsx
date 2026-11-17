@@ -1135,7 +1135,9 @@ export default function RoleplayStudioPage() {
       setError('Carga primero en Audio Studio el audio original correspondiente a esta transcripción.');
       return;
     }
-    if (!happyScribeSelectedId || happyScribeImporting) return;
+    // State-based disabled controls render later. The ref closes the window
+    // between a first click and that render, avoiding duplicate provider exports.
+    if (!happyScribeSelectedId || happyScribeImporting || happyScribeTranscriptAbort.current) return;
     const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
     if (!item || !['automatic_done', 'done'].includes(item.state)) {
       setError('Selecciona una transcripción completada en HappyScribe.');
@@ -1178,7 +1180,8 @@ export default function RoleplayStudioPage() {
   };
 
   const importHappyScribeAudio = async () => {
-    if (!happyScribeSelectedId || happyScribeMediaImporting) return;
+    // Prevent a second potentially expensive MP3 export before React rerenders.
+    if (!happyScribeSelectedId || happyScribeMediaImporting || happyScribeMediaAbort.current) return;
     const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
     if (!item || item.state !== 'automatic_done') {
       setError('El audio original solo está disponible para transcripciones completadas con el estado automatic_done.');
