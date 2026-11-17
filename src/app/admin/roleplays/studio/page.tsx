@@ -264,6 +264,7 @@ export default function RoleplayStudioPage() {
     exportRevision.current += 1;
     exportAbort.current?.abort();
     happyScribeMediaAbort.current?.abort();
+    happyScribeMediaAbort.current = null;
   }, []);
 
   // Edits invalidate the ZIP snapshot immediately: never download an older
@@ -297,6 +298,7 @@ export default function RoleplayStudioPage() {
     // Otherwise a stale HappyScribe MP3 can waste up to 250 MiB of bandwidth.
     happyScribeMediaAbort.current?.abort();
     happyScribeMediaAbort.current = null;
+    setHappyScribeMediaImporting(false);
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
     draftOperationRevision.current += 1;
@@ -1208,8 +1210,10 @@ export default function RoleplayStudioPage() {
         setError(cause instanceof Error ? cause.message : 'No fue posible importar el audio desde HappyScribe.');
       }
     } finally {
-      if (happyScribeMediaAbort.current === controller) happyScribeMediaAbort.current = null;
-      setHappyScribeMediaImporting(false);
+      if (happyScribeMediaAbort.current === controller) {
+        happyScribeMediaAbort.current = null;
+        setHappyScribeMediaImporting(false);
+      }
     }
   };
 
