@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
+import { verifyHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
@@ -66,6 +67,13 @@ export async function POST(req: NextRequest) {
       ? body.id : '';
     if (!isValidHappyScribeId(id)) return privateRoleplayResponse(
       { success: false, error: 'Identificador de transcripción no válido.' }, { status: 400 },
+    );
+    const proof = body && typeof body === 'object' && 'proof' in body ? body.proof : null;
+    if (!config.organizationId || !verifyHappyScribeImportProof({
+      id, organizationId: config.organizationId, userId: auth.user.userId, token,
+    }, proof)) return privateRoleplayResponse(
+      { success: false, error: 'Selección no verificada o caducada. Actualiza la biblioteca y vuelve a intentarlo.' },
+      { status: 403 },
     );
 
     const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, token, undefined, req.signal);
