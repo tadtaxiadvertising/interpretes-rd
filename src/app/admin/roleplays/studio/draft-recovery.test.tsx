@@ -231,7 +231,7 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(screen.getByText(/Importación cancelada/)).toBeTruthy();
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición sin guardar');
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(screen.queryByDisplayValue('Nuevo borrador válido')).toBeNull();
     expect(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i)).not.toHaveProperty('disabled', true);
   });
@@ -268,7 +268,7 @@ describe('Roleplay Studio editable project recovery', () => {
       });
     });
     expect(window.confirm).toHaveBeenCalledOnce();
-    expect((screen.getByRole('radio', { name: /Servidor \\(opcional\\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Intervención 1');
     expect(screen.queryByText(/Proyecto v2 restaurado/)).toBeNull();
   });
