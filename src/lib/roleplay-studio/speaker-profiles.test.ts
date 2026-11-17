@@ -3,6 +3,7 @@ import {
   classifySpeakerRole,
   filterInterpreterCues,
   makeNeutralSegmentTitle,
+  titleAfterProfileChange,
   safePublishableSpeakerLabel,
 } from './speaker-profiles';
 
@@ -38,6 +39,23 @@ describe('Studio three-party speaker review with bilingual role labels', () => {
     expect(filterInterpreterCues(cues, false).selected).toHaveLength(4);
     // Important: never infer an interpreter from a non-generic personal label.
     expect(selected[2].text).toContain('needs manual review');
+  });
+
+  it('automatically updates generated titles without overwriting editorial titles', () => {
+    expect(titleAfterProfileChange('Intervención 1', 'unknown', 'unknown', 0, 'doctor', 'en'))
+      .toBe('Doctor · 1 (EN)');
+    expect(titleAfterProfileChange('Doctor · 1 (EN)', 'doctor', 'en', 0, 'patient', 'es'))
+      .toBe('Paciente · 1 (ES)');
+    expect(titleAfterProfileChange('Médico · 1', 'doctor', 'unknown', 0, 'doctor', 'es'))
+      .toBe('Doctor · 1 (ES)');
+    expect(titleAfterProfileChange('Intervención sugerida 3', 'unknown', 'unknown', 2, 'nurse', 'es'))
+      .toBe('Enfermería · 3 (ES)');
+    expect(titleAfterProfileChange('Corte 00:10.0', 'unknown', 'unknown', 0, 'doctor', 'en'))
+      .toBe('Doctor · 1 (EN)');
+    expect(titleAfterProfileChange('Evaluación médica', 'doctor', 'en', 0, 'patient', 'es'))
+      .toBe('Evaluación médica');
+    expect(titleAfterProfileChange('Dr. Ana Pérez', 'unknown', 'unknown', 0, 'doctor', 'en'))
+      .toBe('Dr. Ana Pérez');
   });
 
   it('creates non-identifying titles without including the transcript', () => {

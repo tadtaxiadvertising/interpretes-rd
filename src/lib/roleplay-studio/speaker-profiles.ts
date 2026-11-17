@@ -51,6 +51,36 @@ export function makeNeutralSegmentTitle(
   return `${label} · ${index + 1}${languageSuffix}`;
 }
 
+/**
+ * Retitle generated clips as soon as the editor chooses a speaker/language.
+ * Keep all freeform titles intact; in particular, never derive titles from
+ * source transcript content or personal names.
+ */
+export function titleAfterProfileChange(
+  title: string,
+  previousRole: StudioSpeakerRole,
+  previousLanguage: StudioLanguage,
+  index: number,
+  nextRole: StudioSpeakerRole,
+  nextLanguage: StudioLanguage,
+): string {
+  const numbered = index + 1;
+  const recognizedDefault =
+    title === makeNeutralSegmentTitle(previousRole, previousLanguage, index) ||
+    title === `Intervención ${numbered}` ||
+    title === `Intervención sugerida ${numbered}` ||
+    title === `Médico · ${numbered}` ||
+    title === `Doctor · ${numbered}` ||
+    title === `Paciente · ${numbered}` ||
+    title === `Enfermería · ${numbered}` ||
+    title === `Operador · ${numbered}` ||
+    title === `Intérprete · ${numbered}` ||
+    /^Corte (?:\d{2}:)?\d{2}:\d{2}\.\d$/.test(title);
+  return recognizedDefault
+    ? makeNeutralSegmentTitle(nextRole, nextLanguage, index)
+    : title;
+}
+
 export function filterInterpreterCues<T extends { speaker: string | null }>(
   cues: readonly T[], excludeInterpreter: boolean,
 ): { selected: T[]; excludedCount: number } {

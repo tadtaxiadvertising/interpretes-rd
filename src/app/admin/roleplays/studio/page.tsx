@@ -34,7 +34,7 @@ import {
 } from '@/lib/roleplay-studio/long-media';
 import {
   classifySpeakerRole, filterInterpreterCues, makeNeutralSegmentTitle,
-  type StudioLanguage, type StudioSpeakerRole,
+  titleAfterProfileChange, type StudioLanguage, type StudioSpeakerRole,
 } from '@/lib/roleplay-studio/speaker-profiles';
 
 type Segment = {
@@ -84,7 +84,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -645,6 +645,28 @@ export default function RoleplayStudioPage() {
     reportTurnAction(id, 'Cortes separados. Revisa las instrucciones y títulos antes de exportar.');
   };
 
+  const excludeOriginalInterpreterTurns = () => {
+    const excludedIds = new Set(segments.filter(item => item.speakerRole === 'interpreter')
+      .map(item => item.id));
+    if (!excludedIds.size) return;
+    // This is an undoable bulk action; no remote export or upload is involved.
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'exclusión',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    setSegments(previous => previous.filter(item => !excludedIds.has(item.id)));
+    setCaptionTexts(previous => Object.fromEntries(
+      Object.entries(previous).filter(([id]) => !excludedIds.has(id)),
+    ));
+    setExpandedSegmentId(previous => previous && excludedIds.has(previous) ? null : previous);
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice('Intervenciones del intérprete original excluidas. Puedes deshacer antes de seguir editando.');
+  };
+
   const addSegment = () => {
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       setError('Se alcanzó el límite de intervenciones exportables.');
@@ -685,7 +707,22 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     setTurnActionFeedback(null);
     subtitleImportRevision.current += 1;
-    setSegments(prev => prev.map(segment => segment.id === id ? { ...segment, ...patch } : segment));
+    setSegments(prev => {
+      const order = [...prev].sort((a, b) => a.start - b.start);
+      const index = order.findIndex(segment => segment.id === id);
+      return prev.map(segment => {
+        if (segment.id !== id) return segment;
+        const next = { ...segment, ...patch };
+        if (index >= 0 && patch.title === undefined &&
+            (patch.speakerRole !== undefined || patch.language !== undefined)) {
+          next.title = titleAfterProfileChange(
+            segment.title, segment.speakerRole, segment.language, index,
+            next.speakerRole, next.language,
+          );
+        }
+        return next;
+      });
+    });
   };
 
   const saveDraft = async () => {
@@ -1419,7 +1456,8 @@ export default function RoleplayStudioPage() {
               </button>
               {lastStructuralEdit && (
                 <button type="button" onClick={undoLastStructuralEdit}
-                  aria-label="Deshacer última división o unión"
+                  aria-label={lastStructuralEdit.kind === 'exclusión'
+                    ? 'Deshacer exclusión de intérpretes' : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
@@ -1459,10 +1497,16 @@ export default function RoleplayStudioPage() {
             </div>
           </details>
           {originalInterpreterCount > 0 && (
-            <p role="status" className="rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
-              {originalInterpreterCount} {originalInterpreterCount === 1 ? 'turno identificado' : 'turnos identificados'}
-              {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
-            </p>
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
+              <p>
+                {originalInterpreterCount} {originalInterpreterCount === 1 ? 'turno identificado' : 'turnos identificados'}
+                {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
+              </p>
+              <button type="button" onClick={excludeOriginalInterpreterTurns}
+                className="rounded-lg border border-amber-300/40 px-3 py-2 font-semibold text-amber-100 hover:bg-amber-400/10">
+                Excluir {originalInterpreterCount} {originalInterpreterCount === 1 ? 'intervención' : 'intervenciones'} del intérprete
+              </button>
+            </div>
           )}
           {segments.length > 0 && (
             <p className="text-xs text-slate-400">
