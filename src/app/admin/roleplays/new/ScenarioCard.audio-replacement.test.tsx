@@ -37,6 +37,19 @@ afterEach(() => {
 });
 
 describe('replacing Audio Studio source audio', () => {
+  it('opens verified scenario details only when requested in a compact imported review', () => {
+    render(<ScenarioCard {...props} startCollapsed />);
+    expect(screen.getByDisplayValue('Interpreting scenario')).toBeTruthy();
+    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+    const toggle = screen.getByRole('button', { name: 'Editar detalles del escenario 1' });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(screen.getByLabelText(/Base audio/)).toBeTruthy();
+    expect(screen.getByDisplayValue('Preserve these instructions')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
+    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+  });
+
   it('clears imported timeline, speaker, language, turn and checksum without changing other edits', () => {
     const createObjectURL = vi.fn(() => 'blob:new-file');
     Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });

@@ -12,8 +12,8 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }));
 vi.mock('./ScenarioCard', () => ({
-  ScenarioCard: ({ scenario }: { scenario: { title: string } }) =>
-    <div data-testid="draft-scenario">{scenario.title || 'Borrador'}</div>,
+  ScenarioCard: ({ scenario, startCollapsed }: { scenario: { title: string }; startCollapsed?: boolean }) =>
+    <div data-testid="draft-scenario" data-initially-collapsed={String(Boolean(startCollapsed))}>{scenario.title || 'Borrador'}</div>,
 }));
 vi.mock('@/lib/roleplay-manifest-import', () => ({
   prepareRoleplayManifestImport: vi.fn(),
@@ -137,6 +137,25 @@ describe('Admin roleplay import concurrency', () => {
     expect(screen.getAllByTestId('draft-scenario')).toHaveLength(1);
     expect(screen.getByText('Escenario importado')).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows large verified ZIP imports in compact mode without collapsing the initial manual scenario', async () => {
+    const imported = Array.from({ length: 4 }, (_, index) => ({
+      title: `Intervención importada ${index + 1}`,
+      baseAudioFile: new File(['ID3'], `clip-${index + 1}.mp3`, { type: 'audio/mpeg' }),
+      durationLimitSec: 120,
+      scriptPrompt: '',
+      sha256: String(index + 1).repeat(64),
+    }));
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce(imported);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    expect(screen.getByTestId('draft-scenario').getAttribute('data-initially-collapsed')).toBe('false');
+
+    await act(async () => { chooseManifest(); });
+    const cards = screen.getAllByTestId('draft-scenario');
+    expect(cards).toHaveLength(4);
+    expect(cards.map(card => card.getAttribute('data-initially-collapsed')))
+      .toEqual(['true', 'true', 'true', 'true']);
   });
 
   it('uses the external ZIP fallback and canonical SHA-256 validation without publishing', async () => {
