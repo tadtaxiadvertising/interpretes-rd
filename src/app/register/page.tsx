@@ -33,7 +33,7 @@ export default function RegisterPage() {
         router.push(nextPath || (result.role === 'admin' ? '/admin' : result.role === 'candidate' ? '/candidate' : '/dashboard'));
       }
     } catch {
-      setError('Registration failed. Please try again.');
+      setError('No pudimos crear tu cuenta. Inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
     }
@@ -68,7 +68,7 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-400 mb-2">
-                Full Name
+                Nombre completo
               </label>
               <div className="relative">
                 <User size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -77,7 +77,7 @@ export default function RegisterPage() {
                   name="name"
                   type="text"
                   required
-                  placeholder="John Doe"
+                  placeholder="Tu nombre y apellido"
                   className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                 />
               </div>
@@ -85,7 +85,7 @@ export default function RegisterPage() {
 
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-400 mb-2">
-                Email Address
+                Correo electrónico
               </label>
               <div className="relative">
                 <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -102,7 +102,7 @@ export default function RegisterPage() {
 
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-400 mb-2">
-                Password
+                Contraseña
               </label>
               <div className="relative">
                 <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -125,26 +125,26 @@ export default function RegisterPage() {
               {isLoading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Registering...
+                  Creando cuenta...
                 </>
               ) : (
-                'Create Account'
+                'Crear cuenta'
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
-              Already have an account?{' '}
+              ¿Ya tienes una cuenta?{' '}
               <Link href={nextPath ? `/login?next=${encodeURIComponent(nextPath)}` : "/login"} className="text-blue-400 hover:text-blue-300 font-medium">
-                Sign In
+                Iniciar sesión
               </Link>
             </p>
           </div>
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Intérpretes RD. Secure Enterprise Access.
+          © 2026 Intérpretes RD. Acceso seguro a tu cuenta.
         </p>
       </div>
     </div>
