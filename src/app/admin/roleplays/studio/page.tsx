@@ -999,6 +999,8 @@ export default function RoleplayStudioPage() {
         revealInvalidTurn(segment, index, issue);
         return;
       }
+      // An invalid range always produces an issue above, before this point.
+      if (!ranges) return;
       end = segment.end;
       total += studioSelectedSeconds(ranges);
     }
