@@ -67,6 +67,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
   const [isCreating, setIsCreating] = useState(false);
+  const [audioFocusRequest, setAudioFocusRequest] = useState<{ scenarioId: string; request: number } | null>(null);
   // A state-driven disabled button updates on render; the ref also prevents
   // duplicate POST requests fired before React commits that render.
   const createPending = useRef(false);
@@ -377,7 +378,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       }
       if (!scenario.baseAudioFile) {
         setError(`El escenario ${index + 1} necesita un audio válido.`);
-        document.getElementById(`scenario-audio-${scenario.id}`)?.focus();
+        // Child opens the collapsed details before focusing the file input.
+        setAudioFocusRequest(previous => ({
+          scenarioId: scenario.id,
+          request: (previous?.request ?? 0) + 1,
+        }));
         return false;
       }
     }
@@ -708,6 +713,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
                 onMoveDown={() => moveScenario(scenario.id, 'down')}
                 isDragging={draggingId === scenario.id}
                 startCollapsed={scenarios.length >= 4 && Boolean(scenario.sha256 && scenario.baseAudioFile)}
+                focusAudioRequest={audioFocusRequest?.scenarioId === scenario.id ? audioFocusRequest.request : undefined}
               />
             </div>
           ))}
