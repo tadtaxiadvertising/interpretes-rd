@@ -22,6 +22,26 @@ describe('external platform metadata security', () => {
       'https://portal.example.com/#token=abc',
     ]) expect(safeHttpsUrl.safeParse(value).success).toBe(false);
   });
+  it('rejects embedded control bytes before URL normalization', () => {
+    for (const value of [
+      'https://portal.example.com/lo\ngin',
+      'https://portal.example.com/lo\tgin',
+      '\nhttps://portal.example.com/login',
+      'https://portal.example.com/login\r',
+      'https:portal.example.com/login',
+      'https://portal.example.com/path with spaces',
+    ]) {
+      expect(safeHttpsUrl.safeParse(value).success).toBe(false);
+    }
+  });
+
+  it('normalizes only ordinary outside spaces and rejects unbounded URLs', () => {
+    expect(safeHttpsUrl.parse('  https://portal.example.com/login  '))
+      .toBe('https://portal.example.com/login');
+    expect(safeHttpsUrl.safeParse('https://portal.example.com/' + 'a'.repeat(2100)).success)
+      .toBe(false);
+  });
+
   it('rejects obvious credentials in notes', () => {
     expect(rejectCredentialLikeText('password: demo')).toBe(false);
     expect(rejectCredentialLikeText('api_key=123')).toBe(false);
