@@ -290,7 +290,7 @@ describe('Roleplay Studio editable project recovery', () => {
     });
     expect(window.confirm).toHaveBeenCalledOnce();
     expect(pause).not.toHaveBeenCalled();
-    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Intervención 1');
+    expect((screen.getAllByLabelText('Título')[0] as HTMLInputElement).value).toBe('Intervención 1');
 
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
@@ -299,7 +299,7 @@ describe('Roleplay Studio editable project recovery', () => {
     });
     expect(window.confirm).toHaveBeenCalledTimes(2);
     expect(pause).toHaveBeenCalled();
-    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Draft accepted');
+    expect((screen.getAllByLabelText('Título')[0] as HTMLInputElement).value).toBe('Draft accepted');
   });
 
   it('preserves proposals on rejected JSON import and clears them on accepted recovery', async () => {
