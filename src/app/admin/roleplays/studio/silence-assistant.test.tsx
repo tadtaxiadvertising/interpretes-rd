@@ -91,12 +91,12 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
     });
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/i)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/i)).toBeTruthy();
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     fireEvent.click(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i }));
 
     expect(window.confirm).toHaveBeenCalledOnce();
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/i)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/i)).toBeTruthy();
     expect((screen.getByLabelText('Título') as HTMLInputElement).value)
       .toBe('Turno editado manualmente');
     expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value)
@@ -107,7 +107,7 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     // Explicitly accepting the next attempt replaces the draft and resets stale filters.
     fireEvent.click(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i }));
     expect(window.confirm).toHaveBeenCalledTimes(2);
-    expect(screen.getByText(/Intervenciones \\(3\\/25\\)/i)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(3\/25\)/i)).toBeTruthy();
     expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value)
       .toBe('');
     expect(screen.getAllByLabelText('Título')).toHaveLength(3);
