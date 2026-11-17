@@ -189,6 +189,8 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, protocolScore: 100, totalScore: 92,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 92 } as never);
     const response = await PATCH(patch({ protocolScore: 100 }), params);
     expect(response.status).toBe(200);
     privateResponse(response);
@@ -203,6 +205,8 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, protocolScore: null, totalScore: 72,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 72 } as never);
     const response = await PATCH(patch({ protocolScore: null }), params);
     expect(response.status).toBe(200);
     expect(prisma.qAScore.update).toHaveBeenCalledWith({
@@ -215,6 +219,8 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, totalScore: 40.26,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 40.26 } as never);
     const response = await PATCH(patch({
       protocolScore: 6.49, interpretationScore: 31.72,
       languageScore: 90.83, serviceScore: 46.41, technicalScore: 34.62,
@@ -234,6 +240,7 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce({
       ...score, criticalError: true, totalScore: 0,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce({ totalScore: 0 } as never);
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, criticalError: true, totalScore: 0,
     } as never);
@@ -248,6 +255,8 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, criticalError: true, totalScore: 0,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 0 } as never);
     const response = await PATCH(patch({ criticalError: true }), params);
     expect(response.status).toBe(200);
     expect(prisma.qAScore.update).toHaveBeenCalledWith({
@@ -260,6 +269,8 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, totalScore: 26,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 26 } as never);
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const response = await PATCH(patch({ comentarios: 'Solo comentario' }), params);
@@ -274,12 +285,44 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, protocolScore: 100, totalScore: 26,
     } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 26 } as never);
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const response = await PATCH(patch({ protocolScore: 100 }), params);
       expect(response.status).toBe(500);
       privateResponse(response);
       expect(await response.json()).toEqual({ success: false, error: 'Error updating scorecard' });
+    } finally { spy.mockRestore(); }
+  });
+
+  it('rejects a one-cent AFTER UPDATE discrepancy even when UPDATE RETURNING is correct', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, protocolScore: 100, totalScore: 92,
+    } as never);
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 92.01 } as never);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await PATCH(patch({ protocolScore: 100 }), params);
+      expect(response.status).toBe(500);
+      privateResponse(response);
+      expect(prisma.qAScore.findUnique).toHaveBeenLastCalledWith({
+        where: { id: 8 }, select: { totalScore: true },
+      });
+      expect(await response.json()).toEqual({ success: false, error: 'Error updating scorecard' });
+    } finally { spy.mockRestore(); }
+  });
+
+  it('does not commit metadata-only edits if an AFTER UPDATE trigger changes a score', async () => {
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(score as never)
+      .mockResolvedValueOnce({ totalScore: 89.99 } as never);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await PATCH(patch({ comentarios: 'Nota adicional' }), params);
+      expect(response.status).toBe(500);
+      privateResponse(response);
+      expect(prisma.qAScore.update).toHaveBeenCalledOnce();
     } finally { spy.mockRestore(); }
   });
 
