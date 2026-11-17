@@ -18,6 +18,7 @@ const schema = z.object({
 // A cache refresh failure must not report "save failed" and trigger duplicate
 // attempts; refresh other affected routes even if the first one fails.
 function revalidateCommittedCompanyPaths(paths: readonly string[]) {
+function refreshCompanyViews(paths: readonly string[]) {
   for (const path of paths) {
     try {
       revalidatePath(path);
@@ -26,6 +27,12 @@ function revalidateCommittedCompanyPaths(paths: readonly string[]) {
     }
   }
 }
+      // Report only the category; framework/provider errors may include secrets.
+      console.warn('[COMPANIES] Saved but cache refresh failed', safeServerErrorCategory(error));
+    }
+  }
+}
+
 export async function createCompany(formData: FormData) {
   const profile = await getCurrentProfile();
   if (!profile || profile.role !== 'admin') return { success: false, error: 'No autorizado.' };
@@ -39,6 +46,10 @@ export async function createCompany(formData: FormData) {
     console.error('[COMPANIES] Create failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar la compañía.' };
   }
+
+  // Database write is already committed: a cache failure is not a save failure.
+  refreshCompanyViews(['/admin/companies']);
+  return { success: true };
 }
 
 export async function assignAccountToCompany(formData: FormData) {
@@ -57,4 +68,7 @@ export async function assignAccountToCompany(formData: FormData) {
     console.error('[COMPANIES] Assign failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo vincular la cuenta.' };
   }
+
+  refreshCompanyViews(['/admin/companies', '/admin/accounts']);
+  return { success: true };
 }
