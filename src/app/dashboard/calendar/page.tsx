@@ -14,7 +14,7 @@ export default async function InterpreterCalendarPage() {
   const profile = userData.profile;
 
   if (!profile || !profile.interpreterId) {
-    return <div className="p-8 text-white">Interpreter profile not found.</div>;
+    return <div className="p-8 text-white">No se encontró el perfil de intérprete.</div>;
   }
 
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santo_Domingo' }).format(new Date());
@@ -72,7 +72,7 @@ export default async function InterpreterCalendarPage() {
               />
             </div>
             <div className="flex justify-between items-center mt-3">
-              <p className="text-sm font-medium text-slate-400">Health Score</p>
+              <p className="text-sm font-medium text-slate-400">Indicador de cumplimiento</p>
               <p className={`text-lg font-bold ${isOverachieving ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.8)]' :
                 commitment.healthScore >= 100 ? 'text-emerald-400' :
                   commitment.healthScore >= 80 ? 'text-amber-400' : 'text-rose-400'
@@ -89,7 +89,7 @@ export default async function InterpreterCalendarPage() {
             <div className="absolute top-0 right-0 p-4 opacity-10">
               <AlertCircle className="w-24 h-24 text-rose-500" />
             </div>
-            <h2 className="text-lg font-bold text-rose-400 mb-2">¡Asegura tu Nómina!</h2>
+            <h2 className="text-lg font-bold text-rose-400 mb-2">¡Completa tu meta de producción!</h2>
             <p className="text-sm text-slate-300 mb-5 leading-relaxed">
               El fin de semana es tu oportunidad. Recupera tus <span className="font-bold text-rose-400">{formatMinutes(commitment.deficit)} minutos</span> pendientes y asegura <span className="font-bold text-emerald-400">{formatMoney(recoveryMoney)} extra</span> en tu próximo pago.
             </p>
@@ -112,7 +112,7 @@ export default async function InterpreterCalendarPage() {
             <div className="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
               <Trophy className="w-8 h-8 text-emerald-400" />
             </div>
-            <h2 className="text-2xl font-bold text-emerald-400 mb-2">¡Racha Perfecta!</h2>
+            <h2 className="text-2xl font-bold text-emerald-400 mb-2">¡Meta cumplida!</h2>
             <p className="text-slate-300 max-w-[250px]">
               Estás al día con tus metas. Todo lo que hagas ahora es <span className="text-emerald-400 font-bold">ganancia extra pura</span>. ¡Sigue así!
             </p>
