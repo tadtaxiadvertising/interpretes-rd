@@ -272,4 +272,75 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
   });
 
+  it('auditions two distant turns without the gap and leaves both exported cuts intact', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
+
+    const startButton = screen.getByRole('button', {
+      name: 'Preescuchar intervenciones 1 y 2 sin pausa',
+    });
+    fireEvent.click(startButton);
+    const audio = screen.getByLabelText('Reproductor de preescucha sin pausa') as HTMLAudioElement;
+    expect(audio.currentTime).toBe(0);
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+    expect(screen.getByText(/se saltan 00:10.0/)).toBeTruthy();
+
+    audio.currentTime = 30;
+    fireEvent.timeUpdate(audio);
+    expect(audio.currentTime).toBe(40);
+    audio.currentTime = 60;
+    fireEvent.timeUpdate(audio);
+    expect(screen.getByRole('button', {
+      name: 'Preescuchar intervenciones 1 y 2 sin pausa',
+    }).textContent).toBe('Escuchar sin pausa');
+
+    const starts = screen.getAllByLabelText('Inicio (segundos)') as HTMLInputElement[];
+    const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
+    expect(starts.map(item => Number(item.value))).toEqual([0, 40]);
+    expect(ends.map(item => Number(item.value))).toEqual([30, 60]);
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+  });
+
+  it('does not offer gapless audition for a mismatched speaker or a hidden following turn', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
+    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], { target: { value: 'patient' } });
+    expect(screen.queryByRole('button', { name: /Preescuchar intervenciones/ })).toBeNull();
+    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], { target: { value: 'unknown' } });
+    expect(screen.getByRole('button', { name: /Preescuchar intervenciones/ })).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 1' },
+    });
+    expect(screen.queryByRole('button', { name: /Preescuchar intervenciones/ })).toBeNull();
+  });
+
+  it('undoes the last split or merge without altering the original source', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1/ }));
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer última división o unión' }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Deshacer última división o unión' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer última división o unión' }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+  });
+
+  it('invalidates undo after manually editing a restored turn', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1/ }));
+    expect(screen.getByRole('button', { name: 'Deshacer última división o unión' })).toBeTruthy();
+    fireEvent.change(screen.getAllByLabelText('Título')[0], { target: { value: 'Editado' } });
+    expect(screen.queryByRole('button', { name: 'Deshacer última división o unión' })).toBeNull();
+  });
+
 });
