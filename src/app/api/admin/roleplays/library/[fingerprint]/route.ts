@@ -10,6 +10,22 @@ import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 const FINGERPRINT_RE = /^[a-f0-9]{64}$/;
 
 /**
+ * A successful archive/restore transaction cannot be rolled back by Next.js
+ * cache invalidation. Refresh paths independently after commit and never
+ * report the persisted write as failed when revalidation throws.
+ */
+function refreshCommittedLibraryViews(paths: readonly string[]): void {
+  for (const path of paths) {
+    try {
+      revalidatePath(path);
+    } catch {
+      // Do not log session IDs, paths or framework error objects.
+      console.warn('[ADMIN ROLEPLAY LIBRARY] Committed change; cache refresh failed');
+    }
+  }
+}
+
+/**
  * Remove a roleplay from the reusable catalog without deleting any actual
  * practice session, audio asset, response, or QA evaluation.
  * Catalog entries are derived from existing session snapshots.
@@ -65,8 +81,10 @@ export async function POST(
         update: { archivedAt, archivedBy: auth.user.userId },
       });
     });
-    revalidatePath('/admin/roleplays/library');
-    revalidatePath(`/admin/roleplays/library/${payload.sourceSessionId}`);
+    refreshCommittedLibraryViews([
+      '/admin/roleplays/library',
+      `/admin/roleplays/library/${payload.sourceSessionId}`,
+    ]);
     return privateRoleplayResponse({ success: true, archived: true });
   } catch (error) {
     console.error('[ADMIN ROLEPLAY LIBRARY] Failed to archive snapshot', safeServerErrorCategory(error));
@@ -104,7 +122,7 @@ export async function DELETE(
     if (result.count === 0) {
       return privateRoleplayResponse({ success: false, error: 'No archived entry found' }, { status: 404 });
     }
-    revalidatePath('/admin/roleplays/library');
+    refreshCommittedLibraryViews(['/admin/roleplays/library']);
     return privateRoleplayResponse({ success: true, archived: false });
   } catch (error) {
     console.error('[ADMIN ROLEPLAY LIBRARY] Failed to restore snapshot', safeServerErrorCategory(error));

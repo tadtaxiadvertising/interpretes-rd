@@ -84,6 +84,20 @@ jobs:
       # This never bypasses or relaxes the supply-chain audit.
       - name: Verify HappyScribe encrypted settings and admin permissions
         run: npx vitest run src/lib/roleplay/happyscribe-settings.test.ts src/app/actions/__tests__/audio-studio-settings.test.ts
+      # Lock down the legacy QA response contract while directing API
+      # consumers to verified, paginated ProductionLog review status.
+      # This test does not bypass the unchanged supply-chain audit gate.
+      - name: Verify QA legacy pending deprecation contract
+        run: npx vitest run src/app/api/v1/qa/pending/__tests__/route.test.ts
+      # Preserve a focused privacy regression check even when an upstream
+      # dependency advisory blocks the full validation pipeline.
+      - name: Verify call action error redaction
+        run: npx vitest run src/app/actions/__tests__/calls-error-redaction.test.ts src/app/api/v1/calls/manual/__tests__/route.test.ts
+      # Verify that archive/restore responses stay accurate after a committed
+      # write even if Next.js cache invalidation subsequently throws.
+      # The audit remains a hard gate; this unit test does not enable deploys.
+      - name: Verify Roleplay library post-commit regression tests
+        run: npx vitest run 'src/app/api/admin/roleplays/library/[fingerprint]/__tests__/route.test.ts'
 
       - name: Dependency Security Audit
         run: |
