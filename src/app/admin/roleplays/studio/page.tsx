@@ -1019,10 +1019,11 @@ export default function RoleplayStudioPage() {
       if (!ranges) return;
       end = segment.end;
       total += studioSelectedSeconds(ranges);
-    }
-    if (total > 900) {
-      setError('El paquete no puede superar 15 minutos de audio acumulado.');
-      return;
+      if (total > 900) {
+        revealInvalidTurn(segment, index,
+          'la selección acumulada supera 15 minutos. Reduce este corte o alguno de los anteriores antes de exportar.');
+        return;
+      }
     }
     // Long recordings create only a local JSON draft. Do not allocate a
     // remote ZIP AbortController for this branch: otherwise the early return
