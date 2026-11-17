@@ -22,7 +22,6 @@ const schema = z.object({
   vpnCountry: optionalText(80),
   vpnRegion: optionalText(100),
   vpnServer: optionalText(255),
-  vpnExitIp: z.string().trim().max(45).refine(rejectCredentialLikeText),
   vpnExitIp: z.string().trim().max(45).refine(value => !value || isIP(value) !== 0, 'La IP de salida no es válida.').refine(rejectCredentialLikeText),
   vpnProfile: optionalText(100),
   vpnProtocol: optionalText(40),
