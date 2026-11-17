@@ -20,7 +20,7 @@ export const VPN_COLUMN_TYPES = {
  */
 export function matchesVpnPortConstraint(definition: unknown): boolean {
   if (typeof definition !== 'string') return false;
-  const normalized = definition.replace(/["()\\s]/gu, '').toLowerCase();
+  const normalized = definition.replace(/["()\s]/gu, '').toLowerCase();
   return normalized === 'checkvpn_portisnullorvpn_port>=1andvpn_port<=65535';
 }
 
