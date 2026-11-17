@@ -89,8 +89,8 @@ export function RoleplayCompletion({
           <div className="w-20 h-20 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <FileText size={40} className="text-blue-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Resumen de tu Evaluación</h2>
-          <p className="text-slate-400">Revisa tu progreso antes del envío final</p>
+          <h2 className="text-2xl font-bold text-white mb-2">Resumen de tu evaluación</h2>
+          <p className="text-slate-400">Revisa tu progreso antes de enviar la evaluación</p>
         </div>
 
         <div className="space-y-4 mb-8">
@@ -100,7 +100,7 @@ export function RoleplayCompletion({
               <p className="text-2xl font-bold text-white">{scenariosCompleted} / {scenariosCompleted}</p>
             </div>
             <div className="p-4 bg-slate-900/50 rounded-xl border border-white/5 text-center">
-              <p className="text-xs text-slate-500">Tiempo Total</p>
+              <p className="text-xs text-slate-500">Tiempo total</p>
               <p className="text-2xl font-bold text-white">{formatDuration(totalDuration)}</p>
             </div>
             <div className="p-4 bg-slate-900/50 rounded-xl border border-white/5 text-center">
