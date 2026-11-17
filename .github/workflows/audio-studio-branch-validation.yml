@@ -1,0 +1,30 @@
+# Temporary, non-deploying branch validation. This does NOT replace the full
+# Dependency Security Audit or authorize a merge into main.
+name: Audio Studio isolated branch verification
+on:
+  push:
+    branches:
+      - fix/audio-studio-admin-preferences-validated-20261117
+permissions:
+  contents: read
+jobs:
+  audio-studio:
+    name: Targeted Audio Studio validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies (CPU only)
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+      - name: Audio Studio server and route regression tests
+        run: npx vitest run src/lib/roleplay/happyscribe-settings.test.ts src/app/actions/__tests__/audio-studio-settings.test.ts src/app/api/admin/happyscribe/transcriptions/route.test.ts src/app/api/admin/happyscribe/media/route.test.ts src/lib/roleplay/happyscribe-import-proof.test.ts
+      - name: TypeScript check
+        run: npx tsc --noEmit
+      - name: ESLint edited Audio Studio files
+        run: npx eslint src/lib/roleplay/happyscribe-settings.ts src/lib/roleplay/happyscribe-settings.test.ts src/app/actions/audio-studio-settings.ts src/app/actions/__tests__/audio-studio-settings.test.ts src/app/admin/roleplays/settings/settings-form.tsx src/app/admin/roleplays/studio/page.tsx
+      - name: Production dependency security audit
+        run: npm audit --omit=dev --audit-level=high
