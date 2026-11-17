@@ -215,16 +215,16 @@ describe('Audio Studio clip review player', () => {
     pause.mockClear(); // Loading a new file deliberately stops the previous preview.
     const buttons = screen.getAllByRole('button', { name: /Escuchar fragmento/i });
     fireEvent.click(buttons[0]);
-    expect(screen.getByRole('button', { name: 'Detener fragmento' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
+    expect(screen.getByRole('button', { name: 'Detener fragmento de intervención 1' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 2' }));
 
     // The browser's delayed onPause event used to clear the new clip's boundary.
     expect(pause).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Detener fragmento' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Detener fragmento de intervención 2' })).toBeTruthy();
 
     player.currentTime = 60.1;
     fireEvent.timeUpdate(player);
-    expect(screen.queryByRole('button', { name: 'Detener fragmento' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Detener fragmento de intervención 2' })).toBeNull();
     expect(pause).toHaveBeenCalledTimes(1);
   });
 
