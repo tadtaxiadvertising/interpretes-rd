@@ -63,7 +63,9 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByLabelText('Título')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
-    expect(screen.getByRole('alert').textContent).toContain('Intervención 1: añade un título');
+    expect(screen.getAllByRole('alert').some(item =>
+      item.textContent?.includes('Intervención 1: añade un título'))).toBe(true);
+    expect(screen.getByText('añade un título antes de exportar.')).toBeTruthy();
     expect(search.value).toBe('');
     expect(screen.getByLabelText('Título')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Contraer' })).toBeTruthy();
@@ -83,7 +85,9 @@ describe('Audio Studio compact editing', () => {
       target: { value: 'turno oculto' },
     });
     fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
-    expect(screen.getByRole('alert').textContent).toMatch(/Intervención 1: elimina el fragmento del intérprete original/);
+    expect(screen.getAllByRole('alert').some(item =>
+      item.textContent?.includes('Intervención 1: elimina el fragmento del intérprete original'))).toBe(true);
+    expect(screen.getByText('elimina el fragmento del intérprete original antes de exportar el roleplay.')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Excluir 1 intervención del intérprete' })).toBeTruthy();
     expect(document.activeElement).toBe(
       screen.getByRole('button', { name: 'Ir al inicio de intervención 1' }).closest('article'),
