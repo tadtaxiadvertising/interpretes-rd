@@ -730,6 +730,44 @@ def run_desktop():
     root.mainloop()
 
 
+def verify_packaged_tk_resources():
+    """Require the Tk widget scripts in frozen builds, without a display.
+
+    PyInstaller's tkinter runtime hook normally places Tk scripts in
+    sys._MEIPASS/_tk_data. Tcl() alone only checks Tcl (useTk=False), so a
+    missing tk.tcl/ttk.tcl would otherwise slip through the smoke test.
+    macOS may use a native Tk framework instead of collecting these files.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    bundle = getattr(sys, "_MEIPASS", None)
+    if not bundle:
+        raise ExportError("El ejecutable no contiene la ruta de recursos Tcl/Tk.")
+
+    def has_tk_scripts(folder):
+        return ((folder / "tk.tcl").is_file() and
+                (folder / "ttk" / "ttk.tcl").is_file())
+
+    packaged_tk = Path(bundle) / "_tk_data"
+    if packaged_tk.is_dir():
+        if has_tk_scripts(packaged_tk):
+            return
+        raise ExportError("Faltan los scripts Tk/ttk en el ejecutable.")
+
+    if sys.platform == "darwin":
+        # Some supported macOS Python builds use native Tk.framework scripts,
+        # which PyInstaller deliberately leaves outside the bundle.
+        options = [
+            Path("/System/Library/Frameworks/Tk.framework/Versions/Current/Resources/Scripts"),
+            Path("/Library/Frameworks/Tk.framework/Versions/Current/Resources/Scripts"),
+        ]
+        if os.environ.get("TK_LIBRARY"):
+            options.append(Path(os.environ["TK_LIBRARY"]))
+        if any(has_tk_scripts(folder) for folder in options):
+            return
+    raise ExportError("No se encontraron los recursos gráficos Tk/ttk requeridos.")
+
+
 def self_check():
     """Headless smoke check of the *packaged* GUI and real MP3 encoder.
 
@@ -744,6 +782,9 @@ def self_check():
         interpreter = tk.Tcl()  # Works without a display server.
         if not interpreter.eval("info patchlevel"):
             raise RuntimeError("No Tcl interpreter version")
+        verify_packaged_tk_resources()
+    except ExportError:
+        raise
     except Exception as exc:
         raise ExportError(
             "La interfaz Tcl/Tk del ejecutable no funciona; revisa el empaquetado."
