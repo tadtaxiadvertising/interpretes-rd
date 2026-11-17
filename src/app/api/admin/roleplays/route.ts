@@ -116,6 +116,9 @@ export async function POST(req: NextRequest) {
   let libraryArchivedDuringAssignment = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
+  // A successful upload is safe to delete only before any transaction that
+  // might have persisted its URL. A failed/ambiguous commit must preserve it.
+  let audioCommitMayHaveStarted = false;
 
   try {
     const forbidden = await guardRoleplayAdmin(req);
@@ -408,6 +411,7 @@ export async function POST(req: NextRequest) {
         throw new Error('Roleplay base audio path could not be resolved');
       }
 
+      audioCommitMayHaveStarted = true;
       const bulkResult = await db.$transaction(async (tx) => {
         if (useLibrary) {
           const fingerprint = rawLibraryFingerprint as string;
@@ -611,6 +615,7 @@ export async function POST(req: NextRequest) {
       inviteLink = `${frontendOrigin}/r/${inviteCode}`;
     }
 
+    audioCommitMayHaveStarted = true;
     await db.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
       if (useLibrary) {
@@ -686,12 +691,24 @@ export async function POST(req: NextRequest) {
     // or infrastructure details; preserve an error category, not its payload.
     console.error('Create Roleplay API Error:', error instanceof Error ? 'Error' : 'UnknownError');
 
-    // A failed/ambiguous transaction response does not prove rollback: the
-    // database may have committed the session while the acknowledgment was
-    // lost. NEVER delete unique base audio objects in this catch block, as
-    // doing so could leave committed Roleplay scenarios with missing audio.
-    // Unreferenced uploads must be reconciled later with an age-gated,
-    // read-only-first audit and manual review (see issue #408).
+    // The first upload may succeed before a later audio upload fails.
+    // Before the publishing transaction starts, these unique paths cannot
+    // be referenced by a newly committed scenario, so we can reclaim them.
+    // Once a transaction starts, its acknowledgment may be lost *after* a
+    // successful commit: never delete those files on an ambiguous failure.
+    if (!audioCommitMayHaveStarted && uploadedPaths.length > 0 && supabaseAdmin) {
+      try {
+        const { error: cleanupError } = await supabaseAdmin.storage
+          .from('roleplay-audio').remove(uploadedPaths);
+        if (cleanupError) {
+          console.error('Roleplay pre-commit audio cleanup failed');
+        }
+      } catch {
+        console.error('Roleplay pre-commit audio cleanup failed');
+      }
+    }
+    // Post-transaction orphan reconciliation remains read-only-first and
+    // age-gated; see issue #408.
 
     if (libraryArchivedDuringAssignment) {
       return privateRoleplayJson({
