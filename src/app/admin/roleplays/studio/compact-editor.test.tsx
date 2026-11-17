@@ -227,6 +227,25 @@ describe('Audio Studio compact editing', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
+  it('preserves active audio, interventions and editor state when replacement media is invalid', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    const originalPlayer = document.querySelector('audio') as HTMLAudioElement;
+    const originalSrc = originalPlayer.getAttribute('src');
+    const invalid = new File(['text is not audio'], 'not-audio.txt', { type: 'text/plain' });
+
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [invalid] },
+    });
+
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/formato|archivo|audio/i);
+    expect((document.querySelector('audio') as HTMLAudioElement).getAttribute('src')).toBe(originalSrc);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
   it('replaces an untouched source without unnecessary confirmation', () => {
     loadAudio(120);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
