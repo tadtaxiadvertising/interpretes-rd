@@ -52,9 +52,9 @@ export default async function PayratesPage(props: { searchParams: Promise<{ mana
         <div>
           <div className="flex items-center gap-3 mb-2">
             <DollarSign size={28} className="text-purple-400" />
-            <h2 className="text-3xl font-bold text-white">Payrate Management</h2>
+            <h2 className="text-3xl font-bold text-white">Gestión de tarifas</h2>
           </div>
-          <p className="text-gray-400">Update interpreter tariffs. All changes are audited and take effect on the next call.</p>
+          <p className="text-gray-400">Actualiza las tarifas de los intérpretes. Todos los cambios quedan registrados y se aplican a partir de la siguiente llamada.</p>
         </div>
         
         <a 
@@ -79,12 +79,12 @@ export default async function PayratesPage(props: { searchParams: Promise<{ mana
             <table className="w-full text-left">
               <thead>
                 <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
-                  <th className="pb-3 px-2">Interpreter</th>
+                  <th className="pb-3 px-2">Intérprete</th>
                   <th className="pb-3 px-2">ID</th>
-                  <th className="pb-3 px-2">Campaign</th>
-                  <th className="pb-3 px-2">Status</th>
-                  <th className="pb-3 px-2">Current Rate</th>
-                  <th className="pb-3 px-2 text-right">Action</th>
+                  <th className="pb-3 px-2">Campaña</th>
+                  <th className="pb-3 px-2">Estado</th>
+                  <th className="pb-3 px-2">Tarifa actual</th>
+                  <th className="pb-3 px-2 text-right">Acción</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
