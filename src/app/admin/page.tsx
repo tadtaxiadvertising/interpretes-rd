@@ -95,10 +95,10 @@ export default async function AdminDashboard(props: PageProps) {
     <div className="space-y-8 animate-in fade-in duration-700">
       <header className="flex justify-between items-start">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Telemetría Central</h2>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Panel de control</h2>
           <p className="text-gray-400 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            Dashboard Administrador · Caching ISR (120s)
+            Resumen administrativo · Actualización automática cada 120 segundos
           </p>
         </div>
         <div className="flex gap-3">
@@ -109,10 +109,10 @@ export default async function AdminDashboard(props: PageProps) {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Intérpretes Activos', value: interpreters.length, sub: `${onlineCount} Online Now`, icon: Users, color: 'text-purple-400' },
-          { label: 'Minutos Mensuales', value: totalMinutesMonth.toLocaleString(), sub: `MTD Production`, icon: Activity, color: 'text-blue-400' },
+          { label: 'Intérpretes Activos', value: interpreters.length, sub: `${onlineCount} En línea ahora`, icon: Users, color: 'text-purple-400' },
+          { label: 'Minutos Mensuales', value: totalMinutesMonth.toLocaleString(), sub: `Producción del mes`, icon: Activity, color: 'text-blue-400' },
           { label: 'Tasa de Adherencia', value: `${avgAdherence.toFixed(1)}%`, sub: 'Promedio Global', icon: CheckCircle2, color: 'text-green-400' },
-          { label: 'Alertas de QA (<80%)', value: qaAlertsCount, sub: 'Evaluaciones críticas', icon: AlertTriangle, color: 'text-red-400' },
+          { label: 'Alertas de calidad (<80%)', value: qaAlertsCount, sub: 'Evaluaciones críticas', icon: AlertTriangle, color: 'text-red-400' },
         ].map((stat, i) => (
           <div key={i} className="glass p-6 rounded-3xl border border-white/5 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
             <div className="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
