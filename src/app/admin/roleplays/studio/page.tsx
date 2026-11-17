@@ -84,7 +84,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'eliminación';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -230,7 +230,9 @@ export default function RoleplayStudioPage() {
     setExpandedSegmentId(lastStructuralEdit.expandedId);
     setNotice(lastStructuralEdit.kind === 'idiomas'
       ? 'Asignación masiva de idiomas deshecha. Revisa los idiomas pendientes.'
-      : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
+      : lastStructuralEdit.kind === 'eliminación'
+        ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
+        : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
     setLastStructuralEdit(null);
@@ -1562,7 +1564,9 @@ export default function RoleplayStudioPage() {
                     ? 'Deshacer exclusión de intérpretes'
                     : lastStructuralEdit.kind === 'idiomas'
                       ? 'Deshacer asignación de idiomas'
-                      : 'Deshacer última división o unión'}
+                      : lastStructuralEdit.kind === 'eliminación'
+                        ? 'Deshacer eliminación de intervención'
+                        : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
@@ -1728,8 +1732,12 @@ export default function RoleplayStudioPage() {
                 )}
                 <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
                   subtitleImportRevision.current += 1;
+                  stopPreview();
                   stopPairPreview();
-                  setLastStructuralEdit(null);
+                  setLastStructuralEdit({
+                    kind: 'eliminación', segments: [...segments],
+                    captions: { ...captionTexts }, expandedId: expandedSegmentId,
+                  });
                   setSegments(prev => prev.filter(s => s.id !== segment.id));
                   // Discard the deleted turn's private transcript reference.
                   setCaptionTexts(prev => {
@@ -1740,6 +1748,8 @@ export default function RoleplayStudioPage() {
                   });
                   setExpandedSegmentId(prev => prev === segment.id ? null : prev);
                   setTurnActionFeedback(null);
+                  setError('');
+                  setNotice('Intervención eliminada. Usa «Deshacer eliminación» si necesitas recuperarla.');
                 }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>

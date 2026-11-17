@@ -52,7 +52,7 @@ export default async function SettingsPage() {
           pais: true,
           banco: true,
           cuentaPago: true,
-          tipoCuenta bancaria: true,
+          tipoCuenta: true,
           cedulaRnc: true,
         }
       })
@@ -187,7 +187,7 @@ export default async function SettingsPage() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo de cuenta</label>
-                    <p className="text-white font-mono">{interpreter?.tipoCuenta bancaria || profile.bank_account_type || '—'}</p>
+                    <p className="text-white font-mono">{interpreter?.tipoCuenta || profile.bank_account_type || '—'}</p>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cuenta bancaria</label>
