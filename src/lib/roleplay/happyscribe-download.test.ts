@@ -58,6 +58,56 @@ describe('HappyScribe SRT download destination safety', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it('closes the discarded response before a valid redirect to S3', async () => {
+    const cancel = vi.fn();
+    const request = vi.fn()
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 302,
+        headers: { Location: 'https://s3.us-east-1.amazonaws.com/export/file.srt' },
+      }))
+      .mockResolvedValueOnce(new Response('SRT content'));
+    vi.stubGlobal('fetch', request);
+
+    const response = await fetchHappyScribeExport(
+      'https://www.happyscribe.com/download/file', new AbortController().signal,
+    );
+
+    expect(response.ok).toBe(true);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledTimes(2);
+  });
+
+  it('closes redirect bodies even when the target is forbidden', async () => {
+    const cancel = vi.fn();
+    const request = vi.fn().mockResolvedValueOnce(new Response(
+      new ReadableStream<Uint8Array>({ cancel }),
+      { status: 302, headers: { Location: 'http://127.0.0.1/internal' } },
+    ));
+    vi.stubGlobal('fetch', request);
+
+    await expect(fetchHappyScribeExport(
+      'https://www.happyscribe.com/download/file', new AbortController().signal,
+    )).rejects.toThrow('Untrusted HappyScribe export destination');
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a malformed redirect response without leaking its body', async () => {
+    const cancel = vi.fn();
+    const request = vi.fn().mockResolvedValueOnce(new Response(
+      new ReadableStream<Uint8Array>({ cancel }), { status: 302 },
+    ));
+    vi.stubGlobal('fetch', request);
+
+    await expect(fetchHappyScribeExport(
+      'https://www.happyscribe.com/download/file', new AbortController().signal,
+    )).rejects.toThrow('Invalid HappyScribe export redirect');
+
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it('follows a validated HTTPS redirect to AWS storage without exposing credentials', async () => {
     const request = vi.fn()
       .mockResolvedValueOnce(new Response(null, {
