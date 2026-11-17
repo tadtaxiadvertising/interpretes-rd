@@ -63,6 +63,73 @@ class StudioDesktopTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    @unittest.skipUnless(shutil.which("ffmpeg") or
+                         importlib.util.find_spec("imageio_ffmpeg"),
+                         "FFmpeg not installed on this machine")
+    def test_packaging_self_check_encodes_real_synthetic_mp3(self):
+        # The actual packaging workflow also runs this against frozen binaries.
+        try:
+            import tkinter as tk
+            tk.Tcl()
+        except Exception:
+            self.skipTest("Headless Tk not installed; package smoke runs with Tk")
+        module.self_check()
+
+    def test_packaging_self_check_refuses_missing_libmp3lame(self):
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import patch
+        fake_tk = ModuleType("tkinter")
+        fake_tk.Tcl = lambda: SimpleNamespace(eval=lambda _: "8.6")
+        fake_tk.ttk = ModuleType("tkinter.ttk")
+        with (patch.dict("sys.modules",
+                         {"tkinter": fake_tk, "tkinter.ttk": fake_tk.ttk}),
+              patch.object(module, "resolve_ffmpeg", return_value="ffmpeg"),
+              patch.object(module.subprocess, "run", return_value=
+                           subprocess.CompletedProcess(["ffmpeg"], 1, b""))):
+            with self.assertRaisesRegex(module.ExportError, "libmp3lame"):
+                module.self_check()
+
+    def test_packaging_self_check_refuses_missing_tcl_runtime(self):
+        from types import ModuleType
+        from unittest.mock import patch
+        fake_tk = ModuleType("tkinter")
+        def broken_tcl():
+            raise RuntimeError("packaged Tcl resources not found")
+        fake_tk.Tcl = broken_tcl
+        fake_tk.ttk = ModuleType("tkinter.ttk")
+        with patch.dict("sys.modules",
+                        {"tkinter": fake_tk, "tkinter.ttk": fake_tk.ttk}):
+            with self.assertRaisesRegex(module.ExportError, "Tcl/Tk"):
+                module.self_check()
+
+    def test_packaged_tcl_can_work_while_tk_widget_scripts_are_missing(self):
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import patch
+        fake_tk = ModuleType("tkinter")
+        fake_tk.Tcl = lambda: SimpleNamespace(eval=lambda _: "8.6")
+        fake_tk.ttk = ModuleType("tkinter.ttk")
+        bundle = self.project.parent / "frozen-runtime"
+        bundle.mkdir()
+        # Tcl() succeeds but the frozen bundle is missing the Tk scripts.
+        with (patch.dict("sys.modules",
+                         {"tkinter": fake_tk, "tkinter.ttk": fake_tk.ttk}),
+              patch.object(module.sys, "frozen", True, create=True),
+              patch.object(module.sys, "_MEIPASS", str(bundle), create=True),
+              patch.object(module.sys, "platform", "linux")):
+            with self.assertRaisesRegex(module.ExportError, "Tk/ttk"):
+                module.self_check()
+            scripts = bundle / "_tk_data"
+            scripts.mkdir()
+            (scripts / "tk.tcl").write_text("tk script", encoding="utf-8")
+            with self.assertRaisesRegex(module.ExportError, "Tk/ttk"):
+                module.verify_packaged_tk_resources()
+            (scripts / "ttk").mkdir()
+            (scripts / "ttk" / "ttk.tcl").write_text(
+                "ttk widget script", encoding="utf-8")
+            # Both scripts exist. The separate MP3 smoke still runs next in
+            # self_check, but resource validation must not need any display.
+            module.verify_packaged_tk_resources()
+
     def test_one_dialog_recognizes_source_and_json_in_any_order(self):
         self.assertEqual(module.recognize_media_and_project(
             [str(self.project), str(self.source)]),

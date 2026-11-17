@@ -730,18 +730,89 @@ def run_desktop():
     root.mainloop()
 
 
+def verify_packaged_tk_resources():
+    """Require the Tk widget scripts in frozen builds, without a display.
+
+    PyInstaller's tkinter runtime hook normally places Tk scripts in
+    sys._MEIPASS/_tk_data. Tcl() alone only checks Tcl (useTk=False), so a
+    missing tk.tcl/ttk.tcl would otherwise slip through the smoke test.
+    macOS may use a native Tk framework instead of collecting these files.
+    """
+    if not getattr(sys, "frozen", False):
+        return
+    bundle = getattr(sys, "_MEIPASS", None)
+    if not bundle:
+        raise ExportError("El ejecutable no contiene la ruta de recursos Tcl/Tk.")
+
+    def has_tk_scripts(folder):
+        return ((folder / "tk.tcl").is_file() and
+                (folder / "ttk" / "ttk.tcl").is_file())
+
+    packaged_tk = Path(bundle) / "_tk_data"
+    if packaged_tk.is_dir():
+        if has_tk_scripts(packaged_tk):
+            return
+        raise ExportError("Faltan los scripts Tk/ttk en el ejecutable.")
+
+    if sys.platform == "darwin":
+        # Some supported macOS Python builds use native Tk.framework scripts,
+        # which PyInstaller deliberately leaves outside the bundle.
+        options = [
+            Path("/System/Library/Frameworks/Tk.framework/Versions/Current/Resources/Scripts"),
+            Path("/Library/Frameworks/Tk.framework/Versions/Current/Resources/Scripts"),
+        ]
+        if os.environ.get("TK_LIBRARY"):
+            options.append(Path(os.environ["TK_LIBRARY"]))
+        if any(has_tk_scripts(folder) for folder in options):
+            return
+    raise ExportError("No se encontraron los recursos gráficos Tk/ttk requeridos.")
+
+
 def self_check():
-    """Non-GUI packaging smoke check; returns nonzero if FFmpeg is unavailable."""
-    binary = resolve_ffmpeg()
+    """Headless smoke check of the *packaged* GUI and real MP3 encoder.
+
+    A working FFmpeg -version alone does not prove that libmp3lame was
+    bundled, and Python itself may run while the embedded Tcl/Tk resources
+    are missing. Exercise both paths without opening a display or recording
+    any audio. This is called by the manual Windows/macOS/Linux build jobs.
+    """
     try:
-        probe = subprocess.run([binary, "-hide_banner", "-version"],
-                               stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=10, check=False)
+        import tkinter as tk
+        from tkinter import ttk  # noqa: F401 - PyInstaller must bundle ttk
+        interpreter = tk.Tcl()  # Works without a display server.
+        if not interpreter.eval("info patchlevel"):
+            raise RuntimeError("No Tcl interpreter version")
+        verify_packaged_tk_resources()
+    except ExportError:
+        raise
+    except Exception as exc:
+        raise ExportError(
+            "La interfaz Tcl/Tk del ejecutable no funciona; revisa el empaquetado."
+        ) from exc
+
+    binary = resolve_ffmpeg()
+    command = [
+        binary, "-hide_banner", "-nostdin", "-loglevel", "error",
+        "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
+        "-t", "0.25", "-vn", "-ac", "1", "-ar", "24000",
+        "-codec:a", "libmp3lame", "-b:a", "64k",
+        "-f", "mp3", "pipe:1",
+    ]
+    try:
+        probe = subprocess.run(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, timeout=20, check=False,
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ExportError("El ejecutable FFmpeg incluido no funciona.") from exc
-    if probe.returncode != 0:
-        raise ExportError("El ejecutable FFmpeg incluido no funciona.")
+        raise ExportError(
+            "FFmpeg no pudo codificar el MP3 sintético de verificación."
+        ) from exc
+    # Verify there is actual encoded output: an empty successful process
+    # would not demonstrate a usable MP3 codec.
+    if probe.returncode != 0 or len(probe.stdout or b"") < 200:
+        raise ExportError(
+            "El FFmpeg incluido no puede codificar MP3 con libmp3lame."
+        )
 
 
 if __name__ == "__main__":
