@@ -22,9 +22,10 @@ import { POST } from './route';
 const transcriptionId = 'a'.repeat(32);
 const exportId = 'b'.repeat(32);
 
-function importRequest() {
+function importRequest(signal?: AbortSignal) {
   return new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: transcriptionId }),
   });
@@ -141,6 +142,45 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(response.status).toBe(502);
     expect(cancel).toHaveBeenCalledOnce();
     expect(JSON.stringify(await response.json())).not.toContain('private/error.srt');
+  });
+
+  it('stops SRT polling when the administrator cancels the HTTP request', async () => {
+    const controller = new AbortController();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockImplementationOnce(async () => {
+        queueMicrotask(() => controller.abort());
+        return Response.json({ state: 'processing' });
+      });
+
+    const response = await POST(importRequest(controller.signal));
+    expect(response.status).toBe(502);
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+    expect(controller.signal.aborted).toBe(true);
+    for (const [, init] of mocks.fetch.mock.calls) {
+      expect((init as RequestInit).signal).toBeDefined();
+      expect(((init as RequestInit).signal as AbortSignal).aborted).toBe(true);
+    }
+  });
+
+  it('preserves the SRT size-limit response when cancellation after reading fails', async () => {
+    const cancel = vi.fn(async () => { throw new Error('provider stream gone'); });
+    const oversized = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(5_000_001)); },
+      cancel,
+    }));
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://www.happyscribe.com/private/oversize.srt',
+      }))
+      .mockResolvedValueOnce(oversized);
+
+    const response = await POST(importRequest());
+    expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('denies non-admin access before any provider request', async () => {
