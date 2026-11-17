@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   redirect: vi.fn((destination: string): never => { throw new Error('REDIRECT:' + destination); }),
   interpreters: vi.fn(),
   scores: vi.fn(),
+  productionLogs: vi.fn(),
   profileLookup: vi.fn(),
 }));
 
@@ -16,6 +17,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     interpreter: { findMany: m.interpreters },
     qAScore: { findMany: m.scores },
+    productionLog: { findMany: m.productionLogs },
     userProfile: { findUnique: m.profileLookup },
   },
 }));
@@ -38,6 +40,7 @@ describe('QA routes: consistent administrative identity authorization', () => {
     m.getCurrentProfile.mockResolvedValue({ id: 'profile-1', role: 'admin', display_name: 'Admin' });
     m.interpreters.mockResolvedValue([]);
     m.scores.mockResolvedValue([]);
+    m.productionLogs.mockResolvedValue([]);
   });
 
   it('rejects anonymous visitors in the layout before rendering the admin shell', async () => {
@@ -66,6 +69,7 @@ describe('QA routes: consistent administrative identity authorization', () => {
     await expect(QAPage(pageArgs())).rejects.toThrow('REDIRECT:/login');
     expect(m.interpreters).not.toHaveBeenCalled();
     expect(m.scores).not.toHaveBeenCalled();
+    expect(m.productionLogs).not.toHaveBeenCalled();
   });
 
   it('also protects direct page entry for candidates and interpreters', async () => {
@@ -73,6 +77,7 @@ describe('QA routes: consistent administrative identity authorization', () => {
     await expect(QAPage(pageArgs())).rejects.toThrow('REDIRECT:/dashboard');
     expect(m.interpreters).not.toHaveBeenCalled();
     expect(m.scores).not.toHaveBeenCalled();
+    expect(m.productionLogs).not.toHaveBeenCalled();
   });
 
   it('loads QA data only after the canonical admin profile is confirmed', async () => {
@@ -80,6 +85,13 @@ describe('QA routes: consistent administrative identity authorization', () => {
     expect(result).toBeTruthy();
     expect(m.interpreters).toHaveBeenCalledOnce();
     expect(m.scores).toHaveBeenCalledOnce();
+    expect(m.productionLogs).toHaveBeenCalledOnce();
+    expect(m.productionLogs).toHaveBeenCalledWith({
+      where: { interpreterId: { not: null }, qaScore: { is: null } },
+      select: { id: true, interpreterId: true, date: true, status: true },
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      take: 100,
+    });
     // The page must not fall back to Auth.js-only profile lookups.
     expect(m.profileLookup).not.toHaveBeenCalled();
   });
