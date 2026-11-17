@@ -54,7 +54,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <ActivityTrackerClient interpreterId={profile?.interpreter_id} />
       <DashboardShell
         role="interpreter"
-        userName={profile?.display_name || "Interpreter"}
+        userName={profile?.display_name || "Intérprete"}
         interpreterId={profile?.interpreter_id}
         userEmail={profile?.email || ''}
         notifications={notifications}
