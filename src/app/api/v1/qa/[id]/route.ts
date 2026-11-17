@@ -121,22 +121,29 @@ export async function PATCH(
         data: updateData as any,
       });
 
+      // AFTER UPDATE triggers may change the stored total after the update
+      // response snapshot. Verify an explicit re-read before committing.
+      const stored = await tx.qAScore.findUnique({
+        where: { id },
+        select: { totalScore: true },
+      });
+      if (!stored) throw new Error('QA PATCH row missing after update');
+
       if (scoreChanged) {
-        if (!qaV1StoredTotalMatches(updated.totalScore, expectedTotal!)) {
+        if (!qaV1StoredTotalMatches(stored.totalScore, expectedTotal!)) {
           throw new Error('QA PATCH stored score mismatch');
         }
       } else {
-        // A DB trigger might recompute an old score on ANY UPDATE.
-        // Roll back a metadata-only patch instead of silently rewriting it.
+        // A metadata-only edit must not rewrite any historical score.
         const before = existing.totalScore;
-        const after = updated.totalScore;
+        const after = stored.totalScore;
         const unchanged = before == null
           ? after == null
           : after != null && Number(before) === Number(after);
         if (!unchanged) throw new Error('QA PATCH changed historical score');
       }
 
-      return updated;
+      return { ...updated, totalScore: stored.totalScore };
     });
 
     if (!updatedScore) {
