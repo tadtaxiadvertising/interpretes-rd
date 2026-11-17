@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   interpreterFindUnique: vi.fn(),
   productionLogFindUnique: vi.fn(),
   qaCreate: vi.fn(),
+  qaFindUnique: vi.fn(),
   transaction: vi.fn(),
   profileFindUnique: vi.fn(),
   createNotification: vi.fn(),
@@ -16,7 +17,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     interpreter: { findUnique: m.interpreterFindUnique },
     productionLog: { findUnique: m.productionLogFindUnique },
-    qAScore: { create: m.qaCreate },
+    qAScore: { create: m.qaCreate, findUnique: m.qaFindUnique },
     $transaction: m.transaction,
     userProfile: { findUnique: m.profileFindUnique },
   },
@@ -57,12 +58,13 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     m.interpreterFindUnique.mockResolvedValue({ id: 7, emailCorporativo: 'interpreter@example.test' });
     m.productionLogFindUnique.mockResolvedValue({ id: 22, interpreterId: 7 });
     m.profileFindUnique.mockResolvedValue({ id: 'profile-1' });
-    m.qaCreate.mockResolvedValue({ id: 'qa-1', totalScore: 90 });
+    m.qaCreate.mockResolvedValue({ id: 'qa-1' });
+    m.qaFindUnique.mockResolvedValue({ totalScore: 90 });
     m.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
       callback({
         interpreter: { findUnique: m.interpreterFindUnique },
         productionLog: { findUnique: m.productionLogFindUnique },
-        qAScore: { create: m.qaCreate },
+        qAScore: { create: m.qaCreate, findUnique: m.qaFindUnique },
       }));
     m.createNotification.mockResolvedValue(undefined);
   });
@@ -91,7 +93,10 @@ describe('QA Server Actions credential-safe error boundaries', () => {
         totalScore: 90, interpreterId: 7, productionLogId: 22,
         accionRequerida: 'Ninguna',
       }),
-      select: { id: true, totalScore: true },
+      select: { id: true },
+    });
+    expect(m.qaFindUnique).toHaveBeenCalledWith({
+      where: { id: 'qa-1' }, select: { totalScore: true },
     });
     expect(m.revalidatePath).toHaveBeenCalledWith('/qa');
     expect(m.revalidatePath).toHaveBeenCalledWith('/admin');
@@ -113,8 +118,25 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     expect(m.revalidatePath).not.toHaveBeenCalled();
   });
 
-  it('rejects a trigger-overridden result rather than confirming a misleading score', async () => {
+  it('trusts the post-trigger read rather than an outdated INSERT RETURNING total', async () => {
     m.qaCreate.mockResolvedValueOnce({ id: 'qa-1', totalScore: 26 });
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 90 });
+    const result = await submitQaForm(undefined, qaFormData());
+    expect(result).toMatchObject({ success: true, message: expect.stringContaining('90.00%') });
+  });
+
+  it('fails closed if a post-trigger read cannot find the inserted score', async () => {
+    m.qaFindUnique.mockResolvedValueOnce(null);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaForm(undefined, qaFormData());
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.revalidatePath).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects a trigger-overridden result rather than confirming a misleading score', async () => {
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 26 });
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await submitQaForm(undefined, qaFormData());
@@ -126,7 +148,7 @@ describe('QA Server Actions credential-safe error boundaries', () => {
   });
 
   it('rejects even a one-cent persisted score drift', async () => {
-    m.qaCreate.mockResolvedValueOnce({ id: 'qa-1', totalScore: 90.01 });
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 90.01 });
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await submitQaForm(undefined, qaFormData());
@@ -138,14 +160,14 @@ describe('QA Server Actions credential-safe error boundaries', () => {
   it('rejects a critical-error override when a database trigger ignores it', async () => {
     const data = qaFormData();
     data.set('criticalError', 'on');
-    m.qaCreate.mockResolvedValueOnce({ id: 'qa-1', totalScore: 90 });
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 90 });
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const result = await submitQaForm(undefined, data);
       expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
       expect(m.qaCreate).toHaveBeenCalledWith({
         data: expect.objectContaining({ criticalError: true, totalScore: 0 }),
-        select: { id: true, totalScore: true },
+        select: { id: true },
       });
     } finally { log.mockRestore(); }
   });
@@ -167,7 +189,7 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     expect(m.productionLogFindUnique).not.toHaveBeenCalled();
     expect(m.qaCreate).toHaveBeenCalledWith({
       data: expect.objectContaining({ productionLogId: null }),
-      select: { id: true, totalScore: true },
+      select: { id: true },
     });
   });
 
