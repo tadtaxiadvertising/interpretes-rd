@@ -1,6 +1,6 @@
-#Interpreters RD
+# Intérpretes RD
 
-> Internal CRM platform for managing interpreters, production tracking, QA audits, payroll, and recruitment.
+> Plataforma de gestión de intérpretes for managing interpreters, production tracking, QA audits, payroll, and recruitment.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ This platform uses a **decoupled two-service architecture**:
 
 | Service | Description | Tech |
 | :------ | :---------- | :--- |
-| `interpreters-os` | Main application: UI, Auth, Direct Data Access | Next.js 15.2.6, Prisma 7, Tailwind v4 |
+| `interpretes-rd` | Aplicación principal: interfaz, autenticación y acceso directo a datos | Next.js 15.2.6, Prisma 7, Tailwind v4 |
 | `interpreters-api` | REST Service: Webhooks, External integrations | Next.js 16 API Routes, Prisma 7 |
 
 ### Dual-Service Synchronization in Easypanel
@@ -34,7 +34,7 @@ See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) for full architecture diagram
 While built as two separate services, the code currently resides in this single repository for development velocity. Deployment targets specific Dockerfiles.
 
 ```text
-free-interpreters-os/          
+interpretes-rd/          
 ├── src/app/                   # Frontend pages & Layouts
 ├── src/app/api/               # Backend REST endpoints (interpreters-api)
 ├── src/app/actions/           # Shared Server Actions
