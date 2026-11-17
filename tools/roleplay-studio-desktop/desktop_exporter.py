@@ -539,7 +539,7 @@ def discover_local_companion(selected, *, max_entries=250, max_candidates=8):
                 if len(matches) > 1:
                     return None
         return matches[0] if len(matches) == 1 else None
-    except (OSError, ValueError):
+    except (OSError, ValueError, ExportError):
         # Never make browsing impossible just because auto-discovery failed.
         return None
 
