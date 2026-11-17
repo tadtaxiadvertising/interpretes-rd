@@ -7,6 +7,7 @@ import { corsHeaders } from '@/lib/cors';
 import { z } from 'zod';
 import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { normalizeQaV1Points, qaV1StoredTotalMatches } from '@/lib/qa-v1-score-contract';
 
 export async function OPTIONS(request: Request) {
   return NextResponse.json({}, { headers: corsHeaders(request, 'GET, POST, OPTIONS') });
@@ -68,6 +69,12 @@ export async function GET(request: Request) {
   }
 }
 
+class QaLogContractError extends Error {
+  constructor(public readonly status: 404 | 422) {
+    super('Invalid QA production log');
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
@@ -75,40 +82,50 @@ export async function POST(request: Request) {
 
     const data = { ...(await parseJsonBody(request, QAScoreSchema)) };
 
-    // FÓRMULA DE CALIDAD (QA Scorecard)
-    // Total Score = (Protocol * 0.20) + (Interpretación * 0.40) + (Idioma * 0.20) + (Servicio * 0.10) + (Técnico * 0.10)
-    const protocol = data.protocolScore || 0;
-    const interpretation = data.interpretationScore || 0;
-    const language = data.languageScore || 0;
-    const service = data.serviceScore || 0;
-    const technical = data.technicalScore || 0;
+    // The legacy v1 request uses ALREADY-WEIGHTED point caps 20/40/20/10/10.
+    // The DB and canonical QA actions store dimension percentages from 0 to 100.
+    // Convert once before persistence; do not multiply points by their weight again.
+    const calculated = normalizeQaV1Points(data, data.criticalError);
+    if (data.criticalError) data.accionRequerida = 'Advertencia';
 
-    let totalScore = (protocol * 0.20) + 
-                     (interpretation * 0.40) + 
-                     (language * 0.20) + 
-                     (service * 0.10) + 
-                     (technical * 0.10);
+    const newScore = await prisma.$transaction(async (tx) => {
+      // Reject a QA score linked to another interpreter's production log.
+      // Keep this check in the same transaction as INSERT.
+      const log = await tx.productionLog.findUnique({
+        where: { id: data.productionLogId },
+        select: { id: true, interpreterId: true },
+      });
+      if (!log) throw new QaLogContractError(404);
+      if (log.interpreterId !== data.interpreterId) throw new QaLogContractError(422);
 
-    // REGLA CRÍTICA DE AUTO-FAIL
-    // Si criticalError === true, el totalScore se fuerza a 0.00 y accionRequerida a "Advertencia"
-    if (data.criticalError === true) {
-      totalScore = 0.00;
-      data.accionRequerida = 'Advertencia';
-    }
+      const created = await tx.qAScore.create({
+        data: {
+          ...data,
+          ...calculated.dimensions,
+          totalScore: calculated.totalScore,
+        },
+      });
 
-    data.totalScore = Math.round(totalScore * 100) / 100;
-
-    const newScore = await prisma.qAScore.create({
-      data: data,
+      // A PostgreSQL trigger can overwrite the value supplied by Prisma.
+      // Roll back the whole transaction if the persisted result diverges.
+      if (!qaV1StoredTotalMatches(created.totalScore, calculated.totalScore)) {
+        throw new Error('QA database score contract mismatch');
+      }
+      return created;
     });
 
-    return privateAdminJson(newScore, { 
+    return privateAdminJson(newScore, {
       status: 201,
       headers: corsHeaders(request),
     });
   } catch (error) {
+    if (error instanceof QaLogContractError) {
+      return privateAdminJson(
+        { success: false, error: error.status === 404 ? 'Production log not found' : 'Production log does not belong to the selected interpreter' },
+        { status: error.status, headers: corsHeaders(request) },
+      );
+    }
     console.error('QA API ERROR:', safeServerErrorCategory(error));
     return privateAdminResponse(apiError({ error, fallback: 'Unable to create QA score', exposeMessage: false }));
   }
 }
-
