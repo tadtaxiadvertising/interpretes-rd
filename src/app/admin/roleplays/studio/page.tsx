@@ -333,6 +333,11 @@ export default function RoleplayStudioPage() {
       return false;
     }
     subtitleImportRevision.current += 1;
+    // A pending pause analysis must not recreate the previous edit's cuts.
+    silenceRevision.current += 1;
+    silenceAbort.current?.abort();
+    silenceAbort.current = null;
+    setAnalyzingSilences(false);
     // The prior clip may still be playing in the primary media element.
     // Stop it only after accepting the replacement, not when it is declined.
     stopPreview();
@@ -345,6 +350,10 @@ export default function RoleplayStudioPage() {
     setExpandedSegmentId(null);
     setSegments(prepared);
     setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
+    // Suggestions belong to the previous edit, not to the newly imported cues.
+    setDetectedSilences([]);
+    setSuggestedClips([]);
+    setOmittedSuggestions(0);
     setNotice(`${prepared.length} intervenciones cargadas. ${excludedCount} del intérprete original omitidas; revisa idiomas, hablantes y límites antes de exportar.`);
     return true;
   };
@@ -479,6 +488,11 @@ export default function RoleplayStudioPage() {
     setCaptionTexts({});
     setReviewCues([]);
     setChosenCueIndices([]);
+    // The proposal has been consumed; keep the confirmation notice, but do
+    // not leave a stale "Reemplazar" action able to overwrite later edits.
+    setDetectedSilences([]);
+    setSuggestedClips([]);
+    setOmittedSuggestions(0);
     setError('');
     setNotice('Cortes sugeridos aplicados. Son aproximaciones basadas en pausas, no separación de voces. Revisa cada inicio, fin, rol e idioma antes de exportar.');
   };
@@ -892,6 +906,10 @@ export default function RoleplayStudioPage() {
         }
       }
       if (revision !== subtitleImportRevision.current) return;
+      silenceRevision.current += 1;
+      silenceAbort.current?.abort();
+      silenceAbort.current = null;
+      setAnalyzingSilences(false);
       const containsCompound = restored.some(segment => segment.ranges !== undefined);
       // Opening a v2 project must be local-only even after the user separates
       // its cuts. For ordinary v1 projects retain the user's chosen mode.
@@ -903,6 +921,15 @@ export default function RoleplayStudioPage() {
       setCaptionTexts({});
       setReviewCues([]);
       setChosenCueIndices([]);
+      setDetectedSilences([]);
+      setSuggestedClips([]);
+      setOmittedSuggestions(0);
+      // A previous project's filters can otherwise make a valid restored
+      // project appear empty or leave the old turn expanded.
+      setSegmentSearch('');
+      setShowPendingReview(false);
+      setExpandedSegmentId(null);
+      setTurnActionFeedback(null);
       setNotice(containsCompound
         ? `Proyecto v2 restaurado: ${restored.length} intervenciones. El modo local se activó para proteger el audio y conservar las pausas eliminadas. Usa un exportador local actualizado.`
         : sampledProject

@@ -301,6 +301,53 @@ describe('Roleplay Studio editable project recovery', () => {
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Draft accepted');
   });
 
+  it('preserves proposals on rejected JSON import and clears them on accepted recovery', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Edición anterior' },
+    });
+    const request = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        durationSeconds: 90,
+        silences: [{ start: 2, end: 3 }, { start: 8, end: 9 }],
+      }),
+    }));
+    vi.stubGlobal('fetch', request);
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: /Autorizo subir este MP3 al servidor para detectar pausas/,
+    }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    });
+    expect(screen.getByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeTruthy();
+
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Nuevo proyecto')] },
+      });
+    });
+    expect(screen.getByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeTruthy();
+    expect((screen.getByRole('searchbox', {
+      name: 'Buscar intervenciones',
+    }) as HTMLInputElement).value).toBe('Edición anterior');
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Nuevo proyecto')] },
+      });
+    });
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
+    expect(screen.queryByText(/2 pausas detectadas/i)).toBeNull();
+    expect((screen.getByRole('searchbox', {
+      name: 'Buscar intervenciones',
+    }) as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Nuevo proyecto');
+    expect(request).toHaveBeenCalledOnce();
+  });
+
   it('rejects projects bound to another MP3 and preserves existing edits', async () => {
     selectSource();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));

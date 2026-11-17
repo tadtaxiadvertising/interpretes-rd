@@ -76,6 +76,8 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect((screen.getAllByLabelText(/Perfil del hablante/i)[0] as HTMLSelectElement).value)
       .toBe('unknown');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    // A consumed proposal must not remain available to erase later edits.
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
   });
 
   it('applies suggestions to an untouched draft without a needless confirmation step', async () => {
@@ -92,6 +94,30 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(window.confirm).not.toHaveBeenCalled();
     expect(screen.getByText(/Intervenciones \(3\/25\)/i)).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('discards old silence proposals when valid SRT cues replace the editor draft', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => result })));
+    loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    });
+    expect(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i })).toBeTruthy();
+    const file = new File(['srt'], 'new-source.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true,
+      value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Verified replacement',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Doctor: Verified replacement')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
+    expect(screen.queryByText(/2 pausas detectadas/i)).toBeNull();
   });
 
   it('preserves edited interventions and filters when the administrator declines a suggested replacement', async () => {
@@ -129,6 +155,40 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(screen.getAllByLabelText('Título')).toHaveLength(3);
     expect(screen.queryByDisplayValue('Turno editado manualmente')).toBeNull();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it('aborts an in-flight pause analysis when accepted SRT cuts replace the draft', async () => {
+    let finish!: (response: Response) => void;
+    let signal: AbortSignal | undefined;
+    const pending = new Promise<Response>(resolve => { finish = resolve; });
+    const request = vi.fn((_url: RequestInfo | URL, options: RequestInit) => {
+      signal = options.signal as AbortSignal;
+      return pending;
+    });
+    vi.stubGlobal('fetch', request);
+    loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    expect(signal?.aborted).toBe(false);
+    const replacement = new File(['srt'], 'accepted.srt', { type: 'text/plain' });
+    Object.defineProperty(replacement, 'text', {
+      configurable: true,
+      value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: New accepted turn',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [replacement] },
+      });
+    });
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      finish({ ok: true, json: async () => result } as Response);
+      await pending;
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(screen.getByText('Doctor: New accepted turn')).toBeTruthy();
+    expect(screen.queryByText(/2 pausas detectadas/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
   });
 
   it('ignores an analysis that finishes after the admin has changed the original MP3', async () => {
