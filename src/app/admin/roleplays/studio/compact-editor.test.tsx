@@ -20,6 +20,7 @@ describe('Audio Studio compact editing', () => {
     });
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -194,6 +195,45 @@ describe('Audio Studio compact editing', () => {
     expect(fullSpeakers[0].value).toBe('doctor');
     expect(fullLanguages[0].value).toBe('en');
     expect(screen.queryByRole('combobox', { name: 'Hablante rápido intervención 1' })).toBeNull();
+  });
+
+  it('preserves the current source and interventions when the file picker is cancelled', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [] },
+    });
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(window.confirm).not.toHaveBeenCalled();
+  });
+
+  it('does not replace the source or discard edits when replacement is declined', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    const replacement = new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' });
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [replacement] },
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [replacement] },
+    });
+    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+  });
+
+  it('replaces an untouched source without unnecessary confirmation', () => {
+    loadAudio(120);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'fresh.mp3', { type: 'audio/mpeg' })] },
+    });
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
   it('clears stale review filters when the source recording changes', () => {

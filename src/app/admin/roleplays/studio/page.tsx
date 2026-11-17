@@ -252,7 +252,14 @@ export default function RoleplayStudioPage() {
     setError('La exportación se canceló porque cambiaron las intervenciones. Exporta nuevamente.');
   }, [segments]);
 
-  const chooseAudio = (file: File | undefined) => {
+  const chooseAudio = (file: File) => {
+    // Selecting another source destroys the in-memory editor and cue review.
+    // A cancelled picker must never reach this action, and an actual
+    // replacement should not discard substantial work without consent.
+    if (audio && (segments.length > 0 || reviewCues.length > 0 || suggestedClips.length > 0) &&
+        !window.confirm('Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?')) {
+      return;
+    }
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
     draftOperationRevision.current += 1;
@@ -292,7 +299,6 @@ export default function RoleplayStudioPage() {
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
-    if (!file) { setAudio(null); setUrl(''); return; }
     try {
       validateLocalMedia(file);
     } catch (cause) {
@@ -975,7 +981,9 @@ export default function RoleplayStudioPage() {
           onChange={event => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
-            chooseAudio(file);
+            // Browsers may dispatch a change event with no files when the
+            // picker is cancelled. Preserve the existing source and edits.
+            if (file) chooseAudio(file);
           }} />
         {url && (
           <div className="mt-5 space-y-3">
