@@ -706,7 +706,7 @@ def run_desktop():
                 status.set(f"ZIP generado: {result['clips']} fragmentos. Guardado en: {exported_path}. "
                            "La grabación original permanece local.")
                 messagebox.showinfo("Exportación terminada",
-                                    f"El ZIP está guardado en:\\n{exported_path}")
+                                    f"El ZIP está guardado en:\n{exported_path}")
             elif kind == "cancelled":
                 status.set("Exportación cancelada; temporales eliminados.")
             else:
