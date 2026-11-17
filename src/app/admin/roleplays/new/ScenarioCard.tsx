@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import { Mic2, Trash2, GripVertical, Clock, ChevronUp, ChevronDown } from 'lucide-react';
+import { Mic2, Trash2, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage } from '@/lib/roleplay-studio/protocols';
@@ -132,15 +132,6 @@ export function ScenarioCard({
     >
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <button
-            type="button"
-            className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors cursor-grab active:cursor-grabbing"
-            onMouseDown={(event) => event.preventDefault()}
-            aria-label="Reorder scenario"
-            title="Use the up/down controls to reorder scenarios"
-          >
-            <GripVertical size={20} className="text-gray-500" />
-          </button>
           <div className="flex-1 min-w-0">
             <label className="sr-only" htmlFor={`scenario-title-${scenario.id}`}>Scenario title</label>
             <input
@@ -174,7 +165,7 @@ export function ScenarioCard({
         </div>
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setExpanded(current => !current)}
-            aria-expanded={expanded} aria-controls={`scenario-details-${scenario.id}`}
+            aria-expanded={expanded} aria-controls={expanded ? `scenario-details-${scenario.id}` : undefined}
             aria-label={`${expanded ? 'Ocultar detalles' : 'Editar detalles'} del escenario ${index + 1}`}
             className="rounded-lg border border-white/15 px-2 py-1.5 text-xs font-medium text-blue-200 hover:bg-white/10">
             {expanded ? 'Ocultar detalles' : 'Editar detalles'}
