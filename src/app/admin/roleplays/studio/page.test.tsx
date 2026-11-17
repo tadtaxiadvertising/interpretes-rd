@@ -423,7 +423,7 @@ describe('Audio Studio clip review player', () => {
     const itemId = 'a'.repeat(32);
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') {
-        return new Response(new Blob(['ID3-audio'], { type: 'audio/mpeg' }), {
+        return new Response(new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00]), {
           status: 200, headers: { 'Content-Type': 'audio/mpeg' },
         });
       }
