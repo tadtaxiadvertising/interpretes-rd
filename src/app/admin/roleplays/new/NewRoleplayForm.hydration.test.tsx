@@ -33,7 +33,12 @@ describe('Admin roleplay new form: deterministic server/client initial markup', 
     const clientIds = [...container.querySelectorAll('[id^="scenario-"]')].map(el => el.id);
     expect(clientIds).toEqual(serverIds);
 
+    // The localized label must agree in server HTML and the hydrated form,
+    // while the stable ID remains unchanged across environments.
+    expect(ssr.querySelector('label[for="scenario-title-new-roleplay-initial-scenario"]')?.textContent)
+      .toBe('Título del escenario');
     const title = screen.getByLabelText('Título del escenario');
+    expect(screen.getByRole('button', { name: 'Añadir escenario' })).toBeTruthy();
     expect(title.id).toBe('scenario-title-new-roleplay-initial-scenario');
     expect(container.querySelector(`label[for="${title.id}"]`)).not.toBeNull();
   });
