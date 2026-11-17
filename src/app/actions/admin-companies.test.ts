@@ -16,6 +16,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
 import { createCompany, assignAccountToCompany } from './admin-companies';
 
 describe('admin company actions', () => {
@@ -57,6 +58,49 @@ describe('admin company actions', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('does not report duplicate-prone failure when company creation commits before cache invalidation fails', async () => {
+    vi.mocked(prisma.company.create).mockResolvedValueOnce({ id: 3 } as never);
+    vi.mocked(revalidatePath).mockImplementationOnce(() => {
+      throw new Error('PRIVATE_CACHE_TOKEN');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const data = new FormData();
+      data.set('name', 'Language Services');
+      expect(await createCompany(data)).toEqual({ success: true });
+      expect(prisma.company.create).toHaveBeenCalledTimes(1);
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/companies');
+      expect(warn).toHaveBeenCalledWith('[COMPANIES] Saved but cache refresh failed:', 'Error');
+      expect(error).not.toHaveBeenCalled();
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_CACHE_TOKEN');
+    } finally { warn.mockRestore(); error.mockRestore(); }
+  });
+
+  it('keeps committed account assignment successful and attempts both cache paths independently', async () => {
+    vi.mocked(prisma.account.update).mockResolvedValueOnce({ id: 12, companyId: 3 } as never);
+    vi.mocked(revalidatePath).mockImplementationOnce(() => {
+      throw new Error('PRIVATE_CACHE_TOKEN');
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const data = new FormData();
+      data.set('accountId', '12');
+      data.set('companyId', '3');
+      expect(await assignAccountToCompany(data)).toEqual({ success: true });
+      expect(prisma.account.update).toHaveBeenCalledTimes(1);
+      expect(prisma.account.update).toHaveBeenCalledWith({
+        where: { id: 12 }, data: { companyId: 3 },
+      });
+      expect(revalidatePath).toHaveBeenNthCalledWith(1, '/admin/companies');
+      expect(revalidatePath).toHaveBeenNthCalledWith(2, '/admin/accounts');
+      expect(warn).toHaveBeenCalledWith('[COMPANIES] Assigned but cache refresh failed:', 'Error');
+      expect(error).not.toHaveBeenCalled();
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_CACHE_TOKEN');
+    } finally { warn.mockRestore(); error.mockRestore(); }
   });
 
   it('rejects non-admin users before database writes', async () => {
