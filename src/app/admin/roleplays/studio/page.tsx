@@ -130,7 +130,8 @@ export default function RoleplayStudioPage() {
   useEffect(() => {
     let active = true;
     void readAudioStudioEditorPreferences().then(settings => {
-      if (!active) return;
+      // Never change parsing/export defaults after a recording was selected.
+      if (!active || activeAudioFile.current) return;
       if (!preferenceEdits.current.exclude)
         setExcludeInterpreter(settings.excludeInterpreterByDefault);
       if (!preferenceEdits.current.compact)
