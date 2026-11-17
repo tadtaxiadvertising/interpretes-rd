@@ -13,6 +13,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
 import { createAccountPlatform } from '../admin-account-platforms';
 
 function makeForm(values: Record<string, string>) {
@@ -127,4 +128,37 @@ describe('createAccountPlatform VPN configuration', () => {
     expect(result.success).toBe(false);
     expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
   });
+  it('does not report an already-committed platform as failed when cache invalidation fails', async () => {
+    vi.mocked(revalidatePath).mockImplementationOnce(() => { throw new Error('PRIVATE_CACHE_TOKEN'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await createAccountPlatform(makeForm({
+        accountId: '12',
+        name: 'Portal principal',
+      }));
+      expect(result).toEqual({ success: true });
+      expect(prisma.accountPlatform.create).toHaveBeenCalledTimes(1);
+      expect(revalidatePath).toHaveBeenNthCalledWith(1, '/admin/platforms');
+      expect(revalidatePath).toHaveBeenNthCalledWith(2, '/admin/accounts');
+      expect(warn).toHaveBeenCalledWith('[PLATFORMS] Saved but cache refresh failed:', 'Error');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_CACHE_TOKEN');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('redacts provider credentials when creating a platform fails before commit', async () => {
+    vi.mocked(prisma.accountPlatform.create).mockRejectedValueOnce(
+      new Error('postgresql://admin:PRIVATE_PASSWORD@db.internal/platforms'),
+    );
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await createAccountPlatform(makeForm({
+        accountId: '12', name: 'Portal principal',
+      }));
+      expect(result.success).toBe(false);
+      expect(revalidatePath).not.toHaveBeenCalled();
+      expect(spy).toHaveBeenCalledWith('[PLATFORMS] Create failed:', 'Error');
+      expect(JSON.stringify([result, spy.mock.calls])).not.toMatch(/PRIVATE_PASSWORD|db\\.internal|postgresql:/);
+    } finally { spy.mockRestore(); }
+  });
+
 });

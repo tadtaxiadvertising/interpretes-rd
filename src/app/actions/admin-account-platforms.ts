@@ -73,11 +73,20 @@ export async function createAccountPlatform(formData: FormData) {
       },
     });
 
-    revalidatePath('/admin/platforms');
-    revalidatePath('/admin/accounts');
+    // The database write already committed. Cache invalidation must not
+    // report a false save failure that causes duplicate account-platform rows.
+    for (const path of ['/admin/platforms', '/admin/accounts']) {
+      try {
+        revalidatePath(path);
+      } catch (cacheError) {
+        console.warn('[PLATFORMS] Saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+      }
+    }
     return { success: true };
   } catch (error) {
     console.error('[PLATFORMS] Create failed', safeServerErrorCategory(error));
+    // Provider errors may contain DB connection strings or account metadata.
+    console.error('[PLATFORMS] Create failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar la plataforma. Comprueba la cuenta y el nombre.' };
   }
 }
