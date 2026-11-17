@@ -3,7 +3,7 @@
 This directory contains the necessary configuration details for deploying the **Intérpretes RD** on an Easypanel-managed VPS.
 
 > **Easypanel instance**: `rewvid.easypanel.host`  
-> **Custom domains** (`freeinterpreters.com`) are not yet configured — services are accessible via Easypanel subdomains.
+> **Custom domains** are pending configuration — services are currently accessible via Easypanel subdomains.
 
 ---
 
