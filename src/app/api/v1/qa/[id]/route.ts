@@ -6,6 +6,7 @@ import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
 import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { qaV1StoredTotalMatches } from '@/lib/qa-v1-score-contract';
 
 const METHODS = 'GET, PATCH, DELETE, OPTIONS';
 
@@ -44,6 +45,14 @@ export async function GET(
   }
 }
 
+const QA_SCORE_FIELDS = [
+  'protocolScore',
+  'interpretationScore',
+  'languageScore',
+  'serviceScore',
+  'technicalScore',
+] as const;
+
 export async function PATCH(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -53,63 +62,73 @@ export async function PATCH(
     if (denied) return privateAdminResponse(denied);
 
     const { id } = numericIdParamSchema.parse(await params);
-
-    const body = await parseJsonBody(request, QAScorePatchSchema);
-    
-    // Rule D: Partial validation
-    const validationResult = { success: true as const, data: body };
-    if (!validationResult.success) {
+    // Only explicit editable fields are accepted. Changes to interpreterId,
+    // productionLogId and totalScore must not silently rewrite audit history.
+    const updateData = { ...(await parseJsonBody(request, QAScorePatchSchema)) };
+    if (Object.keys(updateData).length === 0) {
       return privateAdminJson(
-        { success: false, error: 'Validation failed', details: [] },
-        { status: 400 }
+        { success: false, error: 'At least one editable field must be provided' },
+        { status: 400 },
       );
     }
 
-    const existingScore = await prisma.qAScore.findUnique({ where: { id } });
-    if (!existingScore) {
+    const scoreChanged = updateData.criticalError !== undefined ||
+      QA_SCORE_FIELDS.some(field => updateData[field] !== undefined);
+
+    const updatedScore = await prisma.$transaction(async tx => {
+      const existing = await tx.qAScore.findUnique({ where: { id } });
+      if (!existing) return null;
+
+      let expectedTotal: number | null = null;
+      if (scoreChanged) {
+        const [protocol, interpretation, language, service, technical] =
+          QA_SCORE_FIELDS.map(field =>
+            Number(updateData[field] ?? existing[field] ?? 0));
+
+        const isCritical = updateData.criticalError ?? existing.criticalError ?? false;
+        const weighted = protocol * 0.20 + interpretation * 0.40 +
+          language * 0.20 + service * 0.10 + technical * 0.10;
+        expectedTotal = isCritical ? 0 : Math.round(weighted * 100) / 100;
+        updateData.totalScore = expectedTotal;
+        if (isCritical) updateData.accionRequerida = 'Advertencia';
+      }
+
+      // Do not recompute historical scores when editing a comment, date,
+      // auditor, or other non-scoring metadata.
+      const updated = await tx.qAScore.update({
+        where: { id },
+        data: updateData,
+      });
+
+      if (scoreChanged) {
+        if (!qaV1StoredTotalMatches(updated.totalScore, expectedTotal!)) {
+          throw new Error('QA PATCH stored score mismatch');
+        }
+      } else {
+        // A DB trigger might recompute an old score on ANY UPDATE.
+        // Roll back a metadata-only patch instead of silently rewriting it.
+        const before = existing.totalScore;
+        const after = updated.totalScore;
+        const unchanged = before == null
+          ? after == null
+          : after != null && Number(before) === Number(after);
+        if (!unchanged) throw new Error('QA PATCH changed historical score');
+      }
+
+      return updated;
+    });
+
+    if (!updatedScore) {
       return privateAdminJson({ success: false, error: 'Scorecard not found' }, { status: 404 });
     }
-
-    const updateData = { ...validationResult.data };
-
-    // FÓRMULA DE CALIDAD (QA Scorecard) - Re-calculate if components changed
-    // Rule C: Safely cast Prisma Decimals to number
-    const protocol = Number(updateData.protocolScore ?? existingScore.protocolScore ?? 0);
-    const interpretation = Number(updateData.interpretationScore ?? existingScore.interpretationScore ?? 0);
-    const language = Number(updateData.languageScore ?? existingScore.languageScore ?? 0);
-    const service = Number(updateData.serviceScore ?? existingScore.serviceScore ?? 0);
-    const technical = Number(updateData.technicalScore ?? existingScore.technicalScore ?? 0);
-
-    let totalScore = (protocol * 0.20) + 
-                     (interpretation * 0.40) + 
-                     (language * 0.20) + 
-                     (service * 0.10) + 
-                     (technical * 0.10);
-
-
-    // REGLA CRÍTICA DE AUTO-FAIL
-    const isCritical = updateData.criticalError ?? existingScore.criticalError;
-    if (isCritical === true) {
-      totalScore = 0.00;
-      updateData.accionRequerida = 'Advertencia';
-    }
-
-    updateData.totalScore = Math.round(totalScore * 100) / 100;
-
-    const updatedScore = await prisma.qAScore.update({
-      where: { id },
-      data: updateData as any,
-    });
-
-    return privateAdminJson(updatedScore, {
-      headers: corsHeaders(request, METHODS),
-    });
+    return privateAdminJson(updatedScore, { headers: corsHeaders(request, METHODS) });
   } catch (error) {
     console.error('QA PATCH ERROR:', safeServerErrorCategory(error));
-    return privateAdminResponse(apiError({ error, fallback: 'Error updating scorecard', exposeMessage: false }));
+    return privateAdminResponse(apiError({
+      error, fallback: 'Error updating scorecard', exposeMessage: false,
+    }));
   }
 }
-
 
 export async function DELETE(
   request: Request,
