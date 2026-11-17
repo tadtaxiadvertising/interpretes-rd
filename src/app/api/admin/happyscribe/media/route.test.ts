@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { issueHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
+import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
@@ -236,6 +237,14 @@ describe('HappyScribe original media import', () => {
     });
     const response = await POST(req);
     expect(response.status).toBe(403);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when stored provider settings cannot be read or decrypted', async () => {
+    vi.mocked(getHappyScribeSettings).mockRejectedValueOnce(new Error('synthetic unavailable credentials'));
+    const response = await POST(request());
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toContain('configuración');
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
