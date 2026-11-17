@@ -2,7 +2,7 @@
 
 import prisma from '@/lib/prisma';
 import { createPayrollRecord } from '@/lib/payroll';
-import { refreshPayrollRecord } from '@/services/PayrollService';
+import { reconcileProductionMinutes } from '@/lib/payroll/reconcile-production-minutes';
 import { revalidatePath } from 'next/cache';
 import type { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
@@ -112,52 +112,14 @@ export async function reconcileMinutes(
   try {
     const validated = ReconcileSchema.parse({ logId, verifiedMinutes });
 
-    const reconciliation = await db.$transaction(async (tx) => {
-      const log = await tx.productionLog.findUnique({
-        where: { id: validated.logId },
-        select: { id: true, interpreterId: true, date: true, isSettled: true },
-      });
-
-      if (!log) return { kind: 'NOT_FOUND' as const };
-      if (!log.interpreterId) return { kind: 'INVALID_LOG' as const };
-      if (log.isSettled) return { kind: 'SETTLED' as const };
-
-      const linkedPaidPayroll = await tx.payrollRecord.findFirst({
-        where: {
-          interpreterId: log.interpreterId,
-          periodStart: { lte: log.date },
-          periodEnd: { gte: log.date },
-          OR: [
-            { status: { in: ['PAID', 'Paid'] } },
-            { paidAt: { not: null } },
-          ],
-        },
-        select: { id: true },
-      });
-
-      if (linkedPaidPayroll) return { kind: 'PAID_PAYROLL' as const };
-
-      const updated = await tx.productionLog.updateMany({
-        where: { id: validated.logId, isSettled: false },
-        data: { verifiedMinutes: validated.verifiedMinutes },
-      });
-
-      if (updated.count !== 1) return { kind: 'CONFLICT' as const };
-
-      // Keep the production-log correction and pending payroll totals atomic.
-      // Every calculation query uses this transaction client, never the global
-      // Prisma singleton, so a failed refresh rolls the log update back too.
-      await refreshPayrollRecord(log.interpreterId, log.date, tx);
-
-      return { kind: 'UPDATED' as const };
-    }, { isolationLevel: 'Serializable' });
+    const reconciliation = await reconcileProductionMinutes(validated.logId, validated.verifiedMinutes);
 
     if (reconciliation.kind !== 'UPDATED') {
       const errors = {
         NOT_FOUND: ['Production log not found', 'NOT_FOUND'],
         INVALID_LOG: ['Production log is not linked to an interpreter', 'VALIDATION_ERROR'],
         SETTLED: ['Cannot modify: Log is already settled', 'CONFLICT'],
-        PAID_PAYROLL: ['Cannot modify: Log is linked to a paid payroll record', 'CONFLICT'],
+        LOCKED_PAYROLL: ['Cannot modify: Log is linked to a payroll record that is no longer pending', 'CONFLICT'],
         CONFLICT: ['The production log changed during reconciliation; reload and retry', 'CONFLICT'],
       } as const;
       const [error, code] = errors[reconciliation.kind];
