@@ -42,7 +42,9 @@ export async function getHappyScribeSettings() {
   const map = new Map(rows.map(row => [row.key, row.value]));
   let token = process.env.HAPPY_SCRIBE_API_TOKEN?.trim() || '';
   if (map.has(TOKEN_KEY)) token = decrypt(map.get(TOKEN_KEY)!);
-  const organizationId = map.get(ORG_KEY) || process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || '';
+  const organizationId = map.has(ORG_KEY)
+    ? map.get(ORG_KEY)!
+    : process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || '';
   // In the interest of VPS costs, the existing deployment feature flag remains
   // a hard safety gate. The panel can only opt out, never bypass the flag.
   const mediaImportEnabled = process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true'
@@ -59,7 +61,7 @@ export async function getHappyScribeSettingsStatus() {
   return {
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
     tokenSource: map.has(TOKEN_KEY) ? 'panel' : process.env.HAPPY_SCRIBE_API_TOKEN ? 'servidor' : 'ninguna',
-    organizationId: map.get(ORG_KEY) || process.env.HAPPY_SCRIBE_ORGANIZATION_ID || '',
+    organizationId: map.has(ORG_KEY) ? map.get(ORG_KEY)! : (process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || ''),
     // Display the effective state, not merely a persisted preference:
     // media never flows through the VPS unless the deployment gate is on.
     mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true'
@@ -76,6 +78,7 @@ export async function saveHappyScribeSettings(input: {
   if (organizationId && !/^\d{1,30}$/.test(organizationId)) throw new Error('ORGANIZATION_INVALID');
   if (input.token && (input.token.length > 2048 || input.token.trim().length < 8))
     throw new Error('TOKEN_INVALID');
+  if (input.token?.trim() && input.removeToken) throw new Error('TOKEN_OPERATION_CONFLICT');
   if (input.token && !masterKey()) throw new Error('ENCRYPTION_KEY_MISSING');
   await prisma.$transaction(async tx => {
     if (input.removeToken) await tx.systemConfig.deleteMany({ where: { key: TOKEN_KEY } });
