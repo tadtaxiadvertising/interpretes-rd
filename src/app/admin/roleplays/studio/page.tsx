@@ -34,7 +34,7 @@ import {
 } from '@/lib/roleplay-studio/long-media';
 import {
   classifySpeakerRole, filterInterpreterCues, makeNeutralSegmentTitle,
-  type StudioLanguage, type StudioSpeakerRole,
+  titleAfterProfileChange, type StudioLanguage, type StudioSpeakerRole,
 } from '@/lib/roleplay-studio/speaker-profiles';
 
 type Segment = {
@@ -84,7 +84,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -679,7 +679,22 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     setTurnActionFeedback(null);
     subtitleImportRevision.current += 1;
-    setSegments(prev => prev.map(segment => segment.id === id ? { ...segment, ...patch } : segment));
+    setSegments(prev => {
+      const order = [...prev].sort((a, b) => a.start - b.start);
+      const index = order.findIndex(segment => segment.id === id);
+      return prev.map(segment => {
+        if (segment.id !== id) return segment;
+        const next = { ...segment, ...patch };
+        if (index >= 0 && patch.title === undefined &&
+            (patch.speakerRole !== undefined || patch.language !== undefined)) {
+          next.title = titleAfterProfileChange(
+            segment.title, segment.speakerRole, segment.language, index,
+            next.speakerRole, next.language,
+          );
+        }
+        return next;
+      });
+    });
   };
 
   const saveDraft = async () => {
@@ -1411,7 +1426,8 @@ export default function RoleplayStudioPage() {
               </button>
               {lastStructuralEdit && (
                 <button type="button" onClick={undoLastStructuralEdit}
-                  aria-label="Deshacer última división o unión"
+                  aria-label={lastStructuralEdit.kind === 'exclusión'
+                    ? 'Deshacer exclusión de intérpretes' : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
