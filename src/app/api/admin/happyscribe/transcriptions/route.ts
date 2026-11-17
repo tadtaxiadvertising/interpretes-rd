@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
+import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
@@ -83,6 +84,7 @@ export async function GET(req: NextRequest) {
       if (typeof row.id !== 'string' || !isValidHappyScribeId(row.id)) return [];
       return [{
         id: row.id,
+        importProof: issueHappyScribeImportProof({ id: row.id, organizationId: config.organizationId, userId: auth.user.userId, token: config.token }),
         name: typeof row.name === 'string' ? row.name.slice(0, 240) : 'Transcripción sin título',
         state: typeof row.state === 'string' ? row.state : 'unknown',
         language: typeof row.language === 'string' ? row.language : null,
@@ -126,6 +128,10 @@ export async function POST(req: NextRequest) {
     const body: unknown = await req.json();
     if (body && typeof body === 'object' && 'id' in body && typeof body.id === 'string') id = body.id;
     if (!isValidHappyScribeId(id)) return privateRoleplayResponse({ error: 'Identificador de transcripción no válido.' }, { status: 400 });
+    const proof = body && typeof body === 'object' && 'proof' in body ? body.proof : null;
+    if (!verifyHappyScribeImportProof({ id, organizationId: config.organizationId, userId: auth.user.userId, token: config.token }, proof)) {
+      return privateRoleplayResponse({ error: 'Selección no verificada o caducada. Actualiza la biblioteca y vuelve a intentarlo.' }, { status: 403 });
+    }
 
     const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, config.token, undefined, req.signal);
     if (!detailResponse.ok) return privateRoleplayResponse(
