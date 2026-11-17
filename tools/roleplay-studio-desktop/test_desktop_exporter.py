@@ -169,6 +169,19 @@ class StudioDesktopTests(unittest.TestCase):
         self.project.write_text(json.dumps(self.draft), encoding="utf-8")
         self.assertIsNone(module.discover_local_companion(self.project))
 
+    def test_auto_pair_never_offers_an_invalid_matching_project(self):
+        # A matching source fingerprint must not hide invalid roleplay cuts.
+        self.draft["segments"][0]["speakerRole"] = "interpreter"
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        self.assertIsNone(module.discover_local_companion(self.project))
+        self.assertIsNone(module.discover_local_companion(self.source))
+
+        self.draft["segments"][0]["speakerRole"] = "doctor"
+        self.draft["segments"][0]["end"] = 500
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        self.assertIsNone(module.discover_local_companion(self.project))
+        self.assertIsNone(module.discover_local_companion(self.source))
+
     def test_pair_discovery_is_bounded_and_rejects_invalid_projects_and_links(self):
         # No recursive scan or unbounded inventory of private folders.
         self.assertIsNone(module.discover_local_companion(self.project, max_entries=1))
