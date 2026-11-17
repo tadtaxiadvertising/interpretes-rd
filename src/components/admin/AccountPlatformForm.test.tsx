@@ -38,7 +38,7 @@ describe('account platform and VPN form: no duplicated controls', () => {
     'javascript:alert(1)',
     'http://portal.example.test/login',
     'https://user:password@portal.example.test/login',
-    'https://portal.example.test/lo\\tgin',
+    'https://portal.example.test/lo\tgin',
     'https://portal.example.test/?access_token=private',
     '',
   ])('never reveals an unsafe stored portal URL: %s', url => {
