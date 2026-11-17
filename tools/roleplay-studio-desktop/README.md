@@ -12,6 +12,16 @@ Herramienta **opcional y separada** de Intérpretes RD para convertir cortes de 
 
 El usuario final **no necesita instalar Node.js ni escribir comandos** cuando utiliza el ejecutable empaquetado. El desarrollador sí necesita herramientas de compilación para construirlo.
 
+## Unir intervenciones sin incluir silencios (proyectos v2)
+
+En Audio Studio, coloca dos intervenciones consecutivas del mismo hablante e idioma y pulsa **Unir sin pausa**. Si entre ambas hay más de dos segundos, el editor crea **una intervención compuesta** en un proyecto **JSON versión 2**, con `ranges` que conservan únicamente los tramos seleccionados. «Escuchar unido» permite revisar el resultado; «Separar cortes» lo revierte a dos intervenciones.
+
+**Generar ZIP local** con el exportador de escritorio actualizado o con el exportador Node.js actualizado: FFmpeg extrae ambos intervalos y los concatena a nivel de audio decodificado antes de codificar **un único MP3**. El ZIP generado sigue teniendo el formato y el manifest estándar que importa Intérpretes RD. No se incorpora el tramo intermedio ni se graba o sube el archivo original.
+
+Los proyectos con `ranges` solo funcionan con los exportadores que aceptan **versión 2**; un exportador v1 debe rechazarlos. La plataforma fuerza la preparación local de proyectos compuestos, incluso si antes se había elegido el servidor. El exportador de servidor no soporta esta variante: la rechaza para evitar incluir silencios por error. El modo ordinario de una sola pieza mantiene proyectos **versión 1** y la exportación anterior.
+
+Cada intervención compuesta admite **exactamente dos intervalos**, cada uno de al menos 0,1 s, con pausa estrictamente superior a 2 s y una duración **seleccionada** combinada de hasta 300 s. Se conserva un máximo de 25 intervenciones y 900 s seleccionados por ZIP.
+
 ## Límites y privacidad
 
 - Entrada: MP3, M4A, WAV, AAC, OGG, FLAC, MP4, MOV, WebM y MKV hasta **8 GiB**; duración declarada del proyecto hasta **12 horas**.
