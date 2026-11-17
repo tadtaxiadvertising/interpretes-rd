@@ -75,6 +75,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [validationFocus, setValidationFocus] = useState<{
+    scenarioId: string; field: 'title' | 'audio'; requestId: number;
+  } | null>(null);
+  const validationFocusSequence = useRef(0);
   const [lastRemoved, setLastRemoved] = useState<{ scenario: Scenario; index: number } | null>(null);
   const [bulkResponseLimitSec, setBulkResponseLimitSec] = useState(120);
   // Keep the import identity independent from React render batching. The user
@@ -111,6 +115,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const invalidatePendingImport = useCallback(() => {
     setImportNotice(null);
+    setValidationFocus(null);
     // Undo only the most recent deletion; subsequent edits invalidate it.
     setLastRemoved(null);
     // Increment on every draft edit, including one React processes after an
@@ -372,12 +377,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     for (const [index, scenario] of scenarios.entries()) {
       if (!scenario.title.trim()) {
         setError(`El escenario ${index + 1} necesita un título.`);
-        document.getElementById(`scenario-title-${scenario.id}`)?.focus();
+        setValidationFocus({
+          scenarioId: scenario.id, field: 'title', requestId: ++validationFocusSequence.current,
+        });
         return false;
       }
       if (!scenario.baseAudioFile) {
         setError(`El escenario ${index + 1} necesita un audio válido.`);
-        document.getElementById(`scenario-audio-${scenario.id}`)?.focus();
+        setValidationFocus({
+          scenarioId: scenario.id, field: 'audio', requestId: ++validationFocusSequence.current,
+        });
         return false;
       }
     }
@@ -708,6 +717,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
                 onMoveDown={() => moveScenario(scenario.id, 'down')}
                 isDragging={draggingId === scenario.id}
                 startCollapsed={scenarios.length >= 4 && Boolean(scenario.sha256 && scenario.baseAudioFile)}
+                focusRequest={validationFocus?.scenarioId === scenario.id ? validationFocus : null}
               />
             </div>
           ))}
