@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
+import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 
@@ -30,6 +31,9 @@ async function happyScribeFetch(path: string, token: string, init?: RequestInit,
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
+  if (!(await matchesExplicitAdminBearer(req, auth.user.userId))) {
+    return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
+  }
 
   // Audio transits this frontend VPS. Keep the potentially expensive transfer
   // disabled until an operator explicitly accepts bandwidth/privacy costs.
