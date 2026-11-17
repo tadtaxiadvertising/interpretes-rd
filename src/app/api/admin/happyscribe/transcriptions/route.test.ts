@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { issueHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
@@ -13,6 +14,13 @@ vi.mock('@/lib/auth/actions', () => ({
 }));
 
 vi.mock('@/lib/api-auth', () => ({ actorFromBearer: mocks.actorFromBearer }));
+vi.mock('@/lib/roleplay/happyscribe-settings', () => ({
+  getHappyScribeSettings: vi.fn(async () => ({
+    token: process.env.HAPPY_SCRIBE_API_TOKEN || '',
+    organizationId: process.env.HAPPY_SCRIBE_ORGANIZATION_ID || '',
+    mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true',
+  })),
+}));
 
 vi.mock('@/lib/security/rate-limit', () => ({
   RATE_LIMITS: { audioUpload: { windowMs: 60_000, maxRequests: 20 } },
@@ -23,6 +31,15 @@ vi.mock('@/lib/security/rate-limit', () => ({
 import { GET, POST } from './route';
 
 const transcriptionId = 'a'.repeat(32);
+const organizationId = '123456';
+const userId = 'admin-test';
+function validProof() {
+  return issueHappyScribeImportProof({
+    id: transcriptionId,
+    organizationId, userId,
+    token: process.env.HAPPY_SCRIBE_API_TOKEN || '',
+  });
+}
 const exportId = 'b'.repeat(32);
 
 function importRequest(signal?: AbortSignal) {
@@ -30,7 +47,7 @@ function importRequest(signal?: AbortSignal) {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: transcriptionId }),
+    body: JSON.stringify({ id: transcriptionId, proof: validProof() }),
   });
 }
 
@@ -42,7 +59,7 @@ describe('HappyScribe SRT import download boundary', () => {
     mocks.fetch.mockReset();
     vi.stubGlobal('fetch', mocks.fetch);
     vi.stubEnv('HAPPY_SCRIBE_API_TOKEN', 'test-only-api-token');
-    vi.stubEnv('HAPPY_SCRIBE_ORGANIZATION_ID', '123456');
+    vi.stubEnv('HAPPY_SCRIBE_ORGANIZATION_ID', organizationId);
   });
 
   afterEach(() => {
@@ -214,13 +231,50 @@ describe('HappyScribe SRT import download boundary', () => {
     const mixedRequest = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer invalid-token' },
-      body: JSON.stringify({ id: transcriptionId }),
+      body: JSON.stringify({ id: transcriptionId, proof: validProof() }),
     });
 
     const response = await POST(mixedRequest);
 
     expect(response.status).toBe(403);
     expect(mocks.applyRateLimit).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns a signed selection from the organization-filtered listing', async () => {
+    mocks.fetch.mockResolvedValueOnce(Response.json({
+      results: [{ id: transcriptionId, name: 'Synthetic test transcript', state: 'done' }],
+    }));
+    const response = await GET(new NextRequest('http://localhost/api/admin/happyscribe/transcriptions'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data[0].importProof).toMatch(/^\d{13}\.[a-f0-9]{64}$/);
+    expect(JSON.stringify(body)).not.toContain('test-only-api-token');
+    expect(String(mocks.fetch.mock.calls[0][0])).toContain('organization_id=123456');
+  });
+
+  it('rejects an SRT export without a scoped selection, without contacting the provider', async () => {
+    const unverified = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: transcriptionId }),
+    });
+    const response = await POST(unverified);
+    expect(response.status).toBe(403);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an SRT selection issued for another organization', async () => {
+    const proof = issueHappyScribeImportProof({
+      id: transcriptionId, organizationId: '999999', userId, token: process.env.HAPPY_SCRIBE_API_TOKEN || '',
+    });
+    const req = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: transcriptionId, proof }),
+    });
+    const response = await POST(req);
+    expect(response.status).toBe(403);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
