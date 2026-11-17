@@ -464,6 +464,122 @@ describe('Audio Studio clip review player', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
   });
 
+  it('does not spend provider bandwidth if unsaved edits are not approved for MP3 replacement', async () => {
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return Promise.reject(new Error('Unexpected MP3 transfer'));
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: 'a'.repeat(32), name: 'Remote.mp3', state: 'automatic_done',
+            language: 'en', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    vi.mocked(window.confirm).mockReturnValue(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/i)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
+  });
+
+  it('asks once when preapproved edits stay unchanged during the MP3 transfer', async () => {
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve(new Response(new Uint8Array([0x49, 0x44, 0x33]), { status: 200 }));
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: 'a'.repeat(32), name: 'Remote.mp3', state: 'automatic_done',
+            language: 'en', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+      await Promise.resolve();
+    });
+
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(screen.getByText(/Intervenciones \(0\/25\)/i)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+  });
+
+  it('rechecks consent if new edits appear while the MP3 is downloading', async () => {
+    let complete!: (response: Response) => void;
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Promise<Response>(resolve => { complete = resolve; });
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: 'a'.repeat(32), name: 'Remote.mp3', state: 'automatic_done',
+            language: 'en', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+    expect(window.confirm).toHaveBeenCalledOnce();
+
+    // A new intervention was added after the initial consent; protect it.
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    vi.mocked(window.confirm).mockReturnValue(false);
+    await act(async () => {
+      complete(new Response(new Uint8Array([0x49, 0x44, 0x33]), { status: 200 }));
+      await Promise.resolve();
+    });
+
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Intervenciones \(2\/25\)/i)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Audio original importado desde HappyScribe/)).toBeNull();
+  });
+
   it('lets an administrator cancel a HappyScribe transfer without replacing the recording', async () => {
     const itemId = 'a'.repeat(32);
     let pendingSignal: AbortSignal | undefined;
