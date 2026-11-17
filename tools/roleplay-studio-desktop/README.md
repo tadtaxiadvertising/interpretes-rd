@@ -6,11 +6,11 @@ Herramienta **opcional y separada** de Intérpretes RD para convertir cortes de 
 
 1. En Audio Studio del administrador, abre la grabación y prepara las intervenciones. Para MP3 cortos, el modo **Local (predeterminado)** genera un JSON sin subir audio; si se selecciona explícitamente **Servidor (opcional)**, el ZIP se genera en la plataforma mediante una transferencia del MP3. Para videos y fuentes extensas, solo se permite el modo local. Selecciona **Descargar plan local de cortes (JSON)**.
 2. Descarga el ejecutable compilado correspondiente a Windows, macOS o Linux desde un **artefacto verificado de GitHub Actions**, una vez que un mantenedor haya ejecutado y revisado el empaquetado manual.
-3. Abre **RoleplayStudioLocal**. Selecciona **Grabación original** y **Proyecto JSON**. Pulsa **Validar proyecto** para revisar, sin conversiones, el número de intervenciones y su duración total.
-4. Elige una ruta nueva para **ZIP de salida** y presiona **Generar ZIP local**. La aplicación muestra el progreso, desactiva los campos durante el proceso y permite cancelar, eliminando temporales.
-5. En Intérpretes RD, ve al formulario **Crear roleplay**, importa el ZIP y asígnalo al participante autorizado.
+3. Abre **RoleplayStudioLocal** y pulsa **Elegir grabación + JSON (2 archivos)**. Si ambos archivos están en la misma carpeta, puedes seleccionarlos en un solo diálogo. Si están en carpetas diferentes, selecciona uno y la aplicación abrirá automáticamente el diálogo para elegir el otro. También puedes elegirlos individualmente con «Examinar…».
+4. La aplicación propone automáticamente un nombre **ZIP disponible** en la misma carpeta del proyecto, sin reemplazar otros paquetes. Puedes cambiarlo si lo deseas. Pulsa **Generar ZIP local**: se vuelve a verificar que JSON y grabación coincidan antes de convertir. **Validar proyecto** es opcional y permite revisar previamente intervenciones y duración, sin transcodificar.
+5. En Intérpretes RD, ve al formulario **Crear roleplay**, importa el ZIP y asígnalo al participante autorizado. Al terminar una exportación se propone un nombre libre para el siguiente paquete.
 
-El usuario final **no necesita instalar Node.js ni escribir comandos** cuando utiliza el ejecutable empaquetado. El desarrollador sí necesita herramientas de compilación para construirlo.
+El usuario final **no necesita instalar Node.js ni escribir comandos para generar el ZIP** cuando utiliza el ejecutable empaquetado. La verificación de la descarga puede hacerla un administrador. El desarrollador sí necesita herramientas de compilación para construirlo.
 
 ## Unir intervenciones sin incluir silencios (proyectos v2)
 
@@ -44,6 +44,14 @@ Los pull requests ejecutan pruebas del exportador y **no publican ejecutables au
 | Windows | RoleplayStudioLocal-windows.zip | Aplicación sin firma Authenticode |
 | macOS | RoleplayStudioLocal-macos.zip | App sin firma ni notarización |
 | Linux | RoleplayStudioLocal-linux.tar.gz | Puede requerir bibliotecas gráficas/Tk |
+
+Cada artefacto contiene ahora el archivo **`SHA256SUMS.txt`** junto con el ZIP/TAR.GZ del ejecutable. El workflow calcula su SHA-256 después de empaquetar y lo comprueba antes de subirlo. Puedes verificar la descarga desde una terminal, situándote en la carpeta de ambos archivos:
+
+- **Linux:** `sha256sum -c SHA256SUMS.txt`
+- **macOS:** `shasum -a 256 -c SHA256SUMS.txt`
+- **Windows PowerShell:** `(Get-FileHash .\\RoleplayStudioLocal-windows.zip -Algorithm SHA256).Hash` y comparar el resultado (sin distinguir mayúsculas/minúsculas) con el código de `SHA256SUMS.txt`.
+
+**La suma SHA-256 detecta archivos dañados o alterados con respecto al manifiesto descargado, pero no autentica al autor ni sustituye una firma digital.** Verifica que ambos archivos provienen del **mismo artefacto del workflow** [Roleplay Audio Studio - local desktop exporter](https://github.com/tadtaxiadvertising/interpretes-rd/actions/workflows/roleplay-studio-desktop.yml), que el commit corresponde al código revisado y que el job de empaquetado fue exitoso.
 
 Los artefactos de GitHub Actions pueden requerir autenticación y caducan según la retención. **El software todavía no está firmado ni notarizado**; pueden aparecer advertencias del sistema operativo. Verifica personalmente la procedencia del binario antes de distribuirlo.
 

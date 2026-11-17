@@ -92,11 +92,16 @@ jobs:
       - name: Archive Linux application
         if: runner.os == 'Linux'
         run: tar -czf RoleplayStudioLocal-linux.tar.gz -C dist RoleplayStudioLocal
+      - name: Generate and verify SHA-256 archive manifest
+        run: |
+          python tools/roleplay-studio-desktop/archive_checksums.py
+          python tools/roleplay-studio-desktop/archive_checksums.py --verify
       - uses: actions/upload-artifact@v4
         with:
           name: roleplay-studio-${{ runner.os }}
           path: |
             RoleplayStudioLocal-*.zip
             RoleplayStudioLocal-*.tar.gz
+            SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7

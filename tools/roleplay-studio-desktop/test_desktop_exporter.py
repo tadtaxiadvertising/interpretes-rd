@@ -63,6 +63,47 @@ class StudioDesktopTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    def test_one_dialog_recognizes_source_and_json_in_any_order(self):
+        self.assertEqual(module.recognize_media_and_project(
+            [str(self.project), str(self.source)]),
+            (str(self.source), str(self.project)))
+        self.assertEqual(module.recognize_media_and_project(
+            [str(self.source), str(self.project)]),
+            (str(self.source), str(self.project)))
+        for selection in ([str(self.project)], [str(self.source), str(self.source)],
+                          [str(self.project), str(self.project)], [],
+                          [str(self.source), str(self.project), str(self.source)]):
+            with self.subTest(selection=selection), self.assertRaises(module.ExportError):
+                module.recognize_media_and_project(selection)
+
+    def test_zip_suggestion_avoids_existing_and_symlinked_outputs(self):
+        folder = self.project.parent
+        first = folder / "roleplay-studio.zip"
+        self.assertEqual(module.suggest_local_zip_path(self.project), str(first))
+        first.write_bytes(b"existing package must survive")
+        self.assertEqual(module.suggest_local_zip_path(self.project),
+                         str(folder / "roleplay-studio-2.zip"))
+        target = folder / "protected.bin"
+        target.write_bytes(b"private")
+        candidate = folder / "roleplay-studio-2.zip"
+        try:
+            candidate.symlink_to(target)
+        except (OSError, NotImplementedError):
+            candidate.write_bytes(b"occupied")
+        self.assertEqual(module.suggest_local_zip_path(self.project),
+                         str(folder / "roleplay-studio-3.zip"))
+        self.assertEqual(first.read_bytes(), b"existing package must survive")
+        self.assertEqual(target.read_bytes(), b"private")
+        with self.assertRaises(module.ExportError):
+            module.suggest_local_zip_path(self.source)
+
+    def test_zip_suggestion_fails_when_all_suggested_names_are_occupied(self):
+        # Avoid creating a thousand files: simulate the occupied-path guard.
+        from unittest.mock import patch
+        with patch.object(module.Path, "exists", return_value=True):
+            with self.assertRaisesRegex(module.ExportError, "No hay un nombre ZIP"):
+                module.suggest_local_zip_path(self.project)
+
     def test_fingerprint_matches_independent_hash_framing(self):
         import hashlib
         size = self.source.stat().st_size
