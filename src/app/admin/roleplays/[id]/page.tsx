@@ -11,8 +11,8 @@ import { formatDate } from '@/lib/utils';
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
-  title: 'Roleplay Evaluation',
-  description: 'Evaluate roleplay session',
+  title: 'Evaluación de roleplay',
+  description: 'Evalúa una sesión de roleplay',
 };
 
 interface PageProps {
@@ -66,8 +66,8 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white mb-2">Roleplay Evaluation</h1>
-            <p className="text-gray-400">Session: {session.id.slice(0, 12)}...</p>
+            <h1 className="text-3xl font-bold text-white mb-2">Evaluación de roleplay</h1>
+            <p className="text-gray-400">Sesión: {session.id.slice(0, 12)}...</p>
           </div>
           <div className="flex items-center gap-4">
             <span className={`px-3 py-1 rounded-full text-xs font-bold ${
@@ -80,11 +80,11 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Participant Info */}
+        {/* Participante Info */}
         <div className="glass p-6 rounded-2xl border border-white/5 mb-8">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div>
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Participant</h3>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Participante</h3>
               <p className="text-lg font-bold text-white">
                 {session.interpreter?.name || session.recruitmentCandidate?.name || 'Unknown'}
               </p>
@@ -96,17 +96,17 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
               </p>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Status</h3>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Estado</h3>
               <p className="text-lg font-bold text-white">
                 {session.status}
                 {session.status === 'EVALUATED' && session.evaluatedAt && ` • ${formatDate(session.evaluatedAt)}`}
               </p>
               {session.submittedAt && (
-                <p className="text-sm text-gray-400 mt-1">Submitted: {formatDate(session.submittedAt)}</p>
+                <p className="text-sm text-gray-400 mt-1">Enviada: {formatDate(session.submittedAt)}</p>
               )}
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Scenarios</h3>
+              <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-2">Escenarios</h3>
               <p className="text-lg font-bold text-white">
                 {session.scenarios.length}
               </p>
@@ -117,7 +117,7 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* Scenarios Evaluation */}
+        {/* Escenarios Evaluation */}
         {scenarios.length > 0 && (
           <div className="space-y-6">
             {scenarios.map((scenario, index) => (
@@ -125,7 +125,7 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
                 key={scenario.id}
                 scenario={scenario}
                 scenarioIndex={index + 1}
-                totalScenarios={scenarios.length}
+                totalEscenarios={scenarios.length}
                 sessionId={session.id}
                 isEvaluated={session.status === 'EVALUATED'}
                 qaScore={session.qaScore}
@@ -136,7 +136,7 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
 
         {!scenarios.length && (
           <div className="glass p-12 rounded-3xl border border-white/5 text-center">
-            <p className="text-gray-400">No scenarios configured for this session.</p>
+            <p className="text-gray-400">No hay escenarios configurados para esta sesión.</p>
           </div>
         )}
       </div>
@@ -147,7 +147,7 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
 interface ScenarioEvaluationCardProps {
   scenario: any;
   scenarioIndex: number;
-  totalScenarios: number;
+  totalEscenarios: number;
   sessionId: string;
   isEvaluated: boolean;
   qaScore: any;
@@ -156,7 +156,7 @@ interface ScenarioEvaluationCardProps {
 function ScenarioEvaluationCard({ 
   scenario, 
   scenarioIndex, 
-  totalScenarios,
+  totalEscenarios,
   sessionId,
   isEvaluated,
   qaScore
@@ -167,14 +167,14 @@ function ScenarioEvaluationCard({
 
   return (
     <div className="glass p-6 rounded-2xl border border-white/5">
-      {/* Scenario Header */}
+      {/* Escenario Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-blue-500/10 rounded-xl flex items-center justify-center">
             <span className="text-blue-400 font-bold text-lg">{scenarioIndex}</span>
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white">{scenario.title || `Scenario ${scenarioIndex}`}</h3>
+            <h3 className="text-lg font-bold text-white">{scenario.title || `Escenario ${scenarioIndex}`}</h3>
             <p className="text-sm text-gray-400">
               {scenario.durationLimitSec ? `Time limit: ${Math.floor(scenario.durationLimitSec / 60)}:${(scenario.durationLimitSec % 60).toString().padStart(2, '0')}` : 'Default limit (5:00 max)'}
             </p>
@@ -265,12 +265,12 @@ function ScenarioEvaluationCard({
           </div>
           {response.selfScore?.criticalError && (
             <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-              <p className="text-red-400 font-bold">⚠ Critical Error Flagged</p>
+              <p className="text-red-400 font-bold">⚠ Error crítico detectado</p>
             </div>
           )}
           {response.selfNotes && (
             <div className="mt-4">
-              <p className="text-xs text-gray-500 mb-1">Notes:</p>
+              <p className="text-xs text-gray-500 mb-1">Notas:</p>
               <p className="text-sm text-gray-300">{response.selfNotes}</p>
             </div>
           )}
