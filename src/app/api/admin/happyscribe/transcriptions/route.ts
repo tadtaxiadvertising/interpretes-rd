@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
@@ -17,7 +18,7 @@ function configuration() {
   return { token, organizationId };
 }
 
-async function happyScribeFetch(path: string, token: string, init?: RequestInit) {
+async function happyScribeFetch(path: string, token: string, init?: RequestInit, requestSignal?: AbortSignal) {
   return fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -26,7 +27,9 @@ async function happyScribeFetch(path: string, token: string, init?: RequestInit)
       ...(init?.headers ?? {}),
     },
     cache: 'no-store',
-    signal: AbortSignal.timeout(20_000),
+    signal: requestSignal
+      ? AbortSignal.any([requestSignal, AbortSignal.timeout(20_000)])
+      : AbortSignal.timeout(20_000),
   });
 }
 
@@ -54,7 +57,7 @@ export async function GET(req: NextRequest) {
   try {
     const upstream = await happyScribeFetch(
       `/transcriptions?organization_id=${encodeURIComponent(config.organizationId)}&page=${page}&per_page=50`,
-      config.token,
+      config.token, undefined, req.signal,
     );
     if (!upstream.ok) {
       const status = upstream.status === 401 || upstream.status === 403 ? 502
@@ -117,7 +120,7 @@ export async function POST(req: NextRequest) {
     if (body && typeof body === 'object' && 'id' in body && typeof body.id === 'string') id = body.id;
     if (!isValidHappyScribeId(id)) return privateRoleplayResponse({ error: 'Identificador de transcripción no válido.' }, { status: 400 });
 
-    const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, config.token);
+    const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, config.token, undefined, req.signal);
     if (!detailResponse.ok) return privateRoleplayResponse(
       { error: detailResponse.status === 404 ? 'Transcripción no encontrada.' : 'No fue posible verificar la transcripción.' },
       { status: detailResponse.status === 404 ? 404 : 502 },
@@ -132,7 +135,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ export: { format: 'srt', transcription_ids: [id] } }),
-    });
+    }, req.signal);
     if (!createResponse.ok) return privateRoleplayResponse({ error: 'HappyScribe no pudo preparar el archivo SRT.' }, { status: 502 });
     const created: unknown = await createResponse.json();
     const exportId = created && typeof created === 'object' && 'id' in created && typeof created.id === 'string'
@@ -141,7 +144,7 @@ export async function POST(req: NextRequest) {
 
     let downloadLink: string | null = null;
     for (let attempt = 0; attempt < 12; attempt++) {
-      const statusResponse = await happyScribeFetch(`/exports/${exportId}`, config.token);
+      const statusResponse = await happyScribeFetch(`/exports/${exportId}`, config.token, undefined, req.signal);
       if (!statusResponse.ok) break;
       const status: unknown = await statusResponse.json();
       if (status && typeof status === 'object' && 'state' in status) {
@@ -152,7 +155,7 @@ export async function POST(req: NextRequest) {
         }
         if (status.state === 'failed' || status.state === 'expired') break;
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await delay(1000, undefined, { signal: req.signal });
     }
     if (!downloadLink) return privateRoleplayResponse(
       { error: 'La exportación aún no está disponible. Inténtalo nuevamente en unos segundos.' },
@@ -165,7 +168,8 @@ export async function POST(req: NextRequest) {
     }
     // Follow only a small number of HTTPS redirects to approved provider or
     // AWS storage hosts; never let an allowed URL redirect to private services.
-    const fileResponse = await fetchHappyScribeExport(downloadLink, AbortSignal.timeout(15_000));
+    const fileResponse = await fetchHappyScribeExport(downloadLink,
+      AbortSignal.any([req.signal, AbortSignal.timeout(15_000)]));
     if (!fileResponse.ok) {
       await discardHappyScribeDownload(fileResponse);
       return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
@@ -184,7 +188,7 @@ export async function POST(req: NextRequest) {
       if (done) break;
       totalBytes += value.byteLength;
       if (totalBytes > 5_000_000) {
-        await reader.cancel();
+        try { await reader.cancel(); } catch { /* Preserve 413 if upstream cleanup fails. */ }
         return privateRoleplayResponse({ error: 'El SRT supera el tamaño admitido.' }, { status: 413 });
       }
       chunks.push(value);
