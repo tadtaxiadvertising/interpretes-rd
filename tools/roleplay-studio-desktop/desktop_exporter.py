@@ -520,6 +520,25 @@ def run_desktop():
         )
         if not selected:
             return
+        # Tk cannot select files from two directories in a single dialog.
+        # A one-file selection seamlessly opens the complementary picker.
+        if len(selected) == 1:
+            first = selected[0]
+            if Path(first).suffix.lower() == ".json":
+                second = filedialog.askopenfilename(
+                    title="Ahora selecciona la grabación original",
+                    filetypes=labels[0][1])
+            elif Path(first).suffix.lower().lstrip(".") in EXTENSIONS:
+                second = filedialog.askopenfilename(
+                    title="Ahora selecciona el proyecto JSON",
+                    filetypes=labels[1][1])
+            else:
+                messagebox.showwarning(
+                    "Archivo no válido", "Selecciona una grabación o un proyecto JSON.")
+                return
+            if not second:
+                return
+            selected = (first, second)
         try:
             source, project = recognize_media_and_project(selected)
         except ExportError as exc:
