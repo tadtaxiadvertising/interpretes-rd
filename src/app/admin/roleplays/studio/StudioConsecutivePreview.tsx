@@ -41,7 +41,7 @@ export default function StudioConsecutivePreview({
       };
     }
   }, [segments, sourceDuration]);
-  const turns = result.plan?.turns ?? [];
+  const turns = useMemo(() => result.plan?.turns ?? [], [result.plan]);
 
   const [index, setIndex] = useState(0);
   const [phase, setPhase] = useState<PreviewPhase>('idle');
