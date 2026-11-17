@@ -79,6 +79,12 @@ jobs:
           CI: 'true'
         run: npx tsx scripts/verify-account-platform-vpn-guard.ts
 
+      # Lock down the legacy QA response contract while directing API
+      # consumers to verified, paginated ProductionLog review status.
+      # This test does not bypass the unchanged supply-chain audit gate.
+      - name: Verify QA legacy pending deprecation contract
+        run: npx vitest run src/app/api/v1/qa/pending/__tests__/route.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
