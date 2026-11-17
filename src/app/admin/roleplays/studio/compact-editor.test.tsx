@@ -52,6 +52,49 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByText(/#1 · Intervención 1/)).toBeNull();
   });
 
+  it('identifies a missing title and reopens the intervention hidden by an active search', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Vista compacta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Contraer' }));
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement;
+    fireEvent.change(search, { target: { value: 'ningún resultado' } });
+    expect(screen.queryByLabelText('Título')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
+    expect(screen.getAllByRole('alert').some(item =>
+      item.textContent?.includes('Intervención 1: añade un título'))).toBe(true);
+    expect(screen.getByText('añade un título antes de exportar.')).toBeTruthy();
+    expect(search.value).toBe('');
+    expect(screen.getByLabelText('Título')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Contraer' })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Ir al inicio de intervención 1' }).closest('article'),
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
+  it('reveals an interpreter-original turn for correction instead of exporting it', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), {
+      target: { value: 'interpreter' },
+    });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'turno oculto' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
+    expect(screen.getAllByRole('alert').some(item =>
+      item.textContent?.includes('Intervención 1: elimina el fragmento del intérprete original'))).toBe(true);
+    expect(screen.getByText('elimina el fragmento del intérprete original antes de exportar el roleplay.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Excluir 1 intervención del intérprete' })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Ir al inicio de intervención 1' }).closest('article'),
+    );
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
   it('automatically shows condensed rows for larger sets, with accessible editors', () => {
     loadAudio(240);
     for (let i = 0; i < 6; i++) {

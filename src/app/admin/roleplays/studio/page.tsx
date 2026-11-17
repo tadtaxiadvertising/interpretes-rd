@@ -105,6 +105,16 @@ export default function RoleplayStudioPage() {
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
+  const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number } | null>(null);
+  const exportFocusAttempt = useRef(0);
+  // Focus the first invalid clip after filters have been cleared and the row
+  // has been rendered again. No media file is read or uploaded by this action.
+  useEffect(() => {
+    if (!invalidExportTurn) return;
+    const article = document.getElementById(`studio-intervention-${invalidExportTurn.id}`);
+    article?.focus({ preventScroll: true });
+    article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [invalidExportTurn]);
   const [turnActionFeedback, setTurnActionFeedback] = useState<{
     id: string; message: string; error: boolean;
   } | null>(null);
@@ -963,23 +973,50 @@ export default function RoleplayStudioPage() {
     if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
-    if (segments.some(segment => segment.speakerRole === 'interpreter')) {
-      setError('Hay intervenciones etiquetadas como Intérprete. Elimina esos fragmentos antes de exportar un roleplay para candidatos o intérpretes.');
+    setTurnActionFeedback(null);
+    const ordered = [...segments].sort((a, b) => a.start - b.start);
+    const revealInvalidTurn = (segment: Segment, index: number, reason: string) => {
+      // Export is blocked before saving or uploading anything. Surface the
+      // exact turn, even if a search or pending-only filter was hiding it.
+      setSegmentSearch('');
+      setShowPendingReview(false);
+      setExpandedSegmentId(segment.id);
+      setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
+      setTurnActionFeedback({ id: segment.id, message: reason, error: true });
+      setError(`Intervención ${index + 1}: ${reason}`);
+    };
+    // The original interpreter is never exportable: surface this safety
+    // requirement before any other editorial validation, as before.
+    const interpreterIndex = ordered.findIndex(item => item.speakerRole === 'interpreter');
+    if (interpreterIndex !== -1) {
+      revealInvalidTurn(ordered[interpreterIndex], interpreterIndex,
+        'elimina el fragmento del intérprete original antes de exportar el roleplay.');
       return;
     }
-    const ordered = [...segments].sort((a, b) => a.start - b.start);
     let end = 0;
     let total = 0;
-    for (const segment of ordered) {
+    for (const [index, segment] of ordered.entries()) {
       const ranges = validStudioRanges(segment, duration);
-      if (!segment.title.trim() || segment.title.length > 200 ||
-        !ranges || segment.start < end ||
-        segment.scriptPrompt.length > 5000 ||
-        !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
-        segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) {
-        setError('Corrige las intervenciones: orden, títulos, cortes válidos, máximo de 5 minutos de audio seleccionado y ausencia de solapamientos.');
+      const issue = !segment.title.trim()
+        ? 'añade un título antes de exportar.'
+        : segment.title.length > 200
+          ? 'reduce el título a 200 caracteres o menos.'
+          : !ranges
+            ? 'corrige los límites de corte (máximo 5 minutos de audio seleccionado).'
+            : segment.start < end
+              ? 'este corte se solapa con la intervención anterior.'
+              : segment.scriptPrompt.length > 5000
+                ? 'reduce las instrucciones a 5000 caracteres o menos.'
+                : !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
+                    segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC
+                  ? `ajusta el tiempo de respuesta entre 0 y ${ROLEPLAY_RESPONSE_MAX_DURATION_SEC} segundos.`
+                  : null;
+      if (issue) {
+        revealInvalidTurn(segment, index, issue);
         return;
       }
+      // An invalid range always produces an issue above, before this point.
+      if (!ranges) return;
       end = segment.end;
       total += studioSelectedSeconds(ranges);
     }
@@ -1686,7 +1723,8 @@ export default function RoleplayStudioPage() {
             </p>
           )}
           {visibleSegments.map(({ segment, index }) => (
-            <article key={segment.id} className="space-y-2 rounded-lg border border-white/10 bg-slate-950/70 p-2.5">
+            <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
+              className="space-y-2 rounded-lg border border-white/10 bg-slate-950/70 p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
                   #{index + 1} · {segment.title}
@@ -1952,11 +1990,12 @@ export default function RoleplayStudioPage() {
           )}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
-          <button type="button" onClick={() => void exportPackage()} disabled={busy || analyzingSilences || !segments.length}
+          <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
             <Download size={18} /> {busy
               ? 'Procesando segmentos…'
-              : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
+              : draftBusy ? 'Verificando proyecto…'
+                : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
           </button>
         </section>
       )}
