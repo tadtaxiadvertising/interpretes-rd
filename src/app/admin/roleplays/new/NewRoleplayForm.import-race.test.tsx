@@ -39,7 +39,7 @@ describe('Admin roleplay import concurrency', () => {
     });
   });
 
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
   const chooseManifest = () => {
     fireEvent.change(screen.getByLabelText(/Importar roleplay preparado/i), {
