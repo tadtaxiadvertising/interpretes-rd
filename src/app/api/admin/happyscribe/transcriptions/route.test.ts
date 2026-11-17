@@ -69,7 +69,7 @@ describe('HappyScribe SRT import download boundary', () => {
   });
 
   it('accepts a direct HTTPS SRT from the approved host', async () => {
-    const srt = '1\\n00:00:00,000 --> 00:00:01,000\\nDoctor: Hello\\n';
+    const srt = '1\n00:00:00,000 --> 00:00:01,000\nDoctor: Hello\n';
     mocks.fetch
       .mockResolvedValueOnce(Response.json({ state: 'done' }))
       .mockResolvedValueOnce(Response.json({ id: exportId }))
