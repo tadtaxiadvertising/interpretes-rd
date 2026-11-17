@@ -153,10 +153,12 @@ describe('Audio Studio compact editing', () => {
       target: { value: 'en' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
-    expect(screen.queryByText(/#1 · Intervención 1/)).toBeNull();
-    expect(screen.getByText(/#2 · Intervención 2/)).toBeTruthy();
+    // The visible title is now updated automatically after classifying its
+    // speaker; row identity must not depend on the old placeholder title.
+    expect(screen.queryByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
-    expect(screen.getByText(/#1 · Intervención 1/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
   });
 
   it('seeks directly to an intervention without playing or changing the editor', () => {
@@ -223,7 +225,13 @@ describe('Audio Studio compact editing', () => {
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [replacement] },
     });
+    // Replacing the file intentionally resets duration until the browser
+    // supplies fresh media metadata; jsdom never does so automatically.
+    const player = document.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(player);
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(window.confirm).toHaveBeenCalledTimes(2);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
@@ -304,7 +312,10 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toMatch(/No se pueden unir voces o idiomas distintos/);
-    expect(alert.closest('article')?.textContent).toMatch(/Intervención 1/);
+    // Profile classification changes the displayed title, not the row ID.
+    expect(alert.closest('article')?.querySelector(
+      '[aria-label="Ir al inicio de intervención 1"]',
+    )).not.toBeNull();
   });
 
   it('physically joins two compatible distant cuts into one local-only v2 scene without the gap', () => {
