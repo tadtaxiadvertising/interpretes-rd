@@ -110,6 +110,7 @@ export default function RoleplayStudioPage() {
   const exportRevision = useRef(0);
   const exportAbort = useRef<AbortController | null>(null);
   const happyScribeMediaAbort = useRef<AbortController | null>(null);
+  const happyScribeTranscriptAbort = useRef<AbortController | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
@@ -265,6 +266,8 @@ export default function RoleplayStudioPage() {
     exportAbort.current?.abort();
     happyScribeMediaAbort.current?.abort();
     happyScribeMediaAbort.current = null;
+    happyScribeTranscriptAbort.current?.abort();
+    happyScribeTranscriptAbort.current = null;
   }, []);
 
   // Edits invalidate the ZIP snapshot immediately: never download an older
@@ -299,6 +302,9 @@ export default function RoleplayStudioPage() {
     happyScribeMediaAbort.current?.abort();
     happyScribeMediaAbort.current = null;
     setHappyScribeMediaImporting(false);
+    happyScribeTranscriptAbort.current?.abort();
+    happyScribeTranscriptAbort.current = null;
+    setHappyScribeImporting(false);
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
     draftOperationRevision.current += 1;
@@ -1138,11 +1144,13 @@ export default function RoleplayStudioPage() {
     // Discard provider exports that finish after an audio replacement or edit.
     const sourceAtRequest = audio;
     const revisionAtRequest = subtitleImportRevision.current;
+    const controller = new AbortController();
+    happyScribeTranscriptAbort.current = controller;
     setHappyScribeImporting(true);
     setError('');
     try {
       const response = await fetch('/api/admin/happyscribe/transcriptions', {
-        method: 'POST', credentials: 'same-origin',
+        method: 'POST', credentials: 'same-origin', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id }),
       });
@@ -1150,19 +1158,22 @@ export default function RoleplayStudioPage() {
       if (!response.ok || !body?.success || typeof body.data?.content !== 'string') {
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible importar el SRT.');
       }
-      if (revisionAtRequest !== subtitleImportRevision.current ||
+      if (controller.signal.aborted || revisionAtRequest !== subtitleImportRevision.current ||
           activeAudioFile.current !== sourceAtRequest) return;
       const file = new File([body.data.content], item.name.replace(/\\.[^.]+$/, '') + '.srt', {
         type: 'application/x-subrip',
       });
       await importSubtitles(file);
     } catch (cause) {
-      if (revisionAtRequest === subtitleImportRevision.current &&
+      if (!controller.signal.aborted && revisionAtRequest === subtitleImportRevision.current &&
           activeAudioFile.current === sourceAtRequest) {
         setError(cause instanceof Error ? cause.message : 'No fue posible importar desde HappyScribe.');
       }
     } finally {
-      setHappyScribeImporting(false);
+      if (happyScribeTranscriptAbort.current === controller) {
+        happyScribeTranscriptAbort.current = null;
+        setHappyScribeImporting(false);
+      }
     }
   };
 
@@ -1378,6 +1389,17 @@ export default function RoleplayStudioPage() {
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
               </button>
+              {happyScribeImporting && (
+                <button type="button" onClick={() => {
+                  happyScribeTranscriptAbort.current?.abort();
+                  happyScribeTranscriptAbort.current = null;
+                  subtitleImportRevision.current += 1;
+                  setHappyScribeImporting(false);
+                }}
+                  className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
+                  Cancelar transcripción
+                </button>
+              )}
             </div>
           )}
           {happyScribeItems.length === 0 && !happyScribeLoading && (
