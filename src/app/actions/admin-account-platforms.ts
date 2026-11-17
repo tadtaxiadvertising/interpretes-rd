@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { isIP } from 'node:net';
 import { safeHttpsUrl, rejectCredentialLikeText } from '@/lib/platform-input-security';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const optionalText = (max: number) => z.string().trim().max(max).refine(rejectCredentialLikeText);
 
@@ -76,7 +77,7 @@ export async function createAccountPlatform(formData: FormData) {
     revalidatePath('/admin/accounts');
     return { success: true };
   } catch (error) {
-    console.error('[PLATFORMS] Create failed', error);
+    console.error('[PLATFORMS] Create failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar la plataforma. Comprueba la cuenta y el nombre.' };
   }
 }
