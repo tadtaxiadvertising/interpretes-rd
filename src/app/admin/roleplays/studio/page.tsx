@@ -1313,6 +1313,55 @@ export default function RoleplayStudioPage() {
             // picker is cancelled. Preserve the existing source and edits.
             if (file) chooseAudio(file);
           }} />
+        {/* This library must be available before choosing an audio source. */}
+        <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-emerald-100">Importar desde HappyScribe</p>
+          <p className="mt-1 text-xs text-slate-400">
+            Importa el MP3 original desde HappyScribe o selecciónalo en tu equipo. Después importa los tiempos y textos; revisa las voces antes de excluir al intérprete original.
+          </p>
+        </div>
+        <button type="button" onClick={() => void loadHappyScribeItems()}
+          disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
+          className="rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-emerald-100 disabled:opacity-50">
+          {happyScribeLoading ? 'Consultando…' : 'Actualizar biblioteca'}
+        </button>
+      </div>
+      {happyScribeItems.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <select aria-label="Transcripción de HappyScribe"
+            disabled={happyScribeImporting || happyScribeLoading}
+            value={happyScribeSelectedId}
+            onChange={event => setHappyScribeSelectedId(event.currentTarget.value)}
+            className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
+            <option value="">Selecciona una transcripción</option>
+            {happyScribeItems.map(item => (
+              <option key={item.id} value={item.id} disabled={!['automatic_done', 'done'].includes(item.state)}>
+                {item.name} · {item.state} · {item.language || 'Idioma desconocido'}
+              </option>
+            ))}
+          </select>
+          {happyScribeMediaEnabled && (
+            <button type="button" onClick={() => void importHappyScribeAudio()}
+              disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
+                happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
+              className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
+              {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
+            </button>
+          )}
+          <button type="button" onClick={() => void importHappyScribeTranscript()}
+            disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
+          </button>
+        </div>
+      )}
+      {happyScribeItems.length === 0 && !happyScribeLoading && (
+        <p className="mt-2 text-xs text-slate-500">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
+      )}
+    </div>
+
         {url && (
           <div className="mt-5 space-y-3">
             {videoSource
@@ -1590,53 +1639,6 @@ export default function RoleplayStudioPage() {
                   event.currentTarget.value = '';
                   if (file) void importSubtitles(file);
                 }}/>
-              <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-emerald-100">Importar desde HappyScribe</p>
-                    <p className="mt-1 text-xs text-slate-400">
-                      Carga primero el audio original. Importa los tiempos y textos; identifica y revisa las voces antes de excluir al intérprete original.
-                    </p>
-                  </div>
-                  <button type="button" onClick={() => void loadHappyScribeItems()}
-                    disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
-                    className="rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-emerald-100 disabled:opacity-50">
-                    {happyScribeLoading ? 'Consultando…' : 'Actualizar biblioteca'}
-                  </button>
-                </div>
-                {happyScribeItems.length > 0 && (
-                  <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                    <select aria-label="Transcripción de HappyScribe"
-                      disabled={happyScribeImporting || happyScribeLoading}
-                      value={happyScribeSelectedId}
-                      onChange={event => setHappyScribeSelectedId(event.currentTarget.value)}
-                      className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
-                      <option value="">Selecciona una transcripción</option>
-                      {happyScribeItems.map(item => (
-                        <option key={item.id} value={item.id} disabled={!['automatic_done', 'done'].includes(item.state)}>
-                          {item.name} · {item.state} · {item.language || 'Idioma desconocido'}
-                        </option>
-                      ))}
-                    </select>
-                    {happyScribeMediaEnabled && (
-                      <button type="button" onClick={() => void importHappyScribeAudio()}
-                        disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
-                          happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
-                        className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
-                        {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
-                      </button>
-                    )}
-                    <button type="button" onClick={() => void importHappyScribeTranscript()}
-                      disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
-                      className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-                      {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
-                    </button>
-                  </div>
-                )}
-                {happyScribeItems.length === 0 && !happyScribeLoading && (
-                  <p className="mt-2 text-xs text-slate-500">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
-                )}
-              </div>
               <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
                 <input type="checkbox" checked={excludeInterpreter}
                   onChange={event => {
