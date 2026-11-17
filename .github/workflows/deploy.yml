@@ -71,6 +71,14 @@ jobs:
       - name: Verify VPN migration guard regression tests
         run: npx vitest run scripts/account-platform-vpn-schema.test.ts
 
+      # Run the exact migration runner on disposable localhost PostgreSQL:
+      # initial application, repeat no-op, partial schema, and forged CHECK.
+      # Production URLs are rejected by the verifier, and no SQL is deployed.
+      - name: Verify VPN migration guard on isolated PostgreSQL
+        env:
+          CI: 'true'
+        run: npx tsx scripts/verify-account-platform-vpn-guard.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
