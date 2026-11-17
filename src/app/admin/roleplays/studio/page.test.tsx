@@ -20,6 +20,10 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    // Replacing a source with edits requires an explicit confirmation in the
+    // browser; jsdom does not implement confirm(). These particular tests
+    // exercise the accepted-replacement path rather than cancellation.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   afterEach(() => {
