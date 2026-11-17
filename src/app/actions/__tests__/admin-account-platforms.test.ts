@@ -96,7 +96,7 @@ describe('createAccountPlatform VPN configuration', () => {
     const result = await createAccountPlatform(makeForm({
       accountId: '12',
       name: 'Portal principal',
-      loginUrl: 'https://portal.example.test/lo\\tgin',
+      loginUrl: 'https://portal.example.test/lo\tgin',
     }));
     expect(result.success).toBe(false);
     expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
@@ -113,7 +113,7 @@ describe('createAccountPlatform VPN configuration', () => {
       }));
       expect(result.success).toBe(false);
       expect(spy).toHaveBeenCalledWith('[PLATFORMS] Create failed', 'Error');
-      expect(JSON.stringify(spy.mock.calls)).not.toMatch(/PRIVATE_CREDENTIAL|database\\.internal\\.invalid|postgresql:/);
+      expect(JSON.stringify(spy.mock.calls)).not.toMatch(/PRIVATE_CREDENTIAL|database\.internal\.invalid|postgresql:/);
     } finally {
       spy.mockRestore();
     }
