@@ -1374,12 +1374,6 @@ export default function RoleplayStudioPage() {
                   // Some transports do not settle promptly after abort.
                   // Allow the newly selected recording to be imported at once.
                   setHappyScribeMediaImporting(false);
-                  if (happyScribeMediaAbort.current) {
-                    happyScribeMediaAbort.current.abort();
-                    happyScribeMediaAbort.current = null;
-                    // A hung network request must not keep a new selection busy.
-                    setHappyScribeMediaImporting(false);
-                  }
                   setHappyScribeSelectedId(event.currentTarget.value);
                 }}
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
