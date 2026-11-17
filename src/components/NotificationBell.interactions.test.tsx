@@ -42,7 +42,8 @@ describe('NotificationBell interactions', () => {
       expect(screen.queryByRole('button', { name: 'Marcar como leída: Auditoría QA' })).toBeNull();
     });
     expect(screen.getByRole('button', { name: 'Marcar como leída: Turno nuevo' })).toBeTruthy();
-    expect(m.markNotificationAsRead).toHaveBeenCalledExactlyOnceWith('n1');
+    expect(m.markNotificationAsRead).toHaveBeenCalledOnce();
+    expect(m.markNotificationAsRead).toHaveBeenCalledWith('n1');
   });
 
   it('prevents duplicate mark-read requests while a request is pending', async () => {
