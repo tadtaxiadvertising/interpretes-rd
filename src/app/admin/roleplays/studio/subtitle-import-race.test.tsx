@@ -56,10 +56,20 @@ describe('Audio Studio subtitle import lifecycle', () => {
     await act(async () => { fireEvent.click(screen.getByText('Importar transcripción')); });
     expect(pendingImportSignal).toBeDefined();
     expect(pendingImportSignal?.aborted).toBe(false);
+    // The manual cancel must end the busy state without waiting for the server.
+    fireEvent.click(screen.getByText('Cancelar transcripción'));
+    expect(pendingImportSignal?.aborted).toBe(true);
+    expect(screen.queryByText('Cancelar transcripción')).toBeNull();
+
+    // A subsequent import must not be blocked by the aborted request.
+    await act(async () => { fireEvent.click(screen.getByText('Importar transcripción')); });
+    const secondSignal = pendingImportSignal;
+    expect(secondSignal).toBeDefined();
+    expect(secondSignal?.aborted).toBe(false);
     fireEvent.change(input, {
       target: { files: [new File(['ID3-b'], 'second.mp3', { type: 'audio/mpeg' })] },
     });
-    expect(pendingImportSignal?.aborted).toBe(true);
+    expect(secondSignal?.aborted).toBe(true);
     expect(screen.queryByText('Cancelar transcripción')).toBeNull();
   });
 
