@@ -12,9 +12,9 @@ import type { NextConfig } from "next";
  * ============================================================
  */
 
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://app.freeinterpreters.com";
-const CUSTOM_DOMAIN = process.env.CUSTOM_DOMAIN || "https://freeinterpreters.com";
-const CUSTOM_DOMAIN_API = process.env.CUSTOM_DOMAIN_API || "https://freeinterpreters.com";
+const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://interpretes.rd.ibusiness.com.do";
+const CUSTOM_DOMAIN = process.env.CUSTOM_DOMAIN || "https://interpretes.rd.ibusiness.com.do";
+const CUSTOM_DOMAIN_API = process.env.CUSTOM_DOMAIN_API || "https://interpretes.rd.ibusiness.com.do";
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -45,11 +45,11 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self'",
-              "connect-src 'self' https://kzbkygppplknynrwmtmf.supabase.co wss://kzbkygppplknynrwmtmf.supabase.co https://freeinterpreters.com https://app.freeinterpreters.com ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
+              "connect-src 'self' https://kzbkygppplknynrwmtmf.supabase.co wss://kzbkygppplknynrwmtmf.supabase.co https://interpretes.rd.ibusiness.com.do https://interpretes.rd.ibusiness.com.do ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
               "media-src 'self' https://kzbkygppplknynrwmtmf.supabase.co blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
-              "form-action 'self' https://app.freeinterpreters.com https://freeinterpreters.com ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
+              "form-action 'self' https://interpretes.rd.ibusiness.com.do https://interpretes.rd.ibusiness.com.do ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
             ].join('; ');
 
     return [
