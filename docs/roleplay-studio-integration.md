@@ -14,6 +14,14 @@ La plataforma incorpora una **integración nativa incremental**, no una migraci�
 
 No se graba el archivo fuente en Supabase ni se crea una sesión automáticamente. Publicación y asignación continúan dentro del endpoint administrativo actual, que vuelve a validar autorizaciones y hashes.
 
+## Unión física sin silencios en proyectos locales v2
+
+El editor admite la operación **Unir sin pausa** para dos cortes consecutivos del mismo hablante e idioma separados por más de 2 segundos. La intervención compuesta conserva un par `ranges: [{start,end},{start,end}]` y su ventana exterior `start/end`; **nunca** debe tratarse esta ventana exterior como audio continuo. El JSON declara `version: 2` únicamente cuando existe una intervención compuesta; los proyectos sin `ranges` se mantienen como **versión 1**. El lector v2 admite ambos formatos y rechaza intervalos malformados, solapados o con duración seleccionada superior a 300 s.
+
+Para garantizar costes mínimos y privacidad, **el administrador genera el ZIP únicamente con el exportador local Node o de escritorio**; ambos extraen las piezas de forma independiente con FFmpeg, concatenan audio decodificado y producen un solo MP3 por intervención compuesta. La duración seleccionada (sin la pausa) se utiliza para el límite de 900 s del paquete. El ZIP y `manifest.json` resultantes conservan su estructura anterior y se revalidan en el importador.
+
+El endpoint de exportación en servidor **rechaza** metadatos `ranges` en lugar de incluir accidentalmente la pausa. Audio Studio fuerza el JSON local v2 aunque la preferencia previa fuese servidor. La preescucha local de dos tramos no modifica el original; el simulador consecutivo basado en intervalos continuos queda deshabilitado mientras existan composiciones. El administrador puede «Separar cortes» y «Deshacer» cambios estructurales, sin publicar automáticamente.
+
 ## Revisión de subtítulos y protección de nombres
 - El editor admite archivos SRT/WebVTT para preparar las marcas de tiempo sin enviar la transcripción al servidor.
 - El contenido de cada intervención se muestra únicamente como referencia local del administrador; no se incorpora automáticamente a las instrucciones entregadas al participante.
