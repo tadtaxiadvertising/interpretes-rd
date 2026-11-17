@@ -57,7 +57,8 @@ describe('legacy QA v1 weighted-point conversion', () => {
   it('checks persisted Prisma decimals and rejects missing or overwritten trigger results', () => {
     expect(qaV1StoredTotalMatches('100.00', 100)).toBe(true);
     expect(qaV1StoredTotalMatches({ toString: () => '50.00' }, 50)).toBe(true);
-    expect(qaV1StoredTotalMatches(50.01, 50)).toBe(true);
+    expect(qaV1StoredTotalMatches(50.01, 50)).toBe(false);
+    expect(qaV1StoredTotalMatches(50.00, 50)).toBe(true);
     expect(qaV1StoredTotalMatches(26, 100)).toBe(false);
     expect(qaV1StoredTotalMatches(null, 100)).toBe(false);
     expect(qaV1StoredTotalMatches('NaN', 100)).toBe(false);
