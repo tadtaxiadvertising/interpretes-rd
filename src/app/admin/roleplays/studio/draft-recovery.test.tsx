@@ -275,8 +275,10 @@ describe('Roleplay Studio editable project recovery', () => {
 
   it('stops stale clip preview only after accepting a verified JSON replacement', async () => {
     selectSource();
+    // A single edited cut verifies rejection/acceptance without ambiguous controls.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     // A single edited cut is sufficient for the replacement confirmation.
+    expect(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     pause.mockClear();
