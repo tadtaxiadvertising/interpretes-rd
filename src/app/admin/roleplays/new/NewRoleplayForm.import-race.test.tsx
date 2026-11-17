@@ -34,7 +34,7 @@ describe('Admin roleplay import concurrency', () => {
     });
   });
 
-  afterEach(() => { cleanup(); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   const chooseManifest = () => {
     fireEvent.change(screen.getByLabelText(/Importar roleplay preparado/i), {
@@ -94,6 +94,49 @@ describe('Admin roleplay import concurrency', () => {
     expect(screen.getAllByTestId('draft-scenario')).toHaveLength(1);
     expect(screen.getByText('1 de 1')).toBeTruthy();
     expect(screen.queryByText(/Verificando archivos/)).toBeNull();
+  });
+
+  it('does not ask for confirmation when importing into an untouched form', async () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce([{
+      title: 'Importación inicial',
+      baseAudioFile: new File(['ID3'], 'initial.mp3', { type: 'audio/mpeg' }),
+      durationLimitSec: 120,
+      scriptPrompt: '',
+      sha256: 'c'.repeat(64),
+    }]);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    await act(async () => { chooseManifest(); });
+    expect(screen.getByText('Importación inicial')).toBeTruthy();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it('preserves an edited draft when a valid ZIP import is declined and allows explicit retry', async () => {
+    const prepared = [{
+      title: 'Escenario importado',
+      baseAudioFile: new File(['ID3'], 'prepared.mp3', { type: 'audio/mpeg' }),
+      durationLimitSec: 120,
+      scriptPrompt: '',
+      sha256: 'd'.repeat(64),
+    }];
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValue(prepared);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    fireEvent.click(screen.getByRole('button', { name: /Add Scenario/i }));
+    expect(screen.getAllByTestId('draft-scenario')).toHaveLength(2);
+
+    await act(async () => { chooseManifest(); });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(screen.getAllByTestId('draft-scenario')).toHaveLength(2);
+    expect(screen.getByText(/Importación cancelada/)).toBeTruthy();
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+
+    confirm.mockReturnValue(true);
+    await act(async () => { chooseManifest(); });
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(screen.getAllByTestId('draft-scenario')).toHaveLength(1);
+    expect(screen.getByText('Escenario importado')).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it('uses the external ZIP fallback and canonical SHA-256 validation without publishing', async () => {
