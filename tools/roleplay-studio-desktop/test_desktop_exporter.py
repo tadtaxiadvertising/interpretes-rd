@@ -63,6 +63,45 @@ class StudioDesktopTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
+    @unittest.skipUnless(shutil.which("ffmpeg") or
+                         importlib.util.find_spec("imageio_ffmpeg"),
+                         "FFmpeg not installed on this machine")
+    def test_packaging_self_check_encodes_real_synthetic_mp3(self):
+        # The actual packaging workflow also runs this against frozen binaries.
+        try:
+            import tkinter as tk
+            tk.Tcl()
+        except Exception:
+            self.skipTest("Headless Tk not installed; package smoke runs with Tk")
+        module.self_check()
+
+    def test_packaging_self_check_refuses_missing_libmp3lame(self):
+        from types import ModuleType, SimpleNamespace
+        from unittest.mock import patch
+        fake_tk = ModuleType("tkinter")
+        fake_tk.Tcl = lambda: SimpleNamespace(eval=lambda _: "8.6")
+        fake_tk.ttk = ModuleType("tkinter.ttk")
+        with (patch.dict("sys.modules",
+                         {"tkinter": fake_tk, "tkinter.ttk": fake_tk.ttk}),
+              patch.object(module, "resolve_ffmpeg", return_value="ffmpeg"),
+              patch.object(module.subprocess, "run", return_value=
+                           subprocess.CompletedProcess(["ffmpeg"], 1, b""))):
+            with self.assertRaisesRegex(module.ExportError, "libmp3lame"):
+                module.self_check()
+
+    def test_packaging_self_check_refuses_missing_tcl_runtime(self):
+        from types import ModuleType
+        from unittest.mock import patch
+        fake_tk = ModuleType("tkinter")
+        def broken_tcl():
+            raise RuntimeError("packaged Tcl resources not found")
+        fake_tk.Tcl = broken_tcl
+        fake_tk.ttk = ModuleType("tkinter.ttk")
+        with patch.dict("sys.modules",
+                        {"tkinter": fake_tk, "tkinter.ttk": fake_tk.ttk}):
+            with self.assertRaisesRegex(module.ExportError, "Tcl/Tk"):
+                module.self_check()
+
     def test_one_dialog_recognizes_source_and_json_in_any_order(self):
         self.assertEqual(module.recognize_media_and_project(
             [str(self.project), str(self.source)]),
