@@ -89,6 +89,38 @@ describe("RBAC holder vault actions", () => {
     expect(prisma.vaultAccount.create).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,hello",
+    "ftp://example.test/account",
+    "http://example.test/login",
+    "https://name:secret@example.test/login",
+    "https://example.test:badport/login",
+  ])("rejects unsafe portal URL %s before any persistence", async (url) => {
+    await expect(uploadAccount({
+      platformName: "Portal",
+      credentials: "test-secret",
+      url,
+    })).rejects.toThrow();
+    expect(prisma.vaultAccount.create).not.toHaveBeenCalled();
+    expect(encryptPassword).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a valid HTTPS portal URL without restricting VPN settings", async () => {
+    await uploadAccount({
+      platformName: "Portal",
+      credentials: "test-secret",
+      url: "  https://network.wordsynk.us/login  ",
+      vpnConfig: "Provider: custom\\nProfile: preferred",
+    });
+    expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        url: "https://network.wordsynk.us/login",
+        vpnConfig: "Provider: custom\\nProfile: preferred",
+      }),
+    }));
+  });
+
   it("validates messages and persists them for the authenticated holder", async () => {
     await sendMessage({ content: "  Please review this account  " });
 
