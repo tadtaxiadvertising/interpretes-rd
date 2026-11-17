@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
+import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
@@ -11,7 +11,7 @@ export const maxDuration = 120;
 const API_BASE = 'https://www.happyscribe.com/api/v1';
 const MAX_MEDIA_BYTES = 250 * 1024 * 1024;
 
-async function happyScribeFetch(path: string, token: string, init?: RequestInit) {
+async function happyScribeFetch(path: string, token: string, init?: RequestInit, requestSignal?: AbortSignal) {
   return fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -20,7 +20,9 @@ async function happyScribeFetch(path: string, token: string, init?: RequestInit)
       ...(init?.headers ?? {}),
     },
     cache: 'no-store',
-    signal: AbortSignal.timeout(20_000),
+    signal: requestSignal
+      ? AbortSignal.any([requestSignal, AbortSignal.timeout(20_000)])
+      : AbortSignal.timeout(20_000),
   });
 }
 
@@ -60,7 +62,7 @@ export async function POST(req: NextRequest) {
       { success: false, error: 'Identificador de transcripción no válido.' }, { status: 400 },
     );
 
-    const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, token);
+    const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, token, undefined, req.signal);
     if (!detailResponse.ok) return privateRoleplayResponse(
       { success: false, error: detailResponse.status === 404
         ? 'Transcripción no encontrada.' : 'No fue posible verificar el archivo en HappyScribe.' },
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ export: { format: 'mp3', transcription_ids: [id] } }),
-    });
+    }, req.signal);
     if (!exportResponse.ok) return privateRoleplayResponse(
       { success: false, error: 'HappyScribe no pudo preparar el audio original.' }, { status: 502 },
     );
@@ -97,17 +99,18 @@ export async function POST(req: NextRequest) {
     if (!isAllowedHappyScribeExportUrl(parsedUrl)) return privateRoleplayResponse(
       { success: false, error: 'HappyScribe devolvió un destino de descarga no permitido.' }, { status: 502 },
     );
-    // A cancelled browser download should stop the upstream provider transfer
-    // rather than continuing to consume the server's bandwidth.
     const transferSignal = AbortSignal.any([req.signal, AbortSignal.timeout(90_000)]);
     const media = await fetchHappyScribeExport(downloadLink, transferSignal);
-    if (!media.ok || !media.body) return privateRoleplayResponse(
-      { success: false, error: 'No fue posible descargar el audio desde HappyScribe.' }, { status: 502 },
-    );
+    if (!media.ok || !media.body) {
+      await discardHappyScribeDownload(media);
+      return privateRoleplayResponse(
+        { success: false, error: 'No fue posible descargar el audio desde HappyScribe.' }, { status: 502 },
+      );
+    }
 
     const declaredLength = Number(media.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > MAX_MEDIA_BYTES) {
-      await media.body.cancel();
+      await discardHappyScribeDownload(media);
       return privateRoleplayResponse(
         { success: false, error: 'El audio supera el límite de importación directa de 250 MiB. Descárgalo desde HappyScribe y cárgalo localmente.' },
         { status: 413 },
