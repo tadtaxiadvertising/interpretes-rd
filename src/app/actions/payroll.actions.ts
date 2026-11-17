@@ -3,6 +3,7 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
 
 const prisma = prismaClient;
@@ -69,7 +70,7 @@ export async function updatePayrollAdjustments(_prevState: unknown, formData: Fo
     revalidatePath('/payroll');
     return { success: true, message: 'Ajustes aplicados correctamente' };
   } catch (error) {
-    console.error('updatePayrollAdjustments failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('updatePayrollAdjustments failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No fue posible actualizar los ajustes', code: 'INTERNAL_ERROR' };
   }
 }
@@ -134,7 +135,7 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
     revalidatePath('/payroll');
     return { success: true, message: 'Minutos verificados y nómina aprobada' };
   } catch (error) {
-    console.error('verifyPayrollMinutes failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('verifyPayrollMinutes failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No fue posible verificar los minutos', code: 'INTERNAL_ERROR' };
   }
 }
@@ -200,7 +201,7 @@ export async function markPayrollAsPaid(_prevState: unknown, formData: FormData)
     revalidatePath('/payroll');
     return { success: true, message: 'Nómina marcada como pagada' };
   } catch (error) {
-    console.error('markPayrollAsPaid failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('markPayrollAsPaid failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No fue posible registrar el pago', code: 'INTERNAL_ERROR' };
   }
 }
