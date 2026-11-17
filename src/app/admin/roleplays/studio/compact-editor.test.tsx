@@ -210,7 +210,7 @@ describe('Audio Studio compact editing', () => {
     loadAudio(90);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     pause.mockClear();
     const file = new File(['srt'], 'new-cuts.srt', { type: 'text/plain' });
