@@ -241,13 +241,22 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
+    const resolvedValidationField = validationFocus?.scenarioId === id && (
+      (validationFocus.field === 'title' && typeof updates.title === 'string' && updates.title.trim().length > 0) ||
+      (validationFocus.field === 'audio' && Boolean(updates.baseAudioFile))
+    );
     invalidatePendingImport();
+    // Clear a resolved, local validation warning immediately, but never hide
+    // an upload, import, permission or publication error from the server.
+    if (resolvedValidationField) {
+      setError(previous => previous?.startsWith('El escenario ') ? null : previous);
+    }
     // Track new URLs before state commits so unmount can still release them.
     if (updates.baseAudioPreview?.startsWith('blob:')) previewUrls.current.add(updates.baseAudioPreview);
     setScenarios(prev => prev.map(scenario =>
       scenario.id === id ? { ...scenario, ...updates } : scenario
     ));
-  }, [invalidatePendingImport]);
+  }, [invalidatePendingImport, validationFocus]);
 
   const moveScenario = useCallback(function(id: string, direction: 'up' | 'down') {
     invalidatePendingImport();
