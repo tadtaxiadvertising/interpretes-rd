@@ -126,9 +126,12 @@ export default function RoleplayStudioPage() {
   };
 
   const stopPairPreview = () => {
+    const wasActive = pairPlayback.current !== null;
     pairPlayback.current = null;
     setPairPreviewId(null);
-    pairPlayer.current?.pause();
+    // Never pause an idle auxiliary player: changing ordinary clips must not
+    // interfere with the primary player's pause/resume lifecycle.
+    if (wasActive) pairPlayer.current?.pause();
   };
 
   const stopPreview = () => {
@@ -913,7 +916,7 @@ export default function RoleplayStudioPage() {
                   {...mediaHandlers} className="max-h-64 w-full rounded-lg bg-black"/>
               : <audio ref={attachPlayer} src={url} controls preload="metadata"
                   {...mediaHandlers} className="w-full"/>}
-        {url && <audio ref={pairPlayer} src={url} preload="metadata"
+        {url && <audio ref={pairPlayer} src={url} preload="none"
           aria-label="Reproductor de preescucha sin pausa"
           onTimeUpdate={event => {
             const current = pairPlayback.current;
@@ -935,6 +938,7 @@ export default function RoleplayStudioPage() {
             }
           }}
           onError={() => {
+            if (!pairPlayback.current) return;
             stopPairPreview();
             setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
           }}

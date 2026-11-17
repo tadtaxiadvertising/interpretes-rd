@@ -343,4 +343,20 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByRole('button', { name: 'Deshacer última división o unión' })).toBeNull();
   });
 
+  it('ignores inactive secondary media errors but reports failures during an explicit audition', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
+
+    const secondary = screen.getByLabelText('Reproductor de preescucha sin pausa') as HTMLAudioElement;
+    expect(secondary.preload).toBe('none');
+    fireEvent.error(secondary);
+    expect(screen.queryByText(/El navegador no pudo reproducir la preescucha/)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Preescuchar intervenciones/ }));
+    fireEvent.error(secondary);
+    expect(screen.getByText(/El navegador no pudo reproducir la preescucha/)).toBeTruthy();
+  });
+
 });
