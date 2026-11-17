@@ -57,8 +57,14 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # CI runs CPU/WebAssembly inference only. Avoid downloading the CUDA
+      # NuGet package during onnxruntime-node's postinstall: that unused GPU
+      # dependency caused intermittent ETIMEDOUT failures on api.nuget.org.
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+
+      - name: Verify ONNX Runtime CPU binding
+        run: node -e "const ort = require('onnxruntime-node'); if (typeof ort.InferenceSession?.create !== 'function') process.exit(1)"
 
       - name: Dependency Security Audit
         run: |
@@ -200,7 +206,7 @@ jobs:
 
       - name: Install migration dependencies
         if: steps.check_head.outputs.current == 'true'
-        run: npm ci --legacy-peer-deps
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
 
       - name: Preflight production credentials and read-only connection
         if: steps.check_head.outputs.current == 'true'
