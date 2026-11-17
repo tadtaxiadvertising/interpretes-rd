@@ -248,16 +248,39 @@ describe('Audio Studio compact editing', () => {
     expect(alert.closest('article')?.textContent).toMatch(/Intervención 1/);
   });
 
-  it('explains a long gap and does not silently include it in a merge', () => {
+  it('physically joins two compatible distant cuts into one local-only v2 scene without the gap', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], {
       target: { value: '40' },
     });
+    expect(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ })
+      .textContent).toMatch(/Unir sin pausa/);
     fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
-    expect(screen.getByRole('alert').textContent).toMatch(/de separación/);
-    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervención compuesta/)).toBeTruthy();
+    expect(screen.getByText(/pausa de 00:10.0 excluida/)).toBeTruthy();
+    expect(screen.getByText(/unidas sin pausa/)).toBeTruthy();
+    expect((screen.getAllByLabelText('Inicio (segundos)')[0] as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getAllByLabelText('Final (segundos)')[0] as HTMLInputElement).disabled).toBe(true);
+    expect(screen.getByText(/Proyecto compuesto v2/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Separar cortes de intervención 1/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Escuchar unido/ }));
+    const player = screen.getByLabelText('Reproductor de preescucha sin pausa') as HTMLAudioElement;
+    player.currentTime = 30;
+    fireEvent.timeUpdate(player);
+    expect(player.currentTime).toBe(40);
+    player.currentTime = 60;
+    fireEvent.timeUpdate(player);
+
+    fireEvent.click(screen.getByRole('button', { name: /Separar cortes de intervención 1/ }));
+    expect(screen.getByText(/Intervenciones \\(2\\/25\\)/)).toBeTruthy();
+    expect((screen.getAllByLabelText('Inicio (segundos)')[0] as HTMLInputElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer última división o unión' }));
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervención compuesta/)).toBeTruthy();
   });
 
   it('never merges a hidden next turn when review filters are active', () => {
