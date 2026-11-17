@@ -318,21 +318,30 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const validateForm = () => {
     if (!isBulk && !selectedParticipantId) {
-      setError('Please select a participant');
+      setError('Selecciona el intérprete o candidato que recibirá el roleplay.');
+      document.getElementById('roleplay-participant-select')?.focus();
       return false;
     }
-    if (librarySource) return librarySource.scenarios.length > 0;
+    if (librarySource) {
+      if (librarySource.scenarios.length === 0) {
+        setError('La plantilla no contiene escenarios. Elige otra plantilla antes de asignar.');
+        return false;
+      }
+      return true;
+    }
     if (scenarios.length === 0 || scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
-      setError(`Please add between 1 and ${ROLEPLAY_MAX_SCENARIOS} scenarios`);
+      setError(`Agrega entre 1 y ${ROLEPLAY_MAX_SCENARIOS} escenarios antes de crear el roleplay.`);
       return false;
     }
-    for (const scenario of scenarios) {
+    for (const [index, scenario] of scenarios.entries()) {
       if (!scenario.title.trim()) {
-        setError('All scenarios must have a title');
+        setError(`El escenario ${index + 1} necesita un título.`);
+        document.getElementById(`scenario-title-${scenario.id}`)?.focus();
         return false;
       }
       if (!scenario.baseAudioFile) {
-        setError('All scenarios must have a base audio file');
+        setError(`El escenario ${index + 1} necesita un audio válido.`);
+        document.getElementById(`scenario-audio-${scenario.id}`)?.focus();
         return false;
       }
     }
@@ -683,7 +692,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           Escenarios listos: <span className="font-medium text-white">{readyScenarioCount} de {scenarioCount}</span>
         </p>
         {(!isBulk && !selectedParticipantId) ? (
-          <p className="text-xs text-amber-200">Elige un destinatario para habilitar la creación.</p>
+          <p className="text-xs text-amber-200">Elige un destinatario antes de crear. El formulario te llevará al primer dato pendiente.</p>
         ) : readyScenarioCount !== scenarioCount || scenarioCount === 0 ? (
           <p className="text-xs text-amber-200">Completa el título y audio de cada escenario antes de crear.</p>
         ) : (
@@ -702,10 +711,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting || (!isBulk && !selectedParticipantId) || (!librarySource && scenarios.length === 0)}
+        disabled={isCreating || isImporting}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting || (!isBulk && !selectedParticipantId) || (!librarySource && scenarios.length === 0)
+          isCreating || isImporting
             ? "bg-slate-800 text-slate-500 cursor-not-allowed"
             : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
         )}
