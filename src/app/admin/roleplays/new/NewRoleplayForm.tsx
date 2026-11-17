@@ -79,6 +79,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     scenarioId: string; field: 'title' | 'audio'; requestId: number;
   } | null>(null);
   const validationFocusSequence = useRef(0);
+  // Unlike focus requests, this target survives unrelated edits so a
+  // later correction can remove the stale warning without resubmitting.
+  const pendingFieldValidation = useRef<{ scenarioId: string; field: 'title' | 'audio' } | null>(null);
   const [lastRemoved, setLastRemoved] = useState<{ scenario: Scenario; index: number } | null>(null);
   const [bulkResponseLimitSec, setBulkResponseLimitSec] = useState(120);
   // Keep the import identity independent from React render batching. The user
@@ -241,7 +244,18 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
+    const pending = pendingFieldValidation.current;
+    const resolvedValidationField = pending?.scenarioId === id && (
+      (pending.field === 'title' && typeof updates.title === 'string' && updates.title.trim().length > 0) ||
+      (pending.field === 'audio' && Boolean(updates.baseAudioFile))
+    );
     invalidatePendingImport();
+    // Clear a resolved, local validation warning immediately, but never hide
+    // an upload, import, permission or publication error from the server.
+    if (resolvedValidationField) {
+      pendingFieldValidation.current = null;
+      setError(previous => previous?.startsWith('El escenario ') ? null : previous);
+    }
     // Track new URLs before state commits so unmount can still release them.
     if (updates.baseAudioPreview?.startsWith('blob:')) previewUrls.current.add(updates.baseAudioPreview);
     setScenarios(prev => prev.map(scenario =>
@@ -359,6 +373,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const validateForm = () => {
     if (!isBulk && !selectedParticipantId) {
+      pendingFieldValidation.current = null;
       setError('Selecciona el intérprete o candidato que recibirá el roleplay.');
       document.getElementById('roleplay-participant-select')?.focus();
       return false;
@@ -376,6 +391,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     }
     for (const [index, scenario] of scenarios.entries()) {
       if (!scenario.title.trim()) {
+        pendingFieldValidation.current = { scenarioId: scenario.id, field: 'title' };
         setError(`El escenario ${index + 1} necesita un título.`);
         setValidationFocus({
           scenarioId: scenario.id, field: 'title', requestId: ++validationFocusSequence.current,
@@ -383,6 +399,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         return false;
       }
       if (!scenario.baseAudioFile) {
+        pendingFieldValidation.current = { scenarioId: scenario.id, field: 'audio' };
         setError(`El escenario ${index + 1} necesita un audio válido.`);
         setValidationFocus({
           scenarioId: scenario.id, field: 'audio', requestId: ++validationFocusSequence.current,
@@ -390,6 +407,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         return false;
       }
     }
+    pendingFieldValidation.current = null;
     return true;
   };
 
