@@ -133,9 +133,21 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     });
   });
 
-  it('does not query notifications without a verified linked profile, even if an auth ID exists', async () => {
+  it('allows an account UUID to mark its own notifications even without a linked profile', async () => {
+    const authId = '48fb69c9-2ea0-497b-b599-bfd1845ea812';
     m.validateAction.mockResolvedValueOnce({
-      user: { userId: '48fb69c9-2ea0-497b-b599-bfd1845ea812', profileId: null, role: 'interpreter' },
+      user: { userId: authId, profileId: null, role: 'interpreter' },
+    });
+    expect(await markNotificationAsRead('notification-1')).toEqual({ success: true });
+    expect(m.notificationUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'notification-1', userId: { in: [authId] } },
+      data: { isRead: true },
+    });
+  });
+
+  it('denies notification lookup if neither authenticated ID nor profile ID is a UUID', async () => {
+    m.validateAction.mockResolvedValueOnce({
+      user: { userId: 'legacy-authjs', profileId: null, role: 'interpreter' },
     });
     const response = await markNotificationAsRead('notification-1');
     expect(response).toMatchObject({ success: false, code: 'NOT_FOUND' });
