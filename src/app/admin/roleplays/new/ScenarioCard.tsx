@@ -154,14 +154,14 @@ export function ScenarioCard({
       <div className="flex items-start justify-between gap-4 mb-4">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           <div className="flex-1 min-w-0">
-            <label className="sr-only" htmlFor={`scenario-title-${scenario.id}`}>Scenario title</label>
+            <label className="sr-only" htmlFor={`scenario-title-${scenario.id}`}>Título del escenario</label>
             <input
               ref={titleInputRef}
               id={`scenario-title-${scenario.id}`}
               type="text"
               value={scenario.title}
               onChange={handleTitleChange}
-              placeholder={`Scenario ${index + 1} title`}
+              placeholder={`Título del escenario ${index + 1}`}
               maxLength={200}
               className="bg-transparent border-none text-white placeholder-gray-500 text-lg font-semibold focus:outline-none w-full"
             />
@@ -170,7 +170,7 @@ export function ScenarioCard({
                 <Clock size={12} />
                 {scenario.durationLimitSec
                   ? `${Math.floor(scenario.durationLimitSec / 60)}:${(scenario.durationLimitSec % 60).toString().padStart(2, '0')}`
-                  : 'Default (5:00 max)'}
+                  : 'Predeterminado (máx. 5:00)'}
               </span>
               {scenario.studioTurn && <span>Turno original #{scenario.studioTurn}</span>}
               {scenario.studioSpeaker && <span>{scenario.studioSpeaker.replace('_', ' ')}</span>}
@@ -179,7 +179,7 @@ export function ScenarioCard({
               {scenario.baseAudioFile && (
                 <span className="flex items-center gap-1 text-green-400">
                   <Mic2 size={12} />
-                  Audio ready
+                  Audio listo
                 </span>
               )}
             </div>
@@ -192,17 +192,17 @@ export function ScenarioCard({
             className="rounded-lg border border-white/15 px-2 py-1.5 text-xs font-medium text-blue-200 hover:bg-white/10">
             {expanded ? 'Ocultar detalles' : 'Editar detalles'}
           </button>
-          <button type="button" onClick={() => onMoveUp(scenario.id)} disabled={index === 0} aria-label={`Move scenario ${index + 1} up`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+          <button type="button" onClick={() => onMoveUp(scenario.id)} disabled={index === 0} aria-label={`Subir escenario ${index + 1}`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
             <ChevronUp size={18} />
           </button>
-          <button type="button" onClick={() => onMoveDown(scenario.id)} disabled={index === scenarioCount - 1} aria-label={`Move scenario ${index + 1} down`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
+          <button type="button" onClick={() => onMoveDown(scenario.id)} disabled={index === scenarioCount - 1} aria-label={`Bajar escenario ${index + 1}`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
             <ChevronDown size={18} />
           </button>
           <button
             type="button"
             onClick={() => onRemove(scenario.id)}
             className="p-2 hover:bg-red-500/20 rounded-xl text-red-400 hover:text-red-300 transition-colors"
-            aria-label={`Remove scenario ${index + 1}`}
+            aria-label={`Eliminar escenario ${index + 1}`}
           >
             <Trash2 size={18} />
           </button>
@@ -213,14 +213,14 @@ export function ScenarioCard({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1" htmlFor={`scenario-duration-${scenario.id}`}>
-              Duration limit (seconds, max {ROLEPLAY_RESPONSE_MAX_DURATION_SEC})
+              Límite de respuesta (segundos, máximo {ROLEPLAY_RESPONSE_MAX_DURATION_SEC})
             </label>
             <input
               id={`scenario-duration-${scenario.id}`}
               type="number"
               value={scenario.durationLimitSec || ''}
               onChange={handleDurationChange}
-              placeholder="e.g., 120"
+              placeholder="Por ejemplo, 120"
               min="0"
               max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC}
               step="1"
@@ -229,19 +229,19 @@ export function ScenarioCard({
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1" htmlFor={`scenario-prompt-${scenario.id}`}>
-              Script prompt (optional)
+              Instrucciones del escenario (opcional)
             </label>
             <textarea
               id={`scenario-prompt-${scenario.id}`}
               value={scenario.scriptPrompt}
               onChange={handleScriptChange}
-              placeholder="Key phrases or guidance for the interpreter..."
+              placeholder="Frases clave o instrucciones para el intérprete..."
               rows={3}
               maxLength={5000}
               className="w-full bg-slate-950 border border-white/10 rounded-xl py-2 px-3 text-white focus:border-blue-500 transition-colors resize-none"
             />
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label className="sr-only" htmlFor={`scenario-protocol-language-${scenario.id}`}>Protocol language</label>
+              <label className="sr-only" htmlFor={`scenario-protocol-language-${scenario.id}`}>Idioma del protocolo</label>
               <select
                 id={`scenario-protocol-language-${scenario.id}`}
                 value={protocolLanguage}
@@ -249,7 +249,7 @@ export function ScenarioCard({
                 className="rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-gray-200"
               >
                 <option value="es">Protocolos en español</option>
-                <option value="en">Protocols in English</option>
+                <option value="en">Protocolos en inglés</option>
               </select>
               <button type="button" onClick={() => handleAddProtocol('opening')} className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-blue-200 hover:bg-white/10">
                 + Apertura
@@ -268,7 +268,7 @@ export function ScenarioCard({
 
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1" htmlFor={`scenario-audio-${scenario.id}`}>
-            Base audio (MP3, WAV, WebM or MP4 · max. 15 MB)
+            Audio base (MP3, WAV, WebM o MP4 · máx. 15 MB)
           </label>
           <input
             ref={fileInputRef}
@@ -291,7 +291,7 @@ export function ScenarioCard({
           )}
           {scenario.baseAudioPreview && (
             <div className="space-y-2 mt-3">
-              <p className="text-xs font-medium text-gray-400">Preview</p>
+              <p className="text-xs font-medium text-gray-400">Previsualización</p>
               <audio src={scenario.baseAudioPreview} controls preload="metadata" className="w-full" />
             </div>
           )}

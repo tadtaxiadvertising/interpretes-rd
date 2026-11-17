@@ -443,8 +443,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         setSuccess({
           link: data.data.inviteLink || `${window.location.origin}/roleplays/${data.data.sessionId}`,
           participantName: participantType === 'interpreter'
-            ? interpreters.find(i => i.id === parseInt(selectedParticipantId))?.name || 'Interpreter'
-            : candidates.find(c => c.id === parseInt(selectedParticipantId))?.name || 'Candidate',
+            ? interpreters.find(i => i.id === parseInt(selectedParticipantId))?.name || 'Intérprete'
+            : candidates.find(c => c.id === parseInt(selectedParticipantId))?.name || 'Candidato',
         });
       }
     } catch (err) {
@@ -462,9 +462,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         <div className="w-20 h-20 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
           <Mic2 size={40} className="text-green-400" />
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">{success.summary ? 'Bulk roleplays created' : 'Roleplay Created!'}</h2>
+        <h2 className="text-2xl font-bold text-white mb-2">{success.summary ? 'Roleplays creados correctamente' : '¡Roleplay creado correctamente!'}</h2>
         <p className="text-gray-400 mb-6">
-          Created for <span className="font-bold text-white">{success.participantName}</span>
+          Creado para <span className="font-bold text-white">{success.participantName}</span>
         </p>
         <p className="text-gray-400 mb-6">{librarySource?.scenarios.length ?? scenarios.length} escenarios configurados</p>
         {success.summary && <p className="text-sm text-gray-300 mb-6">{success.summary}</p>}
@@ -481,13 +481,13 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             onClick={() => navigator.clipboard.writeText(success.link)}
             className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors flex items-center gap-2"
           >
-            Copy Link
+            Copiar enlace
           </button>
           <Link 
             href="/admin/roleplays"
             className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors"
           >
-            View All Roleplays
+            Ver todos los roleplays
           </Link>
         </div>
       </div>
@@ -667,7 +667,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={18} />
-            Add Scenario
+            Añadir escenario
           </button>
         </div>
 
@@ -704,8 +704,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           {scenarios.map((scenario, index) => (
             <div key={scenario.id} className="group" onDragStart={() => setDraggingId(scenario.id)} onDragEnd={() => setDraggingId(null)}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-gray-400">Scenario {index + 1}</span>
-                <span className="text-xs text-gray-500">(use arrows to reorder)</span>
+                <span className="text-sm font-medium text-gray-400">Escenario {index + 1}</span>
+                <span className="text-xs text-gray-500">(usa las flechas para cambiar el orden)</span>
               </div>
               <ScenarioCard
                 scenario={scenario}
@@ -724,7 +724,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           
           {scenarios.length === 0 && (
             <div className="text-center py-8 text-gray-500">
-              No scenarios added yet. Click "Add Scenario" to start.
+              No hay escenarios. Pulsa «Añadir escenario» para empezar.
             </div>
           )}
         </div>

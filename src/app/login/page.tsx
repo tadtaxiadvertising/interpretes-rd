@@ -185,7 +185,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Interpretes RD. Plataforma para intérpretes.
+          © {new Date().getFullYear()} Intérpretes RD. Plataforma para intérpretes.
         </p>
       </div>
     </div>
