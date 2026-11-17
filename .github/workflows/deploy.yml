@@ -84,6 +84,10 @@ jobs:
       # This never bypasses or relaxes the supply-chain audit.
       - name: Verify HappyScribe encrypted settings and admin permissions
         run: npx vitest run src/lib/roleplay/happyscribe-settings.test.ts src/app/actions/__tests__/audio-studio-settings.test.ts
+      # Check bounded provider responses and ID-scoped SRT/MP3 imports even
+      # when the unchanged dependency audit blocks full TypeScript/build.
+      - name: Verify HappyScribe bounded probe and private import routes
+        run: npx vitest run src/lib/roleplay/happyscribe-probe.test.ts src/lib/roleplay/happyscribe-import-proof.test.ts src/app/api/admin/happyscribe/transcriptions/route.test.ts src/app/api/admin/happyscribe/media/route.test.ts
       # Lock down the legacy QA response contract while directing API
       # consumers to verified, paginated ProductionLog review status.
       # This test does not bypass the unchanged supply-chain audit gate.
