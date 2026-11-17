@@ -148,11 +148,12 @@ export async function submitQAEvaluation(rawInput: QAScoreInput) {
     console.error('Notification failed but QA saved:', safeServerErrorCategory(notifyError));
   }
 
-  try {
-    revalidatePath('/qa');
-    revalidatePath('/dashboard');
-  } catch (cacheError: unknown) {
-    console.warn('QA saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+  for (const path of ['/qa', '/dashboard']) {
+    try {
+      revalidatePath(path);
+    } catch (cacheError: unknown) {
+      console.warn('QA saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+    }
   }
   return { success: true, data: { id: data.id } };
 }
