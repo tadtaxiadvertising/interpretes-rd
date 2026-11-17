@@ -1,5 +1,5 @@
 # ============================================================
-# FREE INTERPRETERS OS — STABLE MULTI-STAGE DOCKERFILE
+# INTÉRPRETES RD — STABLE MULTI-STAGE DOCKERFILE
 # Target: Easypanel (Docker/VPS ~457MB RAM) — STANDALONE BUILD
 # ============================================================
 

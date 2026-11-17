@@ -1,9 +1,9 @@
 # Easypanel Deployment & Environment Configuration
 
-This directory contains the necessary configuration details for deploying the **Free Interpreters OS** on an Easypanel-managed VPS.
+This directory contains the necessary configuration details for deploying the **Intérpretes RD** on an Easypanel-managed VPS.
 
 > **Easypanel instance**: `rewvid.easypanel.host`  
-> **Custom domains** (`freeinterpreters.com`) are not yet configured — services are accessible via Easypanel subdomains.
+> **Custom domains** are pending configuration — services are currently accessible via Easypanel subdomains.
 
 ---
 
@@ -73,7 +73,7 @@ Each service has its own **webhook URL** for triggering deployments via GitHub A
 ## EasyPanel Deployment Steps
 
 1. **Create Services:** Create the frontend and API services. Add `roleplay-audio-worker` as a private worker service when the Roleplay queue migration is deployed.
-2. **Source:** Connect the `free-interpreters-os` GitHub repository to each service.
+2. **Source:** Connect the `interpretes-rd` GitHub repository to each service.
 3. **Build:** Use `Dockerfile` at root with context `.`.
 4. **Env:** Copy variables from the tables above to the **Environment** tab. Mark sensitive vars as runtime-only.
 5. **Domains:** Map your public domain (e.g., `interpreters.rewvid.easypanel.host`) or configure custom domains later.

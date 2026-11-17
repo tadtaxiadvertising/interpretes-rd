@@ -1,4 +1,4 @@
-# Architecture Specification — Free Interpreters OS v3
+# Architecture Specification — Intérpretes RD v3
 
 > **Architecture**: Unified Data Layer (Direct Prisma) + Decoupled REST for Clients
 > **Runtime**: Easypanel (Docker/VPS) — Self-Hosted
@@ -27,9 +27,9 @@
 
 | Service              | Repository (Current)    | Easypanel App        | Port | Build Target     | Responsibility                               |
 | :------------------- | :---------------------- | :------------------- | :--- | :--------------- | :------------------------------------------- |
-| **interpreters-os**  | `free-interpreters-os`  | `interpreters`       | 3000 | `Dockerfile`     | UI, Legacy Auth (Supabase), Direct DB        |
-| **portal-rbac**      | `free-interpreters-os`  | `interpreters`       | 3000 | `Dockerfile`     | Secure Vault UI, RBAC Auth (Auth.js)         |
-| **interpreters-api** | `free-interpreters-os`  | `interpreters-api`   | 4000 | `Dockerfile.api` | External REST, webhooks, legacy modules      |
+| **interpreters-os**  | `interpretes-rd`  | `interpreters`       | 3000 | `Dockerfile`     | UI, Legacy Auth (Supabase), Direct DB        |
+| **portal-rbac**      | `interpretes-rd`  | `interpreters`       | 3000 | `Dockerfile`     | Secure Vault UI, RBAC Auth (Auth.js)         |
+| **interpreters-api** | `interpretes-rd`  | `interpreters-api`   | 4000 | `Dockerfile.api` | External REST, webhooks, legacy modules      |
 
 > **Dual-Authentication Architecture**: The platform uses two authentication systems in parallel:
 >

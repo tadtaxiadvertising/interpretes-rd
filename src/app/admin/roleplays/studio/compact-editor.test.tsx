@@ -93,6 +93,63 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getAllByText('Doctor: Review instructions')).toHaveLength(1);
   });
 
+  it('preserves edited cuts when valid SRT replacement is declined', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Edición sin guardar' } });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    const file = new File(['srt'], 'reemplazo.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: New subtitle',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición sin guardar');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: New subtitle')).toBeNull();
+    expect(screen.getByText(/Importación de cortes cancelada/)).toBeTruthy();
+  });
+
+  it('accepts SRT replacement with confirmation and clears filters from the old project', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'turno que no existe' },
+    });
+    const file = new File(['srt'], 'nuevo.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Accepted subtitle',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value).toBe('');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Doctor: Accepted subtitle')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
+  });
+
+  it('does not prompt or erase existing cuts for invalid subtitle files', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    const invalid = new File(['not subtitles'], 'wrong.txt', { type: 'text/plain' });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [invalid] },
+      });
+    });
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/Selecciona un SRT o VTT/);
+  });
+
   it('splits at the playhead and merges adjacent compatible intervals', () => {
     const player = loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
@@ -153,10 +210,13 @@ describe('Audio Studio compact editing', () => {
       target: { value: 'en' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
-    expect(screen.queryByText(/#1 · Intervención 1/)).toBeNull();
-    expect(screen.getByText(/#2 · Intervención 2/)).toBeTruthy();
+    // The visible title is now updated automatically after classifying its
+    // speaker; row identity must not depend on the old placeholder title.
+    expect(screen.queryByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
     expect(screen.getByText(/#1 · Doctor · 1 \(EN\)/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
   });
 
   it('seeks directly to an intervention without playing or changing the editor', () => {
@@ -230,7 +290,13 @@ describe('Audio Studio compact editing', () => {
     const newPlayer = document.querySelector('audio') as HTMLAudioElement;
     Object.defineProperty(newPlayer, 'duration', { configurable: true, value: 120 });
     fireEvent.loadedMetadata(newPlayer);
+    // Replacing the file intentionally resets duration until the browser
+    // supplies fresh media metadata; jsdom never does so automatically.
+    const player = document.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(player);
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(window.confirm).toHaveBeenCalledTimes(2);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
@@ -312,6 +378,10 @@ describe('Audio Studio compact editing', () => {
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toMatch(/No se pueden unir voces o idiomas distintos/);
     expect(alert.closest('article')?.textContent).toMatch(/Doctor · 1/);
+    // Profile classification changes the displayed title, not the row ID.
+    expect(alert.closest('article')?.querySelector(
+      '[aria-label="Ir al inicio de intervención 1"]',
+    )).not.toBeNull();
   });
 
   it('physically joins two compatible distant cuts into one local-only v2 scene without the gap', () => {

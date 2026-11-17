@@ -22,6 +22,9 @@ describe('Audio Studio clip review player', () => {
     pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     // Changing a source with unsaved turns now requires explicit acceptance.
     // These export/reset cases intentionally approve it; refusal is tested separately.
+    // Replacing a source with edits requires an explicit confirmation in the
+    // browser; jsdom does not implement confirm(). These particular tests
+    // exercise the accepted-replacement path rather than cancellation.
     vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
