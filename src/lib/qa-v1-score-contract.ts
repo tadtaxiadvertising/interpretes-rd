@@ -63,7 +63,7 @@ export function normalizeQaV1Points(input: QaV1PointScores, criticalError: boole
 
   // Each persisted dimension has exactly two decimal places. Apply the
   // percentage weights after that rounding with integer arithmetic.
-  const expectedCents = (weightedPercentageBasis + 5BigInt(0)) / 10BigInt(0);
+  const expectedCents = (weightedPercentageBasis + BigInt(50)) / BigInt(100);
   return {
     dimensions: normalized,
     totalScore: criticalError ? 0 : Number(expectedCents) / 100,
