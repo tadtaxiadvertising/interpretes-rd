@@ -211,6 +211,25 @@ describe('QA detail API privacy and error isolation', () => {
     });
   });
 
+  it('calculates exact decimal ties for a canonical five-field PATCH', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, totalScore: 40.26,
+    } as never);
+    const response = await PATCH(patch({
+      protocolScore: 6.49, interpretationScore: 31.72,
+      languageScore: 90.83, serviceScore: 46.41, technicalScore: 34.62,
+    }), params);
+    expect(response.status).toBe(200);
+    expect(prisma.qAScore.update).toHaveBeenCalledWith({
+      where: { id: 8 },
+      data: {
+        protocolScore: 6.49, interpretationScore: 31.72,
+        languageScore: 90.83, serviceScore: 46.41,
+        technicalScore: 34.62, totalScore: 40.26,
+      },
+    });
+  });
+
   it('preserves criticalError when a PATCH edits only comments', async () => {
     vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce({
       ...score, criticalError: true, totalScore: 0,
