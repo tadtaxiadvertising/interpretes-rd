@@ -65,6 +65,32 @@ describe('account platform and VPN form: no duplicated controls', () => {
     expect(screen.queryByRole('link', { name: /Abrir portal/i })).toBeNull();
   });
 
+  it('does not resurrect an earlier approval after switching away and back', () => {
+    const firstUrl = 'https://first.example.test/login';
+    const secondUrl = 'https://second.example.test/login';
+    const { rerender } = render(<WhoerAccessGate url={firstUrl} expectedCountry="United States" />);
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('link', { name: /Abrir portal/i }).getAttribute('href')).toBe(firstUrl);
+    // An unchanged portal and country may preserve the current approval.
+    rerender(<WhoerAccessGate url={firstUrl} expectedCountry="United States" />);
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+
+    rerender(<WhoerAccessGate url={secondUrl} expectedCountry="United States" />);
+    expect(screen.queryByRole('link', { name: /Abrir portal/i })).toBeNull();
+    rerender(<WhoerAccessGate url={firstUrl} expectedCountry="United States" />);
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole('link', { name: /Abrir portal/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('link', { name: /Abrir portal/i }).getAttribute('href')).toBe(firstUrl);
+    rerender(<WhoerAccessGate url={firstUrl} expectedCountry="Canada" />);
+    expect(screen.queryByRole('link', { name: /Abrir portal/i })).toBeNull();
+    rerender(<WhoerAccessGate url={firstUrl} expectedCountry="United States" />);
+    expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+    expect(screen.queryByRole('link', { name: /Abrir portal/i })).toBeNull();
+  });
+
   it('normalizes a safe saved portal URL without exposing it before consent', () => {
     render(<WhoerAccessGate url="  https://portal.example.test/login  " />);
     expect(screen.queryByRole('link', { name: /Abrir portal/i })).toBeNull();
