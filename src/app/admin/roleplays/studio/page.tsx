@@ -331,6 +331,12 @@ export default function RoleplayStudioPage() {
       return false;
     }
     subtitleImportRevision.current += 1;
+    // A pending pause analysis must not recreate the previous edit's cuts.
+    silenceRevision.current += 1;
+    silenceAbort.current?.abort();
+    silenceAbort.current = null;
+    setAnalyzingSilences(false);
+    stopPreview();
     stopPairPreview();
     setLastStructuralEdit(null);
     setTurnActionFeedback(null);
@@ -461,6 +467,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     subtitleImportRevision.current += 1;
+    stopPreview();
     stopPairPreview();
     setLastStructuralEdit(null);
     // Old filters and expanded rows must not hide the new suggestion draft.
@@ -895,10 +902,15 @@ export default function RoleplayStudioPage() {
         }
       }
       if (revision !== subtitleImportRevision.current) return;
+      silenceRevision.current += 1;
+      silenceAbort.current?.abort();
+      silenceAbort.current = null;
+      setAnalyzingSilences(false);
       const containsCompound = restored.some(segment => segment.ranges !== undefined);
       // Opening a v2 project must be local-only even after the user separates
       // its cuts. For ordinary v1 projects retain the user's chosen mode.
       if (containsCompound) setAllowServerZipExport(false);
+      stopPreview();
       stopPairPreview();
       setLastStructuralEdit(null);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
