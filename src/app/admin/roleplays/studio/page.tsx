@@ -91,6 +91,12 @@ export default function RoleplayStudioPage() {
   const pairPlayer = useRef<HTMLAudioElement | null>(null);
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
+  const [lastStructuralEdit, setLastStructuralEdit] = useState<{
+    kind: 'división' | 'unión';
+    segments: Segment[];
+    captions: Record<string, string>;
+    expandedId: string | null;
+  } | null>(null);
   // Source identity prevents a delayed decode from updating a replacement MP3.
   const activeAudioFile = useRef<File | null>(null);
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
@@ -208,6 +214,20 @@ export default function RoleplayStudioPage() {
     });
   };
 
+  const undoLastStructuralEdit = () => {
+    if (!lastStructuralEdit) return;
+    stopPreview();
+    stopPairPreview();
+    subtitleImportRevision.current += 1;
+    setSegments(lastStructuralEdit.segments);
+    setCaptionTexts(lastStructuralEdit.captions);
+    setExpandedSegmentId(lastStructuralEdit.expandedId);
+    setNotice(`Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
+    setError('');
+    setTurnActionFeedback(null);
+    setLastStructuralEdit(null);
+  };
+
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
   useEffect(() => () => {
     silenceAbort.current?.abort();
@@ -262,6 +282,7 @@ export default function RoleplayStudioPage() {
     setShowPendingReview(false);
     setExpandedSegmentId(null);
     setTurnActionFeedback(null);
+    setLastStructuralEdit(null);
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
@@ -288,6 +309,7 @@ export default function RoleplayStudioPage() {
     }));
     subtitleImportRevision.current += 1;
     stopPairPreview();
+    setLastStructuralEdit(null);
     setSegments(prepared);
     setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
     setNotice(`${prepared.length} intervenciones cargadas. ${excludedCount} del intérprete original omitidas; revisa idiomas, hablantes y límites antes de exportar.`);
@@ -390,6 +412,7 @@ export default function RoleplayStudioPage() {
     if (!suggestedClips.length || analyzingSilences || busy || draftBusy) return;
     subtitleImportRevision.current += 1;
     stopPairPreview();
+    setLastStructuralEdit(null);
     setSegments(suggestedClips.map((clip, index) => ({
       id: crypto.randomUUID(),
       title: `Intervención sugerida ${index + 1}`,
@@ -480,6 +503,10 @@ export default function RoleplayStudioPage() {
     }
     subtitleImportRevision.current += 1;
     stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'división',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
     const secondId = crypto.randomUUID();
     setSegments(previous => previous.flatMap(item => item.id === id ? [
       { ...item, end: midpoint },
@@ -537,6 +564,10 @@ export default function RoleplayStudioPage() {
     }
     subtitleImportRevision.current += 1;
     stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'unión',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
     setSegments(previous => previous.filter(item => item.id !== second.id)
       .map(item => item.id === first.id
         ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
@@ -568,6 +599,7 @@ export default function RoleplayStudioPage() {
     }
     subtitleImportRevision.current += 1;
     stopPairPreview();
+    setLastStructuralEdit(null);
     setTurnActionFeedback(null);
     const id = crypto.randomUUID();
     setSegments(prev => [...prev, {
@@ -583,6 +615,7 @@ export default function RoleplayStudioPage() {
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
+    setLastStructuralEdit(null);
     stopPairPreview();
     setTurnActionFeedback(null);
     subtitleImportRevision.current += 1;
@@ -657,6 +690,7 @@ export default function RoleplayStudioPage() {
         ? openLongMediaDraft(json, audio.size, digest, duration)
         : openStudioDraft(json, audio.size, digest, duration);
       stopPairPreview();
+      setLastStructuralEdit(null);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
@@ -1043,6 +1077,7 @@ export default function RoleplayStudioPage() {
                   if (!detected.length) return;
                   subtitleImportRevision.current += 1;
                   stopPairPreview();
+                  setLastStructuralEdit(null);
                   setSegments(prev => [...prev, ...detected.map((item, index) => ({
                     id: crypto.randomUUID(),
                     title: 'Intervención ' + (prev.length + index + 1),
@@ -1291,6 +1326,13 @@ export default function RoleplayStudioPage() {
                 className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200">
                 {compactRows ? 'Vista detallada' : 'Vista compacta'}
               </button>
+              {lastStructuralEdit && (
+                <button type="button" onClick={undoLastStructuralEdit}
+                  aria-label="Deshacer última división o unión"
+                  className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
+                  Deshacer {lastStructuralEdit.kind}
+                </button>
+              )}
               <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir intervención</button>
             </div>
@@ -1416,6 +1458,7 @@ export default function RoleplayStudioPage() {
                 <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
                   subtitleImportRevision.current += 1;
                   stopPairPreview();
+                  setLastStructuralEdit(null);
                   setSegments(prev => prev.filter(s => s.id !== segment.id));
                   // Discard the deleted turn's private transcript reference.
                   setCaptionTexts(prev => {
