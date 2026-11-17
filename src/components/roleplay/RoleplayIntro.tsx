@@ -80,7 +80,7 @@ export function RoleplayIntro({
               <Mic2 size={40} className="text-blue-400" />
             </div>
             <h1 className="text-3xl font-bold text-white mb-2">Evaluación de Roleplay</h1>
-            <p className="text-gray-400">Sesión ID: <code className="font-mono text-xs bg-white/5 px-2 py-1 rounded">{sessionId.slice(0, 12)}...</code></p>
+            <p className="text-gray-400">Código de sesión: <code className="font-mono text-xs bg-white/5 px-2 py-1 rounded">{sessionId.slice(0, 12)}...</code></p>
           </div>
 
           <div className="space-y-6 mb-8">
@@ -108,13 +108,13 @@ export function RoleplayIntro({
                 <p>• <strong>Conexión estable</strong> a internet</p>
                 <p>• <strong>No recargar la página</strong> durante la grabación</p>
                 <p>• <strong>Tiempo límite:</strong> 5 minutos por respuesta</p>
-                <p>• Puedes <strong>salir y volver</strong> - tu progreso se guarda</p>
+                <p>• Puedes <strong>salir y regresar</strong>: tu progreso se guarda</p>
               </div>
             </div>
           </div>
 
           <div className="mb-8">
-            <h3 className="text-lg font-bold text-white mb-4">Verificación de equipo</h3>
+            <h3 className="text-lg font-bold text-white mb-4">Comprobación del equipo</h3>
             <div className="space-y-3">
               {steps.map((step, index) => {
                 const isPassed = equipmentChecks[step.id as keyof typeof equipmentChecks];
@@ -149,7 +149,7 @@ export function RoleplayIntro({
                         <span className={cn("font-medium", isPassed ? "text-emerald-400" : "text-white")}>
                           {step.label}
                         </span>
-                        {isChecking && <span className="text-xs text-blue-400">Verificando...</span>}
+                        {isChecking && <span className="text-xs text-blue-400">Comprobando...</span>}
                         {isPassed && <span className="text-xs text-emerald-400">✓ Listo</span>}
                       </div>
                       <p className="text-xs text-slate-400 mt-1">{step.description}</p>
