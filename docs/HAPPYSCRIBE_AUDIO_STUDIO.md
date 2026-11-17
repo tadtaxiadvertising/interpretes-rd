@@ -25,7 +25,7 @@ The imported transcript text remains editor-only; it is not copied into particip
 
 - Both endpoints require the platform's administrator role and use per-user rate limits.
 - The API token stays server-side; errors returned to the browser are generic.
-- Transcription IDs are validated; export downloads are HTTPS-only and restricted to HappyScribe/AWS hosts.
+- Los identificadores de transcripción se validan; las descargas firmadas usan HTTPS y solo permiten hosts de HappyScribe y **endpoints de objetos AWS S3 reconocidos**. Otros servicios de `amazonaws.com` (EC2, API Gateway, Lambda, etc.) y las redirecciones hacia ellos se rechazan antes de conectar.
 - SRT downloads are capped at 5 MB and bounded while streaming.
 - Direct MP3 imports are **disabled by default**; if explicitly enabled, recordings up to 250 MiB pass through the Next.js frontend server and consume VPS bandwidth. Larger recordings must be loaded locally. The UI does not persist provider signed URLs. This proxy path is not a zero-server-cost or local-only transfer.
 - No automatic publication, session creation, QA scoring, or transcript-to-prompt copying occurs.

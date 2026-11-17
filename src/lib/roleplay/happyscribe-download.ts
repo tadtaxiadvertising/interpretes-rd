@@ -12,6 +12,15 @@ export async function discardHappyScribeDownload(response: Response): Promise<vo
     // Best-effort connection cleanup, never expose signed URLs or upstream details.
   }
 }
+// HappyScribe may return signed AWS S3 URLs. Restrict the AWS allowlist to
+// S3 object storage; other AWS services are not legitimate export hosts.
+const S3_REGION = '[a-z]{2}(?:-gov)?-[a-z]+-[0-9]';
+const S3_HOST = new RegExp(
+  '^(?:[a-z0-9][a-z0-9.-]{0,200}\\.)?s3' +
+    '(?:\\.' + S3_REGION + '|-' + S3_REGION +
+    '|\\.dualstack\\.' + S3_REGION +
+    '|-accelerate(?:\\.dualstack)?|-external-1)?\\.amazonaws\\.com' + '$',
+);
 
 /** Only provider endpoints or its AWS object storage, never private addresses. */
 export function isAllowedHappyScribeExportUrl(url: URL): boolean {
@@ -20,7 +29,7 @@ export function isAllowedHappyScribeExportUrl(url: URL): boolean {
     (url.port === '' || url.port === '443') &&
     (host === 'happyscribe.com' ||
       host.endsWith('.happyscribe.com') ||
-      host.endsWith('.amazonaws.com'));
+      S3_HOST.test(host));
 }
 
 /**
