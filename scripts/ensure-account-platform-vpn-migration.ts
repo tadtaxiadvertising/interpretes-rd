@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
-import { readFile, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
