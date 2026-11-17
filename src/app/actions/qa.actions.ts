@@ -11,9 +11,12 @@ const prismaClient = prisma;
 
 // Stored QA percentages have NUMERIC(5,2) precision. Reject extra places
 // before Prisma can silently round a dimension after the score was computed.
-const QAPercentage = z.coerce.number().finite().min(0).max(100).refine(
-  value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
-  { message: 'QA percentages support at most two decimal places' },
+const QAPercentage = z.preprocess(
+  value => typeof value === 'string' && value.trim() === '' ? NaN : value,
+  z.coerce.number().finite().min(0).max(100).refine(
+    value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
+    { message: 'QA percentages support at most two decimal places' },
+  ),
 );
 
 // Unlike the legacy API's rounding-tolerant comparator, this form writes a
@@ -139,11 +142,12 @@ export async function submitQAEvaluation(_prevState: unknown, formData: FormData
 
     // A post-commit cache failure must not claim the QA insert failed and
     // prompt an operator to retry a transaction that already committed.
-    try {
-      revalidatePath('/qa');
-      revalidatePath('/admin');
-    } catch (cacheError) {
-      console.warn('QA saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+    for (const path of ['/qa', '/admin']) {
+      try {
+        revalidatePath(path);
+      } catch (cacheError) {
+        console.warn('QA saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+      }
     }
 
     return {
