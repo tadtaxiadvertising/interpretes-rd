@@ -102,7 +102,7 @@ jobs:
       # Exercise financial-response privacy before the supply-chain audit.
       # The audit remains mandatory; these tests do not authorize deployment.
       - name: Verify financial API privacy regressions
-        run: npx vitest run src/app/api/v1/payroll/__tests__/financial-privacy.test.ts
+        run: npx vitest run src/app/api/v1/payroll/__tests__/financial-privacy.test.ts src/lib/api-responses.security.test.ts
 
       - name: Dependency Security Audit
         run: |
