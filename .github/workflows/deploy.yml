@@ -380,8 +380,20 @@ jobs:
   # without suppressing the remaining service deployment requests.
   verify-easypanel-frontend:
     name: Verify live Easypanel frontend SHA (opt-in)
-    needs: [validate, deploy-interpreters, deploy-interpreters-api]
-    if: github.ref == 'refs/heads/main' && needs.deploy-interpreters.outputs.is_current == 'true'
+    needs: [validate, deploy-interpreters, deploy-interpreters-api, deploy-roleplay-audio-worker]
+    # The worker is optional. A skipped worker must not skip verification,
+    # but a failed worker must still leave this release incomplete.
+    if: >-
+      ${{
+        !cancelled() &&
+        github.ref == 'refs/heads/main' &&
+        needs.validate.result == 'success' &&
+        needs.deploy-interpreters.result == 'success' &&
+        needs.deploy-interpreters-api.result == 'success' &&
+        (needs.deploy-roleplay-audio-worker.result == 'success' ||
+          needs.deploy-roleplay-audio-worker.result == 'skipped') &&
+        needs.deploy-interpreters.outputs.is_current == 'true'
+      }}
     runs-on: ubuntu-latest
     environment: production
     steps:
