@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
+  actorFromBearer: vi.fn(),
   applyRateLimit: vi.fn(),
   fetch: vi.fn(),
 }));
@@ -11,13 +12,15 @@ vi.mock('@/lib/auth/actions', () => ({
   validateAction: mocks.validateAction,
 }));
 
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: mocks.actorFromBearer }));
+
 vi.mock('@/lib/security/rate-limit', () => ({
   RATE_LIMITS: { audioUpload: { windowMs: 60_000, maxRequests: 20 } },
   applyRateLimit: mocks.applyRateLimit,
   createRateLimitHeaders: vi.fn(() => new Headers()),
 }));
 
-import { POST } from './route';
+import { GET, POST } from './route';
 
 const transcriptionId = 'a'.repeat(32);
 const exportId = 'b'.repeat(32);
@@ -33,6 +36,7 @@ function importRequest(signal?: AbortSignal) {
 
 describe('HappyScribe SRT import download boundary', () => {
   beforeEach(() => {
+    mocks.actorFromBearer.mockReset();
     mocks.validateAction.mockReset().mockResolvedValue({ user: { userId: 'admin-test' } });
     mocks.applyRateLimit.mockReset().mockReturnValue({ success: true });
     mocks.fetch.mockReset();
@@ -191,4 +195,33 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(response.status).toBe(403);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
+  it('denies a different administrator Bearer on the library GET before provider calls', async () => {
+    mocks.actorFromBearer.mockResolvedValue({ userId: 'other-admin', role: 'admin' });
+    const mixedRequest = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
+      headers: { Authorization: 'Bearer other-admin-token' },
+    });
+
+    const response = await GET(mixedRequest);
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(mocks.applyRateLimit).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('denies an invalid explicit Bearer on SRT POST even when the admin cookie exists', async () => {
+    mocks.actorFromBearer.mockResolvedValue(null);
+    const mixedRequest = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer invalid-token' },
+      body: JSON.stringify({ id: transcriptionId }),
+    });
+
+    const response = await POST(mixedRequest);
+
+    expect(response.status).toBe(403);
+    expect(mocks.applyRateLimit).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
 });
