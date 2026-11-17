@@ -544,6 +544,35 @@ def discover_local_companion(selected, *, max_entries=250, max_candidates=8):
         return None
 
 
+def open_export_directory(zip_path):
+    """Open the parent folder of a completed ZIP on an explicit user action.
+
+    Never execute the ZIP itself, invoke a shell, contact the platform or
+    place private file paths on the clipboard.
+    """
+    archive = Path(zip_path).expanduser().absolute()
+    if (archive.suffix.lower() != ".zip" or archive.is_symlink() or
+            not archive.is_file() or not archive.parent.is_dir()):
+        raise ExportError("El último ZIP ya no está disponible. Comprueba la carpeta de salida.")
+    directory = str(archive.parent)
+    try:
+        if sys.platform == "win32":
+            os.startfile(directory)
+        else:
+            launcher = "open" if sys.platform == "darwin" else "xdg-open"
+            subprocess.Popen(
+                [launcher, directory],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+    except (OSError, AttributeError) as exc:
+        raise ExportError(
+            "No se pudo abrir la carpeta automáticamente. Usa el explorador de archivos."
+        ) from exc
+
+
 def run_desktop():
     # The Windows console bootloader is more reliable with the bundled FFmpeg.
     # Hide its terminal only in packaged GUI mode; keep it visible for diagnostics.
@@ -580,6 +609,7 @@ def run_desktop():
     input_widgets = []
     browse_buttons = []
     suggested_output = None
+    last_exported_zip = None
     busy = False
     cancelled = threading.Event()
     events = queue.Queue()
@@ -694,6 +724,9 @@ def run_desktop():
         state = "normal" if enabled else "disabled"
         for widget in input_widgets + browse_buttons:
             widget.configure(state=state)
+        open_folder_button.configure(
+            state="normal" if enabled and last_exported_zip else "disabled"
+        )
 
     def inspect_worker(paths):
         try:
@@ -749,19 +782,31 @@ def run_desktop():
             cancelled.set()
             status.set("Cancelando FFmpeg y limpiando temporales…")
 
+    def open_last_export():
+        if not last_exported_zip or busy:
+            return
+        try:
+            open_export_directory(last_exported_zip)
+        except ExportError as exc:
+            messagebox.showwarning("Ubicación del ZIP", str(exc))
+
     inspect_button = ttk.Button(
         controls, text="Validar proyecto", command=lambda: begin_job("inspect"))
     inspect_button.pack(side="left", padx=6)
     start_button = ttk.Button(
         controls, text="Generar ZIP local", command=lambda: begin_job("export"))
     start_button.pack(side="left", padx=6)
+    open_folder_button = ttk.Button(
+        controls, text="Abrir carpeta del último ZIP",
+        command=open_last_export, state="disabled")
+    open_folder_button.pack(side="left", padx=6)
     cancel_button = ttk.Button(controls, text="Cancelar", command=cancel, state="disabled")
     cancel_button.pack(side="left")
 
     closing = False
 
     def process_events():
-        nonlocal busy, suggested_output
+        nonlocal busy, suggested_output, last_exported_zip
         while True:
             try:
                 message = events.get_nowait()
@@ -791,6 +836,8 @@ def run_desktop():
                 result = message[1]
                 bar["value"] = 100
                 exported_path = fields[2].get().strip()
+                last_exported_zip = exported_path
+                open_folder_button.configure(state="normal")
                 # Offer a fresh path for a second package only if the first
                 # suggestion was accepted. Never replace a manual filename.
                 if exported_path == suggested_output:
