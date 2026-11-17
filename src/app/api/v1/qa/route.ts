@@ -106,12 +106,13 @@ export async function POST(request: Request) {
         },
       });
 
-      // A PostgreSQL trigger can overwrite the value supplied by Prisma.
-      // Roll back the whole transaction if the persisted result diverges.
-      if (!qaV1StoredTotalMatches(created.totalScore, calculated.totalScore)) {
+      // AFTER INSERT triggers can update the score after INSERT RETURNING.
+      // Read the final row inside the transaction before publishing a result.
+      const stored = await tx.qAScore.findUnique({ where: { id: created.id } });
+      if (!stored || !qaV1StoredTotalMatches(stored.totalScore, calculated.totalScore)) {
         throw new Error('QA database score contract mismatch');
       }
-      return created;
+      return stored;
     });
 
     return privateAdminJson(newScore, {

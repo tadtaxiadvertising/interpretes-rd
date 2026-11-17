@@ -81,6 +81,7 @@ export function qaV1StoredTotalMatches(stored: unknown, expected: number): boole
   if (typeof stored !== 'number' && typeof stored !== 'string' &&
       !(typeof stored === 'object' && stored !== null && 'toString' in stored)) return false;
   const actual = Number(stored);
+  // Both values represent NUMERIC(5,2). Even a one-cent drift must abort.
   return Number.isFinite(actual) && Number.isFinite(expected) &&
-    Math.abs(actual - expected) <= 0.011;
+    Math.round(actual * 100) === Math.round(expected * 100);
 }

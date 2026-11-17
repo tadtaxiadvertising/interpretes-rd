@@ -7,6 +7,7 @@ import { corsHeaders } from '@/lib/cors';
 import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { qaV1StoredTotalMatches } from '@/lib/qa-v1-score-contract';
+import { calculateCanonicalQaTotal } from '@/lib/qa-canonical-score';
 
 const METHODS = 'GET, PATCH, DELETE, OPTIONS';
 
@@ -101,10 +102,14 @@ export async function PATCH(
               ? (existing[field] ?? 0)
               : (updateData[field] ?? 0)));
 
-        const isCritical = updateData.criticalError ?? existing.criticalError ?? false;
-        const weighted = protocol * 0.20 + interpretation * 0.40 +
-          language * 0.20 + service * 0.10 + technical * 0.10;
-        expectedTotal = isCritical ? 0 : Math.round(weighted * 100) / 100;
+        const isCritical = Boolean(updateData.criticalError ?? existing.criticalError ?? false);
+        expectedTotal = calculateCanonicalQaTotal({
+          protocolScore: protocol,
+          interpretationScore: interpretation,
+          languageScore: language,
+          serviceScore: service,
+          technicalScore: technical,
+        }, isCritical);
         updateData.totalScore = expectedTotal;
         if (isCritical) updateData.accionRequerida = 'Advertencia';
       }
@@ -116,22 +121,29 @@ export async function PATCH(
         data: updateData as any,
       });
 
+      // AFTER UPDATE triggers may change the stored total after the update
+      // response snapshot. Verify an explicit re-read before committing.
+      const stored = await tx.qAScore.findUnique({
+        where: { id },
+        select: { totalScore: true },
+      });
+      if (!stored) throw new Error('QA PATCH row missing after update');
+
       if (scoreChanged) {
-        if (!qaV1StoredTotalMatches(updated.totalScore, expectedTotal!)) {
+        if (!qaV1StoredTotalMatches(stored.totalScore, expectedTotal!)) {
           throw new Error('QA PATCH stored score mismatch');
         }
       } else {
-        // A DB trigger might recompute an old score on ANY UPDATE.
-        // Roll back a metadata-only patch instead of silently rewriting it.
+        // A metadata-only edit must not rewrite any historical score.
         const before = existing.totalScore;
-        const after = updated.totalScore;
+        const after = stored.totalScore;
         const unchanged = before == null
           ? after == null
           : after != null && Number(before) === Number(after);
         if (!unchanged) throw new Error('QA PATCH changed historical score');
       }
 
-      return updated;
+      return { ...updated, totalScore: stored.totalScore };
     });
 
     if (!updatedScore) {

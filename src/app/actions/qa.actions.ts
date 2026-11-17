@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { calculateCanonicalQaTotal } from '@/lib/qa-canonical-score';
 
 const prismaClient = prisma;
 
@@ -70,12 +71,7 @@ export async function submitQAEvaluation(_prevState: unknown, formData: FormData
   }
 
   const data = parsed.data;
-  const weightedTotal = data.protocolScore * 0.20 +
-    data.interpretationScore * 0.40 +
-    data.languageScore * 0.20 +
-    data.serviceScore * 0.10 +
-    data.technicalScore * 0.10;
-  const expectedTotal = data.criticalError ? 0 : Math.round(weightedTotal * 100) / 100;
+  const expectedTotal = calculateCanonicalQaTotal(data, data.criticalError);
 
   const actionRequired = data.criticalError || expectedTotal < 70
     ? 'Advertencia / Coaching'
