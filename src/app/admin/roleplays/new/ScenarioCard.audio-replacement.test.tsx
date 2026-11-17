@@ -52,36 +52,36 @@ describe('replacing Audio Studio source audio', () => {
 
   it('opens a collapsed imported scenario and focuses the missing audio input on validation', () => {
     const { rerender } = render(<ScenarioCard {...props} startCollapsed />);
-    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+    expect(screen.queryByLabelText(/Audio base/)).toBeNull();
     expect(screen.getByDisplayValue('Interpreting scenario')).toBeTruthy();
 
     rerender(<ScenarioCard {...props} startCollapsed focusRequest={{ field: 'audio', requestId: 1 }} />);
-    const audio = screen.getByLabelText(/Base audio/) as HTMLInputElement;
+    const audio = screen.getByLabelText(/Audio base/) as HTMLInputElement;
     expect(document.activeElement).toBe(audio);
     expect(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' })
       .getAttribute('aria-expanded')).toBe('true');
 
     // Reopening manually must not reuse an already-consumed validation request.
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
-    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
-    const title = screen.getByLabelText('Scenario title') as HTMLInputElement;
+    expect(screen.queryByLabelText(/Audio base/)).toBeNull();
+    const title = screen.getByLabelText('Título del escenario') as HTMLInputElement;
     title.focus();
     fireEvent.click(screen.getByRole('button', { name: 'Editar detalles del escenario 1' }));
-    expect(screen.getByLabelText(/Base audio/)).toBeTruthy();
+    expect(screen.getByLabelText(/Audio base/)).toBeTruthy();
     expect(document.activeElement).toBe(title);
 
     // A new validation attempt must still bring focus back to the missing audio.
     rerender(<ScenarioCard {...props} startCollapsed focusRequest={{ field: 'audio', requestId: 2 }} />);
-    expect(document.activeElement).toBe(screen.getByLabelText(/Base audio/));
+    expect(document.activeElement).toBe(screen.getByLabelText(/Audio base/));
     rerender(<ScenarioCard {...props} startCollapsed focusRequest={null} />);
-    expect(screen.getByLabelText(/Base audio/)).toBeTruthy();
+    expect(screen.getByLabelText(/Audio base/)).toBeTruthy();
   });
 
   it('focuses an always-visible title without expanding compact details', () => {
     const { rerender } = render(<ScenarioCard {...props} startCollapsed />);
     rerender(<ScenarioCard {...props} startCollapsed focusRequest={{ field: 'title', requestId: 2 }} />);
-    expect(document.activeElement).toBe(screen.getByLabelText('Scenario title'));
-    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText('Título del escenario'));
+    expect(screen.queryByLabelText(/Audio base/)).toBeNull();
   });
 
   it('clears imported timeline, speaker, language, turn and checksum without changing other edits', () => {
