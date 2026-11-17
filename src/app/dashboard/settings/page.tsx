@@ -52,7 +52,7 @@ export default async function SettingsPage() {
           pais: true,
           banco: true,
           cuentaPago: true,
-          tipoCuenta: true,
+          tipoCuenta bancaria: true,
           cedulaRnc: true,
         }
       })
@@ -76,7 +76,7 @@ export default async function SettingsPage() {
           <Settings className="text-blue-400" />
           Profile Settings
         </h2>
-        <p className="text-gray-400 mt-2">Manage your personal information and payment preferences.</p>
+        <p className="text-gray-400 mt-2">Administra tu información personal y tus preferencias de pago.</p>
       </header>
 
       <form action={updateInterpreterProfileFromForm} className="space-y-6">
@@ -85,12 +85,12 @@ export default async function SettingsPage() {
         <div className="glass p-8 rounded-3xl border border-white/5 space-y-6">
           <div className="flex items-center gap-3 pb-4 border-b border-white/5">
             <User className="text-blue-400" size={20} />
-            <h3 className="text-lg font-bold text-white">Personal Information</h3>
+            <h3 className="text-lg font-bold text-white">Información personal</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Full Name</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Nombre completo</label>
               <input 
                 type="text" 
                 disabled 
@@ -99,7 +99,7 @@ export default async function SettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Corporate Email</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Correo electrónico</label>
               <input 
                 type="text" 
                 disabled 
@@ -108,7 +108,7 @@ export default async function SettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Phone Number</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Número de teléfono</label>
               <div className="relative">
                 <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                 <input 
@@ -121,14 +121,14 @@ export default async function SettingsPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Country of Residence</label>
+              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">País de residencia</label>
               <div className="relative">
                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
                 <input 
                   name="country"
                   type="text" 
                   defaultValue={interpreter?.pais || ''}
-                  placeholder="e.g. Dominican Republic"
+                  placeholder="Ej.: República Dominicana"
                   className="w-full bg-white/5 border border-white/10 focus:border-blue-500/50 rounded-xl px-12 py-3 text-white focus:outline-none transition-all"
                 />
               </div>
@@ -140,7 +140,7 @@ export default async function SettingsPage() {
         <div className="glass p-8 rounded-3xl border border-white/5 space-y-6">
           <div className="flex items-center gap-3 pb-4 border-b border-white/5">
             <CreditCard className="text-green-400" size={20} />
-            <h3 className="text-lg font-bold text-white">Payment Preferences (RD Only)</h3>
+            <h3 className="text-lg font-bold text-white">Preferencias de pago (República Dominicana)</h3>
           </div>
 
           {showBankingForm ? (
@@ -186,15 +186,15 @@ export default async function SettingsPage() {
                     <p className="text-white font-mono">{interpreter?.banco || profile.bank_name || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo de Cuenta</label>
-                    <p className="text-white font-mono">{interpreter?.tipoCuenta || profile.bank_account_type || '—'}</p>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo de cuenta</label>
+                    <p className="text-white font-mono">{interpreter?.tipoCuenta bancaria || profile.bank_account_type || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cuenta</label>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cuenta bancaria</label>
                     <p className="text-white font-mono">{maskAccount(interpreter?.cuentaPago || profile.bank_account || '')}</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cédula</label>
+                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cédula o RNC</label>
                     <p className="text-white font-mono">{maskCedula(interpreter?.cedulaRnc || profile.bank_cedula || '')}</p>
                   </div>
                 </div>
@@ -216,7 +216,7 @@ export default async function SettingsPage() {
           <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-4">
             <Info className="text-blue-400 shrink-0" size={20} />
             <p className="text-xs text-gray-400 leading-relaxed">
-              Payments are processed every 15 days in Dominican Pesos (DOP). Ensure the Cédula matches the bank account holder&apos;s identity to avoid payment rejection.
+              Payments are processed every 15 days in Dominican Pesos (DOP). Ensure the Cédula o RNC matches the bank account holder&apos;s identity to avoid payment rejection.
             </p>
           </div>
         </div>
