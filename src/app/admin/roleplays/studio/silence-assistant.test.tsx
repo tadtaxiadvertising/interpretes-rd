@@ -157,6 +157,40 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(fetchMock).toHaveBeenCalledOnce();
   });
 
+  it('aborts an in-flight pause analysis when accepted SRT cuts replace the draft', async () => {
+    let finish!: (response: Response) => void;
+    let signal: AbortSignal | undefined;
+    const pending = new Promise<Response>(resolve => { finish = resolve; });
+    const request = vi.fn((_url: RequestInfo | URL, options: RequestInit) => {
+      signal = options.signal as AbortSignal;
+      return pending;
+    });
+    vi.stubGlobal('fetch', request);
+    loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    expect(signal?.aborted).toBe(false);
+    const replacement = new File(['srt'], 'accepted.srt', { type: 'text/plain' });
+    Object.defineProperty(replacement, 'text', {
+      configurable: true,
+      value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: New accepted turn',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [replacement] },
+      });
+    });
+    expect(signal?.aborted).toBe(true);
+    await act(async () => {
+      finish({ ok: true, json: async () => result } as Response);
+      await pending;
+    });
+    expect(request).toHaveBeenCalledOnce();
+    expect(screen.getByText('Doctor: New accepted turn')).toBeTruthy();
+    expect(screen.queryByText(/2 pausas detectadas/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
+  });
+
   it('ignores an analysis that finishes after the admin has changed the original MP3', async () => {
     let finish!: (body: unknown) => void;
     const responsePending = new Promise<unknown>(resolve => { finish = resolve; });
