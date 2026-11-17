@@ -125,6 +125,16 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     } finally { log.mockRestore(); }
   });
 
+  it('rejects even a one-cent persisted score drift', async () => {
+    m.qaCreate.mockResolvedValueOnce({ id: 'qa-1', totalScore: 90.01 });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaForm(undefined, qaFormData());
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.revalidatePath).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+
   it('rejects a critical-error override when a database trigger ignores it', async () => {
     const data = qaFormData();
     data.set('criticalError', 'on');
