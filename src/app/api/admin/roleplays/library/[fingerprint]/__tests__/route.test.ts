@@ -16,6 +16,7 @@ import { POST, DELETE } from '../route';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 
 const scenarios = [{
@@ -147,6 +148,51 @@ describe('admin roleplay library visibility', () => {
       where: { fingerprint, archivedAt: { not: null } },
       data: { archivedAt: null },
     });
+  });
+
+  it('returns success after archive commit even when the first cache refresh throws', async () => {
+    vi.mocked(revalidatePath).mockImplementationOnce(() => {
+      throw new Error('private://PRIVATE_ARCHIVE_CACHE_TOKEN');
+    });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await POST(archiveRequest(), context());
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ success: true, archived: true });
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+      expect(prisma.roleplayLibraryArchive.upsert).toHaveBeenCalledOnce();
+      expect(revalidatePath).toHaveBeenNthCalledWith(1, '/admin/roleplays/library');
+      expect(revalidatePath).toHaveBeenNthCalledWith(2, '/admin/roleplays/library/session-source-1');
+      expect(warning).toHaveBeenCalledWith('[ADMIN ROLEPLAY LIBRARY] Committed change; cache refresh failed');
+      expect(JSON.stringify(warning.mock.calls)).not.toContain('PRIVATE_ARCHIVE_CACHE_TOKEN');
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('returns success after restore commit when cache refresh fails without retrying the write', async () => {
+    vi.mocked(revalidatePath).mockImplementationOnce(() => {
+      throw new Error('PRIVATE_RESTORE_CACHE_TOKEN');
+    });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await DELETE(restoreRequest(), context());
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ success: true, archived: false });
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+      expect(prisma.roleplayLibraryArchive.updateMany).toHaveBeenCalledOnce();
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/roleplays/library');
+      expect(warning).toHaveBeenCalledWith('[ADMIN ROLEPLAY LIBRARY] Committed change; cache refresh failed');
+      expect(JSON.stringify(warning.mock.calls)).not.toContain('PRIVATE_RESTORE_CACHE_TOKEN');
+      expect(error).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+      error.mockRestore();
+    }
   });
 
   it('requires admin privileges to restore', async () => {
