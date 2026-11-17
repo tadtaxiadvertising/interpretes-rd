@@ -78,6 +78,15 @@ export default function RoleplayStudioPage() {
   const [cuePage, setCuePage] = useState(0);
   const [cueSearch, setCueSearch] = useState('');
   const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
+  const [happyScribeItems, setHappyScribeItems] = useState<Array<{
+    id: string; name: string; state: string; language: string | null;
+    durationSeconds: number | null; createdAt: string | null; folder: string | null;
+  }>>([]);
+  const [happyScribeSelectedId, setHappyScribeSelectedId] = useState('');
+  const [happyScribeLoading, setHappyScribeLoading] = useState(false);
+  const [happyScribeImporting, setHappyScribeImporting] = useState(false);
+  const [happyScribeMediaImporting, setHappyScribeMediaImporting] = useState(false);
+  const [happyScribeMediaEnabled, setHappyScribeMediaEnabled] = useState(false);
   const CUES_PER_PAGE = 60;
   const player = useRef<HTMLMediaElement | null>(null);
   const pairPlayer = useRef<HTMLAudioElement | null>(null);
@@ -1080,6 +1089,119 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const loadHappyScribeItems = async () => {
+    setHappyScribeLoading(true);
+    setHappyScribeMediaEnabled(false);
+    setError('');
+    try {
+      const response = await fetch('/api/admin/happyscribe/transcriptions', {
+        credentials: 'same-origin', cache: 'no-store',
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.success || !Array.isArray(body.data)) {
+        throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible consultar HappyScribe.');
+      }
+      const items = body.data as typeof happyScribeItems;
+      setHappyScribeMediaEnabled(body.mediaImportEnabled === true);
+      setHappyScribeItems(items);
+      setHappyScribeSelectedId(current =>
+        items.some(item => item.id === current) ? current : items.find(item =>
+          ['automatic_done', 'done'].includes(item.state))?.id ?? '',
+      );
+      setNotice(`HappyScribe: ${items.length} transcripciones disponibles en la página actual.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No fue posible consultar HappyScribe.');
+    } finally {
+      setHappyScribeLoading(false);
+    }
+  };
+
+  const importHappyScribeTranscript = async () => {
+    if (!audio || !duration) {
+      setError('Carga primero en Audio Studio el audio original correspondiente a esta transcripción.');
+      return;
+    }
+    if (!happyScribeSelectedId || happyScribeImporting) return;
+    const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
+    if (!item || !['automatic_done', 'done'].includes(item.state)) {
+      setError('Selecciona una transcripción completada en HappyScribe.');
+      return;
+    }
+    // Discard provider exports that finish after an audio replacement or edit.
+    const sourceAtRequest = audio;
+    const revisionAtRequest = subtitleImportRevision.current;
+    setHappyScribeImporting(true);
+    setError('');
+    try {
+      const response = await fetch('/api/admin/happyscribe/transcriptions', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !body?.success || typeof body.data?.content !== 'string') {
+        throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible importar el SRT.');
+      }
+      if (revisionAtRequest !== subtitleImportRevision.current ||
+          activeAudioFile.current !== sourceAtRequest) return;
+      const file = new File([body.data.content], item.name.replace(/\\.[^.]+$/, '') + '.srt', {
+        type: 'application/x-subrip',
+      });
+      await importSubtitles(file);
+    } catch (cause) {
+      if (revisionAtRequest === subtitleImportRevision.current &&
+          activeAudioFile.current === sourceAtRequest) {
+        setError(cause instanceof Error ? cause.message : 'No fue posible importar desde HappyScribe.');
+      }
+    } finally {
+      setHappyScribeImporting(false);
+    }
+  };
+
+  const importHappyScribeAudio = async () => {
+    if (!happyScribeSelectedId || happyScribeMediaImporting) return;
+    const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
+    if (!item || item.state !== 'automatic_done') {
+      setError('El audio original solo está disponible para transcripciones completadas con el estado automatic_done.');
+      return;
+    }
+    const previousAudio = activeAudioFile.current;
+    const revisionAtRequest = subtitleImportRevision.current;
+    setHappyScribeMediaImporting(true);
+    setError('');
+    setNotice('');
+    try {
+      const response = await fetch('/api/admin/happyscribe/media', {
+        method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(typeof body?.error === 'string'
+          ? body.error : 'No fue posible importar el audio original.');
+      }
+      const blob = await response.blob();
+      if (revisionAtRequest !== subtitleImportRevision.current ||
+          activeAudioFile.current !== previousAudio) return;
+      if (!blob.size || blob.size > 250 * 1024 * 1024) {
+        throw new Error('El audio está vacío o supera el límite de importación directa de 250 MiB.');
+      }
+      const filename = item.name.replace(/\\.[^.]+$/, '').slice(0, 180) + '.mp3';
+      const file = new File([blob], filename, { type: 'audio/mpeg' });
+      chooseAudio(file);
+      if (activeAudioFile.current !== file) return;
+      setNotice('Audio original importado desde HappyScribe. Espera a que Audio Studio calcule su duración y después importa la transcripción para revisar y asignar los hablantes.');
+    } catch (cause) {
+      if (revisionAtRequest === subtitleImportRevision.current &&
+          activeAudioFile.current === previousAudio) {
+        setError(cause instanceof Error ? cause.message : 'No fue posible importar el audio desde HappyScribe.');
+      }
+    } finally {
+      setHappyScribeMediaImporting(false);
+    }
+  };
+
   const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
   const hasCompound = segments.some(segment => segment.ranges !== undefined);
   const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
@@ -1191,6 +1313,55 @@ export default function RoleplayStudioPage() {
             // picker is cancelled. Preserve the existing source and edits.
             if (file) chooseAudio(file);
           }} />
+        {/* This library must be available before choosing an audio source. */}
+        <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-emerald-100">Importar desde HappyScribe</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Importa el MP3 original desde HappyScribe o selecciónalo en tu equipo. Después importa los tiempos y textos; revisa las voces antes de excluir al intérprete original.
+              </p>
+            </div>
+            <button type="button" onClick={() => void loadHappyScribeItems()}
+              disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
+              className="rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-emerald-100 disabled:opacity-50">
+              {happyScribeLoading ? 'Consultando…' : 'Actualizar biblioteca'}
+            </button>
+          </div>
+          {happyScribeItems.length > 0 && (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <select aria-label="Transcripción de HappyScribe"
+                disabled={happyScribeImporting || happyScribeLoading}
+                value={happyScribeSelectedId}
+                onChange={event => setHappyScribeSelectedId(event.currentTarget.value)}
+                className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
+                <option value="">Selecciona una transcripción</option>
+                {happyScribeItems.map(item => (
+                  <option key={item.id} value={item.id} disabled={!['automatic_done', 'done'].includes(item.state)}>
+                    {item.name} · {item.state} · {item.language || 'Idioma desconocido'}
+                  </option>
+                ))}
+              </select>
+              {happyScribeMediaEnabled && (
+                <button type="button" onClick={() => void importHappyScribeAudio()}
+                  disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
+                    happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
+                  className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
+                  {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
+                </button>
+              )}
+              <button type="button" onClick={() => void importHappyScribeTranscript()}
+                disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
+                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
+              </button>
+            </div>
+          )}
+          {happyScribeItems.length === 0 && !happyScribeLoading && (
+            <p className="mt-2 text-xs text-slate-500">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
+          )}
+        </div>
+
         {url && (
           <div className="mt-5 space-y-3">
             {videoSource
@@ -2001,6 +2172,11 @@ export default function RoleplayStudioPage() {
         </section>
       )}
       {error && (!audio || !duration) && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {notice && (!audio || !duration) && (
+        <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+          {notice}
+        </p>
+      )}
       <p className="text-xs leading-5 text-slate-500">
         Solo administración · Los archivos originales locales no se guardan en la biblioteca.
         Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.

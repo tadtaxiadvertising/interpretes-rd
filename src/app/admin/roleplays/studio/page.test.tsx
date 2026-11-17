@@ -364,4 +364,96 @@ describe('Audio Studio clip review player', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it('discards a delayed HappyScribe transcript when a different recording is selected', async () => {
+    const itemId = 'a'.repeat(32);
+    let finishImport!: (response: Response) => void;
+    const pendingImport = new Promise<Response>(resolve => { finishImport = resolve; });
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? pendingImport
+        : Promise.resolve({
+            ok: true,
+            json: async () => ({
+              success: true,
+              data: [{ id: itemId, name: 'Consulta', state: 'done', language: 'es',
+                durationSeconds: 90, createdAt: null, folder: null }],
+            }),
+          } as Response));
+    vi.stubGlobal('fetch', fetcher);
+
+    const { container } = render(<RoleplayStudioPage />);
+    const sourceInput = screen.getByLabelText(/Grabación original MP3/i);
+    const choose = (name: string) => {
+      fireEvent.change(sourceInput, {
+        target: { files: [new File(['ID3'], name, { type: 'audio/mpeg' })] },
+      });
+      const player = container.querySelector('audio')!;
+      Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+      fireEvent.loadedMetadata(player);
+    };
+    choose('original.mp3');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('button', { name: 'Importar transcripción' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Importar audio original' })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    choose('different.mp3');
+
+    await act(async () => {
+      finishImport({
+        ok: true,
+        json: async () => ({
+          success: true, data: { content:
+            '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Obsolete transcript' },
+        }),
+      } as Response);
+      await pendingImport;
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.queryByText(/Obsolete transcript/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Aplicar selección al editor' })).toBeNull();
+  });
+
+  it('imports the original HappyScribe MP3 directly into the Audio Studio source', async () => {
+    const itemId = 'a'.repeat(32);
+    const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return new Response(new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00]), {
+          status: 200, headers: { 'Content-Type': 'audio/mpeg' },
+        });
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          success: true,
+          data: [{ id: itemId, name: 'Practice recording.mp3', state: 'automatic_done',
+            language: 'en-US', durationSeconds: 90, createdAt: null, folder: null }],
+          mediaImportEnabled: true,
+        }),
+      } as Response;
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    const { container } = render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+      await Promise.resolve();
+    });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1][0]).toBe('/api/admin/happyscribe/media');
+    expect(screen.getByText(/Audio original importado desde HappyScribe/)).toBeTruthy();
+    const player = container.querySelector('audio');
+    expect(player?.getAttribute('src')).toMatch(/^blob:/);
+  });
+
 });
