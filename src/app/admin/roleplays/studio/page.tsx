@@ -702,9 +702,11 @@ export default function RoleplayStudioPage() {
     setNotice('Intervenciones del intérprete original excluidas. Puedes deshacer antes de seguir editando.');
   };
 
-  const setLanguageForPendingTurns = (language: 'en' | 'es') => {
+  const setLanguageForPendingTurns = (language: 'en' | 'es', visibleIds: readonly string[]) => {
+    const visible = new Set(visibleIds);
     const pendingIds = new Set(segments.filter(item =>
-      item.language === 'unknown' && item.speakerRole !== 'interpreter',
+      visible.has(item.id) && item.language === 'unknown' &&
+      item.speakerRole !== 'interpreter',
     ).map(item => item.id));
     if (!pendingIds.size) return;
     // The choice is intentional and undoable; never infer a clip's language
@@ -1041,8 +1043,6 @@ export default function RoleplayStudioPage() {
   const originalInterpreterCount = segments.filter(
     segment => segment.speakerRole === 'interpreter',
   ).length;
-  const pendingLanguageCount = segments.filter(segment =>
-    segment.language === 'unknown' && segment.speakerRole !== 'interpreter').length;
   const orderedSegments = [...segments].sort((a, b) => a.start - b.start);
   const visibleSegments = orderedSegments
     .map((segment, index) => ({ segment, index }))
@@ -1050,6 +1050,10 @@ export default function RoleplayStudioPage() {
       (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language]
         .some(value => value.toLocaleLowerCase().includes(query))));
+
+  const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
+    segment.language === 'unknown' && segment.speakerRole !== 'interpreter')
+    .map(({ segment }) => segment.id);
 
   const mediaHandlers = {
     onPlay: () => setEditorPlaybackRevision(n => n + 1),
@@ -1585,16 +1589,16 @@ export default function RoleplayStudioPage() {
               </label>
             </div>
           </details>
-          {pendingLanguageCount > 1 && (
+          {pendingLanguageIds.length > 1 && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2">
               <span className="mr-auto text-xs text-slate-300">
-                {pendingLanguageCount} intervenciones sin idioma. Asigna solo si todas comparten el idioma seleccionado.
+                {pendingLanguageIds.length} intervenciones visibles sin idioma. Solo se cambiarán las que aparecen con los filtros actuales.
               </span>
-              <button type="button" onClick={() => setLanguageForPendingTurns('en')}
+              <button type="button" onClick={() => setLanguageForPendingTurns('en', pendingLanguageIds)}
                 className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
                 Marcar pendientes como inglés
               </button>
-              <button type="button" onClick={() => setLanguageForPendingTurns('es')}
+              <button type="button" onClick={() => setLanguageForPendingTurns('es', pendingLanguageIds)}
                 className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
                 Marcar pendientes como español
               </button>
