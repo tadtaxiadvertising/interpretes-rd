@@ -440,7 +440,7 @@ export async function refreshPayrollRecord(
     const calc = await calculateFullPayroll(interpreterId, record.periodStart, record.periodEnd, client);
     // Recheck the pending state in the write itself. A payment may be marked
     // paid after the initial read while this calculation is in progress.
-    await client.payrollRecord.updateMany({
+    const claimed = await client.payrollRecord.updateMany({
       where: {
         id: record.id,
         status: { in: ['Pendiente', 'PENDING'] },
@@ -457,6 +457,12 @@ export async function refreshPayrollRecord(
         verifiedMinutes: calc.totalMinutes,
       },
     });
+    // A concurrent approval/payment can make the conditional UPDATE match
+    // zero rows. Never commit a revised ProductionLog with stale payroll
+    // totals: force the caller's transaction to roll back.
+    if (claimed.count !== 1) {
+      throw new Error('Payroll changed during recalculation');
+    }
   }
 }
 

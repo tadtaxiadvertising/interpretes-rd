@@ -1,52 +1,37 @@
-import { NextResponse, NextRequest } from 'next/server';
-import prisma from '@/lib/prisma';
+import { NextRequest } from 'next/server';
+import { z } from 'zod';
 import { withSecurity } from '@/lib/api-security';
 import { guardApiAuth } from '@/lib/api-auth';
-import { z } from 'zod';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { reconcileProductionMinutes } from '@/lib/payroll/reconcile-production-minutes';
 
+const ReconcileBody = z.object({
+  logId: z.number().int().positive(),
+  verifiedMinutes: z.number().int().min(0).max(100_000),
+}).strict();
+
+/**
+ * Legacy HTTP endpoint delegates to exactly the same transactional rules as
+ * the admin Server Action. No direct writes or "paid status only" shortcuts.
+ */
 export const PATCH = withSecurity(async (request: NextRequest) => {
   const denied = await guardApiAuth(request, 'admin');
-  if (denied) return denied;
+  if (denied) return privateAdminResponse(denied);
 
-  const body = await request.json();
-  const { logId, verifiedMinutes } = body;
+  const { logId, verifiedMinutes } = ReconcileBody.parse(await request.json());
+  const result = await reconcileProductionMinutes(logId, verifiedMinutes);
 
-  // 1. Fetch the log
-  const log = await prisma.productionLog.findUnique({
-    where: { id: logId }
-  });
-
-  if (!log) {
-    return NextResponse.json({ error: 'Production log not found' }, { status: 404 });
+  if (result.kind === 'UPDATED') {
+    return privateAdminJson({ success: true, data: result.log });
   }
 
-  // 2. Check if linked to a PAID payroll record
-  const linkedPaidPayroll = await prisma.payrollRecord.findFirst({
-    where: {
-      interpreterId: log.interpreterId,
-      status: 'PAID',
-      periodStart: { lte: log.date },
-      periodEnd: { gte: log.date }
-    }
-  });
-
-  if (linkedPaidPayroll) {
-    return NextResponse.json(
-      { error: 'Cannot modify verifiedMinutes: Log is linked to a PAID payroll record' },
-      { status: 403 }
-    );
-  }
-
-  // 3. Update the log
-  const updatedLog = await prisma.productionLog.update({
-    where: { id: logId },
-    data: { verifiedMinutes: Number(verifiedMinutes) }
-  });
-
-  return NextResponse.json({ success: true, data: updatedLog });
-}, {
-  body: z.object({
-    logId: z.number().int().positive(),
-    verifiedMinutes: z.number().nonnegative()
-  })
-});
+  const failures = {
+    NOT_FOUND: { status: 404, error: 'Production log not found' },
+    INVALID_LOG: { status: 400, error: 'Production log is not linked to an interpreter' },
+    SETTLED: { status: 409, error: 'Cannot modify a settled production log' },
+    LOCKED_PAYROLL: { status: 409, error: 'Cannot modify production linked to an approved or paid payroll' },
+    CONFLICT: { status: 409, error: 'Production log changed; reload and try again' },
+  } as const;
+  const failure = failures[result.kind];
+  return privateAdminJson({ success: false, error: failure.error }, { status: failure.status });
+}, { body: ReconcileBody });
