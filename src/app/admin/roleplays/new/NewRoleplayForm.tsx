@@ -81,7 +81,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const validationFocusSequence = useRef(0);
   // Unlike focus requests, this target survives unrelated edits so a
   // later correction can remove the stale warning without resubmitting.
-  const pendingFieldValidation = useRef<{ scenarioId: string; field: 'title' | 'audio' } | null>(null);
+  const pendingFieldValidation = useRef<{ scenarioId: string; field: 'title' | 'audio'; message: string } | null>(null);
   const [lastRemoved, setLastRemoved] = useState<{ scenario: Scenario; index: number } | null>(null);
   const [bulkResponseLimitSec, setBulkResponseLimitSec] = useState(120);
   // Keep the import identity independent from React render batching. The user
@@ -254,7 +254,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     // an upload, import, permission or publication error from the server.
     if (resolvedValidationField) {
       pendingFieldValidation.current = null;
-      setError(previous => previous?.startsWith('El escenario ') ? null : previous);
+      setError(previous => previous === pending?.message ? null : previous);
     }
     // Track new URLs before state commits so unmount can still release them.
     if (updates.baseAudioPreview?.startsWith('blob:')) previewUrls.current.add(updates.baseAudioPreview);
@@ -391,16 +391,18 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     }
     for (const [index, scenario] of scenarios.entries()) {
       if (!scenario.title.trim()) {
-        pendingFieldValidation.current = { scenarioId: scenario.id, field: 'title' };
-        setError(`El escenario ${index + 1} necesita un título.`);
+        const message = `El escenario ${index + 1} necesita un título.`;
+        pendingFieldValidation.current = { scenarioId: scenario.id, field: 'title', message };
+        setError(message);
         setValidationFocus({
           scenarioId: scenario.id, field: 'title', requestId: ++validationFocusSequence.current,
         });
         return false;
       }
       if (!scenario.baseAudioFile) {
-        pendingFieldValidation.current = { scenarioId: scenario.id, field: 'audio' };
-        setError(`El escenario ${index + 1} necesita un audio válido.`);
+        const message = `El escenario ${index + 1} necesita un audio válido.`;
+        pendingFieldValidation.current = { scenarioId: scenario.id, field: 'audio', message };
+        setError(message);
         setValidationFocus({
           scenarioId: scenario.id, field: 'audio', requestId: ++validationFocusSequence.current,
         });
