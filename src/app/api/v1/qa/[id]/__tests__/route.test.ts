@@ -2,11 +2,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
-  default: { qAScore: {
-    findUnique: vi.fn(),
-    update: vi.fn(),
-    delete: vi.fn(),
-  } },
+  default: {
+    $transaction: vi.fn(),
+    qAScore: {
+      findUnique: vi.fn(),
+      update: vi.fn(),
+      delete: vi.fn(),
+    },
+  },
 }));
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: vi.fn() }));
 
@@ -20,6 +23,7 @@ const score = {
   serviceScore: 90, technicalScore: 90, criticalError: false,
   interpreter: { name: 'Sensitive interpreter' },
   productionLog: { id: 22 },
+  totalScore: 90,
 };
 const req = () => new Request('http://localhost/api/v1/qa/8');
 const patch = (body: unknown) => new Request('http://localhost/api/v1/qa/8', {
@@ -43,6 +47,9 @@ describe('QA detail API privacy and error isolation', () => {
     vi.mocked(prisma.qAScore.findUnique).mockResolvedValue(score as never);
     vi.mocked(prisma.qAScore.update).mockResolvedValue(score as never);
     vi.mocked(prisma.qAScore.delete).mockResolvedValue(score as never);
+    vi.mocked(prisma.$transaction).mockImplementation(
+      (async (callback: (tx: typeof prisma) => Promise<unknown>) => callback(prisma)) as never,
+    );
   });
 
   it.each([
@@ -78,6 +85,11 @@ describe('QA detail API privacy and error isolation', () => {
     expect(response.status).toBe(200);
     privateResponse(response);
     expect(prisma.qAScore.update).toHaveBeenCalledOnce();
+    // Metadata PATCH must not modify historical scores, critical flags or
+    // audit ownership, even if a previously stored result was inconsistent.
+    expect(prisma.qAScore.update).toHaveBeenCalledWith({
+      where: { id: 8 }, data: { comentarios: 'Synthetic QA review' },
+    });
 
     const invalid = await PATCH(patch({ protocolScore: 999 }), params);
     expect(invalid.status).toBe(400);
@@ -129,4 +141,91 @@ describe('QA detail API privacy and error isolation', () => {
       expect(JSON.stringify(spy.mock.calls)).not.toMatch(/PRIVATE_|Bearer /);
     } finally { spy.mockRestore(); }
   });
+  it('rejects empty edits and direct attempts to change total or audit linkage', async () => {
+    for (const body of [
+      {}, { totalScore: 100 }, { interpreterId: 55 }, { productionLogId: 44 },
+    ]) {
+      const response = await PATCH(patch(body), params);
+      expect(response.status).toBe(400);
+      privateResponse(response);
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.qAScore.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts canonical 0–100 dimensions and recomputes the score only for score edits', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, protocolScore: 100, totalScore: 92,
+    } as never);
+    const response = await PATCH(patch({ protocolScore: 100 }), params);
+    expect(response.status).toBe(200);
+    privateResponse(response);
+    expect(prisma.$transaction).toHaveBeenCalledOnce();
+    expect(prisma.qAScore.update).toHaveBeenCalledWith({
+      where: { id: 8 },
+      data: { protocolScore: 100, totalScore: 92 },
+    });
+  });
+
+  it('preserves criticalError when a PATCH edits only comments', async () => {
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce({
+      ...score, criticalError: true, totalScore: 0,
+    } as never);
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, criticalError: true, totalScore: 0,
+    } as never);
+    const response = await PATCH(patch({ comentarios: 'Comentario actualizado' }), params);
+    expect(response.status).toBe(200);
+    expect(prisma.qAScore.update).toHaveBeenCalledWith({
+      where: { id: 8 }, data: { comentarios: 'Comentario actualizado' },
+    });
+  });
+
+  it('forces zero when an administrator explicitly marks a critical error', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, criticalError: true, totalScore: 0,
+    } as never);
+    const response = await PATCH(patch({ criticalError: true }), params);
+    expect(response.status).toBe(200);
+    expect(prisma.qAScore.update).toHaveBeenCalledWith({
+      where: { id: 8 },
+      data: { criticalError: true, totalScore: 0, accionRequerida: 'Advertencia' },
+    });
+  });
+
+  it('rejects a database trigger that rewrites a historical total on a comments-only PATCH', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, totalScore: 26,
+    } as never);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await PATCH(patch({ comentarios: 'Solo comentario' }), params);
+      expect(response.status).toBe(500);
+      privateResponse(response);
+      expect(await response.json()).toEqual({ success: false, error: 'Error updating scorecard' });
+      expect(spy).toHaveBeenCalledWith('QA PATCH ERROR:', 'Error');
+    } finally { spy.mockRestore(); }
+  });
+
+  it('rejects a database trigger that overwrites a freshly recalculated QA total', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, protocolScore: 100, totalScore: 26,
+    } as never);
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const response = await PATCH(patch({ protocolScore: 100 }), params);
+      expect(response.status).toBe(500);
+      privateResponse(response);
+      expect(await response.json()).toEqual({ success: false, error: 'Error updating scorecard' });
+    } finally { spy.mockRestore(); }
+  });
+
+  it('does not update a nonexistent scorecard', async () => {
+    vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(null);
+    const response = await PATCH(patch({ comentarios: 'Una nota' }), params);
+    expect(response.status).toBe(404);
+    privateResponse(response);
+    expect(prisma.qAScore.update).not.toHaveBeenCalled();
+  });
+
 });
