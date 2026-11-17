@@ -46,7 +46,7 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 bg-clip-text text-transparent">
               Tablero de Cumplimiento
             </h1>
-            <p className="text-sm text-slate-400 mt-1">Heatmap de rendimiento mensual y KPIs</p>
+            <p className="text-sm text-slate-400 mt-1">Mapa de actividad mensual e indicadores de rendimiento</p>
           </div>
         </div>
         
@@ -79,9 +79,9 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
                   <span className="text-[9px] uppercase tracking-wider font-normal text-slate-500">/ Estado</span>
                 </div>
               </th>
-              {/* Resumen MTD */}
+              {/* Resumen Mes actual */}
               <th className="p-4 text-center font-bold text-slate-300 sticky left-[180px] bg-slate-900/90 z-20 border-r border-white/10 min-w-[80px] w-[80px]">
-                <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4 text-emerald-400"/> MTD</div>
+                <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4 text-emerald-400"/> Mes actual</div>
               </th>
               <th className="p-4 text-center font-bold text-slate-300 sticky left-[260px] bg-slate-900/90 z-20 border-r border-white/10 min-w-[80px] w-[80px]">
                 Meta
@@ -155,7 +155,7 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
                               <span className="font-mono text-emerald-400">{formatMinutes(d.logsMinutes)} min</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-slate-400">Sesiones Vivo:</span>
+                              <span className="text-slate-400">Sesiones en vivo:</span>
                               <span className="font-mono text-blue-400">{formatMinutes(d.sessionsMinutes)} min</span>
                             </div>
                             <div className="flex justify-between items-center mt-2 pt-1 border-t border-slate-700">
