@@ -294,7 +294,7 @@ jobs:
             exit 78
           fi
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
-          case "$HTTP_CODE" in 200|201|202|204) echo "OK: interpreters deployed (HTTP $HTTP_CODE)";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
+          case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
 
@@ -329,7 +329,7 @@ jobs:
             exit 78
           fi
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
-          case "$HTTP_CODE" in 200|201|202|204) echo "OK: Roleplay worker deploy triggered (HTTP $HTTP_CODE)";; *) echo "FAIL: Roleplay worker webhook returned HTTP $HTTP_CODE"; exit 1;; esac
+          case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook Roleplay worker aceptado (HTTP $HTTP_CODE); readiness y SHA no verificados"; printf 'Roleplay worker: solicitud aceptada HTTP %s; contenedor no verificado.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: Roleplay worker webhook returned HTTP $HTTP_CODE"; exit 1;; esac
 
   deploy-interpreters-api:
     name: Deploy interpreters-api (Backend)
@@ -362,6 +362,6 @@ jobs:
             exit 78
           fi
           HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
-          case "$HTTP_CODE" in 200|201|202|204) echo "OK: interpreters-api deployed (HTTP $HTTP_CODE)";; *) echo "FAIL: interpreters-api webhook returned HTTP $HTTP_CODE"; exit 1;; esac
+          case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters-api aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters API: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters-api webhook returned HTTP $HTTP_CODE"; exit 1;; esac
         env:
           EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
