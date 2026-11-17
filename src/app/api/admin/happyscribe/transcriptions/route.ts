@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
     const createResponse = await happyScribeFetch('/exports', config.token, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ export: { format: 'srt', transcription_ids: [id], show_speakers: true } }),
+      body: JSON.stringify({ export: { format: 'srt', transcription_ids: [id] } }),
     });
     if (!createResponse.ok) return privateRoleplayResponse({ error: 'HappyScribe no pudo preparar el archivo SRT.' }, { status: 502 });
     const created: unknown = await createResponse.json();
