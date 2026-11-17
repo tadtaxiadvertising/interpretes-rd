@@ -294,7 +294,7 @@ export default async function InterpreterDashboard() {
             <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
               <div className="flex justify-between items-end mb-4">
                 <div>
-                  <p className="text-sm text-white font-semibold mb-1">Horas MTD</p>
+                  <p className="text-sm text-white font-semibold mb-1">Horas del mes</p>
                   <p className="text-3xl font-bold text-white">
                     <span suppressHydrationWarning>{(mtdMinutes / 60).toFixed(1)}</span>
                     <span className="text-lg text-slate-300"> / {Math.round(monthlyGoal / 60)}</span>
@@ -374,7 +374,7 @@ export default async function InterpreterDashboard() {
             {/* Earnings — IMPROVED CONTRAST */}
             <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/5 backdrop-blur-sm flex flex-col justify-center">
               <div className="flex justify-between items-center mb-2">
-                <p className="text-sm text-white font-semibold">Ganancias MTD</p>
+                <p className="text-sm text-white font-semibold">Ganancias del mes</p>
                 <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
                   <DollarSign size={20} />
                 </div>
@@ -410,7 +410,7 @@ export default async function InterpreterDashboard() {
                 </div>
                 <h3 className="text-xl font-bold text-white tracking-tight">Temporizador en Vivo</h3>
               </div>
-              <span className="text-[10px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-md uppercase tracking-wider border border-blue-500/20">Realtime</span>
+              <span className="text-[10px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-md uppercase tracking-wider border border-blue-500/20">En tiempo real</span>
             </div>
             <div className="relative z-10">
               <CallTimer
