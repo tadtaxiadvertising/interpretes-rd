@@ -78,6 +78,22 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('applies suggestions to an untouched draft without a needless confirmation step', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => result }));
+    vi.stubGlobal('fetch', fetchMock);
+    loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    });
+
+    expect(screen.getByText(/Intervenciones \(0\/25\)/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i }));
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(screen.getByText(/Intervenciones \(3\/25\)/i)).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
   it('preserves edited interventions and filters when the administrator declines a suggested replacement', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => result }));
     vi.stubGlobal('fetch', fetchMock);
