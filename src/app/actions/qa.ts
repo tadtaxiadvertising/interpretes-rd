@@ -130,13 +130,18 @@ export async function submitQAEvaluation(rawInput: QAScoreInput) {
       });
       if (profile) {
         const confirmedScore = data.totalScore;
-        await createNotification({
+        const delivery = await createNotification({
           userId: profile.id,
           title: 'Evaluación QA Lista',
           message: `Tu puntaje de sesión: ${confirmedScore.toFixed(1)}%. Acción: ${actionRequired}`,
           type: confirmedScore >= 85 ? 'success' : confirmedScore >= 70 ? 'info' : 'warning',
           link: '/dashboard/earnings',
         });
+        // A Server Action may return a failure result instead of throwing.
+        // Do not leak its arbitrary message, and never undo the QA commit.
+        if (delivery?.success === false) {
+          console.warn('QA saved but notification not delivered');
+        }
       }
     }
   } catch (notifyError: unknown) {
