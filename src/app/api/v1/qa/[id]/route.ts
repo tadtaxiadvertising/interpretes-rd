@@ -7,6 +7,7 @@ import { corsHeaders } from '@/lib/cors';
 import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { qaV1StoredTotalMatches } from '@/lib/qa-v1-score-contract';
+import { calculateCanonicalQaTotal } from '@/lib/qa-canonical-score';
 
 const METHODS = 'GET, PATCH, DELETE, OPTIONS';
 
@@ -102,9 +103,13 @@ export async function PATCH(
               : (updateData[field] ?? 0)));
 
         const isCritical = updateData.criticalError ?? existing.criticalError ?? false;
-        const weighted = protocol * 0.20 + interpretation * 0.40 +
-          language * 0.20 + service * 0.10 + technical * 0.10;
-        expectedTotal = isCritical ? 0 : Math.round(weighted * 100) / 100;
+        expectedTotal = calculateCanonicalQaTotal({
+          protocolScore: protocol,
+          interpretationScore: interpretation,
+          languageScore: language,
+          serviceScore: service,
+          technicalScore: technical,
+        }, isCritical);
         updateData.totalScore = expectedTotal;
         if (isCritical) updateData.accionRequerida = 'Advertencia';
       }
