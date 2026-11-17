@@ -30,6 +30,7 @@ interface ScenarioCardProps {
   onMoveUp: (id: string) => void;
   onMoveDown: (id: string) => void;
   isDragging: boolean;
+  startCollapsed?: boolean;
 }
 
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -44,7 +45,9 @@ export function ScenarioCard({
   onMoveUp,
   onMoveDown,
   isDragging,
+  startCollapsed = false,
 }: ScenarioCardProps) {
+  const [expanded, setExpanded] = useState(() => !startCollapsed);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [protocolLanguage, setProtocolLanguage] = useState<StudioProtocolLanguage>('es');
   const [protocolError, setProtocolError] = useState<string | null>(null);
@@ -170,6 +173,12 @@ export function ScenarioCard({
           </div>
         </div>
         <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setExpanded(current => !current)}
+            aria-expanded={expanded} aria-controls={`scenario-details-${scenario.id}`}
+            aria-label={`${expanded ? 'Ocultar detalles' : 'Editar detalles'} del escenario ${index + 1}`}
+            className="rounded-lg border border-white/15 px-2 py-1.5 text-xs font-medium text-blue-200 hover:bg-white/10">
+            {expanded ? 'Ocultar detalles' : 'Editar detalles'}
+          </button>
           <button type="button" onClick={() => onMoveUp(scenario.id)} disabled={index === 0} aria-label={`Move scenario ${index + 1} up`} className="p-2 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed">
             <ChevronUp size={18} />
           </button>
@@ -187,7 +196,7 @@ export function ScenarioCard({
         </div>
       </div>
 
-      <div className="space-y-4">
+      {expanded && <div id={`scenario-details-${scenario.id}`} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1" htmlFor={`scenario-duration-${scenario.id}`}>
@@ -274,7 +283,7 @@ export function ScenarioCard({
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
