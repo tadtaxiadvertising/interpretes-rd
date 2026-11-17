@@ -61,10 +61,20 @@ describe('replacing Audio Studio source audio', () => {
     expect(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' })
       .getAttribute('aria-expanded')).toBe('true');
 
-    rerender(<ScenarioCard {...props} startCollapsed focusRequest={null} />);
-    expect(screen.getByLabelText(/Base audio/)).toBe(audio);
+    // Reopening manually must not reuse an already-consumed validation request.
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
     expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+    const title = screen.getByLabelText('Scenario title') as HTMLInputElement;
+    title.focus();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar detalles del escenario 1' }));
+    expect(screen.getByLabelText(/Base audio/)).toBeTruthy();
+    expect(document.activeElement).toBe(title);
+
+    // A new validation attempt must still bring focus back to the missing audio.
+    rerender(<ScenarioCard {...props} startCollapsed focusRequest={{ field: 'audio', requestId: 2 }} />);
+    expect(document.activeElement).toBe(screen.getByLabelText(/Base audio/));
+    rerender(<ScenarioCard {...props} startCollapsed focusRequest={null} />);
+    expect(screen.getByLabelText(/Base audio/)).toBeTruthy();
   });
 
   it('focuses an always-visible title without expanding compact details', () => {
