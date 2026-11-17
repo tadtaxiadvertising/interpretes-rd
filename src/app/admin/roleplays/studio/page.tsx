@@ -1387,6 +1387,18 @@ export default function RoleplayStudioPage() {
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
                   Unir
                 </button>
+                {orderedSegments[index + 1] &&
+                  visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
+                  planGaplessPair(segment, orderedSegments[index + 1], duration) && (
+                    <button type="button"
+                      onClick={() => previewPairWithoutGap(segment.id)}
+                      aria-label={'Preescuchar intervenciones ' + (index + 1) + ' y ' + (index + 2) + ' sin pausa'}
+                      aria-pressed={pairPreviewId === segment.id}
+                      title="Preescucha dos cortes compatibles saltando la pausa; el proyecto y el ZIP no cambian"
+                      className="rounded-md border border-cyan-400/30 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-400/10">
+                      {pairPreviewId === segment.id ? 'Detener preescucha' : 'Escuchar sin pausa'}
+                    </button>
+                  )}
                 {compactRows && (
                   <>
                     <button type="button" onClick={() => previewSegment(segment)}
@@ -1417,6 +1429,14 @@ export default function RoleplayStudioPage() {
                 }}
                   className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
+              {orderedSegments[index + 1] &&
+                visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
+                planGaplessPair(segment, orderedSegments[index + 1], duration) && (
+                  <p className="text-xs text-cyan-200/80">
+                    Pausa entre ambos cortes: {formatTime(orderedSegments[index + 1].start - segment.end)}.
+                    La preescucha la omite localmente, pero al exportar siguen siendo dos clips separados.
+                  </p>
+                )}
               {turnActionFeedback?.id === segment.id && (
                 <p
                   role={turnActionFeedback.error ? 'alert' : 'status'}
