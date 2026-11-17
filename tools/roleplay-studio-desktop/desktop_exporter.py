@@ -696,14 +696,17 @@ def run_desktop():
             elif kind == "success":
                 result = message[1]
                 bar["value"] = 100
+                exported_path = fields[2].get().strip()
                 # Offer a fresh path for a second package only if the first
                 # suggestion was accepted. Never replace a manual filename.
-                if fields[2].get().strip() == suggested_output:
+                if exported_path == suggested_output:
                     suggested_output = None
                     fields[2].set("")
                     propose_output()
-                status.set(f"ZIP generado: {result['clips']} fragmentos. El video original permanece local.")
-                messagebox.showinfo("Exportación terminada", "Paquete ZIP generado correctamente.")
+                status.set(f"ZIP generado: {result['clips']} fragmentos. Guardado en: {exported_path}. "
+                           "La grabación original permanece local.")
+                messagebox.showinfo("Exportación terminada",
+                                    f"El ZIP está guardado en:\\n{exported_path}")
             elif kind == "cancelled":
                 status.set("Exportación cancelada; temporales eliminados.")
             else:
