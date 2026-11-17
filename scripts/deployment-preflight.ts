@@ -176,6 +176,7 @@ export async function runDeploymentPreflight(
       // Fail deployment before the app is released if the additive migration is missing.
       await client.query('SELECT id, client_id, name, holder_name, email FROM public.accounts LIMIT 0');
       await client.query('SELECT id FROM public.clients LIMIT 0');
+      await client.query('SELECT vpn_provider, vpn_app, vpn_username_hint, vpn_secret_ref, vpn_country, vpn_region, vpn_server, vpn_exit_ip, vpn_profile, vpn_protocol, vpn_port FROM public.account_platforms LIMIT 0');
       // Roleplay application code now writes queue rows for WebM recordings and
       // reads the canonical base-audio path. Validate both before deployment.
       await client.query('SELECT id, session_id, scenario_id, source_audio_path, status FROM public.roleplay_audio_jobs LIMIT 0');
@@ -276,7 +277,35 @@ export async function runDeploymentPreflight(
              AND actual.column_name = expected.column_name
              AND actual.data_type = expected.column_type
              AND actual.is_nullable = 'YES'
-          ) AS roleplay_studio_column_types
+          ) AS roleplay_studio_column_types,
+          (
+            SELECT COUNT(*) = 11
+            FROM (VALUES
+              ('vpn_provider', 'text'),
+              ('vpn_app', 'text'),
+              ('vpn_username_hint', 'text'),
+              ('vpn_secret_ref', 'text'),
+              ('vpn_country', 'text'),
+              ('vpn_region', 'text'),
+              ('vpn_server', 'text'),
+              ('vpn_exit_ip', 'text'),
+              ('vpn_profile', 'text'),
+              ('vpn_protocol', 'text'),
+              ('vpn_port', 'integer')
+            ) AS expected(column_name, column_type)
+            JOIN information_schema.columns AS actual
+              ON actual.table_schema = 'public'
+             AND actual.table_name = 'account_platforms'
+             AND actual.column_name = expected.column_name
+             AND actual.data_type = expected.column_type
+             AND actual.is_nullable = 'YES'
+          ) AS account_platform_vpn_columns,
+          EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conrelid = 'public.account_platforms'::regclass
+              AND conname = 'account_platforms_vpn_port_range'
+              AND contype = 'c' AND convalidated
+          ) AS account_platform_vpn_port_constraint
       `);
       const status = integrity.rows[0];
       if (!status || ![
@@ -284,6 +313,7 @@ export async function runDeploymentPreflight(
         'roleplay_queue_table', 'roleplay_queue_enum', 'roleplay_queue_unique',
         'roleplay_queue_foreign_keys', 'roleplay_base_audio_path', 'library_archive_rls',
         'roleplay_studio_constraints', 'roleplay_studio_column_types',
+        'account_platform_vpn_columns', 'account_platform_vpn_port_constraint',
       ].every((key) => status[key] === true)) {
         throw new Error('Client-directory or Roleplay audio database constraints are incomplete.');
       }
