@@ -4,6 +4,7 @@ import { z } from 'zod';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 
@@ -17,6 +18,17 @@ const CreateNotificationSchema = z.object({
 });
 
 const NotificationIdSchema = z.string().min(1).max(128);
+
+// Refreshing Next.js cache happens after the database write commits.
+// A refresh failure must never be reported as a failed create/mark-read,
+// otherwise users may retry and generate duplicate notifications.
+function refreshNotificationCache() {
+  try {
+    revalidatePath('/');
+  } catch (error) {
+    console.warn('Notification saved but cache refresh failed:', safeServerErrorCategory(error));
+  }
+}
 
 /**
  * Create notifications as an administrative operation.
@@ -48,10 +60,10 @@ export async function createNotification(input: unknown) {
       select: { id: true },
     });
 
-    revalidatePath('/');
+    refreshNotificationCache();
     return { success: true, data: notification };
   } catch (error) {
-    console.error('Failed to create notification:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('Failed to create notification:', safeServerErrorCategory(error));
     return { success: false, error: 'Internal server error', code: 'INTERNAL_ERROR' };
   }
 }
@@ -84,10 +96,10 @@ export async function markNotificationAsRead(id: string) {
       return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
     }
 
-    revalidatePath('/');
+    refreshNotificationCache();
     return { success: true };
   } catch (error) {
-    console.error('Failed to update notification:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('Failed to update notification:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to update notification', code: 'INTERNAL_ERROR' };
   }
 }
