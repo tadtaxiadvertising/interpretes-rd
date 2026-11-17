@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Mic2, Trash2, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -31,6 +31,7 @@ interface ScenarioCardProps {
   onMoveDown: (id: string) => void;
   isDragging: boolean;
   startCollapsed?: boolean;
+  focusRequest?: { field: 'title' | 'audio'; requestId: number } | null;
 }
 
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -46,6 +47,7 @@ export function ScenarioCard({
   onMoveDown,
   isDragging,
   startCollapsed = false,
+  focusRequest,
 }: ScenarioCardProps) {
   const [expanded, setExpanded] = useState(() => !startCollapsed);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -53,6 +55,25 @@ export function ScenarioCard({
   const [protocolError, setProtocolError] = useState<string | null>(null);
   const [protocolNotice, setProtocolNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const consumedFocusRequest = useRef<number | null>(null);
+  const focusField = focusRequest?.field;
+  const focusRequestId = focusRequest?.requestId;
+
+  // Reveal the missing audio before moving focus to its newly mounted input.
+  useEffect(() => {
+    if (focusField === 'audio') setExpanded(true);
+  }, [focusField, focusRequestId]);
+
+  useEffect(() => {
+    if (focusRequestId === undefined || consumedFocusRequest.current === focusRequestId) return;
+    const input = focusField === 'title'
+      ? titleInputRef.current
+      : focusField === 'audio' && expanded ? fileInputRef.current : null;
+    if (!input) return;
+    input.focus();
+    consumedFocusRequest.current = focusRequestId;
+  }, [focusField, focusRequestId, expanded]);
 
   const handleAudioSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -135,6 +156,7 @@ export function ScenarioCard({
           <div className="flex-1 min-w-0">
             <label className="sr-only" htmlFor={`scenario-title-${scenario.id}`}>Scenario title</label>
             <input
+              ref={titleInputRef}
               id={`scenario-title-${scenario.id}`}
               type="text"
               value={scenario.title}
