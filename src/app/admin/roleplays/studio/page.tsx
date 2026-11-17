@@ -331,6 +331,9 @@ export default function RoleplayStudioPage() {
       return false;
     }
     subtitleImportRevision.current += 1;
+    // The prior clip may still be playing in the primary media element.
+    // Stop it only after accepting the replacement, not when it is declined.
+    stopPreview();
     stopPairPreview();
     setLastStructuralEdit(null);
     setTurnActionFeedback(null);
@@ -457,6 +460,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     subtitleImportRevision.current += 1;
+    stopPreview();
     stopPairPreview();
     setLastStructuralEdit(null);
     // Old filters and expanded rows must not hide the new suggestion draft.
@@ -890,6 +894,7 @@ export default function RoleplayStudioPage() {
       // Opening a v2 project must be local-only even after the user separates
       // its cuts. For ordinary v1 projects retain the user's chosen mode.
       if (containsCompound) setAllowServerZipExport(false);
+      stopPreview();
       stopPairPreview();
       setLastStructuralEdit(null);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
