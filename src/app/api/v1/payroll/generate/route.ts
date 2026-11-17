@@ -1,15 +1,16 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import crypto from 'crypto';
 import { calculateFullPayroll } from '@/services/PayrollService';
 import { PayrollGenerateSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function POST(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { targetDate } = await parseJsonBody(request, PayrollGenerateSchema);
     const dateToProcess = targetDate ?? new Date();
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     });
 
     if (interpreters.length === 0) {
-      return NextResponse.json({ message: 'No interpreters scheduled for payment today', count: 0 });
+      return privateAdminJson({ message: 'No interpreters scheduled for payment today', count: 0 });
     }
 
     const results = [];
@@ -105,14 +106,17 @@ export async function POST(request: Request) {
         
         results.push({ interpreterId: interpreter.id, payrollId: result.id, status: 'Success' });
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        results.push({ interpreterId: interpreter.id, error: message, status: 'Failed' });
+        // The per-interpreter response is public to the authenticated caller:
+        // never put Prisma/DB provider messages into the returned results.
+        console.error('Payroll generation failed for one interpreter:', safeServerErrorCategory(err));
+        results.push({ interpreterId: interpreter.id, error: 'No se pudo procesar este registro de nómina.', status: 'Failed' });
       }
     }
 
-    return NextResponse.json({ success: true, results });
+    return privateAdminJson({ success: true, results });
 
   } catch (error) {
-    return apiError({ error, fallback: 'Internal Server Error' });
+    console.error('Payroll generation request failed:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Internal Server Error', exposeMessage: false }));
   }
 }
