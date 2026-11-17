@@ -15,7 +15,7 @@ export function detectStudioProjectFormat(json: string): StudioProjectFormat {
   try { parsed = JSON.parse(json); }
   catch { throw new Error('El proyecto JSON no es válido.'); }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-      !('format' in parsed) || !('version' in parsed) || parsed.version !== 1) {
+      !('format' in parsed) || !('version' in parsed) || (parsed.version !== 1 && parsed.version !== 2)) {
     throw new Error('El proyecto JSON no tiene un formato o versión compatible.');
   }
   if (parsed.format === LOCAL_DRAFT_FORMAT) return 'sampled-local';
