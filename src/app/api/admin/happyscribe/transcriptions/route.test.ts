@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { issueHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
+import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
@@ -275,6 +276,14 @@ describe('HappyScribe SRT import download boundary', () => {
     });
     const response = await POST(req);
     expect(response.status).toBe(403);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns a safe 503 rather than an unhandled error if provider settings fail to load', async () => {
+    vi.mocked(getHappyScribeSettings).mockRejectedValueOnce(new Error('synthetic unavailable credentials'));
+    const response = await GET(new NextRequest('http://localhost/api/admin/happyscribe/transcriptions'));
+    expect(response.status).toBe(503);
+    expect((await response.json()).error).toContain('HappyScribe');
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
