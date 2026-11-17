@@ -84,10 +84,17 @@ describe("RBAC holder vault actions", () => {
     "data:text/html,unsafe",
     "file:///etc/passwd",
     "ftp://example.test/login",
+    "http://vpn.internal.test/login",
     "https://user:password@example.test/login",
     "https://example.test/line\nnext",
+    "https://example.test/pa\tth",
+    "\nhttps://example.test/login",
+    "https://example.test/login\r",
+    "https://example.test/path with spaces",
+    "https:example.test/login",
+    "https://example.test:badport/login",
     "https://",
-  ])("rejects unsafe portal link %s before persisting credentials", async (url) => {
+  ])("rejects unsafe portal links before storing credentials: %s", async (url) => {
     await expect(uploadAccount({
       platformName: "Portal",
       credentials: "secret",
@@ -98,49 +105,17 @@ describe("RBAC holder vault actions", () => {
     expect(encryptPassword).not.toHaveBeenCalled();
   });
 
-  it("still accepts an HTTP portal used within a VPN without a fixed provider or slot", async () => {
+  it("normalizes an HTTPS login portal and permits flexible VPN settings", async () => {
     await uploadAccount({
-      platformName: "Portal interno",
+      platformName: "Portal",
       credentials: "secret",
-      url: "http://vpn.internal.test/login",
+      url: "  https://network.wordsynk.us/login  ",
       vpnConfig: "VPN provider: variable\nProfile: custom",
     });
     expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        url: "http://vpn.internal.test/login",
-        vpnConfig: "VPN provider: variable\nProfile: custom",
-      }),
-    }));
-  });
-
-  it.each([
-    "javascript:alert(1)",
-    "data:text/html,hello",
-    "ftp://example.test/account",
-    "http://example.test/login",
-    "https://name:secret@example.test/login",
-    "https://example.test:badport/login",
-  ])("rejects unsafe portal URL %s before any persistence", async (url) => {
-    await expect(uploadAccount({
-      platformName: "Portal",
-      credentials: "test-secret",
-      url,
-    })).rejects.toThrow();
-    expect(prisma.vaultAccount.create).not.toHaveBeenCalled();
-    expect(encryptPassword).not.toHaveBeenCalled();
-  });
-
-  it("normalizes a valid HTTPS portal URL without restricting VPN settings", async () => {
-    await uploadAccount({
-      platformName: "Portal",
-      credentials: "test-secret",
-      url: "  https://network.wordsynk.us/login  ",
-      vpnConfig: "Provider: custom\\nProfile: preferred",
-    });
-    expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
         url: "https://network.wordsynk.us/login",
-        vpnConfig: "Provider: custom\\nProfile: preferred",
+        vpnConfig: "VPN provider: variable\nProfile: custom",
       }),
     }));
   });
