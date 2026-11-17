@@ -107,12 +107,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   }, [scenarios]);
 
   useEffect(() => {
+    // Capture the current Set once; cleanup should release the URLs owned by
+    // this mount even if the ref is later reassigned.
+    const ownedPreviewUrls = previewUrls.current;
     return () => {
       // Cancel async ZIP/SHA-256 work from committing after unmount.
       importRevision.current += 1;
       importPending.current = false;
-      for (const url of previewUrls.current) URL.revokeObjectURL(url);
-      previewUrls.current.clear();
+      for (const url of ownedPreviewUrls) URL.revokeObjectURL(url);
+      ownedPreviewUrls.clear();
     };
   }, []);
 

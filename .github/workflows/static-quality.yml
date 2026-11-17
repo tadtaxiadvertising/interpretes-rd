@@ -1,0 +1,67 @@
+name: Static Quality (independent)
+
+# Run source validation independently of the mandatory supply-chain audit.
+# This workflow NEVER deploys. The existing CI/CD validate job remains
+# the only prerequisite for all deploy jobs, including npm audit.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interpretes-static-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  static-quality:
+    name: Prisma, TypeScript & ESLint
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # CI-only isolated placeholders; never use production credentials.
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
+      AUTH_SECRET: static-ci-only-secret-for-typechecking-2026
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: static-analysis-placeholder-key
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+
+      - name: Check Prisma schema
+        run: npx prisma validate
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: TypeScript application
+        run: npx tsc --noEmit
+
+      - name: TypeScript audit scripts
+        run: npm run typecheck:audit
+
+      - name: TypeScript maintenance scripts
+        run: npm run typecheck:scripts
+
+      - name: ESLint
+        run: npm run lint
+
+      # IMPORTANT: A successful static-quality run is not release approval.
+      # CI/CD Pipeline > Validate & Test still contains the mandatory
+      # Dependency Security Audit; its failure must keep deploy jobs skipped.
