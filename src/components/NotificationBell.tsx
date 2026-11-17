@@ -16,7 +16,7 @@ interface Notification {
 
 function formatNotificationTime(value: Date | string | null): string {
   if (value === null) return 'Fecha no disponible';
-  const date = new Date(value);
+  const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   return Number.isFinite(date.getTime())
     ? date.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })
     : 'Fecha no disponible';
