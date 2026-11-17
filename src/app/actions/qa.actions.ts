@@ -5,7 +5,6 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
-import { qaV1StoredTotalMatches } from '@/lib/qa-v1-score-contract';
 
 const prismaClient = prisma;
 
@@ -15,6 +14,15 @@ const QAPercentage = z.coerce.number().finite().min(0).max(100).refine(
   value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
   { message: 'QA percentages support at most two decimal places' },
 );
+
+// Unlike the legacy API's rounding-tolerant comparator, this form writes a
+// pre-rounded NUMERIC(5,2) score: any difference of one cent is a mismatch.
+function storedQaFormTotalMatches(stored: unknown, expected: number): boolean {
+  if (stored === null || stored === undefined || !Number.isFinite(expected)) return false;
+  const actual = Number(stored);
+  return Number.isFinite(actual) &&
+    Math.round(actual * 100) === Math.round(expected * 100);
+}
 
 class QaPreconditionError extends Error {
   constructor(
@@ -120,7 +128,7 @@ export async function submitQAEvaluation(_prevState: unknown, formData: FormData
         select: { id: true, totalScore: true },
       });
 
-      if (!qaV1StoredTotalMatches(created.totalScore, expectedTotal)) {
+      if (!storedQaFormTotalMatches(created.totalScore, expectedTotal)) {
         throw new Error('QA stored score contract mismatch');
       }
       return created;
