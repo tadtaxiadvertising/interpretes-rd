@@ -3,6 +3,7 @@
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { z } from 'zod';
 
 const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
@@ -70,7 +71,7 @@ export async function assignInterpreterToAccount(formData: FormData) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2034') {
       return { success: false, error: 'La asignación coincidió con otra operación simultánea. Actualiza e inténtalo de nuevo.' };
     }
-    console.error('[ADMIN_ACCOUNTS] Assignment creation failed', error);
+    console.error('[ADMIN_ACCOUNTS] Assignment creation failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo crear la asignación.' };
   }
 }
@@ -103,7 +104,7 @@ export async function endInterpreterAccountAssignment(formData: FormData) {
     revalidatePath('/admin/accounts');
     return { success: true };
   } catch (error) {
-    console.error('[ADMIN_ACCOUNTS] Assignment end failed', error);
+    console.error('[ADMIN_ACCOUNTS] Assignment end failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo finalizar la asignación.' };
   }
 }
