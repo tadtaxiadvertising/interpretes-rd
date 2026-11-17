@@ -2,6 +2,10 @@
 
 > Plataforma de gestión de intérpretes en la República Dominicana para postulación, seguimiento profesional, operaciones, control de calidad y nómina.
 
+## Identidad de marca
+
+El nombre oficial y único del producto es **Intérpretes RD**. Utiliza esta denominación en títulos, textos de interfaz, metadatos, documentación y comunicaciones del producto. No utilices «Free Interpreters» como nombre, marca ni variante del producto. El identificador técnico del repositorio y del paquete puede permanecer como `interpretes-rd`.
+
 ## Architecture
 
 This platform uses a **decoupled two-service architecture**:
