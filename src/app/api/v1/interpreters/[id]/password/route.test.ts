@@ -92,10 +92,11 @@ describe('interpreter password reset admin privacy boundary', () => {
     const response = await POST(request(), params());
     expect(response.status).toBe(503);
     expectPrivate(response);
-    expect(await response.json()).toEqual({
+    const body = await response.json();
+    expect(body).toEqual({
       success: false, error: 'Authentication administration is unavailable.',
     });
-    expect(JSON.stringify(await response.clone().text())).not.toContain('SUPER_SECRET');
+    expect(JSON.stringify(body)).not.toContain('SUPER_SECRET');
   });
 
   it('never logs or returns upstream Auth credentials or arbitrary provider errors', async () => {
