@@ -587,6 +587,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
                 onMoveUp={() => moveScenario(scenario.id, 'up')}
                 onMoveDown={() => moveScenario(scenario.id, 'down')}
                 isDragging={draggingId === scenario.id}
+                startCollapsed={scenarios.length >= 4 && Boolean(scenario.sha256 && scenario.baseAudioFile)}
               />
             </div>
           ))}
