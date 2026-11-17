@@ -43,4 +43,32 @@ describe('QAEngine accessible input and precision contract', () => {
     expect(score.value).toBe('100');
     expect(screen.getByRole('button', { name: 'Registrar Auditoría Segura' })).toBeTruthy();
   });
+  it('suggests only unreviewed production logs for the selected interpreter and resets stale IDs', () => {
+    const { container } = render(<QAEngine
+      interpreters={[
+        { id: 7, name: 'Intérprete A', externalId: 'T-7' },
+        { id: 8, name: 'Intérprete B', externalId: 'T-8' },
+      ]}
+      productionLogSuggestions={[
+        { id: 22, interpreterId: 7, date: '2026-11-17', status: 'Finalizado' },
+        { id: 33, interpreterId: 8, date: '2026-11-16', status: 'Manual' },
+      ]}
+    />);
+    const interpreter = screen.getByLabelText('Intérprete Auditado') as HTMLSelectElement;
+    const productionId = screen.getByLabelText('Production Log ID (Opcional)') as HTMLInputElement;
+    const suggestions = () => [...container.querySelectorAll('datalist option')]
+      .map(option => option.getAttribute('value'));
+
+    expect(suggestions()).toEqual([]);
+    fireEvent.change(interpreter, { target: { value: '7' } });
+    expect(suggestions()).toEqual(['22']);
+    fireEvent.change(productionId, { target: { value: '22' } });
+    expect(productionId.value).toBe('22');
+
+    fireEvent.change(interpreter, { target: { value: '8' } });
+    expect(productionId.value).toBe('');
+    expect(suggestions()).toEqual(['33']);
+    expect(productionId.name).toBe('productionLogId');
+  });
+
 });
