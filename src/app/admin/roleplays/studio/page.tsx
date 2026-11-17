@@ -84,7 +84,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -228,7 +228,9 @@ export default function RoleplayStudioPage() {
     setSegments(lastStructuralEdit.segments);
     setCaptionTexts(lastStructuralEdit.captions);
     setExpandedSegmentId(lastStructuralEdit.expandedId);
-    setNotice(`Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
+    setNotice(lastStructuralEdit.kind === 'idiomas'
+      ? 'Asignación masiva de idiomas deshecha. Revisa los idiomas pendientes.'
+      : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
     setLastStructuralEdit(null);
@@ -700,6 +702,41 @@ export default function RoleplayStudioPage() {
     setNotice('Intervenciones del intérprete original excluidas. Puedes deshacer antes de seguir editando.');
   };
 
+  const setLanguageForPendingTurns = (language: 'en' | 'es') => {
+    const pendingIds = new Set(segments.filter(item =>
+      item.language === 'unknown' && item.speakerRole !== 'interpreter',
+    ).map(item => item.id));
+    if (!pendingIds.size) return;
+    // The choice is intentional and undoable; never infer a clip's language
+    // or change labels already reviewed by an administrator.
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'idiomas', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    setSegments(previous => {
+      const indexById = new Map([...previous]
+        .sort((a, b) => a.start - b.start)
+        .map((item, index) => [item.id, index]));
+      return previous.map(item => {
+        if (!pendingIds.has(item.id)) return item;
+        return {
+          ...item,
+          language,
+          title: titleAfterProfileChange(
+            item.title, item.speakerRole, item.language,
+            indexById.get(item.id) ?? 0, item.speakerRole, language,
+          ),
+        };
+      });
+    });
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice(`Idioma ${language.toUpperCase()} asignado a ${pendingIds.size} intervenciones pendientes, sin modificar idiomas ya revisados ni al intérprete original. Puedes deshacerlo; verifica cada audio antes de exportar.`);
+  };
+
   const addSegment = () => {
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       setError('Se alcanzó el límite de intervenciones exportables.');
@@ -1004,6 +1041,8 @@ export default function RoleplayStudioPage() {
   const originalInterpreterCount = segments.filter(
     segment => segment.speakerRole === 'interpreter',
   ).length;
+  const pendingLanguageCount = segments.filter(segment =>
+    segment.language === 'unknown' && segment.speakerRole !== 'interpreter').length;
   const orderedSegments = [...segments].sort((a, b) => a.start - b.start);
   const visibleSegments = orderedSegments
     .map((segment, index) => ({ segment, index }))
@@ -1504,7 +1543,10 @@ export default function RoleplayStudioPage() {
               {lastStructuralEdit && (
                 <button type="button" onClick={undoLastStructuralEdit}
                   aria-label={lastStructuralEdit.kind === 'exclusión'
-                    ? 'Deshacer exclusión de intérpretes' : 'Deshacer última división o unión'}
+                    ? 'Deshacer exclusión de intérpretes'
+                    : lastStructuralEdit.kind === 'idiomas'
+                      ? 'Deshacer asignación de idiomas'
+                      : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
@@ -1543,6 +1585,21 @@ export default function RoleplayStudioPage() {
               </label>
             </div>
           </details>
+          {pendingLanguageCount > 1 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2">
+              <span className="mr-auto text-xs text-slate-300">
+                {pendingLanguageCount} intervenciones sin idioma. Asigna solo si todas comparten el idioma seleccionado.
+              </span>
+              <button type="button" onClick={() => setLanguageForPendingTurns('en')}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
+                Marcar pendientes como inglés
+              </button>
+              <button type="button" onClick={() => setLanguageForPendingTurns('es')}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
+                Marcar pendientes como español
+              </button>
+            </div>
+          )}
           {originalInterpreterCount > 0 && (
             <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
               <p>
