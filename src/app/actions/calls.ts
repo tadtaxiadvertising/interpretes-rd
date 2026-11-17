@@ -280,7 +280,9 @@ export async function addManualCall(formData: FormData): Promise<ActionResult<{ 
       interpreterId: formData.get('interpreterId'),
       startedAt: formData.get('startedAt'),
       durationMinutes: formData.get('durationMinutes'),
-      notes: formData.get('notes'),
+      // FormData.get() yields null for an absent optional field, not undefined.
+      // Preserve the schema's optional contract for submissions without notes.
+      notes: formData.get('notes') ?? undefined,
     };
 
     const validated = ManualCallSchema.parse(rawData);
