@@ -241,6 +241,40 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     } finally { log.mockRestore(); }
   });
 
+  it('uses exact canonical weighted cents when submitting the administrator QA form', async () => {
+    const data = qaFormData();
+    for (const [key, value] of Object.entries({
+      protocolScore: '6.49', interpretationScore: '31.72',
+      languageScore: '90.83', serviceScore: '46.41', technicalScore: '34.62',
+    })) data.set(key, value);
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 40.26 });
+    const result = await submitQaForm(undefined, data);
+    expect(result).toMatchObject({
+      success: true, message: expect.stringContaining('40.26%'),
+    });
+    expect(m.qaCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ totalScore: 40.26 }),
+      select: { id: true },
+    });
+  });
+
+  it('uses the exact stored cent total when submitting the secondary QA action', async () => {
+    m.qaFindUnique.mockResolvedValueOnce({ totalScore: 58.69 });
+    const result = await submitQaInput({
+      ...input,
+      protocolScore: 68.88, interpretationScore: 50.85,
+      languageScore: 51.56, serviceScore: 99.91, technicalScore: 42.66,
+    });
+    expect(result).toMatchObject({ success: true });
+    expect(m.qaCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ totalScore: 58.69 }),
+      select: { id: true },
+    });
+    expect(m.createNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('58.7%') }),
+    );
+  });
+
   it('validates object QA ownership and stored score inside one transaction', async () => {
     const result = await submitQaInput(input);
     expect(result).toMatchObject({ success: true, data: { id: 'qa-1' } });
