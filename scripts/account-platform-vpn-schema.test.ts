@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyVpnSchema, VPN_COLUMN_TYPES } from './account-platform-vpn-schema';
+import { classifyVpnSchema, matchesVpnPortConstraint, VPN_COLUMN_TYPES } from './account-platform-vpn-schema';
 
 const validColumns = Object.entries(VPN_COLUMN_TYPES).map(([column_name, data_type]) => ({
   column_name, data_type, is_nullable: 'YES',
@@ -27,4 +27,13 @@ describe('repeatable account-platform VPN migration guard', () => {
       column_name: 'vpn_unexpected', data_type: 'text', is_nullable: 'YES',
     }], true)).toBe('partial');
   });
+  it('validates the actual port CHECK expression rather than trusting its name', () => {
+    expect(matchesVpnPortConstraint(
+      'CHECK (((vpn_port IS NULL) OR ((vpn_port >= 1) AND (vpn_port <= 65535))))',
+    )).toBe(true);
+    expect(matchesVpnPortConstraint('CHECK (true)')).toBe(false);
+    expect(matchesVpnPortConstraint('CHECK (vpn_port >= 0)')).toBe(false);
+    expect(matchesVpnPortConstraint(null)).toBe(false);
+  });
+
 });
