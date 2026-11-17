@@ -3,6 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
+import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 
@@ -37,6 +38,9 @@ async function happyScribeFetch(path: string, token: string, init?: RequestInit,
 export async function GET(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+  if (!(await matchesExplicitAdminBearer(req, auth.user.userId))) {
+    return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const quota = applyRateLimit(
     req, { ...RATE_LIMITS.audioUpload, maxRequests: 20, keyPrefix: 'happyscribe-list' },
@@ -101,6 +105,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+  if (!(await matchesExplicitAdminBearer(req, auth.user.userId))) {
+    return privateRoleplayResponse({ error: 'Forbidden' }, { status: 403 });
+  }
 
   const quota = applyRateLimit(
     req, { ...RATE_LIMITS.audioUpload, maxRequests: 10, keyPrefix: 'happyscribe-export' },
