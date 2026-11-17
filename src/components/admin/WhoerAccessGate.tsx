@@ -3,17 +3,15 @@
 import { useState } from 'react';
 import { safeHttpsUrl } from '@/lib/platform-input-security';
 
-export default function WhoerAccessGate({ url, expectedCountry }: { url: string; expectedCountry?: string | null }) {
-  // Historical records may predate server-side HTTPS validation. Never render
-  // a navigable portal link for unsafe URLs, regardless of checkbox state.
-  const parsed = safeHttpsUrl.safeParse(url);
-  const safeUrl = parsed.success && parsed.data ? parsed.data : null;
+type GateProps = { url: string; expectedCountry?: string | null };
 
-  // Keep consent tied to this exact portal and expected exit country. Changing
-  // either requires another review, even if React reuses the same component.
-  const consentKey = safeUrl ? JSON.stringify([safeUrl, expectedCountry ?? '']) : null;
-  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
-  const confirmed = consentKey !== null && confirmedFor === consentKey;
+function PortalConsent({ safeUrl, expectedCountry }: {
+  safeUrl: string | null;
+  expectedCountry?: string | null;
+}) {
+  // State belongs to a keyed child so A -> B -> A never restores an
+  // earlier approval. A simple confirmedFor === consentKey check would.
+  const [confirmed, setConfirmed] = useState(false);
 
   return (
     <div className="min-w-48 space-y-2">
@@ -25,7 +23,7 @@ export default function WhoerAccessGate({ url, expectedCountry }: { url: string;
           type="checkbox"
           checked={confirmed}
           disabled={!safeUrl}
-          onChange={event => setConfirmedFor(event.target.checked ? consentKey : null)}
+          onChange={event => setConfirmed(event.target.checked)}
           className="mt-0.5"
         />
         <span>
@@ -46,4 +44,15 @@ export default function WhoerAccessGate({ url, expectedCountry }: { url: string;
       <p className="text-[11px] text-slate-500">La aplicación no lee ni valida automáticamente el resultado de Whoer.</p>
     </div>
   );
+}
+
+export default function WhoerAccessGate({ url, expectedCountry }: GateProps) {
+  // Existing/historical rows can contain unsafe URLs: never expose them as
+  // hrefs, regardless of whether a checkbox was previously confirmed.
+  const parsed = safeHttpsUrl.safeParse(url);
+  const safeUrl = parsed.success && parsed.data ? parsed.data : null;
+  const consentKey = JSON.stringify([safeUrl, expectedCountry ?? '']);
+  // A changed key forces a fresh checkbox for every portal/country switch,
+  // including when the user switches back to a previously approved pair.
+  return <PortalConsent key={consentKey} safeUrl={safeUrl} expectedCountry={expectedCountry} />;
 }
