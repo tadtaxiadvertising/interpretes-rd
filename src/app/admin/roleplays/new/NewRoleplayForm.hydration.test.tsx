@@ -33,14 +33,14 @@ describe('Admin roleplay new form: deterministic server/client initial markup', 
     const clientIds = [...container.querySelectorAll('[id^="scenario-"]')].map(el => el.id);
     expect(clientIds).toEqual(serverIds);
 
-    const title = screen.getByLabelText('Scenario title');
+    const title = screen.getByLabelText('Título del escenario');
     expect(title.id).toBe('scenario-title-new-roleplay-initial-scenario');
     expect(container.querySelector(`label[for="${title.id}"]`)).not.toBeNull();
   });
 
   it('still creates unique event-time IDs after adding cards', () => {
     const { container } = render(<NewRoleplayForm {...props} />);
-    fireEvent.click(screen.getByRole('button', { name: /Add Scenario/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir escenario/i }));
 
     const inputIds = [...container.querySelectorAll('input[id^="scenario-title-"]')]
       .map(el => el.id);
