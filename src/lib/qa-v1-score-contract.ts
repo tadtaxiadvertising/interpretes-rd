@@ -22,7 +22,7 @@ export type QaV1PointScores = {
  * 30.874999..., incorrectly rounding 30.88 down to 30.87.
  */
 function normalizedPercentageCents(points: number, limit: number): bigint {
-  const match = /^(\\d+)(?:\\.(\\d+))?(?:e([+-]?\\d+))?$/i.exec(String(points));
+  const match = /^([0-9]+)(?:[.]([0-9]+))?(?:e([+-]?[0-9]+))?$/i.exec(String(points));
   if (!match) throw new Error('Invalid QA dimension');
   const fraction = match[2] ?? '';
   const exponent = Number(match[3] ?? 0);
