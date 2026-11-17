@@ -3,7 +3,7 @@
 This directory contains the necessary configuration details for deploying the **Intérpretes RD** on an Easypanel-managed VPS.
 
 > **Easypanel instance**: `rewvid.easypanel.host`  
-> **Custom domains** are pending configuration — services are currently accessible via Easypanel subdomains.
+> **Dominio principal:** `https://interpretes.rd.ibusiness.com.do/` (frontend). Confirma en Easypanel que el dominio esté asignado al servicio `interpreters` y que el certificado TLS esté activo.
 
 ---
 
@@ -76,7 +76,7 @@ Each service has its own **webhook URL** for triggering deployments via GitHub A
 2. **Source:** Connect the `interpretes-rd` GitHub repository to each service.
 3. **Build:** Use `Dockerfile` at root with context `.`.
 4. **Env:** Copy variables from the tables above to the **Environment** tab. Mark sensitive vars as runtime-only.
-5. **Domains:** Map your public domain (e.g., `interpreters.rewvid.easypanel.host`) or configure custom domains later.
+5. **Domains:** Map `interpretes.rd.ibusiness.com.do` to the frontend service `interpreters`; keep the API service on its configured internal/Easypanel endpoint unless a separate API subdomain is provisioned.
 6. **Webhooks:** Copy webhook URLs from each service's Settings → Webhook section. Store them as GitHub Secrets (see below).
 7. **Deploy:** Execute initial deployment. For the worker, set its build file to `Dockerfile.worker` (context `.`), configure runtime `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL`, and `SUPABASE_SERVICE_ROLE_KEY`, set one replica, and keep it private with no domain.
 8. Enable automatic worker deployment only after the service has started successfully once and the production migrations are confirmed applied.
