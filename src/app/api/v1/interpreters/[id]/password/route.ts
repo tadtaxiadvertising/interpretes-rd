@@ -1,55 +1,69 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 import { InterpreterPasswordSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { ZodError } from 'zod';
 
+/**
+ * Cookie/Bearer admin guard is evaluated before any ID, body or database read.
+ * Treat all error paths as private: reset failures must never expose Auth
+ * provider messages, account details or credentials to the client or logs.
+ */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { id: interpreterId } = numericIdParamSchema.parse(await params);
     const { password } = await parseJsonBody(request, InterpreterPasswordSchema);
 
-    // 1. Find the interpreter and user profile
     const interpreter = await prisma.interpreter.findUnique({
       where: { id: interpreterId },
-      include: { userProfile: true }
+      include: { userProfile: true },
     });
-
-    if (!interpreter || !interpreter.userProfile) {
-      return NextResponse.json({ success: false, error: 'Interpreter or user profile not found' }, { status: 404 });
+    if (!interpreter?.userProfile) {
+      return privateAdminJson(
+        { success: false, error: 'Interpreter or user profile not found' },
+        { status: 404 },
+      );
     }
 
-    // 2. Attempt to create Supabase Admin client (graceful degradation)
-    const { supabaseAdmin, ADMIN_UNAVAILABLE_MESSAGE, isAdminUnavailableError } = await import('@/lib/supabase/admin');
-    
+    const { supabaseAdmin, isAdminUnavailableError } = await import('@/lib/supabase/admin');
     try {
-      // 3. Update Supabase Auth user
       const { error } = await supabaseAdmin.auth.admin.updateUserById(
         interpreter.userProfile.id,
-        { password, email_confirm: true }
+        { password, email_confirm: true },
       );
-
       if (error) throw error;
-    } catch (err: unknown) {
-      if (isAdminUnavailableError(err)) {
-        return NextResponse.json(
-          { success: false, error: ADMIN_UNAVAILABLE_MESSAGE },
-          { status: 503 }
+    } catch (error: unknown) {
+      if (isAdminUnavailableError(error)) {
+        return privateAdminJson(
+          { success: false, error: 'Authentication administration is unavailable.' },
+          { status: 503 },
         );
       }
-      throw err;
+      throw error;
     }
 
-    return NextResponse.json({ success: true, message: 'Password updated successfully' });
-
+    return privateAdminJson({ success: true, message: 'Password updated successfully' });
   } catch (error) {
-    console.error('Error resetting password:', error);
-    return apiError({ error, fallback: 'Error resetting password' });
+    // Expected validation failures should not disclose raw submitted values.
+    if (error instanceof ZodError) {
+      return privateAdminJson(
+        { success: false, error: 'Invalid interpreter ID or password.' },
+        { status: 400 },
+      );
+    }
+    console.error('Error resetting interpreter password:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({
+      error,
+      fallback: 'Error resetting password',
+      exposeMessage: false,
+    }));
   }
 }

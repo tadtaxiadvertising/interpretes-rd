@@ -7,10 +7,38 @@ import { z } from "zod";
 
 const optionalText = z.string().trim().max(5000).optional().transform(value => value || undefined);
 
+const AccountUrlSchema = z.string().trim().max(2048).refine((value) => {
+  if (value === "") return true;
+  // z.string().url() accepts non-web schemes, including javascript:.
+  // Only ordinary web portal links are safe to store and render as links.
+  if (/[\s\u0000-\u001f\u007f]/u.test(value)) return false;
+  try {
+    const url = new URL(value);
+    return (url.protocol === "https:" || url.protocol === "http:") &&
+      Boolean(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}, "La dirección del portal debe ser HTTP(S) y no incluir credenciales.");
+
 const AccountSchema = z.object({
   platformName: z.string().trim().min(1).max(120),
   credentials: z.string().min(1).max(10000),
-  url: z.union([z.string().url().max(2048), z.literal("")]).optional(),
+  url: AccountUrlSchema.optional(),
+  // Zod's generic .url() accepts javascript:/ftp:/data: schemes. These
+  // values may be rendered as login links in holder/interpreter interfaces;
+  // store HTTPS destinations only, without credentials embedded in the URL.
+  url: z.union([
+    z.string().trim().url().max(2048).refine(value => {
+      try {
+        const parsed = new URL(value);
+        return parsed.protocol === "https:" && !parsed.username && !parsed.password;
+      } catch {
+        return false;
+      }
+    }, { message: "Portal URL must use HTTPS without embedded credentials" }),
+    z.literal(""),
+  ]).optional(),
   // VPN providers and profiles are intentionally free-form: no vendor or slot
   // is hard-coded. Existing records remain compatible with this text field.
   vpnConfig: z.string().max(10000).optional(),

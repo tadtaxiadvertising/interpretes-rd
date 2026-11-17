@@ -79,14 +79,70 @@ describe("RBAC holder vault actions", () => {
     }));
   });
 
-  it("rejects malformed URLs before writing to the database", async () => {
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,unsafe",
+    "file:///etc/passwd",
+    "ftp://example.test/login",
+    "https://user:password@example.test/login",
+    "https://example.test/line\nnext",
+    "https://",
+  ])("rejects unsafe portal link %s before persisting credentials", async (url) => {
     await expect(uploadAccount({
       platformName: "Portal",
       credentials: "secret",
-      url: "javascript:alert(1)",
+      url,
     })).rejects.toThrow();
 
     expect(prisma.vaultAccount.create).not.toHaveBeenCalled();
+    expect(encryptPassword).not.toHaveBeenCalled();
+  });
+
+  it("still accepts an HTTP portal used within a VPN without a fixed provider or slot", async () => {
+    await uploadAccount({
+      platformName: "Portal interno",
+      credentials: "secret",
+      url: "http://vpn.internal.test/login",
+      vpnConfig: "VPN provider: variable\nProfile: custom",
+    });
+    expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        url: "http://vpn.internal.test/login",
+        vpnConfig: "VPN provider: variable\nProfile: custom",
+      }),
+    }));
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,hello",
+    "ftp://example.test/account",
+    "http://example.test/login",
+    "https://name:secret@example.test/login",
+    "https://example.test:badport/login",
+  ])("rejects unsafe portal URL %s before any persistence", async (url) => {
+    await expect(uploadAccount({
+      platformName: "Portal",
+      credentials: "test-secret",
+      url,
+    })).rejects.toThrow();
+    expect(prisma.vaultAccount.create).not.toHaveBeenCalled();
+    expect(encryptPassword).not.toHaveBeenCalled();
+  });
+
+  it("normalizes a valid HTTPS portal URL without restricting VPN settings", async () => {
+    await uploadAccount({
+      platformName: "Portal",
+      credentials: "test-secret",
+      url: "  https://network.wordsynk.us/login  ",
+      vpnConfig: "Provider: custom\\nProfile: preferred",
+    });
+    expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        url: "https://network.wordsynk.us/login",
+        vpnConfig: "Provider: custom\\nProfile: preferred",
+      }),
+    }));
   });
 
   it("validates messages and persists them for the authenticated holder", async () => {
