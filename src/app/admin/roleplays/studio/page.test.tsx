@@ -20,6 +20,9 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    // Changing a source with unsaved turns now requires explicit acceptance.
+    // These export/reset cases intentionally approve it; refusal is tested separately.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   afterEach(() => {
