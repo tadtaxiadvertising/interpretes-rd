@@ -847,32 +847,6 @@ export default function RoleplayStudioPage() {
 
   return (
     <main className="space-y-4">
-      {url && <audio ref={pairPlayer} src={url} preload="metadata"
-        aria-label="Reproductor de preescucha sin pausa"
-        onTimeUpdate={event => {
-          const current = pairPlayback.current;
-          if (!current) return;
-          if (current.stage === 1 &&
-              event.currentTarget.currentTime >= current.plan.first.end - 0.025) {
-            current.stage = 2;
-            event.currentTarget.currentTime = current.plan.second.start;
-          } else if (current.stage === 2 &&
-                     event.currentTarget.currentTime >= current.plan.second.end - 0.025) {
-            stopPairPreview();
-          }
-        }}
-        onEnded={() => stopPairPreview()}
-        onPause={() => {
-          if (pairPlayer.current?.paused) {
-            pairPlayback.current = null;
-            setPairPreviewId(null);
-          }
-        }}
-        onError={() => {
-          stopPairPreview();
-          setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
-        }}
-        className="hidden" />}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
@@ -905,6 +879,32 @@ export default function RoleplayStudioPage() {
                   {...mediaHandlers} className="max-h-64 w-full rounded-lg bg-black"/>
               : <audio ref={attachPlayer} src={url} controls preload="metadata"
                   {...mediaHandlers} className="w-full"/>}
+        {url && <audio ref={pairPlayer} src={url} preload="metadata"
+          aria-label="Reproductor de preescucha sin pausa"
+          onTimeUpdate={event => {
+            const current = pairPlayback.current;
+            if (!current) return;
+            if (current.stage === 1 &&
+                event.currentTarget.currentTime >= current.plan.first.end - 0.025) {
+              current.stage = 2;
+              event.currentTarget.currentTime = current.plan.second.start;
+            } else if (current.stage === 2 &&
+                       event.currentTarget.currentTime >= current.plan.second.end - 0.025) {
+              stopPairPreview();
+            }
+          }}
+          onEnded={() => stopPairPreview()}
+          onPause={() => {
+            if (pairPlayer.current?.paused) {
+              pairPlayback.current = null;
+              setPairPreviewId(null);
+            }
+          }}
+          onError={() => {
+            stopPairPreview();
+            setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
+          }}
+          className="hidden" />}
             {audio && duration > 0 && !sourceRequiresLocal && (
               <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-white/15 bg-slate-950/60 p-3">
                 <legend className="px-1 text-sm font-semibold text-white">Dónde preparar el ZIP</legend>
