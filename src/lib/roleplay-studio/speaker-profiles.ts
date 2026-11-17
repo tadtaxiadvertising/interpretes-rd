@@ -75,7 +75,7 @@ export function titleAfterProfileChange(
     title === `Enfermería · ${numbered}` ||
     title === `Operador · ${numbered}` ||
     title === `Intérprete · ${numbered}` ||
-    /^Corte (?:\\d{2}:)?\\d{2}:\\d{2}\\.\\d$/.test(title);
+    /^Corte (?:\d{2}:)?\d{2}:\d{2}\.\d$/.test(title);
   return recognizedDefault
     ? makeNeutralSegmentTitle(nextRole, nextLanguage, index)
     : title;
