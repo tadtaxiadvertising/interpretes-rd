@@ -66,9 +66,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
 
   // Auto-cierre de modales en success (simplificado para UX)
   React.useEffect(() => {
-    if (adjustState?.success || verifyState?.success || payState?.success) {
-      setTimeout(() => closeModal(), 1500);
-    }
+    if (!adjustState?.success && !verifyState?.success && !payState?.success) return;
+    const timeoutId = setTimeout(() => closeModal(), 1500);
+    return () => clearTimeout(timeoutId);
   }, [adjustState, verifyState, payState]);
 
   return (
