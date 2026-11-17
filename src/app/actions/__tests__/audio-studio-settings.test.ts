@@ -82,7 +82,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
 
   it('never returns stored raw tokens when inspecting settings', async () => {
     const safeStatus = {
-      hasToken: true, credentialUsable: true,
+      hasToken: true, credentialUsable: true, environmentFallbackAvailable: false,
       tokenSource: 'panel', organizationId: '123456',
       mediaImportEnabled: false, proxyAvailable: false, encryptionReady: true,
       excludeInterpreterByDefault: true,
