@@ -39,7 +39,8 @@ function bulkRequest(): NextRequest {
 
 describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
   beforeEach(() => {
-    vi.resetAllMocks();
+    // Keep the authentication mock implementation while clearing call history.
+    vi.clearAllMocks();
     mocks.activeInterpreters.mockResolvedValue([{ id: 11 }, { id: 22 }]);
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', '');
     vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', '');
