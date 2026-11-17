@@ -124,7 +124,7 @@ export default async function RoleplayLibraryPage({
       </header>
 
       <section className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5 text-sm text-blue-100">
-        <div className="mb-2 flex items-center gap-2 font-semibold"><Layers3 size={17} /> Instantáneas reutilizables</div>
+        <div className="mb-2 flex items-center gap-2 font-semibold"><Layers3 size={17} /> Plantillas reutilizables</div>
         <p className="text-blue-100/80">
           Esta primera biblioteca recupera los ejercicios ya publicados y agrupa configuraciones equivalentes por una huella SHA-256
           de referencias y metadatos. No modifica ni elimina sesiones históricas, y no requiere una nueva tabla. La edición y el
@@ -147,7 +147,7 @@ export default async function RoleplayLibraryPage({
         <label className="sr-only" htmlFor="library-query">Buscar ejercicios por título o huella</label>
         <input id="library-query" name="q" type="search" maxLength={100}
           defaultValue={params.q?.slice(0, 100) ?? ''}
-          placeholder="Buscar por escenario o huella SHA-256"
+          placeholder="Buscar por escenario o identificador SHA-256"
           className="min-w-64 flex-1 rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-white placeholder:text-gray-500" />
         {showArchived && <input type="hidden" name="archived" value="1" />}
         <button type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500">Buscar</button>
@@ -157,7 +157,7 @@ export default async function RoleplayLibraryPage({
       <section aria-label="Ejercicios reutilizables" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-semibold text-white">{showArchived ? 'Roleplays retirados' : 'Ejercicios disponibles'}</h2>
+            <h2 className="text-lg font-semibold text-white">{showArchived ? 'Ejercicios archivados' : 'Ejercicios disponibles'}</h2>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
               <Link href="/admin/roleplays/library" className={!showArchived ? 'font-bold text-blue-300' : 'text-gray-400 hover:text-white'}>Disponibles</Link>
               <Link href="/admin/roleplays/library?archived=1" className={showArchived ? 'font-bold text-blue-300' : 'text-gray-400 hover:text-white'}>Eliminados de la biblioteca ({archivedCount})</Link>
@@ -168,7 +168,7 @@ export default async function RoleplayLibraryPage({
         {!result.error && matches.length === 0 && (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-12 text-center">
             <AudioLines size={38} className="mx-auto mb-3 text-gray-500" />
-            <p className="font-semibold text-white">{showArchived ? 'No hay roleplays retirados' : q ? 'No hay ejercicios con esa búsqueda' : 'No hay ejercicios reutilizables todavía'}</p>
+            <p className="font-semibold text-white">{showArchived ? 'No hay ejercicios archivados' : q ? 'No hay ejercicios con esa búsqueda' : 'No hay ejercicios reutilizables todavía'}</p>
             <p className="mt-2 text-sm text-gray-400">{showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
           </div>
         )}
