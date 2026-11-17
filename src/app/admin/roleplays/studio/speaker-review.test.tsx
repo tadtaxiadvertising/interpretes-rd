@@ -94,13 +94,13 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     });
 
     expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
-    expect(screen.getByText('Original rendition')).toBeTruthy();
+    expect(screen.getByText('Interpreter: Original rendition')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Excluir 1 intervención del intérprete' }));
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
-    expect(screen.queryByText('Original rendition')).toBeNull();
+    expect(screen.queryByText('Interpreter: Original rendition')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer exclusión de intérpretes' }));
     expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
-    expect(screen.getByText('Original rendition')).toBeTruthy();
+    expect(screen.getByText('Interpreter: Original rendition')).toBeTruthy();
   });
 
   it('updates generated titles without another click but respects manual titles', async () => {
