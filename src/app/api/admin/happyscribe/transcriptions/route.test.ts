@@ -242,6 +242,31 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+  it('checks connectivity without returning transcription metadata to the admin settings form', async () => {
+    mocks.fetch.mockResolvedValueOnce(Response.json({
+      results: [{ id: transcriptionId, name: 'SYNTHETIC_PRIVATE_TITLE' }],
+    }));
+    const response = await GET(new NextRequest(
+      'http://localhost/api/admin/happyscribe/transcriptions?check=1',
+    ));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ success: true, ready: true });
+    expect(JSON.stringify(body)).not.toContain('SYNTHETIC_PRIVATE_TITLE');
+    expect(String(mocks.fetch.mock.calls[0][0])).toContain('per_page=1');
+    expect(String(mocks.fetch.mock.calls[0][0])).toContain('organization_id=123456');
+  });
+
+  it('rejects an invalid provider response during the connection check', async () => {
+    mocks.fetch.mockResolvedValueOnce(new Response('<html>Not an API</html>', { status: 200 }));
+    const response = await GET(new NextRequest(
+      'http://localhost/api/admin/happyscribe/transcriptions?check=1',
+    ));
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(await response.json())).not.toContain('<html>');
+  });
+
+
   it('returns a signed selection from the organization-filtered listing', async () => {
     mocks.fetch.mockResolvedValueOnce(Response.json({
       results: [{ id: transcriptionId, name: 'Synthetic test transcript', state: 'done' }],

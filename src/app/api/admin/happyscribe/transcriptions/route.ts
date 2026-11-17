@@ -65,10 +65,12 @@ export async function GET(req: NextRequest) {
     { status: 503 },
   );
 
-  const page = Math.max(0, Math.min(1000, Number(req.nextUrl.searchParams.get('page') ?? 0) || 0));
+  const connectionCheck = req.nextUrl.searchParams.get('check') === '1';
+  const page = connectionCheck ? 0
+    : Math.max(0, Math.min(1000, Number(req.nextUrl.searchParams.get('page') ?? 0) || 0));
   try {
     const upstream = await happyScribeFetch(
-      `/transcriptions?organization_id=${encodeURIComponent(config.organizationId)}&page=${page}&per_page=50`,
+      `/transcriptions?organization_id=${encodeURIComponent(config.organizationId)}&page=${page}&per_page=${connectionCheck ? 1 : 50}`,
       config.token, undefined, req.signal,
     );
     if (!upstream.ok) {
@@ -79,6 +81,22 @@ export async function GET(req: NextRequest) {
           ? 'HappyScribe rechazó las credenciales o el acceso a este espacio.'
           : upstream.status === 429 ? 'HappyScribe limitó temporalmente las consultas.' : 'No fue posible consultar HappyScribe.' },
         { status, headers: { 'Cache-Control': 'private, no-store' } },
+      );
+    }
+    if (connectionCheck) {
+      // Verify the provider's JSON contract, rather than treating an HTML 200
+      // as success. Request only one row and never return its contents.
+      const check: unknown = await upstream.json().catch(() => null);
+      if (!check || typeof check !== 'object' ||
+          !('results' in check) || !Array.isArray(check.results)) {
+        return privateRoleplayResponse(
+          { error: 'HappyScribe devolvió una respuesta de conexión no válida.' },
+          { status: 502 },
+        );
+      }
+      return privateRoleplayResponse(
+        { success: true, ready: true },
+        { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } },
       );
     }
     const payload: unknown = await upstream.json();
