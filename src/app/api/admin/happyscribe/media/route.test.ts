@@ -88,7 +88,6 @@ describe('HappyScribe original media import', () => {
     const upstreamSignal = (mocks.fetch.mock.calls[2][1] as RequestInit).signal as AbortSignal;
     expect(upstreamSignal).toBeDefined();
     expect(upstreamSignal.aborted).toBe(false);
-
     controller.abort();
     expect(upstreamSignal.aborted).toBe(true);
     expect(mocks.fetch).toHaveBeenCalledTimes(3);
@@ -124,20 +123,55 @@ describe('HappyScribe original media import', () => {
     expect(response.status).toBe(502);
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
-  it('rejects a provider audio export larger than the direct-import limit', async () => {
+  it('cancels the provider stream immediately if the MP3 exceeds the direct-import limit', async () => {
+    const cancel = vi.fn();
     mocks.fetch
       .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
       .mockResolvedValueOnce(Response.json({
         state: 'ready', download_link: 'https://media.happyscribe.com/audio.mp3',
       }))
-      .mockResolvedValueOnce(new Response(new Uint8Array([0x49]), {
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
         headers: { 'Content-Length': String(250 * 1024 * 1024 + 1) },
       }));
 
     const response = await POST(request());
 
     expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
     expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves the size-limit response even when provider cancellation throws', async () => {
+    const cancel = vi.fn(async () => { throw new Error('provider disconnected'); });
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://media.happyscribe.com/audio.mp3',
+      }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        headers: { 'Content-Length': String(250 * 1024 * 1024 + 1) },
+      }));
+
+    const response = await POST(request());
+    expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('closes rejected upstream media without exposing its signed download URL', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://media.happyscribe.com/audio.mp3?signature=private',
+      }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 502,
+      }));
+
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await response.json())).not.toContain('signature=private');
   });
 
 });
