@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Roleplay Audio Studio: offline desktop exporter.
 
-All processing stays on the administrator's computer. This file intentionally
-has no network, database, or browser-server dependencies. Python is needed to
+All audio processing stays on the administrator's computer. This file
+has no database or audio-upload dependencies; an explicit button may open
+the fixed Intérpretes RD import page in the user's browser. Python is needed to
 run from source, but packaged distributions contain their own runtime.
 """
 from __future__ import annotations
@@ -21,9 +22,11 @@ import sys
 import tempfile
 import threading
 import time
+import webbrowser
 import zlib
 
 FORMAT = "interpretes-rd-studio-long-local-project"
+ROLEPLAY_IMPORT_URL = "https://interpretes.rd.ibusiness.com.do/admin/roleplays/new"
 MAX_SOURCE_BYTES = 8 * 1024**3
 MAX_SOURCE_SECONDS = 12 * 3600
 MAX_PROJECT_BYTES = 180_000
@@ -576,6 +579,24 @@ def open_export_directory(zip_path):
         ) from exc
 
 
+def open_roleplay_import_page(zip_path):
+    """Explicitly open the official web form; keep the ZIP on this device.
+
+    Browsers cannot prefill file inputs by URL. No local filename, audio,
+    token, project metadata or ZIP content is added to the link.
+    """
+    archive = Path(zip_path).expanduser().absolute()
+    if (archive.suffix.lower() != ".zip" or archive.is_symlink() or
+            not archive.is_file()):
+        raise ExportError("El último ZIP ya no está disponible. Genera o localiza el archivo antes de importar.")
+    try:
+        opened = webbrowser.open(ROLEPLAY_IMPORT_URL, new=2, autoraise=True)
+    except (OSError, webbrowser.Error) as exc:
+        raise ExportError("No se pudo abrir el navegador. Accede manualmente al formulario Crear roleplay.") from exc
+    if not opened:
+        raise ExportError("No se encontró un navegador disponible. Abre Intérpretes RD manualmente.")
+
+
 def run_desktop():
     # The Windows console bootloader is more reliable with the bundled FFmpeg.
     # Hide its terminal only in packaged GUI mode; keep it visible for diagnostics.
@@ -597,7 +618,7 @@ def run_desktop():
 
     root = tk.Tk()
     root.title("Intérpretes RD · Exportador Local de Roleplay")
-    root.minsize(630, 325)
+    root.minsize(630, 360)
     frame = ttk.Frame(root, padding=20)
     frame.grid(sticky="nsew")
     root.columnconfigure(0, weight=1)
@@ -730,6 +751,9 @@ def run_desktop():
         open_folder_button.configure(
             state="normal" if enabled and last_exported_zip else "disabled"
         )
+        import_page_button.configure(
+            state="normal" if enabled and last_exported_zip else "disabled"
+        )
 
     def inspect_worker(paths):
         try:
@@ -793,6 +817,14 @@ def run_desktop():
         except ExportError as exc:
             messagebox.showwarning("Ubicación del ZIP", str(exc))
 
+    def open_import_page():
+        if not last_exported_zip or busy:
+            return
+        try:
+            open_roleplay_import_page(last_exported_zip)
+        except ExportError as exc:
+            messagebox.showwarning("Importar roleplay", str(exc))
+
     inspect_button = ttk.Button(
         controls, text="Validar proyecto", command=lambda: begin_job("inspect"))
     inspect_button.pack(side="left", padx=6)
@@ -805,6 +837,14 @@ def run_desktop():
     open_folder_button.pack(side="left", padx=6)
     cancel_button = ttk.Button(controls, text="Cancelar", command=cancel, state="disabled")
     cancel_button.pack(side="left")
+
+    handoff = ttk.Frame(frame)
+    handoff.grid(row=8, column=0, columnspan=3, sticky="e", pady=(0, 8))
+    ttk.Label(handoff, text="Después de exportar:").pack(side="left", padx=(0, 8))
+    import_page_button = ttk.Button(
+        handoff, text="Ir a Crear roleplay (web)",
+        command=open_import_page, state="disabled")
+    import_page_button.pack(side="left")
 
     closing = False
 
@@ -841,6 +881,7 @@ def run_desktop():
                 exported_path = fields[2].get().strip()
                 last_exported_zip = exported_path
                 open_folder_button.configure(state="normal")
+                import_page_button.configure(state="normal")
                 # Offer a fresh path for a second package only if the first
                 # suggestion was accepted. Never replace a manual filename.
                 if exported_path == suggested_output:
