@@ -18,7 +18,13 @@ export default async function AccountPlatformsPage() {
       <h2 className="text-lg font-semibold">{p.name}</h2>
       <p className="text-sm text-slate-400">{p.account.client?.name || 'Cliente pendiente'} · {p.account.company?.name || 'Sin compañía'} / {p.account.name}</p>
       <p className="mt-2 text-xs text-slate-400">{p.active ? 'Activa' : 'Inactiva'} · {p.secretRef ? 'Referencia de secreto registrada' : 'Sin referencia de secreto'}</p>
-      {p.loginUrl && <a href={p.loginUrl} target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm text-blue-300 hover:underline">Abrir acceso externo</a>}
+      <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
+        <p className="font-semibold text-slate-200">Configuración VPN</p>
+        <p className="mt-1">{[p.vpnProvider, p.vpnApp, p.vpnUsernameHint ? 'Usuario configurado' : null].filter(Boolean).join(' · ') || 'Proveedor y aplicación pendientes'}</p>
+        <p className="mt-1">{[p.vpnCountry, p.vpnRegion, p.vpnServer, p.vpnExitIp, p.vpnProfile, p.vpnProtocol, p.vpnPort ? `Puerto ${p.vpnPort}` : null].filter(Boolean).join(' · ') || 'Sin detalles de servidor o ubicación'}</p>
+        <p className="mt-1">{p.vpnSecretRef ? 'Referencia segura VPN registrada' : 'Sin referencia segura VPN'}</p>
+      </div>
+      {p.loginUrl && <a href="https://whoer.net/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm text-blue-300 hover:underline">Comprobar VPN en Whoer.net ↗</a>}
     </article>)}</div>
     {!platforms.length && <p className="text-slate-400">No hay plataformas registradas.</p>}
     <p className="text-xs text-slate-500">Se muestran hasta 200 plataformas. No se muestran identificadores de usuario ni referencias internas de secretos en este listado.</p>

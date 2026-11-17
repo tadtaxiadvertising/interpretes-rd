@@ -2,6 +2,7 @@ import prisma from '@/lib/prisma';
 import CreateAccountForm from '@/components/admin/CreateAccountForm';
 import EditOperationalAccountForm from '@/components/admin/EditOperationalAccountForm';
 import AccountAssignmentManager from '@/components/admin/AccountAssignmentManager';
+import WhoerAccessGate from '@/components/admin/WhoerAccessGate';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,7 +16,7 @@ export default async function AdminAccountsPage() {
         id: true, name: true, holderName: true, email: true, description: true, clientId: true, companyId: true,
         client: { select: { name: true } },
         company: { select: { name: true } },
-        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true, secretRef: true } },
+        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true, secretRef: true, vpnCountry: true, vpnProvider: true, vpnApp: true, vpnServer: true, vpnProfile: true, vpnProtocol: true, vpnPort: true } },
         assignments: { where: { OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { id: true, interpreterId: true, startsAt: true, endsAt: true, interpreter: { select: { id: true, name: true } } } },
         _count: { select: { assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] } } } },
       },
@@ -56,7 +57,7 @@ export default async function AdminAccountsPage() {
           return <tr key={account.id} className="border-t border-white/10 align-top">
             <td className="p-4"><strong className="text-white">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-slate-400">{account.name}</p>{account.description && <p className="mt-1 text-xs text-slate-500">{account.description}</p>}<EditOperationalAccountForm account={{ id: account.id, name: account.name, holderName: account.holderName, email: account.email, description: account.description, clientId: account.clientId, companyId: account.companyId, platform: platform ? { loginUrl: platform.loginUrl, secretRef: platform.secretRef } : null }} clients={clients} companies={companies} /></td>
             <td className="p-4">{account.email || 'Pendiente'}</td>
-            <td className="p-4">{platform?.loginUrl ? <a href={platform.loginUrl} target="_blank" rel="noopener noreferrer" className="text-blue-300 hover:underline">{platform.name} ↗</a> : 'Sin página registrada'}</td>
+            <td className="p-4">{platform?.loginUrl ? <div className="space-y-2"><p className="text-xs text-slate-400">{platform.name}</p><WhoerAccessGate url={platform.loginUrl} expectedCountry={platform.vpnCountry} />{(platform.vpnProvider || platform.vpnApp || platform.vpnServer) && <p className="text-[11px] text-slate-500">{[platform.vpnProvider, platform.vpnApp, platform.vpnServer, platform.vpnProfile, platform.vpnProtocol, platform.vpnPort ? `Puerto ${platform.vpnPort}` : null].filter(Boolean).join(' · ')}</p>}</div> : 'Sin página registrada'}</td>
             <td className="p-4">{account.client?.name || <span className="text-amber-300">Pendiente de identificar</span>}</td>
             <td className="p-4">{account.company?.name || 'Sin compañía'}</td>
             <td className="p-4"><span>{account._count.assignments}</span><AccountAssignmentManager accountId={account.id} interpreters={interpreters} today={today.toISOString().slice(0, 10)} assignments={account.assignments.map(item => ({ id: item.id, interpreterId: item.interpreterId, interpreterName: item.interpreter.name, startsAt: item.startsAt.toISOString().slice(0, 10), endsAt: item.endsAt?.toISOString().slice(0, 10) ?? null }))} /></td>
