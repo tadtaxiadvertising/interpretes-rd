@@ -12,7 +12,7 @@ export default async function QALayout({ children }: { children: React.ReactNode
   if (profile.role !== 'admin') redirect('/dashboard');
 
   return (
-    <DashboardShell role="admin" userName={profile.display_name || 'Admin'}>
+    <DashboardShell role="admin" userName={profile.display_name || 'Administrador'}>
       {children}
     </DashboardShell>
   );
