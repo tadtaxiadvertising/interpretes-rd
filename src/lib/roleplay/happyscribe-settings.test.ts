@@ -87,6 +87,7 @@ describe('HappyScribe encrypted admin settings', () => {
     expect((await getHappyScribeSettings()).token).toBe(testToken);
     const status = await getHappyScribeSettingsStatus();
     expect(status.hasToken).toBe(true);
+    expect(status.credentialUsable).toBe(true);
     expect(status.organizationId).toBe('123456');
     expect(JSON.stringify(status)).not.toContain(testToken);
   });
@@ -177,6 +178,17 @@ describe('HappyScribe encrypted admin settings', () => {
       compactViewDefault: 'unknown' as 'auto',
     })).rejects.toThrow('COMPACT_MODE_INVALID');
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('marks an encrypted token as unusable when the runtime decryption key is missing', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    });
+    delete process.env.AUDIO_STUDIO_ENCRYPTION_KEY;
+    const status = await getHappyScribeSettingsStatus();
+    expect(status.hasToken).toBe(true);
+    expect(status.credentialUsable).toBe(false);
+    expect(JSON.stringify(status)).not.toContain(testToken);
   });
 
 });
