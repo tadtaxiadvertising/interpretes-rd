@@ -15,9 +15,16 @@ export const maxDuration = 30;
 const API_BASE = 'https://www.happyscribe.com/api/v1';
 
 async function configuration() {
-  const { token, organizationId, mediaImportEnabled } = await getHappyScribeSettings();
-  if (!token || !/^\d+$/.test(organizationId)) return null;
-  return { token, organizationId, mediaImportEnabled };
+  try {
+    const { token, organizationId, mediaImportEnabled } = await getHappyScribeSettings();
+    if (!token || !/^\d+$/.test(organizationId)) return null;
+    return { token, organizationId, mediaImportEnabled };
+  } catch {
+    // Database or decryption failures must not produce an unhandled 500 or
+    // accidentally fall back to a different provider organization.
+    console.warn('[HappyScribe] Configuration is unavailable');
+    return null;
+  }
 }
 
 async function happyScribeFetch(path: string, token: string, init?: RequestInit, requestSignal?: AbortSignal) {
@@ -54,7 +61,7 @@ export async function GET(req: NextRequest) {
 
   const config = await configuration();
   if (!config) return privateRoleplayResponse(
-    { error: 'HappyScribe no está configurado. Añade HAPPY_SCRIBE_API_TOKEN y HAPPY_SCRIBE_ORGANIZATION_ID en el servidor.' },
+    { error: 'HappyScribe no está disponible. Revisa la configuración en Administración → Roleplays → Configuración Audio Studio.' },
     { status: 503 },
   );
 
