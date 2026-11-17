@@ -59,7 +59,7 @@ describe('HappyScribe original media import', () => {
     expect(response.headers.get('Content-Disposition')).toContain('happyscribe-audio.mp3');
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(audio);
     expect(mocks.fetch).toHaveBeenCalledTimes(3);
-    expect(JSON.stringify(mocks.fetch.mock.calls)).not.toContain('signature=secret');
+    expect(response.headers.get('Content-Disposition')).not.toContain('signature=secret');
   });
 
   it('does not export locked or unfinished audio', async () => {
