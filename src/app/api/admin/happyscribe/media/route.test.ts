@@ -92,4 +92,20 @@ describe('HappyScribe original media import', () => {
     expect(response.status).toBe(502);
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
+  it('rejects a provider audio export larger than the direct-import limit', async () => {
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://media.happyscribe.com/audio.mp3',
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([0x49]), {
+        headers: { 'Content-Length': String(250 * 1024 * 1024 + 1) },
+      }));
+
+    const response = await POST(request());
+
+    expect(response.status).toBe(413);
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  });
+
 });
