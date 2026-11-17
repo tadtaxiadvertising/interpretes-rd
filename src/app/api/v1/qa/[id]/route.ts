@@ -83,7 +83,10 @@ export async function PATCH(
       if (scoreChanged) {
         const [protocol, interpretation, language, service, technical] =
           QA_SCORE_FIELDS.map(field =>
-            Number(updateData[field] ?? existing[field] ?? 0));
+            // Distinguish omitted (keep prior value) from explicit null (clear to zero).
+            Number(updateData[field] === undefined
+              ? (existing[field] ?? 0)
+              : (updateData[field] ?? 0)));
 
         const isCritical = updateData.criticalError ?? existing.criticalError ?? false;
         const weighted = protocol * 0.20 + interpretation * 0.40 +
