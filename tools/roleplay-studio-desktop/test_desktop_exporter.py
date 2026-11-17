@@ -169,6 +169,21 @@ class StudioDesktopTests(unittest.TestCase):
         self.project.write_text(json.dumps(self.draft), encoding="utf-8")
         self.assertIsNone(module.discover_local_companion(self.project))
 
+    def test_matching_fingerprint_does_not_autoselect_an_invalid_project(self):
+        # Matching size/partial hash is necessary, but malformed scenarios
+        # must not be suggested as a ready-to-export pair.
+        self.draft["segments"][0]["speakerRole"] = "interpreter"
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        self.assertIsNone(module.discover_local_companion(self.project))
+        self.assertIsNone(module.discover_local_companion(self.source))
+
+        # Invalid time limits must also keep the manual selection fallback.
+        self.draft["segments"][0]["speakerRole"] = "doctor"
+        self.draft["segments"][0]["end"] = 500
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        self.assertIsNone(module.discover_local_companion(self.project))
+        self.assertIsNone(module.discover_local_companion(self.source))
+
     def test_pair_discovery_is_bounded_and_rejects_invalid_projects_and_links(self):
         # No recursive scan or unbounded inventory of private folders.
         self.assertIsNone(module.discover_local_companion(self.project, max_entries=1))
