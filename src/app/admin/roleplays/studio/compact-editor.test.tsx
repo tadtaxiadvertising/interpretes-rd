@@ -258,7 +258,7 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ })
       .textContent).toMatch(/Unir sin pausa/);
     fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(screen.getByText(/Intervención compuesta/)).toBeTruthy();
     expect(screen.getByText(/pausa de 00:10.0 excluida/)).toBeTruthy();
     expect(screen.getByText(/unidas sin pausa/)).toBeTruthy();
@@ -276,10 +276,10 @@ describe('Audio Studio compact editing', () => {
     fireEvent.timeUpdate(player);
 
     fireEvent.click(screen.getByRole('button', { name: /Separar cortes de intervención 1/ }));
-    expect(screen.getByText(/Intervenciones \\(2\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
     expect((screen.getAllByLabelText('Inicio (segundos)')[0] as HTMLInputElement).disabled).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer última división o unión' }));
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(screen.getByText(/Intervención compuesta/)).toBeTruthy();
   });
 
