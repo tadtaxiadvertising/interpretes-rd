@@ -46,6 +46,23 @@ describe('NotificationBell interactions', () => {
     expect(m.markNotificationAsRead).toHaveBeenCalledWith('n1');
   });
 
+  it('shows newly supplied server notifications without losing locally confirmed reads', async () => {
+    const { rerender } = render(<NotificationBell initialNotifications={notifications} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar como leída: Auditoría QA' }));
+    await waitFor(() => expect(screen.getByText('1 sin leer')).toBeTruthy());
+
+    const newItem = {
+      id: 'n3', title: 'Aviso nuevo', message: 'Nueva asignación',
+      type: 'warning', isRead: false,
+      createdAt: new Date('2026-11-17T14:00:00Z'),
+    };
+    rerender(<NotificationBell initialNotifications={[...notifications, newItem]} />);
+    expect(screen.getByText('2 sin leer')).toBeTruthy();
+    expect(screen.getByText('Aviso nuevo')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Marcar como leída: Auditoría QA' })).toBeNull();
+  });
+
   it('prevents duplicate mark-read requests while a request is pending', async () => {
     let finish!: (value: { success: boolean }) => void;
     m.markNotificationAsRead.mockReturnValueOnce(
