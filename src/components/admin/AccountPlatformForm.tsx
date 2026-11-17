@@ -24,7 +24,7 @@ export default function AccountPlatformForm({ accounts }: { accounts: AccountOpt
       <label className="grid gap-1 text-sm">Nombre de plataforma<input name="name" required minLength={2} maxLength={120} className={cls} /></label>
       <label className="grid gap-1 text-sm">URL de acceso HTTPS<input name="loginUrl" type="url" placeholder="https://..." className={cls} /></label>
       <label className="grid gap-1 text-sm">Usuario de plataforma (no contraseña)<input name="usernameHint" maxLength={150} className={cls} /></label>
-      <label className="grid gap-1 text-sm md:col-span-2">Referencia de contraseña en gestor seguro<input name="secretRef" placeholder="vault://empresa/cuenta/plataforma" className={cls} /></label>
+      <label className="grid gap-1 text-sm md:col-span-2">Referencia externa a gestor seguro (solo referencia)<input name="secretRef" placeholder="vault://empresa/cuenta/plataforma" className={cls} /></label>
 
       <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">
         <h3 className="font-semibold">Configuración VPN</h3>
@@ -33,7 +33,7 @@ export default function AccountPlatformForm({ accounts }: { accounts: AccountOpt
       <label className="grid gap-1 text-sm">Proveedor VPN<input name="vpnProvider" maxLength={120} placeholder="Proveedor o servicio" className={cls} /></label>
       <label className="grid gap-1 text-sm">Aplicación VPN<input name="vpnApp" maxLength={120} placeholder="Nombre de la aplicación" className={cls} /></label>
       <label className="grid gap-1 text-sm">Usuario VPN<input name="vpnUsernameHint" maxLength={150} autoComplete="off" className={cls} /></label>
-      <label className="grid gap-1 text-sm">Referencia de contraseña VPN<input name="vpnSecretRef" placeholder="vault://empresa/cuenta/vpn" className={cls} /></label>
+      <label className="grid gap-1 text-sm">Referencia externa VPN (solo referencia)<input name="vpnSecretRef" placeholder="vault://empresa/cuenta/vpn" className={cls} /></label>
       <label className="grid gap-1 text-sm">País de salida esperado<input name="vpnCountry" maxLength={80} placeholder="País" className={cls} /></label>
       <label className="grid gap-1 text-sm">Ciudad / región<input name="vpnRegion" maxLength={100} placeholder="Ciudad o región" className={cls} /></label>
       <label className="grid gap-1 text-sm">Servidor / hostname<input name="vpnServer" maxLength={255} className={cls} /></label>
@@ -44,7 +44,7 @@ export default function AccountPlatformForm({ accounts }: { accounts: AccountOpt
       <label className="grid gap-1 text-sm md:col-span-2">Notas operativas<textarea name="notes" maxLength={500} rows={2} className={cls} /></label>
 
       <div className="md:col-span-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-amber-100">
-        Antes de iniciar sesión en el portal, abre <a href="https://whoer.net/" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Whoer.net</a> y comprueba manualmente que el país y la IP de salida coincidan con los valores esperados. Las contraseñas no se guardan aquí: utiliza referencias vault://.
+        Antes de iniciar sesión en el portal, abre <a href="https://whoer.net/" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Whoer.net</a> y comprueba manualmente que el país y la IP de salida coincidan con los valores esperados. Las contraseñas no se guardan aquí. Las referencias vault:// son solo identificadores: esta aplicación no se conecta al gestor externo.
       </div>
       <button disabled={pending || !accounts.length} className="rounded-lg bg-[#2675ff] px-4 py-3 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar plataforma'}</button>
       <p role="status" aria-live="polite" className={state.error ? 'text-red-300' : 'text-emerald-300'}>{state.error || (state.success ? 'Plataforma registrada.' : '')}</p>
