@@ -18,9 +18,10 @@ import { POST } from './route';
 
 const transcriptionId = 'a'.repeat(32);
 
-function request() {
+function request(signal?: AbortSignal) {
   return new NextRequest('http://localhost/api/admin/happyscribe/media', {
     method: 'POST',
+    signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: transcriptionId }),
   });
@@ -69,6 +70,28 @@ describe('HappyScribe original media import', () => {
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(audio);
     expect(mocks.fetch).toHaveBeenCalledTimes(3);
     expect(response.headers.get('Content-Disposition')).not.toContain('signature=secret');
+  });
+
+  it('propagates a cancelled administrator request to the upstream media transfer', async () => {
+    const controller = new AbortController();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://media.happyscribe.com/audio.mp3',
+      }))
+      .mockResolvedValueOnce(new Response(new Uint8Array([0x49, 0x44, 0x33]), {
+        headers: { 'Content-Type': 'audio/mpeg' },
+      }));
+
+    const response = await POST(request(controller.signal));
+    expect(response.status).toBe(200);
+    const upstreamSignal = (mocks.fetch.mock.calls[2][1] as RequestInit).signal as AbortSignal;
+    expect(upstreamSignal).toBeDefined();
+    expect(upstreamSignal.aborted).toBe(false);
+
+    controller.abort();
+    expect(upstreamSignal.aborted).toBe(true);
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
   });
 
   it('does not export locked or unfinished audio', async () => {
