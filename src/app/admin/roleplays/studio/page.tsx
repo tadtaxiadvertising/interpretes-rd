@@ -84,6 +84,8 @@ export default function RoleplayStudioPage() {
   }>>([]);
   const [happyScribeSelectedId, setHappyScribeSelectedId] = useState('');
   const [happyScribeLoading, setHappyScribeLoading] = useState(false);
+  const [happyScribePage, setHappyScribePage] = useState(0);
+  const [happyScribeHasMore, setHappyScribeHasMore] = useState(false);
   const [happyScribeImporting, setHappyScribeImporting] = useState(false);
   const [happyScribeMediaImporting, setHappyScribeMediaImporting] = useState(false);
   const [happyScribeMediaEnabled, setHappyScribeMediaEnabled] = useState(false);
@@ -111,6 +113,7 @@ export default function RoleplayStudioPage() {
   const exportAbort = useRef<AbortController | null>(null);
   const happyScribeMediaAbort = useRef<AbortController | null>(null);
   const happyScribeTranscriptAbort = useRef<AbortController | null>(null);
+  const happyScribeListAbort = useRef<AbortController | null>(null);
   // Keep an up-to-date snapshot for transfers that may resolve after edits.
   // A preflight approval only covers the source and work that existed then.
   const audioReplacementEdits = useRef({ segments, reviewCues, suggestedClips, captionTexts });
@@ -275,6 +278,8 @@ export default function RoleplayStudioPage() {
     happyScribeMediaAbort.current = null;
     happyScribeTranscriptAbort.current?.abort();
     happyScribeTranscriptAbort.current = null;
+    happyScribeListAbort.current?.abort();
+    happyScribeListAbort.current = null;
   }, []);
 
   // Edits invalidate the ZIP snapshot immediately: never download an older
@@ -1119,30 +1124,54 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const loadHappyScribeItems = async () => {
+  const loadHappyScribeItems = async (page = 0) => {
+    // Page 0 is a manual refresh. Other pages load only on explicit request.
+    // The ref closes the rapid-click race before React rerenders disabled buttons.
+    if (page !== 0 && (!happyScribeHasMore || happyScribeListAbort.current ||
+        page !== happyScribePage + 1 || page > 1000)) return;
+    happyScribeListAbort.current?.abort();
+    const controller = new AbortController();
+    happyScribeListAbort.current = controller;
     setHappyScribeLoading(true);
-    setHappyScribeMediaEnabled(false);
     setError('');
     try {
-      const response = await fetch('/api/admin/happyscribe/transcriptions', {
-        credentials: 'same-origin', cache: 'no-store',
+      const response = await fetch(`/api/admin/happyscribe/transcriptions?page=${page}`, {
+        credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
       });
       const body = await response.json().catch(() => null);
+      if (controller.signal.aborted || happyScribeListAbort.current !== controller) return;
       if (!response.ok || !body?.success || !Array.isArray(body.data)) {
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible consultar HappyScribe.');
       }
       const items = body.data as typeof happyScribeItems;
       setHappyScribeMediaEnabled(body.mediaImportEnabled === true);
-      setHappyScribeItems(items);
-      setHappyScribeSelectedId(current =>
-        items.some(item => item.id === current) ? current : items.find(item =>
-          ['automatic_done', 'done'].includes(item.state))?.id ?? '',
-      );
-      setNotice(`HappyScribe: ${items.length} transcripciones disponibles en la página actual.`);
+      if (page === 0) {
+        setHappyScribeItems(items);
+        setHappyScribeSelectedId(current =>
+          items.some(item => item.id === current) ? current : items.find(item =>
+            ['automatic_done', 'done'].includes(item.state))?.id ?? '',
+        );
+      } else {
+        // Provider pages may overlap. Keep the first occurrence and selection.
+        setHappyScribeItems(current => {
+          const seen = new Set(current.map(item => item.id));
+          return [...current, ...items.filter(item => !seen.has(item.id) && seen.add(item.id))];
+        });
+        setHappyScribeSelectedId(current => current || items.find(item =>
+          ['automatic_done', 'done'].includes(item.state))?.id ?? '');
+      }
+      setHappyScribePage(page);
+      setHappyScribeHasMore(body.hasMore === true && page < 1000);
+      setNotice(`HappyScribe: página ${page + 1} consultada. No se ha descargado ningún archivo.`);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No fue posible consultar HappyScribe.');
+      if (!controller.signal.aborted && happyScribeListAbort.current === controller) {
+        setError(cause instanceof Error ? cause.message : 'No fue posible consultar HappyScribe.');
+      }
     } finally {
-      setHappyScribeLoading(false);
+      if (happyScribeListAbort.current === controller) {
+        happyScribeListAbort.current = null;
+        setHappyScribeLoading(false);
+      }
     }
   };
 
@@ -1442,6 +1471,18 @@ export default function RoleplayStudioPage() {
                 </button>
               )}
             </div>
+          )}
+          {happyScribeItems.length > 0 && (
+            <p className="mt-2 text-xs text-slate-400">
+              {happyScribeItems.length} transcripciones cargadas · sin importar ni descargar archivos.
+            </p>
+          )}
+          {happyScribeHasMore && (
+            <button type="button" onClick={() => void loadHappyScribeItems(happyScribePage + 1)}
+              disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
+              className="mt-2 rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-emerald-100 disabled:opacity-50">
+              {happyScribeLoading ? 'Consultando…' : 'Cargar más transcripciones (50)'}
+            </button>
           )}
           {happyScribeItems.length === 0 && !happyScribeLoading && (
             <p className="mt-2 text-xs text-slate-500">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
