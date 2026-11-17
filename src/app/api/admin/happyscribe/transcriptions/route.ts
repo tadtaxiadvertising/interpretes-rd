@@ -65,10 +65,12 @@ export async function GET(req: NextRequest) {
     { status: 503 },
   );
 
-  const page = Math.max(0, Math.min(1000, Number(req.nextUrl.searchParams.get('page') ?? 0) || 0));
+  const connectionCheck = req.nextUrl.searchParams.get('check') === '1';
+  const page = connectionCheck ? 0
+    : Math.max(0, Math.min(1000, Number(req.nextUrl.searchParams.get('page') ?? 0) || 0));
   try {
     const upstream = await happyScribeFetch(
-      `/transcriptions?organization_id=${encodeURIComponent(config.organizationId)}&page=${page}&per_page=50`,
+      `/transcriptions?organization_id=${encodeURIComponent(config.organizationId)}&page=${page}&per_page=${connectionCheck ? 1 : 50}`,
       config.token, undefined, req.signal,
     );
     if (!upstream.ok) {
@@ -79,6 +81,15 @@ export async function GET(req: NextRequest) {
           ? 'HappyScribe rechazó las credenciales o el acceso a este espacio.'
           : upstream.status === 429 ? 'HappyScribe limitó temporalmente las consultas.' : 'No fue posible consultar HappyScribe.' },
         { status, headers: { 'Cache-Control': 'private, no-store' } },
+      );
+    }
+    if (connectionCheck) {
+      // A connectivity test must not expose or transfer the operator's
+      // transcription catalog to the settings form.
+      try { await upstream.body?.cancel(); } catch { /* Best-effort cleanup. */ }
+      return privateRoleplayResponse(
+        { success: true, ready: true },
+        { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } },
       );
     }
     const payload: unknown = await upstream.json();
