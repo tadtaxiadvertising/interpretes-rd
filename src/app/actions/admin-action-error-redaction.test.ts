@@ -47,7 +47,7 @@ describe('admin action error log redaction', () => {
       }));
       expect(result.success).toBe(false);
       expect(log).toHaveBeenCalledWith('[ADMIN_ACCOUNTS] Assignment creation failed', 'Error');
-      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db\\.internal|postgresql:/);
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db[.]internal|postgresql:/);
     } finally {
       log.mockRestore();
     }
@@ -64,7 +64,7 @@ describe('admin action error log redaction', () => {
       }));
       expect(result.success).toBe(false);
       expect(log).toHaveBeenCalledWith('[ADMIN_ACCOUNTS] Assignment end failed', 'Error');
-      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db\\.internal/);
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db[.]internal/);
     } finally {
       log.mockRestore();
     }
@@ -82,7 +82,7 @@ describe('admin action error log redaction', () => {
       }));
       expect(result.success).toBe(false);
       expect(log).toHaveBeenCalledWith('[CLIENTS] Create failed', 'Error');
-      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db\\.internal|postgresql:/);
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db[.]internal|postgresql:/);
     } finally {
       log.mockRestore();
     }
@@ -98,7 +98,7 @@ describe('admin action error log redaction', () => {
       const result = await assignAccountToClient(makeForm({ accountId: '1', clientId: '4' }));
       expect(result.success).toBe(false);
       expect(log).toHaveBeenCalledWith('[CLIENTS] Account assignment failed', 'Error');
-      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db\\.internal/);
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(/PRIVATE_SECRET|db[.]internal/);
     } finally {
       log.mockRestore();
     }
