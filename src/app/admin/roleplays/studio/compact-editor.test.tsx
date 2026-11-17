@@ -156,7 +156,7 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByText(/#1 · Intervención 1/)).toBeNull();
     expect(screen.getByText(/#2 · Intervención 2/)).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
-    expect(screen.getByText(/#1 · Intervención 1/)).toBeTruthy();
+    expect(screen.getByText(/#1 · Doctor · 1 \(EN\)/)).toBeTruthy();
   });
 
   it('seeks directly to an intervention without playing or changing the editor', () => {
@@ -220,9 +220,16 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
 
+    // A fresh explicit choice and approval should replace the untouched source.
+    vi.mocked(window.confirm).mockReturnValue(true);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
-      target: { files: [replacement] },
+      target: { files: [new File(['ID3'], 'accepted-replacement.mp3', { type: 'audio/mpeg' })] },
     });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    // The editor hides the timeline until metadata from the new source is known.
+    const newPlayer = document.querySelector('audio') as HTMLAudioElement;
+    Object.defineProperty(newPlayer, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(newPlayer);
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
@@ -304,7 +311,7 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toMatch(/No se pueden unir voces o idiomas distintos/);
-    expect(alert.closest('article')?.textContent).toMatch(/Intervención 1/);
+    expect(alert.closest('article')?.textContent).toMatch(/Doctor · 1/);
   });
 
   it('physically joins two compatible distant cuts into one local-only v2 scene without the gap', () => {
