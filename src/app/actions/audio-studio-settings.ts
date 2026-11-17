@@ -17,7 +17,13 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
       mediaImportEnabled: form.get('mediaImportEnabled') === 'on',
       removeToken: form.get('removeToken') === 'on',
     });
-    revalidatePath('/admin/roleplays/settings');
+    // The encrypted settings transaction has committed. Cache revalidation
+    // cannot undo it and must not trick an admin into resubmitting a secret.
+    try {
+      revalidatePath('/admin/roleplays/settings');
+    } catch {
+      console.warn('[Audio Studio settings] Saved; cache refresh failed');
+    }
     return { success: true, message: 'Configuración guardada. Las credenciales permanecen ocultas.' };
   } catch (error) {
     console.error('[Audio Studio settings]', safeServerErrorCategory(error));
