@@ -973,6 +973,7 @@ export default function RoleplayStudioPage() {
     if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
+    setTurnActionFeedback(null);
     const ordered = [...segments].sort((a, b) => a.start - b.start);
     const revealInvalidTurn = (segment: Segment, index: number, reason: string) => {
       // Export is blocked before saving or uploading anything. Surface the
@@ -981,6 +982,7 @@ export default function RoleplayStudioPage() {
       setShowPendingReview(false);
       setExpandedSegmentId(segment.id);
       setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
+      setTurnActionFeedback({ id: segment.id, message: reason, error: true });
       setError(`Intervención ${index + 1}: ${reason}`);
     };
     // The original interpreter is never exportable: surface this safety
