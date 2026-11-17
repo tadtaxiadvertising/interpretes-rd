@@ -89,6 +89,60 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch.mock.calls[3][1]).toMatchObject({ redirect: 'manual' });
   });
 
+  it('cancels an oversized SRT response immediately instead of leaving the download open', async () => {
+    const cancel = vi.fn();
+    const oversized = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      headers: { 'Content-Length': '5000001' },
+    });
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://www.happyscribe.com/private/large.srt',
+      }))
+      .mockResolvedValueOnce(oversized);
+
+    const response = await POST(importRequest());
+    expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it('still responds 413 if cancelling an oversized SRT fails', async () => {
+    const cancel = vi.fn(async () => { throw new Error('provider cleanup failed'); });
+    const oversized = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      headers: { 'Content-Length': '5000001' },
+    });
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://www.happyscribe.com/private/large.srt',
+      }))
+      .mockResolvedValueOnce(oversized);
+
+    const response = await POST(importRequest());
+    expect(response.status).toBe(413);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('releases a rejected provider response without forwarding upstream error text', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://www.happyscribe.com/private/error.srt',
+      }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 502,
+      }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await response.json())).not.toContain('private/error.srt');
+  });
+
   it('denies non-admin access before any provider request', async () => {
     mocks.validateAction.mockResolvedValueOnce({ error: 'Forbidden' });
 
