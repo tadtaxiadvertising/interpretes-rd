@@ -66,6 +66,11 @@ jobs:
       - name: Verify ONNX Runtime CPU binding
         run: node -e "const ort = require('onnxruntime-node'); if (typeof ort.InferenceSession?.create !== 'function') process.exit(1)"
 
+      # Validate the deployment safety guard even while a supply-chain advisory
+      # blocks the broader pipeline. This does NOT bypass the audit gate.
+      - name: Verify VPN migration guard regression tests
+        run: npx vitest run scripts/account-platform-vpn-schema.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
