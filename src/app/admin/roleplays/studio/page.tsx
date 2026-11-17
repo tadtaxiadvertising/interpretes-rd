@@ -723,7 +723,7 @@ export default function RoleplayStudioPage() {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
       setNotice(localOnly
-        ? 'Plan de cortes local descargado. Conserva la grabación original; el JSON no contiene audio ni video ni transcripción. La huella es parcial y no verifica cada byte.'
+        ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
         : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
