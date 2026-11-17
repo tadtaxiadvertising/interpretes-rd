@@ -16,6 +16,7 @@ const migrations = [
   '20261103224000_company_production_reports/migration.sql',
   '20261103232000_company_report_reviews/migration.sql',
   '20261103235000_account_platforms/migration.sql',
+  '20261117130000_account_platform_vpn_config/migration.sql',
   '20261105140000_client_directory/migration.sql',
   ownershipMigration,
   '20261105180000_client_directory/migration.sql',
@@ -182,6 +183,50 @@ async function main() {
       if (!accountHolderColumnNames.has(column)) {
         throw new Error(`Operational account holder migration did not create accounts.${column}`);
       }
+    }
+
+    const vpnColumns = await client.query(
+      `SELECT column_name, data_type, is_nullable
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'account_platforms'
+         AND column_name = ANY($1::text[])`,
+      [[
+        'vpn_provider', 'vpn_app', 'vpn_username_hint', 'vpn_secret_ref',
+        'vpn_country', 'vpn_region', 'vpn_server', 'vpn_exit_ip',
+        'vpn_profile', 'vpn_protocol', 'vpn_port',
+      ]],
+    );
+    const expectedVpnTypes: Record<string, string> = {
+      vpn_provider: 'text',
+      vpn_app: 'text',
+      vpn_username_hint: 'text',
+      vpn_secret_ref: 'text',
+      vpn_country: 'text',
+      vpn_region: 'text',
+      vpn_server: 'text',
+      vpn_exit_ip: 'text',
+      vpn_profile: 'text',
+      vpn_protocol: 'text',
+      vpn_port: 'integer',
+    };
+    const actualVpnColumns = new Map(
+      vpnColumns.rows.map((row: { column_name: string; data_type: string; is_nullable: string }) =>
+        [row.column_name, row]),
+    );
+    for (const [column, dataType] of Object.entries(expectedVpnTypes)) {
+      const actual = actualVpnColumns.get(column);
+      if (!actual || actual.data_type !== dataType || actual.is_nullable !== 'YES') {
+        throw new Error(`VPN migration did not create nullable account_platforms.${column} with type ${dataType}.`);
+      }
+    }
+    const vpnPortConstraint = await client.query(
+      `SELECT 1 FROM pg_constraint
+       WHERE conrelid = 'public.account_platforms'::regclass
+         AND conname = 'account_platforms_vpn_port_range'
+         AND contype = 'c' AND convalidated`,
+    );
+    if (!vpnPortConstraint.rowCount) {
+      throw new Error('VPN port range constraint is missing or not validated.');
     }
 
     const expectedTables = [
