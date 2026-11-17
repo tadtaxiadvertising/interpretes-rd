@@ -6,6 +6,7 @@ import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-inte
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
 import { z } from 'zod';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 
@@ -96,7 +97,7 @@ export async function getOnboardingDetails(userId: string): Promise<ActionResult
       },
     };
   } catch (error) {
-    console.error('[ADMIN-ONBOARDING] getOnboardingDetails error:', error);
+    console.error('[ADMIN-ONBOARDING] getOnboardingDetails error:', safeServerErrorCategory(error));
     return { success: false, error: 'Error fetching onboarding details', code: 'INTERNAL_ERROR' };
   }
 }
@@ -183,7 +184,7 @@ export async function adminUpdateOnboardingDetails(input: unknown): Promise<Acti
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0]?.message ?? 'Invalid banking data', code: 'VALIDATION_ERROR' };
     }
-    console.error('[ADMIN-ONBOARDING] adminUpdateOnboardingDetails error:', error);
+    console.error('[ADMIN-ONBOARDING] adminUpdateOnboardingDetails error:', safeServerErrorCategory(error));
     return { success: false, error: 'Error updating onboarding details', code: 'INTERNAL_ERROR' };
   }
 }
@@ -239,7 +240,7 @@ export async function adminResetOnboarding(input: unknown): Promise<ActionResult
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid user ID', code: 'VALIDATION_ERROR' };
     }
-    console.error('[ADMIN-ONBOARDING] adminResetOnboarding error:', error);
+    console.error('[ADMIN-ONBOARDING] adminResetOnboarding error:', safeServerErrorCategory(error));
     return { success: false, error: 'Error resetting onboarding', code: 'INTERNAL_ERROR' };
   }
 }

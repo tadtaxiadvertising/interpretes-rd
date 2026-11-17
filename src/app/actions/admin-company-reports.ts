@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { nonNegativeIntegerInput } from '@/lib/company-report-validation';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const schema = z.object({
   accountId: z.coerce.number().int().positive(),
@@ -41,7 +42,7 @@ export async function registerCompanyReport(formData: FormData) {
     revalidatePath('/admin/reports');
     return { success: true };
   } catch (error) {
-    console.error('[COMPANY REPORTS] Registration failed', error);
+    console.error('[COMPANY REPORTS] Registration failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar el reporte. Puede estar duplicado.' };
   }
 }

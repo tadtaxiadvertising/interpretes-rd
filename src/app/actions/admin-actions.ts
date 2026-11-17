@@ -5,6 +5,7 @@ import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-inte
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { validateAction } from "@/lib/auth/actions";
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export type AdminActionResult = {
   success: boolean;
@@ -69,7 +70,7 @@ export async function editRecord(input: unknown): Promise<AdminActionResult> {
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0]?.message ?? "Datos inválidos." };
     }
-    console.error("🔴 ERROR [editRecord]:", error);
+    console.error("🔴 ERROR [editRecord]:", safeServerErrorCategory(error));
     return { success: false, error: "Error interno al actualizar el registro." };
   }
 }
@@ -97,7 +98,7 @@ export async function deleteRecord(input: unknown): Promise<AdminActionResult> {
     if (error instanceof z.ZodError) {
       return { success: false, error: error.issues[0]?.message ?? "Datos inválidos." };
     }
-    console.error("🔴 ERROR [deleteRecord]:", error);
+    console.error("🔴 ERROR [deleteRecord]:", safeServerErrorCategory(error));
     return { success: false, error: "Error interno al eliminar el registro." };
   }
 }
