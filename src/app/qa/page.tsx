@@ -5,6 +5,7 @@ import prismaClient from '@/lib/prisma';
 import { QAEngine } from '@/components/QAEngine';
 import { ShieldAlert, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { qaRecentScoreDisplay } from '@/lib/qa-recent-score-display';
 
 export const dynamic = 'force-dynamic';
 const prisma = prismaClient; // Regla 4: Single prisma client
@@ -64,15 +65,16 @@ export default async function QAPage(props: PageProps) {
 
             <div className="space-y-4">
               {recentScores.map(score => {
-                const totalScoreValue = score.totalScore ? Number(score.totalScore) : 0;
-                const isCritical = score.criticalError || totalScoreValue === 0;
-                const isExcellent = totalScoreValue >= 85;
+                const display = qaRecentScoreDisplay(score.totalScore, score.criticalError);
+                const needsAttention = display.severity === 'critical' || display.severity === 'low';
+                const isExcellent = display.severity === 'excellent';
 
                 return (
                   <div key={score.id} className={cn(
                     "p-4 rounded-2xl border transition-all",
-                    isCritical ? "bg-red-500/5 border-red-500/20" :
+                    needsAttention ? "bg-red-500/5 border-red-500/20" :
                       isExcellent ? "bg-green-500/5 border-green-500/20" :
+                        display.severity === 'unscored' ? "bg-white/5 border-white/10" :
                         "bg-orange-500/5 border-orange-500/20"
                   )}>
                     <div className="flex justify-between items-start mb-2">
@@ -82,11 +84,12 @@ export default async function QAPage(props: PageProps) {
                       </div>
                       <span className={cn(
                         "px-3 py-1 rounded-lg text-xs font-black uppercase border",
-                        isCritical ? 'bg-red-500/10 text-red-400 border-red-500/20' :
+                        needsAttention ? 'bg-red-500/10 text-red-400 border-red-500/20' :
                           isExcellent ? 'bg-green-500/10 text-green-400 border-green-500/20' :
+                            display.severity === 'unscored' ? 'bg-white/5 text-gray-300 border-white/10' :
                             'bg-orange-500/10 text-orange-400 border-orange-500/20'
                       )}>
-                        {totalScoreValue.toFixed(2)}%
+                        {display.scoreLabel}
                       </span>
                     </div>
                     <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
@@ -94,7 +97,10 @@ export default async function QAPage(props: PageProps) {
                         QA-{score.id} • {new Date(score.auditDate).toLocaleDateString()}
                       </p>
                       <p className="text-[10px] font-bold uppercase text-gray-400">
-                        {score.accionRequerida}
+                        {display.criticalLabel ? (
+                          <span className="text-red-400">{display.criticalLabel} · </span>
+                        ) : null}
+                        {score.accionRequerida ?? 'Sin acción definida'}
                       </p>
                     </div>
                   </div>
