@@ -191,7 +191,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                 <tr><td colSpan={6} className="py-8 text-center text-gray-500">No se encontraron registros.</td></tr>
               ) : filteredRecords.map(record => {
                 const isPaid = ['paid', 'paid_out', 'pagado', 'pagada'].includes(String(record.status || '').trim().toLowerCase());
-                const isApproved = ['approved', 'aprobado', 'aprobada'].includes(String(record.status || '').trim().toLowerCase());
+                const normalizedStatus = String(record.status || '').trim().toLowerCase();
+                const isApproved = ['approved', 'aprobado', 'aprobada'].includes(normalizedStatus);
+                const isEditable = ['pendiente', 'draft', 'borrador', 'approved', 'aprobado', 'aprobada'].includes(normalizedStatus);
                 
                 return (
                   <tr key={record.id} className="hover:bg-white/5 transition-colors">
@@ -221,7 +223,7 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                     </td>
                     <td className="py-4 px-6 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        {!isPaid && (
+                        {isEditable && !isPaid && (
                           <>
                             <button onClick={() => openModal('ADJUST', record)} className="p-1.5 bg-white/5 hover:bg-white/10 rounded-md text-gray-400 transition-colors" title="Ajustes">
                               <Edit3 size={14} />
