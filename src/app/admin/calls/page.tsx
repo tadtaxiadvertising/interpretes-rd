@@ -58,9 +58,9 @@ export default async function AdminCallsPage() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <Phone size={28} className="text-green-400" />
-            <h2 className="text-3xl font-bold text-white">Call History</h2>
+            <h2 className="text-3xl font-bold text-white">Historial de llamadas</h2>
           </div>
-          <p className="text-gray-400">Complete call log with server-computed billing. All costs are immutable.</p>
+          <p className="text-gray-400">Registro completo de llamadas con facturación calculada por el servidor. Los importes registrados no se modifican.</p>
         </div>
         <ManualCallForm interpreters={allInterpreters || []} />
       </header>
@@ -70,13 +70,13 @@ export default async function AdminCallsPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
-                <th className="pb-3 px-2">Interpreter</th>
-                <th className="pb-3 px-2">Date</th>
-                <th className="pb-3 px-2">Start</th>
-                <th className="pb-3 px-2">Duration</th>
-                <th className="pb-3 px-2">Rate</th>
-                <th className="pb-3 px-2">Cost</th>
-                <th className="pb-3 px-2 text-right">Status</th>
+                <th className="pb-3 px-2">Intérprete</th>
+                <th className="pb-3 px-2">Fecha</th>
+                <th className="pb-3 px-2">Inicio</th>
+                <th className="pb-3 px-2">Duración</th>
+                <th className="pb-3 px-2">Tarifa</th>
+                <th className="pb-3 px-2">Costo</th>
+                <th className="pb-3 px-2 text-right">Estado</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -114,7 +114,7 @@ export default async function AdminCallsPage() {
               })}
               {(!calls || calls.length === 0) && (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-gray-500 italic">No call records found.</td>
+                  <td colSpan={7} className="py-10 text-center text-gray-500 italic">No se encontraron registros de llamadas.</td>
                 </tr>
               )}
             </tbody>
