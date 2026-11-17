@@ -14,6 +14,7 @@ const interpreters = [{ id: 1, name: 'Intérprete de prueba', status: 'Activo' }
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('Roleplay assignment guides administrators to incomplete fields', () => {
@@ -40,7 +41,8 @@ describe('Roleplay assignment guides administrators to incomplete fields', () =>
   });
 
   it('rejects an empty library template with a specific error without submitting anything', () => {
-    const request = vi.spyOn(globalThis, 'fetch');
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
     render(<NewRoleplayForm interpreters={interpreters} candidates={[]}
       librarySource={{ id: 'empty-template', fingerprint: 'a'.repeat(64), scenarios: [] }} />);
 
