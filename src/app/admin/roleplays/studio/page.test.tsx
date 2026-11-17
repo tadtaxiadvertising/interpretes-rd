@@ -20,6 +20,9 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    // When a replacement destroys existing edits, the browser prompts for
+    // consent. These tests explicitly accept, except where they test denial.
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
   });
 
   afterEach(() => {
@@ -143,6 +146,7 @@ describe('Audio Studio clip review player', () => {
     const signal = fetchMock.mock.calls[0][1]?.signal as AbortSignal;
     expect(signal.aborted).toBe(false);
     choose('second.mp3');
+    expect(window.confirm).toHaveBeenCalledOnce();
     expect(signal.aborted).toBe(true);
 
     // A proxy can still complete after the browser aborts. Its stale result
