@@ -612,6 +612,39 @@ export default function RoleplayStudioPage() {
       : `Unidas las intervenciones ${current + 1} y ${current + 2}. Verifica el audio resultante.`);
   };
 
+  const separateCompound = (id: string) => {
+    const segment = segments.find(item => item.id === id);
+    if (!segment?.ranges) return;
+    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
+      reportTurnAction(id, 'Hay 25 intervenciones. Elimina otra antes de separar esta intervención.', true);
+      return;
+    }
+    const ranges = validStudioRanges(segment, duration);
+    if (ranges?.length !== 2) {
+      reportTurnAction(id, 'Los tiempos de la intervención compuesta son inválidos.', true);
+      return;
+    }
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'separación',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    const secondId = crypto.randomUUID();
+    setSegments(previous => previous.flatMap(item => item.id === id ? [
+      { ...item, ranges: undefined, start: ranges[0].start, end: ranges[0].end },
+      { ...item, ranges: undefined, id: secondId,
+        title: item.title.slice(0, 185) + ' (parte 2)',
+        start: ranges[1].start, end: ranges[1].end,
+        scriptPrompt: '' },
+    ] : [item]));
+    setCaptionTexts(previous => previous[id]
+      ? { ...previous, [secondId]: previous[id] } : previous);
+    setExpandedSegmentId(secondId);
+    reportTurnAction(id, 'Cortes separados. Revisa las instrucciones y títulos antes de exportar.');
+  };
+
   const addSegment = () => {
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       setError('Se alcanzó el límite de intervenciones exportables.');
@@ -665,7 +698,8 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      const localOnly = usesLocalLongMode(audio, duration) || !allowServerZipExport;
+      const localOnly = usesLocalLongMode(audio, duration) ||
+        snapshot.some(segment => segment.ranges !== undefined) || !allowServerZipExport;
       const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
       const draft = localOnly
@@ -767,18 +801,17 @@ export default function RoleplayStudioPage() {
     let end = 0;
     let total = 0;
     for (const segment of ordered) {
+      const ranges = validStudioRanges(segment, duration);
       if (!segment.title.trim() || segment.title.length > 200 ||
-        !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
-        segment.start < end || segment.end <= segment.start ||
-        segment.end > duration + 0.1 || segment.end - segment.start > 300 ||
+        !ranges || segment.start < end ||
         segment.scriptPrompt.length > 5000 ||
         !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
         segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) {
-        setError('Corrige las intervenciones: orden, títulos, duración máxima de 5 minutos y ausencia de solapamientos.');
+        setError('Corrige las intervenciones: orden, títulos, cortes válidos, máximo de 5 minutos de audio seleccionado y ausencia de solapamientos.');
         return;
       }
       end = segment.end;
-      total += segment.end - segment.start;
+      total += studioSelectedSeconds(ranges);
     }
     if (total > 900) {
       setError('El paquete no puede superar 15 minutos de audio acumulado.');
@@ -787,7 +820,9 @@ export default function RoleplayStudioPage() {
     // Long recordings create only a local JSON draft. Do not allocate a
     // remote ZIP AbortController for this branch: otherwise the early return
     // locks all subsequent downloads until an edit resets exportAbort.
-    if (usesLocalLongMode(audio, duration) || !allowServerZipExport) {
+    if (usesLocalLongMode(audio, duration) ||
+        ordered.some(segment => segment.ranges !== undefined) ||
+        !allowServerZipExport) {
       await saveDraft();
       return;
     }
@@ -838,7 +873,8 @@ export default function RoleplayStudioPage() {
   };
 
   const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
-  const localOnly = audio !== null && (sourceRequiresLocal || !allowServerZipExport);
+  const hasCompound = segments.some(segment => segment.ranges !== undefined);
+  const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
   const videoSource = audio !== null && mediaKind(audio) === 'video';
   // Retain the unfiltered SRT/VTT index for selections across pages.
   const filteredCueEntries = useMemo(() => {
@@ -857,7 +893,9 @@ export default function RoleplayStudioPage() {
     currentCuePage * CUES_PER_PAGE, (currentCuePage + 1) * CUES_PER_PAGE);
 
   const coverage = useMemo(
-    () => summarizeStudioCoverage(duration, segments), [duration, segments],
+    () => summarizeStudioCoverage(duration,
+      segments.flatMap(segment => validStudioRanges(segment, duration) ?? [])),
+    [duration, segments],
   );
   const largestGaps = coverage.gaps
     .filter(gap => gap.duration >= 5)
@@ -973,7 +1011,7 @@ export default function RoleplayStudioPage() {
             setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
           }}
           className="hidden" />}
-            {audio && duration > 0 && !sourceRequiresLocal && (
+            {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
               <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-white/15 bg-slate-950/60 p-3">
                 <legend className="px-1 text-sm font-semibold text-white">Dónde preparar el ZIP</legend>
                 <label className="flex items-start gap-2 text-sm text-cyan-100">
@@ -1016,6 +1054,12 @@ export default function RoleplayStudioPage() {
             )}
             {localOnly && duration > 0 && (
               <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
+                {hasCompound && (
+                  <p className="mb-2 font-semibold text-amber-100">
+                    Proyecto compuesto v2: el ZIP debe generarse con un exportador local actualizado.
+                    La grabación no se enviará al servidor, aunque se haya seleccionado ese modo anteriormente.
+                  </p>
+                )}
                 <strong>Preparación local:</strong> la grabación no se sube al servidor.
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
                 El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
@@ -1641,7 +1685,7 @@ export default function RoleplayStudioPage() {
               )}
             </article>
           ))}
-          {segments.length > 0 && !sourceRequiresLocal && (
+          {segments.length > 0 && !sourceRequiresLocal && !hasCompound && (
             <StudioConsecutivePreview
               sourceUrl={url}
               sourceDuration={duration}
@@ -1649,6 +1693,12 @@ export default function RoleplayStudioPage() {
               interruptRevision={editorPlaybackRevision}
               onStart={pauseEditorialAudio}
             />
+          )}
+          {hasCompound && !sourceRequiresLocal && (
+            <p className="text-xs text-amber-200">
+              El simulador consecutivo de intervalos continuos está deshabilitado para proyectos compuestos.
+              Utiliza «Escuchar unido» para revisar cada unión física antes de generar el ZIP local.
+            </p>
           )}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
