@@ -17,13 +17,13 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [protocolDefault, setProtocolDefault] = useState(initial.protocolLanguageDefault);
   const [status, setStatus] = useState(initial);
   const [checking, setChecking] = useState(false);
+  const [pending, start] = useTransition();
   const hasToken = status.hasToken;
   const editingDisabled = pending || checking;
   const hasUnsavedChanges = org !== status.organizationId || token.length > 0 || remove ||
     media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
     compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
-  const [pending, start] = useTransition();
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData();
