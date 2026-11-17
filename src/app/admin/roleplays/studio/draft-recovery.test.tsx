@@ -273,6 +273,33 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(screen.queryByText(/Proyecto v2 restaurado/)).toBeNull();
   });
 
+  it('stops stale clip preview only after accepting a verified JSON replacement', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
+    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+    pause.mockClear();
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Draft not accepted')] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(pause).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Intervención 1');
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Draft accepted')] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(pause).toHaveBeenCalled();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Draft accepted');
+  });
+
   it('rejects projects bound to another MP3 and preserves existing edits', async () => {
     selectSource();
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
