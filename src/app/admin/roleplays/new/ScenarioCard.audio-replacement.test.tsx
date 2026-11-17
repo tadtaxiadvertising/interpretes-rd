@@ -40,14 +40,14 @@ describe('replacing Audio Studio source audio', () => {
   it('opens verified scenario details only when requested in a compact imported review', () => {
     render(<ScenarioCard {...props} startCollapsed />);
     expect(screen.getByDisplayValue('Interpreting scenario')).toBeTruthy();
-    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+    expect(screen.queryByLabelText(/Audio base/)).toBeNull();
     const toggle = screen.getByRole('button', { name: 'Editar detalles del escenario 1' });
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(toggle);
-    expect(screen.getByLabelText(/Base audio/)).toBeTruthy();
+    expect(screen.getByLabelText(/Audio base/)).toBeTruthy();
     expect(screen.getByDisplayValue('Preserve these instructions')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
-    expect(screen.queryByLabelText(/Base audio/)).toBeNull();
+    expect(screen.queryByLabelText(/Audio base/)).toBeNull();
   });
 
   it('clears imported timeline, speaker, language, turn and checksum without changing other edits', () => {
@@ -56,7 +56,7 @@ describe('replacing Audio Studio source audio', () => {
     const onUpdate = vi.fn();
     render(<ScenarioCard {...props} onUpdate={onUpdate} />);
     const newFile = new File(['new audio'], 'replacement.mp3', { type: 'audio/mpeg' });
-    fireEvent.change(screen.getByLabelText(/Base audio/), { target: { files: [newFile] } });
+    fireEvent.change(screen.getByLabelText(/Audio base/), { target: { files: [newFile] } });
 
     expect(createObjectURL).toHaveBeenCalledWith(newFile);
     expect(onUpdate).toHaveBeenCalledOnce();
@@ -80,7 +80,7 @@ describe('replacing Audio Studio source audio', () => {
     const onUpdate = vi.fn();
     render(<ScenarioCard {...props} scenario={{ ...scenario, title: '' }} onUpdate={onUpdate} />);
     const file = new File(['new audio'], 'patient_visit-follow_up.mp3', { type: 'audio/mpeg' });
-    fireEvent.change(screen.getByLabelText(/Base audio/), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText(/Audio base/), { target: { files: [file] } });
 
     expect(onUpdate).toHaveBeenCalledWith(scenario.id, expect.objectContaining({
       title: 'patient visit follow up',
@@ -92,7 +92,7 @@ describe('replacing Audio Studio source audio', () => {
     const onUpdate = vi.fn();
     render(<ScenarioCard {...props} scenario={{ ...scenario, title: '' }} onUpdate={onUpdate} />);
     const file = new File(['invalid'], 'patient-visit.txt', { type: 'text/plain' });
-    fireEvent.change(screen.getByLabelText(/Base audio/), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText(/Audio base/), { target: { files: [file] } });
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
@@ -100,7 +100,7 @@ describe('replacing Audio Studio source audio', () => {
     const onUpdate = vi.fn();
     render(<ScenarioCard {...props} onUpdate={onUpdate} />);
     const invalidFile = new File(['not audio'], 'replacement.txt', { type: 'text/plain' });
-    fireEvent.change(screen.getByLabelText(/Base audio/), { target: { files: [invalidFile] } });
+    fireEvent.change(screen.getByLabelText(/Audio base/), { target: { files: [invalidFile] } });
 
     expect(screen.getByRole('alert').textContent).toContain('Formato no válido');
     expect(onUpdate).not.toHaveBeenCalled();
