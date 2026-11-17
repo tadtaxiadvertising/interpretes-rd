@@ -1155,7 +1155,12 @@ export default function RoleplayStudioPage() {
         // Provider pages may overlap. Keep the first occurrence and selection.
         setHappyScribeItems(current => {
           const seen = new Set(current.map(item => item.id));
-          return [...current, ...items.filter(item => !seen.has(item.id) && seen.add(item.id))];
+          const newItems = items.filter(item => {
+            if (seen.has(item.id)) return false;
+            seen.add(item.id);
+            return true;
+          });
+          return [...current, ...newItems];
         });
         setHappyScribeSelectedId(current => current || items.find(item =>
           ['automatic_done', 'done'].includes(item.state))?.id ?? '');
@@ -1474,7 +1479,7 @@ export default function RoleplayStudioPage() {
           )}
           {happyScribeItems.length > 0 && (
             <p className="mt-2 text-xs text-slate-400">
-              {happyScribeItems.length} transcripciones cargadas · sin importar ni descargar archivos.
+              {happyScribeItems.length} transcripciones cargadas · {happyScribeHasMore ? 'hay más resultados disponibles' : 'no hay más páginas disponibles'} · sin importar ni descargar archivos.
             </p>
           )}
           {happyScribeHasMore && (
