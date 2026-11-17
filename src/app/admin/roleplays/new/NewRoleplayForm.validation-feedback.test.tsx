@@ -1,12 +1,17 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import NewRoleplayForm from './NewRoleplayForm';
+import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
     <a href={href}>{children}</a>,
+}));
+
+vi.mock('@/lib/roleplay-manifest-import', () => ({
+  prepareRoleplayManifestImport: vi.fn(),
 }));
 
 // Isolate parent-form validation and feedback from file decoding or audio previews.
@@ -37,6 +42,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.mocked(prepareRoleplayManifestImport).mockReset();
 });
 
 describe('feedback de validación al completar un escenario', () => {
@@ -67,5 +73,34 @@ describe('feedback de validación al completar un escenario', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Adjuntar audio de prueba' }));
     expect(screen.queryByText('El escenario 1 necesita un audio válido.')).toBeNull();
     expect(request).not.toHaveBeenCalled();
+  });
+
+  it('does not hide an import failure when the user fixes an earlier title warning', async () => {
+    vi.stubGlobal('fetch', vi.fn());
+    render(<NewRoleplayForm
+      interpreters={[{ id: 1, name: 'Intérprete de prueba', status: 'Activo' }]}
+      candidates={[]}
+    />);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    expect(screen.getByText('El escenario 1 necesita un título.')).toBeTruthy();
+
+    // Importing can fail without changing the draft, replacing the local warning.
+    vi.mocked(prepareRoleplayManifestImport).mockRejectedValueOnce(
+      new Error('El escenario 1 contiene un audio corrupto.'),
+    );
+    const manifestInput = document.getElementById('manifest-roleplay-upload') as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(manifestInput, {
+        target: { files: [new File(['{}'], 'manifest.json', { type: 'application/json' })] },
+      });
+    });
+    expect(screen.getByText('El escenario 1 contiene un audio corrupto.')).toBeTruthy();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Título del escenario' }), {
+      target: { value: 'Consulta médica' },
+    });
+    // The old prefix-based clearing logic incorrectly hid this unrelated error.
+    expect(screen.getByText('El escenario 1 contiene un audio corrupto.')).toBeTruthy();
   });
 });
