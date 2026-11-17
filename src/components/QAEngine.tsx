@@ -24,9 +24,30 @@ function SubmitButton() {
   );
 }
 
-export function QAEngine({ interpreters }: { interpreters: any[] }) {
+type QaInterpreterOption = { id: number; name: string; externalId: string | null };
+type QaProductionSuggestion = {
+  id: number;
+  interpreterId: number;
+  date: string;
+  status: string;
+};
+
+export function QAEngine({
+  interpreters,
+  productionLogSuggestions = [],
+}: {
+  interpreters: QaInterpreterOption[];
+  productionLogSuggestions?: QaProductionSuggestion[];
+}) {
   const [state, formAction] = useActionState(submitQAEvaluation, null);
   const [criticalError, setCriticalError] = useState(false);
+  const [selectedInterpreterId, setSelectedInterpreterId] = useState('');
+  const [productionLogId, setProductionLogId] = useState('');
+  // Suggestions are not proof that all historical records are covered.
+  // The server independently verifies ownership and the unique QA link.
+  const matchingLogs = productionLogSuggestions.filter(log =>
+    String(log.interpreterId) === selectedInterpreterId,
+  );
 
   return (
     <div className="glass p-8 rounded-3xl border border-white/5 bg-slate-900/40">
@@ -44,8 +65,14 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
             <label htmlFor="qa-interpreter" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Intérprete Auditado</label>
             <select 
               id="qa-interpreter"
-              name="interpreterId" 
+              name="interpreterId"
               required
+              value={selectedInterpreterId}
+              onChange={(event) => {
+                setSelectedInterpreterId(event.target.value);
+                // An old suggested ID cannot be submitted for a new person.
+                setProductionLogId('');
+              }}
               className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors"
             >
               <option value="">Seleccione un intérprete...</option>
@@ -57,14 +84,31 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
 
           <div className="space-y-2">
             <label htmlFor="qa-production-log" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Production Log ID (Opcional)</label>
-            <input 
-              type="number" 
+            <input
+              type="number"
               id="qa-production-log"
-              name="productionLogId" 
+              name="productionLogId"
               min="1" step="1"
-              placeholder="Ej. 1042"
-              className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono" 
+              value={productionLogId}
+              onChange={(event) => setProductionLogId(event.target.value)}
+              list={matchingLogs.length ? 'qa-unreviewed-production-logs' : undefined}
+              placeholder="Sin registro o ID anterior"
+              className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono"
             />
+            {matchingLogs.length > 0 && (
+              <datalist id="qa-unreviewed-production-logs">
+                {matchingLogs.map(log => (
+                  <option key={log.id} value={log.id}
+                    label={`${log.date} · ${log.status}`} />
+                ))}
+              </datalist>
+            )}
+            <p className="text-xs text-slate-400">
+              {selectedInterpreterId
+                ? `${matchingLogs.length} registro(s) de producción reciente(s) sin QA sugeridos. También puedes introducir un ID histórico válido.`
+                : 'Selecciona primero un intérprete para ver registros sin QA disponibles.'}
+              El registro vinculado se valida antes de guardar.
+            </p>
           </div>
         </div>
 
