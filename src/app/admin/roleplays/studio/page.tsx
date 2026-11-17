@@ -253,6 +253,14 @@ export default function RoleplayStudioPage() {
   }, [segments]);
 
   const chooseAudio = (file: File) => {
+    // Validate before any reset, abort or consent prompt. Invalid replacements
+    // must not destroy the existing recording and unsaved interventions.
+    try {
+      validateLocalMedia(file);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'No se puede abrir este archivo.');
+      return;
+    }
     // Selecting another source destroys the in-memory editor and cue review.
     // A cancelled picker must never reach this action, and an actual
     // replacement should not discard substantial work without consent.
@@ -299,14 +307,6 @@ export default function RoleplayStudioPage() {
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
-    try {
-      validateLocalMedia(file);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No se puede abrir este archivo.');
-      setAudio(null);
-      setUrl('');
-      return;
-    }
     activeAudioFile.current = file;
     setAudio(file);
     setUrl(URL.createObjectURL(file));
