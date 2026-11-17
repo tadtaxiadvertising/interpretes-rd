@@ -1,0 +1,41 @@
+name: Worker production image smoke
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - Dockerfile.worker
+      - package.json
+      - package-lock.json
+      - prisma/schema.prisma
+      - prisma.config.ts
+      - scripts/roleplay-audio-worker.ts
+      - src/lib/roleplay-audio-*.ts
+      - src/lib/prisma.ts
+      - src/lib/database-pool-config.ts
+      - src/lib/roleplay-limits.ts
+      - .github/workflows/worker-image-smoke.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Build worker production-only image
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build exact final worker image
+        run: docker build --file Dockerfile.worker --tag roleplay-audio-worker:smoke .
+      - name: Verify least-privilege runtime and no development toolchain
+        run: |
+          test "$(docker image inspect --format '{{.Config.User}}' roleplay-audio-worker:smoke)" = "worker"
+          docker run --rm --entrypoint sh roleplay-audio-worker:smoke -ec '
+            test -s /app/dist/roleplay-audio-worker.mjs
+            test ! -e /app/node_modules/.bin/tsx
+            test ! -e /app/node_modules/.bin/vitest
+            test ! -e /app/node_modules/.bin/eslint
+            test ! -e /app/node_modules/.bin/vite
+          '
