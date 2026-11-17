@@ -692,7 +692,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           Escenarios listos: <span className="font-medium text-white">{readyScenarioCount} de {scenarioCount}</span>
         </p>
         {(!isBulk && !selectedParticipantId) ? (
-          <p className="text-xs text-amber-200">Elige un destinatario para habilitar la creación.</p>
+          <p className="text-xs text-amber-200">Elige un destinatario antes de crear. El formulario te llevará al primer dato pendiente.</p>
         ) : readyScenarioCount !== scenarioCount || scenarioCount === 0 ? (
           <p className="text-xs text-amber-200">Completa el título y audio de cada escenario antes de crear.</p>
         ) : (
@@ -711,10 +711,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting || (!isBulk && !selectedParticipantId) || (!librarySource && scenarios.length === 0)}
+        disabled={isCreating || isImporting}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting || (!isBulk && !selectedParticipantId) || (!librarySource && scenarios.length === 0)
+          isCreating || isImporting
             ? "bg-slate-800 text-slate-500 cursor-not-allowed"
             : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
         )}
