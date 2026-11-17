@@ -3,11 +3,14 @@ import { NextRequest } from 'next/server';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
+  actorFromBearer: vi.fn(),
   applyRateLimit: vi.fn(),
   fetch: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/actions', () => ({ validateAction: mocks.validateAction }));
+vi.mock('@/lib/api-auth', () => ({ actorFromBearer: mocks.actorFromBearer }));
+
 vi.mock('@/lib/security/rate-limit', () => ({
   RATE_LIMITS: { audioUpload: { windowMs: 60_000, maxRequests: 3 } },
   applyRateLimit: mocks.applyRateLimit,
@@ -29,6 +32,7 @@ function request(signal?: AbortSignal) {
 
 describe('HappyScribe original media import', () => {
   beforeEach(() => {
+    mocks.actorFromBearer.mockReset();
     mocks.validateAction.mockReset().mockResolvedValue({ user: { userId: 'admin-test' } });
     mocks.applyRateLimit.mockReset().mockReturnValue({ success: true });
     mocks.fetch.mockReset();
@@ -172,6 +176,24 @@ describe('HappyScribe original media import', () => {
     expect(response.status).toBe(502);
     expect(cancel).toHaveBeenCalledOnce();
     expect(JSON.stringify(await response.json())).not.toContain('signature=private');
+  });
+
+  it('rejects an interpreter Bearer paired with an admin cookie before rate limiting or provider calls', async () => {
+    mocks.actorFromBearer.mockResolvedValue({ userId: 'other-user', role: 'interpreter' });
+    const mixedRequest = new NextRequest('http://localhost/api/admin/happyscribe/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer interpreter-token' },
+      body: JSON.stringify({ id: transcriptionId }),
+    });
+
+    const response = await POST(mixedRequest);
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(response.headers.get('Vary')).toContain('Authorization');
+    expect(mocks.actorFromBearer).toHaveBeenCalledOnce();
+    expect(mocks.applyRateLimit).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
 });
