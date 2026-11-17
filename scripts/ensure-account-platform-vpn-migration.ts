@@ -54,6 +54,22 @@ async function main() {
     // Matches the lock used by scripts/run-migration.ts to prevent races.
     await client.query('SELECT pg_advisory_xact_lock(194, 20261105)');
     const state = await readSchemaState(client);
+    // A completed migration recorded in Prisma history with no matching
+    // schema signals drift. Do not silently replay it or rewrite history.
+    const historyTable = await client.query(
+      "SELECT to_regclass('public._prisma_migrations') AS relation",
+    );
+    if (historyTable.rows[0]?.relation && state === 'missing') {
+      const history = await client.query(
+        `SELECT finished_at FROM public._prisma_migrations
+         WHERE migration_name = $1 AND rolled_back_at IS NULL
+         ORDER BY started_at DESC LIMIT 1`,
+        ['20261117130000_account_platform_vpn_config'],
+      );
+      if (history.rows[0]?.finished_at) {
+        throw new Error('VPN migration history contradicts the live schema');
+      }
+    }
     if (state === 'partial') {
       throw new Error('VPN migration schema is partially applied or incompatible');
     }
