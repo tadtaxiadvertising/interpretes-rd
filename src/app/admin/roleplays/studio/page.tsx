@@ -12,6 +12,7 @@ import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
+import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -44,6 +45,7 @@ type Segment = {
   responseLimit: number;
   speakerRole: StudioSpeakerRole;
   language: StudioLanguage;
+  ranges?: StudioCutRange[];
 };
 
 function formatTime(value: number): string {
@@ -92,7 +94,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión';
+    kind: 'división' | 'unión' | 'separación';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -161,6 +163,7 @@ export default function RoleplayStudioPage() {
   };
 
   const previewSegment = (segment: Segment) => {
+    if (segment.ranges) { previewPairWithoutGap(segment.id); return; }
     const audioPlayer = player.current;
     if (!audioPlayer || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
       segment.end <= segment.start || segment.start < 0 || segment.end > duration) return;
@@ -188,19 +191,27 @@ export default function RoleplayStudioPage() {
     const at = sorted.findIndex(item => item.id === id);
     const first = sorted[at];
     const second = sorted[at + 1];
-    const plan = planGaplessPair(first, second, duration);
+    const existing = first?.ranges
+      ? validStudioRanges(first, duration)
+      : null;
+    const plan: GaplessPairPlan | null = existing?.length === 2
+      ? { first: existing[0], second: existing[1],
+          skippedSeconds: existing[1].start - existing[0].end,
+          selectedSeconds: studioSelectedSeconds(existing) }
+      : planGaplessPair(first, second, duration);
     const element = pairPlayer.current;
-    if (!plan || !element || !second) {
+    if (!plan || !element || (!first?.ranges && !second)) {
       reportTurnAction(id, 'La preescucha requiere dos cortes válidos del mismo hablante e idioma.', true);
       return;
     }
     // Do not play a turn hidden by the administrator's active filter.
     const needle = segmentSearch.trim().toLocaleLowerCase();
-    if ((showPendingReview && second.speakerRole !== 'unknown' &&
-         second.speakerRole !== 'interpreter' && second.language !== 'unknown') ||
+    if (!first?.ranges && second &&
+        ((showPendingReview && second.speakerRole !== 'unknown' &&
+          second.speakerRole !== 'interpreter' && second.language !== 'unknown') ||
         (needle && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
           second.speakerRole, second.language].some(value =>
-          value.toLocaleLowerCase().includes(needle)))) {
+          value.toLocaleLowerCase().includes(needle))))) {
       reportTurnAction(id, 'El siguiente corte está oculto: limpia los filtros para escucharlo.', true);
       return;
     }
@@ -210,7 +221,9 @@ export default function RoleplayStudioPage() {
     setPairPreviewId(id);
     element.currentTime = plan.first.start;
     setEditorPlaybackRevision(n => n + 1);
-    reportTurnAction(id, `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
+    reportTurnAction(id, first?.ranges
+      ? `Preescucha de intervención compuesta: ${formatTime(plan.selectedSeconds)} de audio sin la pausa de ${formatTime(plan.skippedSeconds)}.`
+      : `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
     void element.play().catch(() => {
       stopPairPreview();
       reportTurnAction(id, 'El navegador no pudo iniciar la preescucha sin pausa.', true);
@@ -480,6 +493,10 @@ export default function RoleplayStudioPage() {
   const splitAtPlayhead = (id: string) => {
     const segment = segments.find(item => item.id === id);
     if (!segment) return;
+    if (segment.ranges) {
+      reportTurnAction(id, 'Esta intervención contiene dos cortes. Usa «Separar cortes» antes de dividir.', true);
+      return;
+    }
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       reportTurnAction(id, `Límite de ${ROLEPLAY_MAX_SCENARIOS} intervenciones. Elimina un turno antes de dividir.`, true);
       return;
@@ -535,6 +552,10 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'Este es el último turno; no existe otro después para unir.', true);
       return;
     }
+    if (first.ranges || second.ranges) {
+      reportTurnAction(id, 'Para unir nuevos cortes, separa antes la intervención compuesta. El formato v2 admite dos tramos.', true);
+      return;
+    }
     if ((showPendingReview && !needsReview(second)) ||
         (segmentSearch.trim() && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
           second.speakerRole, second.language].some(value =>
@@ -551,11 +572,12 @@ export default function RoleplayStudioPage() {
       return;
     }
     const gap = second.start - first.end;
-    if (gap > 2 + 1e-6) {
-      reportTurnAction(id, `Hay ${formatTime(gap)} de separación. Reduce el espacio a 2 segundos o menos antes de unir, para evitar incluir una pausa larga.`, true);
+    const compound = gap > 2 + 1e-6 ? planGaplessPair(first, second, duration) : null;
+    if (gap > 2 + 1e-6 && !compound) {
+      reportTurnAction(id, 'La unión sin pausa no es válida. Revisa los límites y la duración total de los cortes (máximo 5 minutos).', true);
       return;
     }
-    if (second.end - first.start > 300) {
+    if (!compound && second.end - first.start > 300) {
       reportTurnAction(id, 'La unión superaría los 5 minutos por intervención. Reduce los límites antes de unir.', true);
       return;
     }
@@ -573,7 +595,8 @@ export default function RoleplayStudioPage() {
     });
     setSegments(previous => previous.filter(item => item.id !== second.id)
       .map(item => item.id === first.id
-        ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
+        ? { ...item, end: second.end, scriptPrompt: mergedPrompt,
+            ...(compound ? { ranges: [compound.first, compound.second] } : {}) } : item));
     setCaptionTexts(previous => {
       const next = { ...previous };
       // Rejoining previously split cues must not duplicate private text.
@@ -584,7 +607,9 @@ export default function RoleplayStudioPage() {
       return next;
     });
     setExpandedSegmentId(prev => prev === second.id ? first.id : prev);
-    reportTurnAction(id, `Unidas las intervenciones ${current + 1} y ${current + 2}. Verifica el audio resultante.`);
+    reportTurnAction(id, compound
+      ? `Intervenciones ${current + 1} y ${current + 2} unidas sin pausa: ${formatTime(compound.selectedSeconds)} de audio. Exportación local en un MP3; guarda el proyecto v2.`
+      : `Unidas las intervenciones ${current + 1} y ${current + 2}. Verifica el audio resultante.`);
   };
 
   const addSegment = () => {
@@ -618,6 +643,11 @@ export default function RoleplayStudioPage() {
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
+    if (segments.some(segment => segment.id === id && segment.ranges) &&
+        (patch.start !== undefined || patch.end !== undefined)) {
+      reportTurnAction(id, 'Separa los dos cortes antes de modificar sus límites.', true);
+      return;
+    }
     setLastStructuralEdit(null);
     stopPairPreview();
     setTurnActionFeedback(null);
