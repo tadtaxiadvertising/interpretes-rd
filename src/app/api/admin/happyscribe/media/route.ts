@@ -39,7 +39,17 @@ export async function POST(req: NextRequest) {
 
   // Audio transits this frontend VPS. Keep the potentially expensive transfer
   // disabled until an operator explicitly accepts bandwidth/privacy costs.
-  const config = await getHappyScribeSettings();
+  let config: Awaited<ReturnType<typeof getHappyScribeSettings>>;
+  try {
+    config = await getHappyScribeSettings();
+  } catch {
+    // Fail closed on DB/credential decryption failure; do not leak secrets.
+    console.warn('[HappyScribe] Media configuration is unavailable');
+    return privateRoleplayResponse(
+      { success: false, error: 'La configuración de HappyScribe no está disponible. Revisa los ajustes de Audio Studio.' },
+      { status: 503 },
+    );
+  }
   if (!config.mediaImportEnabled) {
     return privateRoleplayResponse(
       { success: false, error: 'La importación directa de audio está desactivada. Descarga la grabación y selecciónala localmente.' },
