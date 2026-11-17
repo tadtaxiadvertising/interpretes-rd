@@ -80,6 +80,19 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // on replace/remove leaks them when navigating away from the form.
   const previewUrls = useRef<Set<string>>(new Set());
 
+  // React state updaters must remain pure; StrictMode can invoke them more
+  // than once. Release replaced/removed previews only after a committed render
+  // has stopped referencing them (including stale import previews).
+  useEffect(() => {
+    const active = new Set(scenarios.map(s => s.baseAudioPreview).filter(Boolean));
+    for (const url of previewUrls.current) {
+      if (!active.has(url)) {
+        URL.revokeObjectURL(url);
+        previewUrls.current.delete(url);
+      }
+    }
+  }, [scenarios]);
+
   useEffect(() => {
     return () => {
       // Cancel async ZIP/SHA-256 work from committing after unmount.
@@ -165,28 +178,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const removeScenario = useCallback((id: string) => {
     invalidatePendingImport();
-    setScenarios(prev => {
-      const removed = prev.find((scenario) => scenario.id === id);
-      if (removed?.baseAudioPreview) {
-        previewUrls.current.delete(removed.baseAudioPreview);
-        URL.revokeObjectURL(removed.baseAudioPreview);
-      }
-      return prev.filter((scenario) => scenario.id !== id);
-    });
+    setScenarios(prev => prev.filter(scenario => scenario.id !== id));
   }, [invalidatePendingImport]);
 
   const updateScenario = useCallback((id: string, updates: Partial<Scenario>) => {
     invalidatePendingImport();
     // Track new URLs before state commits so unmount can still release them.
     if (updates.baseAudioPreview?.startsWith('blob:')) previewUrls.current.add(updates.baseAudioPreview);
-    setScenarios(prev => prev.map((scenario) => {
-      if (scenario.id !== id) return scenario;
-      if (updates.baseAudioPreview && scenario.baseAudioPreview && updates.baseAudioPreview !== scenario.baseAudioPreview) {
-        previewUrls.current.delete(scenario.baseAudioPreview);
-        URL.revokeObjectURL(scenario.baseAudioPreview);
-      }
-      return { ...scenario, ...updates };
-    }));
+    setScenarios(prev => prev.map(scenario =>
+      scenario.id === id ? { ...scenario, ...updates } : scenario
+    ));
   }, [invalidatePendingImport]);
 
   const moveScenario = useCallback(function(id: string, direction: 'up' | 'down') {
@@ -239,24 +240,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         previewUrls.current.add(baseAudioPreview);
         return { ...scenario, id: generateId(), baseAudioPreview };
       });
-      // A failed import never touches existing edits. Revoke old previews
-      // only after every selected file has been verified.
-      setScenarios((prev) => {
-        if (revision !== importRevision.current) {
-          next.forEach((scenario) => {
-            previewUrls.current.delete(scenario.baseAudioPreview);
-            URL.revokeObjectURL(scenario.baseAudioPreview);
-          });
-          return prev;
-        }
-        prev.forEach((scenario) => {
-          if (scenario.baseAudioPreview) {
-            previewUrls.current.delete(scenario.baseAudioPreview);
-            URL.revokeObjectURL(scenario.baseAudioPreview);
-          }
-        });
-        return next;
-      });
+      // Do not mutate browser resources inside the state updater: it may be
+      // replayed. Even when an import becomes stale while React is batching,
+      // return a new unchanged array to schedule orphan preview cleanup.
+      setScenarios(prev => revision === importRevision.current ? next : [...prev]);
     } catch (cause) {
       if (revision === importRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No se pudo importar el manifiesto.');
