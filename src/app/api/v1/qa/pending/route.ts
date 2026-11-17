@@ -4,6 +4,20 @@ import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 import { corsHeaders } from '@/lib/cors';
 
+/**
+ * Backward-compatible retirement signal. This endpoint historically lists
+ * completed calls, NOT unaudited QA records. Preserve its old payload only
+ * for callers that have not migrated; point them to the accurate, paginated
+ * ProductionLog endpoint without silently changing response shape.
+ */
+function legacyPendingHeaders(request: Request): Headers {
+  const headers = new Headers(corsHeaders(request));
+  headers.set('Deprecation', 'true');
+  headers.set('Link', '</api/v1/qa/pending-production>; rel="alternate"');
+  headers.set('X-QA-Data-Semantics', 'recent-completed-calls-not-audited-pending');
+  return headers;
+}
+
 export async function GET(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
@@ -25,10 +39,10 @@ export async function GET(request: Request) {
     });
 
     return privateAdminJson(pendingCalls, {
-      headers: corsHeaders(request),
+      headers: legacyPendingHeaders(request),
     });
   } catch (error) {
     console.error('Error fetching pending audits:', safeServerErrorCategory(error));
-    return privateAdminJson({ error: 'Error fetching pending audits' }, { status: 500, headers: corsHeaders(request) });
+    return privateAdminJson({ error: 'Error fetching pending audits' }, { status: 500, headers: legacyPendingHeaders(request) });
   }
 }

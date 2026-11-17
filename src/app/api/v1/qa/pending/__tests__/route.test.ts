@@ -38,6 +38,17 @@ describe('pending QA calls: privacy and safe failure handling', () => {
     expect(prisma.callSession.findMany).not.toHaveBeenCalled();
   });
 
+  it('advertises that recent completed calls are not verified pending QA records', async () => {
+    const response = await GET(req());
+    expect(response.status).toBe(200);
+    expectPrivate(response);
+    expect(response.headers.get('Deprecation')).toBe('true');
+    expect(response.headers.get('Link')).toBe('</api/v1/qa/pending-production>; rel="alternate"');
+    expect(response.headers.get('X-QA-Data-Semantics')).toBe('recent-completed-calls-not-audited-pending');
+    // Preserve the historical array contract while clients migrate.
+    expect(Array.isArray(await response.json())).toBe(true);
+  });
+
   it('marks successful results containing interpreter names as private', async () => {
     const response = await GET(req());
     expect(response.status).toBe(200);
@@ -56,6 +67,8 @@ describe('pending QA calls: privacy and safe failure handling', () => {
       expect(response.status).toBe(500);
       expectPrivate(response);
       expect(await response.json()).toEqual({ error: 'Error fetching pending audits' });
+      expect(response.headers.get('Deprecation')).toBe('true');
+      expect(response.headers.get('Link')).toContain('/api/v1/qa/pending-production');
       expect(spy).toHaveBeenCalledWith('Error fetching pending audits:', 'Error');
       expect(JSON.stringify(spy.mock.calls)).not.toMatch(/PRIVATE_PASSWORD|db\.internal|postgresql:|PRIVATE_TOKEN/);
     } finally { spy.mockRestore(); }
