@@ -77,4 +77,49 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect((screen.getAllByLabelText('Título')[0] as HTMLInputElement).value)
       .toBe('Doctor · 1 (EN)');
   });
+
+  it('excludes all recognized interpreter turns at once and restores private references on undo', async () => {
+    selectAudio();
+    fireEvent.click(screen.getByLabelText(/Excluir intervenciones del intérprete original al importar/i));
+    const subtitle = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitle, 'text', { value: async () => [
+      '1', '00:00:00,000 --> 00:00:02,000', 'Doctor: Hello', '',
+      '2', '00:00:02,000 --> 00:00:03,000', 'Interpreter: Original rendition', '',
+      '3', '00:00:03,000 --> 00:00:04,000', 'Paciente: Hola',
+    ].join('\n'), configurable: true });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitle] },
+      });
+    });
+
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Original rendition')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir 1 intervención del intérprete' }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.queryByText('Original rendition')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer exclusión de intérpretes' }));
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Original rendition')).toBeTruthy();
+  });
+
+  it('updates generated titles without another click but respects manual titles', async () => {
+    selectAudio();
+    const subtitle = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitle, 'text', { value: async () =>
+      '1\n00:00:00,000 --> 00:00:02,000\nDoctor: Hello', configurable: true });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitle] },
+      });
+    });
+
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    const title = screen.getByLabelText('Título') as HTMLInputElement;
+    expect(title.value).toBe('Doctor · 1 (EN)');
+    fireEvent.change(title, { target: { value: 'Consulta personalizada' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'es' } });
+    expect(title.value).toBe('Consulta personalizada');
+  });
+
 });
