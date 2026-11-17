@@ -130,4 +130,62 @@ describe('real long-video local export -> production manifest import', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 90_000);
+  it('exports one truly gapless MP3 from v2 JSON and imports it through the real ZIP contract', async () => {
+    if (!python || !ffmpegStatic) {
+      if (process.env.CI) throw new Error('CI needs Python and ffmpeg-static');
+      return;
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'roleplay-v2-merge-'));
+    try {
+      const sourcePath = join(dir, 'source.wav');
+      const projectPath = join(dir, 'project-v2.json');
+      const zipPath = join(dir, 'joined.zip');
+      const generated = run(ffmpegStatic, [
+        '-hide_banner', '-loglevel', 'error', '-nostdin',
+        '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=24000:duration=6',
+        '-c:a', 'pcm_s16le', '-y', sourcePath,
+      ]);
+      expect(generated.status, generated.stderr || generated.error?.message).toBe(0);
+      const original = readFileSync(sourcePath);
+      const source = new File([new Uint8Array(original)], 'source.wav', { type: 'audio/wav' });
+      const project = createLongMediaDraft(source.size, await fingerprintLocalMedia(source), [{
+        title: 'Médico · dos fragmentos sin pausa',
+        start: 0.2, end: 5.2,
+        ranges: [{ start: 0.2, end: 1.2 }, { start: 4, end: 5.2 }],
+        scriptPrompt: '', responseLimit: 120,
+        speakerRole: 'doctor', language: 'en',
+      }], 6);
+      expect(project.version).toBe(2);
+      writeFileSync(projectPath, JSON.stringify(project), { mode: 0o600 });
+      const exporter = resolve(process.cwd(),
+        'tools/roleplay-studio-desktop/export_integration_fixture.py');
+      const result = run(python, [exporter, sourcePath, projectPath, zipPath, ffmpegStatic], 60_000);
+      expect(result.status, result.stderr || result.error?.message).toBe(0);
+
+      const files = await extractStudioZip(new File([
+        new Uint8Array(readFileSync(zipPath)),
+      ], 'joined.zip', { type: 'application/zip' }));
+      expect(files.map(file => file.name)).toEqual(['manifest.json', 'segment-01.mp3']);
+      const scenarios = await prepareRoleplayManifestImport(files);
+      expect(scenarios).toHaveLength(1);
+      expect(scenarios[0].title).toBe('Médico · dos fragmentos sin pausa');
+
+      const mp3 = Buffer.from(await scenarios[0].baseAudioFile.arrayBuffer());
+      const probe = run(ffmpegStatic, [
+        '-hide_banner', '-nostdin', '-loglevel', 'error',
+        '-f', 'mp3', '-i', 'pipe:0', '-f', 'null', '-',
+        '-progress', 'pipe:2', '-nostats',
+      ], 30_000, mp3);
+      expect(probe.status, probe.stderr || probe.error?.message).toBe(0);
+      const records = [...probe.stderr.matchAll(/out_time=(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/g)];
+      expect(records.length).toBeGreaterThan(0);
+      const last = records.at(-1)!;
+      const seconds = Number(last[1]) * 3600 + Number(last[2]) * 60 + Number(last[3]);
+      expect(seconds).toBeGreaterThan(1.95);
+      expect(seconds).toBeLessThan(2.5); // 2.2 s selected, 5 s envelope
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 90_000);
+
 });
