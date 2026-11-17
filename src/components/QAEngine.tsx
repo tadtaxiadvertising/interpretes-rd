@@ -41,8 +41,9 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
       <form action={formAction} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label className="text-sm font-bold text-gray-300 uppercase tracking-wider">Intérprete Auditado</label>
+            <label htmlFor="qa-interpreter" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Intérprete Auditado</label>
             <select 
+              id="qa-interpreter"
               name="interpreterId" 
               required
               className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors"
@@ -55,10 +56,12 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-gray-300 uppercase tracking-wider">Production Log ID (Opcional)</label>
+            <label htmlFor="qa-production-log" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Production Log ID (Opcional)</label>
             <input 
               type="number" 
+              id="qa-production-log"
               name="productionLogId" 
+              min="1" step="1"
               placeholder="Ej. 1042"
               className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono" 
             />
@@ -98,11 +101,13 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
              { name: 'technicalScore', label: 'Técnico (10%)' }
            ].map(field => (
              <div key={field.name} className="space-y-2">
-               <label className="text-xs font-bold text-gray-400 uppercase tracking-wider">{field.label}</label>
+               <label htmlFor={`qa-${field.name}`} className="text-xs font-bold text-gray-400 uppercase tracking-wider">{field.label}</label>
                <input 
                  type="number" 
+                 id={`qa-${field.name}`}
                  name={field.name} 
-                 min="0" max="100" 
+                 min="0" max="100" step="0.01" inputMode="decimal"
+                 readOnly={criticalError} 
                  defaultValue="100"
                  required={!criticalError}
                  className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono" 
@@ -112,10 +117,12 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-300 uppercase tracking-wider">Comentarios del Auditor</label>
+          <label htmlFor="qa-comments" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Comentarios del Auditor</label>
           <textarea 
+            id="qa-comments"
             name="comments" 
             rows={4}
+            maxLength={2000}
             className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors resize-none"
             placeholder="Describe la falta de protocolo, problema técnico o excelente desempeño..."
           ></textarea>
@@ -123,14 +130,14 @@ export function QAEngine({ interpreters }: { interpreters: any[] }) {
 
         {/* Feedback Messages */}
         {state?.error && (
-          <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3 animate-in fade-in">
+          <div role="alert" className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3 animate-in fade-in">
              <AlertTriangle />
              <span className="font-bold">{state.error}</span>
           </div>
         )}
 
         {state?.success && (
-          <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 flex items-center gap-3 animate-in fade-in">
+          <div role="status" className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 flex items-center gap-3 animate-in fade-in">
              <CheckCircle2 />
              <span className="font-bold">{state.message}</span>
           </div>
