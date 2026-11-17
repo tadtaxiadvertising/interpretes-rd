@@ -50,7 +50,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     try {
       // Reuse the authenticated, rate-limited read-only endpoint; do not
       // transmit the token or expose transcription titles in this panel.
-      const response = await fetch('/api/admin/happyscribe/transcriptions?page=0', { credentials: 'same-origin', cache: 'no-store' });
+      const response = await fetch('/api/admin/happyscribe/transcriptions?check=1', { credentials: 'same-origin', cache: 'no-store' });
       const result = await response.json().catch(() => null);
       setNotice(response.ok && result?.success === true
         ? { ok: true, message: 'Conexión verificada: HappyScribe responde para la organización configurada.' }
