@@ -61,6 +61,28 @@ describe('replacing Audio Studio source audio', () => {
     expect(onUpdate.mock.calls[0][1]).not.toHaveProperty('scriptPrompt');
   });
 
+  it('infers a readable title only for a new untitled scenario', () => {
+    const createObjectURL = vi.fn(() => 'blob:new-file');
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    const onUpdate = vi.fn();
+    render(<ScenarioCard {...props} scenario={{ ...scenario, title: '' }} onUpdate={onUpdate} />);
+    const file = new File(['new audio'], 'patient_visit-follow_up.mp3', { type: 'audio/mpeg' });
+    fireEvent.change(screen.getByLabelText(/Base audio/), { target: { files: [file] } });
+
+    expect(onUpdate).toHaveBeenCalledWith(scenario.id, expect.objectContaining({
+      title: 'patient visit follow up',
+      baseAudioFile: file,
+    }));
+  });
+
+  it('does not invent a title for a rejected audio file', () => {
+    const onUpdate = vi.fn();
+    render(<ScenarioCard {...props} scenario={{ ...scenario, title: '' }} onUpdate={onUpdate} />);
+    const file = new File(['invalid'], 'patient-visit.txt', { type: 'text/plain' });
+    fireEvent.change(screen.getByLabelText(/Base audio/), { target: { files: [file] } });
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
   it('preserves the previous imported metadata if the replacement file is rejected', () => {
     const onUpdate = vi.fn();
     render(<ScenarioCard {...props} onUpdate={onUpdate} />);
