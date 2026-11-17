@@ -544,9 +544,10 @@ def run_desktop():
             if index == 1:
                 propose_output()
 
-    ttk.Button(frame, text="Elegir grabación + JSON (2 archivos)",
-               command=pick_pair).grid(row=0, column=0, columnspan=3,
-                                       sticky="w", pady=(0, 8))
+    pair_button = ttk.Button(frame, text="Elegir grabación + JSON (2 archivos)",
+                             command=pick_pair)
+    pair_button.grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+    browse_buttons.append(pair_button)
     for index, (label, _) in enumerate(labels):
         ttk.Label(frame, text=label).grid(row=index + 1, column=0, sticky="w", pady=8)
         entry = ttk.Entry(frame, textvariable=fields[index], width=58)
