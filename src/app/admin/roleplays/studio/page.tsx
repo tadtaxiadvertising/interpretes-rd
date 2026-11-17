@@ -105,6 +105,16 @@ export default function RoleplayStudioPage() {
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
+  const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number } | null>(null);
+  const exportFocusAttempt = useRef(0);
+  // Focus the first invalid clip after filters have been cleared and the row
+  // has been rendered again. No media file is read or uploaded by this action.
+  useEffect(() => {
+    if (!invalidExportTurn) return;
+    const article = document.getElementById(`studio-intervention-${invalidExportTurn.id}`);
+    article?.focus({ preventScroll: true });
+    article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [invalidExportTurn]);
   const [turnActionFeedback, setTurnActionFeedback] = useState<{
     id: string; message: string; error: boolean;
   } | null>(null);
@@ -970,6 +980,7 @@ export default function RoleplayStudioPage() {
       setSegmentSearch('');
       setShowPendingReview(false);
       setExpandedSegmentId(segment.id);
+      setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
       setError(`Intervención ${index + 1}: ${reason}`);
     };
     let end = 0;
@@ -1707,7 +1718,8 @@ export default function RoleplayStudioPage() {
             </p>
           )}
           {visibleSegments.map(({ segment, index }) => (
-            <article key={segment.id} className="space-y-2 rounded-lg border border-white/10 bg-slate-950/70 p-2.5">
+            <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
+              className="space-y-2 rounded-lg border border-white/10 bg-slate-950/70 p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
                   #{index + 1} · {segment.title}
