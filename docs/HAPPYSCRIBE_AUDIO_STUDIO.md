@@ -16,7 +16,7 @@ The connected HappyScribe workspace currently reports organization ID `26114416`
 3. **Importar desde HappyScribe → Actualizar biblioteca** lists up to 50 recent workspace transcriptions.
 4. Select a completed transcription and choose **Importar transcripción**.
 5. The server requests an SRT export from HappyScribe and returns only the bounded subtitle text to the authenticated administrator.
-6. Audio Studio reuses its existing SRT/WebVTT parser, review queue, interpreter-exclusion filter, and confirmation flow. The operator then assigns speaker role and language to each intervention before exporting/publishing.
+6. Audio Studio reuses its existing SRT/WebVTT parser, review queue, interpreter-exclusion filter, and confirmation flow. SRT exports may omit reliable speaker labels; the administrator must identify the original interpreter and manually verify speaker roles and language before excluding turns or exporting/publishing.
 
 The imported transcript text remains editor-only; it is not copied into participant instructions. The source audio is not downloaded by this integration; load the matching original recording into Audio Studio first. A future phase can add a separately consented media import and persistent source-link audit.
 
