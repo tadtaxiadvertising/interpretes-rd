@@ -67,6 +67,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
   const [isCreating, setIsCreating] = useState(false);
+  // A state-driven disabled button updates on render; the ref also prevents
+  // duplicate POST requests fired before React commits that render.
+  const createPending = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -340,7 +343,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const handleCreate = async () => {
-    if (!validateForm()) return;
+    if (createPending.current || !validateForm()) return;
+    createPending.current = true;
 
     setIsCreating(true);
     setError(null);
@@ -395,6 +399,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create roleplay');
     } finally {
+      createPending.current = false;
       setIsCreating(false);
     }
   };
