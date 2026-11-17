@@ -153,10 +153,13 @@ describe('Audio Studio compact editing', () => {
       target: { value: 'en' },
     });
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
-    expect(screen.queryByText(/#1 · Intervención 1/)).toBeNull();
-    expect(screen.getByText(/#2 · Intervención 2/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
-    expect(screen.getByText(/#1 · Intervención 1/)).toBeTruthy();
+    // Auto-titling now names the first turn by its verified speaker profile.
+    // Assert the stable action and the updated title, not the stale draft name.
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
+    expect(screen.getByText(/#1 · Doctor/)).toBeTruthy();
   });
 
   it('seeks directly to an intervention without playing or changing the editor', () => {
@@ -223,6 +226,11 @@ describe('Audio Studio compact editing', () => {
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [replacement] },
     });
+    // The replacement has no known duration until browser metadata arrives.
+    // Wait for the same metadata event used for the first source.
+    const replacementPlayer = document.querySelector('audio')!;
+    Object.defineProperty(replacementPlayer, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(replacementPlayer);
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
@@ -304,7 +312,8 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toMatch(/No se pueden unir voces o idiomas distintos/);
-    expect(alert.closest('article')?.textContent).toMatch(/Intervención 1/);
+    // Auto-generated speaker-specific titles replace the generic draft title.
+    expect(alert.closest('article')?.textContent).toMatch(/#1 · Doctor/);
   });
 
   it('physically joins two compatible distant cuts into one local-only v2 scene without the gap', () => {
