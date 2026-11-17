@@ -85,7 +85,7 @@ describe("RBAC holder vault actions", () => {
     "file:///etc/passwd",
     "ftp://example.test/login",
     "https://user:password@example.test/login",
-    "https://example.test/line\\nnext",
+    "https://example.test/line\nnext",
     "https://",
   ])("rejects unsafe portal link %s before persisting credentials", async (url) => {
     await expect(uploadAccount({
@@ -103,12 +103,12 @@ describe("RBAC holder vault actions", () => {
       platformName: "Portal interno",
       credentials: "secret",
       url: "http://vpn.internal.test/login",
-      vpnConfig: "VPN provider: variable\\nProfile: custom",
+      vpnConfig: "VPN provider: variable\nProfile: custom",
     });
     expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         url: "http://vpn.internal.test/login",
-        vpnConfig: "VPN provider: variable\\nProfile: custom",
+        vpnConfig: "VPN provider: variable\nProfile: custom",
       }),
     }));
   });
