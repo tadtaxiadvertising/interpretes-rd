@@ -41,7 +41,13 @@ describe('HappyScribe cookie-bound admin identity', () => {
   });
 
   it('fails closed when Bearer identity resolution throws', async () => {
-    mocks.actorFromBearer.mockRejectedValue(new Error('Sensitive provider detail'));
-    expect(await matchesExplicitAdminBearer(request('Bearer broken-token'), 'admin-1')).toBe(false);
+    // Simulate an exception without introducing a dangling rejected promise
+    // into the test runner's module-mocking lifecycle.
+    mocks.actorFromBearer.mockImplementationOnce(() => {
+      throw new Error('Sensitive provider detail');
+    });
+    await expect(matchesExplicitAdminBearer(request('Bearer broken-token'), 'admin-1'))
+      .resolves.toBe(false);
+    expect(mocks.actorFromBearer).toHaveBeenCalledOnce();
   });
 });
