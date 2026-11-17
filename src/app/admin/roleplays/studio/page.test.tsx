@@ -540,6 +540,49 @@ describe('Audio Studio clip review player', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it('does not attach a late MP3 body after the download was cancelled', async () => {
+    let completeBody!: (blob: Blob) => void;
+    let requestSignal: AbortSignal | undefined;
+    const blob = vi.fn(() => new Promise<Blob>(resolve => { completeBody = resolve; }));
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        requestSignal = init.signal as AbortSignal;
+        return Promise.resolve({ ok: true, blob } as unknown as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: 'a'.repeat(32), name: 'Slow.mp3', state: 'automatic_done',
+            language: 'es', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<RoleplayStudioPage />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+      await Promise.resolve();
+    });
+    expect(blob).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }));
+    expect(requestSignal?.aborted).toBe(true);
+    await act(async () => {
+      completeBody(new Blob(['ID3'], { type: 'audio/mpeg' }));
+      await Promise.resolve();
+    });
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Audio original importado desde HappyScribe/)).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it('aborts a pending media import when the selected HappyScribe transcript changes', async () => {
     let complete!: (response: Response) => void;
     let requestSignal: AbortSignal | undefined;
