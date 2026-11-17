@@ -206,6 +206,36 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByDisplayValue('Edición pendiente')).toBeNull();
   });
 
+  it('keeps playback when SRT replacement is declined but stops it on acceptance', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
+    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+    pause.mockClear();
+    const file = new File(['srt'], 'new-cuts.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true,
+      value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Replacement',
+    });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(pause).not.toHaveBeenCalled();
+    expect(screen.getByText(/Importación de cortes cancelada/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(pause).toHaveBeenCalled();
+    expect(screen.getByText('Doctor: Replacement')).toBeTruthy();
+  });
+
   it('splits at the playhead and merges adjacent compatible intervals', () => {
     const player = loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
