@@ -1,5 +1,6 @@
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import type { StudioSpeakerRole, StudioLanguage } from './speaker-profiles';
+import { validStudioRanges, type StudioCutRange } from './compound-cuts';
 
 export interface StudioDraftSegment {
   title: string;
@@ -9,11 +10,12 @@ export interface StudioDraftSegment {
   responseLimit: number;
   speakerRole: StudioSpeakerRole;
   language: StudioLanguage;
+  ranges?: StudioCutRange[];
 }
 
 interface StudioDraft {
   format: 'interpretes-rd-audio-studio-draft';
-  version: 1;
+  version: 1 | 2;
   sourceSizeBytes: number;
   sourceSha256: string;
   segments: StudioDraftSegment[];
@@ -35,14 +37,14 @@ function validHash(value: string): boolean {
   return /^[0-9a-f]{64}$/i.test(value);
 }
 
-function isDraftSegment(value: unknown, audioDuration: number): value is StudioDraftSegment {
+function isDraftSegment(value: unknown, audioDuration: number, version: 1 | 2): value is StudioDraftSegment {
   if (!isRecord(value)) return false;
   return typeof value.title === 'string' && value.title.trim().length > 0 &&
     value.title.length <= 200 &&
     typeof value.start === 'number' && Number.isFinite(value.start) && value.start >= 0 &&
     typeof value.end === 'number' && Number.isFinite(value.end) && value.end > value.start &&
-    value.end - value.start >= 0.1 && value.end - value.start <= 300 &&
-    value.end <= audioDuration + 0.1 &&
+    (version === 2 || !('ranges' in value)) &&
+    validStudioRanges({ start: value.start, end: value.end, ranges: value.ranges }, audioDuration) !== null &&
     typeof value.responseLimit === 'number' && Number.isSafeInteger(value.responseLimit) &&
     value.responseLimit >= 0 && value.responseLimit <= ROLEPLAY_RESPONSE_MAX_DURATION_SEC &&
     typeof value.scriptPrompt === 'string' && value.scriptPrompt.length <= 5000 &&
@@ -55,6 +57,7 @@ function onlyDraftFields(source: StudioDraftSegment): StudioDraftSegment {
     title: source.title, start: source.start, end: source.end,
     scriptPrompt: source.scriptPrompt, responseLimit: source.responseLimit,
     speakerRole: source.speakerRole, language: source.language,
+    ...(source.ranges ? { ranges: source.ranges.map(range => ({ start: range.start, end: range.end })) } : {}),
   };
 }
 
@@ -67,16 +70,17 @@ export function createStudioDraft(
   sourceSizeBytes: number, sourceSha256: string, segments: readonly StudioDraftSegment[],
   audioDuration: number,
 ): StudioDraft {
+  const version = segments.some(segment => segment.ranges !== undefined) ? 2 : 1;
   if (!Number.isSafeInteger(sourceSizeBytes) || sourceSizeBytes < 1 ||
       sourceSizeBytes > MAX_ORIGINAL_AUDIO_BYTES || !validHash(sourceSha256) ||
       !Number.isFinite(audioDuration) || audioDuration <= 0 || audioDuration > MAX_ORIGINAL_AUDIO_SECONDS ||
       segments.length > ROLEPLAY_MAX_SCENARIOS ||
-      !segments.every(segment => isDraftSegment(segment, audioDuration))) {
+      !segments.every(segment => isDraftSegment(segment, audioDuration, version))) {
     throw new Error('El borrador contiene intervenciones incompletas o límites inválidos.');
   }
   return {
     format: FORMAT,
-    version: 1,
+    version,
     sourceSizeBytes,
     sourceSha256: sourceSha256.toLowerCase(),
     segments: segments.map(onlyDraftFields),
@@ -96,12 +100,14 @@ export function openStudioDraft(
   try { parsed = JSON.parse(json); }
   catch { throw new Error('El archivo de proyecto no contiene JSON válido.'); }
 
-  if (!isRecord(parsed) || parsed.format !== FORMAT || parsed.version !== 1 ||
+  if (!isRecord(parsed) || parsed.format !== FORMAT ||
+      (parsed.version !== 1 && parsed.version !== 2) ||
       !Number.isSafeInteger(parsed.sourceSizeBytes) ||
       typeof parsed.sourceSha256 !== 'string' || !validHash(parsed.sourceSha256) ||
       !Array.isArray(parsed.segments) ||
       parsed.segments.length > ROLEPLAY_MAX_SCENARIOS ||
-      !parsed.segments.every((segment: unknown) => isDraftSegment(segment, audioDuration))) {
+      !parsed.segments.every((segment: unknown) => isDraftSegment(segment, audioDuration, parsed.version as 1 | 2)) ||
+      (parsed.version === 2 && !parsed.segments.some((segment: StudioDraftSegment) => segment.ranges !== undefined))) {
     throw new Error('Proyecto incompatible, dañado o con límites de intervención inválidos.');
   }
   if (parsed.sourceSizeBytes !== sourceSizeBytes ||

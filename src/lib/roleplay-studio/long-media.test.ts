@@ -37,6 +37,19 @@ describe('local-only long media projects', () => {
       [{ ...segments[0], end: 44000 }], 43200)).toThrow(/límites/);
   });
 
+  it('persists v2 disjoint cuts and fails closed on forged ranges', () => {
+    const compound = { ...segments[0], start: 14000, end: 14450,
+      ranges: [{ start: 14000, end: 14010 }, { start: 14400, end: 14450 }] };
+    const project = createLongMediaDraft(222, hash, [compound], 21600);
+    expect(project.version).toBe(2);
+    expect(openLongMediaDraft(JSON.stringify(project), 222, hash, 21600)).toEqual([compound]);
+    expect(() => openLongMediaDraft(
+      JSON.stringify({ ...project, version: 1 }), 222, hash, 21600)).toThrow();
+    expect(() => createLongMediaDraft(222, hash,
+      [{ ...compound, ranges: [{ start: 14000, end: 14010 }, { start: 14009, end: 14450 }] }],
+      21600)).toThrow(/límites/);
+  });
+
   it('fingerprints only bounded slices and never calls file.arrayBuffer on the whole source', async () => {
     vi.stubGlobal('crypto', webcrypto);
     const file = new File([new Uint8Array(512 * 1024)], 'long.webm');

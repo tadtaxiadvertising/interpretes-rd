@@ -63,7 +63,7 @@ def _int(value):
 def validate_project(project, source_size):
     """Mirror the established Node exporter's safety/manifest constraints."""
     if (not _obj(project) or project.get("format") != FORMAT or
-            project.get("version") != 1 or type(project.get("version")) is bool or
+            project.get("version") not in (1, 2) or type(project.get("version")) is bool or
             not _int(project.get("sourceSizeBytes")) or
             project["sourceSizeBytes"] != source_size or
             not isinstance(project.get("sourceSampleSha256"), str) or
@@ -92,7 +92,7 @@ def validate_project(project, source_size):
         language = clip.get("language")
         if (type(title) is not str or not title.strip() or len(title) > 200 or
                 not _number(start) or not _number(end) or start < last_end or
-                end - start < 0.1 or end - start > 300 or
+                end - start < 0.1 or
                 end > project["sourceDurationSeconds"] + 0.1 or
                 type(prompt) is not str or len(prompt) > 5000 or
                 not _int(limit) or not 0 <= limit <= 300 or
@@ -101,10 +101,30 @@ def validate_project(project, source_size):
             raise ExportError("Revisa títulos, perfiles, tiempos o instrucciones inválidos.")
         if role == "interpreter":
             raise ExportError("Hay un fragmento del intérprete original. Exclúyelo antes de exportar.")
-        total += end - start
+        if "ranges" in clip and project["version"] != 2:
+            raise ExportError("Un proyecto v1 no admite intervalos compuestos.")
+        selected = end - start
+        if "ranges" in clip:
+            ranges = clip["ranges"]
+            if (type(ranges) is not list or len(ranges) != 2 or
+                    any(not _obj(r) or not _number(r.get("start")) or
+                        not _number(r.get("end")) or r["start"] < 0 or
+                        r["end"] - r["start"] < 0.1 - 1e-6 or
+                        r["end"] > project["sourceDurationSeconds"] + 0.1
+                        for r in ranges) or
+                    abs(start - ranges[0]["start"]) > 1e-6 or
+                    abs(end - ranges[1]["end"]) > 1e-6 or
+                    ranges[1]["start"] - ranges[0]["end"] <= 2 + 1e-6):
+                raise ExportError("El proyecto contiene intervalos compuestos inválidos.")
+            selected = sum(r["end"] - r["start"] for r in ranges)
+        if selected > 300 + 1e-6:
+            raise ExportError("Una intervención supera los 5 minutos de audio seleccionado.")
+        total += selected
         if total > MAX_TOTAL_SECONDS + 1e-6:
             raise ExportError("El ZIP supera los 15 minutos acumulados de audio.")
         last_end = end
+    if project["version"] == 2 and not any("ranges" in clip for clip in ordered):
+        raise ExportError("Un proyecto v2 debe contener al menos una intervención compuesta.")
     return ordered
 
 
@@ -151,11 +171,20 @@ def resolve_ffmpeg():
 def transcode_clip(source, destination, clip, ffmpeg, cancelled):
     if cancelled.is_set():
         raise ExportCancelled("Exportación cancelada.")
-    length = clip["end"] - clip["start"]
+    ranges = clip.get("ranges", [{"start": clip["start"], "end": clip["end"]}])
+    length = sum(r["end"] - r["start"] for r in ranges)
+    # Two bounded inputs + decoded-audio concat: one encoded MP3 with no
+    # intermediary silence, never bytewise concatenation of encoded streams.
+    inputs = []
+    for cut in ranges:
+        inputs.extend(["-ss", str(cut["start"]), "-t",
+                       str(cut["end"] - cut["start"]), "-i", str(source)])
+    mapping = (["-filter_complex",
+                "[0:a:0][1:a:0]concat=n=2:v=0:a=1[out]", "-map", "[out]"]
+               if len(ranges) == 2 else ["-map", "0:a:0"])
     command = [
         ffmpeg, "-hide_banner", "-nostdin", "-loglevel", "error",
-        "-ss", str(clip["start"]), "-i", str(source),
-        "-t", str(length), "-map", "0:a:0", "-vn",
+        *inputs, *mapping, "-vn",
         "-ac", "1", "-ar", "24000", "-codec:a", "libmp3lame",
         "-b:a", "64k", "-progress", "pipe:2", "-nostats", "-y",
         str(destination),
@@ -300,7 +329,10 @@ def inspect_project(source, project_file):
         "info": info,
         "clips": clips,
         "source_hash": source_hash,
-        "duration_seconds": sum(clip["end"] - clip["start"] for clip in clips),
+        "duration_seconds": sum(
+            sum(r["end"] - r["start"] for r in clip.get("ranges",
+                [{"start": clip["start"], "end": clip["end"]}]))
+            for clip in clips),
         "unreviewed_roles": sum(clip["speakerRole"] == "unknown" for clip in clips),
     }
 

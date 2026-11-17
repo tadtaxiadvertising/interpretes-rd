@@ -12,6 +12,7 @@ import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
+import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -44,6 +45,7 @@ type Segment = {
   responseLimit: number;
   speakerRole: StudioSpeakerRole;
   language: StudioLanguage;
+  ranges?: StudioCutRange[];
 };
 
 function formatTime(value: number): string {
@@ -92,7 +94,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión';
+    kind: 'división' | 'unión' | 'separación';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -161,6 +163,7 @@ export default function RoleplayStudioPage() {
   };
 
   const previewSegment = (segment: Segment) => {
+    if (segment.ranges) { previewPairWithoutGap(segment.id); return; }
     const audioPlayer = player.current;
     if (!audioPlayer || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
       segment.end <= segment.start || segment.start < 0 || segment.end > duration) return;
@@ -188,19 +191,27 @@ export default function RoleplayStudioPage() {
     const at = sorted.findIndex(item => item.id === id);
     const first = sorted[at];
     const second = sorted[at + 1];
-    const plan = planGaplessPair(first, second, duration);
+    const existing = first?.ranges
+      ? validStudioRanges(first, duration)
+      : null;
+    const plan: GaplessPairPlan | null = existing?.length === 2
+      ? { first: existing[0], second: existing[1],
+          skippedSeconds: existing[1].start - existing[0].end,
+          selectedSeconds: studioSelectedSeconds(existing) }
+      : planGaplessPair(first, second, duration);
     const element = pairPlayer.current;
-    if (!plan || !element || !second) {
+    if (!plan || !element || (!first?.ranges && !second)) {
       reportTurnAction(id, 'La preescucha requiere dos cortes válidos del mismo hablante e idioma.', true);
       return;
     }
     // Do not play a turn hidden by the administrator's active filter.
     const needle = segmentSearch.trim().toLocaleLowerCase();
-    if ((showPendingReview && second.speakerRole !== 'unknown' &&
-         second.speakerRole !== 'interpreter' && second.language !== 'unknown') ||
+    if (!first?.ranges && second &&
+        ((showPendingReview && second.speakerRole !== 'unknown' &&
+          second.speakerRole !== 'interpreter' && second.language !== 'unknown') ||
         (needle && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
           second.speakerRole, second.language].some(value =>
-          value.toLocaleLowerCase().includes(needle)))) {
+          value.toLocaleLowerCase().includes(needle))))) {
       reportTurnAction(id, 'El siguiente corte está oculto: limpia los filtros para escucharlo.', true);
       return;
     }
@@ -210,7 +221,9 @@ export default function RoleplayStudioPage() {
     setPairPreviewId(id);
     element.currentTime = plan.first.start;
     setEditorPlaybackRevision(n => n + 1);
-    reportTurnAction(id, `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
+    reportTurnAction(id, first?.ranges
+      ? `Preescucha de intervención compuesta: ${formatTime(plan.selectedSeconds)} de audio sin la pausa de ${formatTime(plan.skippedSeconds)}.`
+      : `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
     void element.play().catch(() => {
       stopPairPreview();
       reportTurnAction(id, 'El navegador no pudo iniciar la preescucha sin pausa.', true);
@@ -480,6 +493,10 @@ export default function RoleplayStudioPage() {
   const splitAtPlayhead = (id: string) => {
     const segment = segments.find(item => item.id === id);
     if (!segment) return;
+    if (segment.ranges) {
+      reportTurnAction(id, 'Esta intervención contiene dos cortes. Usa «Separar cortes» antes de dividir.', true);
+      return;
+    }
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       reportTurnAction(id, `Límite de ${ROLEPLAY_MAX_SCENARIOS} intervenciones. Elimina un turno antes de dividir.`, true);
       return;
@@ -535,6 +552,10 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'Este es el último turno; no existe otro después para unir.', true);
       return;
     }
+    if (first.ranges || second.ranges) {
+      reportTurnAction(id, 'Para unir nuevos cortes, separa antes la intervención compuesta. El formato v2 admite dos tramos.', true);
+      return;
+    }
     if ((showPendingReview && !needsReview(second)) ||
         (segmentSearch.trim() && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
           second.speakerRole, second.language].some(value =>
@@ -551,11 +572,12 @@ export default function RoleplayStudioPage() {
       return;
     }
     const gap = second.start - first.end;
-    if (gap > 2 + 1e-6) {
-      reportTurnAction(id, `Hay ${formatTime(gap)} de separación. Reduce el espacio a 2 segundos o menos antes de unir, para evitar incluir una pausa larga.`, true);
+    const compound = gap > 2 + 1e-6 ? planGaplessPair(first, second, duration) : null;
+    if (gap > 2 + 1e-6 && !compound) {
+      reportTurnAction(id, 'La unión sin pausa no es válida. Revisa los límites y la duración total de los cortes (máximo 5 minutos).', true);
       return;
     }
-    if (second.end - first.start > 300) {
+    if (!compound && second.end - first.start > 300) {
       reportTurnAction(id, 'La unión superaría los 5 minutos por intervención. Reduce los límites antes de unir.', true);
       return;
     }
@@ -573,7 +595,8 @@ export default function RoleplayStudioPage() {
     });
     setSegments(previous => previous.filter(item => item.id !== second.id)
       .map(item => item.id === first.id
-        ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
+        ? { ...item, end: second.end, scriptPrompt: mergedPrompt,
+            ...(compound ? { ranges: [compound.first, compound.second] } : {}) } : item));
     setCaptionTexts(previous => {
       const next = { ...previous };
       // Rejoining previously split cues must not duplicate private text.
@@ -584,7 +607,42 @@ export default function RoleplayStudioPage() {
       return next;
     });
     setExpandedSegmentId(prev => prev === second.id ? first.id : prev);
-    reportTurnAction(id, `Unidas las intervenciones ${current + 1} y ${current + 2}. Verifica el audio resultante.`);
+    reportTurnAction(id, compound
+      ? `Intervenciones ${current + 1} y ${current + 2} unidas sin pausa: ${formatTime(compound.selectedSeconds)} de audio. Exportación local en un MP3; guarda el proyecto v2.`
+      : `Unidas las intervenciones ${current + 1} y ${current + 2}. Verifica el audio resultante.`);
+  };
+
+  const separateCompound = (id: string) => {
+    const segment = segments.find(item => item.id === id);
+    if (!segment?.ranges) return;
+    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
+      reportTurnAction(id, 'Hay 25 intervenciones. Elimina otra antes de separar esta intervención.', true);
+      return;
+    }
+    const ranges = validStudioRanges(segment, duration);
+    if (ranges?.length !== 2) {
+      reportTurnAction(id, 'Los tiempos de la intervención compuesta son inválidos.', true);
+      return;
+    }
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'separación',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    const secondId = crypto.randomUUID();
+    setSegments(previous => previous.flatMap(item => item.id === id ? [
+      { ...item, ranges: undefined, start: ranges[0].start, end: ranges[0].end },
+      { ...item, ranges: undefined, id: secondId,
+        title: item.title.slice(0, 185) + ' (parte 2)',
+        start: ranges[1].start, end: ranges[1].end,
+        scriptPrompt: '' },
+    ] : [item]));
+    setCaptionTexts(previous => previous[id]
+      ? { ...previous, [secondId]: previous[id] } : previous);
+    setExpandedSegmentId(secondId);
+    reportTurnAction(id, 'Cortes separados. Revisa las instrucciones y títulos antes de exportar.');
   };
 
   const addSegment = () => {
@@ -618,6 +676,11 @@ export default function RoleplayStudioPage() {
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
+    if (segments.some(segment => segment.id === id && segment.ranges) &&
+        (patch.start !== undefined || patch.end !== undefined)) {
+      reportTurnAction(id, 'Separa los dos cortes antes de modificar sus límites.', true);
+      return;
+    }
     setLastStructuralEdit(null);
     stopPairPreview();
     setTurnActionFeedback(null);
@@ -635,7 +698,8 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
-      const localOnly = usesLocalLongMode(audio, duration) || !allowServerZipExport;
+      const localOnly = usesLocalLongMode(audio, duration) ||
+        snapshot.some(segment => segment.ranges !== undefined) || !allowServerZipExport;
       const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
       const draft = localOnly
@@ -737,18 +801,17 @@ export default function RoleplayStudioPage() {
     let end = 0;
     let total = 0;
     for (const segment of ordered) {
+      const ranges = validStudioRanges(segment, duration);
       if (!segment.title.trim() || segment.title.length > 200 ||
-        !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
-        segment.start < end || segment.end <= segment.start ||
-        segment.end > duration + 0.1 || segment.end - segment.start > 300 ||
+        !ranges || segment.start < end ||
         segment.scriptPrompt.length > 5000 ||
         !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
         segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) {
-        setError('Corrige las intervenciones: orden, títulos, duración máxima de 5 minutos y ausencia de solapamientos.');
+        setError('Corrige las intervenciones: orden, títulos, cortes válidos, máximo de 5 minutos de audio seleccionado y ausencia de solapamientos.');
         return;
       }
       end = segment.end;
-      total += segment.end - segment.start;
+      total += studioSelectedSeconds(ranges);
     }
     if (total > 900) {
       setError('El paquete no puede superar 15 minutos de audio acumulado.');
@@ -757,7 +820,9 @@ export default function RoleplayStudioPage() {
     // Long recordings create only a local JSON draft. Do not allocate a
     // remote ZIP AbortController for this branch: otherwise the early return
     // locks all subsequent downloads until an edit resets exportAbort.
-    if (usesLocalLongMode(audio, duration) || !allowServerZipExport) {
+    if (usesLocalLongMode(audio, duration) ||
+        ordered.some(segment => segment.ranges !== undefined) ||
+        !allowServerZipExport) {
       await saveDraft();
       return;
     }
@@ -808,7 +873,8 @@ export default function RoleplayStudioPage() {
   };
 
   const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
-  const localOnly = audio !== null && (sourceRequiresLocal || !allowServerZipExport);
+  const hasCompound = segments.some(segment => segment.ranges !== undefined);
+  const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
   const videoSource = audio !== null && mediaKind(audio) === 'video';
   // Retain the unfiltered SRT/VTT index for selections across pages.
   const filteredCueEntries = useMemo(() => {
@@ -827,7 +893,9 @@ export default function RoleplayStudioPage() {
     currentCuePage * CUES_PER_PAGE, (currentCuePage + 1) * CUES_PER_PAGE);
 
   const coverage = useMemo(
-    () => summarizeStudioCoverage(duration, segments), [duration, segments],
+    () => summarizeStudioCoverage(duration,
+      segments.flatMap(segment => validStudioRanges(segment, duration) ?? [])),
+    [duration, segments],
   );
   const largestGaps = coverage.gaps
     .filter(gap => gap.duration >= 5)
@@ -943,7 +1011,7 @@ export default function RoleplayStudioPage() {
             setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
           }}
           className="hidden" />}
-            {audio && duration > 0 && !sourceRequiresLocal && (
+            {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
               <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-white/15 bg-slate-950/60 p-3">
                 <legend className="px-1 text-sm font-semibold text-white">Dónde preparar el ZIP</legend>
                 <label className="flex items-start gap-2 text-sm text-cyan-100">
@@ -986,6 +1054,12 @@ export default function RoleplayStudioPage() {
             )}
             {localOnly && duration > 0 && (
               <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
+                {hasCompound && (
+                  <p className="mb-2 font-semibold text-amber-100">
+                    Proyecto compuesto v2: el ZIP debe generarse con un exportador local actualizado.
+                    La grabación no se enviará al servidor, aunque se haya seleccionado ese modo anteriormente.
+                  </p>
+                )}
                 <strong>Preparación local:</strong> la grabación no se sube al servidor.
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
                 El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
@@ -1381,7 +1455,8 @@ export default function RoleplayStudioPage() {
             <p className="text-xs text-slate-400">
               Cursor: <span className="font-medium text-cyan-200">{formatTime(playhead)}</span>.
               {' '}«Dividir» corta en el cursor cuando está dentro del turno; fuera de él usa el punto medio.
-              {' '}«Unir» combina con el siguiente turno visible solo cuando son compatibles y están próximos.
+              {' '}«Unir» combina turnos compatibles. Si están separados por más de 2 s,
+              crea un único MP3 sin la pausa al exportar localmente el proyecto v2.
             </p>
           )}
           {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
@@ -1408,7 +1483,10 @@ export default function RoleplayStudioPage() {
                 <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
                   #{index + 1} · {segment.title}
                   <span className="ml-2 text-xs font-normal text-slate-400">
-                    {formatTime(segment.start)}–{formatTime(segment.end)} · {segment.speakerRole} · {segment.language.toUpperCase()}
+                    {segment.ranges
+                      ? segment.ranges.map(range => formatTime(range.start) + '–' + formatTime(range.end)).join(' + ')
+                      : formatTime(segment.start) + '–' + formatTime(segment.end)}
+                    {' · '}{segment.speakerRole} · {segment.language.toUpperCase()}
                   </span>
                   {captionTexts[segment.id] && compactRows && (
                     <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-amber-200/80">
@@ -1422,17 +1500,27 @@ export default function RoleplayStudioPage() {
                   Ir al inicio
                 </button>
                 <button type="button" onClick={() => splitAtPlayhead(segment.id)}
+                  disabled={Boolean(segment.ranges)}
                   aria-label={'Dividir intervención ' + (index + 1) + ' en cursor o punto medio'}
-                  title="Divide en el cursor si está dentro del turno; si no, en el punto medio"
+                  title={segment.ranges ? 'Separa los dos cortes antes de dividir' : 'Divide en cursor o punto medio'}
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
                   Dividir
                 </button>
                 <button type="button" onClick={() => mergeWithNext(segment.id)}
+                  disabled={Boolean(segment.ranges)}
                   aria-label={'Unir intervención ' + (index + 1) + ' con siguiente'}
-                  title="Une con el siguiente turno visible si comparten hablante e idioma, están separados por 2 s o menos y no superan 5 minutos"
+                  title={segment.ranges ? 'Separa los dos cortes antes de añadir otro' : 'Une con el siguiente turno visible; omite pausas largas en el MP3 local'}
                   className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
-                  Unir
+                  {orderedSegments[index + 1] &&
+                    orderedSegments[index + 1].start - segment.end > 2 ? 'Unir sin pausa' : 'Unir'}
                 </button>
+                {segment.ranges && (
+                  <button type="button" onClick={() => separateCompound(segment.id)}
+                    aria-label={'Separar cortes de intervención ' + (index + 1)}
+                    className="rounded-md border border-amber-400/30 px-2 py-1 text-xs text-amber-100">
+                    Separar cortes
+                  </button>
+                )}
                 {orderedSegments[index + 1] &&
                   visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
                   planGaplessPair(segment, orderedSegments[index + 1], duration) && (
@@ -1440,7 +1528,7 @@ export default function RoleplayStudioPage() {
                       onClick={() => previewPairWithoutGap(segment.id)}
                       aria-label={'Preescuchar intervenciones ' + (index + 1) + ' y ' + (index + 2) + ' sin pausa'}
                       aria-pressed={pairPreviewId === segment.id}
-                      title="Preescucha dos cortes compatibles saltando la pausa; el proyecto y el ZIP no cambian"
+                      title="Preescucha dos cortes; usa Unir sin pausa para generar una intervención física en el proyecto v2"
                       className="rounded-md border border-cyan-400/30 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-400/10">
                       {pairPreviewId === segment.id ? 'Detener preescucha' : 'Escuchar sin pausa'}
                     </button>
@@ -1449,7 +1537,9 @@ export default function RoleplayStudioPage() {
                   <>
                     <button type="button" onClick={() => previewSegment(segment)}
                       className="rounded-md border border-emerald-400/25 px-2 py-1 text-xs text-emerald-200">
-                      {previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
+                      {segment.ranges
+                        ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
+                        : previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
                     </button>
                     <button type="button" onClick={() =>
                       setExpandedSegmentId(prev => prev === segment.id ? null : segment.id)}
@@ -1481,9 +1571,17 @@ export default function RoleplayStudioPage() {
                 planGaplessPair(segment, orderedSegments[index + 1], duration) && (
                   <p className="text-xs text-cyan-200/80">
                     Pausa entre ambos cortes: {formatTime(orderedSegments[index + 1].start - segment.end)}.
-                    La preescucha la omite localmente, pero al exportar siguen siendo dos clips separados.
+                    Puedes preescucharlos o pulsar «Unir sin pausa» para generar un único MP3 en el exportador local.
                   </p>
                 )}
+              {segment.ranges && (
+                <p className="text-xs text-amber-100">
+                  Intervención compuesta · {formatTime(studioSelectedSeconds(segment.ranges))} de audio útil;
+                  pausa de {formatTime(segment.ranges[1].start - segment.ranges[0].end)} excluida.
+                  El proyecto v2 se exporta como un único MP3 con el exportador local actualizado.
+                  Para ajustar los tiempos, selecciona «Separar cortes».
+                </p>
+              )}
               {turnActionFeedback?.id === segment.id && (
                 <p
                   role={turnActionFeedback.error ? 'alert' : 'status'}
@@ -1535,11 +1633,13 @@ export default function RoleplayStudioPage() {
               <div className="grid gap-3 sm:grid-cols-3">
                 <label className="text-sm text-slate-300">Inicio (segundos)
                   <input type="number" min={0} max={duration} step="0.1" value={segment.start}
+                    disabled={Boolean(segment.ranges)}
                     onChange={event => update(segment.id, {start: event.target.valueAsNumber})}
                     className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
                 </label>
                 <label className="text-sm text-slate-300">Final (segundos)
                   <input type="number" min={0} max={duration} step="0.1" value={segment.end}
+                    disabled={Boolean(segment.ranges)}
                     onChange={event => update(segment.id, {end: event.target.valueAsNumber})}
                     className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
                 </label>
@@ -1597,13 +1697,17 @@ export default function RoleplayStudioPage() {
               </button>
               <div className="flex flex-wrap items-center gap-3 text-sm">
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                  disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                  disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
                 {!compactRows && (
                   <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
                     onClick={() => previewSegment(segment)}>
-                    {previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
+                    {segment.ranges
+                      ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
+                      : previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
                   </button>
                 )}
               </div>
@@ -1611,7 +1715,7 @@ export default function RoleplayStudioPage() {
               )}
             </article>
           ))}
-          {segments.length > 0 && !sourceRequiresLocal && (
+          {segments.length > 0 && !sourceRequiresLocal && !hasCompound && (
             <StudioConsecutivePreview
               sourceUrl={url}
               sourceDuration={duration}
@@ -1619,6 +1723,12 @@ export default function RoleplayStudioPage() {
               interruptRevision={editorPlaybackRevision}
               onStart={pauseEditorialAudio}
             />
+          )}
+          {hasCompound && !sourceRequiresLocal && (
+            <p className="text-xs text-amber-200">
+              El simulador consecutivo de intervalos continuos está deshabilitado para proyectos compuestos.
+              Utiliza «Escuchar unido» para revisar cada unión física antes de generar el ZIP local.
+            </p>
           )}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}

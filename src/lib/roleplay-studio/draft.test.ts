@@ -36,6 +36,18 @@ describe('Roleplay Studio resumable, SHA-256-bound project drafts', () => {
     expect(openStudioDraft(JSON.stringify(saved), sourceSize, hash, length)).toEqual([]);
   });
 
+  it('roundtrips compound v2 without exposing private references and rejects v1 flattening', () => {
+    const joined = { ...segment, start: 0, end: 45,
+      ranges: [{ start: 0, end: 10 }, { start: 40, end: 45 }] };
+    const saved = createStudioDraft(sourceSize, hash, [joined], length);
+    expect(saved.version).toBe(2);
+    expect(openStudioDraft(JSON.stringify(saved), sourceSize, hash, length)).toEqual([joined]);
+    expect(() => openStudioDraft(JSON.stringify({ ...saved, version: 1 }), sourceSize, hash, length))
+      .toThrow();
+    expect(() => openStudioDraft(JSON.stringify({ ...saved, version: 3 }), sourceSize, hash, length))
+      .toThrow();
+  });
+
   it('rejects a different MP3 even if its byte count matches', () => {
     const saved = createStudioDraft(sourceSize, hash, [segment], length);
     expect(() => openStudioDraft(JSON.stringify(saved), sourceSize, 'cd'.repeat(32), length))

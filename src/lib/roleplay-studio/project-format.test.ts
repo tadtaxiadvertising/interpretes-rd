@@ -11,6 +11,9 @@ describe('Audio Studio project format preflight', () => {
     expect(detectStudioProjectFormat(JSON.stringify({
       format: STUDIO_DRAFT_FORMAT, version: 1,
     }))).toBe('complete-sha256');
+    expect(detectStudioProjectFormat(JSON.stringify({
+      format: LOCAL_DRAFT_FORMAT, version: 2,
+    }))).toBe('sampled-local');
   });
 
   it.each([
@@ -18,7 +21,7 @@ describe('Audio Studio project format preflight', () => {
     'null',
     '[]',
     '{}',
-    JSON.stringify({ format: STUDIO_DRAFT_FORMAT, version: 2 }),
+    JSON.stringify({ format: STUDIO_DRAFT_FORMAT, version: 3 }),
     JSON.stringify({ format: LOCAL_DRAFT_FORMAT, version: 0 }),
     JSON.stringify({ format: 'unsupported', version: 1 }),
     JSON.stringify({ format: LOCAL_DRAFT_FORMAT, version: '1' }),

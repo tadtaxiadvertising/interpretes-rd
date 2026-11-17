@@ -59,7 +59,7 @@ function parseArgs(argv) {
 }
 
 function validateProject(data, size) {
-  if (!object(data) || data.format !== FORMAT || data.version !== 1 ||
+  if (!object(data) || data.format !== FORMAT || ![1, 2].includes(data.version) ||
       !Number.isSafeInteger(data.sourceSizeBytes) ||
       data.sourceSizeBytes !== size ||
       typeof data.sourceSampleSha256 !== 'string' || !SAMPLE_HASH.test(data.sourceSampleSha256) ||
@@ -76,7 +76,7 @@ function validateProject(data, size) {
         clip.title.trim().length === 0 || clip.title.length > 200 ||
         !Number.isFinite(clip.start) || !Number.isFinite(clip.end) ||
         clip.start < lastEnd || clip.end <= clip.start ||
-        clip.end - clip.start < 0.1 || clip.end - clip.start > 300 ||
+        clip.end - clip.start < 0.1 ||
         clip.end > data.sourceDurationSeconds + 0.1 ||
         typeof clip.scriptPrompt !== 'string' || clip.scriptPrompt.length > 5000 ||
         !Number.isSafeInteger(clip.responseLimit) || clip.responseLimit < 0 ||
@@ -87,11 +87,35 @@ function validateProject(data, size) {
     if (clip.speakerRole === 'interpreter') {
       fail('El paquete contiene una intervención del intérprete original; exclúyela antes de generar el ZIP.');
     }
-    total += clip.end - clip.start;
+    if (clip.ranges !== undefined && data.version !== 2) {
+      fail('El proyecto v1 no admite intervalos compuestos.');
+    }
+    let selectedSeconds = clip.end - clip.start;
+    if (clip.ranges !== undefined) {
+      const ranges = clip.ranges;
+      if (!Array.isArray(ranges) || ranges.length !== 2 ||
+          !ranges.every(range => object(range) &&
+            Number.isFinite(range.start) && Number.isFinite(range.end) &&
+            range.start >= 0 && range.end <= data.sourceDurationSeconds + 0.1 &&
+            range.end - range.start >= 0.1 - 1e-6) ||
+          Math.abs(clip.start - ranges[0].start) > 1e-6 ||
+          Math.abs(clip.end - ranges[1].end) > 1e-6 ||
+          ranges[1].start - ranges[0].end <= 2 + 1e-6) {
+        fail('El proyecto contiene intervalos compuestos inválidos.');
+      }
+      selectedSeconds = ranges.reduce((sum, range) => sum + range.end - range.start, 0);
+    }
+    if (selectedSeconds > 300 + 1e-6) {
+      fail('Cada intervención puede contener hasta 5 minutos de audio seleccionado.');
+    }
+    total += selectedSeconds;
     if (total > MAX_TOTAL_SECONDS + 1e-6) {
       fail('El ZIP supera los 15 minutos acumulados de audio.');
     }
     lastEnd = clip.end;
+  }
+  if (data.version === 2 && !sorted.some(clip => clip.ranges !== undefined)) {
+    fail('Un proyecto v2 debe contener al menos una intervención compuesta.');
   }
   return sorted;
 }
@@ -131,10 +155,20 @@ function durationFromFfmpeg(output) {
 
 async function transcodeClip(source, target, clip) {
   if (!ffmpegStatic) fail('FFmpeg no está disponible en este equipo.');
+  const ranges = clip.ranges || [{ start: clip.start, end: clip.end }];
+  const length = ranges.reduce((sum, range) => sum + range.end - range.start, 0);
+  // For composite scenes, seek each bounded input independently and concat
+  // decoded PCM once. Never concatenate encoded MP3 byte streams or include
+  // the original gap. Keep all processing on the operator's machine.
+  const inputArgs = ranges.flatMap(range => [
+    '-ss', String(range.start), '-t', String(range.end - range.start), '-i', source,
+  ]);
+  const mapping = ranges.length === 2
+    ? ['-filter_complex', '[0:a:0][1:a:0]concat=n=2:v=0:a=1[out]', '-map', '[out]']
+    : ['-map', '0:a:0'];
   const args = [
     '-hide_banner', '-nostdin', '-loglevel', 'error',
-    '-ss', String(clip.start), '-i', source,
-    '-t', String(clip.end - clip.start), '-map', '0:a:0', '-vn',
+    ...inputArgs, ...mapping, '-vn',
     '-ac', '1', '-ar', '24000', '-codec:a', 'libmp3lame',
     '-b:a', '64k', '-progress', 'pipe:2', '-nostats',
     '-y', target,
@@ -146,7 +180,7 @@ async function transcodeClip(source, target, clip) {
     const abort = () => child.kill('SIGKILL');
     process.once('SIGINT', abort);
     const timeout = setTimeout(() => child.kill('SIGKILL'),
-      Math.min(300_000, 90_000 + (clip.end - clip.start) * 1000));
+      Math.min(300_000, 90_000 + length * 1000));
     const finish = error => {
       if (settled) return;
       settled = true;
@@ -162,7 +196,7 @@ async function transcodeClip(source, target, clip) {
     child.on('close', code => {
       if (code !== 0) return finish(new Error('FFmpeg no pudo extraer un clip (o no existe pista de audio).'));
       const actual = durationFromFfmpeg(stderr);
-      const expected = clip.end - clip.start;
+      const expected = length;
       if (actual === null || actual + Math.min(0.35, Math.max(0.08, expected * 0.1)) < expected) {
         return finish(new Error('Un corte termina después de la pista de audio o quedó truncado.'));
       }
