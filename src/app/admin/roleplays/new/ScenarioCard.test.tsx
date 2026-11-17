@@ -22,6 +22,18 @@ const baseScenario = {
 };
 
 describe('ScenarioCard with nullable Studio metadata', () => {
+  it('renders Spanish editorial labels and accessible scenario actions', () => {
+    const markup = renderToStaticMarkup(<ScenarioCard {...shared} scenario={baseScenario} />);
+    expect(markup).toContain('Título del escenario');
+    expect(markup).toContain('Límite de respuesta');
+    expect(markup).toContain('Instrucciones del escenario (opcional)');
+    expect(markup).toContain('Audio base');
+    expect(markup).toContain('Subir escenario 1');
+    expect(markup).toContain('Bajar escenario 1');
+    expect(markup).toContain('Eliminar escenario 1');
+    expect(markup).toContain('Predeterminado (máx. 5:00)');
+  });
+
   it('renders legacy library scenarios with null timeline fields', () => {
     const markup = renderToStaticMarkup(
       <ScenarioCard {...shared} scenario={{ ...baseScenario, sourceStartSec: null, sourceEndSec: null }} />,
