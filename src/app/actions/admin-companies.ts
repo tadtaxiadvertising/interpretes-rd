@@ -20,7 +20,13 @@ export async function createCompany(formData: FormData) {
   if (!parsed.success) return { success: false, error: 'Datos de compañía inválidos.' };
   try {
     await prisma.company.create({ data: parsed.data });
-    revalidatePath('/admin/companies');
+    // A successful database commit must not be reported as a failed save
+    // if cache invalidation subsequently fails.
+    try {
+      revalidatePath('/admin/companies');
+    } catch (cacheError) {
+      console.warn('[COMPANIES] Saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+    }
     return { success: true };
   } catch (error) {
     console.error('[COMPANIES] Create failed', safeServerErrorCategory(error));
@@ -38,8 +44,14 @@ export async function assignAccountToCompany(formData: FormData) {
   }
   try {
     await prisma.account.update({ where: { id: accountId }, data: { companyId } });
-    revalidatePath('/admin/companies');
-    revalidatePath('/admin/accounts');
+    // Attempt each refresh independently; neither can undo the committed update.
+    for (const path of ['/admin/companies', '/admin/accounts']) {
+      try {
+        revalidatePath(path);
+      } catch (cacheError) {
+        console.warn('[COMPANIES] Assigned but cache refresh failed:', safeServerErrorCategory(cacheError));
+      }
+    }
     return { success: true };
   } catch (error) {
     console.error('[COMPANIES] Assign failed', safeServerErrorCategory(error));
