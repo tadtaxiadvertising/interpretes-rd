@@ -126,7 +126,7 @@ export default function RoleplayStudioPage() {
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
-  const preferenceEdits = useRef({ exclude: false, compact: false });
+  const preferenceEdits = useRef({ exclude: false, compact: false, protocolLanguage: false });
   useEffect(() => {
     let active = true;
     void readAudioStudioEditorPreferences().then(settings => {
@@ -137,6 +137,8 @@ export default function RoleplayStudioPage() {
       if (!preferenceEdits.current.compact)
         setCompactPreference(settings.compactViewDefault === 'auto'
           ? null : settings.compactViewDefault === 'compact');
+      if (!preferenceEdits.current.protocolLanguage)
+        setProtocolLanguage(settings.protocolLanguageDefault);
     }).catch(() => {
       // Preserve the local, low-cost defaults if settings are unavailable.
     });
@@ -1986,7 +1988,7 @@ export default function RoleplayStudioPage() {
               </label>
               <label className="text-sm text-slate-200">Idioma del protocolo
                 <select value={protocolLanguage}
-                  onChange={event => setProtocolLanguage(event.currentTarget.value as StudioProtocolLanguage)}
+                  onChange={event => { preferenceEdits.current.protocolLanguage = true; setProtocolLanguage(event.currentTarget.value as StudioProtocolLanguage); }}
                   className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
                   <option value="en">Inglés</option>
                   <option value="es">Español</option>
