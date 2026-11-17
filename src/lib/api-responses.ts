@@ -12,7 +12,8 @@ export function apiSuccess<T>(data?: T, init?: ResponseInit) {
   return NextResponse.json({ success: true, ...(data === undefined ? {} : { data }) }, init);
 }
 
-export function apiError({ error, fallback, status = 500, exposeMessage = true }: ApiErrorInput) {
+/** Fail closed: provider errors may contain credentials, SQL, URLs or private data. */
+export function apiError({ error, fallback, status = 500, exposeMessage = false }: ApiErrorInput) {
   if (error instanceof z.ZodError) {
     return NextResponse.json(
       { success: false, error: 'Validation failed', details: error.issues },
