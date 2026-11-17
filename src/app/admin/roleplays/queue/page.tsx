@@ -127,7 +127,7 @@ export default async function AdminRoleplayQueuePage({
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-3xl font-bold text-white">Cola de Evaluación QA</h2>
-          <p className="text-gray-400">Gestiona y asigna evaluaciones de roleplay pendientes</p>
+          <p className="text-gray-400">Organiza y asigna las evaluaciones de roleplay pendientes</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <Link
@@ -156,7 +156,7 @@ export default async function AdminRoleplayQueuePage({
           href={`/admin/roleplays/queue?status=SUBMITTED`}
         />
         <StatCard 
-          label="En Revisión" 
+          label="En revisión" 
           value={stats.UNDER_REVIEW || 0} 
           icon={User} 
           color="blue"
@@ -197,7 +197,7 @@ export default async function AdminRoleplayQueuePage({
             <input
               type="text"
               name="search"
-              placeholder="Buscar por nombre, email..."
+              placeholder="Buscar por nombre o correo..."
               defaultValue={searchQuery}
               className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:border-blue-500/50 transition-colors"
             />
@@ -209,7 +209,7 @@ export default async function AdminRoleplayQueuePage({
           >
             <option value="all">Todos los estados</option>
             <option value="SUBMITTED">Enviados</option>
-            <option value="UNDER_REVIEW">En Revisión</option>
+            <option value="UNDER_REVIEW">En revisión</option>
             <option value="EVALUATED">Evaluados</option>
             <option value="PASSED">Aprobados</option>
             <option value="FAILED">Rechazados</option>
@@ -235,7 +235,7 @@ export default async function AdminRoleplayQueuePage({
       {/* Queue Table */}
       <div className="glass rounded-3xl overflow-visible">
         <div className="p-6 border-b border-white/5 flex flex-wrap gap-4 items-center justify-between">
-          <h3 className="text-xl font-bold text-white">Sesiones en Cola ({total})</h3>
+          <h3 className="text-xl font-bold text-white">Sesiones pendientes de evaluación ({total})</h3>
           <div className="flex gap-2">
             <select
               name="sortBy"
@@ -247,9 +247,9 @@ export default async function AdminRoleplayQueuePage({
                 window.location.href = url.toString();
               }}
             >
-              <option value="submittedAt">Fecha envío</option>
-              <option value="createdAt">Fecha creación</option>
-              <option value="reviewStartedAt">Inicio revisión</option>
+              <option value="submittedAt">Fecha de envío</option>
+              <option value="createdAt">Fecha de creación</option>
+              <option value="reviewStartedAt">Inicio de la revisión</option>
             </select>
             <button
               onClick={() => {
@@ -279,10 +279,10 @@ export default async function AdminRoleplayQueuePage({
                   <th className="py-6 px-4">Participante</th>
                   <th className="py-6 px-4">Tipo</th>
                   <th className="py-6 px-4">Estado</th>
-                  <th className="py-6 px-4">Enviado</th>
+                  <th className="py-6 px-4">Envío</th>
                   <th className="py-6 px-4">Evaluador</th>
                   <th className="py-6 px-4">Escenarios</th>
-                  <th className="py-6 px-4">Autoeval</th>
+                  <th className="py-6 px-4">Autoevaluación</th>
                   <th className="py-6 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
