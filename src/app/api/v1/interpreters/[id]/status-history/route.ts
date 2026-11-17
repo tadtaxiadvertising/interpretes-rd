@@ -1,45 +1,53 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { validateAction } from '@/lib/auth/actions';
-
-const db = prisma;
+import { guardApiAuth } from '@/lib/api-auth';
+import { numericIdParamSchema } from '@/lib/api-responses';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 /**
- * GET /api/v1/interpreters/[id]/status-history
- * 
- * Returns the status change log for a specific interpreter.
- * Used by StatusTimeline component.
+ * Administrative status history contains interpreter identity and activity
+ * metadata. Resolve the same principal as the API middleware, honoring an
+ * explicit Bearer over a different cookie; never cache or log raw failures.
  */
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const auth = await validateAction('admin');
-    if ('error' in auth) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+    const denied = await guardApiAuth(req, 'admin');
+    if (denied) return privateAdminResponse(denied);
+
+    const parsed = numericIdParamSchema.safeParse(await params);
+    if (!parsed.success) {
+      return privateAdminJson(
+        { success: false, error: 'Invalid interpreter ID' },
+        { status: 400 },
+      );
     }
-
-    const { id } = await params;
-    const interpreterId = parseInt(id, 10);
-    if (isNaN(interpreterId)) {
-      return NextResponse.json({ success: false, error: 'Invalid interpreter ID' }, { status: 400 });
+    const interpreterId = parsed.data.id;
+    const limitRaw = new URL(req.url).searchParams.get('limit');
+    // Reject NaN, negative values, fractions and 0; do not permit arbitrary
+    // count inflation or a malformed limit to reach Prisma.
+    if (limitRaw !== null && !/^(?:[1-9]|[1-9][0-9]|100)$/.test(limitRaw)) {
+      return privateAdminJson(
+        { success: false, error: 'Invalid history limit (1-100)' },
+        { status: 400 },
+      );
     }
+    const limit = limitRaw === null ? 20 : Number(limitRaw);
 
-    const url = new URL(req.url);
-    const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 100);
-
-    // Verify interpreter exists
-    const interpreter = await db.interpreter.findUnique({
+    const interpreter = await prisma.interpreter.findUnique({
       where: { id: interpreterId },
       select: { id: true, name: true, realtimeStatus: true },
     });
-
     if (!interpreter) {
-      return NextResponse.json({ success: false, error: 'Interpreter not found' }, { status: 404 });
+      return privateAdminJson(
+        { success: false, error: 'Interpreter not found' },
+        { status: 404 },
+      );
     }
 
-    const logs = await db.interpreterStatusLog.findMany({
+    const logs = await prisma.interpreterStatusLog.findMany({
       where: { interpreterId },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -54,7 +62,7 @@ export async function GET(
       },
     });
 
-    return NextResponse.json({
+    return privateAdminJson({
       success: true,
       interpreter: {
         id: interpreter.id,
@@ -64,10 +72,10 @@ export async function GET(
       logs,
     });
   } catch (error) {
-    console.error('[StatusHistory] Error:', error);
-    return NextResponse.json(
+    console.error('[StatusHistory] Error:', safeServerErrorCategory(error));
+    return privateAdminJson(
       { success: false, error: 'Internal Server Error' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
