@@ -15,10 +15,13 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
     return { success: false, message: 'Solicitud inválida.' };
   const excludeValue = form.get('excludeInterpreterByDefault');
   const compactValue = form.get('compactViewDefault');
+  const protocolLanguageValue = form.get('protocolLanguageDefault');
   if (excludeValue !== null && excludeValue !== 'true' && excludeValue !== 'false')
     return { success: false, message: 'Preferencia de intérprete no válida.' };
   if (compactValue !== null && !['auto', 'compact', 'expanded'].includes(String(compactValue)))
     return { success: false, message: 'Modo de visualización no válido.' };
+  if (protocolLanguageValue !== null && protocolLanguageValue !== 'en' && protocolLanguageValue !== 'es')
+    return { success: false, message: 'Idioma predeterminado del protocolo no válido.' };
   try {
     await saveHappyScribeSettings({
       token, organizationId: organization,
@@ -27,6 +30,7 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
       updatedBy: auth.user.userId,
       ...(excludeValue !== null ? { excludeInterpreterByDefault: excludeValue === 'true' } : {}),
       ...(compactValue !== null ? { compactViewDefault: compactValue as 'auto' | 'compact' | 'expanded' } : {}),
+      ...(protocolLanguageValue !== null ? { protocolLanguageDefault: protocolLanguageValue as 'en' | 'es' } : {}),
     });
     // The encrypted settings transaction has committed. Cache revalidation
     // cannot undo it and must not trick an admin into resubmitting a secret.
