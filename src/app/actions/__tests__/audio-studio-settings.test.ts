@@ -53,7 +53,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
       expect(result.message).not.toContain(fakeToken);
       expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
         token: fakeToken, organizationId: '123456',
-        mediaImportEnabled: true, removeToken: false,
+        mediaImportEnabled: true, removeToken: false, updatedBy: 'test-admin',
       });
       expect(revalidatePath).toHaveBeenCalledWith('/admin/roleplays/settings');
       expect(warn).toHaveBeenCalledWith('[Audio Studio settings] Saved; cache refresh failed');
@@ -112,7 +112,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     expect((await saveAudioStudioSettings(form)).success).toBe(true);
     expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
       token: fakeToken, organizationId: '123456', mediaImportEnabled: true,
-      removeToken: false, excludeInterpreterByDefault: false, compactViewDefault: 'expanded',
+      removeToken: false, updatedBy: 'test-admin', excludeInterpreterByDefault: false, compactViewDefault: 'expanded',
     });
   });
 
