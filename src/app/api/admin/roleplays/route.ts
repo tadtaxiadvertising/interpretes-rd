@@ -11,7 +11,8 @@ import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/rolepla
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 import {
-  blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentScope,
+  blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentBatchScope,
+  interpreterAssignmentScope,
 } from '@/lib/roleplay-assignment-ownership';
 
 const db = prisma;
@@ -347,6 +348,26 @@ export async function POST(req: NextRequest) {
       });
       if (activeInterpreters.length === 0) {
         return privateRoleplayJson({ success: false, error: 'No active interpreters found' }, { status: 400 });
+      }
+
+      // Avoid uploading up to 25 audio objects when there is nobody to
+      // assign. Use exactly the candidate-safe ownership/status predicate of
+      // the eligibility preview. This read is only an optimization: the final
+      // per-interpreter advisory locks below remain authoritative.
+      const blockingSessions = await db.roleplaySession.findMany({
+        where: {
+          ...interpreterAssignmentBatchScope(activeInterpreters.map(({ id }) => id)),
+          status: { in: blockingAssignmentStatuses(true) },
+        },
+        select: { interpreterId: true },
+      });
+      const occupiedIds = new Set(blockingSessions.map(({ interpreterId }) => interpreterId));
+      if (activeInterpreters.every(({ id }) => occupiedIds.has(id))) {
+        return privateRoleplayJson({
+          success: false,
+          error: 'All active interpreters already have a draft or existing roleplay session',
+          skippedCount: activeInterpreters.length,
+        }, { status: 409 });
       }
 
       // Eligibility is rechecked under per-interpreter advisory locks
