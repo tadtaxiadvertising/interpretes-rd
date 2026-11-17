@@ -235,6 +235,23 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const prepared = await prepareRoleplayManifestImport(files);
       // Never overwrite a newer ZIP import or edits made during validation.
       if (revision !== importRevision.current) return;
+      // A first import into the empty form stays one-click. A prepared package
+      // must not silently erase a draft containing manual work; ask only
+      // after all ZIP, manifest and checksum checks have passed.
+      const hasEditedDraft = scenarios.length > 1 || scenarios.some((scenario) =>
+        Boolean(scenario.title.trim()) ||
+        Boolean(scenario.baseAudioFile) ||
+        Boolean(scenario.scriptPrompt.trim()) ||
+        scenario.durationLimitSec > 0,
+      );
+      if (hasEditedDraft && !window.confirm(
+        'El paquete está verificado, pero importarlo reemplazará los escenarios que ya editaste. ' +
+        'Guarda tu trabajo antes de continuar. ¿Reemplazar el borrador?',
+      )) {
+        setError('Importación cancelada. El borrador anterior se conservó.');
+        return;
+      }
+      if (revision !== importRevision.current) return;
       const next = prepared.map((scenario) => {
         const baseAudioPreview = URL.createObjectURL(scenario.baseAudioFile);
         previewUrls.current.add(baseAudioPreview);
