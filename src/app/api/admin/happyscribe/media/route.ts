@@ -99,7 +99,6 @@ export async function POST(req: NextRequest) {
     if (!isAllowedHappyScribeExportUrl(parsedUrl)) return privateRoleplayResponse(
       { success: false, error: 'HappyScribe devolvió un destino de descarga no permitido.' }, { status: 502 },
     );
-    const media = await fetchHappyScribeExport(downloadLink, AbortSignal.timeout(90_000));
     const transferSignal = AbortSignal.any([req.signal, AbortSignal.timeout(90_000)]);
     const media = await fetchHappyScribeExport(downloadLink, transferSignal);
     if (!media.ok || !media.body) {
