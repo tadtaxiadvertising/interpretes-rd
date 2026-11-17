@@ -78,8 +78,15 @@ export async function getHappyScribeSettingsStatus() {
     select: { key: true, value: true },
   });
   const map = new Map(rows.map(row => [row.key, row.value]));
+  let credentialUsable = Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim());
+  if (map.has(TOKEN_KEY)) {
+    // Report only readiness: never return the decrypted token or ciphertext.
+    try { credentialUsable = Boolean(decrypt(map.get(TOKEN_KEY)!).trim()); }
+    catch { credentialUsable = false; }
+  }
   return {
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
+    credentialUsable,
     tokenSource: map.has(TOKEN_KEY) ? 'panel' : process.env.HAPPY_SCRIBE_API_TOKEN ? 'servidor' : 'ninguna',
     organizationId: map.has(ORG_KEY) ? map.get(ORG_KEY)! : (process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || ''),
     // Display the effective state, not merely a persisted preference:
