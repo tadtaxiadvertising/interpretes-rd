@@ -63,7 +63,10 @@ export const PayrollRecordPatchSchema = PayrollRecordSchema.partial().extend({
 // Audit ownership and the calculated total are immutable from generic PATCH; changes
 // to these fields require an explicit audited workflow rather than relinking history.
 // Build an explicit object to avoid carrying the CREATE criticalError default into PATCH.
-const QAPercentage = z.number().finite().min(0).max(100).nullable().optional();
+const QAPercentage = z.number().finite().min(0).max(100).refine(
+  value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
+  { message: 'QA percentages support at most two decimal places' },
+).nullable().optional();
 export const QAScorePatchSchema = z.object({
   auditDate: z.coerce.date().optional(),
   auditor: z.string().max(255).nullable().optional(),
