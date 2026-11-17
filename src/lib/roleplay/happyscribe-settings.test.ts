@@ -92,6 +92,27 @@ describe('HappyScribe encrypted admin settings', () => {
     expect(JSON.stringify(status)).not.toContain(testToken);
   });
 
+  it('reports server-key fallback before removing a panel token', async () => {
+    const serverToken = 'SYNTHETIC_SERVER_FALLBACK_NOT_REAL';
+    process.env.HAPPY_SCRIBE_API_TOKEN = serverToken;
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    });
+    const before = await getHappyScribeSettingsStatus();
+    expect(before.tokenSource).toBe('panel');
+    expect(before.environmentFallbackAvailable).toBe(true);
+    expect(JSON.stringify(before)).not.toContain(serverToken);
+    expect(JSON.stringify(before)).not.toContain(testToken);
+
+    await saveHappyScribeSettings({
+      removeToken: true, organizationId: '123456', mediaImportEnabled: false,
+    });
+    const after = await getHappyScribeSettingsStatus();
+    expect(after.tokenSource).toBe('servidor');
+    expect(after.environmentFallbackAvailable).toBe(true);
+    expect((await getHappyScribeSettings()).token).toBe(serverToken);
+  });
+
   it('fails closed without the runtime encryption key before any database write', async () => {
     delete process.env.AUDIO_STUDIO_ENCRYPTION_KEY;
     await expect(saveHappyScribeSettings({
@@ -154,21 +175,21 @@ describe('HappyScribe encrypted admin settings', () => {
 
   it('persists allowed Audio Studio defaults and supplies safe defaults when absent', async () => {
     expect(await getAudioStudioEditorPreferences()).toEqual({
-      excludeInterpreterByDefault: true, compactViewDefault: 'auto',
+      excludeInterpreterByDefault: true, compactViewDefault: 'auto', protocolLanguageDefault: 'en',
     });
     await saveHappyScribeSettings({
       organizationId: '123456', mediaImportEnabled: false,
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
     expect(await getAudioStudioEditorPreferences()).toEqual({
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
     expect(await getHappyScribeSettingsStatus()).toMatchObject({
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
     await saveHappyScribeSettings({ organizationId: '123456', mediaImportEnabled: false });
     expect(await getAudioStudioEditorPreferences()).toEqual({
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
   });
 
@@ -177,6 +198,14 @@ describe('HappyScribe encrypted admin settings', () => {
       organizationId: '123456', mediaImportEnabled: false,
       compactViewDefault: 'unknown' as 'auto',
     })).rejects.toThrow('COMPACT_MODE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported protocol language before any database transaction', async () => {
+    await expect(saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      protocolLanguageDefault: 'fr' as 'en',
+    })).rejects.toThrow('PROTOCOL_LANGUAGE_INVALID');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 

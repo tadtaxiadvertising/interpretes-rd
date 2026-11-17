@@ -82,15 +82,21 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
 
   it('never returns stored raw tokens when inspecting settings', async () => {
     const safeStatus = {
-      hasToken: true, tokenSource: 'panel', organizationId: '123456',
+      hasToken: true, credentialUsable: true, environmentFallbackAvailable: false,
+      tokenSource: 'panel', organizationId: '123456',
       mediaImportEnabled: false, proxyAvailable: false, encryptionReady: true,
+      excludeInterpreterByDefault: true,
+      compactViewDefault: 'auto' as const, protocolLanguageDefault: 'en' as const,
     };
     vi.mocked(getHappyScribeSettingsStatus).mockResolvedValueOnce(safeStatus);
     expect(await inspectAudioStudioSettings()).toEqual(safeStatus);
     expect(getHappyScribeSettingsStatus).toHaveBeenCalledOnce();
   });
   it('allows only admin roles to read editor defaults, without exposing keys', async () => {
-    const preferences = { excludeInterpreterByDefault: false, compactViewDefault: 'compact' as const };
+    const preferences = {
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact' as const,
+      protocolLanguageDefault: 'es' as const,
+    };
     vi.mocked(getAudioStudioEditorPreferences).mockResolvedValueOnce(preferences);
     expect(await readAudioStudioEditorPreferences()).toEqual(preferences);
     vi.mocked(validateAction).mockResolvedValueOnce({ error: 'Access denied', code: 'UNAUTHORIZED' } as never);
@@ -103,6 +109,22 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     const result = await saveAudioStudioSettings(form);
     expect(result.success).toBe(false);
     expect(saveHappyScribeSettings).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported protocol language and accepts an explicit Spanish default', async () => {
+    const invalid = settingsForm();
+    invalid.set('protocolLanguageDefault', 'fr');
+    expect((await saveAudioStudioSettings(invalid)).success).toBe(false);
+    expect(saveHappyScribeSettings).not.toHaveBeenCalled();
+
+    const valid = settingsForm();
+    valid.set('protocolLanguageDefault', 'es');
+    expect((await saveAudioStudioSettings(valid)).success).toBe(true);
+    expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
+      token: fakeToken, organizationId: '123456', mediaImportEnabled: true,
+      removeToken: false, updatedBy: 'test-admin',
+      protocolLanguageDefault: 'es',
+    });
   });
 
   it('persists explicit defaults alongside the provider settings', async () => {

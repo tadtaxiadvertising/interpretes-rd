@@ -4,6 +4,7 @@ import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from '@/lib
 import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
+import { isValidHappyScribeProbe } from '@/lib/roleplay/happyscribe-probe';
 import { validateAction } from '@/lib/auth/actions';
 import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
@@ -74,6 +75,9 @@ export async function GET(req: NextRequest) {
       config.token, undefined, req.signal,
     );
     if (!upstream.ok) {
+      // Close the response body even for unauthorized or rate-limited requests.
+      // Repeated connection checks must not retain unused provider streams.
+      try { await upstream.body?.cancel(); } catch { /* Preserve safe upstream error. */ }
       const status = upstream.status === 401 || upstream.status === 403 ? 502
         : upstream.status === 429 ? 503 : 502;
       return privateRoleplayResponse(
@@ -84,13 +88,11 @@ export async function GET(req: NextRequest) {
       );
     }
     if (connectionCheck) {
-      // Verify the provider's JSON contract, rather than treating an HTML 200
-      // as success. Request only one row and never return its contents.
-      const check: unknown = await upstream.json().catch(() => null);
-      if (!check || typeof check !== 'object' ||
-          !('results' in check) || !Array.isArray(check.results)) {
+      // A provider may ignore per_page=1. Reject oversized/invalid payloads
+      // without buffering its entire catalog or revealing transcription data.
+      if (!(await isValidHappyScribeProbe(upstream))) {
         return privateRoleplayResponse(
-          { error: 'HappyScribe devolvió una respuesta de conexión no válida.' },
+          { error: 'HappyScribe devolvió una respuesta de conexión no válida o demasiado grande.' },
           { status: 502 },
         );
       }
