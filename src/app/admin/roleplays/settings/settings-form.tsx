@@ -5,6 +5,7 @@ type Initial = {
   hasToken: boolean; credentialUsable: boolean; tokenSource: string; organizationId: string;
   mediaImportEnabled: boolean; proxyAvailable: boolean; encryptionReady: boolean;
   excludeInterpreterByDefault: boolean; compactViewDefault: 'auto' | 'compact' | 'expanded';
+  protocolLanguageDefault: 'en' | 'es';
 };
 export default function AudioStudioSettingsForm({ initial }: { initial: Initial }) {
   const [org, setOrg] = useState(initial.organizationId);
@@ -13,6 +14,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [media, setMedia] = useState(initial.mediaImportEnabled);
   const [excludeDefault, setExcludeDefault] = useState(initial.excludeInterpreterByDefault);
   const [compactDefault, setCompactDefault] = useState(initial.compactViewDefault);
+  const [protocolDefault, setProtocolDefault] = useState(initial.protocolLanguageDefault);
   const [status, setStatus] = useState(initial);
   const [checking, setChecking] = useState(false);
   const hasToken = status.hasToken;
@@ -24,6 +26,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     data.set('organizationId', org); data.set('token', token);
     data.set('excludeInterpreterByDefault', String(excludeDefault));
     data.set('compactViewDefault', compactDefault);
+    data.set('protocolLanguageDefault', protocolDefault);
     if (remove) data.set('removeToken', 'on');
     if (media) data.set('mediaImportEnabled', 'on');
     start(async () => {
@@ -39,6 +42,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
           setOrg(latest.organizationId);
           setExcludeDefault(latest.excludeInterpreterByDefault);
           setCompactDefault(latest.compactViewDefault);
+          setProtocolDefault(latest.protocolLanguageDefault);
           setMedia(latest.mediaImportEnabled);
         } catch { /* The save already succeeded; avoid misleading retry prompts. */ }
       }
@@ -102,6 +106,12 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
         <option value="auto">Automática — compacta cuando el proyecto crece</option>
         <option value="compact">Compacta</option>
         <option value="expanded">Detallada</option>
+      </select>
+      <label htmlFor="protocol-default" className="block text-sm text-slate-200">Idioma inicial de los protocolos</label>
+      <select id="protocol-default" value={protocolDefault} onChange={e => setProtocolDefault(e.target.value as 'en' | 'es')}
+        className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white">
+        <option value="en">Inglés</option>
+        <option value="es">Español</option>
       </select>
     </fieldset>
     {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
