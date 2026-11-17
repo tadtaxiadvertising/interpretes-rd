@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import Link from 'next/link';
+import { readAudioStudioEditorPreferences } from '@/app/actions/audio-studio-settings';
 import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import {
@@ -125,6 +126,22 @@ export default function RoleplayStudioPage() {
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
+  const preferenceEdits = useRef({ exclude: false, compact: false });
+  useEffect(() => {
+    let active = true;
+    void readAudioStudioEditorPreferences().then(settings => {
+      // Never change parsing/export defaults after a recording was selected.
+      if (!active || activeAudioFile.current) return;
+      if (!preferenceEdits.current.exclude)
+        setExcludeInterpreter(settings.excludeInterpreterByDefault);
+      if (!preferenceEdits.current.compact)
+        setCompactPreference(settings.compactViewDefault === 'auto'
+          ? null : settings.compactViewDefault === 'compact');
+    }).catch(() => {
+      // Preserve the local, low-cost defaults if settings are unavailable.
+    });
+    return () => { active = false; };
+  }, []);
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
   const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number } | null>(null);
   const exportFocusAttempt = useRef(0);
@@ -1778,6 +1795,7 @@ export default function RoleplayStudioPage() {
                 <input type="checkbox" checked={excludeInterpreter}
                   onChange={event => {
                     subtitleImportRevision.current += 1;
+                    preferenceEdits.current.exclude = true;
                     setExcludeInterpreter(event.currentTarget.checked);
                   }}
                   className="h-4 w-4 accent-blue-500"/>
@@ -1924,7 +1942,7 @@ export default function RoleplayStudioPage() {
                   className="accent-blue-500"/>
                 Pendientes ({pendingReviewCount})
               </label>
-              <button type="button" onClick={() => setCompactPreference(!compactRows)}
+              <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
                 aria-pressed={compactRows}
                 className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200">
                 {compactRows ? 'Vista detallada' : 'Vista compacta'}
