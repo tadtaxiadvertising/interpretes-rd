@@ -24,6 +24,44 @@ describe('Audio Studio subtitle import lifecycle', () => {
     vi.unstubAllGlobals();
   });
 
+  it('starts at most one provider SRT export for rapid repeated clicks', async () => {
+    const provider = vi.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === 'POST') return new Promise<Response>(() => {});
+      return Promise.resolve(Response.json({
+        success: true,
+        data: [{
+          id: 'a'.repeat(32), name: 'draft.srt', state: 'done',
+          language: 'es', durationSeconds: 60, createdAt: null, folder: null,
+        }],
+        mediaImportEnabled: false,
+      }));
+    });
+    vi.stubGlobal('fetch', provider);
+
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'source.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    act(() => {
+      const button = screen.getByRole('button', { name: 'Importar transcripción' });
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+
+    expect(provider.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Cancelar transcripción' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar transcripción' }));
+    expect(screen.queryByRole('button', { name: 'Cancelar transcripción' })).toBeNull();
+  });
+
   it('aborts an obsolete HappyScribe SRT request when the administrator replaces the recording', async () => {
     let pendingImportSignal: AbortSignal | undefined;
     const list = {
