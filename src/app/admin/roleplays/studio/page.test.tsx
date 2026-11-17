@@ -332,7 +332,7 @@ describe('Audio Studio clip review player', () => {
     expect(consent.checked).toBe(true);
     expect((container.querySelector('audio') as HTMLAudioElement).getAttribute('src'))
       .toBe(originalUrl);
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
