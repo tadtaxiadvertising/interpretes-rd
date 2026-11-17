@@ -92,6 +92,27 @@ describe('HappyScribe encrypted admin settings', () => {
     expect(JSON.stringify(status)).not.toContain(testToken);
   });
 
+  it('reports server-key fallback before removing a panel token', async () => {
+    const serverToken = 'SYNTHETIC_SERVER_FALLBACK_NOT_REAL';
+    process.env.HAPPY_SCRIBE_API_TOKEN = serverToken;
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    });
+    const before = await getHappyScribeSettingsStatus();
+    expect(before.tokenSource).toBe('panel');
+    expect(before.environmentFallbackAvailable).toBe(true);
+    expect(JSON.stringify(before)).not.toContain(serverToken);
+    expect(JSON.stringify(before)).not.toContain(testToken);
+
+    await saveHappyScribeSettings({
+      removeToken: true, organizationId: '123456', mediaImportEnabled: false,
+    });
+    const after = await getHappyScribeSettingsStatus();
+    expect(after.tokenSource).toBe('servidor');
+    expect(after.environmentFallbackAvailable).toBe(true);
+    expect((await getHappyScribeSettings()).token).toBe(serverToken);
+  });
+
   it('fails closed without the runtime encryption key before any database write', async () => {
     delete process.env.AUDIO_STUDIO_ENCRYPTION_KEY;
     await expect(saveHappyScribeSettings({
