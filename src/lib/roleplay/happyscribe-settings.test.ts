@@ -154,21 +154,21 @@ describe('HappyScribe encrypted admin settings', () => {
 
   it('persists allowed Audio Studio defaults and supplies safe defaults when absent', async () => {
     expect(await getAudioStudioEditorPreferences()).toEqual({
-      excludeInterpreterByDefault: true, compactViewDefault: 'auto',
+      excludeInterpreterByDefault: true, compactViewDefault: 'auto', protocolLanguageDefault: 'en',
     });
     await saveHappyScribeSettings({
       organizationId: '123456', mediaImportEnabled: false,
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
     expect(await getAudioStudioEditorPreferences()).toEqual({
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
     expect(await getHappyScribeSettingsStatus()).toMatchObject({
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
     await saveHappyScribeSettings({ organizationId: '123456', mediaImportEnabled: false });
     expect(await getAudioStudioEditorPreferences()).toEqual({
-      excludeInterpreterByDefault: false, compactViewDefault: 'compact',
+      excludeInterpreterByDefault: false, compactViewDefault: 'compact', protocolLanguageDefault: 'es',
     });
   });
 
@@ -177,6 +177,14 @@ describe('HappyScribe encrypted admin settings', () => {
       organizationId: '123456', mediaImportEnabled: false,
       compactViewDefault: 'unknown' as 'auto',
     })).rejects.toThrow('COMPACT_MODE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported protocol language before any database transaction', async () => {
+    await expect(saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      protocolLanguageDefault: 'fr' as 'en',
+    })).rejects.toThrow('PROTOCOL_LANGUAGE_INVALID');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 
