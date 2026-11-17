@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { IncentiveConfigSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 
@@ -14,7 +15,7 @@ const db = prisma;
 export async function GET(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const configs = await db.systemConfig.findMany({
       where: {
@@ -44,14 +45,14 @@ export async function GET(request: Request) {
       }
     }
 
-    return NextResponse.json({
+    return privateAdminJson({
       success: true,
       tiers,
       raw: configs,
     });
   } catch (error) {
-    console.error('[GET /api/config/incentives] Error:', error);
-    return apiError({ error, fallback: 'Failed to fetch incentive config' });
+    console.error('[GET /api/config/incentives] Error:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Failed to fetch incentive config', exposeMessage: false }));
   }
 }
 
@@ -71,7 +72,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { tiers } = await parseJsonBody(request, IncentiveConfigSchema);
 
@@ -113,13 +114,13 @@ export async function POST(request: Request) {
       results.push({ hoursRecord, bonusRecord });
     }
 
-    return NextResponse.json({
+    return privateAdminJson({
       success: true,
       message: `${tiers.length} tier(s) saved successfully`,
       results,
     });
   } catch (error) {
-    console.error('[POST /api/config/incentives] Error:', error);
-    return apiError({ error, fallback: 'Failed to save incentive config' });
+    console.error('[POST /api/config/incentives] Error:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Failed to save incentive config', exposeMessage: false }));
   }
 }

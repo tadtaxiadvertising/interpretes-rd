@@ -1,13 +1,14 @@
-import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { PayrollPaySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function PATCH(request: Request) {
   try {
     const denied = await guardApiAuth(request, 'admin');
-    if (denied) return denied;
+    if (denied) return privateAdminResponse(denied);
 
     const { payrollRecordId, transactionReference } = await parseJsonBody(request, PayrollPaySchema);
 
@@ -17,11 +18,11 @@ export async function PATCH(request: Request) {
     });
 
     if (!payroll) {
-      return NextResponse.json({ success: false, error: 'Payroll record not found' }, { status: 404 });
+      return privateAdminJson({ success: false, error: 'Payroll record not found' }, { status: 404 });
     }
 
     if (payroll.status !== 'APPROVED') {
-      return NextResponse.json(
+      return privateAdminJson(
         { error: `Cannot mark as PAID. Payroll record is in ${payroll.status} state, must be APPROVED.` },
         { status: 403 }
       );
@@ -39,7 +40,7 @@ export async function PATCH(request: Request) {
     });
 
     if (claim.count === 0) {
-      return NextResponse.json(
+      return privateAdminJson(
         { error: 'Concurrent modification detected; payroll record is no longer APPROVED.' },
         { status: 409 }
       );
@@ -49,8 +50,9 @@ export async function PATCH(request: Request) {
       where: { id: payrollRecordId },
     });
 
-    return NextResponse.json({ success: true, data: updatedPayroll });
+    return privateAdminJson({ success: true, data: updatedPayroll });
   } catch (error) {
-    return apiError({ error, fallback: 'Internal Server Error' });
+    console.error('Payroll payment request failed:', safeServerErrorCategory(error));
+    return privateAdminResponse(apiError({ error, fallback: 'Internal Server Error', exposeMessage: false }));
   }
 }
