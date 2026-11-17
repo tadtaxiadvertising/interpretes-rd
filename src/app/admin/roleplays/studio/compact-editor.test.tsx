@@ -215,6 +215,7 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
+    expect(screen.getByText(/#1 · Doctor · 1 \(EN\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
   });
 
@@ -279,9 +280,16 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
 
+    // A fresh explicit choice and approval should replace the untouched source.
+    vi.mocked(window.confirm).mockReturnValue(true);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
-      target: { files: [replacement] },
+      target: { files: [new File(['ID3'], 'accepted-replacement.mp3', { type: 'audio/mpeg' })] },
     });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    // The editor hides the timeline until metadata from the new source is known.
+    const newPlayer = document.querySelector('audio') as HTMLAudioElement;
+    Object.defineProperty(newPlayer, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(newPlayer);
     // Replacing the file intentionally resets duration until the browser
     // supplies fresh media metadata; jsdom never does so automatically.
     const player = document.querySelector('audio')!;
@@ -369,6 +377,7 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
     const alert = screen.getByRole('alert');
     expect(alert.textContent).toMatch(/No se pueden unir voces o idiomas distintos/);
+    expect(alert.closest('article')?.textContent).toMatch(/Doctor · 1/);
     // Profile classification changes the displayed title, not the row ID.
     expect(alert.closest('article')?.querySelector(
       '[aria-label="Ir al inicio de intervención 1"]',

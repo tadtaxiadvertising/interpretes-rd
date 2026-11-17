@@ -20,6 +20,8 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), configurable: true });
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
     pause = vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
+    // Changing a source with unsaved turns now requires explicit acceptance.
+    // These export/reset cases intentionally approve it; refusal is tested separately.
     // Replacing a source with edits requires an explicit confirmation in the
     // browser; jsdom does not implement confirm(). These particular tests
     // exercise the accepted-replacement path rather than cancellation.
@@ -305,6 +307,36 @@ describe('Audio Studio clip review player', () => {
     expect(consent.checked).toBe(false);
     expect(serverButton.disabled).toBe(true);
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps consent attached to the original recording when replacement is declined', () => {
+    const { container } = render(<RoleplayStudioPage />);
+    const input = screen.getByLabelText(/Grabación original MP3/i);
+    fireEvent.change(input, {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    const originalUrl = player.getAttribute('src');
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    const consent = screen.getByRole('checkbox', {
+      name: 'Autorizo subir este MP3 al servidor para detectar pausas',
+    }) as HTMLInputElement;
+    fireEvent.click(consent);
+    expect(consent.checked).toBe(true);
+
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    fireEvent.change(input, {
+      target: { files: [new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' })] },
+    });
+
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(consent.checked).toBe(true);
+    expect((container.querySelector('audio') as HTMLAudioElement).getAttribute('src'))
+      .toBe(originalUrl);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
   it('revoking server consent aborts the in-flight upload request', async () => {
