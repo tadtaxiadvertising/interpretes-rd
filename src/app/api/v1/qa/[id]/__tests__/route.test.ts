@@ -174,6 +174,18 @@ describe('QA detail API privacy and error isolation', () => {
     });
   });
 
+  it('treats an explicit null component as cleared while retaining omitted dimensions', async () => {
+    vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
+      ...score, protocolScore: null, totalScore: 72,
+    } as never);
+    const response = await PATCH(patch({ protocolScore: null }), params);
+    expect(response.status).toBe(200);
+    expect(prisma.qAScore.update).toHaveBeenCalledWith({
+      where: { id: 8 },
+      data: { protocolScore: null, totalScore: 72 },
+    });
+  });
+
   it('preserves criticalError when a PATCH edits only comments', async () => {
     vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce({
       ...score, criticalError: true, totalScore: 0,
