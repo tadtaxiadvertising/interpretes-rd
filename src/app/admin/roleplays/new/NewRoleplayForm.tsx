@@ -71,6 +71,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
   const [bulkResponseLimitSec, setBulkResponseLimitSec] = useState(120);
   // Keep the import identity independent from React render batching. The user
   // can edit a draft while a ZIP/SHA-256 validation is still awaiting.
@@ -105,6 +106,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   }, []);
 
   const invalidatePendingImport = useCallback(() => {
+    setImportNotice(null);
     // Increment on every draft edit, including one React processes after an
     // import has resolved but before its state update has committed.
     importRevision.current += 1;
@@ -231,6 +233,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     importPending.current = true;
     setIsImporting(true);
     setError(null);
+    setImportNotice(null);
     try {
       // Preserve the strict native ZIP contract. When it is not a native
       // package, attempt the bounded external Audio Studio reader; both still
@@ -252,6 +255,29 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const prepared = await prepareRoleplayManifestImport(files);
       // Never overwrite a newer ZIP import or edits made during validation.
       if (revision !== importRevision.current) return;
+      // A validated package already loaded with identical editorial metadata
+      // must be a no-op: no replacement prompt, new blob URLs or lost focus.
+      // SHA-256 is required so manually replaced audio can never count as the
+      // same package solely because its filename happens to match.
+      const identicalPackage = scenarios.length === prepared.length &&
+        scenarios.every((current, index) => {
+          const incoming = prepared[index];
+          return Boolean(current.sha256) &&
+            current.sha256 === incoming.sha256 &&
+            current.baseAudioFile?.name === incoming.baseAudioFile.name &&
+            current.title === incoming.title &&
+            current.durationLimitSec === incoming.durationLimitSec &&
+            current.scriptPrompt === incoming.scriptPrompt &&
+            (current.studioTurn ?? null) === (incoming.studioTurn ?? null) &&
+            (current.studioSpeaker ?? null) === (incoming.studioSpeaker ?? null) &&
+            (current.studioLanguage ?? null) === (incoming.studioLanguage ?? null) &&
+            (current.sourceStartSec ?? null) === (incoming.sourceStartSec ?? null) &&
+            (current.sourceEndSec ?? null) === (incoming.sourceEndSec ?? null);
+        });
+      if (identicalPackage) {
+        setImportNotice('Este paquete ya está importado y no tiene cambios. Conservamos los escenarios existentes.');
+        return;
+      }
       // A first import into the empty form stays one-click. A prepared package
       // must not silently erase a draft containing manual work; ask only
       // after all ZIP, manifest and checksum checks have passed.
@@ -575,6 +601,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white disabled:opacity-50"
           />
           {isImporting && <p role="status" className="mt-2 text-sm text-blue-200">Verificando archivos y huellas SHA-256…</p>}
+          {importNotice && <p role="status" className="mt-2 text-sm text-emerald-200">{importNotice}</p>}
         </div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-bold text-white">Escenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>

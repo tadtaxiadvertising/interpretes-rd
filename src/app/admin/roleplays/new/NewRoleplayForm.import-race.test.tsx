@@ -12,8 +12,9 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }));
 vi.mock('./ScenarioCard', () => ({
-  ScenarioCard: ({ scenario, startCollapsed }: { scenario: { title: string; durationLimitSec: number }; startCollapsed?: boolean }) =>
+  ScenarioCard: ({ scenario, startCollapsed }: { scenario: { id: string; title: string; durationLimitSec: number }; startCollapsed?: boolean }) =>
     <div data-testid="draft-scenario"
+      data-draft-id={scenario.id}
       data-initially-collapsed={String(Boolean(startCollapsed))}
       data-duration-limit={scenario.durationLimitSec}>
       {scenario.title || 'Borrador'}
@@ -195,6 +196,53 @@ describe('Admin roleplay import concurrency', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar solo a los sin configurar' }));
     expect(screen.getAllByTestId('draft-scenario')
       .map(card => card.getAttribute('data-duration-limit'))).toEqual(['120', '120']);
+  });
+
+  it('keeps existing previews and draft identity when the same verified package is selected again', async () => {
+    const prepared = [{
+      title: 'Importación idéntica',
+      baseAudioFile: new File(['ID3'], 'clip.mp3', { type: 'audio/mpeg' }),
+      durationLimitSec: 120,
+      scriptPrompt: 'Instrucciones editoriales',
+      sha256: 'a'.repeat(64),
+    }];
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValue(prepared);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    await act(async () => { chooseManifest(); });
+    const originalId = screen.getByTestId('draft-scenario').getAttribute('data-draft-id');
+
+    await act(async () => { chooseManifest(); });
+    expect(prepareRoleplayManifestImport).toHaveBeenCalledTimes(2);
+    expect(confirm).not.toHaveBeenCalled();
+    expect(screen.getByTestId('draft-scenario').getAttribute('data-draft-id')).toBe(originalId);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(screen.getByText(/Este paquete ya está importado y no tiene cambios/)).toBeTruthy();
+  });
+
+  it('treats edited response limits as work to preserve instead of skipping a repeated package', async () => {
+    const prepared = [0, 180, 0].map((durationLimitSec, index) => ({
+      title: `Escenario ${index + 1}`,
+      baseAudioFile: new File(['ID3'], `clip-${index + 1}.mp3`, { type: 'audio/mpeg' }),
+      durationLimitSec, scriptPrompt: '',
+      sha256: String(index + 1).repeat(64),
+    }));
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValue(prepared);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    await act(async () => { chooseManifest(); });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar solo a los sin configurar' }));
+    const currentDurations = () => screen.getAllByTestId('draft-scenario')
+      .map(card => card.getAttribute('data-duration-limit'));
+    expect(currentDurations()).toEqual(['120', '180', '120']);
+
+    await act(async () => { chooseManifest(); });
+    expect(confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Importación cancelada/)).toBeTruthy();
+    expect(currentDurations()).toEqual(['120', '180', '120']);
+    expect(screen.queryByText(/Este paquete ya está importado/)).toBeNull();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(3);
   });
 
   it('uses the external ZIP fallback and canonical SHA-256 validation without publishing', async () => {
