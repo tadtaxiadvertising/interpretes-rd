@@ -19,6 +19,8 @@ afterEach(() => {
 
 describe('Roleplay assignment guides administrators to incomplete fields', () => {
   it('focuses the exact missing recipient, title and audio instead of leaving a generic error', () => {
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
     render(<NewRoleplayForm interpreters={interpreters} candidates={[]} />);
     const create = screen.getByRole('button', { name: 'Crear roleplay' });
 
@@ -38,6 +40,7 @@ describe('Roleplay assignment guides administrators to incomplete fields', () =>
     const audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
     expect(document.activeElement).toBe(audio);
     expect(screen.getByText('El escenario 1 necesita un audio válido.')).toBeTruthy();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it('rejects an empty library template with a specific error without submitting anything', () => {
