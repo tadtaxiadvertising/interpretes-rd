@@ -43,16 +43,16 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(player, 'duration', { configurable: true, value: 7200.1 });
     fireEvent.loadedMetadata(player);
     expect(screen.getByText(/Preparación local:/i)).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Añadir intervención/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Añadir fragmento/i })).toBeTruthy();
 
     Object.defineProperty(player, 'duration', { configurable: true, value: 43200.1 });
     fireEvent.loadedMetadata(player);
     expect(screen.getByText(/supera las 12 horas admitidas/i)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Añadir intervención/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Añadir fragmento/i })).toBeNull();
 
     Object.defineProperty(player, 'duration', { configurable: true, value: 7200 });
     fireEvent.loadedMetadata(player);
-    expect(screen.getByRole('button', { name: /Añadir intervención/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Añadir fragmento/i })).toBeTruthy();
   });
 
   it('prepares a short MP3 locally by default without posting media to the server', async () => {
@@ -77,7 +77,7 @@ describe('Audio Studio clip review player', () => {
     expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(false);
     expect(screen.getByText(/Actividad de voz en este equipo/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Detectar pausas en servidor/i })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/i }));
@@ -107,7 +107,7 @@ describe('Audio Studio clip review player', () => {
     const player = container.querySelector('audio')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
     fireEvent.loadedMetadata(player);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const fetchMock = vi.fn((_url: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve({ ok: true, blob: async () => new Blob(['valid-zip']) } as Response));
     vi.stubGlobal('fetch', fetchMock);
@@ -135,7 +135,7 @@ describe('Audio Studio clip review player', () => {
       fireEvent.loadedMetadata(player);
     };
     choose('first.mp3');
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
 
     let finishFetch!: (response: Response) => void;
     const responsePending = new Promise<Response>(resolve => { finishFetch = resolve; });
@@ -170,7 +170,7 @@ describe('Audio Studio clip review player', () => {
     const player = container.querySelector('audio')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
     fireEvent.loadedMetadata(player);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
 
     let finishBlob!: (value: Blob) => void;
     const pendingBlob = new Promise<Blob>(resolve => { finishBlob = resolve; });
@@ -208,8 +208,8 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
     fireEvent.loadedMetadata(player);
 
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     expect(screen.getAllByRole('button', { name: /Escuchar fragmento/i })).toHaveLength(2);
 
     pause.mockClear(); // Loading a new file deliberately stops the previous preview.
@@ -248,7 +248,7 @@ describe('Audio Studio clip review player', () => {
     const player = container.querySelector('video')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 7201 });
     fireEvent.loadedMetadata(player);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
 
     const downloadClick = vi.spyOn(HTMLAnchorElement.prototype, 'click')
       .mockImplementation(() => {});
@@ -319,7 +319,7 @@ describe('Audio Studio clip review player', () => {
     const originalUrl = player.getAttribute('src');
     Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
     fireEvent.loadedMetadata(player);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const consent = screen.getByRole('checkbox', {
       name: 'Autorizo subir este MP3 al servidor para detectar pausas',
     }) as HTMLInputElement;
