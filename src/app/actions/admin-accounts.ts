@@ -5,6 +5,19 @@ import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { safeHttpsUrl } from '@/lib/platform-input-security';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+
+// A database transaction may already be committed when cache refresh fails.
+// Always try every affected page, but never ask the admin to repeat a saved write.
+function refreshAccountPagesAfterCommit() {
+  for (const path of ['/admin/accounts', '/admin/clients']) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.warn('[ADMIN_ACCOUNTS] Saved but cache refresh failed:', safeServerErrorCategory(error));
+    }
+  }
+}
 
 const AccountInput = z.object({
   clientId: z.coerce.number().int().positive(),
@@ -58,14 +71,13 @@ export async function createOperationalAccount(formData: FormData) {
         },
       },
     });
-    revalidatePath('/admin/accounts');
-    revalidatePath('/admin/clients');
+    refreshAccountPagesAfterCommit();
     return { success: true };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return { success: false, error: 'Ya existe una cuenta con ese nombre para este cliente.' };
     }
-    console.error('[ADMIN_ACCOUNTS] Create failed', error);
+    console.error('[ADMIN_ACCOUNTS] Create failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo crear la cuenta.' };
   }
 }
@@ -128,14 +140,13 @@ export async function updateOperationalAccount(formData: FormData) {
       }
     });
 
-    revalidatePath('/admin/accounts');
-    revalidatePath('/admin/clients');
+    refreshAccountPagesAfterCommit();
     return { success: true };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return { success: false, error: 'Ya existe una cuenta con ese nombre para este cliente.' };
     }
-    console.error('[ADMIN_ACCOUNTS] Update failed', error);
+    console.error('[ADMIN_ACCOUNTS] Update failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo actualizar la cuenta.' };
   }
 }
