@@ -111,7 +111,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
             <div className="py-8 text-center text-gray-500">No se encontraron registros.</div>
           ) : filteredRecords.map(record => {
             const isPaid = ['paid', 'paid_out', 'pagado', 'pagada'].includes(String(record.status || '').trim().toLowerCase());
-            const isApproved = ['approved', 'aprobado', 'aprobada'].includes(String(record.status || '').trim().toLowerCase());
+            const normalizedStatus = String(record.status || '').trim().toLowerCase();
+            const isApproved = ['approved', 'aprobado', 'aprobada'].includes(normalizedStatus);
+            const isEditable = ['pendiente', 'draft', 'borrador', 'approved', 'aprobado', 'aprobada'].includes(normalizedStatus);
             
             return (
               <div key={record.id} className="bg-slate-800/50 rounded-2xl p-4 border border-white/5 space-y-3">
@@ -150,7 +152,7 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                     <p className="text-sm font-bold text-green-400">RD${Number(record.netTotal).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!isPaid && (
+                    {isEditable && !isPaid && (
                       <>
                         <button onClick={() => openModal('ADJUST', record)} className="p-2 bg-white/5 hover:bg-white/10 rounded-md text-gray-400 transition-colors" title="Ajustes">
                           <Edit3 size={16} />
