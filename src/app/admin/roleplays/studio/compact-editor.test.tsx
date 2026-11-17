@@ -208,7 +208,7 @@ describe('Audio Studio compact editing', () => {
 
   it('keeps playback when SRT replacement is declined but stops it on acceptance', async () => {
     loadAudio(90);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    // Only one source cut is needed; two make the audition button ambiguous.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
@@ -376,10 +376,9 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
     expect(screen.getByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
-    expect(screen.getByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+
+    // A new edit deliberately invalidates the older removal snapshot.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
