@@ -15,7 +15,8 @@ export async function updateSystemConfig(key: string, value: string): Promise<Ac
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  if (!key || typeof key !== 'string' || key.length > 100) {
+  // Secrets must only be changed through the encrypted Audio Studio settings action.
+  if (!key || typeof key !== 'string' || key.length > 100 || key.startsWith('audio_studio_')) {
     return { success: false, error: 'Invalid config key', code: 'VALIDATION_ERROR' };
   }
 

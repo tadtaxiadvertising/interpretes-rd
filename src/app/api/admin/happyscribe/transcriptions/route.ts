@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
 import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
@@ -12,11 +13,10 @@ export const maxDuration = 30;
 
 const API_BASE = 'https://www.happyscribe.com/api/v1';
 
-function configuration() {
-  const token = process.env.HAPPY_SCRIBE_API_TOKEN?.trim();
-  const organizationId = process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim();
-  if (!token || !organizationId || !/^\d+$/.test(organizationId)) return null;
-  return { token, organizationId };
+async function configuration() {
+  const { token, organizationId, mediaImportEnabled } = await getHappyScribeSettings();
+  if (!token || !/^\d+$/.test(organizationId)) return null;
+  return { token, organizationId, mediaImportEnabled };
 }
 
 async function happyScribeFetch(path: string, token: string, init?: RequestInit, requestSignal?: AbortSignal) {
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     { status: 429, headers: createRateLimitHeaders(quota) },
   );
 
-  const config = configuration();
+  const config = await configuration();
   if (!config) return privateRoleplayResponse(
     { error: 'HappyScribe no está configurado. Añade HAPPY_SCRIBE_API_TOKEN y HAPPY_SCRIBE_ORGANIZATION_ID en el servidor.' },
     { status: 503 },
@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
       }];
     });
     return privateRoleplayResponse(
-      { success: true, data: items, page, hasMore: Boolean((payload as { _links?: { next?: unknown } })._links?.next), mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true' },
+      { success: true, data: items, page, hasMore: Boolean((payload as { _links?: { next?: unknown } })._links?.next), mediaImportEnabled: config.mediaImportEnabled },
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
   } catch {
@@ -118,7 +118,7 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: createRateLimitHeaders(quota) },
   );
 
-  const config = configuration();
+  const config = await configuration();
   if (!config) return privateRoleplayResponse({ error: 'HappyScribe no está configurado en el servidor.' }, { status: 503 });
 
   let id = '';

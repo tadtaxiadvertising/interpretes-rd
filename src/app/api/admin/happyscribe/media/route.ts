@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
@@ -37,7 +38,8 @@ export async function POST(req: NextRequest) {
 
   // Audio transits this frontend VPS. Keep the potentially expensive transfer
   // disabled until an operator explicitly accepts bandwidth/privacy costs.
-  if (process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED !== 'true') {
+  const config = await getHappyScribeSettings();
+  if (!config.mediaImportEnabled) {
     return privateRoleplayResponse(
       { success: false, error: 'La importación directa de audio está desactivada. Descarga la grabación y selecciónala localmente.' },
       { status: 503 },
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
     { status: 429, headers: createRateLimitHeaders(quota) },
   );
 
-  const token = process.env.HAPPY_SCRIBE_API_TOKEN?.trim();
+  const token = config.token;
   if (!token) return privateRoleplayResponse(
     { success: false, error: 'HappyScribe no está configurado en el servidor.' }, { status: 503 },
   );
