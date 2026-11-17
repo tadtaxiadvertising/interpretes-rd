@@ -27,7 +27,7 @@ async function getPayrollRecords() {
     const records = await prisma.payrollRecord.findMany({
       include: { 
         interpreter: {
-          select: { name: true, metodoPago: true }
+          select: { name: true, metodoPago: true, cuentaPago: true, banco: true }
         } 
       },
       orderBy: { periodStart: 'desc' },
