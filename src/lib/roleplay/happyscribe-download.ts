@@ -12,6 +12,7 @@ export async function discardHappyScribeDownload(response: Response): Promise<vo
     // Best-effort connection cleanup, never expose signed URLs or upstream details.
   }
 }
+
 // HappyScribe may return signed AWS S3 URLs. Restrict the AWS allowlist to
 // S3 object storage; other AWS services are not legitimate export hosts.
 const S3_REGION = '[a-z]{2}(?:-gov)?-[a-z]+-[0-9]';
