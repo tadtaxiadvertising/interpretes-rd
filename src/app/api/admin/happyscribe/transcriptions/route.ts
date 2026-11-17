@@ -75,6 +75,9 @@ export async function GET(req: NextRequest) {
       config.token, undefined, req.signal,
     );
     if (!upstream.ok) {
+      // Close the response body even for unauthorized or rate-limited requests.
+      // Repeated connection checks must not retain unused provider streams.
+      try { await upstream.body?.cancel(); } catch { /* Preserve safe upstream error. */ }
       const status = upstream.status === 401 || upstream.status === 403 ? 502
         : upstream.status === 429 ? 503 : 502;
       return privateRoleplayResponse(
