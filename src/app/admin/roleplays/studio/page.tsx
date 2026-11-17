@@ -1369,7 +1369,7 @@ export default function RoleplayStudioPage() {
                   Cancelar descarga
                 </button>
               )}
-              <button type="button" onClick={() => void importHappyScribeTranscript()
+              <button type="button" onClick={() => void importHappyScribeTranscript()}
                 disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
                 className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
