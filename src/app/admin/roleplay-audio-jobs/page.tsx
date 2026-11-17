@@ -101,8 +101,8 @@ export default async function AdminRoleplayAudioJobsPage({
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-white">Cola de audio Roleplay</h2>
-          <p className="text-gray-400">Supervisión de conversión, reintentos y fallos de procesamiento</p>
+          <h2 className="text-3xl font-bold text-white">Cola de procesamiento de audio</h2>
+          <p className="text-gray-400">Supervisa las conversiones, los reintentos y los errores de procesamiento</p>
         </div>
         <Link
           href="/admin/roleplays"
@@ -147,7 +147,7 @@ export default async function AdminRoleplayAudioJobsPage({
       <section className="glass rounded-3xl overflow-hidden">
         <div className="p-6 border-b border-white/5 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-xl font-bold text-white">Trabajos recientes</h3>
+            <h3 className="text-xl font-bold text-white">Procesos recientes</h3>
             <p className="mt-1 text-xs text-gray-500">Historial paginado de 20 trabajos, ordenados por creación</p>
           </div>
           <span className="text-sm text-gray-400">{result.error ? 'Datos no disponibles' : `${result.total} trabajos coincidentes`}</span>
@@ -163,8 +163,8 @@ export default async function AdminRoleplayAudioJobsPage({
         ) : jobs.length === 0 ? (
           <div className="p-16 text-center">
             <Waves size={42} className="mx-auto text-gray-700 mb-4" />
-            <p className="font-semibold text-white">{status === 'all' ? 'No hay trabajos de audio registrados' : 'No hay trabajos con este estado'}</p>
-            <p className="mt-2 text-sm text-gray-500">Los trabajos aparecerán aquí cuando se envíen respuestas que requieran procesamiento.</p>
+            <p className="font-semibold text-white">{status === 'all' ? 'No hay procesos de audio registrados' : 'No hay procesos con este estado'}</p>
+            <p className="mt-2 text-sm text-gray-500">Los procesos aparecerán aquí cuando se envíen respuestas que requieran procesamiento.</p>
             <p className="mt-1 text-xs text-gray-600">Una cola vacía no confirma por sí sola que el worker esté operativo.</p>
           </div>
         ) : (
@@ -174,7 +174,7 @@ export default async function AdminRoleplayAudioJobsPage({
                 <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
                   <th className="py-4 px-6">Trabajo</th>
                   <th className="py-4 px-4">Estado</th>
-                  <th className="py-4 px-4">Intentos</th>
+                  <th className="py-4 px-4">Reintentos</th>
                   <th className="py-4 px-4">Escenario</th>
                   <th className="py-4 px-4">Sesión</th>
                   <th className="py-4 px-4">Último error</th>
