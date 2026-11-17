@@ -44,6 +44,13 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=340"
 
+# Optional build provenance supplied as Docker build arguments by Easypanel.
+# When not configured, /api/version reports null rather than a fabricated ID.
+ARG GIT_SHA=""
+ARG BUILD_TIMESTAMP=""
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
+
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
