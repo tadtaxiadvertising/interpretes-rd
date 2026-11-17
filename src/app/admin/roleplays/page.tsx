@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves, Library } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves, Library, Settings } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
 import {
@@ -122,6 +122,7 @@ export default async function AdminRoleplaysPage({
           <p className="text-gray-400">Control de sesiones, participantes y evaluaciones</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/admin/roleplays/settings" className="px-4 py-3 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-semibold flex items-center gap-2 transition-colors border border-white/10"><Settings size={18} /> Configuración Audio Studio</Link>
           <Link
             href="/admin/roleplays/studio"
             className="px-4 py-3 bg-blue-600/15 hover:bg-blue-600/25 text-blue-100 rounded-2xl font-semibold flex items-center gap-2 transition-colors border border-blue-400/20"
