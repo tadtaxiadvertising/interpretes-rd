@@ -1390,7 +1390,12 @@ export default function RoleplayStudioPage() {
                 {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
               </button>
               {happyScribeImporting && (
-                <button type="button" onClick={() => happyScribeTranscriptAbort.current?.abort()}
+                <button type="button" onClick={() => {
+                  happyScribeTranscriptAbort.current?.abort();
+                  happyScribeTranscriptAbort.current = null;
+                  subtitleImportRevision.current += 1;
+                  setHappyScribeImporting(false);
+                }}
                   className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
                   Cancelar transcripción
                 </button>
