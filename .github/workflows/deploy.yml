@@ -79,6 +79,12 @@ jobs:
           CI: 'true'
         run: npx tsx scripts/verify-account-platform-vpn-guard.ts
 
+      # Verify that archive/restore responses stay accurate after a committed
+      # write even if Next.js cache invalidation subsequently throws.
+      # The audit remains a hard gate; this unit test does not enable deploys.
+      - name: Verify Roleplay library post-commit regression tests
+        run: npx vitest run 'src/app/api/admin/roleplays/library/[fingerprint]/__tests__/route.test.ts'
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
