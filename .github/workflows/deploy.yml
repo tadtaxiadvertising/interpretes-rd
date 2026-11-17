@@ -117,7 +117,7 @@ jobs:
       # Financial reconciliation must be atomic and reject settled/paid rows.
       # The supply-chain audit remains mandatory and still blocks deployment.
       - name: Verify transactional payroll reconciliation guards
-        run: npx vitest run src/lib/payroll/reconcile-production-minutes.test.ts src/app/api/reconcile/__tests__/route.test.ts
+        run: npx vitest run src/lib/payroll/reconcile-production-minutes.test.ts src/app/api/reconcile/__tests__/route.test.ts src/app/actions/__tests__/payroll-reconcile-shared-guard.test.ts
 
       - name: Dependency Security Audit
         run: |
