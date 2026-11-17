@@ -38,11 +38,10 @@ describe('Roleplay assignment guides administrators to incomplete fields', () =>
     fireEvent.change(title, { target: { value: 'Consulta médica' } });
     // Closing the card unmounts the audio input; validation must reveal it again.
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
-    expect(screen.queryByLabelText(/Base audio/i)).toBeNull();
+    expect(screen.queryByLabelText(/Audio base/i)).toBeNull();
 
     fireEvent.click(create);
-    const audio = screen.getByLabelText(/Audio base/i) as HTMLInputElement;
-    let audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
+    let audio = screen.getByLabelText(/Audio base/i) as HTMLInputElement;
     expect(document.activeElement).toBe(audio);
     expect(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' })
       .getAttribute('aria-expanded')).toBe('true');
@@ -50,9 +49,9 @@ describe('Roleplay assignment guides administrators to incomplete fields', () =>
 
     // Repeating validation after closing details issues a fresh focus request.
     fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
-    expect(screen.queryByLabelText(/Base audio/i)).toBeNull();
+    expect(screen.queryByLabelText(/Audio base/i)).toBeNull();
     fireEvent.click(create);
-    audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
+    audio = screen.getByLabelText(/Audio base/i) as HTMLInputElement;
     expect(document.activeElement).toBe(audio);
     expect(request).not.toHaveBeenCalled();
   });
