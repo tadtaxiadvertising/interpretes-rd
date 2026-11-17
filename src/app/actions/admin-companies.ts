@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const schema = z.object({
   name: z.string().trim().min(2).max(150),
@@ -22,7 +23,7 @@ export async function createCompany(formData: FormData) {
     revalidatePath('/admin/companies');
     return { success: true };
   } catch (error) {
-    console.error('[COMPANIES] Create failed', error);
+    console.error('[COMPANIES] Create failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar la compañía.' };
   }
 }
@@ -41,7 +42,7 @@ export async function assignAccountToCompany(formData: FormData) {
     revalidatePath('/admin/accounts');
     return { success: true };
   } catch (error) {
-    console.error('[COMPANIES] Assign failed', error);
+    console.error('[COMPANIES] Assign failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo vincular la cuenta.' };
   }
 }
