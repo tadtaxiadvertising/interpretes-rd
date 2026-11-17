@@ -1489,10 +1489,16 @@ export default function RoleplayStudioPage() {
             </div>
           </details>
           {originalInterpreterCount > 0 && (
-            <p role="status" className="rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
-              {originalInterpreterCount} {originalInterpreterCount === 1 ? 'turno identificado' : 'turnos identificados'}
-              {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
-            </p>
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
+              <p>
+                {originalInterpreterCount} {originalInterpreterCount === 1 ? 'turno identificado' : 'turnos identificados'}
+                {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
+              </p>
+              <button type="button" onClick={excludeOriginalInterpreterTurns}
+                className="rounded-lg border border-amber-300/40 px-3 py-2 font-semibold text-amber-100 hover:bg-amber-400/10">
+                Excluir {originalInterpreterCount} {originalInterpreterCount === 1 ? 'intervención' : 'intervenciones'} del intérprete
+              </button>
+            </div>
           )}
           {segments.length > 0 && (
             <p className="text-xs text-slate-400">
