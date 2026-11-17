@@ -163,7 +163,13 @@ export async function POST(req: NextRequest) {
         !(parsedLink.hostname === 'happyscribe.com' || parsedLink.hostname.endsWith('.happyscribe.com') || parsedLink.hostname.endsWith('.amazonaws.com'))) {
       return privateRoleplayResponse({ error: 'HappyScribe devolvió un destino de descarga no permitido.' }, { status: 502 });
     }
-    const fileResponse = await fetch(parsedLink, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
+    // Refuse redirects: the initial hostname allowlist must not be bypassed
+    // by a provider URL forwarding this server request to an internal host.
+    const fileResponse = await fetch(parsedLink, {
+      cache: 'no-store',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    });
     if (!fileResponse.ok) return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
     const declaredLength = Number(fileResponse.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
