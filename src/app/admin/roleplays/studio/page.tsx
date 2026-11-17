@@ -11,6 +11,7 @@ import {
 import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
+import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -87,10 +88,13 @@ export default function RoleplayStudioPage() {
   const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
   const CUES_PER_PAGE = 60;
   const player = useRef<HTMLMediaElement | null>(null);
+  const pairPlayer = useRef<HTMLAudioElement | null>(null);
+  const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
+  const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   // Source identity prevents a delayed decode from updating a replacement MP3.
   const activeAudioFile = useRef<File | null>(null);
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
-  const pauseEditorialAudio = useCallback(() => { player.current?.pause(); }, []);
+  const pauseEditorialAudio = useCallback(() => { player.current?.pause(); pairPlayer.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
@@ -115,6 +119,12 @@ export default function RoleplayStudioPage() {
     setTurnActionFeedback({ id, message, error });
   };
 
+  const stopPairPreview = () => {
+    pairPlayback.current = null;
+    setPairPreviewId(null);
+    pairPlayer.current?.pause();
+  };
+
   const stopPreview = () => {
     previewEnd.current = null;
     setPreviewingId(null);
@@ -129,6 +139,7 @@ export default function RoleplayStudioPage() {
     // the administrator when inspecting another timestamp.
     previewEnd.current = null;
     setPreviewingId(null);
+    stopPairPreview();
     audioPlayer.currentTime = timestamp;
     setPlayhead(timestamp);
   };
@@ -150,6 +161,7 @@ export default function RoleplayStudioPage() {
     }
     // Seek directly even if audio is already playing. Calling pause() here
     // schedules an onPause event which can clear the new segment's end marker.
+    stopPairPreview();
     audioPlayer.currentTime = segment.start;
     previewEnd.current = segment.end;
     setPreviewingId(segment.id);
@@ -157,6 +169,42 @@ export default function RoleplayStudioPage() {
       previewEnd.current = null;
       setPreviewingId(null);
       setError('No fue posible reproducir el fragmento.');
+    });
+  };
+
+  /** Only previews the seam: no export, no transcode and no server request. */
+  const previewPairWithoutGap = (id: string) => {
+    if (pairPreviewId === id) { stopPairPreview(); return; }
+    const sorted = [...segments].sort((a, b) => a.start - b.start);
+    const at = sorted.findIndex(item => item.id === id);
+    const first = sorted[at];
+    const second = sorted[at + 1];
+    const plan = planGaplessPair(first, second, duration);
+    const element = pairPlayer.current;
+    if (!plan || !element || !second) {
+      reportTurnAction(id, 'La preescucha requiere dos cortes válidos del mismo hablante e idioma.', true);
+      return;
+    }
+    // Do not play a turn hidden by the administrator's active filter.
+    const needle = segmentSearch.trim().toLocaleLowerCase();
+    if ((showPendingReview && second.speakerRole !== 'unknown' &&
+         second.speakerRole !== 'interpreter' && second.language !== 'unknown') ||
+        (needle && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
+          second.speakerRole, second.language].some(value =>
+          value.toLocaleLowerCase().includes(needle)))) {
+      reportTurnAction(id, 'El siguiente corte está oculto: limpia los filtros para escucharlo.', true);
+      return;
+    }
+    stopPreview();
+    stopPairPreview();
+    pairPlayback.current = { plan, stage: 1 };
+    setPairPreviewId(id);
+    element.currentTime = plan.first.start;
+    setEditorPlaybackRevision(n => n + 1);
+    reportTurnAction(id, `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
+    void element.play().catch(() => {
+      stopPairPreview();
+      reportTurnAction(id, 'El navegador no pudo iniciar la preescucha sin pausa.', true);
     });
   };
 
@@ -198,6 +246,7 @@ export default function RoleplayStudioPage() {
     setSuggestedClips([]);
     setOmittedSuggestions(0);
     stopPreview();
+    stopPairPreview();
     setError('');
     setNotice('');
     setSegments([]);
@@ -238,6 +287,7 @@ export default function RoleplayStudioPage() {
       language: 'unknown',
     }));
     subtitleImportRevision.current += 1;
+    stopPairPreview();
     setSegments(prepared);
     setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
     setNotice(`${prepared.length} intervenciones cargadas. ${excludedCount} del intérprete original omitidas; revisa idiomas, hablantes y límites antes de exportar.`);
@@ -339,6 +389,7 @@ export default function RoleplayStudioPage() {
   const applySilenceSuggestions = () => {
     if (!suggestedClips.length || analyzingSilences || busy || draftBusy) return;
     subtitleImportRevision.current += 1;
+    stopPairPreview();
     setSegments(suggestedClips.map((clip, index) => ({
       id: crypto.randomUUID(),
       title: `Intervención sugerida ${index + 1}`,
@@ -428,6 +479,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     subtitleImportRevision.current += 1;
+    stopPairPreview();
     const secondId = crypto.randomUUID();
     setSegments(previous => previous.flatMap(item => item.id === id ? [
       { ...item, end: midpoint },
@@ -484,6 +536,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     subtitleImportRevision.current += 1;
+    stopPairPreview();
     setSegments(previous => previous.filter(item => item.id !== second.id)
       .map(item => item.id === first.id
         ? { ...item, end: second.end, scriptPrompt: mergedPrompt } : item));
@@ -514,6 +567,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     subtitleImportRevision.current += 1;
+    stopPairPreview();
     setTurnActionFeedback(null);
     const id = crypto.randomUUID();
     setSegments(prev => [...prev, {
@@ -529,6 +583,7 @@ export default function RoleplayStudioPage() {
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
+    stopPairPreview();
     setTurnActionFeedback(null);
     subtitleImportRevision.current += 1;
     setSegments(prev => prev.map(segment => segment.id === id ? { ...segment, ...patch } : segment));
@@ -601,6 +656,7 @@ export default function RoleplayStudioPage() {
       const restored = sampledProject
         ? openLongMediaDraft(json, audio.size, digest, duration)
         : openStudioDraft(json, audio.size, digest, duration);
+      stopPairPreview();
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
@@ -753,8 +809,8 @@ export default function RoleplayStudioPage() {
   const originalInterpreterCount = segments.filter(
     segment => segment.speakerRole === 'interpreter',
   ).length;
-  const visibleSegments = [...segments]
-    .sort((a, b) => a.start - b.start)
+  const orderedSegments = [...segments].sort((a, b) => a.start - b.start);
+  const visibleSegments = orderedSegments
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => (!showPendingReview || needsReview(segment)) &&
       (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
@@ -791,6 +847,32 @@ export default function RoleplayStudioPage() {
 
   return (
     <main className="space-y-4">
+      {url && <audio ref={pairPlayer} src={url} preload="metadata"
+        aria-label="Reproductor de preescucha sin pausa"
+        onTimeUpdate={event => {
+          const current = pairPlayback.current;
+          if (!current) return;
+          if (current.stage === 1 &&
+              event.currentTarget.currentTime >= current.plan.first.end - 0.025) {
+            current.stage = 2;
+            event.currentTarget.currentTime = current.plan.second.start;
+          } else if (current.stage === 2 &&
+                     event.currentTarget.currentTime >= current.plan.second.end - 0.025) {
+            stopPairPreview();
+          }
+        }}
+        onEnded={() => stopPairPreview()}
+        onPause={() => {
+          if (pairPlayer.current?.paused) {
+            pairPlayback.current = null;
+            setPairPreviewId(null);
+          }
+        }}
+        onError={() => {
+          stopPairPreview();
+          setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
+        }}
+        className="hidden" />}
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
@@ -960,6 +1042,7 @@ export default function RoleplayStudioPage() {
                 onApply={(detected) => {
                   if (!detected.length) return;
                   subtitleImportRevision.current += 1;
+                  stopPairPreview();
                   setSegments(prev => [...prev, ...detected.map((item, index) => ({
                     id: crypto.randomUUID(),
                     title: 'Intervención ' + (prev.length + index + 1),
@@ -1320,6 +1403,7 @@ export default function RoleplayStudioPage() {
                 )}
                 <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
                   subtitleImportRevision.current += 1;
+                  stopPairPreview();
                   setSegments(prev => prev.filter(s => s.id !== segment.id));
                   // Discard the deleted turn's private transcript reference.
                   setCaptionTexts(prev => {
