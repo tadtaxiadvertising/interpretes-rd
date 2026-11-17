@@ -12,8 +12,12 @@ vi.mock('next/link', () => ({
     <a href={href}>{children}</a>,
 }));
 vi.mock('./ScenarioCard', () => ({
-  ScenarioCard: ({ scenario, startCollapsed }: { scenario: { title: string }; startCollapsed?: boolean }) =>
-    <div data-testid="draft-scenario" data-initially-collapsed={String(Boolean(startCollapsed))}>{scenario.title || 'Borrador'}</div>,
+  ScenarioCard: ({ scenario, startCollapsed }: { scenario: { title: string; durationLimitSec: number }; startCollapsed?: boolean }) =>
+    <div data-testid="draft-scenario"
+      data-initially-collapsed={String(Boolean(startCollapsed))}
+      data-duration-limit={scenario.durationLimitSec}>
+      {scenario.title || 'Borrador'}
+    </div>,
 }));
 vi.mock('@/lib/roleplay-manifest-import', () => ({
   prepareRoleplayManifestImport: vi.fn(),
@@ -156,6 +160,41 @@ describe('Admin roleplay import concurrency', () => {
     expect(cards).toHaveLength(4);
     expect(cards.map(card => card.getAttribute('data-initially-collapsed')))
       .toEqual(['true', 'true', 'true', 'true']);
+  });
+
+  it('sets a response limit only on scenarios using the default and preserves individually configured limits', async () => {
+    const prepared = [0, 180, 0].map((durationLimitSec, index) => ({
+      title: `Intervención ${index + 1}`,
+      baseAudioFile: new File(['ID3'], `clip-${index + 1}.mp3`, { type: 'audio/mpeg' }),
+      durationLimitSec,
+      scriptPrompt: `Guion ${index + 1}`,
+      sha256: String(index + 1).repeat(64),
+    }));
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce(prepared);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    await act(async () => { chooseManifest(); });
+    const durationValues = () => screen.getAllByTestId('draft-scenario')
+      .map(card => card.getAttribute('data-duration-limit'));
+    expect(durationValues()).toEqual(['0', '180', '0']);
+
+    fireEvent.change(screen.getByLabelText(/Tiempo de respuesta para 2 escenarios sin límite personalizado/), {
+      target: { value: '90' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar solo a los sin configurar' }));
+    expect(durationValues()).toEqual(['90', '180', '90']);
+    expect(screen.queryByRole('button', { name: 'Aplicar solo a los sin configurar' })).toBeNull();
+    expect(screen.getByText('Intervención 1')).toBeTruthy();
+    expect(screen.getByText('Intervención 3')).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(3);
+  });
+
+  it('offers the same duration shortcut for manually added empty scenarios', () => {
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    expect(screen.queryByRole('button', { name: 'Aplicar solo a los sin configurar' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Add Scenario/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar solo a los sin configurar' }));
+    expect(screen.getAllByTestId('draft-scenario')
+      .map(card => card.getAttribute('data-duration-limit'))).toEqual(['120', '120']);
   });
 
   it('uses the external ZIP fallback and canonical SHA-256 validation without publishing', async () => {
