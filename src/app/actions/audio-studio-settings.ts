@@ -24,6 +24,7 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
       token, organizationId: organization,
       mediaImportEnabled: form.get('mediaImportEnabled') === 'on',
       removeToken: form.get('removeToken') === 'on',
+      updatedBy: auth.user.userId,
       ...(excludeValue !== null ? { excludeInterpreterByDefault: excludeValue === 'true' } : {}),
       ...(compactValue !== null ? { compactViewDefault: compactValue as 'auto' | 'compact' | 'expanded' } : {}),
     });
