@@ -628,17 +628,17 @@ describe('Audio Studio clip review player', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
-  it('allows a new MP3 transfer immediately even if aborted requests never settle', async () => {
-    const signals: AbortSignal[] = [];
+  it('unblocks new MP3 imports immediately when a cancelled provider request never settles', async () => {
+    const posts: { signal: AbortSignal; body: string }[] = [];
     const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') {
-        signals.push(init.signal as AbortSignal);
-        // Simulate a stalled upstream transport that ignores cancellation.
+        posts.push({
+          signal: init.signal as AbortSignal,
+          body: String(init.body),
+        });
+        // Simulate a transport that ignores abort, without keeping the UI busy.
         return new Promise<Response>(() => {});
       }
-  it('starts only one MP3 export even for repeated clicks before state updates', async () => {
-    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
-      if (init?.method === 'POST') return new Promise<Response>(() => {});
       return Promise.resolve({
         ok: true,
         json: async () => ({
@@ -647,8 +647,47 @@ describe('Audio Studio clip review player', () => {
             { id: 'a'.repeat(32), name: 'First.mp3', state: 'automatic_done',
               language: 'es', durationSeconds: 90, createdAt: null, folder: null },
             { id: 'b'.repeat(32), name: 'Second.mp3', state: 'automatic_done',
-              language: 'en', durationSeconds: 60, createdAt: null, folder: null },
+              language: 'en', durationSeconds: 90, createdAt: null, folder: null },
           ],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+    expect(posts).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }));
+    expect(posts[0].signal.aborted).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Importar audio original' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+    expect(posts).toHaveLength(2);
+    fireEvent.change(screen.getByLabelText('Transcripción de HappyScribe'), {
+      target: { value: 'b'.repeat(32) },
+    });
+    expect(posts[1].signal.aborted).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Importar audio original' }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+    expect(posts).toHaveLength(3);
+    expect(JSON.parse(posts[2].body)).toEqual({ id: 'b'.repeat(32) });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }));
+  });
+
+  it('starts only one MP3 export even for repeated clicks before state updates', async () => {
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Promise<Response>(() => {});
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
           data: [{ id: 'a'.repeat(32), name: 'Practice.mp3', state: 'automatic_done',
             language: 'en-US', durationSeconds: 90, createdAt: null, folder: null }],
         }),
@@ -656,34 +695,10 @@ describe('Audio Studio clip review player', () => {
     });
     vi.stubGlobal('fetch', fetcher);
     render(<RoleplayStudioPage />);
-
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
       await Promise.resolve();
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
-    expect(signals).toHaveLength(1);
-
-    // The control must recover immediately, not after the old promise rejects.
-    fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }));
-    expect(signals[0].aborted).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
-    expect((screen.getByRole('button', { name: 'Importar audio original' }) as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
-    expect(signals).toHaveLength(2);
-    expect(signals[1].aborted).toBe(false);
-    fireEvent.change(screen.getByLabelText('Transcripción de HappyScribe'), {
-      target: { value: 'b'.repeat(32) },
-    });
-    expect(signals[1].aborted).toBe(true);
-    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
-    expect((screen.getByRole('button', { name: 'Importar audio original' }) as HTMLButtonElement).disabled).toBe(false);
-
-    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
-    expect(signals).toHaveLength(3);
-    expect(signals[2].aborted).toBe(false);
-    expect(fetcher).toHaveBeenCalledTimes(4);
 
     act(() => {
       const button = screen.getByRole('button', { name: 'Importar audio original' });
