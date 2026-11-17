@@ -27,21 +27,21 @@ function normalizedPercentageCents(points: number, limit: number): bigint {
   const fraction = match[2] ?? '';
   const exponent = Number(match[3] ?? 0);
   const places = fraction.length - exponent;
-  let numerator = BigInt(match[1] + fraction) * 10_000n;
+  let numerator = BigInt(match[1] + fraction) * BigInt(10_000);
   let denominator = BigInt(limit);
   if (places >= 0) {
-    denominator *= 10n ** BigInt(places);
+    denominator *= BigInt(10) ** BigInt(places);
   } else {
-    numerator *= 10n ** BigInt(-places);
+    numerator *= BigInt(10) ** BigInt(-places);
   }
   // Exact positive half-up rounding to 0.01 percentage points.
-  return (numerator * 2n + denominator) / (2n * denominator);
+  return (numerator * BigInt(2) + denominator) / (BigInt(2) * denominator);
 }
 
 export function normalizeQaV1Points(input: QaV1PointScores, criticalError: boolean) {
   const normalized = {} as Record<keyof typeof QA_V1_POINT_LIMITS, number>;
   let totalPoints = 0;
-  let weightedPercentageBasis = 0n;
+  let weightedPercentageBasis = BigInt(0);
 
   for (const [key, limit] of Object.entries(QA_V1_POINT_LIMITS) as Array<
     [keyof typeof QA_V1_POINT_LIMITS, number]
@@ -63,7 +63,7 @@ export function normalizeQaV1Points(input: QaV1PointScores, criticalError: boole
 
   // Each persisted dimension has exactly two decimal places. Apply the
   // percentage weights after that rounding with integer arithmetic.
-  const expectedCents = (weightedPercentageBasis + 50n) / 100n;
+  const expectedCents = (weightedPercentageBasis + 5BigInt(0)) / 10BigInt(0);
   return {
     dimensions: normalized,
     totalScore: criticalError ? 0 : Number(expectedCents) / 100,
