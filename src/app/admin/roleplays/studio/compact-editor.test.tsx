@@ -93,6 +93,63 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getAllByText('Doctor: Review instructions')).toHaveLength(1);
   });
 
+  it('preserves edited cuts when valid SRT replacement is declined', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Edición sin guardar' } });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    const file = new File(['srt'], 'reemplazo.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: New subtitle',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición sin guardar');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: New subtitle')).toBeNull();
+    expect(screen.getByText(/Importación de cortes cancelada/)).toBeTruthy();
+  });
+
+  it('accepts SRT replacement with confirmation and clears filters from the old project', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'turno que no existe' },
+    });
+    const file = new File(['srt'], 'nuevo.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Accepted subtitle',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value).toBe('');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Doctor: Accepted subtitle')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
+  });
+
+  it('does not prompt or erase existing cuts for invalid subtitle files', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    const invalid = new File(['not subtitles'], 'wrong.txt', { type: 'text/plain' });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [invalid] },
+      });
+    });
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByRole('alert').textContent).toMatch(/Selecciona un SRT o VTT/);
+  });
+
   it('splits at the playhead and merges adjacent compatible intervals', () => {
     const player = loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));

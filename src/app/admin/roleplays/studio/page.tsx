@@ -312,19 +312,34 @@ export default function RoleplayStudioPage() {
     setUrl(URL.createObjectURL(file));
   };
 
-  const loadSelectedCues = (selected: TimedTranscriptCue[], excludedCount: number) => {
+  const loadSelectedCues = (selected: TimedTranscriptCue[], excludedCount: number): boolean => {
     const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => ({
       ...segment,
       id: crypto.randomUUID(),
       speakerRole: classifySpeakerRole(selected[index].speaker),
       language: 'unknown',
     }));
+    // Importing a valid SRT/VTT can replace all existing edited cuts. Prompt
+    // only when there is actual work to lose; never silently discard it.
+    if (segments.length > 0 && !window.confirm(
+      'Aplicar estos subtítulos reemplazará las intervenciones actuales. ' +
+      'Guarda el proyecto si deseas conservarlas. ¿Continuar?',
+    )) {
+      setNotice('Importación de cortes cancelada. Las intervenciones actuales se conservaron.');
+      return false;
+    }
     subtitleImportRevision.current += 1;
     stopPairPreview();
     setLastStructuralEdit(null);
+    setTurnActionFeedback(null);
+    // A filter for the old cuts must not hide the newly imported ones.
+    setSegmentSearch('');
+    setShowPendingReview(false);
+    setExpandedSegmentId(null);
     setSegments(prepared);
     setCaptionTexts(Object.fromEntries(prepared.map((segment, index) => [segment.id, selected[index].text])));
     setNotice(`${prepared.length} intervenciones cargadas. ${excludedCount} del intérprete original omitidas; revisa idiomas, hablantes y límites antes de exportar.`);
+    return true;
   };
 
   const applyCueSelection = () => {
@@ -452,8 +467,6 @@ export default function RoleplayStudioPage() {
       // The file may have changed, or a newer import/edit may have started.
       if (revision !== subtitleImportRevision.current) return;
       const cues = parseTimedTranscriptForReview(transcript, usesLocalLongMode(audio, duration));
-      setCueSearch('');
-      setShowOnlySelectedCues(false);
       const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
       if (!selected.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
@@ -470,11 +483,16 @@ export default function RoleplayStudioPage() {
         catch { canApplyAll = false; }
       }
       if (canApplyAll) {
+        // Confirm before changing existing cuts, cue-review state or filters.
+        if (!loadSelectedCues(selected, excludedCount)) return;
+        setCueSearch('');
+        setShowOnlySelectedCues(false);
         setReviewCues([]);
         setChosenCueIndices([]);
         setCuePage(0);
-        loadSelectedCues(selected, excludedCount);
       } else {
+        setCueSearch('');
+        setShowOnlySelectedCues(false);
         setCuePage(0);
         setReviewCues(selected);
         setChosenCueIndices(allIndices.slice(0, ROLEPLAY_MAX_SCENARIOS));
