@@ -92,6 +92,33 @@ describe('createAccountPlatform VPN configuration', () => {
     expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
   });
 
+  it('rejects a portal URL whose control characters would be stripped by URL parsing', async () => {
+    const result = await createAccountPlatform(makeForm({
+      accountId: '12',
+      name: 'Portal principal',
+      loginUrl: 'https://portal.example.test/lo\\tgin',
+    }));
+    expect(result.success).toBe(false);
+    expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
+  });
+
+  it('does not log secrets or connection strings from provider errors', async () => {
+    vi.mocked(prisma.accountPlatform.create).mockRejectedValueOnce(
+      new Error('postgresql://service:PRIVATE_CREDENTIAL@database.internal.invalid/db'),
+    );
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await createAccountPlatform(makeForm({
+        accountId: '12', name: 'Portal principal', loginUrl: 'https://portal.example.test/login',
+      }));
+      expect(result.success).toBe(false);
+      expect(spy).toHaveBeenCalledWith('[PLATFORMS] Create failed', 'Error');
+      expect(JSON.stringify(spy.mock.calls)).not.toMatch(/PRIVATE_CREDENTIAL|database\\.internal\\.invalid|postgresql:/);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('requires an administrator', async () => {
     vi.mocked(getCurrentProfile).mockResolvedValue({ role: 'interpreter' } as never);
 
