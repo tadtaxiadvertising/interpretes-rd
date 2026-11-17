@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    interpreter: { findMany: vi.fn() },
+    interpreter: { findFirst: vi.fn(), findMany: vi.fn() },
     productionLog: { findMany: vi.fn() },
     payrollRecord: { findUnique: vi.fn() },
     systemConfig: { findMany: vi.fn(), upsert: vi.fn() },
@@ -63,6 +63,8 @@ describe('financial administrative API private error boundaries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(guardApiAuth).mockResolvedValue(null);
+    // Newly added pay-cycle preflight must be cleared to reach existing cases.
+    vi.mocked(prisma.interpreter.findFirst).mockResolvedValue(null);
   });
 
   it.each([
