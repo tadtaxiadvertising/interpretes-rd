@@ -1547,7 +1547,7 @@ export default function RoleplayStudioPage() {
                   <div>
                     <p className="text-sm font-semibold text-emerald-100">Importar desde HappyScribe</p>
                     <p className="mt-1 text-xs text-slate-400">
-                      Carga primero el audio original de esta transcripción. Después importa sus tiempos y hablantes para revisar y asignar cada intervención.
+                      Carga primero el audio original. Importa los tiempos y textos; identifica y revisa las voces antes de excluir al intérprete original.
                     </p>
                   </div>
                   <button type="button" onClick={() => void loadHappyScribeItems()}
