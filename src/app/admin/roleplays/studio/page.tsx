@@ -639,6 +639,28 @@ export default function RoleplayStudioPage() {
     reportTurnAction(id, 'Cortes separados. Revisa las instrucciones y títulos antes de exportar.');
   };
 
+  const excludeOriginalInterpreterTurns = () => {
+    const excludedIds = new Set(segments.filter(item => item.speakerRole === 'interpreter')
+      .map(item => item.id));
+    if (!excludedIds.size) return;
+    // This is an undoable bulk action; no remote export or upload is involved.
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'exclusión',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    setSegments(previous => previous.filter(item => !excludedIds.has(item.id)));
+    setCaptionTexts(previous => Object.fromEntries(
+      Object.entries(previous).filter(([id]) => !excludedIds.has(id)),
+    ));
+    setExpandedSegmentId(previous => previous && excludedIds.has(previous) ? null : previous);
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice('Intervenciones del intérprete original excluidas. Puedes deshacer antes de seguir editando.');
+  };
+
   const addSegment = () => {
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       setError('Se alcanzó el límite de intervenciones exportables.');
