@@ -589,6 +589,10 @@ export default function RoleplayStudioPage() {
     }
     subtitleImportRevision.current += 1;
     stopPairPreview();
+    // A compound scene can only be exported locally. Reset an earlier
+    // explicit server choice now so separating or undoing this merge never
+    // silently restores an upload path.
+    if (compound) setAllowServerZipExport(false);
     setLastStructuralEdit({
       kind: 'unión',
       segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
@@ -719,7 +723,7 @@ export default function RoleplayStudioPage() {
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
       setNotice(localOnly
-        ? 'Plan de cortes local descargado. Conserva la grabación original; el JSON no contiene audio ni video ni transcripción. La huella es parcial y no verifica cada byte.'
+        ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
         : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
@@ -756,15 +760,21 @@ export default function RoleplayStudioPage() {
       const restored = sampledProject
         ? openLongMediaDraft(json, audio.size, digest, duration)
         : openStudioDraft(json, audio.size, digest, duration);
+      const containsCompound = restored.some(segment => segment.ranges !== undefined);
+      // Opening a v2 project must be local-only even after the user separates
+      // its cuts. For ordinary v1 projects retain the user's chosen mode.
+      if (containsCompound) setAllowServerZipExport(false);
       stopPairPreview();
       setLastStructuralEdit(null);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
       setChosenCueIndices([]);
-      setNotice(sampledProject
-        ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El audio no se ha subido y el modo de exportación no ha cambiado.`
-        : `Proyecto verificado con SHA-256 completo y restaurado: ${restored.length} intervenciones. Sin subir audio ni cambiar el modo de exportación; la transcripción no forma parte del borrador.`);
+      setNotice(containsCompound
+        ? `Proyecto v2 restaurado: ${restored.length} intervenciones. El modo local se activó para proteger el audio y conservar las pausas eliminadas. Usa un exportador local actualizado.`
+        : sampledProject
+          ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El audio no se ha subido y el modo de exportación no ha cambiado.`
+          : `Proyecto verificado con SHA-256 completo y restaurado: ${restored.length} intervenciones. Sin subir audio ni cambiar el modo de exportación; la transcripción no forma parte del borrador.`);
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No se pudo abrir el proyecto.');
@@ -1056,14 +1066,24 @@ export default function RoleplayStudioPage() {
               <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
                 {hasCompound && (
                   <p className="mb-2 font-semibold text-amber-100">
-                    Proyecto compuesto v2: el ZIP debe generarse con un exportador local actualizado.
-                    La grabación no se enviará al servidor, aunque se haya seleccionado ese modo anteriormente.
+                    Proyecto compuesto v2: la exportación local se ha activado automáticamente.
+                    Usa un exportador actualizado para que el MP3 omita las pausas; la grabación no se envía al servidor.
                   </p>
                 )}
                 <strong>Preparación local:</strong> la grabación no se sube al servidor.
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
                 El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
                 FFmpeg en tu equipo; esta opción no convierte audio en el navegador.
+                <p className="mt-2 font-medium text-white">
+                  Paso 1: descarga el proyecto JSON. Paso 2: genera el ZIP junto a tu grabación
+                  original en el exportador local. Paso 3: importa el ZIP desde «Crear roleplay».
+                </p>
+                <a
+                  href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
+                  target="_blank" rel="noopener noreferrer"
+                  className="mt-1 inline-block font-semibold text-cyan-200 underline underline-offset-2">
+                  Cómo obtener el exportador local actualizado
+                </a>
                 <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
                   <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
                   <p className="mt-2">
@@ -1071,12 +1091,6 @@ export default function RoleplayStudioPage() {
                     la aplicación de escritorio, ábrela y selecciona la grabación original, el
                     proyecto JSON y el ZIP de salida. No requiere comandos ni subir el archivo.
                   </p>
-                  <a
-                    href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
-                    target="_blank" rel="noopener noreferrer"
-                    className="mt-1 inline-block font-semibold text-cyan-200 underline underline-offset-2">
-                    Instrucciones para obtener el exportador local
-                  </a>
                   <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
                     <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
                     <p className="mt-1">En un equipo con el repositorio instalado, ejecuta:</p>

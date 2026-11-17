@@ -283,6 +283,29 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervención compuesta/)).toBeTruthy();
   });
 
+  it('never reactivates a previous server upload after joining and separating v2 cuts', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('radio', { name: /Servidor \(opcional\)/i }));
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByText(/la exportación local se ha activado automáticamente/i)).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: /Servidor \(opcional\)/i })).toBeNull();
+    expect(screen.getByRole('link', { name: /Cómo obtener el exportador local actualizado/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Separar cortes de intervención 1/ }));
+    const local = screen.getByRole('radio', { name: /Local \(predeterminado\)/i }) as HTMLInputElement;
+    const server = screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement;
+    expect(local.checked).toBe(true);
+    expect(server.checked).toBe(false);
+    // Undo must not silently opt back into a previously selected upload path.
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer última división o unión' }));
+    expect(screen.queryByRole('radio', { name: /Servidor \(opcional\)/i })).toBeNull();
+  });
+
   it('never merges a hidden next turn when review filters are active', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
