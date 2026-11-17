@@ -31,8 +31,16 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       setNotice({ ok: result.success, message: result.message });
       if (result.success) {
         setToken(''); setRemove(false);
-        try { setStatus(await inspectAudioStudioSettings()); }
-        catch { /* The save already succeeded; avoid misleading retry prompts. */ }
+        try {
+          const latest = await inspectAudioStudioSettings();
+          setStatus(latest);
+          // The server trims the organization ID. Mirror its canonical value
+          // so "Probar conexión" becomes available immediately after saving.
+          setOrg(latest.organizationId);
+          setExcludeDefault(latest.excludeInterpreterByDefault);
+          setCompactDefault(latest.compactViewDefault);
+          setMedia(latest.mediaImportEnabled);
+        } catch { /* The save already succeeded; avoid misleading retry prompts. */ }
       }
     });
   }
