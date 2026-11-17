@@ -52,7 +52,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       // transmit the token or expose transcription titles in this panel.
       const response = await fetch('/api/admin/happyscribe/transcriptions?check=1', { credentials: 'same-origin', cache: 'no-store' });
       const result = await response.json().catch(() => null);
-      setNotice(response.ok && result?.success === true
+      setNotice(response.ok && result?.success === true && result?.ready === true
         ? { ok: true, message: 'Conexión verificada: HappyScribe responde para la organización configurada.' }
         : { ok: false, message: typeof result?.error === 'string' ? result.error : 'No se pudo comprobar la conexión.' });
     } catch {
@@ -69,7 +69,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       <input id="happy-token" type="password" value={token} onChange={e => setToken(e.target.value)}
         autoComplete="new-password" maxLength={2048} disabled={remove} placeholder={hasToken ? 'Configurada · escribir para reemplazar' : 'Pegar nueva clave API'}
         className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" />
-      <p className="mt-2 text-sm text-slate-400">Estado: {hasToken ? 'Configurada' : 'Sin configurar'} · {status.credentialUsable ? 'Lista para usar' : 'No disponible'}. Origen: {status.tokenSource}. Nunca se muestra la clave.</p>
+      <p className="mt-2 text-sm text-slate-400">Estado: {hasToken ? 'Configurada' : 'Sin configurar'} · {status.credentialUsable ? 'Clave accesible' : 'No disponible'}. Origen: {status.tokenSource}. Nunca se muestra la clave.</p>
       {hasToken && !status.credentialUsable && <p role="alert" className="mt-2 text-sm text-amber-300">
         La clave guardada no puede utilizarse. Comprueba la clave de cifrado del servidor o sustituye la credencial.
       </p>}
