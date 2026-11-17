@@ -422,9 +422,24 @@ export default function RoleplayStudioPage() {
 
   const applySilenceSuggestions = () => {
     if (!suggestedClips.length || analyzingSilences || busy || draftBusy) return;
+    // Suggestions are estimates, not replacements for an administrator's
+    // unsaved edits or an SRT/VTT selection currently under review.
+    if ((segments.length > 0 || reviewCues.length > 0) &&
+        !window.confirm(
+          'Aplicar los cortes sugeridos reemplazará las intervenciones, notas ' +
+          'y selección de subtítulos actuales. Guarda tu proyecto si quieres conservarlos. ¿Continuar?',
+        )) {
+      setNotice('Cortes sugeridos no aplicados. Se conservaron las intervenciones actuales.');
+      return;
+    }
     subtitleImportRevision.current += 1;
     stopPairPreview();
     setLastStructuralEdit(null);
+    // Old filters and expanded rows must not hide the new suggestion draft.
+    setSegmentSearch('');
+    setShowPendingReview(false);
+    setExpandedSegmentId(null);
+    setTurnActionFeedback(null);
     setSegments(suggestedClips.map((clip, index) => ({
       id: crypto.randomUUID(),
       title: `Intervención sugerida ${index + 1}`,
