@@ -109,6 +109,7 @@ export default function RoleplayStudioPage() {
   const silenceAbort = useRef<AbortController | null>(null);
   const exportRevision = useRef(0);
   const exportAbort = useRef<AbortController | null>(null);
+  const happyScribeMediaAbort = useRef<AbortController | null>(null);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
@@ -262,6 +263,8 @@ export default function RoleplayStudioPage() {
     silenceAbort.current?.abort();
     exportRevision.current += 1;
     exportAbort.current?.abort();
+    happyScribeMediaAbort.current?.abort();
+    happyScribeMediaAbort.current = null;
   }, []);
 
   // Edits invalidate the ZIP snapshot immediately: never download an older
@@ -291,6 +294,11 @@ export default function RoleplayStudioPage() {
         !window.confirm('Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?')) {
       return;
     }
+    // Stop the upstream transfer when an operator accepts a different source.
+    // Otherwise a stale HappyScribe MP3 can waste up to 250 MiB of bandwidth.
+    happyScribeMediaAbort.current?.abort();
+    happyScribeMediaAbort.current = null;
+    setHappyScribeMediaImporting(false);
     // Invalidate any in-flight SRT/VTT read bound to the previous audio.
     subtitleImportRevision.current += 1;
     draftOperationRevision.current += 1;
@@ -1167,12 +1175,15 @@ export default function RoleplayStudioPage() {
     }
     const previousAudio = activeAudioFile.current;
     const revisionAtRequest = subtitleImportRevision.current;
+    const controller = new AbortController();
+    happyScribeMediaAbort.current = controller;
     setHappyScribeMediaImporting(true);
     setError('');
     setNotice('');
     try {
       const response = await fetch('/api/admin/happyscribe/media', {
         method: 'POST', credentials: 'same-origin', cache: 'no-store',
+        signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id }),
       });
@@ -1193,12 +1204,16 @@ export default function RoleplayStudioPage() {
       if (activeAudioFile.current !== file) return;
       setNotice('Audio original importado desde HappyScribe. Espera a que Audio Studio calcule su duración y después importa la transcripción para revisar y asignar los hablantes.');
     } catch (cause) {
-      if (revisionAtRequest === subtitleImportRevision.current &&
+      if (!controller.signal.aborted &&
+          revisionAtRequest === subtitleImportRevision.current &&
           activeAudioFile.current === previousAudio) {
         setError(cause instanceof Error ? cause.message : 'No fue posible importar el audio desde HappyScribe.');
       }
     } finally {
-      setHappyScribeMediaImporting(false);
+      if (happyScribeMediaAbort.current === controller) {
+        happyScribeMediaAbort.current = null;
+        setHappyScribeMediaImporting(false);
+      }
     }
   };
 
@@ -1348,6 +1363,14 @@ export default function RoleplayStudioPage() {
                     happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
                   className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
                   {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
+                </button>
+              )}
+              {happyScribeMediaImporting && (
+                <button type="button" onClick={() => {
+                  happyScribeMediaAbort.current?.abort();
+                  setNotice('Descarga de audio cancelada. Puedes seguir trabajando con la grabación actual.');
+                }} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
+                  Cancelar descarga
                 </button>
               )}
               <button type="button" onClick={() => void importHappyScribeTranscript()}
