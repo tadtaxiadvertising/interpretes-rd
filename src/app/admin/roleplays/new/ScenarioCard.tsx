@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Mic2, Trash2, Clock, ChevronUp, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
@@ -31,6 +31,7 @@ interface ScenarioCardProps {
   onMoveDown: (id: string) => void;
   isDragging: boolean;
   startCollapsed?: boolean;
+  focusRequest?: { field: 'title' | 'audio'; requestId: number } | null;
 }
 
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
@@ -46,6 +47,7 @@ export function ScenarioCard({
   onMoveDown,
   isDragging,
   startCollapsed = false,
+  focusRequest,
 }: ScenarioCardProps) {
   const [expanded, setExpanded] = useState(() => !startCollapsed);
   const [audioError, setAudioError] = useState<string | null>(null);
@@ -53,6 +55,19 @@ export function ScenarioCard({
   const [protocolError, setProtocolError] = useState<string | null>(null);
   const [protocolNotice, setProtocolNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+
+  // When validation finds a missing audio in a collapsed imported scenario,
+  // expand it first; the next effect focuses the newly mounted input.
+  useEffect(() => {
+    if (focusRequest?.field === 'audio') setExpanded(true);
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (!focusRequest) return;
+    if (focusRequest.field === 'title') titleInputRef.current?.focus();
+    else if (expanded) fileInputRef.current?.focus();
+  }, [focusRequest, expanded]);
 
   const handleAudioSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -135,6 +150,7 @@ export function ScenarioCard({
           <div className="flex-1 min-w-0">
             <label className="sr-only" htmlFor={`scenario-title-${scenario.id}`}>Scenario title</label>
             <input
+              ref={titleInputRef}
               id={`scenario-title-${scenario.id}`}
               type="text"
               value={scenario.title}
