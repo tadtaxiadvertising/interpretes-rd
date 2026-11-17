@@ -121,6 +121,8 @@ export async function reconcileMinutes(
         SETTLED: ['Cannot modify: Log is already settled', 'CONFLICT'],
         LOCKED_PAYROLL: ['Cannot modify: Log is linked to a payroll record that is no longer pending', 'CONFLICT'],
         CONFLICT: ['The production log changed during reconciliation; reload and retry', 'CONFLICT'],
+        OVERLAPPING_PAYROLLS: ['Overlapping payroll periods require administrative review', 'CONFLICT'],
+        PAYROLL_LINK_MISMATCH: ['The production log payroll link requires administrative review', 'CONFLICT'],
       } as const;
       const [error, code] = errors[reconciliation.kind];
       return { success: false, error, code };
