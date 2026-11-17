@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const prismaClient = prisma;
 
@@ -104,7 +105,7 @@ export async function submitQAEvaluation(_prevState: unknown, formData: FormData
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
       return { success: false, error: 'Este registro de producción ya tiene una evaluación QA.', code: 'CONFLICT' };
     }
-    console.error('QA evaluation failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('QA evaluation failed:', safeServerErrorCategory(error));
     return { success: false, error: 'No fue posible guardar la evaluación QA.', code: 'INTERNAL_ERROR' };
   }
 }
