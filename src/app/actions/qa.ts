@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { calculateCanonicalQaTotal } from '@/lib/qa-canonical-score';
 import { revalidatePath } from 'next/cache';
 import { createNotification } from './notifications';
 import { z } from 'zod';
@@ -52,12 +53,7 @@ export async function submitQAEvaluation(rawInput: QAScoreInput) {
   if (!parsed.success) return { success: false, error: 'Invalid input', code: 'VALIDATION_ERROR' };
   const input = parsed.data;
 
-  const weightedTotal = input.protocolScore * 0.20 +
-    input.interpretationScore * 0.40 +
-    input.languageScore * 0.20 +
-    input.serviceScore * 0.10 +
-    input.technicalScore * 0.10;
-  const expectedTotal = input.criticalError ? 0 : Math.round(weightedTotal * 100) / 100;
+  const expectedTotal = calculateCanonicalQaTotal(input, input.criticalError);
   const actionRequired = input.criticalError || expectedTotal < 70
     ? 'Advertencia / Coaching'
     : expectedTotal < 85 ? 'Feedback Requerido' : 'Ninguna';
