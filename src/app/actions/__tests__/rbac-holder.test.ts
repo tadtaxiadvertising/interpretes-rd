@@ -87,6 +87,11 @@ describe("RBAC holder vault actions", () => {
     "http://vpn.internal.test/login",
     "https://user:password@example.test/login",
     "https://example.test/line\nnext",
+    "https://example.test/pa\tth",
+    "\nhttps://example.test/login",
+    "https://example.test/login\r",
+    "https://example.test/path with spaces",
+    "https:example.test/login",
     "https://example.test:badport/login",
     "https://",
   ])("rejects unsafe portal links before storing credentials: %s", async (url) => {
