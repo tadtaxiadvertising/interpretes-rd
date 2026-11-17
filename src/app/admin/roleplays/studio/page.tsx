@@ -1367,6 +1367,10 @@ export default function RoleplayStudioPage() {
                   // A media transfer belongs to the selected transcription.
                   // Switching selection invalidates the pending download.
                   happyScribeMediaAbort.current?.abort();
+                  happyScribeMediaAbort.current = null;
+                  // Some transports do not settle promptly after abort.
+                  // Allow the newly selected recording to be imported at once.
+                  setHappyScribeMediaImporting(false);
                   setHappyScribeSelectedId(event.currentTarget.value);
                 }}
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
@@ -1388,6 +1392,10 @@ export default function RoleplayStudioPage() {
               {happyScribeMediaImporting && (
                 <button type="button" onClick={() => {
                   happyScribeMediaAbort.current?.abort();
+                  happyScribeMediaAbort.current = null;
+                  // Do not wait for a stalled upstream promise to settle.
+                  // The old request's finally block checks controller identity.
+                  setHappyScribeMediaImporting(false);
                   setNotice('Descarga de audio cancelada. Puedes seguir trabajando con la grabación actual.');
                 }} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
                   Cancelar descarga
