@@ -1,0 +1,43 @@
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+/** Only provider endpoints or its AWS object storage, never private addresses. */
+export function isAllowedHappyScribeExportUrl(url: URL): boolean {
+  const host = url.hostname.toLowerCase();
+  return url.protocol === 'https:' && !url.username && !url.password &&
+    (url.port === '' || url.port === '443') &&
+    (host === 'happyscribe.com' ||
+      host.endsWith('.happyscribe.com') ||
+      host.endsWith('.amazonaws.com'));
+}
+
+/**
+ * Node.js fetch follows redirects automatically by default. Validate EVERY
+ * redirect before making the next request; a valid initial provider URL must
+ * not be able to redirect an internal service request to an arbitrary host.
+ *
+ * No provider API tokens are ever sent in these download requests.
+ */
+export async function fetchHappyScribeExport(
+  startingUrl: string,
+  signal: AbortSignal,
+): Promise<Response> {
+  let url = new URL(startingUrl);
+  for (let redirects = 0; redirects <= 3; redirects++) {
+    if (!isAllowedHappyScribeExportUrl(url)) {
+      throw new Error('Untrusted HappyScribe export destination');
+    }
+    const response = await fetch(url, {
+      cache: 'no-store',
+      signal,
+      redirect: 'manual',
+    });
+    if (!REDIRECT_STATUSES.has(response.status)) return response;
+
+    const location = response.headers.get('location');
+    if (!location || redirects === 3) {
+      throw new Error('Invalid HappyScribe export redirect');
+    }
+    url = new URL(location, url);
+  }
+  throw new Error('HappyScribe export exceeded redirect limit');
+}
