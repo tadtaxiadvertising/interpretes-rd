@@ -731,17 +731,47 @@ def run_desktop():
 
 
 def self_check():
-    """Non-GUI packaging smoke check; returns nonzero if FFmpeg is unavailable."""
-    binary = resolve_ffmpeg()
+    """Headless smoke check of the *packaged* GUI and real MP3 encoder.
+
+    A working FFmpeg -version alone does not prove that libmp3lame was
+    bundled, and Python itself may run while the embedded Tcl/Tk resources
+    are missing. Exercise both paths without opening a display or recording
+    any audio. This is called by the manual Windows/macOS/Linux build jobs.
+    """
     try:
-        probe = subprocess.run([binary, "-hide_banner", "-version"],
-                               stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=10, check=False)
+        import tkinter as tk
+        from tkinter import ttk  # noqa: F401 - PyInstaller must bundle ttk
+        interpreter = tk.Tcl()  # Works without a display server.
+        if not interpreter.eval("info patchlevel"):
+            raise RuntimeError("No Tcl interpreter version")
+    except Exception as exc:
+        raise ExportError(
+            "La interfaz Tcl/Tk del ejecutable no funciona; revisa el empaquetado."
+        ) from exc
+
+    binary = resolve_ffmpeg()
+    command = [
+        binary, "-hide_banner", "-nostdin", "-loglevel", "error",
+        "-f", "lavfi", "-i", "anullsrc=r=24000:cl=mono",
+        "-t", "0.25", "-vn", "-ac", "1", "-ar", "24000",
+        "-codec:a", "libmp3lame", "-b:a", "64k",
+        "-f", "mp3", "pipe:1",
+    ]
+    try:
+        probe = subprocess.run(
+            command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, timeout=20, check=False,
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise ExportError("El ejecutable FFmpeg incluido no funciona.") from exc
-    if probe.returncode != 0:
-        raise ExportError("El ejecutable FFmpeg incluido no funciona.")
+        raise ExportError(
+            "FFmpeg no pudo codificar el MP3 sintético de verificación."
+        ) from exc
+    # Verify there is actual encoded output: an empty successful process
+    # would not demonstrate a usable MP3 codec.
+    if probe.returncode != 0 or len(probe.stdout or b"") < 200:
+        raise ExportError(
+            "El FFmpeg incluido no puede codificar MP3 con libmp3lame."
+        )
 
 
 if __name__ == "__main__":
