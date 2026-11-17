@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
-  hasToken: boolean; tokenSource: string; organizationId: string;
+  hasToken: boolean; credentialUsable: boolean; tokenSource: string; organizationId: string;
   mediaImportEnabled: boolean; proxyAvailable: boolean; encryptionReady: boolean;
   excludeInterpreterByDefault: boolean; compactViewDefault: 'auto' | 'compact' | 'expanded';
 };
@@ -61,7 +61,10 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       <input id="happy-token" type="password" value={token} onChange={e => setToken(e.target.value)}
         autoComplete="new-password" maxLength={2048} disabled={remove} placeholder={hasToken ? 'Configurada · escribir para reemplazar' : 'Pegar nueva clave API'}
         className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" />
-      <p className="mt-2 text-sm text-slate-400">Estado: {hasToken ? 'Configurada' : 'Sin configurar'}. Origen: {status.tokenSource}. Se muestra únicamente el estado, nunca la clave.</p>
+      <p className="mt-2 text-sm text-slate-400">Estado: {hasToken ? 'Configurada' : 'Sin configurar'} · {status.credentialUsable ? 'Lista para usar' : 'No disponible'}. Origen: {status.tokenSource}. Nunca se muestra la clave.</p>
+      {hasToken && !status.credentialUsable && <p role="alert" className="mt-2 text-sm text-amber-300">
+        La clave guardada no puede utilizarse. Comprueba la clave de cifrado del servidor o sustituye la credencial.
+      </p>}
       {!status.encryptionReady && <p role="alert" className="mt-2 text-sm text-amber-300">Para guardar claves nuevas, configura AUDIO_STUDIO_ENCRYPTION_KEY en el servidor.</p>}
       {status.tokenSource === 'panel' && <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
         <input type="checkbox" checked={remove} onChange={e => {
@@ -95,7 +98,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     </fieldset>
     {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
     <div className="flex flex-wrap items-center gap-3"><button disabled={pending || checking} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
-      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
+      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
       <a href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</a></div>
   </form>;
 }
