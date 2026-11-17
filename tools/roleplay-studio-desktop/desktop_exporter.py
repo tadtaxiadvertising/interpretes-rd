@@ -427,6 +427,37 @@ def export_project(source, project_file, output, *, ffmpeg=None,
     return {"clips": len(clips), "size_bytes": output.stat().st_size}
 
 
+def suggest_local_zip_path(project_file):
+    """Suggest a generic non-existing ZIP beside the JSON, without overwriting.
+
+    Final export repeats an exclusive O_EXCL create, preventing symlink or
+    concurrent overwrite races even if the suggested name is later taken.
+    """
+    project = Path(project_file).expanduser().absolute()
+    if project.suffix.lower() != ".json":
+        raise ExportError("Selecciona primero un proyecto JSON válido.")
+    for number in range(1, 1001):
+        name = ("roleplay-studio.zip" if number == 1
+                else f"roleplay-studio-{number}.zip")
+        candidate = project.parent / name
+        if not candidate.exists() and not candidate.is_symlink():
+            return str(candidate)
+    raise ExportError("No hay un nombre ZIP disponible en esta carpeta. Elige otra ubicación.")
+
+
+def recognize_media_and_project(selected):
+    """Resolve one source and one JSON from a single file-picker interaction."""
+    if len(selected) != 2:
+        raise ExportError("Selecciona exactamente dos archivos: grabación y proyecto JSON.")
+    sources = [path for path in selected if
+               Path(path).suffix.lower().lstrip(".") in EXTENSIONS]
+    projects = [path for path in selected if
+                Path(path).suffix.lower() == ".json"]
+    if len(sources) != 1 or len(projects) != 1 or sources[0] == projects[0]:
+        raise ExportError("Selecciona una grabación compatible y un único proyecto JSON.")
+    return sources[0], projects[0]
+
+
 def run_desktop():
     # The Windows console bootloader is more reliable with the bundled FFmpeg.
     # Hide its terminal only in packaged GUI mode; keep it visible for diagnostics.
@@ -462,9 +493,41 @@ def run_desktop():
     fields = [tk.StringVar(), tk.StringVar(), tk.StringVar()]
     input_widgets = []
     browse_buttons = []
+    suggested_output = None
     busy = False
     cancelled = threading.Event()
     events = queue.Queue()
+
+    def propose_output():
+        nonlocal suggested_output
+        current = fields[2].get().strip()
+        if not fields[1].get().strip() or (current and current != suggested_output):
+            return
+        try:
+            destination = suggest_local_zip_path(fields[1].get())
+        except ExportError:
+            return
+        suggested_output = destination
+        fields[2].set(destination)
+
+    def pick_pair():
+        selected = filedialog.askopenfilenames(
+            title="Selecciona la grabación y su proyecto JSON",
+            filetypes=[("Grabación y JSON",
+                        "*.mp3 *.m4a *.wav *.aac *.ogg *.oga *.opus *.flac "
+                        "*.mp4 *.m4v *.mov *.webm *.mkv *.json"),
+                       ("Todos los archivos", "*.*")],
+        )
+        if not selected:
+            return
+        try:
+            source, project = recognize_media_and_project(selected)
+        except ExportError as exc:
+            messagebox.showwarning("Selección incompleta", str(exc))
+            return
+        fields[0].set(source)
+        fields[1].set(project)
+        propose_output()
 
     def pick(index):
         if index == 2:
@@ -478,24 +541,29 @@ def run_desktop():
             )
         if path:
             fields[index].set(path)
+            if index == 1:
+                propose_output()
 
+    ttk.Button(frame, text="Elegir grabación + JSON (2 archivos)",
+               command=pick_pair).grid(row=0, column=0, columnspan=3,
+                                       sticky="w", pady=(0, 8))
     for index, (label, _) in enumerate(labels):
-        ttk.Label(frame, text=label).grid(row=index, column=0, sticky="w", pady=8)
+        ttk.Label(frame, text=label).grid(row=index + 1, column=0, sticky="w", pady=8)
         entry = ttk.Entry(frame, textvariable=fields[index], width=58)
-        entry.grid(row=index, column=1, sticky="ew", padx=(12, 8))
+        entry.grid(row=index + 1, column=1, sticky="ew", padx=(12, 8))
         input_widgets.append(entry)
         browse = ttk.Button(frame, text="Examinar…",
                             command=lambda i=index: pick(i))
-        browse.grid(row=index, column=2)
+        browse.grid(row=index + 1, column=2)
         browse_buttons.append(browse)
 
     ttk.Label(frame, text="Sin subidas · FFmpeg en tu equipo · ZIP compatible con Intérpretes RD",
-              foreground="#24635b").grid(row=3, column=0, columnspan=3, sticky="w", pady=(16, 8))
+              foreground="#24635b").grid(row=4, column=0, columnspan=3, sticky="w", pady=(16, 8))
     bar = ttk.Progressbar(frame, maximum=100, mode="determinate")
-    bar.grid(row=4, column=0, columnspan=3, sticky="ew", pady=(4, 6))
+    bar.grid(row=5, column=0, columnspan=3, sticky="ew", pady=(4, 6))
     status = tk.StringVar(value="Selecciona el audio/video y el proyecto JSON.")
     ttk.Label(frame, textvariable=status, wraplength=580).grid(
-        row=5, column=0, columnspan=3, sticky="w", pady=6)
+        row=6, column=0, columnspan=3, sticky="w", pady=6)
 
     def invalidate_previous_summary(*_):
         if not busy:
@@ -506,7 +574,7 @@ def run_desktop():
         field.trace_add("write", invalidate_previous_summary)
 
     controls = ttk.Frame(frame)
-    controls.grid(row=6, column=0, columnspan=3, sticky="e", pady=10)
+    controls.grid(row=7, column=0, columnspan=3, sticky="e", pady=10)
 
     def set_editable(enabled):
         state = "normal" if enabled else "disabled"
@@ -579,7 +647,7 @@ def run_desktop():
     closing = False
 
     def process_events():
-        nonlocal busy
+        nonlocal busy, suggested_output
         while True:
             try:
                 message = events.get_nowait()
@@ -608,6 +676,12 @@ def run_desktop():
             elif kind == "success":
                 result = message[1]
                 bar["value"] = 100
+                # Offer a fresh path for a second package only if the first
+                # suggestion was accepted. Never replace a manual filename.
+                if fields[2].get().strip() == suggested_output:
+                    suggested_output = None
+                    fields[2].set("")
+                    propose_output()
                 status.set(f"ZIP generado: {result['clips']} fragmentos. El video original permanece local.")
                 messagebox.showinfo("Exportación terminada", "Paquete ZIP generado correctamente.")
             elif kind == "cancelled":
