@@ -5,13 +5,14 @@ vi.mock('@/lib/auth/actions', () => ({ validateAction: vi.fn() }));
 vi.mock('@/lib/roleplay/happyscribe-settings', () => ({
   saveHappyScribeSettings: vi.fn(),
   getHappyScribeSettingsStatus: vi.fn(),
+  getAudioStudioEditorPreferences: vi.fn(),
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { validateAction } from '@/lib/auth/actions';
-import { saveHappyScribeSettings, getHappyScribeSettingsStatus } from '@/lib/roleplay/happyscribe-settings';
+import { saveHappyScribeSettings, getHappyScribeSettingsStatus, getAudioStudioEditorPreferences } from '@/lib/roleplay/happyscribe-settings';
 import { revalidatePath } from 'next/cache';
-import { inspectAudioStudioSettings, saveAudioStudioSettings } from '../audio-studio-settings';
+import { inspectAudioStudioSettings, readAudioStudioEditorPreferences, saveAudioStudioSettings } from '../audio-studio-settings';
 
 const syntheticAdmin = { user: { userId: 'test-admin', role: 'admin' } };
 const fakeToken = 'SYNTHETIC_NOT_A_PROVIDER_TOKEN_12345';
@@ -88,4 +89,31 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     expect(await inspectAudioStudioSettings()).toEqual(safeStatus);
     expect(getHappyScribeSettingsStatus).toHaveBeenCalledOnce();
   });
+  it('allows only admin roles to read editor defaults, without exposing keys', async () => {
+    const preferences = { excludeInterpreterByDefault: false, compactViewDefault: 'compact' as const };
+    vi.mocked(getAudioStudioEditorPreferences).mockResolvedValueOnce(preferences);
+    expect(await readAudioStudioEditorPreferences()).toEqual(preferences);
+    vi.mocked(validateAction).mockResolvedValueOnce({ error: 'Access denied', code: 'UNAUTHORIZED' } as never);
+    await expect(readAudioStudioEditorPreferences()).rejects.toThrow('Forbidden');
+  });
+
+  it('validates editor preference fields before changing the system configuration', async () => {
+    const form = settingsForm();
+    form.set('compactViewDefault', 'invalid');
+    const result = await saveAudioStudioSettings(form);
+    expect(result.success).toBe(false);
+    expect(saveHappyScribeSettings).not.toHaveBeenCalled();
+  });
+
+  it('persists explicit defaults alongside the provider settings', async () => {
+    const form = settingsForm();
+    form.set('excludeInterpreterByDefault', 'false');
+    form.set('compactViewDefault', 'expanded');
+    expect((await saveAudioStudioSettings(form)).success).toBe(true);
+    expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
+      token: fakeToken, organizationId: '123456', mediaImportEnabled: true,
+      removeToken: false, excludeInterpreterByDefault: false, compactViewDefault: 'expanded',
+    });
+  });
+
 });
