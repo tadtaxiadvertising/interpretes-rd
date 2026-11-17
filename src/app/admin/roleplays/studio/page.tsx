@@ -111,6 +111,13 @@ export default function RoleplayStudioPage() {
   const exportAbort = useRef<AbortController | null>(null);
   const happyScribeMediaAbort = useRef<AbortController | null>(null);
   const happyScribeTranscriptAbort = useRef<AbortController | null>(null);
+  // Keep an up-to-date snapshot for transfers that may resolve after edits.
+  // A preflight approval only covers the source and work that existed then.
+  const audioReplacementEdits = useRef({ segments, reviewCues, suggestedClips, captionTexts });
+  audioReplacementEdits.current = { segments, reviewCues, suggestedClips, captionTexts };
+  const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
+  const hasReplacementWork = (edits: typeof audioReplacementEdits.current) =>
+    edits.segments.length > 0 || edits.reviewCues.length > 0 || edits.suggestedClips.length > 0;
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
@@ -281,7 +288,10 @@ export default function RoleplayStudioPage() {
     setError('La exportación se canceló porque cambiaron las intervenciones. Exporta nuevamente.');
   }, [segments]);
 
-  const chooseAudio = (file: File) => {
+  const chooseAudio = (file: File, approved?: {
+    source: File | null;
+    edits: typeof audioReplacementEdits.current;
+  }) => {
     // Validate before any reset, abort or consent prompt. Invalid replacements
     // must not destroy the existing recording and unsaved interventions.
     try {
@@ -293,8 +303,14 @@ export default function RoleplayStudioPage() {
     // Selecting another source destroys the in-memory editor and cue review.
     // A cancelled picker must never reach this action, and an actual
     // replacement should not discard substantial work without consent.
-    if (audio && (segments.length > 0 || reviewCues.length > 0 || suggestedClips.length > 0) &&
-        !window.confirm('Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?')) {
+    const editsNow = audioReplacementEdits.current;
+    const approvedStillValid = approved?.source === activeAudioFile.current &&
+      approved?.edits.segments === editsNow.segments &&
+      approved?.edits.reviewCues === editsNow.reviewCues &&
+      approved?.edits.suggestedClips === editsNow.suggestedClips &&
+      approved?.edits.captionTexts === editsNow.captionTexts;
+    if (activeAudioFile.current && hasReplacementWork(editsNow) &&
+        !approvedStillValid && !window.confirm(replacementPrompt)) {
       return;
     }
     // Stop the upstream transfer when an operator accepts a different source.
@@ -1189,6 +1205,11 @@ export default function RoleplayStudioPage() {
     }
     const previousAudio = activeAudioFile.current;
     const revisionAtRequest = subtitleImportRevision.current;
+    // Ask BEFORE transferring up to 250 MiB, not after the bandwidth is spent.
+    // The approval is valid only while the editor snapshot remains unchanged.
+    const preflight = { source: previousAudio, edits: audioReplacementEdits.current };
+    if (previousAudio && hasReplacementWork(preflight.edits) &&
+        !window.confirm(replacementPrompt)) return;
     const controller = new AbortController();
     happyScribeMediaAbort.current = controller;
     setHappyScribeMediaImporting(true);
@@ -1218,7 +1239,7 @@ export default function RoleplayStudioPage() {
       }
       const filename = item.name.replace(/\\.[^.]+$/, '').slice(0, 180) + '.mp3';
       const file = new File([blob], filename, { type: 'audio/mpeg' });
-      chooseAudio(file);
+      chooseAudio(file, preflight);
       if (activeAudioFile.current !== file) return;
       setNotice('Audio original importado desde HappyScribe. Espera a que Audio Studio calcule su duración y después importa la transcripción para revisar y asignar los hablantes.');
     } catch (cause) {
