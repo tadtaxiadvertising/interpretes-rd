@@ -983,14 +983,17 @@ export default function RoleplayStudioPage() {
       setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
       setError(`Intervención ${index + 1}: ${reason}`);
     };
+    // The original interpreter is never exportable: surface this safety
+    // requirement before any other editorial validation, as before.
+    const interpreterIndex = ordered.findIndex(item => item.speakerRole === 'interpreter');
+    if (interpreterIndex !== -1) {
+      revealInvalidTurn(ordered[interpreterIndex], interpreterIndex,
+        'elimina el fragmento del intérprete original antes de exportar el roleplay.');
+      return;
+    }
     let end = 0;
     let total = 0;
     for (const [index, segment] of ordered.entries()) {
-      if (segment.speakerRole === 'interpreter') {
-        revealInvalidTurn(segment, index,
-          'elimina el fragmento del intérprete original antes de exportar el roleplay.');
-        return;
-      }
       const ranges = validStudioRanges(segment, duration);
       const issue = !segment.title.trim()
         ? 'añade un título antes de exportar.'
