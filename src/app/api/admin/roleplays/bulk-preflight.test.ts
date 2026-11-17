@@ -4,6 +4,7 @@ import { blockingAssignmentStatuses } from '@/lib/roleplay-assignment-ownership'
 
 const mocks = vi.hoisted(() => ({
   activeInterpreters: vi.fn(),
+  findInterpreter: vi.fn(),
   existingSessions: vi.fn(),
   transaction: vi.fn(),
   upload: vi.fn(),
@@ -12,7 +13,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    interpreter: { findMany: mocks.activeInterpreters },
+    interpreter: { findMany: mocks.activeInterpreters, findUnique: mocks.findInterpreter },
     roleplaySession: { findMany: mocks.existingSessions },
     $transaction: mocks.transaction,
   },
@@ -48,6 +49,24 @@ function bulkRequest(count = 1): NextRequest {
   }))));
   for (let index = 0; index < count; index++) {
     form.append('scenarioAudios', new File(['ID3'], `consulta-${index}.mp3`, { type: 'audio/mpeg' }));
+  }
+  return {
+    headers: new Headers(),
+    formData: async () => form,
+  } as unknown as NextRequest;
+}
+
+function singleInterpreterRequest(count = 1): NextRequest {
+  const form = new FormData();
+  form.set('participantType', 'interpreter');
+  form.set('participantId', '11');
+  form.set('scenarios', JSON.stringify(Array.from({ length: count }, (_, index) => ({
+    title: `Consulta individual ${index + 1}`,
+    durationLimitSec: 120,
+    scriptPrompt: '',
+  }))));
+  for (let index = 0; index < count; index++) {
+    form.append('scenarioAudios', new File(['ID3'], `individual-${index}.mp3`, { type: 'audio/mpeg' }));
   }
   return {
     headers: new Headers(),
@@ -106,6 +125,27 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
       error: 'Storage is not configured',
     });
     expect(mocks.transaction).not.toHaveBeenCalled();
+  });
+
+  it('reclaims individual upload attempts after draft reservation but before publishing', async () => {
+    vi.stubEnv('FRONTEND_ORIGIN', 'https://interpretes.rd.ibusiness.com.do');
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://storage.example');
+    vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-only');
+    mocks.findInterpreter.mockResolvedValue({ id: 11 });
+    mocks.transaction.mockResolvedValueOnce({
+      conflict: null,
+      session: { id: 'draft-ci', updatedAt: new Date() },
+    });
+    mocks.upload.mockResolvedValueOnce({ error: null })
+      .mockResolvedValueOnce({ error: { message: 'Upload rejected' } });
+
+    const response = await POST(singleInterpreterRequest(2));
+    expect(response.status).toBe(500);
+    expect(mocks.transaction).toHaveBeenCalledOnce(); // Reserving the draft is not publishing.
+    expect(mocks.remove).toHaveBeenCalledOnce();
+    const removed = mocks.remove.mock.calls[0][0] as string[];
+    expect(removed).toHaveLength(1);
+    expect(removed[0]).toMatch(/^base\/draft-ci\/upload-[a-f0-9-]+\/0\.mp3$/);
   });
 
   it('reclaims successful uploads when the next audio fails before any publishing transaction', async () => {
