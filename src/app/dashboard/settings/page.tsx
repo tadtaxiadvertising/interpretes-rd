@@ -18,6 +18,7 @@ import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { updateInterpreterProfileFromForm } from '@/app/actions/profile';
 import { BankFormRD } from '@/components/BankFormRD';
+import { maskIdentityDocument } from '@/lib/mask-identity-document';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,12 +26,6 @@ function maskAccount(account: string): string {
   if (!account) return '—';
   const visible = account.slice(-4);
   return `••••${visible}`;
-}
-
-function maskCedula(cedula: string): string {
-  if (!cedula) return '—';
-  // Format: XXX-XXXXXXX-X → mask middle digits
-  return cedula.replace(/(\d{3})-(\d{7})-(\d{1})/, '$1-•••••••-$3');
 }
 
 export default async function SettingsPage() {
@@ -195,7 +190,7 @@ export default async function SettingsPage() {
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cédula o RNC</label>
-                    <p className="text-white font-mono">{maskCedula(interpreter?.cedulaRnc || profile.bank_cedula || '')}</p>
+                    <p className="text-white font-mono">{maskIdentityDocument(interpreter?.cedulaRnc || profile.bank_cedula || '')}</p>
                   </div>
                 </div>
               )}
