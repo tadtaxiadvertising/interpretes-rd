@@ -153,12 +153,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           }
         } else {
           setAccessErrorStatus(res.status);
-          setError(data.error || 'Failed to load session');
+          setError(data.error || 'No se pudo cargar la sesión. Inténtalo de nuevo.');
           setPageState('error');
         }
       } catch {
         setAccessErrorStatus(null);
-        setError('Failed to load session');
+        setError('No se pudo cargar la sesión. Inténtalo de nuevo.');
         setPageState('error');
       }
     }
@@ -399,7 +399,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           <div className="w-20 h-20 bg-blue-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <Loader2 size={40} className="animate-spin text-blue-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Cargando Sesión</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">Cargando sesión</h2>
           <p className="text-gray-400">Preparando tu evaluación de roleplay...</p>
         </div>
       </div>
@@ -413,7 +413,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           <div className="w-20 h-20 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <AlertCircle size={40} className="text-red-400" />
           </div>
-          <h2 className="text-2xl font-bold text-white mb-2">Error al Cargar</h2>
+          <h2 className="text-2xl font-bold text-white mb-2">No se pudo cargar</h2>
           <p className="text-gray-400 mb-6">{error}</p>
           {accessErrorStatus === 401 && (
             <p className="text-gray-400 mb-6">
