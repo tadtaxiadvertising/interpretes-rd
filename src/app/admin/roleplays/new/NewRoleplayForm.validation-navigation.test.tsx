@@ -36,10 +36,22 @@ describe('Roleplay assignment guides administrators to incomplete fields', () =>
     expect(screen.getByText('El escenario 1 necesita un título.')).toBeTruthy();
 
     fireEvent.change(title, { target: { value: 'Consulta médica' } });
+    // The audio input does not exist while this card is collapsed.
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
+    expect(screen.queryByLabelText(/Base audio/i)).toBeNull();
+
     fireEvent.click(create);
-    const audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
+    let audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
     expect(document.activeElement).toBe(audio);
+    expect(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('El escenario 1 necesita un audio válido.')).toBeTruthy();
+
+    // A second attempt should reopen and refocus after another manual collapse.
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar detalles del escenario 1' }));
+    expect(screen.queryByLabelText(/Base audio/i)).toBeNull();
+    fireEvent.click(create);
+    audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
+    expect(document.activeElement).toBe(audio);
     expect(request).not.toHaveBeenCalled();
   });
 
