@@ -16,6 +16,7 @@ vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
+import { revalidatePath } from 'next/cache';
 import { createCompany, assignAccountToCompany } from './admin-companies';
 
 describe('admin company actions', () => {
@@ -66,4 +67,55 @@ describe('admin company actions', () => {
     expect(await createCompany(data)).toEqual({ success: false, error: 'No autorizado.' });
     expect(prisma.company.create).not.toHaveBeenCalled();
   });
+  it('returns success when company creation committed but cache refresh fails', async () => {
+    vi.mocked(prisma.company.create).mockResolvedValueOnce({ id: 11 } as never);
+    vi.mocked(revalidatePath).mockImplementationOnce(() => {
+      throw new Error('SECRET_CACHE_DATA');
+    });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const data = new FormData();
+      data.set('name', 'Language Services');
+      expect(await createCompany(data)).toEqual({ success: true });
+      expect(prisma.company.create).toHaveBeenCalledTimes(1);
+      expect(revalidatePath).toHaveBeenCalledWith('/admin/companies');
+      expect(warning).toHaveBeenCalledWith('[COMPANIES] Cache refresh failed', 'Error');
+      expect(JSON.stringify(warning.mock.calls)).not.toContain('SECRET_CACHE_DATA');
+    } finally { warning.mockRestore(); }
+  });
+
+  it('continues refreshing accounts after a committed assignment when one cache path fails', async () => {
+    vi.mocked(prisma.account.update).mockResolvedValueOnce({ id: 12 } as never);
+    vi.mocked(revalidatePath).mockImplementationOnce(() => {
+      throw new Error('SECRET_REFRESH_TOKEN');
+    });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const data = new FormData();
+      data.set('accountId', '12');
+      data.set('companyId', '3');
+      expect(await assignAccountToCompany(data)).toEqual({ success: true });
+      expect(prisma.account.update).toHaveBeenCalledTimes(1);
+      expect(prisma.account.update).toHaveBeenCalledWith({
+        where: { id: 12 },
+        data: { companyId: 3 },
+      });
+      expect(revalidatePath).toHaveBeenNthCalledWith(1, '/admin/companies');
+      expect(revalidatePath).toHaveBeenNthCalledWith(2, '/admin/accounts');
+      expect(warning).toHaveBeenCalledWith('[COMPANIES] Cache refresh failed', 'Error');
+      expect(JSON.stringify(warning.mock.calls)).not.toContain('SECRET_REFRESH_TOKEN');
+    } finally { warning.mockRestore(); }
+  });
+
+  it('does not run cache refresh after a failed database write', async () => {
+    vi.mocked(prisma.company.create).mockRejectedValueOnce(new Error('Synthetic DB failure'));
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const data = new FormData();
+      data.set('name', 'Language Services');
+      expect(await createCompany(data)).toEqual({ success: false, error: 'No se pudo registrar la compañía.' });
+      expect(revalidatePath).not.toHaveBeenCalled();
+    } finally { spy.mockRestore(); }
+  });
+
 });
