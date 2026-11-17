@@ -203,7 +203,7 @@ describe('Audio Studio compact editing', () => {
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [] },
     });
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
     expect(window.confirm).not.toHaveBeenCalled();
   });
@@ -217,13 +217,13 @@ describe('Audio Studio compact editing', () => {
       target: { files: [replacement] },
     });
     expect(window.confirm).toHaveBeenCalledOnce();
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
 
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [replacement] },
     });
-    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
@@ -238,7 +238,7 @@ describe('Audio Studio compact editing', () => {
       target: { files: [invalid] },
     });
 
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(screen.getByRole('alert').textContent).toMatch(/formato|archivo|audio/i);
     expect((document.querySelector('audio') as HTMLAudioElement).getAttribute('src')).toBe(originalSrc);
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
