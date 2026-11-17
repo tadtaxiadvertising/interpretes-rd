@@ -65,7 +65,7 @@ describe('Admin roleplay import concurrency', () => {
     chooseManifest();
     expect(screen.getByRole('status').textContent).toContain('Verificando archivos');
 
-    fireEvent.click(screen.getByRole('button', { name: /Add Scenario/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir escenario/i }));
     expect(screen.getAllByTestId('draft-scenario')).toHaveLength(2);
     expect(screen.getByText(/Importación descartada/i)).toBeTruthy();
 
@@ -127,7 +127,7 @@ describe('Admin roleplay import concurrency', () => {
     vi.mocked(prepareRoleplayManifestImport).mockResolvedValue(prepared);
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
-    fireEvent.click(screen.getByRole('button', { name: /Add Scenario/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir escenario/i }));
     expect(screen.getAllByTestId('draft-scenario')).toHaveLength(2);
 
     await act(async () => { chooseManifest(); });
@@ -192,7 +192,7 @@ describe('Admin roleplay import concurrency', () => {
   it('offers the same duration shortcut for manually added empty scenarios', () => {
     render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
     expect(screen.queryByRole('button', { name: 'Aplicar solo a los sin configurar' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Add Scenario/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir escenario/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar solo a los sin configurar' }));
     expect(screen.getAllByTestId('draft-scenario')
       .map(card => card.getAttribute('data-duration-limit'))).toEqual(['120', '120']);
@@ -282,7 +282,7 @@ describe('Admin roleplay import concurrency', () => {
       }) } as Response);
       await pending;
     });
-    expect(screen.getByText('Roleplay Created!')).toBeTruthy();
+    expect(screen.getByText('¡Roleplay creado correctamente!')).toBeTruthy();
     expect(request).toHaveBeenCalledTimes(1);
   });
 
@@ -309,7 +309,7 @@ describe('Admin roleplay import concurrency', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Asignar plantilla' }));
     });
     expect(request).toHaveBeenCalledTimes(2);
-    expect(screen.getByText('Roleplay Created!')).toBeTruthy();
+    expect(screen.getByText('¡Roleplay creado correctamente!')).toBeTruthy();
   });
 
   it('uses the external ZIP fallback and canonical SHA-256 validation without publishing', async () => {
