@@ -98,13 +98,16 @@ export async function POST(req: NextRequest) {
       { success: false, error: 'HappyScribe devolvió un destino de descarga no permitido.' }, { status: 502 },
     );
     const media = await fetchHappyScribeExport(downloadLink, AbortSignal.timeout(90_000));
-    if (!media.ok || !media.body) return privateRoleplayResponse(
-      { success: false, error: 'No fue posible descargar el audio desde HappyScribe.' }, { status: 502 },
-    );
+    if (!media.ok || !media.body) {
+      await discardHappyScribeDownload(media);
+      return privateRoleplayResponse(
+        { success: false, error: 'No fue posible descargar el audio desde HappyScribe.' }, { status: 502 },
+      );
+    }
 
     const declaredLength = Number(media.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > MAX_MEDIA_BYTES) {
-      await media.body.cancel();
+      await discardHappyScribeDownload(media);
       return privateRoleplayResponse(
         { success: false, error: 'El audio supera el límite de importación directa de 250 MiB. Descárgalo desde HappyScribe y cárgalo localmente.' },
         { status: 413 },
