@@ -166,9 +166,13 @@ export async function POST(req: NextRequest) {
     // Follow only a small number of HTTPS redirects to approved provider or
     // AWS storage hosts; never let an allowed URL redirect to private services.
     const fileResponse = await fetchHappyScribeExport(downloadLink, AbortSignal.timeout(15_000));
-    if (!fileResponse.ok) return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
+    if (!fileResponse.ok) {
+      await discardHappyScribeDownload(fileResponse);
+      return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
+    }
     const declaredLength = Number(fileResponse.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
+      await discardHappyScribeDownload(fileResponse);
       return privateRoleplayResponse({ error: 'El SRT supera el tamaño admitido.' }, { status: 413 });
     }
     if (!fileResponse.body) return privateRoleplayResponse({ error: 'La descarga SRT está vacía.' }, { status: 502 });
