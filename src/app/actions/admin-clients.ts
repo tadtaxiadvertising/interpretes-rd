@@ -3,6 +3,7 @@
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { clientAssignmentSchema, clientInputSchema } from '@/lib/client-validation';
 
 export async function createClient(formData: FormData) {
@@ -19,7 +20,7 @@ export async function createClient(formData: FormData) {
     revalidatePath('/admin/accounts');
     return { success: true };
   } catch (error) {
-    console.error('[CLIENTS] Create failed', error);
+    console.error('[CLIENTS] Create failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar el cliente. Comprueba que no exista.' };
   }
 }
@@ -50,7 +51,7 @@ export async function assignAccountToClient(formData: FormData) {
     }
     return { success: true };
   } catch (error) {
-    console.error('[CLIENTS] Account assignment failed', error);
+    console.error('[CLIENTS] Account assignment failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo vincular la cuenta al cliente.' };
   }
 }
