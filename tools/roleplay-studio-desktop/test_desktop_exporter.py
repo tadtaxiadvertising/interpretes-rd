@@ -246,6 +246,42 @@ class StudioDesktopTests(unittest.TestCase):
             with self.assertRaisesRegex(module.ExportError, "explorador de archivos"):
                 module.open_export_directory(self.output)
 
+    def test_web_handoff_opens_only_the_fixed_form_after_successful_local_zip(self):
+        from unittest.mock import patch
+        payload = b"simulated private local ZIP data"
+        self.output.write_bytes(payload)
+        with patch.object(module.webbrowser, "open", return_value=True) as open_page:
+            module.open_roleplay_import_page(self.output)
+            open_page.assert_called_once_with(
+                "https://interpretes.rd.ibusiness.com.do/admin/roleplays/new",
+                new=2, autoraise=True)
+            # Nothing changes or leaves the local archive as part of navigation.
+            self.assertEqual(self.output.read_bytes(), payload)
+
+    def test_web_handoff_fails_closed_if_zip_missing_or_browser_unavailable(self):
+        from unittest.mock import patch
+        self.output.write_bytes(b"local ZIP")
+        link = self.output.parent / "redirect.zip"
+        try:
+            link.symlink_to(self.output)
+        except (OSError, NotImplementedError):
+            pass
+        with patch.object(module.webbrowser, "open", return_value=True) as open_page:
+            invalid = [self.source, self.output.parent / "missing.zip"]
+            if link.is_symlink():
+                invalid.append(link)
+            for candidate in invalid:
+                with self.subTest(candidate=candidate):
+                    with self.assertRaises(module.ExportError):
+                        module.open_roleplay_import_page(candidate)
+            open_page.assert_not_called()
+        with patch.object(module.webbrowser, "open", return_value=False):
+            with self.assertRaisesRegex(module.ExportError, "navegador disponible"):
+                module.open_roleplay_import_page(self.output)
+        with patch.object(module.webbrowser, "open", side_effect=OSError("blocked")):
+            with self.assertRaisesRegex(module.ExportError, "Accede manualmente"):
+                module.open_roleplay_import_page(self.output)
+
     def test_zip_suggestion_avoids_existing_and_symlinked_outputs(self):
         folder = self.project.parent
         first = folder / "roleplay-studio.zip"
