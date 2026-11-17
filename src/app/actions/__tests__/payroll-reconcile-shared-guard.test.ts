@@ -46,6 +46,15 @@ describe('admin Server Action reuses guarded financial reconciliation', () => {
     expect(m.revalidate).not.toHaveBeenCalled();
   });
 
+  it.each(['OVERLAPPING_PAYROLLS', 'PAYROLL_LINK_MISMATCH'])(
+    'rejects ambiguous financial reconciliation %s without refreshing caches', async kind => {
+      m.reconcile.mockResolvedValueOnce({ kind });
+      const result = await reconcileMinutes(73, 47);
+      expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+      expect(m.revalidate).not.toHaveBeenCalled();
+    },
+  );
+
   it('revalidates payroll and dashboard only after successful reconciliation', async () => {
     m.reconcile.mockResolvedValueOnce({ kind: 'UPDATED', log: { id: 73 } });
     const result = await reconcileMinutes(73, 47);

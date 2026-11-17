@@ -50,6 +50,32 @@ export async function reconcileProductionMinutes(logId: number, verifiedMinutes:
     });
     if (lockedPayroll) return { kind: 'LOCKED_PAYROLL' as const };
 
+    // One production day must not silently alter only one of two overlapping
+    // pending payroll periods. The current schema has no exclusion constraint
+    // against overlapping periods for the same interpreter.
+    const matchingPending = await tx.payrollRecord.findMany({
+      where: {
+        interpreterId: log.interpreterId,
+        periodStart: { lte: log.date },
+        periodEnd: { gte: log.date },
+        status: { in: ['PENDING', 'Pendiente'] },
+        paidAt: null,
+      },
+      select: { id: true },
+      take: 2,
+    });
+    if (matchingPending.length > 1) {
+      return { kind: 'OVERLAPPING_PAYROLLS' as const };
+    }
+
+    // The ledger link is stronger than a date overlap. An orphaned or
+    // mismatched link would otherwise allow updating verified minutes while
+    // refreshPayrollRecord recalculates an unrelated (or no) payroll.
+    if (log.payrollRecordId &&
+        (matchingPending.length !== 1 || matchingPending[0].id !== log.payrollRecordId)) {
+      return { kind: 'PAYROLL_LINK_MISMATCH' as const };
+    }
+
     const updated = await tx.productionLog.updateMany({
       where: { id: log.id, isSettled: false },
       data: { verifiedMinutes },

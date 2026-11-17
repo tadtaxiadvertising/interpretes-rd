@@ -31,6 +31,8 @@ export const PATCH = withSecurity(async (request: NextRequest) => {
     SETTLED: { status: 409, error: 'Cannot modify a settled production log' },
     LOCKED_PAYROLL: { status: 409, error: 'Cannot modify production linked to an approved or paid payroll' },
     CONFLICT: { status: 409, error: 'Production log changed; reload and try again' },
+    OVERLAPPING_PAYROLLS: { status: 409, error: 'Overlapping payroll periods require administrative review before reconciliation' },
+    PAYROLL_LINK_MISMATCH: { status: 409, error: 'The production log payroll link requires administrative review' },
   } as const;
   const failure = failures[result.kind];
   return privateAdminJson({ success: false, error: failure.error }, { status: failure.status });

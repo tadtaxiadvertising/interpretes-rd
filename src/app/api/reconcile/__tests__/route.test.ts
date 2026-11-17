@@ -68,6 +68,8 @@ describe('PATCH /api/reconcile uses one shared guarded transaction', () => {
     ['SETTLED', 409],
     ['LOCKED_PAYROLL', 409],
     ['CONFLICT', 409],
+    ['OVERLAPPING_PAYROLLS', 409],
+    ['PAYROLL_LINK_MISMATCH', 409],
   ] as const)('returns a private business error for %s', async (kind, status) => {
     vi.mocked(reconcileProductionMinutes).mockResolvedValueOnce({ kind } as never);
     const response = await process();
