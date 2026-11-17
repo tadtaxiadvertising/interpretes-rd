@@ -242,6 +242,20 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+  it('checks connectivity without returning transcription metadata to the admin settings form', async () => {
+    const cancel = vi.fn();
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel })));
+    const response = await GET(new NextRequest(
+      'http://localhost/api/admin/happyscribe/transcriptions?check=1',
+    ));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, ready: true });
+    expect(String(mocks.fetch.mock.calls[0][0])).toContain('per_page=1');
+    expect(String(mocks.fetch.mock.calls[0][0])).toContain('organization_id=123456');
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+
   it('returns a signed selection from the organization-filtered listing', async () => {
     mocks.fetch.mockResolvedValueOnce(Response.json({
       results: [{ id: transcriptionId, name: 'Synthetic test transcript', state: 'done' }],
