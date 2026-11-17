@@ -9,9 +9,17 @@ interface Notification {
   id: string;
   title: string;
   message: string;
-  type: string;
-  isRead: boolean;
-  createdAt: Date;
+  type: string | null;
+  isRead: boolean | null;
+  createdAt: Date | string | null;
+}
+
+function formatNotificationTime(value: Date | string | null): string {
+  if (value === null) return 'Fecha no disponible';
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? date.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })
+    : 'Fecha no disponible';
 }
 
 export function NotificationBell({ initialNotifications }: { initialNotifications: Notification[] }) {
@@ -55,7 +63,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
     }
   };
 
-  const getIcon = (type: string) => {
+  const getIcon = (type: string | null) => {
     switch (type) {
       case 'success': return <CheckCircle size={16} className="text-green-400" aria-hidden="true" />;
       case 'warning': return <AlertTriangle size={16} className="text-yellow-400" aria-hidden="true" />;
@@ -116,7 +124,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                       <p className={cn("text-xs font-bold", !n.isRead ? "text-white" : "text-gray-400")}>{n.title}</p>
                       <p className="text-[10px] text-gray-500 leading-relaxed">{n.message}</p>
                       <p className="text-[9px] text-gray-600 uppercase mt-1">
-                        {new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatNotificationTime(n.createdAt)}
                       </p>
                     </div>
                     {!n.isRead && (
