@@ -1744,6 +1744,9 @@ export default function RoleplayStudioPage() {
                 {compactRows && (
                   <>
                     <button type="button" onClick={() => previewSegment(segment)}
+                      aria-label={segment.ranges
+                        ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
+                        : `${previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'} de intervención ${index + 1}`}
                       className="rounded-md border border-emerald-400/25 px-2 py-1 text-xs text-emerald-200">
                       {segment.ranges
                         ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
@@ -1918,6 +1921,9 @@ export default function RoleplayStudioPage() {
                   onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
                 {!compactRows && (
                   <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
+                    aria-label={segment.ranges
+                      ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
+                      : `${previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'} de intervención ${index + 1}`}
                     onClick={() => previewSegment(segment)}>
                     {segment.ranges
                       ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
