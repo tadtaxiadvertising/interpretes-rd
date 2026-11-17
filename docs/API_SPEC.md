@@ -1,7 +1,7 @@
 # API Specification & Webhooks
 
 > **Service**: `interpreters-api` (Backend — co-located with Frontend)
-> **Base URL**: `https://api.freeinterpreters.com` (production) / `http://localhost:3001` (local)
+> **Base URL**: `https://api.example.com` (production) / `http://localhost:3001` (local)
 > **Auth**: All endpoints require a valid Supabase `Authorization: Bearer <token>` header unless marked as public.
 > **Runtime**: Next.js 15.2.6 — All dynamic route params are `Promise<{ id: string }>`.
 
@@ -63,7 +63,7 @@ export async function GET(
 {
   "name": "John Smith",
   "externalId": "INT-002",
-  "emailCorporativo": "john@freeinterpreters.com",
+  "emailCorporativo": "john@example.com",
   "tariffPerMinute": 0.12,
   "status": "Activo",
   "password": "securepass123",
