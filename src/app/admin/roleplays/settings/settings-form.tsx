@@ -2,7 +2,7 @@
 import { useState, useTransition } from 'react';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
-  hasToken: boolean; credentialUsable: boolean; tokenSource: string; organizationId: string;
+  hasToken: boolean; credentialUsable: boolean; environmentFallbackAvailable: boolean; tokenSource: string; organizationId: string;
   mediaImportEnabled: boolean; proxyAvailable: boolean; encryptionReady: boolean;
   excludeInterpreterByDefault: boolean; compactViewDefault: 'auto' | 'compact' | 'expanded';
   protocolLanguageDefault: 'en' | 'es';
@@ -88,6 +88,9 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
           if (e.target.checked) setToken('');
         }} /> Borrar la clave guardada en el panel
       </label>}
+      {remove && status.tokenSource === 'panel' && status.environmentFallbackAvailable && <p role="alert" className="mt-2 text-sm text-amber-300">
+        Atención: al borrar la clave del panel volverá a utilizarse la clave configurada en Easypanel. Para revocarla por completo debes eliminarla también del servidor.
+      </p>}
       {status.tokenSource === 'servidor' && <p className="mt-2 text-xs text-slate-400">
         La clave actual proviene de Easypanel. Puedes sustituirla desde aquí, pero para revocarla debes eliminarla del servidor.
       </p>}</div>
