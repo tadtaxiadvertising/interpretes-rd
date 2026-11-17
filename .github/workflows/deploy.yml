@@ -277,7 +277,7 @@ jobs:
         if: steps.check_head.outputs.current == 'true'
         env:
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
-        run: npm run migrate -- prisma/migrations/20261117130000_account_platform_vpn_config/migration.sql --apply --transaction
+        run: npx tsx scripts/ensure-account-platform-vpn-migration.ts
 
       - name: Verify production client directory schema after migrations
         if: steps.check_head.outputs.current == 'true'
