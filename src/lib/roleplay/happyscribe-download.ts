@@ -56,7 +56,10 @@ export async function fetchHappyScribeExport(
     });
     if (!REDIRECT_STATUSES.has(response.status)) return response;
 
+    // Redirect bodies can hold a network connection open. We never forward
+    // them, so release the response before following or rejecting the hop.
     const location = response.headers.get('location');
+    await discardHappyScribeDownload(response);
     if (!location || redirects === 3) {
       throw new Error('Invalid HappyScribe export redirect');
     }
