@@ -67,6 +67,9 @@ describe('Audio Studio compact editing', () => {
     expect(search.value).toBe('');
     expect(screen.getByLabelText('Título')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Contraer' })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Ir al inicio de intervención 1' }).closest('article'),
+    );
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
@@ -82,7 +85,9 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
     expect(screen.getByRole('alert').textContent).toMatch(/Intervención 1: elimina el fragmento del intérprete original/);
     expect(screen.getByRole('button', { name: 'Excluir 1 intervención del intérprete' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Ir al inicio de intervención 1' }).closest('article'),
+    );
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
