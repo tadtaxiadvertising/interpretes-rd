@@ -80,8 +80,8 @@ export default async function RecruitmentPage() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-white">Recruitment Funnel</h2>
-          <p className="text-gray-400">Track and manage interpreter applications</p>
+          <h2 className="text-3xl font-bold text-white">Gestión de postulaciones</h2>
+          <p className="text-gray-400">Consulta y administra las postulaciones y sus etapas de selección.</p>
         </div>
         <div className="flex gap-4">
           <ExportCandidatesButton data={candidates as any} />
@@ -93,10 +93,10 @@ export default async function RecruitmentPage() {
       {/* Pipeline Summary */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {[
-          { label: 'Total Applicants', count: candidates.length, icon: Users, color: 'text-blue-400' },
-          { label: 'In Interview', count: inInterviewCount, icon: Calendar, color: 'text-purple-400' },
-          { label: 'Hired this Month', count: hiredCount, icon: CheckCircle2, color: 'text-green-400' },
-          { label: 'Rejection Rate', count: candidates.length > 0 ? `${Math.round((rejectedCount / candidates.length) * 100)}%` : '0%', icon: XCircle, color: 'text-red-400' },
+          { label: 'Postulaciones recibidas', count: candidates.length, icon: Users, color: 'text-blue-400' },
+          { label: 'En evaluación', count: inInterviewCount, icon: Calendar, color: 'text-purple-400' },
+          { label: 'Incorporaciones del mes', count: hiredCount, icon: CheckCircle2, color: 'text-green-400' },
+          { label: 'Tasa de no selección', count: candidates.length > 0 ? `${Math.round((rejectedCount / candidates.length) * 100)}%` : '0%', icon: XCircle, color: 'text-red-400' },
         ].map((stat: Stat, i: number) => (
           <div key={i} className="glass p-6 rounded-3xl border border-white/5">
             <div className="flex justify-between items-start">
@@ -115,13 +115,13 @@ export default async function RecruitmentPage() {
       {/* Candidates List */}
       <div className="glass rounded-3xl overflow-visible">
         <div className="p-6 border-b border-white/5 flex flex-wrap gap-4 items-center justify-between">
-          <h3 className="text-xl font-bold text-white">Active Candidates</h3>
+          <h3 className="text-xl font-bold text-white">Candidatos en proceso</h3>
           <div className="flex gap-2">
              <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
               <input 
                 type="text" 
-                placeholder="Search candidates..." 
+                placeholder="Buscar candidatos..." 
                 className="bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors"
               />
             </div>
@@ -134,11 +134,11 @@ export default async function RecruitmentPage() {
         <table className="w-full text-left">
           <thead>
             <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
-              <th className="py-6 px-8">Candidate</th>
-              <th className="py-6 px-4">Contact</th>
-              <th className="py-6 px-4">Status</th>
-              <th className="py-6 px-4">Roleplay</th>
-              <th className="py-6 px-4 text-right">Actions</th>
+              <th className="py-6 px-8">Candidato</th>
+              <th className="py-6 px-4">Contacto</th>
+              <th className="py-6 px-4">Estado</th>
+              <th className="py-6 px-4">Simulación</th>
+              <th className="py-6 px-4 text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
@@ -156,7 +156,7 @@ export default async function RecruitmentPage() {
                         {candidate.name}
                       </p>
                       <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
-                        <Globe size={12} /> {candidate.pais || 'Remote'}
+                        <Globe size={12} /> {candidate.pais || 'Remoto'}
                       </p>
                     </div>
                   </div>
@@ -197,7 +197,7 @@ export default async function RecruitmentPage() {
                       <span className="text-sm font-bold text-white">{candidate.resultRoleplay}%</span>
                     </div>
                   ) : (
-                    <span className="text-xs text-gray-600">Not Evaluated</span>
+                    <span className="text-xs text-gray-600">Pendiente de evaluación</span>
                   )}
                 </td>
                 <td className="py-6 px-4 text-right">
@@ -212,7 +212,7 @@ export default async function RecruitmentPage() {
         {candidates.length === 0 && (
           <div className="p-20 text-center">
             <Clock size={48} className="mx-auto text-gray-700 mb-4" />
-            <p className="text-gray-500">No candidates in the pipeline yet.</p>
+            <p className="text-gray-500">Todavía no hay candidatos en el proceso de selección.</p>
           </div>
         )}
       </div>
