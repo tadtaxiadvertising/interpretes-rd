@@ -628,6 +628,36 @@ describe('Audio Studio clip review player', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it('starts only one MP3 export even for repeated clicks before state updates', async () => {
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') return new Promise<Response>(() => {});
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: 'a'.repeat(32), name: 'Practice.mp3', state: 'automatic_done',
+            language: 'en-US', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+
+    act(() => {
+      const button = screen.getByRole('button', { name: 'Importar audio original' });
+      fireEvent.click(button);
+      fireEvent.click(button);
+    });
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Cancelar descarga' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }));
+    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
+  });
+
   it('imports the original HappyScribe MP3 directly into the Audio Studio source', async () => {
     const itemId = 'a'.repeat(32);
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {

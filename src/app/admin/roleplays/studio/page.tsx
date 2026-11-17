@@ -1135,7 +1135,9 @@ export default function RoleplayStudioPage() {
       setError('Carga primero en Audio Studio el audio original correspondiente a esta transcripción.');
       return;
     }
-    if (!happyScribeSelectedId || happyScribeImporting) return;
+    // State-based disabled controls render later. The ref closes the window
+    // between a first click and that render, avoiding duplicate provider exports.
+    if (!happyScribeSelectedId || happyScribeImporting || happyScribeTranscriptAbort.current) return;
     const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
     if (!item || !['automatic_done', 'done'].includes(item.state)) {
       setError('Selecciona una transcripción completada en HappyScribe.');
@@ -1178,7 +1180,8 @@ export default function RoleplayStudioPage() {
   };
 
   const importHappyScribeAudio = async () => {
-    if (!happyScribeSelectedId || happyScribeMediaImporting) return;
+    // Prevent a second potentially expensive MP3 export before React rerenders.
+    if (!happyScribeSelectedId || happyScribeMediaImporting || happyScribeMediaAbort.current) return;
     const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
     if (!item || item.state !== 'automatic_done') {
       setError('El audio original solo está disponible para transcripciones completadas con el estado automatic_done.');
@@ -1366,7 +1369,12 @@ export default function RoleplayStudioPage() {
                 onChange={event => {
                   // A media transfer belongs to the selected transcription.
                   // Switching selection invalidates the pending download.
-                  happyScribeMediaAbort.current?.abort();
+                  if (happyScribeMediaAbort.current) {
+                    happyScribeMediaAbort.current.abort();
+                    happyScribeMediaAbort.current = null;
+                    // A hung network request must not keep a new selection busy.
+                    setHappyScribeMediaImporting(false);
+                  }
                   setHappyScribeSelectedId(event.currentTarget.value);
                 }}
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
@@ -1388,6 +1396,8 @@ export default function RoleplayStudioPage() {
               {happyScribeMediaImporting && (
                 <button type="button" onClick={() => {
                   happyScribeMediaAbort.current?.abort();
+                  happyScribeMediaAbort.current = null;
+                  setHappyScribeMediaImporting(false);
                   setNotice('Descarga de audio cancelada. Puedes seguir trabajando con la grabación actual.');
                 }} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
                   Cancelar descarga
