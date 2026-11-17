@@ -209,9 +209,10 @@ async function main() {
       vpn_protocol: 'text',
       vpn_port: 'integer',
     };
-    const actualVpnColumns = new Map(
+    const actualVpnColumns = new Map<string, { data_type: string; is_nullable: string }>(
       vpnColumns.rows.map((row: { column_name: string; data_type: string; is_nullable: string }) =>
-        [row.column_name, row]),
+        [row.column_name, row] as const,
+      ),
     );
     for (const [column, dataType] of Object.entries(expectedVpnTypes)) {
       const actual = actualVpnColumns.get(column);
