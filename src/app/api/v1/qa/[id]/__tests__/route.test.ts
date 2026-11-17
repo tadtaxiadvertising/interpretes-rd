@@ -73,6 +73,31 @@ describe('QA detail API privacy and error isolation', () => {
     expect(result.status).toBe(200);
     privateResponse(result);
     expect((await result.json()).interpreter.name).toBe('Sensitive interpreter');
+    expect(prisma.qAScore.findUnique).toHaveBeenCalledWith({
+      where: { id: 8 },
+      include: {
+        interpreter: { select: { id: true, externalId: true, name: true } },
+        productionLog: {
+          select: {
+            id: true,
+            interpreterId: true,
+            date: true,
+            campaign: true,
+            interpretedMinutes: true,
+            callsAttended: true,
+            status: true,
+          },
+        },
+      },
+    });
+    const query = vi.mocked(prisma.qAScore.findUnique).mock.calls[0][0];
+    const serializedQuery = JSON.stringify(query);
+    // Future Prisma relation expansions must not silently return banking,
+    // national identity, network identifiers or settled payroll references.
+    for (const field of ['cuentaPago', 'cedulaRnc', 'clientIp', 'tariffPerMinute', 'payrollRecordId', 'observaciones']) {
+      expect(serializedQuery).not.toContain(field);
+    }
+
 
     vi.mocked(prisma.qAScore.findUnique).mockResolvedValueOnce(null);
     const notFound = await GET(req(), params);
