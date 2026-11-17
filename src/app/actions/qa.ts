@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { revalidatePath } from 'next/cache';
 import { createNotification } from './notifications';
 import { z } from 'zod';
@@ -112,8 +113,7 @@ export async function submitQAEvaluation(rawInput: QAScoreInput) {
         }
       }
     } catch (notifyErr: unknown) {
-      const message = notifyErr instanceof Error ? notifyErr.message : 'Unknown error';
-      console.error('Notification failed but QA saved:', message);
+      console.error('Notification failed but QA saved:', safeServerErrorCategory(notifyErr));
     }
 
     revalidatePath('/qa');
@@ -124,8 +124,7 @@ export async function submitQAEvaluation(rawInput: QAScoreInput) {
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
       return { success: false, error: 'This production log already has a QA evaluation', code: 'CONFLICT' };
     }
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('QA Submission Error:', message);
+    console.error('QA Submission Error:', safeServerErrorCategory(error));
     return { success: false, error: 'Unable to save QA evaluation', code: 'INTERNAL_ERROR' };
   }
 }
