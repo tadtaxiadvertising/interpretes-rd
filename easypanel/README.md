@@ -42,7 +42,7 @@ Easypanel requires these variables to be configured in the **Environment** tab o
 | Variable              | Description                                             | Scope     | Example                                  |
 | :-------------------- | :------------------------------------------------------ | :-------- | :--------------------------------------- |
 | `NODE_ENV`            | Sets application environment (production/development).  | Runtime   | `production`                             |
-| `NEXT_PUBLIC_API_URL` | **SYNC**: Public URL of the backend API service.        | Build+RT  | `https://database-interpreters.rewvid.easypanel.host/` |
+| `NEXT_PUBLIC_API_URL` | **SYNC**: Public URL of the backend API service (keep separate from the frontend domain unless API routing is explicitly configured there). | Build+RT | `https://database-interpreters.rewvid.easypanel.host/` |
 
 ---
 
