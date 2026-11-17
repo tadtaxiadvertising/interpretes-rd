@@ -17,7 +17,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <DashboardShell role="admin" userName={profile?.display_name || "Admin"}>
+    <DashboardShell role="admin" userName={profile?.display_name || "Administrador"}>
       {children}
     </DashboardShell>
   );
