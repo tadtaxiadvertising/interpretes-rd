@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 const API_BASE = 'https://www.happyscribe.com/api/v1';
-const ID_PATTERN = /^[a-f0-9]{32,64}$/i;
+const ID_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/i;
 
 function configuration() {
   const token = process.env.HAPPY_SCRIBE_API_TOKEN?.trim();
