@@ -1,5 +1,5 @@
 import React from 'react';
-import { auth } from '@/lib/auth';
+import { getCurrentProfile } from '@/app/actions/auth';
 import { redirect } from 'next/navigation';
 import prismaClient from '@/lib/prisma';
 import { QAEngine } from '@/components/QAEngine';
@@ -20,15 +20,12 @@ export default async function QAPage(props: PageProps) {
   await props.params;
   await props.searchParams;
 
-  const session = await auth();
-  if (!session || !session.user) redirect('/login');
-
-  const profile = await prisma.userProfile.findUnique({
-    where: { id: session.user.id },
-    select: { role: true }
-  });
-
-  if (profile?.role !== 'admin') redirect('/dashboard');
+  // getCurrentProfile resolves Supabase and Auth.js identities consistently.
+  // Do not require an Auth.js session when a verified Supabase administrator
+  // is already authenticated. Still fail closed for anonymous/non-admin users.
+  const profile = await getCurrentProfile();
+  if (!profile) redirect('/login');
+  if (profile.role !== 'admin') redirect('/dashboard');
 
   const interpreters = await prisma.interpreter.findMany({
     select: { id: true, name: true, externalId: true },
