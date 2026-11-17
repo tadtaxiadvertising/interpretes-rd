@@ -33,6 +33,7 @@ describe('Roleplay Studio editable project recovery', () => {
     Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
     vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => {});
     vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     vi.mocked(sha256StudioAudio).mockResolvedValue(hash);
     vi.mocked(sha256StudioAudio).mockClear();
     vi.mocked(fingerprintLocalMedia).mockResolvedValue(hash);
@@ -198,6 +199,7 @@ describe('Roleplay Studio editable project recovery', () => {
     });
     expect(screen.getByRole('alert').textContent).toMatch(/no es compatible/);
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Intervención 1');
+    expect(window.confirm).not.toHaveBeenCalled();
     expect(vi.mocked(fingerprintLocalMedia)).not.toHaveBeenCalled();
     expect(vi.mocked(sha256StudioAudio)).not.toHaveBeenCalled();
   });
@@ -213,6 +215,62 @@ describe('Roleplay Studio editable project recovery', () => {
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Paciente · 1 (ES)');
     expect(screen.getByDisplayValue('Interpretar con fidelidad')).toBeTruthy();
     expect(screen.queryByText(/Transcripción de referencia · solo editor/)).toBeNull();
+  });
+
+  it('keeps existing edits when the administrator declines a valid project replacement', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    const originalTitle = screen.getByLabelText('Título') as HTMLInputElement;
+    fireEvent.change(originalTitle, { target: { value: 'Edición sin guardar' } });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Nuevo borrador válido')] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Importación cancelada/)).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición sin guardar');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.queryByDisplayValue('Nuevo borrador válido')).toBeNull();
+    expect(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i)).not.toHaveProperty('disabled', true);
+  });
+
+  it('replaces current edits only after accepting a verified project', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    const originalTitle = screen.getByLabelText('Título') as HTMLInputElement;
+    fireEvent.change(originalTitle, { target: { value: 'Edición anterior' } });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Borrador aprobado')] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Borrador aprobado');
+    expect(screen.queryByDisplayValue('Edición anterior')).toBeNull();
+  });
+
+  it('never changes a prior server choice when rejecting a verified compound v2 draft', async () => {
+    selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    const source = createLongMediaDraft(3, hash, [{
+      title: 'Médico compuesto', start: 0, end: 45,
+      ranges: [{ start: 0, end: 10 }, { start: 40, end: 45 }],
+      scriptPrompt: '', responseLimit: 120, speakerRole: 'doctor', language: 'en',
+    }], 90);
+    const file = new File(['v2 project'], 'project-v2.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { configurable: true, value: async () => JSON.stringify(source) });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Intervención 1');
+    expect(screen.queryByText(/Proyecto v2 restaurado/)).toBeNull();
   });
 
   it('rejects projects bound to another MP3 and preserves existing edits', async () => {
