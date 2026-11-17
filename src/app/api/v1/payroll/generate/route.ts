@@ -20,16 +20,36 @@ export async function POST(request: Request) {
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayOfWeek = days[dateToProcess.getDay()];
 
-    // Find all interpreters that are scheduled to be paid today
+    // A weekday alone cannot distinguish alternate-week pay cycles. The
+    // interpreter model has no biweekly anchor date; treating these accounts as
+    // Weekly could prematurely create payroll and mark production as processed.
+    // Fail before ANY financial writes, even if weekly/monthly accounts are
+    // also due. An explicit calendar/anchor workflow must resolve the cycle.
+    const unanchoredBiweekly = await prisma.interpreter.findFirst({
+      where: {
+        status: 'Activo',
+        paymentFrequency: 'Biweekly',
+        paymentDay: dayOfWeek,
+      },
+      select: { id: true },
+    });
+    if (unanchoredBiweekly) {
+      return privateAdminJson({
+        success: false,
+        code: 'BIWEEKLY_SCHEDULE_UNCONFIGURED',
+        error: 'Hay intérpretes con pago cada dos semanas, pero falta una fecha de referencia del ciclo. No se generó ninguna nómina; configura y verifica el calendario antes de reintentar.',
+      }, { status: 409 });
+    }
+
+    // Only deterministic frequencies may be generated in this legacy API.
     const interpreters = await prisma.interpreter.findMany({
       where: {
         status: 'Activo',
         OR: [
           { paymentFrequency: 'Monthly', paymentDay: dayOfMonth },
           { paymentFrequency: 'Weekly', paymentDay: dayOfWeek },
-          { paymentFrequency: 'Biweekly', paymentDay: dayOfWeek } // Would need logic for every other week, simplifying for now
-        ]
-      }
+        ],
+      },
     });
 
     if (interpreters.length === 0) {
