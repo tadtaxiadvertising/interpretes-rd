@@ -1187,13 +1187,17 @@ export default function RoleplayStudioPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id }),
       });
+      // Abort can race with a response already resolved by fetch. Never consume
+      // or import a media response after cancellation, even if it arrives late.
+      if (controller.signal.aborted) return;
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(typeof body?.error === 'string'
           ? body.error : 'No fue posible importar el audio original.');
       }
       const blob = await response.blob();
-      if (revisionAtRequest !== subtitleImportRevision.current ||
+      if (controller.signal.aborted ||
+          revisionAtRequest !== subtitleImportRevision.current ||
           activeAudioFile.current !== previousAudio) return;
       if (!blob.size || blob.size > 250 * 1024 * 1024) {
         throw new Error('El audio está vacío o supera el límite de importación directa de 250 MiB.');
@@ -1348,7 +1352,12 @@ export default function RoleplayStudioPage() {
               <select aria-label="Transcripción de HappyScribe"
                 disabled={happyScribeImporting || happyScribeLoading}
                 value={happyScribeSelectedId}
-                onChange={event => setHappyScribeSelectedId(event.currentTarget.value)}
+                onChange={event => {
+                  // A media transfer belongs to the selected transcription.
+                  // Switching selection invalidates the pending download.
+                  happyScribeMediaAbort.current?.abort();
+                  setHappyScribeSelectedId(event.currentTarget.value);
+                }}
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
                 <option value="">Selecciona una transcripción</option>
                 {happyScribeItems.map(item => (
