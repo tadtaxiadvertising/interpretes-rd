@@ -9,11 +9,11 @@ import { cn } from '@/lib/utils';
 
 // Dimension inputs are 0..10; weights come from the canonical scoring module.
 const DIMENSION_FIELDS = [
-  { key: 'protocolScore', label: 'Protocol (35%)' },
-  { key: 'interpretationScore', label: 'Interpretation (40%)' },
-  { key: 'languageScore', label: 'Language (15%)' },
-  { key: 'serviceScore', label: 'Service (5%)' },
-  { key: 'technicalScore', label: 'Technical (5%)' },
+  { key: 'protocolScore', label: 'Protocolo (35%)' },
+  { key: 'interpretationScore', label: 'Interpretación (40%)' },
+  { key: 'languageScore', label: 'Idioma (15%)' },
+  { key: 'serviceScore', label: 'Servicio (5%)' },
+  { key: 'technicalScore', label: 'Aspectos técnicos (5%)' },
 ] as const;
 
 function SubmitButton() {
@@ -29,7 +29,7 @@ function SubmitButton() {
           : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
       )}
     >
-      {pending ? <><Loader2 className="animate-spin" size={20} /> Evaluating...</> : <><Scale size={20} /> Submit Evaluation</>}
+      {pending ? <><Loader2 className="animate-spin" size={20} /> Evaluando...</> : <><Scale size={20} /> Enviar evaluación</>}
     </button>
   );
 }
@@ -80,8 +80,8 @@ export function RoleplayEvaluationClient({
               <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </div>
             <div>
-              <h4 className="text-lg font-bold text-white">Already Evaluated</h4>
-              <p className="text-gray-400 text-sm">This scenario has already been evaluated</p>
+              <h4 className="text-lg font-bold text-white">Ya evaluado</h4>
+              <p className="text-gray-400 text-sm">Este escenario ya fue evaluado.</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -105,7 +105,7 @@ export function RoleplayEvaluationClient({
         </div>
         {existingScore?.criticalError && (
           <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <p className="text-red-400 font-bold">Critical Error Flagged</p>
+            <p className="text-red-400 font-bold">Error crítico detectado</p>
           </div>
         )}
       </div>
@@ -129,11 +129,11 @@ export function RoleplayEvaluationClient({
           <ShieldCheck className="text-red-400" />
           QA Evaluation
         </h4>
-        <p className="text-gray-400 mt-1">Score the scenario across all 5 dimensions. Selecting <strong className="text-red-400">Critical Error</strong> forces the total score to 0.</p>
+        <p className="text-gray-400 mt-1">Evalúa el escenario en las cinco dimensiones. Si seleccionas <strong className="text-red-400">Error crítico</strong> la puntuación total será 0.</p>
       </div>
 
       <form action={formAction} className="space-y-6">
-        {/* Critical Error Toggle */}
+        {/* Error crítico Toggle */}
         <div className={cn(
           "p-6 rounded-2xl border transition-all flex items-start gap-4",
           formData.criticalError ? "bg-red-500/10 border-red-500/50" : "bg-white/5 border-white/10 hover:border-red-500/30"
@@ -152,7 +152,7 @@ export function RoleplayEvaluationClient({
           </div>
           <div>
             <label htmlFor="criticalError" className="text-lg font-bold text-white cursor-pointer block">
-              Flag: Critical Error Detected
+              Flag: Error crítico Detected
             </label>
             <p className="text-sm text-gray-400 mt-1">Forces total score to 0.00% regardless of other scores.
             </p>
@@ -185,13 +185,13 @@ export function RoleplayEvaluationClient({
         }}>
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-500">Estimated Total Score</p>
+              <p className="text-sm text-gray-500">Puntuación total estimada</p>
               <p className="text-3xl font-bold" style={{ color: formData.criticalError ? "#ef4444" : "#22c55e" }}>
                 {calculatedScore.toFixed(2)}%
               </p>
             </div>
             <div className="text-right">
-              <p className="text-sm text-gray-500">Critical Error</p>
+              <p className="text-sm text-gray-500">Error crítico</p>
               <p className="text-xl font-bold" style={{ color: formData.criticalError ? "#ef4444" : "#22c55e" }}>
                 {formData.criticalError ? "YES" : "NO"}
               </p>
@@ -201,14 +201,14 @@ export function RoleplayEvaluationClient({
 
         {/* Comments */}
         <div className="space-y-2">
-          <label className="text-sm font-bold text-gray-300 uppercase tracking-wider block">Auditor Comments</label>
+          <label className="text-sm font-bold text-gray-300 uppercase tracking-wider block">Comentarios del evaluador</label>
           <textarea 
             name="comments" 
             rows={4}
             value={formData.comments}
             onChange={(e) => handleChange("comments", e.target.value)}
             className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors resize-none"
-            placeholder="Describe the protocol violation, technical issue, or excellent performance..."
+            placeholder="Describe el incumplimiento del protocolo, el problema técnico o el buen desempeño..."
           ></textarea>
         </div>
 
@@ -223,7 +223,7 @@ export function RoleplayEvaluationClient({
         {state?.success && (
           <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 flex items-center gap-3 animate-in fade-in">
              <CheckCircle2 />
-             <span className="font-bold">Evaluation submitted successfully!</span>
+             <span className="font-bold">¡La evaluación se envió correctamente!</span>
           </div>
         )}
 
