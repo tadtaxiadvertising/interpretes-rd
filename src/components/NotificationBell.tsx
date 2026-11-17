@@ -16,7 +16,12 @@ interface Notification {
 
 export function NotificationBell({ initialNotifications }: { initialNotifications: Notification[] }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState(initialNotifications);
+  // Keep local read acknowledgments, not a frozen copy of server props.
+  // New notifications supplied by a refreshed layout must appear immediately.
+  const [locallyReadIds, setLocallyReadIds] = useState<string[]>([]);
+  const notifications = initialNotifications.map(n =>
+    locallyReadIds.includes(n.id) ? { ...n, isRead: true } : n
+  );
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const pendingRef = useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
@@ -33,10 +38,11 @@ export function NotificationBell({ initialNotifications }: { initialNotification
     try {
       const result = await markNotificationAsRead(id);
       if (result.success) {
-        // Functional update is required when requests finish out of order.
-        setNotifications(current => current.map(n =>
-          n.id === id ? { ...n, isRead: true } : n
-        ));
+        // Functional state update survives requests finishing out of order
+        // without hiding new notifications received from server props.
+        setLocallyReadIds(current =>
+          current.includes(id) ? current : [...current, id]
+        );
       } else {
         setError('No se pudo marcar la notificación como leída. Inténtalo de nuevo.');
       }
