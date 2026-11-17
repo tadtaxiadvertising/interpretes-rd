@@ -210,6 +210,8 @@ describe('Audio Studio compact editing', () => {
     loadAudio(90);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    expect(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     pause.mockClear();
