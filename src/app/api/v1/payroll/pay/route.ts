@@ -3,6 +3,7 @@ import { PayrollPaySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function PATCH(request: Request) {
   try {
@@ -51,6 +52,7 @@ export async function PATCH(request: Request) {
 
     return privateAdminJson({ success: true, data: updatedPayroll });
   } catch (error) {
+    console.error('Payroll payment request failed:', safeServerErrorCategory(error));
     return privateAdminResponse(apiError({ error, fallback: 'Internal Server Error', exposeMessage: false }));
   }
 }
