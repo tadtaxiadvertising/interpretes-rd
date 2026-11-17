@@ -36,6 +36,9 @@ function parseSegments(value: string | null): Segment[] | null {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
     const item = entry as Record<string, unknown>;
     const { title, start, end, scriptPrompt, responseLimit } = item;
+    // Compound scenes require local v2 FFmpeg exporters. Reject instead of
+    // silently rendering the encompassing interval and restoring its silence.
+    if (Object.prototype.hasOwnProperty.call(item, 'ranges')) return null;
     if (typeof title !== 'string' || title.trim().length < 1 || title.length > 200 ||
       typeof start !== 'number' || !Number.isFinite(start) ||
       typeof end !== 'number' || !Number.isFinite(end) ||
