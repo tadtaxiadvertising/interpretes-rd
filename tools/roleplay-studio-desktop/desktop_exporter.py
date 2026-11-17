@@ -458,6 +458,92 @@ def recognize_media_and_project(selected):
     return sources[0], projects[0]
 
 
+def _project_source_identity(project_file):
+    """Read only bounded public format/identity metadata for local pairing.
+
+    Do not run an exporter, transcribe, store content or follow symlinks.
+    The sampled fingerprint is a convenience check, not full-file integrity.
+    """
+    try:
+        if (project_file.is_symlink() or not project_file.is_file() or
+                not 0 < project_file.stat().st_size <= MAX_PROJECT_BYTES):
+            return None
+        with project_file.open("r", encoding="utf-8") as file:
+            project = json.load(file)
+        size = project.get("sourceSizeBytes") if _obj(project) else None
+        digest = project.get("sourceSampleSha256") if _obj(project) else None
+        if (not _obj(project) or project.get("format") != FORMAT or
+                type(project.get("version")) is not int or
+                project["version"] not in (1, 2) or
+                type(size) is not int or not 0 < size <= MAX_SOURCE_BYTES or
+                not isinstance(digest, str) or
+                not re.fullmatch(r"[0-9a-fA-F]{64}", digest)):
+            return None
+        return size, digest.lower()
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return None
+
+
+def discover_local_companion(selected, *, max_entries=250, max_candidates=8):
+    """Return a unique verified (source, JSON) pair from the same directory.
+
+    This optional convenience search is shallow, bounded and offline. Multiple
+    matches, unreadable files, symlinks or large directories require the normal
+    explicit picker instead of choosing an uncertain source.
+    """
+    selected = Path(selected).expanduser().absolute()
+    try:
+        if selected.is_symlink() or not selected.is_file():
+            return None
+        is_json = selected.suffix.lower() == ".json"
+        is_media = selected.suffix.lower().lstrip(".") in EXTENSIONS
+        if not (is_json or is_media):
+            return None
+        if is_json:
+            identity = _project_source_identity(selected)
+            if identity is None:
+                return None
+            source_size, expected_hash = identity
+        else:
+            source_size = selected.stat().st_size
+            if not 0 < source_size <= MAX_SOURCE_BYTES:
+                return None
+            expected_hash = fingerprint_file(selected, source_size)
+
+        matches = []
+        candidates_seen = 0
+        with os.scandir(selected.parent) as entries:
+            for index, entry in enumerate(entries):
+                if index >= max_entries:
+                    return None
+                if entry.name == selected.name or entry.is_symlink() or not entry.is_file(follow_symlinks=False):
+                    continue
+                candidate = Path(entry.path)
+                if is_json:
+                    if candidate.suffix.lower().lstrip(".") not in EXTENSIONS:
+                        continue
+                    if entry.stat(follow_symlinks=False).st_size != source_size:
+                        continue
+                    candidates_seen += 1
+                    if candidates_seen > max_candidates:
+                        return None
+                    if fingerprint_file(candidate, source_size) != expected_hash:
+                        continue
+                    matches.append((str(candidate), str(selected)))
+                else:
+                    if candidate.suffix.lower() != ".json":
+                        continue
+                    if _project_source_identity(candidate) != (source_size, expected_hash):
+                        continue
+                    matches.append((str(selected), str(candidate)))
+                if len(matches) > 1:
+                    return None
+        return matches[0] if len(matches) == 1 else None
+    except (OSError, ValueError, ExportError):
+        # Never make browsing impossible just because auto-discovery failed.
+        return None
+
+
 def run_desktop():
     # The Windows console bootloader is more reliable with the bundled FFmpeg.
     # Hide its terminal only in packaged GUI mode; keep it visible for diagnostics.
@@ -524,6 +610,14 @@ def run_desktop():
         # A one-file selection seamlessly opens the complementary picker.
         if len(selected) == 1:
             first = selected[0]
+            companion = discover_local_companion(first)
+            if companion:
+                fields[0].set(companion[0])
+                fields[1].set(companion[1])
+                propose_output()
+                status.set("Grabación y JSON compatibles encontrados en la misma carpeta. "
+                           "Comprueba los archivos y pulsa Generar ZIP local.")
+                return
             if Path(first).suffix.lower() == ".json":
                 second = filedialog.askopenfilename(
                     title="Ahora selecciona la grabación original",

@@ -143,6 +143,51 @@ class StudioDesktopTests(unittest.TestCase):
             with self.subTest(selection=selection), self.assertRaises(module.ExportError):
                 module.recognize_media_and_project(selection)
 
+    def test_unique_same_folder_companion_is_found_from_either_selected_file(self):
+        expected = (str(self.source), str(self.project))
+        self.assertEqual(module.discover_local_companion(self.project), expected)
+        self.assertEqual(module.discover_local_companion(self.source), expected)
+
+    def test_duplicate_media_or_json_never_auto_selects_an_ambiguous_pair(self):
+        duplicate_audio = self.source.parent / "copy.wav"
+        shutil.copyfile(self.source, duplicate_audio)
+        # Two recordings with the same partial fingerprint are ambiguous;
+        # the GUI must ask the user to choose one explicitly.
+        self.assertIsNone(module.discover_local_companion(self.project))
+        duplicate_audio.unlink()
+        duplicate_project = self.project.parent / "copy.json"
+        shutil.copyfile(self.project, duplicate_project)
+        self.assertIsNone(module.discover_local_companion(self.source))
+
+    def test_changed_source_or_project_fingerprint_requires_manual_selection(self):
+        alternative = self.source.parent / "modified.wav"
+        original = bytearray(self.source.read_bytes())
+        original[-1] ^= 1
+        alternative.write_bytes(original)
+        self.assertIsNone(module.discover_local_companion(alternative))
+        self.draft["sourceSampleSha256"] = "0" * 64
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        self.assertIsNone(module.discover_local_companion(self.project))
+
+    def test_pair_discovery_is_bounded_and_rejects_invalid_projects_and_links(self):
+        # No recursive scan or unbounded inventory of private folders.
+        self.assertIsNone(module.discover_local_companion(self.project, max_entries=1))
+        self.assertIsNone(module.discover_local_companion(self.project, max_candidates=0))
+        self.assertIsNone(module.discover_local_companion(self.project, max_entries=0))
+        malformed = self.source.parent / "malformed.json"
+        malformed.write_text("{", encoding="utf-8")
+        self.assertIsNone(module.discover_local_companion(malformed))
+        invalid = self.source.parent / "oversized.json"
+        invalid.write_bytes(b"x" * (module.MAX_PROJECT_BYTES + 1))
+        self.assertIsNone(module.discover_local_companion(invalid))
+        link = self.source.parent / "source-link.wav"
+        try:
+            link.symlink_to(self.source)
+        except (OSError, NotImplementedError):
+            pass
+        else:
+            self.assertIsNone(module.discover_local_companion(link))
+
     def test_zip_suggestion_avoids_existing_and_symlinked_outputs(self):
         folder = self.project.parent
         first = folder / "roleplay-studio.zip"
