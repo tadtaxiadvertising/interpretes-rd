@@ -102,7 +102,7 @@ export async function PATCH(
               ? (existing[field] ?? 0)
               : (updateData[field] ?? 0)));
 
-        const isCritical = updateData.criticalError ?? existing.criticalError ?? false;
+        const isCritical = Boolean(updateData.criticalError ?? existing.criticalError ?? false);
         expectedTotal = calculateCanonicalQaTotal({
           protocolScore: protocol,
           interpretationScore: interpretation,
