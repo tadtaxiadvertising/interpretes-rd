@@ -4,7 +4,7 @@ import { isPublicApiPath } from '@/lib/security/public-api-path';
 import { addCorsVary, trustedCorsOrigin } from '@/lib/security/cors-origin';
 
 /**
- * UNIFIED MIDDLEWARE — FREE INTERPRETERS OS
+ * UNIFIED MIDDLEWARE — INTÉRPRETES RD
  * ============================================================
  * Supabase Auth Only Middleware.
  *
@@ -100,7 +100,7 @@ export async function middleware(req: NextRequest) {
   // to avoid cascading failure when the container cold-starts.
   if (pathname === '/api/health') {
     return new NextResponse(
-      JSON.stringify({ status: 'healthy', timestamp: new Date().toISOString(), service: 'free-interpreters-os' }),
+      JSON.stringify({ status: 'healthy', timestamp: new Date().toISOString(), service: 'interpretes-rd' }),
       {
         status: 200,
         headers: {
