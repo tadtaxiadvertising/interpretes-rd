@@ -53,7 +53,7 @@ export function createClient() {
         detectSessionInUrl: true
       },
       global: {
-        headers: { 'x-application-name': 'free-interpreters-os' },
+        headers: { 'x-application-name': 'interpretes-rd' },
       }
     }
   );
