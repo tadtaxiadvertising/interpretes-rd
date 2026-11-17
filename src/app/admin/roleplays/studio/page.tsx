@@ -1371,15 +1371,8 @@ export default function RoleplayStudioPage() {
                   // Switching selection invalidates the pending download.
                   happyScribeMediaAbort.current?.abort();
                   happyScribeMediaAbort.current = null;
-                  // Some transports do not settle promptly after abort.
-                  // Allow the newly selected recording to be imported at once.
+                  // Do not block the next selection on a transport that ignores abort.
                   setHappyScribeMediaImporting(false);
-                  if (happyScribeMediaAbort.current) {
-                    happyScribeMediaAbort.current.abort();
-                    happyScribeMediaAbort.current = null;
-                    // A hung network request must not keep a new selection busy.
-                    setHappyScribeMediaImporting(false);
-                  }
                   setHappyScribeSelectedId(event.currentTarget.value);
                 }}
                 className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
