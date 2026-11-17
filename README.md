@@ -1,6 +1,6 @@
 # Intérpretes RD
 
-> Plataforma de gestión de intérpretes for managing interpreters, production tracking, QA audits, payroll, and recruitment.
+> Plataforma de gestión de intérpretes en la República Dominicana para postulación, seguimiento profesional, operaciones, control de calidad y nómina.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ This platform uses a **decoupled two-service architecture**:
 
 | Service | Description | Tech |
 | :------ | :---------- | :--- |
-| `interpretes-rd` | Aplicación principal: interfaz, autenticación y acceso directo a datos | Next.js 15.2.6, Prisma 7, Tailwind v4 |
+| `interpretes-rd` | Aplicación principal: interfaz, autenticación y acceso directo a datos | Next.js 15.5.28, Prisma 7, Tailwind v4 |
 | `interpreters-api` | REST Service: Webhooks, External integrations | Next.js 16 API Routes, Prisma 7 |
 
 ### Dual-Service Synchronization in Easypanel
