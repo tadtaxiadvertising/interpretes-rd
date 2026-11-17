@@ -16,9 +16,32 @@ export type QaV1PointScores = {
   [Key in keyof typeof QA_V1_POINT_LIMITS]?: number | null;
 };
 
+/**
+ * Use base-10 integer arithmetic for two-decimal PostgreSQL NUMERIC values.
+ * Binary floats can turn exact ties such as 12.35 / 40 * 100 = 30.875 into
+ * 30.874999..., incorrectly rounding 30.88 down to 30.87.
+ */
+function normalizedPercentageCents(points: number, limit: number): bigint {
+  const match = /^(\\d+)(?:\\.(\\d+))?(?:e([+-]?\\d+))?$/i.exec(String(points));
+  if (!match) throw new Error('Invalid QA dimension');
+  const fraction = match[2] ?? '';
+  const exponent = Number(match[3] ?? 0);
+  const places = fraction.length - exponent;
+  let numerator = BigInt(match[1] + fraction) * 10_000n;
+  let denominator = BigInt(limit);
+  if (places >= 0) {
+    denominator *= 10n ** BigInt(places);
+  } else {
+    numerator *= 10n ** BigInt(-places);
+  }
+  // Exact positive half-up rounding to 0.01 percentage points.
+  return (numerator * 2n + denominator) / (2n * denominator);
+}
+
 export function normalizeQaV1Points(input: QaV1PointScores, criticalError: boolean) {
   const normalized = {} as Record<keyof typeof QA_V1_POINT_LIMITS, number>;
   let totalPoints = 0;
+  let weightedPercentageBasis = 0n;
 
   for (const [key, limit] of Object.entries(QA_V1_POINT_LIMITS) as Array<
     [keyof typeof QA_V1_POINT_LIMITS, number]
@@ -33,18 +56,17 @@ export function normalizeQaV1Points(input: QaV1PointScores, criticalError: boole
     // Postgres qa_scores dimensions are NUMERIC(5,2), with 0..100 ranges.
     // Round the normalized percentages before calculating the expected sum
     // to match the values that a DB trigger reads after persistence.
-    normalized[key] = Math.round((points / limit) * 10_000) / 100;
+    const percentageCents = normalizedPercentageCents(points, limit);
+    normalized[key] = Number(percentageCents) / 100;
+    weightedPercentageBasis += percentageCents * BigInt(limit);
   }
 
-  const persistedWeightedTotal = Object.entries(QA_V1_POINT_LIMITS).reduce(
-    (total, [key, limit]) => total +
-      normalized[key as keyof typeof QA_V1_POINT_LIMITS] * (limit / 100),
-    0,
-  );
-
+  // Each persisted dimension has exactly two decimal places. Apply the
+  // percentage weights after that rounding with integer arithmetic.
+  const expectedCents = (weightedPercentageBasis + 50n) / 100n;
   return {
     dimensions: normalized,
-    totalScore: criticalError ? 0 : Math.round(persistedWeightedTotal * 100) / 100,
+    totalScore: criticalError ? 0 : Number(expectedCents) / 100,
     rawPointTotal: Math.round(totalPoints * 100) / 100,
   };
 }
