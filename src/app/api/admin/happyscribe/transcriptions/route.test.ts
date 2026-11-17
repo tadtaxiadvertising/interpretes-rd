@@ -242,6 +242,19 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+  it('releases rejected upstream streams without disclosing provider errors', async () => {
+    const cancel = vi.fn();
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      status: 429,
+    }));
+    const response = await GET(new NextRequest(
+      'http://localhost/api/admin/happyscribe/transcriptions?check=1',
+    ));
+    expect(response.status).toBe(503);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect((await response.json()).error).toContain('limitó');
+  });
+
   it('checks connectivity without returning transcription metadata to the admin settings form', async () => {
     mocks.fetch.mockResolvedValueOnce(Response.json({
       results: [{ id: transcriptionId, name: 'SYNTHETIC_PRIVATE_TITLE' }],
