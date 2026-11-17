@@ -58,7 +58,29 @@ export const PayrollRecordPatchSchema = PayrollRecordSchema.partial().extend({
   transferDeduction: z.number().nonnegative().optional(),
   status: z.string().optional(),
 });
-export const QAScorePatchSchema = QAScoreSchema.partial();
+// The legacy CREATE endpoint accepts weighted point contributions (20/40/20/10/10).
+// Stored QA dimensions and the admin PATCH endpoint use canonical 0–100 percentages.
+// Audit ownership and the calculated total are immutable from generic PATCH; changes
+// to these fields require an explicit audited workflow rather than relinking history.
+// Build an explicit object to avoid carrying the CREATE criticalError default into PATCH.
+const QAPercentage = z.number().finite().min(0).max(100).refine(
+  value => Math.abs(value * 100 - Math.round(value * 100)) < 1e-7,
+  { message: 'QA percentages support at most two decimal places' },
+).nullable().optional();
+export const QAScorePatchSchema = z.object({
+  auditDate: z.coerce.date().optional(),
+  auditor: z.string().max(255).nullable().optional(),
+  callDuration: z.number().int().positive().nullable().optional(),
+  callType: z.string().max(100).nullable().optional(),
+  protocolScore: QAPercentage,
+  interpretationScore: QAPercentage,
+  languageScore: QAPercentage,
+  serviceScore: QAPercentage,
+  technicalScore: QAPercentage,
+  criticalError: z.boolean().optional(),
+  comentarios: z.string().max(2_000).nullable().optional(),
+  accionRequerida: z.enum(['Ninguna', 'Coaching', 'Advertencia']).nullable().optional(),
+}).strict();
 // Canonical funnel state lives on RecruitmentApplication and may only
 // transition through `advanceApplication`; the candidate record itself carries
 // no status field, so the patch endpoint cannot be used as a state-machine
