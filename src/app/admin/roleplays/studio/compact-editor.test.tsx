@@ -383,8 +383,8 @@ describe('Audio Studio compact editing', () => {
     // A new edit deliberately invalidates the older removal snapshot.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
-    // Two turns remain after adding one to a single surviving cut.
-    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    // The only existing intervention was removed; adding a new one leaves one.
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
   it('filters interventions pending speaker/language review and restores the complete list', () => {
