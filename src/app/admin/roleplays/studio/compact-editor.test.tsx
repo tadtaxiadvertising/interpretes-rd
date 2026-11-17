@@ -42,8 +42,8 @@ describe('Audio Studio compact editing', () => {
 
   it('filters interventions without altering the underlying project', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Intervención 2' },
     });
@@ -55,7 +55,7 @@ describe('Audio Studio compact editing', () => {
   it('automatically shows condensed rows for larger sets, with accessible editors', () => {
     loadAudio(240);
     for (let i = 0; i < 6; i++) {
-      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     }
     // Newly created sixth turn opens for editing even as compact mode begins.
     expect(screen.getAllByRole('button', { name: 'Editar' })).toHaveLength(5);
@@ -95,7 +95,7 @@ describe('Audio Studio compact editing', () => {
 
   it('preserves edited cuts when valid SRT replacement is declined', async () => {
     loadAudio(90);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Edición sin guardar' } });
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     const file = new File(['srt'], 'reemplazo.srt', { type: 'text/plain' });
@@ -116,7 +116,7 @@ describe('Audio Studio compact editing', () => {
 
   it('accepts SRT replacement with confirmation and clears filters from the old project', async () => {
     loadAudio(90);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'turno que no existe' },
     });
@@ -138,7 +138,7 @@ describe('Audio Studio compact editing', () => {
 
   it('does not prompt or erase existing cuts for invalid subtitle files', async () => {
     loadAudio(90);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     const invalid = new File(['not subtitles'], 'wrong.txt', { type: 'text/plain' });
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
@@ -183,7 +183,7 @@ describe('Audio Studio compact editing', () => {
 
   it('preserves long SRT review after declined replacement and closes it after acceptance', async () => {
     loadAudio(90);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByLabelText('Título'), {
       target: { value: 'Edición pendiente' },
     });
@@ -208,8 +208,8 @@ describe('Audio Studio compact editing', () => {
 
   it('splits at the playhead and merges adjacent compatible intervals', () => {
     const player = loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     player.currentTime = 15;
     fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1 en cursor/ }));
     expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
@@ -224,7 +224,7 @@ describe('Audio Studio compact editing', () => {
   it('sets language only on unreviewed non-interpreter turns and restores them with undo', () => {
     loadAudio(180);
     for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     }
     const roles = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
     const languages = screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[];
@@ -260,7 +260,7 @@ describe('Audio Studio compact editing', () => {
   it('never assigns languages to turns hidden by the active search filter', () => {
     loadAudio(180);
     for (let i = 0; i < 4; i++) {
-      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     }
     const titles = screen.getAllByLabelText('Título') as HTMLInputElement[];
     fireEvent.change(titles[1], { target: { value: 'Solo inglés 2' } });
@@ -281,11 +281,11 @@ describe('Audio Studio compact editing', () => {
 
   it('adds a turn near the cursor even when another turn exists much later', () => {
     const player = loadAudio(3600);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     player.currentTime = 600;
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     player.currentTime = 35;
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
     const starts = screen.getAllByLabelText('Inicio (segundos)') as HTMLInputElement[];
     const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
@@ -309,7 +309,7 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.queryByText('Doctor: Fictional reference only')).toBeNull();
   });
 
@@ -342,18 +342,18 @@ describe('Audio Studio compact editing', () => {
 
   it('invalidates deletion undo when a new intervention is added', () => {
     loadAudio(90);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
     expect(screen.getByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
   it('filters interventions pending speaker/language review and restores the complete list', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[0], {
       target: { value: 'doctor' },
     });
@@ -372,8 +372,8 @@ describe('Audio Studio compact editing', () => {
 
   it('seeks directly to an intervention without playing or changing the editor', () => {
     const player = loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Ir al inicio de intervención 2' }));
     expect(player.currentTime).toBe(30);
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
@@ -383,7 +383,7 @@ describe('Audio Studio compact editing', () => {
   it('edits compact rows without opening their detailed editors', () => {
     loadAudio(240);
     for (let i = 0; i < 6; i++) {
-      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     }
     const speaker = screen.getByRole('combobox', { name: 'Hablante rápido intervención 1' });
     const language = screen.getByRole('combobox', { name: 'Idioma rápido intervención 1' });
@@ -410,7 +410,7 @@ describe('Audio Studio compact editing', () => {
 
   it('preserves the current source and interventions when the file picker is cancelled', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [] },
     });
@@ -421,7 +421,7 @@ describe('Audio Studio compact editing', () => {
 
   it('does not replace the source or discard edits when replacement is declined', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     const replacement = new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' });
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
@@ -453,7 +453,7 @@ describe('Audio Studio compact editing', () => {
 
   it('preserves active audio, interventions and editor state when replacement media is invalid', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     const originalPlayer = document.querySelector('audio') as HTMLAudioElement;
     const originalSrc = originalPlayer.getAttribute('src');
     const invalid = new File(['text is not audio'], 'not-audio.txt', { type: 'text/plain' });
@@ -481,7 +481,7 @@ describe('Audio Studio compact editing', () => {
 
   it('clears stale review filters when the source recording changes', () => {
     const player = loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'not visible' },
     });
@@ -498,8 +498,8 @@ describe('Audio Studio compact editing', () => {
 
   it('divides at the midpoint when the player is outside the selected intervention', () => {
     const player = loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
 
     // This was previously a no-op, with the error located below the list.
     player.currentTime = 100;
@@ -516,8 +516,8 @@ describe('Audio Studio compact editing', () => {
 
   it('reports incompatible speakers beside the row and preserves both turns', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[0], {
       target: { value: 'doctor' },
     });
@@ -537,8 +537,8 @@ describe('Audio Studio compact editing', () => {
 
   it('physically joins two compatible distant cuts into one local-only v2 scene without the gap', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], {
       target: { value: '40' },
     });
@@ -575,8 +575,8 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('radio', { name: /Servidor \(opcional\)/i }));
     expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(true);
 
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
     fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
     expect(screen.getByText(/la exportación local se ha activado automáticamente/i)).toBeTruthy();
@@ -595,8 +595,8 @@ describe('Audio Studio compact editing', () => {
 
   it('never merges a hidden next turn when review filters are active', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Intervención 1' },
     });
@@ -607,8 +607,8 @@ describe('Audio Studio compact editing', () => {
 
   it('auditions two distant turns without the gap and leaves both exported cuts intact', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
 
     const startButton = screen.getByRole('button', {
@@ -638,8 +638,8 @@ describe('Audio Studio compact editing', () => {
 
   it('does not offer gapless audition for a mismatched speaker or a hidden following turn', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
     fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], { target: { value: 'patient' } });
     expect(screen.queryByRole('button', { name: /Preescuchar intervenciones/ })).toBeNull();
@@ -653,8 +653,8 @@ describe('Audio Studio compact editing', () => {
 
   it('undoes the last split or merge without altering the original source', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1/ }));
     expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer última división o unión' }));
@@ -669,7 +669,7 @@ describe('Audio Studio compact editing', () => {
 
   it('invalidates undo after manually editing a restored turn', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Dividir intervención 1/ }));
     expect(screen.getByRole('button', { name: 'Deshacer última división o unión' })).toBeTruthy();
     fireEvent.change(screen.getAllByLabelText('Título')[0], { target: { value: 'Editado' } });
@@ -678,8 +678,8 @@ describe('Audio Studio compact editing', () => {
 
   it('ignores inactive secondary media errors but reports failures during an explicit audition', () => {
     loadAudio(120);
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
 
     const secondary = screen.getByLabelText('Reproductor de preescucha sin pausa') as HTMLAudioElement;
