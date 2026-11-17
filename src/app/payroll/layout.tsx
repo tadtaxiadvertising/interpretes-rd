@@ -21,7 +21,7 @@ export default async function PayrollLayout({
   }
 
   return (
-    <DashboardShell role="admin" userName={profile.display_name || "Admin"}>
+    <DashboardShell role="admin" userName={profile.display_name || "Administrador"}>
       {children}
     </DashboardShell>
   );
