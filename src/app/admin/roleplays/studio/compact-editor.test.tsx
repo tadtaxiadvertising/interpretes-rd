@@ -221,6 +221,64 @@ describe('Audio Studio compact editing', () => {
     expect(Number(ends[0].value)).toBe(30);
   });
 
+  it('sets language only on unreviewed non-interpreter turns and restores them with undo', () => {
+    loadAudio(180);
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    }
+    const roles = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
+    const languages = screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[];
+    fireEvent.change(roles[0], { target: { value: 'doctor' } });
+    fireEvent.change(languages[0], { target: { value: 'en' } });
+    fireEvent.change(roles[3], { target: { value: 'interpreter' } });
+    fireEvent.change(screen.getAllByLabelText('Título')[1], {
+      target: { value: 'Escenario personalizado' },
+    });
+
+    const apply = screen.getByRole('button', { name: 'Marcar pendientes como español' });
+    expect(screen.getByText(/2 intervenciones visibles sin idioma/)).toBeTruthy();
+    fireEvent.click(apply);
+    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
+      .map(input => input.value)).toEqual(['en', 'es', 'es', 'unknown']);
+    expect((screen.getAllByLabelText('Título') as HTMLInputElement[])
+      .map(input => input.value)).toEqual([
+        'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención · 3 (ES)', 'Intérprete · 4',
+      ]);
+    expect(screen.queryByRole('button', { name: 'Marcar pendientes como español' })).toBeNull();
+    expect(screen.getByText(/Idioma ES asignado a 2 intervenciones/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de idiomas' }));
+    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
+      .map(input => input.value)).toEqual(['en', 'unknown', 'unknown', 'unknown']);
+    expect((screen.getAllByLabelText('Título') as HTMLInputElement[])
+      .map(input => input.value)).toEqual([
+        'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención 3', 'Intérprete · 4',
+      ]);
+    expect(screen.getByRole('button', { name: 'Marcar pendientes como español' })).toBeTruthy();
+  });
+
+  it('never assigns languages to turns hidden by the active search filter', () => {
+    loadAudio(180);
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    }
+    const titles = screen.getAllByLabelText('Título') as HTMLInputElement[];
+    fireEvent.change(titles[1], { target: { value: 'Solo inglés 2' } });
+    fireEvent.change(titles[3], { target: { value: 'Solo inglés 4' } });
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    fireEvent.change(search, { target: { value: 'Solo inglés' } });
+
+    expect(screen.getByText(/2 intervenciones visibles sin idioma/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar pendientes como inglés' }));
+    fireEvent.change(search, { target: { value: '' } });
+    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
+      .map(item => item.value)).toEqual(['unknown', 'en', 'unknown', 'en']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de idiomas' }));
+    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
+      .map(item => item.value)).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
+  });
+
   it('adds a turn near the cursor even when another turn exists much later', () => {
     const player = loadAudio(3600);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
