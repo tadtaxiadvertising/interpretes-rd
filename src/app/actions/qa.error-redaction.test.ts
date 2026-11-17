@@ -228,6 +228,20 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     } finally { log.mockRestore(); }
   });
 
+  it('does not silently ignore a notification action that returns a failed delivery result', async () => {
+    m.createNotification.mockResolvedValueOnce({
+      success: false, code: 'INTERNAL_ERROR', error: 'PRIVATE_PASSWORD',
+    });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await submitQaInput(input);
+      expect(result).toMatchObject({ success: true });
+      expect(m.qaCreate).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith('QA saved but notification not delivered');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_PASSWORD');
+    } finally { warn.mockRestore(); }
+  });
+
   it('keeps an already-saved QA evaluation successful when notification delivery fails privately', async () => {
     m.createNotification.mockRejectedValueOnce(new Error(credentials));
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
