@@ -79,14 +79,38 @@ describe("RBAC holder vault actions", () => {
     }));
   });
 
-  it("rejects malformed URLs before writing to the database", async () => {
+  it.each([
+    "javascript:alert(1)",
+    "data:text/html,unsafe",
+    "file:///etc/passwd",
+    "ftp://example.test/login",
+    "https://user:password@example.test/login",
+    "https://example.test/line\nnext",
+    "https://",
+  ])("rejects unsafe portal link %s before persisting credentials", async (url) => {
     await expect(uploadAccount({
       platformName: "Portal",
       credentials: "secret",
-      url: "javascript:alert(1)",
+      url,
     })).rejects.toThrow();
 
     expect(prisma.vaultAccount.create).not.toHaveBeenCalled();
+    expect(encryptPassword).not.toHaveBeenCalled();
+  });
+
+  it("still accepts an HTTP portal used within a VPN without a fixed provider or slot", async () => {
+    await uploadAccount({
+      platformName: "Portal interno",
+      credentials: "secret",
+      url: "http://vpn.internal.test/login",
+      vpnConfig: "VPN provider: variable\nProfile: custom",
+    });
+    expect(prisma.vaultAccount.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        url: "http://vpn.internal.test/login",
+        vpnConfig: "VPN provider: variable\nProfile: custom",
+      }),
+    }));
   });
 
   it.each([
