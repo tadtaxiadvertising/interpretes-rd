@@ -39,7 +39,7 @@ describe('Admin roleplay import concurrency', () => {
     });
   });
 
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
   const chooseManifest = () => {
     fireEvent.change(screen.getByLabelText(/Importar roleplay preparado/i), {
@@ -243,6 +243,73 @@ describe('Admin roleplay import concurrency', () => {
     expect(currentDurations()).toEqual(['120', '180', '120']);
     expect(screen.queryByText(/Este paquete ya está importado/)).toBeNull();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(3);
+  });
+
+  const template = {
+    id: 'library-safe',
+    fingerprint: 'a'.repeat(64),
+    scenarios: [{ title: 'Escenario verificado', durationLimitSec: 120, scriptPrompt: '' }],
+  };
+
+  it('submits only once when create is activated twice before a response', async () => {
+    let finish!: (response: Response) => void;
+    const pending = new Promise<Response>(resolve => { finish = resolve; });
+    const request = vi.fn((_url: string, _options: RequestInit) => pending);
+    vi.stubGlobal('fetch', request);
+    render(<NewRoleplayForm
+      interpreters={[{ id: 1, name: 'Intérprete de prueba' }]}
+      candidates={[]}
+      librarySource={template}
+    />);
+    fireEvent.change(screen.getByLabelText(/Destinatario/), { target: { value: '1' } });
+    const create = screen.getByRole('button', { name: 'Asignar plantilla' });
+
+    await act(async () => {
+      fireEvent.click(create);
+      fireEvent.click(create);
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    const [url, options] = request.mock.calls[0];
+    expect(url).toBe('/api/admin/roleplays');
+    expect(options.method).toBe('POST');
+    const fields = options.body as FormData;
+    expect(fields.get('participantId')).toBe('1');
+    expect(fields.get('librarySessionId')).toBe('library-safe');
+
+    await act(async () => {
+      finish({ json: async () => ({
+        success: true, data: { bulk: false, inviteLink: '/roleplays/mock-invitation' },
+      }) } as Response);
+      await pending;
+    });
+    expect(screen.getByText('Roleplay Created!')).toBeTruthy();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a corrected retry after the server rejects creation', async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ json: async () => ({ success: false, error: 'Rechazado por validación' }) })
+      .mockResolvedValueOnce({
+        json: async () => ({
+          success: true, data: { bulk: false, inviteLink: '/roleplays/retry' },
+        }),
+      });
+    vi.stubGlobal('fetch', request);
+    render(<NewRoleplayForm
+      interpreters={[{ id: 1, name: 'Intérprete de prueba' }]}
+      candidates={[]}
+      librarySource={template}
+    />);
+    fireEvent.change(screen.getByLabelText(/Destinatario/), { target: { value: '1' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Asignar plantilla' }));
+    });
+    expect(screen.getByText('Rechazado por validación')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Asignar plantilla' }));
+    });
+    expect(request).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Roleplay Created!')).toBeTruthy();
   });
 
   it('uses the external ZIP fallback and canonical SHA-256 validation without publishing', async () => {
