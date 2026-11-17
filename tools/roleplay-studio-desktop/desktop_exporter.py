@@ -479,8 +479,11 @@ def _project_source_identity(project_file):
                 not isinstance(digest, str) or
                 not re.fullmatch(r"[0-9a-fA-F]{64}", digest)):
             return None
+        # A matching sampled fingerprint is not sufficient if the scenario
+        # contains invalid cuts or an interpreter-original turn.
+        validate_project(project, size)
         return size, digest.lower()
-    except (OSError, UnicodeError, ValueError, TypeError):
+    except (OSError, UnicodeError, ValueError, TypeError, ExportError):
         return None
 
 
