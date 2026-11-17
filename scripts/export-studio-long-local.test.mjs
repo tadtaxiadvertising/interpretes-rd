@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
+import ffmpegStatic from 'ffmpeg-static';
 import { exportLocal, fingerprintFile, parseArgs, validateProject, writeExclusiveZip } from './export-studio-long-local.mjs';
 
-function wavFixture() {
-  const frames = 16000 * 3;
+function wavFixture(seconds = 3) {
+  const frames = 16000 * seconds;
   const pcm = Buffer.alloc(44 + frames * 2);
   pcm.write('RIFF', 0);
   pcm.writeUInt32LE(pcm.length - 8, 4);
@@ -60,6 +62,59 @@ test('the local media exporter makes a valid roleplay STORE ZIP without uploadin
     assert.match(manifest.segments[0].sha256, /^[0-9a-f]{64}$/);
     assert.ok(zip.includes(Buffer.from('segment-01.mp3')));
     await assert.rejects(exportLocal({ source, project, output }), /EEXIST/);
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});
+
+
+test('v2 physical merge exports one MP3 with selected duration and no intervening silence', { timeout: 60000 }, async () => {
+  const temp = await fs.mkdtemp(join(tmpdir(), 'studio-compound-v2-'));
+  try {
+    const source = join(temp, 'source.wav');
+    const project = join(temp, 'compound.json');
+    const output = join(temp, 'joined.zip');
+    await fs.writeFile(source, wavFixture(6));
+    const sourceBytes = (await fs.stat(source)).size;
+    const segment = {
+      title: 'Doctor · unido', start: 0.2, end: 5.2,
+      ranges: [{ start: 0.2, end: 1.2 }, { start: 4, end: 5.2 }],
+      scriptPrompt: '', responseLimit: 120, speakerRole: 'doctor', language: 'en',
+    };
+    const draft = {
+      format: 'interpretes-rd-studio-long-local-project', version: 2,
+      sourceSizeBytes: sourceBytes, sourceDurationSeconds: 6,
+      sourceSampleSha256: await fingerprintFile(source, sourceBytes),
+      segments: [segment],
+    };
+    assert.equal(validateProject(draft, sourceBytes).length, 1);
+    assert.throws(() => validateProject({ ...draft, version: 1 }, sourceBytes), /v1/);
+    assert.throws(() => validateProject({ ...draft, segments: [{
+      ...segment, ranges: [{ start: 0.2, end: 1.2 }, { start: 1.1, end: 5.2 }],
+    }] }, sourceBytes), /intervalos compuestos/);
+    await fs.writeFile(project, JSON.stringify(draft));
+    await exportLocal({ source, project, output });
+    const zip = await fs.readFile(output);
+    const manifestNameLen = zip.readUInt16LE(26);
+    const manifestLen = zip.readUInt32LE(18);
+    const manifest = JSON.parse(zip.subarray(30 + manifestNameLen, 30 + manifestNameLen + manifestLen).toString());
+    assert.equal(manifest.segments.length, 1);
+    const secondOffset = 30 + manifestNameLen + manifestLen;
+    const audioNameLen = zip.readUInt16LE(secondOffset + 26);
+    const audioLength = zip.readUInt32LE(secondOffset + 18);
+    const name = zip.subarray(secondOffset + 30, secondOffset + 30 + audioNameLen).toString();
+    assert.equal(name, 'segment-01.mp3');
+    const mp3 = zip.subarray(secondOffset + 30 + audioNameLen, secondOffset + 30 + audioNameLen + audioLength);
+    const result = spawnSync(ffmpegStatic, [
+      '-hide_banner', '-nostdin', '-loglevel', 'error', '-i', 'pipe:0',
+      '-f', 'null', '-', '-progress', 'pipe:2', '-nostats',
+    ], { input: mp3, timeout: 30000 });
+    assert.equal(result.status, 0, result.stderr?.toString().slice(-500));
+    const times = [...result.stderr.toString().matchAll(/out_time=(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/g)];
+    assert.ok(times.length, 'FFmpeg must report decoded MP3 duration');
+    const last = times.at(-1);
+    const length = Number(last[1]) * 3600 + Number(last[2]) * 60 + Number(last[3]);
+    assert.ok(length > 1.95 && length < 2.5, 'Joined MP3 should contain 2.2s, not the 5-second envelope: ' + length);
   } finally {
     await fs.rm(temp, { recursive: true, force: true });
   }
