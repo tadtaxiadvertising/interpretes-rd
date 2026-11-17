@@ -1088,8 +1088,9 @@ export default function RoleplayStudioPage() {
                   <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
                   <p className="mt-2">
                     Opción con interfaz gráfica: cuando el mantenedor haya generado y verificado
-                    la aplicación de escritorio, ábrela y selecciona la grabación original, el
-                    proyecto JSON y el ZIP de salida. No requiere comandos ni subir el archivo.
+                    la aplicación de escritorio, ábrela y pulsa «Elegir grabación + JSON».
+                    Selecciona ambos archivos una vez: se propondrá un nombre ZIP disponible.
+                    Pulsa «Generar ZIP local»; no requiere comandos ni subir la grabación.
                   </p>
                   <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
                     <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
