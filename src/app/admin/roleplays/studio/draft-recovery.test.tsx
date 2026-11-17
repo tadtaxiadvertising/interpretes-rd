@@ -277,7 +277,7 @@ describe('Roleplay Studio editable project recovery', () => {
     selectSource();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     pause.mockClear();
     vi.mocked(window.confirm).mockReturnValueOnce(false);
