@@ -67,7 +67,16 @@ export function ScenarioCard({
     }
 
     setAudioError(null);
+    // Avoid asking for a title that can be inferred from the uploaded clip.
+    // Never overwrite an administrator's or Audio Studio's existing title.
+    const inferredTitle = file.name
+      .replace(/\.[^.]+$/, '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 120);
     onUpdate(scenario.id, {
+      ...(scenario.title.trim() ? {} : { title: inferredTitle || `Intervención ${index + 1}` }),
       baseAudioFile: file,
       baseAudioPreview: URL.createObjectURL(file),
       sha256: undefined,
