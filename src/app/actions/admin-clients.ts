@@ -4,6 +4,19 @@ import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { clientAssignmentSchema, clientInputSchema } from '@/lib/client-validation';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+
+// Cache refresh is an independent post-commit operation. Revalidate every
+// affected view and never tell an operator to retry a committed write.
+function refreshClientViews(paths: readonly string[]) {
+  for (const path of paths) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.warn('[CLIENTS] Saved but cache refresh failed', safeServerErrorCategory(error));
+    }
+  }
+}
 
 export async function createClient(formData: FormData) {
   const profile = await getCurrentProfile();
@@ -15,11 +28,10 @@ export async function createClient(formData: FormData) {
   if (!parsed.success) return { success: false, error: 'Datos del cliente inválidos.' };
   try {
     await prisma.client.create({ data: parsed.data });
-    revalidatePath('/admin/clients');
-    revalidatePath('/admin/accounts');
+    refreshClientViews(['/admin/clients', '/admin/accounts']);
     return { success: true };
   } catch (error) {
-    console.error('[CLIENTS] Create failed', error);
+    console.error('[CLIENTS] Create failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo registrar el cliente. Comprueba que no exista.' };
   }
 }
@@ -45,12 +57,10 @@ export async function assignAccountToClient(formData: FormData) {
     if (result.count !== 1) {
       return { success: false, error: 'La cuenta no existe o ya pertenece a un cliente. No se modificó su historial.' };
     }
-    for (const path of ['/admin/clients', '/admin/accounts', '/admin/assignments', '/admin/reports', '/admin/reconciliation', '/admin/platforms']) {
-      revalidatePath(path);
-    }
+    refreshClientViews(['/admin/clients', '/admin/accounts', '/admin/assignments', '/admin/reports', '/admin/reconciliation', '/admin/platforms']);
     return { success: true };
   } catch (error) {
-    console.error('[CLIENTS] Account assignment failed', error);
+    console.error('[CLIENTS] Account assignment failed', safeServerErrorCategory(error));
     return { success: false, error: 'No se pudo vincular la cuenta al cliente.' };
   }
 }
