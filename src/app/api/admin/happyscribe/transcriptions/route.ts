@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
+import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { validateAction } from '@/lib/auth/actions';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -8,7 +9,6 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 const API_BASE = 'https://www.happyscribe.com/api/v1';
-const ID_PATTERN = /^(?:[a-f0-9]{32}|[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12})$/i;
 
 function configuration() {
   const token = process.env.HAPPY_SCRIBE_API_TOKEN?.trim();
@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
     const items = payload.results.flatMap((item: unknown) => {
       if (!item || typeof item !== 'object') return [];
       const row = item as Record<string, unknown>;
-      if (typeof row.id !== 'string' || !ID_PATTERN.test(row.id)) return [];
+      if (typeof row.id !== 'string' || !isValidHappyScribeId(row.id)) return [];
       return [{
         id: row.id,
         name: typeof row.name === 'string' ? row.name.slice(0, 240) : 'Transcripción sin título',
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
   try {
     const body: unknown = await req.json();
     if (body && typeof body === 'object' && 'id' in body && typeof body.id === 'string') id = body.id;
-    if (!ID_PATTERN.test(id)) return privateRoleplayResponse({ error: 'Identificador de transcripción no válido.' }, { status: 400 });
+    if (!isValidHappyScribeId(id)) return privateRoleplayResponse({ error: 'Identificador de transcripción no válido.' }, { status: 400 });
 
     const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, config.token);
     if (!detailResponse.ok) return privateRoleplayResponse(
@@ -137,7 +137,7 @@ export async function POST(req: NextRequest) {
     const created: unknown = await createResponse.json();
     const exportId = created && typeof created === 'object' && 'id' in created && typeof created.id === 'string'
       ? created.id : null;
-    if (!exportId || !ID_PATTERN.test(exportId)) return privateRoleplayResponse({ error: 'Respuesta de exportación no válida.' }, { status: 502 });
+    if (!exportId || !isValidHappyScribeId(exportId)) return privateRoleplayResponse({ error: 'Respuesta de exportación no válida.' }, { status: 502 });
 
     let downloadLink: string | null = null;
     for (let attempt = 0; attempt < 12; attempt++) {
