@@ -21,7 +21,10 @@ test('a frontend runtime SHA mismatch cannot suppress the backend webhook job', 
   assert.doesNotMatch(frontend, /verify-easypanel-version\.mjs|EASYPANEL_RELEASE_VERIFY_URL/);
   assert.match(backend, /needs: \[validate, deploy-interpreters\]/);
   assert.match(backend, /Call Easypanel Webhook — interpreters-api/);
-  assert.match(verifier, /needs: \[validate, deploy-interpreters, deploy-interpreters-api\]/);
+  assert.match(verifier, /needs: \[validate, deploy-interpreters, deploy-interpreters-api, deploy-roleplay-audio-worker\]/);
+  assert.match(verifier, /needs\.deploy-roleplay-audio-worker\.result == 'skipped'/);
+  assert.match(verifier, /needs\.deploy-roleplay-audio-worker\.result == 'success'/);
+  assert.match(verifier, /!cancelled\(\)/);
 });
 
 test('runtime verification is still fail-closed after the backend request', () => {
