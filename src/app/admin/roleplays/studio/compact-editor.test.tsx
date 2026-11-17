@@ -150,6 +150,62 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/Selecciona un SRT o VTT/);
   });
 
+  function longTranscript(): File {
+    const stamp = (seconds: number) =>
+      '00:' + String(Math.floor(seconds / 60)).padStart(2, '0') +
+      ':' + String(seconds % 60).padStart(2, '0') + ',000';
+    // The 26th cue requires the explicit selection flow (25-scene limit).
+    const content = Array.from({ length: 26 }, (_, index) => {
+      const start = index * 3;
+      return String(index + 1) + '\n' + stamp(start) + ' --> ' +
+        stamp(start + 1) + '\nDoctor: Source turn ' + (index + 1);
+    }).join('\n\n');
+    const file = new File(['srt'], 'long-reference.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { configurable: true, value: async () => content });
+    return file;
+  }
+
+  it('closes long SRT review only after successfully applying selected cuts', async () => {
+    loadAudio(90);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [longTranscript()] },
+      });
+    });
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Aplicar selección al editor \(25\)/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor \(25\)/ }));
+    expect(screen.queryByText('Seleccionar turnos de la transcripción')).toBeNull();
+    expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
+    expect(window.confirm).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Aplicar selección al editor/ })).toBeNull();
+  });
+
+  it('preserves long SRT review after declined replacement and closes it after acceptance', async () => {
+    loadAudio(90);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.change(screen.getByLabelText('Título'), {
+      target: { value: 'Edición pendiente' },
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [longTranscript()] },
+      });
+    });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor \(25\)/ }));
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición pendiente');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor \(25\)/ }));
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText('Seleccionar turnos de la transcripción')).toBeNull();
+    expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
+    expect(screen.queryByDisplayValue('Edición pendiente')).toBeNull();
+  });
+
   it('splits at the playhead and merges adjacent compatible intervals', () => {
     const player = loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));

@@ -346,7 +346,14 @@ export default function RoleplayStudioPage() {
     setError('');
     try {
       const selected = selectTimedCues(reviewCues, chosenCueIndices);
-      loadSelectedCues(selected, 0);
+      // Only dismiss the transcript review after the operator accepts the
+      // replacement. A declined confirmation must preserve the selection.
+      if (!loadSelectedCues(selected, 0)) return;
+      setReviewCues([]);
+      setChosenCueIndices([]);
+      setCuePage(0);
+      setCueSearch('');
+      setShowOnlySelectedCues(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible aplicar la selección.');
     }
