@@ -95,6 +95,31 @@ describe('Audio Studio compact editing', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
+  it('reveals the turn that pushes selected audio beyond fifteen minutes without exporting', () => {
+    loadAudio(1200);
+    for (let i = 1; i <= 4; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+      const ends = screen.getAllByLabelText('Final (segundos)') as HTMLInputElement[];
+      fireEvent.change(ends[i - 1], { target: { value: String(i * 300) } });
+    }
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'ningún resultado' },
+    });
+    expect(screen.queryByLabelText('Final (segundos)')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
+    expect(screen.getAllByRole('alert').some(item =>
+      item.textContent?.includes('Intervención 4: la selección acumulada supera 15 minutos'))).toBe(true);
+    expect(screen.getByText('la selección acumulada supera 15 minutos. Reduce este corte o alguno de los anteriores antes de exportar.')).toBeTruthy();
+    expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value).toBe('');
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Ir al inicio de intervención 4' }).closest('article'),
+    );
+    // Source preview only; an invalid export must not generate another download.
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+  });
+
   it('automatically shows condensed rows for larger sets, with accessible editors', () => {
     loadAudio(240);
     for (let i = 0; i < 6; i++) {
