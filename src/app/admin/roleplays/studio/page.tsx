@@ -719,7 +719,7 @@ export default function RoleplayStudioPage() {
     setSegments(previous => {
       const indexById = new Map([...previous]
         .sort((a, b) => a.start - b.start)
-        .map((item, index) => [item.id, index]));
+        .map((item, index) => [item.id, index] as const));
       return previous.map(item => {
         if (!pendingIds.has(item.id)) return item;
         return {
