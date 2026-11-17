@@ -16,17 +16,21 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
   const excludeValue = form.get('excludeInterpreterByDefault');
   const compactValue = form.get('compactViewDefault');
   const protocolLanguageValue = form.get('protocolLanguageDefault');
+  const integrationValue = form.get('integrationEnabled');
   if (excludeValue !== null && excludeValue !== 'true' && excludeValue !== 'false')
     return { success: false, message: 'Preferencia de intérprete no válida.' };
   if (compactValue !== null && !['auto', 'compact', 'expanded'].includes(String(compactValue)))
     return { success: false, message: 'Modo de visualización no válido.' };
   if (protocolLanguageValue !== null && protocolLanguageValue !== 'en' && protocolLanguageValue !== 'es')
     return { success: false, message: 'Idioma predeterminado del protocolo no válido.' };
+  if (integrationValue !== null && integrationValue !== 'true' && integrationValue !== 'false')
+    return { success: false, message: 'Estado de conexión no válido.' };
   try {
     await saveHappyScribeSettings({
       token, organizationId: organization,
       mediaImportEnabled: form.get('mediaImportEnabled') === 'on',
       removeToken: form.get('removeToken') === 'on',
+      ...(integrationValue !== null ? { integrationEnabled: integrationValue === 'true' } : {}),
       updatedBy: auth.user.userId,
       ...(excludeValue !== null ? { excludeInterpreterByDefault: excludeValue === 'true' } : {}),
       ...(compactValue !== null ? { compactViewDefault: compactValue as 'auto' | 'compact' | 'expanded' } : {}),
