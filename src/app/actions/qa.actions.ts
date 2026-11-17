@@ -125,13 +125,20 @@ export async function submitQAEvaluation(_prevState: unknown, formData: FormData
           comentarios: data.comments,
           accionRequerida: actionRequired,
         },
-        select: { id: true, totalScore: true },
+        select: { id: true },
       });
 
-      if (!storedQaFormTotalMatches(created.totalScore, expectedTotal)) {
+      // A PostgreSQL AFTER INSERT trigger can update the row after the
+      // INSERT RETURNING snapshot. Re-read within the transaction to see
+      // the final score and abort before COMMIT on any mismatch.
+      const persisted = await tx.qAScore.findUnique({
+        where: { id: created.id },
+        select: { totalScore: true },
+      });
+      if (!storedQaFormTotalMatches(persisted?.totalScore, expectedTotal)) {
         throw new Error('QA stored score contract mismatch');
       }
-      return created;
+      return persisted!;
     });
 
     // A post-commit cache failure must not claim the QA insert failed and
