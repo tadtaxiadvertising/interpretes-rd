@@ -87,7 +87,7 @@ export async function getHappyScribeSettingsStatus() {
   return {
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
     credentialUsable,
-    tokenSource: map.has(TOKEN_KEY) ? 'panel' : process.env.HAPPY_SCRIBE_API_TOKEN ? 'servidor' : 'ninguna',
+    tokenSource: map.has(TOKEN_KEY) ? 'panel' : (process.env.HAPPY_SCRIBE_API_TOKEN?.trim() ? 'servidor' : 'ninguna'),
     organizationId: map.has(ORG_KEY) ? map.get(ORG_KEY)! : (process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || ''),
     // Display the effective state, not merely a persisted preference:
     // media never flows through the VPS unless the deployment gate is on.
@@ -104,6 +104,7 @@ export async function saveHappyScribeSettings(input: {
   token?: string; organizationId: string; mediaImportEnabled: boolean; removeToken?: boolean;
   excludeInterpreterByDefault?: boolean;
   compactViewDefault?: AudioStudioCompactViewDefault;
+  updatedBy?: string;
 }) {
   const organizationId = input.organizationId.trim();
   if (organizationId && !/^\d{1,30}$/.test(organizationId)) throw new Error('ORGANIZATION_INVALID');
@@ -117,11 +118,14 @@ export async function saveHappyScribeSettings(input: {
     throw new Error('EXCLUDE_PREFERENCE_INVALID');
   if (input.token?.trim() && input.removeToken) throw new Error('TOKEN_OPERATION_CONFLICT');
   if (input.token && !masterKey()) throw new Error('ENCRYPTION_KEY_MISSING');
+  const actor = input.updatedBy?.trim() || null;
+  const encryptedToken = input.token ? encrypt(input.token.trim()) : null;
   await prisma.$transaction(async tx => {
     if (input.removeToken) await tx.systemConfig.deleteMany({ where: { key: TOKEN_KEY } });
-    else if (input.token) await tx.systemConfig.upsert({
-      where: { key: TOKEN_KEY }, create: { key: TOKEN_KEY, value: encrypt(input.token.trim()) },
-      update: { value: encrypt(input.token.trim()) },
+    else if (encryptedToken) await tx.systemConfig.upsert({
+      where: { key: TOKEN_KEY },
+      create: { key: TOKEN_KEY, value: encryptedToken, updatedBy: actor },
+      update: { value: encryptedToken, updatedBy: actor },
     });
     const settings: [string, string][] = [[ORG_KEY, organizationId], [MEDIA_KEY, String(input.mediaImportEnabled)]];
     if (input.excludeInterpreterByDefault !== undefined)
@@ -130,7 +134,7 @@ export async function saveHappyScribeSettings(input: {
       settings.push([COMPACT_KEY, input.compactViewDefault]);
     for (const [key, value] of settings) {
       await tx.systemConfig.upsert({
-        where: { key }, create: { key, value }, update: { value },
+        where: { key }, create: { key, value, updatedBy: actor }, update: { value, updatedBy: actor },
       });
     }
   });
