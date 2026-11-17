@@ -1,0 +1,124 @@
+// @vitest-environment node
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('server-only', () => ({}));
+vi.mock('@/lib/prisma', () => ({
+  default: {
+    systemConfig: { findMany: vi.fn() },
+    $transaction: vi.fn(),
+  },
+}));
+
+import prisma from '@/lib/prisma';
+import {
+  getHappyScribeSettings,
+  getHappyScribeSettingsStatus,
+  saveHappyScribeSettings,
+} from './happyscribe-settings';
+
+const TOKEN_KEY = 'audio_studio_happyscribe_token_v1';
+const originalEnv = {
+  key: process.env.AUDIO_STUDIO_ENCRYPTION_KEY,
+  token: process.env.HAPPY_SCRIBE_API_TOKEN,
+  org: process.env.HAPPY_SCRIBE_ORGANIZATION_ID,
+  media: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED,
+};
+const store = new Map<string, string>();
+const testToken = 'SYNTHETIC_NOT_A_REAL_HAPPYSCRIBE_TOKEN_1234';
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  store.clear();
+  process.env.AUDIO_STUDIO_ENCRYPTION_KEY = 'a'.repeat(64);
+  delete process.env.HAPPY_SCRIBE_API_TOKEN;
+  delete process.env.HAPPY_SCRIBE_ORGANIZATION_ID;
+  delete process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED;
+  vi.mocked(prisma.systemConfig.findMany).mockImplementation(async () =>
+    Array.from(store.entries()).map(([key, value]) => ({ key, value })) as never,
+  );
+  vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) =>
+    callback({
+      systemConfig: {
+        upsert: async ({ where, create, update }: any) => {
+          store.set(where.key, store.has(where.key) ? update.value : create.value);
+        },
+        deleteMany: async ({ where }: any) => {
+          store.delete(where.key);
+        },
+      },
+    }),
+  );
+});
+
+afterEach(() => {
+  for (const [key, value] of [
+    ['AUDIO_STUDIO_ENCRYPTION_KEY', originalEnv.key],
+    ['HAPPY_SCRIBE_API_TOKEN', originalEnv.token],
+    ['HAPPY_SCRIBE_ORGANIZATION_ID', originalEnv.org],
+    ['HAPPY_SCRIBE_MEDIA_PROXY_ENABLED', originalEnv.media],
+  ] as const) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
+describe('HappyScribe encrypted admin settings', () => {
+  it('encrypts secrets using a random IV and never returns them in status', async () => {
+    const input = { token: testToken, organizationId: '123456', mediaImportEnabled: false };
+    await saveHappyScribeSettings(input);
+    const first = store.get(TOKEN_KEY)!;
+    expect(first).toMatch(/^enc:v1:/);
+    expect(first).not.toContain(testToken);
+    await saveHappyScribeSettings(input);
+    const second = store.get(TOKEN_KEY)!;
+    expect(second).not.toBe(first);
+    expect((await getHappyScribeSettings()).token).toBe(testToken);
+    const status = await getHappyScribeSettingsStatus();
+    expect(status.hasToken).toBe(true);
+    expect(status.organizationId).toBe('123456');
+    expect(JSON.stringify(status)).not.toContain(testToken);
+  });
+
+  it('fails closed without the runtime encryption key before any database write', async () => {
+    delete process.env.AUDIO_STUDIO_ENCRYPTION_KEY;
+    await expect(saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    })).rejects.toThrow('ENCRYPTION_KEY_MISSING');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(store.size).toBe(0);
+  });
+
+  it('rejects modified ciphertext instead of falling back to the environment token', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    });
+    process.env.HAPPY_SCRIBE_API_TOKEN = 'SYNTHETIC_FALLBACK_TOKEN';
+    const saved = store.get(TOKEN_KEY)!;
+    const parts = saved.split('.');
+    parts[2] = (parts[2][0] === 'A' ? 'B' : 'A') + parts[2].slice(1);
+    store.set(TOKEN_KEY, parts.join('.'));
+    await expect(getHappyScribeSettings()).rejects.toThrow();
+  });
+
+  it('keeps VPS media proxy off without the independent deployment flag', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: true,
+    });
+    expect((await getHappyScribeSettings()).mediaImportEnabled).toBe(false);
+    expect((await getHappyScribeSettingsStatus()).mediaImportEnabled).toBe(false);
+    process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED = 'true';
+    expect((await getHappyScribeSettings()).mediaImportEnabled).toBe(true);
+    expect((await getHappyScribeSettingsStatus()).mediaImportEnabled).toBe(true);
+  });
+
+  it('rejects malformed organization IDs and preserves the existing token', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: false,
+    });
+    const previous = store.get(TOKEN_KEY);
+    await expect(saveHappyScribeSettings({
+      organizationId: 'not-a-number', mediaImportEnabled: false,
+    })).rejects.toThrow('ORGANIZATION_INVALID');
+    expect(store.get(TOKEN_KEY)).toBe(previous);
+  });
+});
