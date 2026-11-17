@@ -11,7 +11,7 @@ const AccountUrlSchema = z.string().trim().max(2048).refine((value) => {
   if (value === "") return true;
   // z.string().url() accepts non-web schemes, including javascript:.
   // Only ordinary web portal links are safe to store and render as links.
-  if (/[\\s\\u0000-\\u001f\\u007f]/u.test(value)) return false;
+  if (/[\s\u0000-\u001f\u007f]/u.test(value)) return false;
   try {
     const url = new URL(value);
     return (url.protocol === "https:" || url.protocol === "http:") &&
