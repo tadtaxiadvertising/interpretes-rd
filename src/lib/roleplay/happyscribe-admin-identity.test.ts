@@ -40,8 +40,14 @@ describe('HappyScribe cookie-bound admin identity', () => {
     expect(await matchesExplicitAdminBearer(request('Bearer matching-admin-token'), 'admin-1')).toBe(true);
   });
 
-  it('fails closed when Bearer identity resolution throws', async () => {
-    mocks.actorFromBearer.mockRejectedValue(new Error('Sensitive provider detail'));
+  it('fails closed when Bearer identity resolution throws synchronously', async () => {
+    // A synchronous provider failure is caught before any request may reach
+    // HappyScribe. Avoid mockRejectedValue here: this test must not create a
+    // rejected Promise outside the request's awaited error boundary.
+    mocks.actorFromBearer.mockImplementationOnce(() => {
+      throw new Error('Synthetic identity lookup error');
+    });
     expect(await matchesExplicitAdminBearer(request('Bearer broken-token'), 'admin-1')).toBe(false);
+    expect(mocks.actorFromBearer).toHaveBeenCalledOnce();
   });
 });
