@@ -37,7 +37,7 @@ Cada intervención compuesta admite **exactamente dos intervalos**, cada uno de 
 
 Workflow manual: [roleplay-studio-desktop.yml](../../.github/workflows/roleplay-studio-desktop.yml).
 
-Los pull requests ejecutan pruebas del exportador y **no publican ejecutables automáticamente**. Al lanzar workflow_dispatch después de revisar la rama, el paquete de cada sistema debe superar `--self-check`: **carga de Tcl/Tk sin pantalla y codificación efectiva de 0,25 segundos de silencio sintético con libmp3lame**. Esto verifica que el ejecutable incluya tanto la interfaz como el códec MP3 requerido sin acceder a grabaciones ni Internet. Después se producen:
+Los pull requests ejecutan pruebas del exportador y **no publican ejecutables automáticamente**. Al lanzar workflow_dispatch después de revisar la rama, el paquete de cada sistema debe superar `--self-check`: **inicialización de Tcl sin pantalla, presencia de los scripts Tk/ttk del paquete (o framework nativo de macOS) y codificación efectiva de 0,25 segundos de silencio sintético con libmp3lame**. Esto verifica que el ejecutable incluya tanto la interfaz como el códec MP3 requerido sin acceder a grabaciones ni Internet. Después se producen:
 
 | Plataforma | Archivo | Observación |
 | --- | --- | --- |
