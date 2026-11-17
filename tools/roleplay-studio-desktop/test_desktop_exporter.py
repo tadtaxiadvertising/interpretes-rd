@@ -4,6 +4,7 @@ import json
 import math
 import os
 import stat
+import subprocess
 from pathlib import Path
 import shutil
 import struct
@@ -150,6 +151,47 @@ class StudioDesktopTests(unittest.TestCase):
         with self.assertRaisesRegex(module.ExportError, "ya existe"):
             module.export_project(self.source, self.project, self.output)
         self.assertEqual(self.output.read_bytes(), b"keep-me")
+
+    @unittest.skipUnless(shutil.which("ffmpeg") or
+                         importlib.util.find_spec("imageio_ffmpeg"),
+                         "FFmpeg not installed on this machine")
+    @unittest.skipUnless(shutil.which("ffmpeg") or
+                         importlib.util.find_spec("imageio_ffmpeg"),
+                         "FFmpeg not installed on this machine")
+    def test_v2_gapless_merge_real_mp3_excludes_original_pause(self):
+        tone_wave(self.source, seconds=6)
+        size = self.source.stat().st_size
+        self.draft["version"] = 2
+        self.draft["sourceSizeBytes"] = size
+        self.draft["sourceDurationSeconds"] = 6
+        self.draft["sourceSampleSha256"] = module.fingerprint_file(self.source, size)
+        scene = self.draft["segments"][0]
+        scene["start"], scene["end"] = 0.2, 5.2
+        scene["ranges"] = [{"start": 0.2, "end": 1.2},
+                           {"start": 4, "end": 5.2}]
+        self.project.write_text(json.dumps(self.draft), encoding="utf-8")
+        self.assertEqual(len(module.validate_project(self.draft, size)), 1)
+        self.assertAlmostEqual(module.inspect_project(
+            self.source, self.project)["duration_seconds"], 2.2)
+        module.export_project(self.source, self.project, self.output)
+        with zipfile.ZipFile(self.output) as archive:
+            self.assertEqual(archive.namelist(), ["manifest.json", "segment-01.mp3"])
+            mp3 = self.output.parent / "joined.mp3"
+            mp3.write_bytes(archive.read("segment-01.mp3"))
+            check = subprocess.run([
+                module.resolve_ffmpeg(), "-hide_banner", "-nostdin", "-loglevel", "error",
+                "-i", str(mp3), "-f", "null", "-", "-progress", "pipe:2", "-nostats",
+            ], capture_output=True, timeout=30, check=True)
+            matches = list(module.OUT_TIME.finditer(check.stderr.decode("utf-8", "replace")))
+            self.assertTrue(matches)
+            h, m, sec = matches[-1].groups()
+            length = int(h) * 3600 + int(m) * 60 + float(sec)
+            self.assertGreater(length, 1.95)
+            self.assertLess(length, 2.5)  # Outer interval is 5 seconds.
+        invalid = json.loads(json.dumps(self.draft))
+        invalid["version"] = 1
+        with self.assertRaises(module.ExportError):
+            module.validate_project(invalid, size)
 
     @unittest.skipUnless(shutil.which("ffmpeg") or
                          importlib.util.find_spec("imageio_ffmpeg"),
