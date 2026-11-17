@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
 const db = prisma;
 
@@ -79,7 +80,13 @@ export async function markNotificationAsRead(id: string) {
   }
 
   const parsedId = NotificationIdSchema.safeParse(id);
+  // Only accept linked profile identity from a trusted server-side actor.
+  // This preserves existing fail-closed behavior if there is no profile.
   if (!parsedId.success || !auth.user.profileId) {
+    return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
+  }
+  const recipientIds = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
+  if (recipientIds.length === 0) {
     return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
   }
 
@@ -87,7 +94,9 @@ export async function markNotificationAsRead(id: string) {
     const updated = await db.notification.updateMany({
       where: {
         id: parsedId.data,
-        userId: auth.user.profileId,
+        // The dashboard lists notifications addressed to either linked ID.
+        // Never permit a recipient ID passed by the caller.
+        userId: { in: recipientIds },
       },
       data: { isRead: true },
     });
