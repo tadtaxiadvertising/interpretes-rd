@@ -24,10 +24,10 @@ describe('external platform metadata security', () => {
   });
   it('rejects embedded control bytes before URL normalization', () => {
     for (const value of [
-      'https://portal.example.com/lo\\ngin',
-      'https://portal.example.com/lo\\tgin',
-      '\\nhttps://portal.example.com/login',
-      'https://portal.example.com/login\\r',
+      'https://portal.example.com/lo\ngin',
+      'https://portal.example.com/lo\tgin',
+      '\nhttps://portal.example.com/login',
+      'https://portal.example.com/login\r',
       'https:portal.example.com/login',
       'https://portal.example.com/path with spaces',
     ]) {
