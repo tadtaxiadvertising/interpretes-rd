@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { privateRoleplayResponse as privateRoleplayJson } from '@/lib/roleplay/private-response';
 import { revalidatePath } from 'next/cache';
+import { revalidateCommittedRoleplayViews } from '@/lib/roleplay/admin-revalidation';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
@@ -487,8 +488,7 @@ export async function POST(req: NextRequest) {
         }, { status: 409 });
       }
 
-      revalidatePath('/admin/roleplays');
-      revalidatePath('/admin/roleplays/new');
+      revalidateCommittedRoleplayViews(revalidatePath);
       return privateRoleplayJson({
         success: true,
         data: {
@@ -679,8 +679,7 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    revalidatePath('/admin/roleplays');
-    revalidatePath('/admin/roleplays/new');
+    revalidateCommittedRoleplayViews(revalidatePath);
     return privateRoleplayJson({
       success: true,
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
