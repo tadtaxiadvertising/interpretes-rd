@@ -208,7 +208,6 @@ describe('Audio Studio compact editing', () => {
 
   it('keeps playback when SRT replacement is declined but stops it on acceptance', async () => {
     loadAudio(90);
-    // A single active cut is sufficient to verify preview preservation.
     // One cut is enough to verify that declined imports preserve playback.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.getByRole('button', { name: 'Escuchar fragmento de intervención 1' })).toBeTruthy();
@@ -384,7 +383,6 @@ describe('Audio Studio compact editing', () => {
     // A new edit deliberately invalidates the older removal snapshot.
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
-    // Exactly one new turn remains; the earlier deleted turn must stay deleted.
     // Removing the only cut then adding one leaves exactly one new cut.
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
