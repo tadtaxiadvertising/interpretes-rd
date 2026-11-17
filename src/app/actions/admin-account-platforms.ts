@@ -4,6 +4,7 @@ import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { isIP } from 'node:net';
 import { safeHttpsUrl, rejectCredentialLikeText } from '@/lib/platform-input-security';
 
 const optionalText = (max: number) => z.string().trim().max(max).refine(rejectCredentialLikeText);
@@ -21,7 +22,7 @@ const schema = z.object({
   vpnCountry: optionalText(80),
   vpnRegion: optionalText(100),
   vpnServer: optionalText(255),
-  vpnExitIp: z.string().trim().max(45).refine(rejectCredentialLikeText),
+  vpnExitIp: z.string().trim().max(45).refine(value => !value || isIP(value) !== 0, 'La IP de salida no es válida.').refine(rejectCredentialLikeText),
   vpnProfile: optionalText(100),
   vpnProtocol: optionalText(40),
   vpnPort: z.union([z.literal(''), z.coerce.number().int().min(1).max(65535)]),
