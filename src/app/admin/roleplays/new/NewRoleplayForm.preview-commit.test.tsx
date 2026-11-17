@@ -110,7 +110,7 @@ describe('audio preview URL lifecycle across committed React updates', () => {
     editor();
     fireEvent.click(screen.getByRole('button', { name: 'Borrar intervención' }));
     expect(screen.getByRole('button', { name: 'Deshacer eliminación de escenario' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Add Scenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir escenario' }));
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de escenario' })).toBeNull();
     expect(screen.getAllByTestId('scenario-id')).toHaveLength(1);
   });
