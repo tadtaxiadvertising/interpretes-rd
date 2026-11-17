@@ -24,6 +24,22 @@ describe('HappyScribe administrator connectivity probe', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it('rejects a declared oversized response before reading its body', async () => {
+    const cancel = vi.fn();
+    const body = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      headers: { 'Content-Length': String(HAPPY_SCRIBE_PROBE_MAX_BYTES + 1) },
+    });
+    expect(await isValidHappyScribeProbe(body)).toBe(false);
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('returns a safe failure when the response body is already locked', async () => {
+    const response = Response.json({ results: [] });
+    const lock = response.body!.getReader();
+    try { expect(await isValidHappyScribeProbe(response)).toBe(false); }
+    finally { lock.releaseLock(); }
+  });
+
   it('accepts a valid response at the bounded size limit', async () => {
     const prefix = '{"results":[],"padding":"';
     const suffix = '"}';
