@@ -29,6 +29,15 @@ export async function POST(req: NextRequest) {
   const auth = await validateAction('admin');
   if ('error' in auth) return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
 
+  // Audio transits this frontend VPS. Keep the potentially expensive transfer
+  // disabled until an operator explicitly accepts bandwidth/privacy costs.
+  if (process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED !== 'true') {
+    return privateRoleplayResponse(
+      { success: false, error: 'La importación directa de audio está desactivada. Descarga la grabación y selecciónala localmente.' },
+      { status: 503 },
+    );
+  }
+
   const quota = applyRateLimit(
     req, { ...RATE_LIMITS.audioUpload, maxRequests: 3, keyPrefix: 'happyscribe-media' },
     auth.user.userId,
