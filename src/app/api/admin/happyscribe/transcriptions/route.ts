@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { validateAction } from '@/lib/auth/actions';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -159,17 +160,12 @@ export async function POST(req: NextRequest) {
     );
 
     const parsedLink = new URL(downloadLink);
-    if (parsedLink.protocol !== 'https:' ||
-        !(parsedLink.hostname === 'happyscribe.com' || parsedLink.hostname.endsWith('.happyscribe.com') || parsedLink.hostname.endsWith('.amazonaws.com'))) {
+    if (!isAllowedHappyScribeExportUrl(parsedLink)) {
       return privateRoleplayResponse({ error: 'HappyScribe devolvió un destino de descarga no permitido.' }, { status: 502 });
     }
-    // Refuse redirects: the initial hostname allowlist must not be bypassed
-    // by a provider URL forwarding this server request to an internal host.
-    const fileResponse = await fetch(parsedLink, {
-      cache: 'no-store',
-      redirect: 'manual',
-      signal: AbortSignal.timeout(15_000),
-    });
+    // Follow only a small number of HTTPS redirects to approved provider or
+    // AWS storage hosts; never let an allowed URL redirect to private services.
+    const fileResponse = await fetchHappyScribeExport(downloadLink, AbortSignal.timeout(15_000));
     if (!fileResponse.ok) return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
     const declaredLength = Number(fileResponse.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
