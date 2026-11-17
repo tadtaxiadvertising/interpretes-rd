@@ -61,8 +61,8 @@ export default async function InterpretersPage() {
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-white">Interpreter Roster</h2>
-          <p className="text-gray-400">Manage your global network of interpreters</p>
+          <h2 className="text-3xl font-bold text-white">Directorio de intérpretes</h2>
+          <p className="text-gray-400">Consulta y administra el directorio de intérpretes.</p>
         </div>
         <div className="flex gap-4">
           <ExportInterpretersButton data={interpreters} />
@@ -76,7 +76,7 @@ export default async function InterpretersPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
           <input
             type="text"
-            placeholder="Search by name, ID or campaign..."
+            placeholder="Buscar por nombre, ID o campaña..."
             className="w-full bg-slate-900/50 border border-slate-800 rounded-2xl py-3 pl-12 pr-4 text-white focus:outline-none focus:border-indigo-500/50 transition-colors backdrop-blur-sm"
           />
         </div>
@@ -130,7 +130,7 @@ export default async function InterpretersPage() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-400">Status</span>
+                  <span className="text-sm text-slate-400">Estado</span>
                   <span className={cn(
                     "px-3 py-1 rounded-full text-xs font-bold",
                     isActive ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
@@ -142,7 +142,7 @@ export default async function InterpretersPage() {
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-slate-400">Campaign</span>
+                  <span className="text-sm text-slate-400">Campaña</span>
                   <span className="text-sm text-slate-300 font-medium truncate max-w-[120px] text-right">
                     {interpreter.campaign || 'Unassigned'}
                   </span>
@@ -150,12 +150,12 @@ export default async function InterpretersPage() {
 
                 <div className="flex items-center justify-between pt-3 border-t border-slate-800/50">
                   <div className="flex flex-col">
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Rate</span>
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Tarifa</span>
                     <p className="text-white font-mono font-bold">RD${(parseFloat(interpreter.tariffPerMinute.toString()) * 60).toFixed(2)}<span className="text-xs text-slate-500">/h</span></p>
                   </div>
                   <div className="text-right">
-                    <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Target</span>
-                    <p className="text-indigo-400 font-mono font-bold">{Math.round((interpreter.monthlyGoal || 2000) / 60)}h<span className="text-xs text-slate-500">/mo</span></p>
+                    <span className="text-xs text-slate-500 font-bold uppercase tracking-tighter">Meta</span>
+                    <p className="text-indigo-400 font-mono font-bold">{Math.round((interpreter.monthlyGoal || 2000) / 60)}h<span className="text-xs text-slate-500">/mes</span></p>
                   </div>
                 </div>
 
@@ -188,7 +188,7 @@ export default async function InterpretersPage() {
         {interpreters.length === 0 && (
           <div className="col-span-full p-20 text-center bg-slate-900/20 border border-slate-800 rounded-3xl border-dashed">
             <Users size={48} className="mx-auto text-slate-700 mb-4" />
-            <p className="text-slate-500 font-medium">No interpreters found in the database.</p>
+            <p className="text-slate-500 font-medium">No se encontraron intérpretes.</p>
           </div>
         )}
       </div>
