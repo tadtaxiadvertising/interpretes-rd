@@ -2,6 +2,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
+// This pre-audit suite executes before prisma generate. Stub only the Prisma
+// error class used by withSecurity, while exercising the real route wrapper.
+vi.mock('@prisma/client', () => ({
+  Prisma: { PrismaClientKnownRequestError: class PrismaClientKnownRequestError extends Error {} },
+}));
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: vi.fn() }));
 vi.mock('@/lib/payroll/reconcile-production-minutes', () => ({
   reconcileProductionMinutes: vi.fn(),
