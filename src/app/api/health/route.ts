@@ -32,7 +32,7 @@ export async function GET(): Promise<NextResponse> {
     {
       status: 'healthy',
       timestamp: new Date().toISOString(),
-      service: 'free-interpreters-os',
+      service: 'interpretes-rd',
     },
     {
       status: 200,

@@ -209,6 +209,7 @@ describe('Audio Studio compact editing', () => {
   it('keeps playback when SRT replacement is declined but stops it on acceptance', async () => {
     loadAudio(90);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     pause.mockClear();
@@ -376,6 +377,10 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
     expect(screen.getByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quitar intervención 1' }));
+    expect(screen.getByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/ }));
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });

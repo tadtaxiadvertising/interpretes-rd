@@ -45,11 +45,13 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
   // Filtrado de la tabla
   const filteredRecords = useMemo(() => {
     return initialRecords.filter(r => {
-      const matchSearch = r.interpreter?.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchSearch = (r.interpreter?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       // Normalizar status DB: 'Pendiente' / 'Draft' -> 'Draft'
-      const normStatus = (r.status === 'Pendiente' || r.status === 'Draft') ? 'Draft' : 
-                         (r.status === 'PAID' || r.status === 'Paid') ? 'Paid' : 'Approved';
+      const rawStatus = String(r.status || '').trim().toLowerCase();
+      const normStatus = ['pendiente', 'draft', 'borrador'].includes(rawStatus) ? 'Draft' :
+        ['paid', 'paid_out', 'pagado', 'pagada'].includes(rawStatus) ? 'Paid' :
+        ['approved', 'aprobado', 'aprobada'].includes(rawStatus) ? 'Approved' : 'Other';
       
       const matchStatus = filterStatus === 'ALL' || normStatus === filterStatus;
       
@@ -108,8 +110,8 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
           {filteredRecords.length === 0 ? (
             <div className="py-8 text-center text-gray-500">No se encontraron registros.</div>
           ) : filteredRecords.map(record => {
-            const isPaid = record.status === 'Paid' || record.status === 'PAID';
-            const isApproved = record.status === 'Approved';
+            const isPaid = ['paid', 'paid_out', 'pagado', 'pagada'].includes(String(record.status || '').trim().toLowerCase());
+            const isApproved = ['approved', 'aprobado', 'aprobada'].includes(String(record.status || '').trim().toLowerCase());
             
             return (
               <div key={record.id} className="bg-slate-800/50 rounded-2xl p-4 border border-white/5 space-y-3">
@@ -124,7 +126,7 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                     isApproved ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                     "bg-orange-500/10 text-orange-400 border-orange-500/20"
                   )}>
-                    {isPaid ? 'PAID' : isApproved ? 'APPROVED' : 'DRAFT'}
+                    {isPaid ? 'PAGADO' : isApproved ? 'APROBADO' : ['pendiente', 'draft', 'borrador'].includes(String(record.status || '').trim().toLowerCase()) ? 'PENDIENTE' : 'ESTADO POR REVISAR'}
                   </span>
                 </div>
                 
@@ -186,8 +188,8 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
               {filteredRecords.length === 0 ? (
                 <tr><td colSpan={6} className="py-8 text-center text-gray-500">No se encontraron registros.</td></tr>
               ) : filteredRecords.map(record => {
-                const isPaid = record.status === 'Paid' || record.status === 'PAID';
-                const isApproved = record.status === 'Approved';
+                const isPaid = ['paid', 'paid_out', 'pagado', 'pagada'].includes(String(record.status || '').trim().toLowerCase());
+                const isApproved = ['approved', 'aprobado', 'aprobada'].includes(String(record.status || '').trim().toLowerCase());
                 
                 return (
                   <tr key={record.id} className="hover:bg-white/5 transition-colors">

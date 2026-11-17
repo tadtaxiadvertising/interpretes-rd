@@ -276,6 +276,7 @@ describe('Roleplay Studio editable project recovery', () => {
   it('stops stale clip preview only after accepting a verified JSON replacement', async () => {
     selectSource();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir intervención/i }));
     fireEvent.click(screen.getByRole('button', { name: /Escuchar fragmento/i }));
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     pause.mockClear();

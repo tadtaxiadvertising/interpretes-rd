@@ -74,7 +74,7 @@ export default async function SettingsPage() {
       <header>
         <h2 className="text-3xl font-bold text-white flex items-center gap-3">
           <Settings className="text-blue-400" />
-          Profile Settings
+          Configuración del perfil
         </h2>
         <p className="text-gray-400 mt-2">Administra tu información personal y tus preferencias de pago.</p>
       </header>
@@ -216,7 +216,7 @@ export default async function SettingsPage() {
           <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-4">
             <Info className="text-blue-400 shrink-0" size={20} />
             <p className="text-xs text-gray-400 leading-relaxed">
-              Payments are processed every 15 days in Dominican Pesos (DOP). Ensure the Cédula o RNC matches the bank account holder&apos;s identity to avoid payment rejection.
+              Los pagos se procesan cada 15 días en pesos dominicanos (DOP). Verifica que la cédula o el RNC coincida con la identidad del titular de la cuenta bancaria para evitar rechazos.
             </p>
           </div>
         </div>
@@ -228,7 +228,7 @@ export default async function SettingsPage() {
             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-8 py-4 rounded-2xl font-bold transition-all glow group"
           >
             <Save size={20} className="group-hover:scale-110 transition-transform" />
-            Save Personal Info Changes
+            Guardar cambios personales
           </button>
         </div>
       </form>
@@ -236,7 +236,7 @@ export default async function SettingsPage() {
       {/* Security Info */}
       <footer className="flex items-center justify-center gap-2 text-gray-600 text-xs py-8">
         <Shield size={14} />
-        Your data is encrypted and managed according to GDPR and Dominican Banking standards.
+        Tus datos se protegen mediante medidas de seguridad y se gestionan conforme a las normas de privacidad y regulación bancaria aplicables.
       </footer>
     </div>
   );
