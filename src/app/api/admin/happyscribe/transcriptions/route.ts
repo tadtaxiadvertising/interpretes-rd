@@ -160,13 +160,34 @@ export async function POST(req: NextRequest) {
 
     const parsedLink = new URL(downloadLink);
     if (parsedLink.protocol !== 'https:' ||
-        !['www.happyscribe.com', 'happyscribe.com'].includes(parsedLink.hostname)) {
+        !(parsedLink.hostname === 'happyscribe.com' || parsedLink.hostname.endsWith('.happyscribe.com') || parsedLink.hostname.endsWith('.amazonaws.com'))) {
       return privateRoleplayResponse({ error: 'HappyScribe devolvió un destino de descarga no permitido.' }, { status: 502 });
     }
     const fileResponse = await fetch(parsedLink, { cache: 'no-store', signal: AbortSignal.timeout(15_000) });
     if (!fileResponse.ok) return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
-    const text = await fileResponse.text();
-    if (!text.trim() || text.length > 5_000_000 || !text.includes('-->')) {
+    const declaredLength = Number(fileResponse.headers.get('content-length') ?? 0);
+    if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
+      return privateRoleplayResponse({ error: 'El SRT supera el tamaño admitido.' }, { status: 413 });
+    }
+    if (!fileResponse.body) return privateRoleplayResponse({ error: 'La descarga SRT está vacía.' }, { status: 502 });
+    const reader = fileResponse.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > 5_000_000) {
+        await reader.cancel();
+        return privateRoleplayResponse({ error: 'El SRT supera el tamaño admitido.' }, { status: 413 });
+      }
+      chunks.push(value);
+    }
+    const merged = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(merged);
+    if (!text.trim() || !text.includes('-->')) {
       return privateRoleplayResponse({ error: 'El SRT está vacío o supera el tamaño admitido.' }, { status: 502 });
     }
     return privateRoleplayResponse(
