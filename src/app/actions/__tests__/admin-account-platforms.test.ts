@@ -113,7 +113,8 @@ describe('createAccountPlatform VPN configuration', () => {
         accountId: '12', name: 'Portal principal', loginUrl: 'https://portal.example.test/login',
       }));
       expect(result.success).toBe(false);
-      expect(spy).toHaveBeenCalledWith('[PLATFORMS] Create failed', 'Error');
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy).toHaveBeenCalledWith('[PLATFORMS] Create failed:', 'Error');
       expect(JSON.stringify(spy.mock.calls)).not.toMatch(/PRIVATE_CREDENTIAL|database\.internal\.invalid|postgresql:/);
     } finally {
       spy.mockRestore();
