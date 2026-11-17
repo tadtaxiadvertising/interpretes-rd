@@ -5,6 +5,26 @@ import prisma from '@/lib/prisma';
 const TOKEN_KEY = 'audio_studio_happyscribe_token_v1';
 const ORG_KEY = 'audio_studio_happyscribe_organization_id';
 const MEDIA_KEY = 'audio_studio_happyscribe_media_proxy';
+const EXCLUDE_KEY = 'audio_studio_exclude_interpreter_default';
+const COMPACT_KEY = 'audio_studio_compact_view_default';
+
+export type AudioStudioCompactViewDefault = 'auto' | 'compact' | 'expanded';
+
+function parseCompactView(value?: string): AudioStudioCompactViewDefault {
+  return value === 'compact' || value === 'expanded' ? value : 'auto';
+}
+
+export async function getAudioStudioEditorPreferences() {
+  const rows = await prisma.systemConfig.findMany({
+    where: { key: { in: [EXCLUDE_KEY, COMPACT_KEY] } },
+    select: { key: true, value: true },
+  });
+  const map = new Map(rows.map(row => [row.key, row.value]));
+  return {
+    excludeInterpreterByDefault: map.get(EXCLUDE_KEY) !== 'false',
+    compactViewDefault: parseCompactView(map.get(COMPACT_KEY)),
+  };
+}
 const PREFIX = 'enc:v1:';
 
 function masterKey(): Buffer | null {
@@ -54,7 +74,7 @@ export async function getHappyScribeSettings() {
 
 export async function getHappyScribeSettingsStatus() {
   const rows = await prisma.systemConfig.findMany({
-    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY] } },
+    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY, EXCLUDE_KEY, COMPACT_KEY] } },
     select: { key: true, value: true },
   });
   const map = new Map(rows.map(row => [row.key, row.value]));
@@ -68,16 +88,26 @@ export async function getHappyScribeSettingsStatus() {
       && map.get(MEDIA_KEY) === 'true',
     proxyAvailable: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true',
     encryptionReady: Boolean(masterKey()),
+    excludeInterpreterByDefault: map.get(EXCLUDE_KEY) !== 'false',
+    compactViewDefault: parseCompactView(map.get(COMPACT_KEY)),
   };
 }
 
 export async function saveHappyScribeSettings(input: {
   token?: string; organizationId: string; mediaImportEnabled: boolean; removeToken?: boolean;
+  excludeInterpreterByDefault?: boolean;
+  compactViewDefault?: AudioStudioCompactViewDefault;
 }) {
   const organizationId = input.organizationId.trim();
   if (organizationId && !/^\d{1,30}$/.test(organizationId)) throw new Error('ORGANIZATION_INVALID');
   if (input.token && (input.token.length > 2048 || input.token.trim().length < 8))
     throw new Error('TOKEN_INVALID');
+  if (input.compactViewDefault !== undefined &&
+      !['auto', 'compact', 'expanded'].includes(input.compactViewDefault))
+    throw new Error('COMPACT_MODE_INVALID');
+  if (input.excludeInterpreterByDefault !== undefined &&
+      typeof input.excludeInterpreterByDefault !== 'boolean')
+    throw new Error('EXCLUDE_PREFERENCE_INVALID');
   if (input.token?.trim() && input.removeToken) throw new Error('TOKEN_OPERATION_CONFLICT');
   if (input.token && !masterKey()) throw new Error('ENCRYPTION_KEY_MISSING');
   await prisma.$transaction(async tx => {
@@ -86,7 +116,12 @@ export async function saveHappyScribeSettings(input: {
       where: { key: TOKEN_KEY }, create: { key: TOKEN_KEY, value: encrypt(input.token.trim()) },
       update: { value: encrypt(input.token.trim()) },
     });
-    for (const [key, value] of [[ORG_KEY, organizationId], [MEDIA_KEY, String(input.mediaImportEnabled)]]) {
+    const settings: [string, string][] = [[ORG_KEY, organizationId], [MEDIA_KEY, String(input.mediaImportEnabled)]];
+    if (input.excludeInterpreterByDefault !== undefined)
+      settings.push([EXCLUDE_KEY, String(input.excludeInterpreterByDefault)]);
+    if (input.compactViewDefault !== undefined)
+      settings.push([COMPACT_KEY, input.compactViewDefault]);
+    for (const [key, value] of settings) {
       await tx.systemConfig.upsert({
         where: { key }, create: { key, value }, update: { value },
       });
