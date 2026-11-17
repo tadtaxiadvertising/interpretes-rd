@@ -419,6 +419,87 @@ describe('Audio Studio clip review player', () => {
     expect(screen.queryByRole('button', { name: 'Aplicar selección al editor' })).toBeNull();
   });
 
+  it('cancels an unfinished HappyScribe MP3 transfer when a different recording is chosen', async () => {
+    const itemId = 'a'.repeat(32);
+    let pendingSignal: AbortSignal | undefined;
+    const fetcher = vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        pendingSignal = init.signal as AbortSignal;
+        return new Promise<Response>((_resolve, reject) => {
+          pendingSignal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')), { once: true });
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: itemId, name: 'Original.mp3', state: 'automatic_done',
+            language: 'es', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    });
+    vi.stubGlobal('fetch', fetcher);
+
+    const { container } = render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+    expect(pendingSignal?.aborted).toBe(false);
+    expect(screen.getByRole('button', { name: 'Cancelar descarga' })).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+        target: { files: [new File(['ID3'], 'replacement.mp3', { type: 'audio/mpeg' })] },
+      });
+      await Promise.resolve();
+    });
+
+    expect(pendingSignal?.aborted).toBe(true);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Audio original importado desde HappyScribe/)).toBeNull();
+    expect(container.querySelector('audio')?.getAttribute('src')).toMatch(/^blob:/);
+    expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
+  });
+
+  it('lets an administrator cancel a HappyScribe transfer without replacing the recording', async () => {
+    const itemId = 'a'.repeat(32);
+    let pendingSignal: AbortSignal | undefined;
+    vi.stubGlobal('fetch', vi.fn((_url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        pendingSignal = init.signal as AbortSignal;
+        return new Promise<Response>((_resolve, reject) => {
+          pendingSignal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')), { once: true });
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          success: true, mediaImportEnabled: true,
+          data: [{ id: itemId, name: 'Practice.mp3', state: 'automatic_done',
+            language: 'en', durationSeconds: 90, createdAt: null, folder: null }],
+        }),
+      } as Response);
+    }));
+
+    render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+      await Promise.resolve();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar descarga' }));
+      await Promise.resolve();
+    });
+    expect(pendingSignal?.aborted).toBe(true);
+    expect(screen.getByText(/Descarga de audio cancelada/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Importar audio original' })).toBeTruthy();
+  });
+
   it('imports the original HappyScribe MP3 directly into the Audio Studio source', async () => {
     const itemId = 'a'.repeat(32);
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
