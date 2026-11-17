@@ -80,11 +80,11 @@ export async function markNotificationAsRead(id: string) {
   }
 
   const parsedId = NotificationIdSchema.safeParse(id);
-  // Only accept linked profile identity from a trusted server-side actor.
-  // This preserves existing fail-closed behavior if there is no profile.
-  if (!parsedId.success || !auth.user.profileId) {
+  if (!parsedId.success) {
     return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
   }
+  // Either trusted identity may be a notification recipient. A missing
+  // profile is safe when the authenticated account itself has a valid UUID.
   const recipientIds = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
   if (recipientIds.length === 0) {
     return { success: false, error: 'Notification not found', code: 'NOT_FOUND' };
