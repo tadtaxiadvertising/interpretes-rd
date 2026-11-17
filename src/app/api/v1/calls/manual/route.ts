@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma';
 import { ManualCallSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { getDayBounds } from '@/lib/interpreter-metrics';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 /**
  * Format a Timestamptz value to a Santo Domingo date string.
@@ -95,7 +96,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, data: callSession });
   } catch (error) {
-    console.error('Error creating manual call log:', error);
-    return apiError({ error, fallback: 'Internal Server Error' });
+    console.error('Error creating manual call log:', safeServerErrorCategory(error));
+    return apiError({ error, fallback: 'Internal Server Error', exposeMessage: false });
   }
 }

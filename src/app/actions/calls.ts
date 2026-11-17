@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { CallSession, Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 
@@ -91,7 +92,7 @@ export async function startCall(): Promise<ActionResult<{ sessionId: number; sta
       },
     };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [startCall]:', error);
+    console.error('Call action startCall failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to start call session', code: 'INTERNAL_ERROR' };
   }
 }
@@ -229,7 +230,7 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       },
     };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [endCall]:', error);
+    console.error('Call action endCall failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to end call session', code: 'INTERNAL_ERROR' };
   }
 }
@@ -254,7 +255,7 @@ export async function getActiveCall(): Promise<ActionResult<CallSession | null>>
 
     return { success: true, data: session };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [getActiveCall]:', error);
+    console.error('Call action getActiveCall failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to fetch active call', code: 'INTERNAL_ERROR' };
   }
 }
@@ -279,7 +280,9 @@ export async function addManualCall(formData: FormData): Promise<ActionResult<{ 
       interpreterId: formData.get('interpreterId'),
       startedAt: formData.get('startedAt'),
       durationMinutes: formData.get('durationMinutes'),
-      notes: formData.get('notes'),
+      // FormData.get() yields null for an absent optional field, not undefined.
+      // Preserve the schema's optional contract for submissions without notes.
+      notes: formData.get('notes') ?? undefined,
     };
 
     const validated = ManualCallSchema.parse(rawData);
@@ -316,7 +319,7 @@ export async function addManualCall(formData: FormData): Promise<ActionResult<{ 
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input data', code: 'VALIDATION_ERROR' };
     }
-    console.error('🔴 ERROR [addManualCall]:', error);
+    console.error('Call action addManualCall failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to record manual call', code: 'INTERNAL_ERROR' };
   }
 }

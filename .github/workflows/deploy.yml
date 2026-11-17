@@ -79,6 +79,10 @@ jobs:
           CI: 'true'
         run: npx tsx scripts/verify-account-platform-vpn-guard.ts
 
+      # Preserve a focused privacy regression check even when an upstream
+      # dependency advisory blocks the full validation pipeline.
+      - name: Verify call action error redaction
+        run: npx vitest run src/app/actions/__tests__/calls-error-redaction.test.ts src/app/api/v1/calls/manual/__tests__/route.test.ts
       # Verify that archive/restore responses stay accurate after a committed
       # write even if Next.js cache invalidation subsequently throws.
       # The audit remains a hard gate; this unit test does not enable deploys.
