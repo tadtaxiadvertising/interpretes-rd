@@ -793,6 +793,20 @@ export default function RoleplayStudioPage() {
       const restored = sampledProject
         ? openLongMediaDraft(json, audio.size, digest, duration)
         : openStudioDraft(json, audio.size, digest, duration);
+      // Validate the entire project and its source fingerprint before asking
+      // to replace the in-memory edits. A valid project can contain zero turns;
+      // accepting it would otherwise silently erase the current work.
+      if (segments.length > 0 || reviewCues.length > 0 || suggestedClips.length > 0) {
+        const accepted = window.confirm(
+          'El proyecto JSON es válido, pero abrirlo reemplazará las intervenciones, ' +
+          'referencias y sugerencias actuales. Guarda tu trabajo antes de continuar. ¿Abrir proyecto?',
+        );
+        if (!accepted) {
+          setNotice('Importación cancelada. Se conservaron las intervenciones y el proyecto actual.');
+          return;
+        }
+      }
+      if (revision !== subtitleImportRevision.current) return;
       const containsCompound = restored.some(segment => segment.ranges !== undefined);
       // Opening a v2 project must be local-only even after the user separates
       // its cuts. For ordinary v1 projects retain the user's chosen mode.
