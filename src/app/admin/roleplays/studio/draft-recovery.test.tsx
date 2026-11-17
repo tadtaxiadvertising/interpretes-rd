@@ -142,6 +142,33 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('forces local export when opening v2, even after separating its cuts', async () => {
+    selectSource(); // Simulate server explicitly enabled before opening.
+    const compound = createLongMediaDraft(3, hash, [{
+      title: 'Médico · compuesto', start: 0, end: 45,
+      ranges: [{ start: 0, end: 10 }, { start: 40, end: 45 }],
+      scriptPrompt: '', responseLimit: 120, speakerRole: 'doctor', language: 'en',
+    }], 90);
+    expect(compound.version).toBe(2);
+    const file = new File(['v2 project'], 'project-v2.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => JSON.stringify(compound),
+    });
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/Proyecto v2 restaurado/)).toBeTruthy();
+    expect(screen.queryByRole('radio', { name: /Servidor \(opcional\)/i })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Separar cortes de intervención 1/ }));
+    expect((screen.getByRole('radio', { name: /Local \(predeterminado\)/i }) as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('radio', { name: /Servidor \(opcional\)/i }) as HTMLInputElement).checked).toBe(false);
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('rejects an old complete-hash project for a long MP3 before allocating the whole source', async () => {
     const { player } = selectSource();
     Object.defineProperty(player, 'duration', { configurable: true, value: 7201 });
