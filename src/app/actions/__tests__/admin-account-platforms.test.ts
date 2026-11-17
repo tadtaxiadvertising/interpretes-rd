@@ -81,6 +81,17 @@ describe('createAccountPlatform VPN configuration', () => {
     expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed exit IP addresses before writing', async () => {
+    const result = await createAccountPlatform(makeForm({
+      accountId: '12',
+      name: 'Portal',
+      vpnExitIp: 'not-an-ip-address',
+    }));
+
+    expect(result.success).toBe(false);
+    expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
+  });
+
   it('requires an administrator', async () => {
     vi.mocked(getCurrentProfile).mockResolvedValue({ role: 'interpreter' } as never);
 
