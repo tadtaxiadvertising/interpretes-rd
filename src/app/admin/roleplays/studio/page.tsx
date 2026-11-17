@@ -1385,7 +1385,10 @@ export default function RoleplayStudioPage() {
             salvo que selecciones expresamente la exportación en servidor.
           </p>
         </div>
-        <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/roleplays/settings" className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5">Configurar Audio Studio</Link>
+          <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
+        </div>
       </header>
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
         <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">
