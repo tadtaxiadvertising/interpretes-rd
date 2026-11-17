@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-      # Temporary, non-deploying branch validation; all deployments require main.
-      - fix/audio-studio-happyscribe-probe-bounds-20261117
   pull_request:
     branches:
       - main
