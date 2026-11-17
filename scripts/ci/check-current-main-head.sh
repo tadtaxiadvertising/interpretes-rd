@@ -23,6 +23,13 @@ fi
 if [[ "$remote_head" != "$GITHUB_SHA" ]]; then
   echo "::notice::Superseded main commit; skipping production steps."
   echo "current=false" >> "$GITHUB_OUTPUT"
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    {
+      echo "### Publicación omitida por cambio de main"
+      echo "El commit validado $GITHUB_SHA ya no es HEAD (actual: $remote_head)."
+      echo "No se ejecutarán las operaciones de producción de este commit."
+    } >> "$GITHUB_STEP_SUMMARY"
+  fi
 else
   echo "current=true" >> "$GITHUB_OUTPUT"
 fi

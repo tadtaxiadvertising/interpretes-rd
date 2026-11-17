@@ -19,7 +19,9 @@ function checkHead(options: {
   tempDirs.push(dir);
   const fakeGit = join(dir, 'git');
   const outputFile = join(dir, 'github-output');
+  const summaryFile = join(dir, 'github-step-summary');
   writeFileSync(outputFile, '');
+  writeFileSync(summaryFile, '');
   // Keep literal Bash parameter expansion separate from JS template literals.
   const fakeGitSource = [
     '#!/usr/bin/env bash',
@@ -40,6 +42,7 @@ function checkHead(options: {
       GITHUB_REF: options.ref ?? 'refs/heads/main',
       GITHUB_SHA: options.sha ?? expected,
       GITHUB_OUTPUT: outputFile,
+      GITHUB_STEP_SUMMARY: summaryFile,
       MOCK_HEAD: options.remote ?? expected,
       MOCK_GIT_FAIL: options.failGit ? 'yes' : 'no',
     },
@@ -47,6 +50,7 @@ function checkHead(options: {
   return {
     status: child.status,
     output: readFileSync(outputFile, 'utf8'),
+    summary: readFileSync(summaryFile, 'utf8'),
     stderr: child.stderr,
     stdout: child.stdout,
   };
@@ -61,6 +65,7 @@ describe('production main HEAD deployment gate', () => {
     const result = checkHead();
     expect(result.status).toBe(0);
     expect(result.output.trim()).toBe('current=true');
+    expect(result.summary).toBe('');
   });
 
   it('skips outdated merges without failing their completed validation', () => {
@@ -68,6 +73,9 @@ describe('production main HEAD deployment gate', () => {
     expect(result.status).toBe(0);
     expect(result.output.trim()).toBe('current=false');
     expect(result.stdout).toContain('Superseded main commit');
+    expect(result.summary).toContain('Publicación omitida por cambio de main');
+    expect(result.summary).toContain(expected);
+    expect(result.summary).toContain(newer);
   });
 
   it('fails closed when it cannot query the remote branch', () => {
