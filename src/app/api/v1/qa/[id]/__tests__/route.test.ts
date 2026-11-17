@@ -153,6 +153,13 @@ describe('QA detail API privacy and error isolation', () => {
     expect(prisma.qAScore.update).not.toHaveBeenCalled();
   });
 
+  it('rejects more than two fractional places before starting a transaction', async () => {
+    const response = await PATCH(patch({ interpretationScore: 17.005 }), params);
+    expect(response.status).toBe(400);
+    privateResponse(response);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('accepts canonical 0–100 dimensions and recomputes the score only for score edits', async () => {
     vi.mocked(prisma.qAScore.update).mockResolvedValueOnce({
       ...score, protocolScore: 100, totalScore: 92,
