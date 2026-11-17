@@ -4,6 +4,7 @@ import React, { useState, useActionState, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Search, DollarSign, CheckCircle2, AlertTriangle, Loader2, Edit3, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus } from '@/lib/payroll-validation';
 import { updatePayrollAdjustments, verifyPayrollMinutes, markPayrollAsPaid } from '@/app/actions/payroll.actions';
 
 function SubmitButton({ label, loadingLabel }: { label: string, loadingLabel: string }) {
@@ -48,10 +49,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
       const matchSearch = (r.interpreter?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
       
       // Normalizar status DB: 'Pendiente' / 'Draft' -> 'Draft'
-      const rawStatus = String(r.status || '').trim().toLowerCase();
-      const normStatus = ['pendiente', 'draft', 'borrador'].includes(rawStatus) ? 'Draft' :
-        ['paid', 'paid_out', 'pagado', 'pagada'].includes(rawStatus) ? 'Paid' :
-        ['approved', 'aprobado', 'aprobada'].includes(rawStatus) ? 'Approved' : 'Other';
+      const normStatus = isPaidPayrollStatus(r.status) ? 'Paid' :
+        isApprovedPayrollStatus(r.status) ? 'Approved' :
+        isEditablePayrollStatus(r.status) ? 'Draft' : 'Other';
       
       const matchStatus = filterStatus === 'ALL' || normStatus === filterStatus;
       
@@ -66,9 +66,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
 
   // Auto-cierre de modales en success (simplificado para UX)
   React.useEffect(() => {
-    if (adjustState?.success || verifyState?.success || payState?.success) {
-      setTimeout(() => closeModal(), 1500);
-    }
+    if (!adjustState?.success && !verifyState?.success && !payState?.success) return;
+    const timeoutId = setTimeout(() => closeModal(), 1500);
+    return () => clearTimeout(timeoutId);
   }, [adjustState, verifyState, payState]);
 
   return (
@@ -110,8 +110,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
           {filteredRecords.length === 0 ? (
             <div className="py-8 text-center text-gray-500">No se encontraron registros.</div>
           ) : filteredRecords.map(record => {
-            const isPaid = ['paid', 'paid_out', 'pagado', 'pagada'].includes(String(record.status || '').trim().toLowerCase());
-            const isApproved = ['approved', 'aprobado', 'aprobada'].includes(String(record.status || '').trim().toLowerCase());
+            const isPaid = isPaidPayrollStatus(record.status);
+            const isApproved = isApprovedPayrollStatus(record.status);
+            const isEditable = isEditablePayrollStatus(record.status);
             
             return (
               <div key={record.id} className="bg-slate-800/50 rounded-2xl p-4 border border-white/5 space-y-3">
@@ -126,7 +127,7 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                     isApproved ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                     "bg-orange-500/10 text-orange-400 border-orange-500/20"
                   )}>
-                    {isPaid ? 'PAGADO' : isApproved ? 'APROBADO' : ['pendiente', 'draft', 'borrador'].includes(String(record.status || '').trim().toLowerCase()) ? 'PENDIENTE' : 'ESTADO POR REVISAR'}
+                    {isPaid ? 'PAGADO' : isApproved ? 'APROBADO' : isEditable ? 'PENDIENTE' : 'ESTADO POR REVISAR'}
                   </span>
                 </div>
                 
@@ -150,7 +151,7 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                     <p className="text-sm font-bold text-green-400">RD${Number(record.netTotal).toLocaleString(undefined, {minimumFractionDigits: 2})}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {!isPaid && (
+                    {isEditable && !isPaid && (
                       <>
                         <button onClick={() => openModal('ADJUST', record)} className="p-2 bg-white/5 hover:bg-white/10 rounded-md text-gray-400 transition-colors" title="Ajustes">
                           <Edit3 size={16} />
@@ -188,8 +189,9 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
               {filteredRecords.length === 0 ? (
                 <tr><td colSpan={6} className="py-8 text-center text-gray-500">No se encontraron registros.</td></tr>
               ) : filteredRecords.map(record => {
-                const isPaid = ['paid', 'paid_out', 'pagado', 'pagada'].includes(String(record.status || '').trim().toLowerCase());
-                const isApproved = ['approved', 'aprobado', 'aprobada'].includes(String(record.status || '').trim().toLowerCase());
+                const isPaid = isPaidPayrollStatus(record.status);
+                const isApproved = isApprovedPayrollStatus(record.status);
+                const isEditable = isEditablePayrollStatus(record.status);
                 
                 return (
                   <tr key={record.id} className="hover:bg-white/5 transition-colors">
@@ -214,12 +216,12 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
                         isApproved ? "bg-blue-500/10 text-blue-400 border-blue-500/20" :
                         "bg-orange-500/10 text-orange-400 border-orange-500/20"
                       )}>
-                        {isPaid ? 'PAID' : isApproved ? 'APPROVED' : 'DRAFT'}
+                        {isPaid ? 'PAGADO' : isApproved ? 'APROBADO' : isEditable ? 'PENDIENTE' : 'ESTADO POR REVISAR'}
                       </span>
                     </td>
                     <td className="py-4 px-6 text-center">
                       <div className="flex items-center justify-center gap-2">
-                        {!isPaid && (
+                        {isEditable && !isPaid && (
                           <>
                             <button onClick={() => openModal('ADJUST', record)} className="p-1.5 bg-white/5 hover:bg-white/10 rounded-md text-gray-400 transition-colors" title="Ajustes">
                               <Edit3 size={14} />
