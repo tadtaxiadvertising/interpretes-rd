@@ -43,7 +43,7 @@ export default function LoginPage() {
             redirect: false,
           });
           if (signInResult?.error) {
-            setError('Authentication failed. Please try again.');
+            setError('No fue posible iniciar sesión. Verifica tus datos e inténtalo de nuevo.');
             return;
           }
         }
@@ -51,7 +51,7 @@ export default function LoginPage() {
       }
     } catch (err) {
       console.error('🔴 [AUTH_LOGIN_PAGE] Login submit error:', err);
-      setError('Invalid email or password');
+      setError('No pudimos iniciar sesión. Revisa el correo y la contraseña.');
     } finally {
       setIsLoading(false);
     }
@@ -67,7 +67,7 @@ export default function LoginPage() {
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="text-center mb-10">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
-            Interpretes RD
+            Intérpretes RD
           </h1>
           <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Plataforma de Intérpretes</p>
         </div>
@@ -118,7 +118,7 @@ export default function LoginPage() {
             <input type="hidden" name="role" value={role} />
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-400 mb-2">
-                Email Address
+                Correo electrónico
               </label>
               <div className="relative">
                 <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -127,7 +127,7 @@ export default function LoginPage() {
                   name="email"
                   type="email"
                   required
-                  placeholder={role === 'admin' ? "admin@interpretesrd.com" : "interprete@interpretesrd.com"}
+                  placeholder={role === 'admin' ? "Correo de administrador" : "tu correo electrónico"}
                   className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all"
                 />
               </div>
@@ -136,10 +136,10 @@ export default function LoginPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label htmlFor="password" className="block text-sm font-medium text-gray-400">
-                  Password
+                  Contraseña
                 </label>
                 <Link href="/forgot-password" className="text-xs text-blue-400 hover:text-blue-300 transition-colors">
-                  Forgot Password?
+                  ¿Olvidaste tu contraseña?
                 </Link>
               </div>
               <div className="relative">
@@ -166,26 +166,26 @@ export default function LoginPage() {
               {isLoading ? (
                 <>
                   <Loader2 size={18} className="animate-spin" />
-                  Signing in...
+                  Iniciando sesión...
                 </>
               ) : (
-                'Sign In'
+                'Iniciar sesión'
               )}
             </button>
           </form>
 
           <div className="mt-6 text-center">
             <p className="text-gray-500 text-sm">
-              Don&apos;t have an account?{' '}
+              ¿Aún no tienes una cuenta?{' '}
               <Link href={nextPath ? `/register?next=${encodeURIComponent(nextPath)}` : "/register"} className="text-blue-400 hover:text-blue-300 font-medium">
-                Create Account
+                Crear cuenta
               </Link>
             </p>
           </div>
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Interpretes RD. Plataforma Segura de Intérpretes.
+          © 2026 Interpretes RD. Plataforma para intérpretes.
         </p>
       </div>
     </div>
