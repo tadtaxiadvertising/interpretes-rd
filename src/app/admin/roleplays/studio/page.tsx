@@ -1123,6 +1123,9 @@ export default function RoleplayStudioPage() {
       setError('Selecciona una transcripción completada en HappyScribe.');
       return;
     }
+    // Discard provider exports that finish after an audio replacement or edit.
+    const sourceAtRequest = audio;
+    const revisionAtRequest = subtitleImportRevision.current;
     setHappyScribeImporting(true);
     setError('');
     try {
@@ -1135,12 +1138,17 @@ export default function RoleplayStudioPage() {
       if (!response.ok || !body?.success || typeof body.data?.content !== 'string') {
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible importar el SRT.');
       }
+      if (revisionAtRequest !== subtitleImportRevision.current ||
+          activeAudioFile.current !== sourceAtRequest) return;
       const file = new File([body.data.content], item.name.replace(/\\.[^.]+$/, '') + '.srt', {
         type: 'application/x-subrip',
       });
       await importSubtitles(file);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'No fue posible importar desde HappyScribe.');
+      if (revisionAtRequest === subtitleImportRevision.current &&
+          activeAudioFile.current === sourceAtRequest) {
+        setError(cause instanceof Error ? cause.message : 'No fue posible importar desde HappyScribe.');
+      }
     } finally {
       setHappyScribeImporting(false);
     }
@@ -1551,6 +1559,7 @@ export default function RoleplayStudioPage() {
                 {happyScribeItems.length > 0 && (
                   <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                     <select aria-label="Transcripción de HappyScribe"
+                      disabled={happyScribeImporting || happyScribeLoading}
                       value={happyScribeSelectedId}
                       onChange={event => setHappyScribeSelectedId(event.currentTarget.value)}
                       className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
