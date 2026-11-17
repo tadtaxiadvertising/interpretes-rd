@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   interpreterFindUnique: vi.fn(),
   productionLogFindUnique: vi.fn(),
   qaCreate: vi.fn(),
+  transaction: vi.fn(),
   profileFindUnique: vi.fn(),
   createNotification: vi.fn(),
   revalidatePath: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock('@/lib/prisma', () => ({
     interpreter: { findUnique: m.interpreterFindUnique },
     productionLog: { findUnique: m.productionLogFindUnique },
     qAScore: { create: m.qaCreate },
+    $transaction: m.transaction,
     userProfile: { findUnique: m.profileFindUnique },
   },
 }));
@@ -55,7 +57,13 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     m.interpreterFindUnique.mockResolvedValue({ id: 7, emailCorporativo: 'interpreter@example.test' });
     m.productionLogFindUnique.mockResolvedValue({ id: 22, interpreterId: 7 });
     m.profileFindUnique.mockResolvedValue({ id: 'profile-1' });
-    m.qaCreate.mockResolvedValue({ id: 'qa-1' });
+    m.qaCreate.mockResolvedValue({ id: 'qa-1', totalScore: 90 });
+    m.transaction.mockImplementation(async (callback: (tx: unknown) => Promise<unknown>) =>
+      callback({
+        interpreter: { findUnique: m.interpreterFindUnique },
+        productionLog: { findUnique: m.productionLogFindUnique },
+        qAScore: { create: m.qaCreate },
+      }));
     m.createNotification.mockResolvedValue(undefined);
   });
 
@@ -65,6 +73,104 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     expect(result).toMatchObject({ success: false, code: 'UNAUTHORIZED' });
     expect(m.interpreterFindUnique).not.toHaveBeenCalled();
     expect(m.qaCreate).not.toHaveBeenCalled();
+    expect(m.transaction).not.toHaveBeenCalled();
+  });
+
+  it('saves a verified form score atomically, after checking interpreter and production ownership', async () => {
+    const result = await submitQaForm(undefined, qaFormData());
+    expect(result).toMatchObject({ success: true, message: expect.stringContaining('90.00%') });
+    expect(m.transaction).toHaveBeenCalledTimes(1);
+    expect(m.interpreterFindUnique).toHaveBeenCalledWith({
+      where: { id: 7 }, select: { id: true },
+    });
+    expect(m.productionLogFindUnique).toHaveBeenCalledWith({
+      where: { id: 22 }, select: { id: true, interpreterId: true },
+    });
+    expect(m.qaCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        totalScore: 90, interpreterId: 7, productionLogId: 22,
+        accionRequerida: 'Ninguna',
+      }),
+      select: { id: true, totalScore: true },
+    });
+    expect(m.revalidatePath).toHaveBeenCalledWith('/qa');
+    expect(m.revalidatePath).toHaveBeenCalledWith('/admin');
+  });
+
+  it('rejects an interpreter that does not exist before creating the QA record', async () => {
+    m.interpreterFindUnique.mockResolvedValueOnce(null);
+    const result = await submitQaForm(undefined, qaFormData());
+    expect(result).toMatchObject({ success: false, code: 'NOT_FOUND' });
+    expect(m.qaCreate).not.toHaveBeenCalled();
+    expect(m.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('rejects production logs owned by a different interpreter inside the transaction', async () => {
+    m.productionLogFindUnique.mockResolvedValueOnce({ id: 22, interpreterId: 99 });
+    const result = await submitQaForm(undefined, qaFormData());
+    expect(result).toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    expect(m.qaCreate).not.toHaveBeenCalled();
+    expect(m.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('rejects a trigger-overridden result rather than confirming a misleading score', async () => {
+    m.qaCreate.mockResolvedValueOnce({ id: 'qa-1', totalScore: 26 });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaForm(undefined, qaFormData());
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.transaction).toHaveBeenCalledTimes(1);
+      expect(m.revalidatePath).not.toHaveBeenCalled();
+      expect(log).toHaveBeenCalledWith('QA evaluation failed:', 'Error');
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects a critical-error override when a database trigger ignores it', async () => {
+    const data = qaFormData();
+    data.set('criticalError', 'on');
+    m.qaCreate.mockResolvedValueOnce({ id: 'qa-1', totalScore: 90 });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await submitQaForm(undefined, data);
+      expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+      expect(m.qaCreate).toHaveBeenCalledWith({
+        data: expect.objectContaining({ criticalError: true, totalScore: 0 }),
+        select: { id: true, totalScore: true },
+      });
+    } finally { log.mockRestore(); }
+  });
+
+  it('rejects scores with more precision than PostgreSQL NUMERIC(5,2) stores', async () => {
+    const data = qaFormData();
+    data.set('interpretationScore', '90.005');
+    const result = await submitQaForm(undefined, data);
+    expect(result).toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    expect(m.transaction).not.toHaveBeenCalled();
+    expect(m.qaCreate).not.toHaveBeenCalled();
+  });
+
+  it('accepts no optional production log without querying an unrelated call', async () => {
+    const data = qaFormData();
+    data.set('productionLogId', '');
+    const result = await submitQaForm(undefined, data);
+    expect(result).toMatchObject({ success: true });
+    expect(m.productionLogFindUnique).not.toHaveBeenCalled();
+    expect(m.qaCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({ productionLogId: null }),
+      select: { id: true, totalScore: true },
+    });
+  });
+
+  it('reports success when post-commit cache refresh fails, preventing duplicate submissions', async () => {
+    m.revalidatePath.mockImplementationOnce(() => { throw new Error('PRIVATE_CACHE_TOKEN'); });
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await submitQaForm(undefined, qaFormData());
+      expect(result).toMatchObject({ success: true });
+      expect(m.qaCreate).toHaveBeenCalledTimes(1);
+      expect(log).toHaveBeenCalledWith('QA saved but cache refresh failed:', 'Error');
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_CACHE_TOKEN');
+    } finally { log.mockRestore(); }
   });
 
   it('redacts a database exception from form QA submission logs and response', async () => {
