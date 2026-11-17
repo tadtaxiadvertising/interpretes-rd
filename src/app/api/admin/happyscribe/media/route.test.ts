@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
+import { issueHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
@@ -10,6 +11,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth/actions', () => ({ validateAction: mocks.validateAction }));
 vi.mock('@/lib/api-auth', () => ({ actorFromBearer: mocks.actorFromBearer }));
+vi.mock('@/lib/roleplay/happyscribe-settings', () => ({
+  getHappyScribeSettings: vi.fn(async () => ({
+    token: process.env.HAPPY_SCRIBE_API_TOKEN || '',
+    organizationId: process.env.HAPPY_SCRIBE_ORGANIZATION_ID || '',
+    mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true',
+  })),
+}));
 
 vi.mock('@/lib/security/rate-limit', () => ({
   RATE_LIMITS: { audioUpload: { windowMs: 60_000, maxRequests: 3 } },
@@ -20,13 +28,22 @@ vi.mock('@/lib/security/rate-limit', () => ({
 import { POST } from './route';
 
 const transcriptionId = 'a'.repeat(32);
+const organizationId = '123456';
+const userId = 'admin-test';
+function validProof() {
+  return issueHappyScribeImportProof({
+    id: transcriptionId,
+    organizationId, userId,
+    token: process.env.HAPPY_SCRIBE_API_TOKEN || '',
+  });
+}
 
 function request(signal?: AbortSignal) {
   return new NextRequest('http://localhost/api/admin/happyscribe/media', {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: transcriptionId }),
+    body: JSON.stringify({ id: transcriptionId, proof: validProof() }),
   });
 }
 
@@ -38,6 +55,7 @@ describe('HappyScribe original media import', () => {
     mocks.fetch.mockReset();
     vi.stubGlobal('fetch', mocks.fetch);
     vi.stubEnv('HAPPY_SCRIBE_API_TOKEN', 'test-only-token');
+    vi.stubEnv('HAPPY_SCRIBE_ORGANIZATION_ID', organizationId);
     vi.stubEnv('HAPPY_SCRIBE_MEDIA_PROXY_ENABLED', 'true');
   });
 
@@ -183,7 +201,7 @@ describe('HappyScribe original media import', () => {
     const mixedRequest = new NextRequest('http://localhost/api/admin/happyscribe/media', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer interpreter-token' },
-      body: JSON.stringify({ id: transcriptionId }),
+      body: JSON.stringify({ id: transcriptionId, proof: validProof() }),
     });
 
     const response = await POST(mixedRequest);
@@ -193,6 +211,31 @@ describe('HappyScribe original media import', () => {
     expect(response.headers.get('Vary')).toContain('Authorization');
     expect(mocks.actorFromBearer).toHaveBeenCalledOnce();
     expect(mocks.applyRateLimit).not.toHaveBeenCalled();
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects a media ID without a listing-issued proof before provider network calls', async () => {
+    const unverified = new NextRequest('http://localhost/api/admin/happyscribe/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: transcriptionId }),
+    });
+    const response = await POST(unverified);
+    expect(response.status).toBe(403);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an import proof from another organization', async () => {
+    const crossOrg = issueHappyScribeImportProof({
+      id: transcriptionId, organizationId: '999999', userId, token: process.env.HAPPY_SCRIBE_API_TOKEN || '',
+    });
+    const req = new NextRequest('http://localhost/api/admin/happyscribe/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: transcriptionId, proof: crossOrg }),
+    });
+    const response = await POST(req);
+    expect(response.status).toBe(403);
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 

@@ -79,7 +79,7 @@ export default function RoleplayStudioPage() {
   const [cueSearch, setCueSearch] = useState('');
   const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
   const [happyScribeItems, setHappyScribeItems] = useState<Array<{
-    id: string; name: string; state: string; language: string | null;
+    id: string; importProof: string; name: string; state: string; language: string | null;
     durationSeconds: number | null; createdAt: string | null; folder: string | null;
   }>>([]);
   const [happyScribeSelectedId, setHappyScribeSelectedId] = useState('');
@@ -1204,7 +1204,7 @@ export default function RoleplayStudioPage() {
       const response = await fetch('/api/admin/happyscribe/transcriptions', {
         method: 'POST', credentials: 'same-origin', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: item.id }),
+        body: JSON.stringify({ id: item.id, proof: item.importProof }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok || !body?.success || typeof body.data?.content !== 'string') {
@@ -1254,7 +1254,7 @@ export default function RoleplayStudioPage() {
         method: 'POST', credentials: 'same-origin', cache: 'no-store',
         signal: controller.signal,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: item.id }),
+        body: JSON.stringify({ id: item.id, proof: item.importProof }),
       });
       // Abort can race with a response already resolved by fetch. Never consume
       // or import a media response after cancellation, even if it arrives late.
@@ -1385,7 +1385,10 @@ export default function RoleplayStudioPage() {
             salvo que selecciones expresamente la exportación en servidor.
           </p>
         </div>
-        <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/roleplays/settings" className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5">Configurar Audio Studio</Link>
+          <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
+        </div>
       </header>
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
         <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">
