@@ -11,7 +11,7 @@ export async function isValidHappyScribeProbe(response: Response): Promise<boole
   // The streaming bound below still applies if Content-Length is missing or
   // inaccurate (including when a response is transparently decompressed).
   const declaredLength = response.headers.get('content-length');
-  if (declaredLength !== null && /^\\d+$/.test(declaredLength) &&
+  if (declaredLength !== null && /^\d+$/.test(declaredLength) &&
       Number(declaredLength) > HAPPY_SCRIBE_PROBE_MAX_BYTES) {
     try { await response.body.cancel(); } catch { /* Preserve bounded failure. */ }
     return false;
