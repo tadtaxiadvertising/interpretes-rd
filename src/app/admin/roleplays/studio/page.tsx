@@ -963,21 +963,40 @@ export default function RoleplayStudioPage() {
     if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
-    if (segments.some(segment => segment.speakerRole === 'interpreter')) {
-      setError('Hay intervenciones etiquetadas como Intérprete. Elimina esos fragmentos antes de exportar un roleplay para candidatos o intérpretes.');
-      return;
-    }
     const ordered = [...segments].sort((a, b) => a.start - b.start);
+    const revealInvalidTurn = (segment: Segment, index: number, reason: string) => {
+      // Export is blocked before saving or uploading anything. Surface the
+      // exact turn, even if a search or pending-only filter was hiding it.
+      setSegmentSearch('');
+      setShowPendingReview(false);
+      setExpandedSegmentId(segment.id);
+      setError(`Intervención ${index + 1}: ${reason}`);
+    };
     let end = 0;
     let total = 0;
-    for (const segment of ordered) {
+    for (const [index, segment] of ordered.entries()) {
+      if (segment.speakerRole === 'interpreter') {
+        revealInvalidTurn(segment, index,
+          'elimina el fragmento del intérprete original antes de exportar el roleplay.');
+        return;
+      }
       const ranges = validStudioRanges(segment, duration);
-      if (!segment.title.trim() || segment.title.length > 200 ||
-        !ranges || segment.start < end ||
-        segment.scriptPrompt.length > 5000 ||
-        !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
-        segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) {
-        setError('Corrige las intervenciones: orden, títulos, cortes válidos, máximo de 5 minutos de audio seleccionado y ausencia de solapamientos.');
+      const issue = !segment.title.trim()
+        ? 'añade un título antes de exportar.'
+        : segment.title.length > 200
+          ? 'reduce el título a 200 caracteres o menos.'
+          : !ranges
+            ? 'corrige los límites de corte (máximo 5 minutos de audio seleccionado).'
+            : segment.start < end
+              ? 'este corte se solapa con la intervención anterior.'
+              : segment.scriptPrompt.length > 5000
+                ? 'reduce las instrucciones a 5000 caracteres o menos.'
+                : !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
+                    segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC
+                  ? `ajusta el tiempo de respuesta entre 0 y ${ROLEPLAY_RESPONSE_MAX_DURATION_SEC} segundos.`
+                  : null;
+      if (issue) {
+        revealInvalidTurn(segment, index, issue);
         return;
       }
       end = segment.end;
