@@ -479,8 +479,12 @@ def _project_source_identity(project_file):
                 not isinstance(digest, str) or
                 not re.fullmatch(r"[0-9a-fA-F]{64}", digest)):
             return None
+        # Identity alone does not make a project exportable. Without this
+        # check an invalid draft is auto-paired, only to fail after the user
+        # clicks Generate ZIP. Keep the usual manual picker as the fallback.
+        validate_project(project, size)
         return size, digest.lower()
-    except (OSError, UnicodeError, ValueError, TypeError):
+    except (OSError, UnicodeError, ValueError, TypeError, ExportError):
         return None
 
 
