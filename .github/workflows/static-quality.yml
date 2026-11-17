@@ -21,7 +21,7 @@ jobs:
   static-quality:
     name: Prisma, TypeScript & ESLint
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       # CI-only isolated placeholders; never use production credentials.
       DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
@@ -61,6 +61,20 @@ jobs:
 
       - name: ESLint
         run: npm run lint
+
+      # Compile the actual standalone Next.js artifact in a disposable runner,
+      # even if the mandatory npm audit blocks the deployment workflow.
+      # Use only CI placeholders: no live database, webhooks, or credentials.
+      - name: Build Next.js standalone production artifact
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+      - name: Verify standalone output
+        run: |
+          test -f .next/standalone/server.js
+          test -d .next/static
 
       # IMPORTANT: A successful static-quality run is not release approval.
       # CI/CD Pipeline > Validate & Test still contains the mandatory
