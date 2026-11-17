@@ -86,6 +86,7 @@ export default function RoleplayStudioPage() {
   const [happyScribeLoading, setHappyScribeLoading] = useState(false);
   const [happyScribeImporting, setHappyScribeImporting] = useState(false);
   const [happyScribeMediaImporting, setHappyScribeMediaImporting] = useState(false);
+  const [happyScribeMediaEnabled, setHappyScribeMediaEnabled] = useState(false);
   const CUES_PER_PAGE = 60;
   const player = useRef<HTMLMediaElement | null>(null);
   const pairPlayer = useRef<HTMLAudioElement | null>(null);
@@ -1090,6 +1091,7 @@ export default function RoleplayStudioPage() {
 
   const loadHappyScribeItems = async () => {
     setHappyScribeLoading(true);
+    setHappyScribeMediaEnabled(false);
     setError('');
     try {
       const response = await fetch('/api/admin/happyscribe/transcriptions', {
@@ -1100,6 +1102,7 @@ export default function RoleplayStudioPage() {
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible consultar HappyScribe.');
       }
       const items = body.data as typeof happyScribeItems;
+      setHappyScribeMediaEnabled(body.mediaImportEnabled === true);
       setHappyScribeItems(items);
       setHappyScribeSelectedId(current =>
         items.some(item => item.id === current) ? current : items.find(item =>
@@ -1615,12 +1618,14 @@ export default function RoleplayStudioPage() {
                         </option>
                       ))}
                     </select>
-                    <button type="button" onClick={() => void importHappyScribeAudio()}
-                      disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
-                        happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
-                      className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
-                      {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
-                    </button>
+                    {happyScribeMediaEnabled && (
+                      <button type="button" onClick={() => void importHappyScribeAudio()}
+                        disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
+                          happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
+                        className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
+                        {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
+                      </button>
+                    )}
                     <button type="button" onClick={() => void importHappyScribeTranscript()}
                       disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
                       className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
