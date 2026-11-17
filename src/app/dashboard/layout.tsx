@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth';
 import { getResolvedIdentity } from '@/lib/auth/actions';
 import { resolveDestination } from '@/lib/identity/resolve-user';
 import { getCurrentProfile } from '@/app/actions/auth';
-import prisma from "@/lib/prisma";
+import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 import HeartbeatProvider from "@/components/HeartbeatProvider";
 import ActivityTrackerClient from "@/components/ActivityTrackerClient";
 
@@ -48,19 +48,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const uuidUserIds = notificationUserIds.filter((id) => id && UUID_RE.test(id));
 
-  const db = prisma as any;
-  const notifications = uuidUserIds.length > 0
-    ? await db.notification
-        .findMany({
-          where: { userId: { in: uuidUserIds } },
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        })
-        .catch((err: unknown) => {
-          console.error('❌ LAYOUT: Notification fetch failed (non-fatal):', err);
-          return [];
-        })
-    : [];
+  const notifications = await loadNavbarNotifications(uuidUserIds);
 
   // Ranking removed from layout - will be fetched client-side or via API
   // This eliminates the N+1 query problem that caused build timeouts
