@@ -64,7 +64,7 @@ export async function PATCH(
     const { id } = numericIdParamSchema.parse(await params);
     // Only explicit editable fields are accepted. Changes to interpreterId,
     // productionLogId and totalScore must not silently rewrite audit history.
-    const updateData = { ...(await parseJsonBody(request, QAScorePatchSchema)) };
+    const updateData: Record<string, unknown> = { ...(await parseJsonBody(request, QAScorePatchSchema)) };
     if (Object.keys(updateData).length === 0) {
       return privateAdminJson(
         { success: false, error: 'At least one editable field must be provided' },
@@ -97,7 +97,7 @@ export async function PATCH(
       // auditor, or other non-scoring metadata.
       const updated = await tx.qAScore.update({
         where: { id },
-        data: updateData,
+        data: updateData as any,
       });
 
       if (scoreChanged) {
