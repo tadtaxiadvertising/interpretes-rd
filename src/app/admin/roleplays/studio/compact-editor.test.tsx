@@ -111,7 +111,7 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/ }));
     expect(screen.getAllByRole('alert').some(item =>
       item.textContent?.includes('Intervención 4: la selección acumulada supera 15 minutos'))).toBe(true);
-    expect(screen.getByText(/Reduce este corte o alguno de los anteriores antes de exportar/)).toBeTruthy();
+    expect(screen.getByText('la selección acumulada supera 15 minutos. Reduce este corte o alguno de los anteriores antes de exportar.')).toBeTruthy();
     expect((screen.getByRole('searchbox', { name: 'Buscar intervenciones' }) as HTMLInputElement).value).toBe('');
     expect(document.activeElement).toBe(
       screen.getByRole('button', { name: 'Ir al inicio de intervención 4' }).closest('article'),
