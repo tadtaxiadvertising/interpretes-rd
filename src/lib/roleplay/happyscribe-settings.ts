@@ -60,7 +60,10 @@ export async function getHappyScribeSettingsStatus() {
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
     tokenSource: map.has(TOKEN_KEY) ? 'panel' : process.env.HAPPY_SCRIBE_API_TOKEN ? 'servidor' : 'ninguna',
     organizationId: map.get(ORG_KEY) || process.env.HAPPY_SCRIBE_ORGANIZATION_ID || '',
-    mediaImportEnabled: map.get(MEDIA_KEY) === 'true',
+    // Display the effective state, not merely a persisted preference:
+    // media never flows through the VPS unless the deployment gate is on.
+    mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true'
+      && map.get(MEDIA_KEY) === 'true',
     proxyAvailable: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true',
     encryptionReady: Boolean(masterKey()),
   };
