@@ -57,7 +57,7 @@ export default function UnauthorizedPage() {
           <div className="mt-12 pt-8 border-t border-white/5">
             <div className="flex items-center justify-center gap-2 text-[10px] text-slate-600 font-bold uppercase tracking-[0.3em]">
               <ShieldAlert size={12} />
-              <span>Security Auth System · Error 403</span>
+              <span>Acceso no autorizado · Error 403</span>
             </div>
           </div>
         </div>
