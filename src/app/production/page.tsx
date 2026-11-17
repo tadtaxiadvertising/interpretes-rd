@@ -248,7 +248,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-3xl font-bold text-white">Production Logs</h2>
+          <h2 className="text-3xl font-bold text-white">Registros de producción</h2>
           <p className="text-gray-400">
             Daily connection metrics, call statistics and full interpreter history — {totalCount} records
           </p>
@@ -261,17 +261,17 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="glass p-6 rounded-3xl border border-white/5">
-          <p className="text-sm text-gray-500 font-medium">Avg. Adherence</p>
-          <div className="flex items-center gap-3 mt-2"><h3 className="text-3xl font-bold text-white">{avgAdherence.toFixed(1)}%</h3><span className="text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full">Optimal</span></div>
+          <p className="text-sm text-gray-500 font-medium">Adherencia promedio</p>
+          <div className="flex items-center gap-3 mt-2"><h3 className="text-3xl font-bold text-white">{avgAdherence.toFixed(1)}%</h3><span className="text-xs font-bold text-blue-400 bg-blue-400/10 px-2 py-1 rounded-full">Óptimo</span></div>
           <Zap size={24} className="mt-4 text-blue-400" />
         </div>
         <div className="glass p-6 rounded-3xl border border-white/5">
-          <p className="text-sm text-gray-500 font-medium">Billed Minutes</p>
+          <p className="text-sm text-gray-500 font-medium">Minutos contabilizados</p>
           <div className="flex items-center gap-3 mt-2"><h3 className="text-3xl font-bold text-white">{logs.reduce((acc, log) => acc + (log.interpretedMinutes || 0), 0).toLocaleString()}</h3><span className="text-xs font-bold text-green-400 bg-green-400/10 px-2 py-1 rounded-full">Total</span></div>
           <Clock size={24} className="mt-4 text-green-400" />
         </div>
         <div className="glass p-6 rounded-3xl border border-white/5">
-          <p className="text-sm text-gray-500 font-medium">Calls Attended</p>
+          <p className="text-sm text-gray-500 font-medium">Llamadas atendidas</p>
           <div className="flex items-center gap-3 mt-2"><h3 className="text-3xl font-bold text-white">{logs.reduce((acc, log) => acc + (log.callsAttended || 0), 0).toLocaleString()}</h3><span className="text-xs font-bold text-purple-400 bg-purple-400/10 px-2 py-1 rounded-full">Total</span></div>
           <PhoneCall size={24} className="mt-4 text-purple-400" />
         </div>
@@ -280,9 +280,9 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
       <div className="glass rounded-3xl overflow-visible">
         <div className="p-6 border-b border-white/5 space-y-4">
           <div className="flex flex-col gap-1">
-            <h3 className="text-xl font-bold text-white">Activity History</h3>
+            <h3 className="text-xl font-bold text-white">Historial de actividad</h3>
             <p className="text-sm text-gray-500">
-              All production records for every interpreter. Use filters to narrow down results.
+              Consulta los registros de producción de los intérpretes. Utiliza los filtros para encontrar la información que necesitas.
             </p>
           </div>
           <ProductionLogControls />
@@ -290,7 +290,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
 
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead><tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5"><th className="py-6 px-8">Interpreter</th><th className="py-6 px-4">Date</th><th className="py-6 px-4">Minutes</th><th className="py-6 px-4">Calls</th><th className="py-6 px-4">Status</th><th className="py-6 px-4">Adherence</th><th className="py-6 px-4 text-right">Actions</th></tr></thead>
+            <thead><tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5"><th className="py-6 px-8">Intérprete</th><th className="py-6 px-4">Fecha</th><th className="py-6 px-4">Minutos</th><th className="py-6 px-4">Llamadas</th><th className="py-6 px-4">Estado</th><th className="py-6 px-4">Adherencia</th><th className="py-6 px-4 text-right">Acciones</th></tr></thead>
             <tbody className="divide-y divide-white/5">
               {historyRows.map((row) => {
                 const isPlaceholder = !row.log;
@@ -342,7 +342,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
 
         <Pagination currentPage={currentPage} totalPages={totalPages} searchParams={resolvedSearchParams as Record<string, string | undefined>} />
 
-        {historyRows.length === 0 && <div className="p-20 text-center"><Clock size={48} className="mx-auto text-gray-700 mb-4" /><p className="text-gray-500">No production logs found.</p></div>}
+        {historyRows.length === 0 && <div className="p-20 text-center"><Clock size={48} className="mx-auto text-gray-700 mb-4" /><p className="text-gray-500">No se encontraron registros de producción.</p></div>}
       </div>
     </div>
   );
