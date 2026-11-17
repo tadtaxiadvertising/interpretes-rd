@@ -31,13 +31,13 @@ describe('Roleplay assignment guides administrators to incomplete fields', () =>
 
     fireEvent.change(participant, { target: { value: '1' } });
     fireEvent.click(create);
-    const title = screen.getByLabelText('Scenario title') as HTMLInputElement;
+    const title = screen.getByLabelText('Título del escenario') as HTMLInputElement;
     expect(document.activeElement).toBe(title);
     expect(screen.getByText('El escenario 1 necesita un título.')).toBeTruthy();
 
     fireEvent.change(title, { target: { value: 'Consulta médica' } });
     fireEvent.click(create);
-    const audio = screen.getByLabelText(/Base audio/i) as HTMLInputElement;
+    const audio = screen.getByLabelText(/Audio base/i) as HTMLInputElement;
     expect(document.activeElement).toBe(audio);
     expect(screen.getByText('El escenario 1 necesita un audio válido.')).toBeTruthy();
     expect(request).not.toHaveBeenCalled();
