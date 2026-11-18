@@ -86,7 +86,13 @@ export async function startCall(): Promise<ActionResult<{ sessionId: number; sta
       return newSession;
     });
 
-    revalidatePath('/dashboard');
+    // The transaction has committed; a cache-refresh failure must not
+    // report the newly created call as unsaved and invite a duplicate start.
+    try {
+      revalidatePath('/dashboard');
+    } catch (error) {
+      console.warn('Call started; cache refresh failed:', safeServerErrorCategory(error));
+    }
     return {
       success: true,
       data: { 
@@ -95,6 +101,13 @@ export async function startCall(): Promise<ActionResult<{ sessionId: number; sta
       },
     };
   } catch (error: unknown) {
+    // A concurrent request can win the database's unique_active_call
+    // constraint after the initial "no active call" read. This must be a
+    // conflict, not a generic error that asks the user to retry blindly.
+    if (error && typeof error === 'object' && 'code' in error &&
+        (error.code === 'P2002' || error.code === 'P2034')) {
+      return { success: false, error: 'An active call may already exist; refresh your call status.', code: 'CONFLICT' };
+    }
     console.error('Call action startCall failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to start call session', code: 'INTERNAL_ERROR' };
   }
