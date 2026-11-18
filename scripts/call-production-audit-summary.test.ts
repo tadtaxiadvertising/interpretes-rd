@@ -8,6 +8,9 @@ const synthetic = {
   total_sessions: '6',
   ended_sessions: '5',
   ended_without_ledger_sessions: '2',
+  ended_missing_duration_sessions: '2',
+  ended_zero_duration_with_elapsed_sessions: '1',
+  ended_missing_cost_sessions: '3',
   ended_session_minutes: '110',
   ledger_entries: '3',
   ledger_minutes: '70',
@@ -50,6 +53,9 @@ describe('read-only reconciliation report privacy', () => {
 
   it('refuses incomplete, fractional and unsafe integers instead of falsifying accounting totals', () => {
     expect(() => callProductionAuditSummary({ ...synthetic, ledger_minutes: undefined })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_duration_sessions: undefined })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, ended_zero_duration_with_elapsed_sessions: '-1' })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_cost_sessions: '1.5' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: 'NaN' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: '1.5' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: '9007199254740993' })).toThrow();
@@ -60,6 +66,11 @@ describe('read-only reconciliation report privacy', () => {
     const script = readFileSync(new URL('./reconcile-call-production-readonly.ts', import.meta.url), 'utf8');
     expect(script).toContain('output: \'AGGREGATE_ONLY\'');
     expect(script).toContain('FROM interpreter_day');
+    expect(script).toContain('ended_missing_duration_count');
+    expect(script).toContain('ended_zero_duration_with_elapsed_count');
+    expect(script).toContain('ended_missing_cost_count');
+    expect(script).toContain('cs.ended_at >= cs.started_at + INTERVAL \'60 seconds\'');
+    expect(script).toContain('BEGIN READ ONLY');
     expect(script).toContain('callProductionAuditSummary(result.rows[0])');
     expect(script).not.toContain('rowCount: rows.length');
     expect(script).not.toContain('      rows,');
