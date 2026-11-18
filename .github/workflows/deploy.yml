@@ -130,6 +130,9 @@ jobs:
 
       - name: Verify Express CORS fails closed in production
         run: npx vitest run src/lib/security/backend-cors-policy.test.ts
+      # Block any regression to unauthenticated PostgreSQL TLS in the Express API.
+      - name: Verify dedicated API PostgreSQL trust policy
+        run: npx vitest run src/lib/security/backend-database-tls.test.ts
 
       - name: Dependency Security Audit
         run: |

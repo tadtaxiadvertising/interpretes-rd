@@ -77,6 +77,9 @@ jobs:
           test -d .next/static
 
       - name: Build dedicated Express API image
+      # Compile the independent Express backend image and its bundled CA.
+      # No runtime connection or remote database credentials are involved.
+      - name: Build dedicated API image with verified TLS
         run: docker build --file Dockerfile.api --tag interpreters-api:static-ci .
 
       # IMPORTANT: A successful static-quality run is not release approval.
