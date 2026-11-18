@@ -52,7 +52,8 @@ function complete(): CallKeyCatalog {
     policyCount: 0,
     supportingIndexValid: true,
     columns: cols.map(([column_name, data_type]) =>
-      ({ column_name, data_type, is_nullable: 'NO' })),
+      ({ column_name, data_type, is_nullable: 'NO',
+        column_default: column_name === 'created_at' ? 'CURRENT_TIMESTAMP' : null })),
     migrationRecords: [],
     constraints: [
       simple('call_submission_keys_pkey', 'p', ['interpreter_id', 'request_key']),
@@ -93,6 +94,48 @@ describe('read-only call idempotency catalog diagnostics', () => {
       ...complete(), tableExists: false, rlsEnabled: false,
       supportingIndexValid: true,
     })).toBe('history-drift');
+  });
+
+  it('does not disguise an unresolved failed Prisma migration as an absent or complete schema', () => {
+    const unresolved = {
+      migration_name: '20261118200000_call_submission_idempotency',
+      succeeded: false,
+      rolled_back: false,
+    };
+    const absent = {
+      ...complete(),
+      tableExists: false,
+      supportingIndexValid: false,
+      rlsEnabled: false,
+      migrationRecords: [unresolved],
+    };
+    expect(classifyCallKeySchema(absent)).toBe('history-drift');
+    expect(classifyCallKeySchema({
+      ...complete(), migrationRecords: [unresolved],
+    })).toBe('history-drift');
+    expect(classifyCallKeySchema({
+      ...complete(), migrationRecords: [{
+        ...unresolved, succeeded: true, rolled_back: true,
+      }],
+    })).toBe('history-drift');
+  });
+
+  it('requires a database-generated created_at timestamp', () => {
+    const schema = complete();
+    const changeDefault = (defaultValue: string | null) =>
+      schema.columns.map(column => column.column_name === 'created_at'
+        ? { ...column, column_default: defaultValue }
+        : column);
+
+    expect(classifyCallKeySchema({
+      ...schema, columns: changeDefault(null),
+    })).toBe('partial');
+    expect(classifyCallKeySchema({
+      ...schema, columns: changeDefault("'malicious constant'::text"),
+    })).toBe('partial');
+    expect(classifyCallKeySchema({
+      ...schema, columns: changeDefault('now()'),
+    })).toBe('complete');
   });
 
   it('does not treat a rolled-back migration as an applied one', () => {
