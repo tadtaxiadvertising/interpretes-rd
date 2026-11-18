@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { cache } from 'react';
 import { UserRole } from '@/lib/types';
 import { auth } from '@/lib/auth-rbac';
-import { resolveUserRoleByEmail } from '@/lib/admin-identity';
+import { hasAuthoritativeAuthJsRole, resolveUserRoleByEmail } from '@/lib/admin-identity';
 
 export type AuthProvider = 'supabase' | 'authjs';
 
@@ -341,11 +341,13 @@ async function resolveActorFromSupabase(
 async function resolveActorFromAuthJs(): Promise<ResolvedIdentity | null> {
   try {
     const session = await auth();
-    if (!session?.user) return null;
+    if (!session?.user?.id) return null;
+    const authoritativeRole = (session.user as { role?: unknown }).role;
+    if (!hasAuthoritativeAuthJsRole(authoritativeRole)) return null;
 
     const userId = session.user.id;
     const email = session.user.email?.toLowerCase().trim() || null;
-    let role = normalizeRbacRole((session.user as any).role);
+    let role = normalizeRbacRole(authoritativeRole);
     const interpreterId = (session.user as any).interpreterId ?? null;
 
     if (!email) return null;
