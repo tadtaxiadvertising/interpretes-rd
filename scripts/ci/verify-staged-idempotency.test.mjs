@@ -46,6 +46,10 @@ test('isolated verifier reads only staged SQL and rolls back its changes', () =>
   assert.ok(verifier.includes("process.env.CI !== 'true'"));
   assert.ok(verifier.includes("url.pathname !== '/interpreters_e2e'"));
   assert.ok(verifier.includes("await client.query('ROLLBACK')"));
+  assert.ok(verifier.includes('readCallKeyCatalog(client)'));
+  assert.ok(verifier.includes("completeState !== 'complete'"));
+  assert.ok(verifier.includes("!== 'partial'"));
+  assert.ok(verifier.includes("!== 'absent'"));
   assert.doesNotMatch(verifier, /prisma\/migrations\/20261118\d+_call_submission/);
 });
 
