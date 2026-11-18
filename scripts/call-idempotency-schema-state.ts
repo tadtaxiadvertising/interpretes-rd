@@ -65,6 +65,43 @@ function sameList(actual: readonly string[], expected: readonly string[]): boole
   return actual.length === expected.length && actual.every((item, i) => item === expected[i]);
 }
 
+/**
+ * PostgreSQL 16 pg_get_constraintdef renders IN lists as either IN(...) or
+ * = ANY(ARRAY[...::text]). Compare the entire expression, not fragments:
+ * an appended "OR TRUE" otherwise makes a dangerous CHECK look valid.
+ *
+ * A future PostgreSQL renderer with different canonical output deliberately
+ * returns "partial" until it is reviewed and covered by isolated PG tests.
+ */
+function canonicalCheckExpression(definition: string): string | null {
+  if (!/^CHECK\s*\(/i.test(definition)) return null;
+  // These staged constraints have no whitespace in quoted literals.
+  let expression = definition.trim()
+    .replace(/^CHECK\s*/i, '')
+    .replace(/::(?:pg_catalog\.)?text\b/gi, '')
+    .replace(/\s+/g, '');
+
+  // Peel only pairs that surround the WHOLE expression; the operator-level
+  // parentheses in ANY(...), IN(...) must remain untouched.
+  while (expression.startsWith('(') && expression.endsWith(')')) {
+    let depth = 0;
+    let closesBeforeEnd = false;
+    for (let i = 0; i < expression.length; i++) {
+      if (expression[i] === '(') depth++;
+      if (expression[i] === ')') depth--;
+      if (depth === 0 && i < expression.length - 1) {
+        closesBeforeEnd = true;
+        break;
+      }
+      if (depth < 0) return null;
+    }
+    if (depth !== 0 || closesBeforeEnd) break;
+    expression = expression.slice(1, -1);
+  }
+
+  return expression;
+}
+
 function validConstraint(actual: CatalogConstraint, expected: (typeof REQUIRED_CONSTRAINTS)[number]): boolean {
   if (actual.conname !== expected.name || actual.contype !== expected.type ||
       actual.convalidated !== true || !sameList(actual.key_columns, expected.columns)) return false;
@@ -75,13 +112,13 @@ function validConstraint(actual: CatalogConstraint, expected: (typeof REQUIRED_C
       actual.on_delete === 'r' && actual.on_update === 'a';
   }
   if (expected.name === 'call_submission_keys_source_check') {
-    return ['quick_log_action', 'quick_log_api', 'admin_manual']
-      .every(source => actual.definition.includes(source)) &&
-      actual.definition.includes('source');
+    const expression = canonicalCheckExpression(actual.definition);
+    return expression === "source=ANY(ARRAY['quick_log_action','quick_log_api','admin_manual'])" ||
+      expression === "sourceIN('quick_log_action','quick_log_api','admin_manual')";
   }
   if (expected.name === 'call_submission_keys_digest_check') {
-    return actual.definition.includes('payload_sha256') &&
-      actual.definition.includes('[0-9a-f]{64}');
+    return canonicalCheckExpression(actual.definition) ===
+      "payload_sha256~'^[0-9a-f]{64}$'";
   }
   return true;
 }

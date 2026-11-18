@@ -57,6 +57,12 @@ tablas ni resolver migraciones automáticamente.
   sobre el DDL íntegro, `partial` cuando se introduce una política RLS
   inesperada o se elimina el default de `created_at`, y `absent` después
   del `ROLLBACK`. Ninguna de estas pruebas consulta la base de Easypanel.
+- El inspector exige la expresión canónica **completa** de los `CHECK`
+  de fuente y digest, no solo la presencia de ciertas palabras. El CI
+  construye temporalmente restricciones debilitadas con `OR TRUE`,
+  exige el estado `partial` y las revierte mediante SAVEPOINT.
+  Diferencias de representación de PostgreSQL requieren nueva revisión
+  antes de afirmar `complete`, nunca saltarse esta verificación.
 
 ## Etapa 0.5: contrato de solicitud revisable (SIN activar)
 

@@ -137,6 +137,37 @@ async function main() {
       await client.query('RELEASE SAVEPOINT check_unsafe_policy');
     }
 
+    // A CHECK containing the right keywords may still be a tautology.
+    // Exercise that failure mode against PostgreSQL's actual renderer,
+    // never against application data or any production database.
+    await client.query('SAVEPOINT check_weakened_source_check');
+    try {
+      await client.query('ALTER TABLE public.call_submission_keys DROP CONSTRAINT call_submission_keys_source_check');
+      await client.query(`ALTER TABLE public.call_submission_keys
+        ADD CONSTRAINT call_submission_keys_source_check
+        CHECK (source IN ('quick_log_action', 'quick_log_api', 'admin_manual') OR TRUE)`);
+      if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'partial') {
+        throw new Error('Catalog reader accepted a weakened source CHECK.');
+      }
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT check_weakened_source_check');
+      await client.query('RELEASE SAVEPOINT check_weakened_source_check');
+    }
+
+    await client.query('SAVEPOINT check_weakened_digest_check');
+    try {
+      await client.query('ALTER TABLE public.call_submission_keys DROP CONSTRAINT call_submission_keys_digest_check');
+      await client.query(`ALTER TABLE public.call_submission_keys
+        ADD CONSTRAINT call_submission_keys_digest_check
+        CHECK (payload_sha256 ~ '^[0-9a-f]{64}' OR TRUE)`);
+      if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'partial') {
+        throw new Error('Catalog reader accepted a weakened digest CHECK.');
+      }
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT check_weakened_digest_check');
+      await client.query('RELEASE SAVEPOINT check_weakened_digest_check');
+    }
+
     await client.query('SAVEPOINT check_missing_default');
     try {
       await client.query('ALTER TABLE public.call_submission_keys ALTER COLUMN created_at DROP DEFAULT');
