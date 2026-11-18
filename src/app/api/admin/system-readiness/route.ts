@@ -15,6 +15,8 @@ interface SchemaReadinessRow {
   libraryArchiveTable: boolean;
   roleplayStudioColumns: boolean;
   roleplayStudioConstraints: boolean;
+  accountPlatformVpnColumns: boolean;
+  accountPlatformVpnPortConstraint: boolean;
 }
 
 /**
@@ -91,7 +93,42 @@ export async function GET(req: NextRequest) {
               'roleplay_scenarios_studio_language_valid',
               'roleplay_scenarios_source_time_pair_valid'
             )
-        ) AS "roleplayStudioConstraints"
+        ) AS "roleplayStudioConstraints",
+        -- Check the exact same 11 nullable types used by the additive
+        -- account-platform VPN migration; no account data is selected.
+        (
+          SELECT COUNT(*) = 11
+          FROM (VALUES
+            ('vpn_provider', 'text'),
+            ('vpn_app', 'text'),
+            ('vpn_username_hint', 'text'),
+            ('vpn_secret_ref', 'text'),
+            ('vpn_country', 'text'),
+            ('vpn_region', 'text'),
+            ('vpn_server', 'text'),
+            ('vpn_exit_ip', 'text'),
+            ('vpn_profile', 'text'),
+            ('vpn_protocol', 'text'),
+            ('vpn_port', 'integer')
+          ) AS expected(column_name, column_type)
+          JOIN information_schema.columns AS actual
+            ON actual.table_schema = 'public'
+           AND actual.table_name = 'account_platforms'
+           AND actual.column_name = expected.column_name
+           AND actual.data_type = expected.column_type
+           AND actual.is_nullable = 'YES'
+        ) AS "accountPlatformVpnColumns",
+        -- A CHECK (true) with the expected name is not a valid VPN port guard.
+        EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conrelid = to_regclass('public.account_platforms')
+            AND conname = 'account_platforms_vpn_port_range'
+            AND contype = 'c' AND convalidated
+            AND regexp_replace(
+              lower(pg_get_constraintdef(oid)), '["()[:space:]]', '', 'g'
+            ) = 'checkvpn_portisnullorvpn_port>=1andvpn_port<=65535'
+        ) AS "accountPlatformVpnPortConstraint"
     `;
 
     if (!state) {

@@ -4,6 +4,42 @@
 `public.account_platforms.vpn_country` (u otra de las 11 columnas VPN) no
 existe en la base de datos a la que está conectada la versión ejecutada.
 
+## Estado verificado del incidente (18 noviembre de 2026)
+
+La ejecución manual [#44245558076](https://github.com/tadtaxiadvertising/interpretes-rd/actions/runs/44245558076)
+del workflow de recuperación terminó satisfactoriamente. Sus registros muestran
+que el esquema VPN pasó de **ausente** a **completo**, tras aplicar la migración
+y verificar las 11 columnas y el CHECK, sobre la base configurada en el
+`DIRECT_URL` de ese workflow.
+
+**No repetir la migración de forma preventiva.** Esa evidencia no demuestra
+por sí sola que el `DATABASE_URL` de la aplicación instalada en Easypanel
+apunte al mismo destino. Para cerrar #626 se necesita una prueba del runtime
+autenticado. Los workflows completos de despliegue siguen bloqueados por
+la auditoría de dependencias (#624); no hay constancia de despliegue reciente
+de los cambios de código.
+
+### Verificación del runtime con la versión que incluya el diagnóstico VPN
+
+1. Confirmar con el operador, por canal seguro, el destino de la base usada
+   por Easypanel y el SHA del código ejecutado, **sin publicar URLs ni secretos**.
+2. Una vez desplegada la versión que incluye el PR #676, iniciar sesión
+   como administrador y consultar `GET /api/admin/system-readiness`.
+   La respuesta autenticada debe indicar `database: "reachable"` y
+   `schema.accountPlatformVpnColumns: true` y
+   `schema.accountPlatformVpnPortConstraint: true`.
+   La respuesta únicamente contiene indicadores de metadatos, no cuentas.
+3. Si uno de los indicadores VPN es `false`, registrar el diagnóstico
+   y detener cualquier nueva migración hasta aclarar la discrepancia entre
+   la base del workflow y la base real de la aplicación.
+4. Si ambos son `true`, probar `/admin/accounts` y `/admin/platforms`
+   con un administrador autorizado; comprobar que no hay P2022, que las cuentas
+   y asignaciones antiguas permanecen y que los enlaces de trabajo usan
+   el control VPN previsto. Solo entonces cerrar #626.
+5. No interpretar una respuesta `503` de readiness como prueba de que falta
+   **solo** VPN: el endpoint también revisa migraciones de Roleplay y otros
+   esquemas. Consultar las claves booleanas individualmente.
+
 ## Causa y seguridad
 
 El repositorio tiene una migración aditiva existente en

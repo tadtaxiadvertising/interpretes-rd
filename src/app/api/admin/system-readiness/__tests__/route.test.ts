@@ -32,6 +32,8 @@ const ready = {
   libraryArchiveTable: true,
   roleplayStudioColumns: true,
   roleplayStudioConstraints: true,
+  accountPlatformVpnColumns: true,
+  accountPlatformVpnPortConstraint: true,
 };
 
 describe('GET /api/admin/system-readiness', () => {
@@ -80,6 +82,48 @@ describe('GET /api/admin/system-readiness', () => {
     expect(body.schema.roleplayStudioColumns).toBe(false);
     expect(body.schema.roleplayStudioConstraints).toBe(false);
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it.each([
+    { accountPlatformVpnColumns: false, accountPlatformVpnPortConstraint: true },
+    { accountPlatformVpnColumns: true, accountPlatformVpnPortConstraint: false },
+    { accountPlatformVpnColumns: false, accountPlatformVpnPortConstraint: false },
+  ])('fails readiness for missing or incompatible VPN schema: %o', async vpn => {
+    m.query.mockResolvedValueOnce([{ ...ready, ...vpn }]);
+
+    const response = await GET(request());
+    const body = await response.json();
+    expect(response.status).toBe(503);
+    expect(body).toMatchObject({
+      success: false,
+      status: 'schema_mismatch',
+      database: 'reachable',
+      schema: { ...ready, ...vpn },
+    });
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('inspects exact nullable VPN column types and validates the real port CHECK, never reads accounts', async () => {
+    const response = await GET(request());
+    expect(response.status).toBe(200);
+    const template = m.query.mock.calls[0][0] as TemplateStringsArray;
+    const sql = Array.from(template).join(' ');
+    const expectedVpnColumns = [
+      'vpn_provider', 'vpn_app', 'vpn_username_hint', 'vpn_secret_ref',
+      'vpn_country', 'vpn_region', 'vpn_server', 'vpn_exit_ip',
+      'vpn_profile', 'vpn_protocol', 'vpn_port',
+    ];
+    for (const field of expectedVpnColumns) {
+      expect(sql).toContain(field);
+    }
+    expect(sql).toContain('COUNT(*) = 11');
+    expect(sql).toContain("actual.is_nullable = 'YES'");
+    expect(sql).toContain('account_platforms_vpn_port_range');
+    expect(sql).toContain('convalidated');
+    expect(sql).toContain('pg_get_constraintdef');
+    expect(sql).toContain('checkvpn_portisnullorvpn_port>=1andvpn_port<=65535');
+    expect(sql).not.toMatch(/SELECT\s+\*\s+FROM\s+public\.account_platforms/i);
+    expect(m.query).toHaveBeenCalledTimes(1);
   });
 
   it('only queries schema metadata and checks all five Studio types and four constraints', async () => {
