@@ -9,6 +9,7 @@ import { asyncHandler } from './lib/asyncHandler.js';
 import { prisma } from './lib/prisma.js';
 import { AppError } from './lib/AppError.js';
 import { resolveAllowedCorsOrigins, isCorsOriginAllowed } from './lib/cors-policy.js';
+import { createCachedReadinessProbe } from './lib/readiness.js';
 
 /**
  * EXPRESS APPLICATION SETUP
@@ -59,15 +60,28 @@ app.use('/api/v1/calls', callRoutes);
 app.use('/api/v1/production', productionRoutes);
 
 
-// ── Health Check ──────────────────────────────────────────
-// Easypanel uses this to determine if the container is healthy.
-// Ultra-lightweight version to prevent SIGTERM during startup/heavy load.
+// ── Liveness and Readiness ───────────────────────────────
+// /health is only process liveness, not proof that PostgreSQL is available.
+// Docker/Easypanel MUST use /ready to avoid marking a DB-unavailable backend
+// as healthy. Coalesce public requests to protect the tiny shared DB pool.
+const checkDatabaseReadiness = createCachedReadinessProbe(async () => {
+  await prisma.$queryRaw`SELECT 1`;
+});
 app.get('/health', (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
   res.json({
     status: 'ok',
-    timestamp: new Date().toISOString(),
     service: 'interpreters-api',
     uptime: Math.floor(process.uptime()),
+  });
+});
+
+app.get('/ready', async (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const ready = await checkDatabaseReadiness();
+  res.status(ready ? 200 : 503).json({
+    status: ready ? 'ready' : 'unavailable',
+    service: 'interpreters-api',
   });
 });
 
@@ -78,7 +92,7 @@ app.use((_req: Request, res: Response) => {
     success: false,
     error: {
       type: 'NOT_FOUND',
-      message: `Route ${_req.method} ${_req.originalUrl} not found`,
+      message: 'Route not found',
     },
   });
 });

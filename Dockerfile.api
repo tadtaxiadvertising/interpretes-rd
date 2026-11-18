@@ -56,7 +56,7 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 # CORS_ORIGINS: comma-separated list of allowed frontend origins
 # Set in Easypanel env vars, e.g.: https://interpreters.example.com,https://admin.example.com
-# If not set, CORS will be open (development fallback).
+# In production, an unset allowlist permits only the official frontend.
 # ENV CORS_ORIGINS=""
 
 # MEMORY OPTIMIZATION: Bumped from 150 to 256 for stability
@@ -64,8 +64,10 @@ ENV NODE_OPTIONS="--max-old-space-size=256"
 
 USER apiuser
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:${PORT:-3000}/health || exit 1
+# The liveness route remains lightweight, but readiness must fail when
+# PostgreSQL is unreachable; allow enough time for the first DB/TLS handshake.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl --fail --silent http://localhost:${PORT:-3000}/ready > /dev/null || exit 1
 
 EXPOSE 3000
 

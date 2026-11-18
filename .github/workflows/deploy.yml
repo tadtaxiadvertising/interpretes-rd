@@ -137,6 +137,11 @@ jobs:
       - name: Verify private Express error handling and logs
         run: npx vitest run src/lib/security/backend-safe-error-logs.test.ts
 
+      # A healthy container must actually be able to reach PostgreSQL.
+      # Keep this diagnostic test ahead of the unchanged release security gate.
+      - name: Verify Express database readiness contract
+        run: npx vitest run src/lib/security/backend-api-readiness.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
