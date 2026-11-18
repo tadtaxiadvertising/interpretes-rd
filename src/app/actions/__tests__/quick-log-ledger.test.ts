@@ -238,6 +238,54 @@ describe('Quick Log Server Action accounting ledger and safe failures', () => {
     });
   });
 
+  it('rejects an unexpectedly missing tariff instead of silently booking a zero-cost call', async () => {
+    vi.mocked(prisma.interpreter.findUnique).mockResolvedValueOnce({
+      id: 7, tariffPerMinute: null,
+    } as never);
+
+    expect(await quickLog(form())).toMatchObject({
+      success: false, code: 'VALIDATION_ERROR',
+    });
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.callSession.create).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('classifies a conditional update P2025 as a settled-day conflict, not an uncertain save', async () => {
+    tx.productionLog.findFirst.mockResolvedValueOnce({
+      id: 40, interpretedMinutes: 5, callsAttended: 2, isSettled: false,
+    });
+    tx.productionLog.update.mockRejectedValueOnce({ code: 'P2025' });
+
+    const logger = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await quickLog(form());
+      expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+      expect(result.error).toContain('Review the call history');
+      expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+      expect(revalidatePath).not.toHaveBeenCalled();
+      expect(logger).not.toHaveBeenCalled();
+    } finally {
+      logger.mockRestore();
+    }
+  });
+
+  it('classifies serialization conflicts without logging database details', async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce({
+      code: 'P2034', meta: { diagnostic: 'PRIVATE_DB_STRING' },
+    });
+    const logger = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await quickLog(form());
+      expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+      expect(JSON.stringify(result)).not.toContain('PRIVATE_DB_STRING');
+      expect(revalidatePath).not.toHaveBeenCalled();
+      expect(logger).not.toHaveBeenCalled();
+    } finally {
+      logger.mockRestore();
+    }
+  });
+
   it('reports a ledger insertion error as unsaved and does not refresh caches', async () => {
     tx.callProductionEntry.create.mockRejectedValueOnce(
       new Error('postgresql://private:ULTRA_PRIVATE_PASSWORD@db.invalid/data'),
