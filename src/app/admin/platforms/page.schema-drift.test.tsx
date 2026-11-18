@@ -59,12 +59,13 @@ describe('admin platform directory during pending VPN migration', () => {
     vi.mocked(inspectAccountVpnSchema).mockResolvedValue('complete');
     vi.mocked(prisma.accountPlatform.findMany)
       .mockResolvedValueOnce([platform] as never)
-      .mockResolvedValueOnce([{ id: 5, vpnCountry: 'United States', vpnProvider: 'Example VPN' }] as never);
+      .mockResolvedValueOnce([{ id: 5, vpnCountry: 'United States', vpnProvider: 'Example VPN', vpnPort: 51820 }] as never);
 
     const html = renderToStaticMarkup(await AccountPlatformsPage());
     expect(html).toContain('Formulario de plataformas habilitado');
     expect(html).toContain('United States');
     expect(html).toContain('Example VPN');
+    expect(html).toContain('Puerto 51820');
     expect(html).not.toContain('Detalles VPN ocultos');
 
     expect(prisma.accountPlatform.findMany).toHaveBeenCalledTimes(2);
