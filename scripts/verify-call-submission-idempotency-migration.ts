@@ -64,6 +64,15 @@ async function main() {
     if (!sql.trim()) throw new Error('Staged idempotency SQL missing.');
     await client.query(sql);
 
+    // A separate staged migration closes an ownership hole in the original
+    // pair of independent foreign keys. Both files stay out of production.
+    const ownershipSql = await readFile(resolve(
+      process.cwd(),
+      'prisma/migrations/20261118213000_call_submission_session_ownership/migration.sql',
+    ), 'utf8');
+    if (!ownershipSql.trim()) throw new Error('Staged session ownership SQL missing.');
+    await client.query(ownershipSql);
+
     const table = await client.query<{ rls_enabled: boolean }>(
       `SELECT c.relrowsecurity AS rls_enabled
        FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -84,6 +93,7 @@ async function main() {
       ['call_submission_keys_call_session_unique', 'u'],
       ['call_submission_keys_interpreter_fkey', 'f'],
       ['call_submission_keys_session_fkey', 'f'],
+      ['call_submission_keys_session_ownership_fkey', 'f'],
       ['call_submission_keys_source_check', 'c'],
       ['call_submission_keys_digest_check', 'c'],
     ];
@@ -91,6 +101,15 @@ async function main() {
       if (types.get(name) !== expectedType) {
         throw new Error('Staged idempotency constraint missing or changed.');
       }
+    }
+
+    const indexes = await client.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes
+       WHERE schemaname = 'public' AND tablename = 'call_sessions'`,
+    );
+    if (!indexes.rows.some(row =>
+      row.indexname === 'ux_call_sessions_id_interpreter_for_idempotency')) {
+      throw new Error('Staged ownership FK supporting index is missing.');
     }
 
     const count = await client.query<{ total: number }>(
@@ -127,6 +146,17 @@ async function main() {
     const callTwo = sessionTwo.rows[0]?.id;
     if (!callOne || !callTwo) throw new Error('Synthetic call fixture creation failed.');
 
+    const interpreterOther = await client.query<{ id: number }>(
+      `INSERT INTO public.interpreters
+         (external_id, name, tariff_per_minute)
+       VALUES ('ci-idempotency-other-interpreter', 'Other CI synthetic', 0.25)
+       RETURNING id`,
+    );
+    const otherId = interpreterOther.rows[0]?.id;
+    if (!otherId || otherId === interpreterId) {
+      throw new Error('Synthetic cross-interpreter fixture creation failed.');
+    }
+
     const keyOne = '00000000-0000-4000-8000-000000000001';
     const keyTwo = '00000000-0000-4000-8000-000000000002';
     const digest = 'a'.repeat(64);
@@ -145,6 +175,16 @@ async function main() {
       [interpreterId, keyTwo, 'quick_log_action', 'not-a-digest', callTwo], '23514');
     await expectSqlState(client, insert,
       [-2147483647, keyTwo, 'quick_log_action', digest, callTwo], '23503');
+
+    // Both referenced rows exist, yet pairing another interpreter with an
+    // existing call is forbidden. Separate FKs alone would allow this.
+    await expectSqlState(client, insert,
+      [otherId, keyTwo, 'quick_log_action', digest, callTwo], '23503');
+    // Even an existing mapping cannot be reassigned later to a different
+    // interpreter by mutating call_sessions.
+    await expectSqlState(client,
+      'UPDATE public.call_sessions SET interpreter_id = $1 WHERE id = $2',
+      [otherId, callOne], '23503');
     await expectSqlState(client,
       'DELETE FROM public.call_sessions WHERE id = $1', [callOne], '23503');
 
@@ -160,8 +200,14 @@ async function main() {
       "SELECT to_regclass('public.call_submission_keys') IS NOT NULL AS exists",
     );
     if (after.rows[0]?.exists) throw new Error('Isolated verifier left schema changes behind.');
+    const indexAfter = await client.query<{ exists: boolean }>(
+      "SELECT to_regclass('public.ux_call_sessions_id_interpreter_for_idempotency') IS NOT NULL AS exists",
+    );
+    if (indexAfter.rows[0]?.exists) {
+      throw new Error('Isolated verifier left the staged ownership index behind.');
+    }
 
-    console.log('Staged call idempotency SQL verified on isolated PostgreSQL: uniqueness, RLS, foreign keys, checks and rollback.');
+    console.log('Staged call idempotency SQL verified on isolated PostgreSQL: uniqueness, ownership, RLS, foreign keys, checks and rollback.');
   } finally {
     if (inTransaction) await client.query('ROLLBACK').catch(() => undefined);
     await client.end();
