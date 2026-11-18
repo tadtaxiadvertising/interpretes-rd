@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { evaluateDependencyAudit } from './evaluate-dependency-audit.mjs';
 
 function validReport(counts = {}) {
@@ -47,6 +48,19 @@ describe('npm audit release gate fails closed', () => {
     delete report.vulnerabilities;
     assert.throws(() => evaluateDependencyAudit(report));
     assert.throws(() => evaluateDependencyAudit({ ...validReport(), vulnerabilities: [] }));
+  });
+
+  it('wires the fail-closed parser into the mandatory deployment gate', () => {
+    const workflow = readFileSync(new URL('../../.github/workflows/deploy.yml', import.meta.url), 'utf8');
+    const start = workflow.indexOf('      - name: Dependency Security Audit');
+    const end = workflow.indexOf('      - name: Prisma Validate', start);
+    assert.ok(start >= 0 && end > start, 'required dependency audit step must exist');
+    const audit = workflow.slice(start, end);
+    assert.match(audit, /id: dependency_security_audit/);
+    assert.match(audit, /node scripts\/ci\/evaluate-dependency-audit\.mjs/);
+    assert.match(workflow, /- name: Verify npm audit fail-closed parser/);
+    assert.match(workflow, /if: always\(\) && steps\.dependency_security_audit\.outcome == 'failure'/);
+    assert.match(workflow, /needs: validate/);
   });
 
   it('rejects an audit error object even when other fields look valid', () => {

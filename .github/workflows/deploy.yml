@@ -152,38 +152,20 @@ jobs:
       - name: Verify patched ESLint minimatch lockfile
         run: node --test scripts/ci/verify-eslint-minimatch-lock.test.mjs
 
+      # Fail-closed evaluation is unit-tested independently of the audit network.
+      - name: Verify npm audit fail-closed parser
+        run: node --test scripts/ci/evaluate-dependency-audit.test.mjs
+
       - name: Dependency Security Audit
         id: dependency_security_audit
         continue-on-error: true
         run: |
+          set -euo pipefail
+          # npm audit exits nonzero when it finds vulnerabilities; its JSON is
+          # still parsed. Network errors/malformed JSON have no valid report
+          # and therefore block deployment (never fall back to zero counts).
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
-          node -e '
-            const report = require(process.env.RUNNER_TEMP + "/npm-audit.json");
-            const vulnerabilities = report.vulnerabilities || {};
-            console.log("Dependency audit summary:", JSON.stringify(report.metadata?.vulnerabilities || {}));
-            const severity = report.metadata?.vulnerabilities || {};
-            if ((severity.high || 0) > 0 || (severity.critical || 0) > 0) {
-              console.error("Dependency audit blocked: high/critical vulnerabilities must be resolved.");
-              process.exitCode = 1;
-            } else if ((severity.moderate || 0) > 0) {
-              console.warn("Dependency audit warning: moderate vulnerabilities remain; review and remediate.");
-            }
-            for (const [name, item] of Object.entries(vulnerabilities)) {
-              const advisories = (item.via || [])
-                .filter((entry) => typeof entry === "object")
-                .map((entry) => entry.title + (entry.url ? " (" + entry.url + ")" : ""));
-              console.log([
-                name,
-                "severity=" + item.severity,
-                "direct=" + item.isDirect,
-                "range=" + item.range,
-                "fixAvailable=" + JSON.stringify(item.fixAvailable),
-                "via=" + JSON.stringify(item.via || []),
-                "effects=" + JSON.stringify(item.effects || []),
-                "advisories=" + advisories.join("; ")
-              ].join(" | "));
-            }
-          '
+          node scripts/ci/evaluate-dependency-audit.mjs "$RUNNER_TEMP/npm-audit.json"
 
       - name: Prisma Validate
         run: npx prisma validate
