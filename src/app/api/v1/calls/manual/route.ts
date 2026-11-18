@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getCurrentUser } from '@/lib/auth/actions';
+import { resolveApiActor } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { ManualCallSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
@@ -23,13 +23,23 @@ class QuickLogConflictError extends Error {}
 
 export async function POST(req: Request) {
   try {
-    const userData = await getCurrentUser();
-    if (!userData?.profile || userData.profile.role !== 'interpreter' || !userData.profile.interpreterId) {
-      return NextResponse.json({ success: false, error: 'Unauthorized or no interpreter profile' }, { status: 401 });
+    // Resolve the caller from the explicit Bearer token when supplied;
+    // otherwise use the verified browser cookie identity. Never authorize
+    // a different cookie identity after middleware accepted a Bearer token.
+    const actor = await resolveApiActor(req);
+    if (!actor) {
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, {
+        status: 401, headers: { 'Cache-Control': 'private, no-store' },
+      });
+    }
+    if (actor.role !== 'interpreter' || !actor.interpreterId) {
+      return NextResponse.json({ success: false, error: 'Interpreter access required' }, {
+        status: 403, headers: { 'Cache-Control': 'private, no-store' },
+      });
     }
 
     const interpreter = await prisma.interpreter.findUnique({
-      where: { id: userData.profile.interpreterId }
+      where: { id: actor.interpreterId }
     });
 
     if (!interpreter) {
