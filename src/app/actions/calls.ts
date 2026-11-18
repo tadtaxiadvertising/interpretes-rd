@@ -11,6 +11,8 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 
+class EndCallFinancialConflict extends Error {}
+
 /**
  * ACTION: Start Call Session
  */
@@ -123,7 +125,8 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
 
       const updated = await tx.callSession.findFirst({
         where: { id: sessionId, interpreterId },
-        select: { durationSeconds: true, callCost: true, startedAt: true }
+        select: { durationSeconds: true, callCost: true, startedAt: true,
+          isSettled: true, payrollRecordId: true }
       });
 
       if (!updated) {
@@ -134,6 +137,56 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       if (claimed.count === 0) {
         return updated;
       }
+
+      // The claim above is part of this transaction and will roll back if
+      // accounting is locked; no session or status change may commit alone.
+      const getLocalDateStr = (d: Date) => new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/Santo_Domingo',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      }).format(d);
+      const dayStr = getLocalDateStr(updated.startedAt || new Date());
+      const logDate = new Date(`${dayStr}T12:00:00Z`);
+      const minutes = Math.max(0, Math.floor((updated.durationSeconds || 0) / 60));
+      const callsAttended = minutes > 0 ? 1 : 0;
+
+      const existingLog = await tx.productionLog.findFirst({
+        where: { interpreterId, date: logDate },
+        select: {
+          id: true, isSettled: true, interpretedMinutes: true,
+          callsAttended: true, payrollRecordId: true,
+        },
+      });
+      if (updated.isSettled || existingLog?.isSettled) {
+        throw new EndCallFinancialConflict();
+      }
+      const lockedPayroll = await tx.payrollRecord.findFirst({
+        where: {
+          OR: [
+            {
+              interpreterId,
+              periodStart: { lte: logDate },
+              periodEnd: { gte: logDate },
+            },
+            ...(existingLog?.payrollRecordId
+              ? [{ id: existingLog.payrollRecordId }]
+              : []),
+            ...(updated.payrollRecordId
+              ? [{ id: updated.payrollRecordId }]
+              : []),
+          ],
+          AND: [{
+            OR: [
+              { paidAt: { not: null } },
+              { status: { notIn: ['PENDING', 'Pendiente'] } },
+              { status: null },
+            ],
+          }],
+        },
+        select: { id: true },
+      });
+      if (lockedPayroll) throw new EndCallFinancialConflict();
 
       await tx.interpreter.update({
         where: { id: interpreterId },
@@ -161,33 +214,20 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       // Persist a per-session ledger entry in the same transaction as the
       // daily aggregate. The primary key makes one production entry possible
       // per CallSession and provides an auditable source for future reports.
-      const getLocalDateStr = (d: Date) => new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'America/Santo_Domingo',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(d);
-      const dayStr = getLocalDateStr(updated.startedAt || new Date());
-      const logDate = new Date(`${dayStr}T12:00:00Z`);
-      const minutes = Math.max(0, Math.floor((updated.durationSeconds || 0) / 60));
-      const callsAttended = minutes > 0 ? 1 : 0;
-
       let productionLogId: number | null = null;
       if (minutes > 0) {
-        const existingLog = await tx.productionLog.findFirst({
-          where: { interpreterId, date: logDate }
-        });
-
         if (existingLog) {
-          const updatedLog = await tx.productionLog.update({
-            where: { id: existingLog.id },
+          // Guard against a settlement between the initial read and the
+          // write. Serializable isolation also detects concurrent updates.
+          const changed = await tx.productionLog.updateMany({
+            where: { id: existingLog.id, isSettled: false },
             data: {
               interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
               callsAttended: (existingLog.callsAttended || 0) + 1,
             },
-            select: { id: true },
           });
-          productionLogId = updatedLog.id;
+          if (changed.count !== 1) throw new EndCallFinancialConflict();
+          productionLogId = existingLog.id;
         } else {
           const createdLog = await tx.productionLog.create({
             data: {
@@ -219,9 +259,15 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       });
 
       return updated;
-    });
+    }, { isolationLevel: 'Serializable' });
 
-    revalidateInterpreterProfileRecords(interpreterId);
+    // A committed session is successful even when cache refresh fails; a
+    // false failure could cause repeated endCall attempts.
+    try {
+      revalidateInterpreterProfileRecords(interpreterId);
+    } catch (error) {
+      console.warn('Call ended; cache refresh failed:', safeServerErrorCategory(error));
+    }
     return {
       success: true,
       data: {
@@ -230,6 +276,10 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       },
     };
   } catch (error: unknown) {
+    if (error instanceof EndCallFinancialConflict ||
+        (error && typeof error === 'object' && 'code' in error && error.code === 'P2034')) {
+      return { success: false, error: 'Production or payroll period is locked; contact an administrator.', code: 'CONFLICT' };
+    }
     console.error('Call action endCall failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to end call session', code: 'INTERNAL_ERROR' };
   }
