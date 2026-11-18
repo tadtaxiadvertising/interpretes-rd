@@ -128,6 +128,9 @@ jobs:
       - name: Verify custom CSP origin safety
         run: npx vitest run src/lib/security/next-config-csp.test.ts
 
+      - name: Verify Express CORS fails closed in production
+        run: npx vitest run src/lib/security/backend-cors-policy.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
