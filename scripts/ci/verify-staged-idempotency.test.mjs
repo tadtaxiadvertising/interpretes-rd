@@ -25,6 +25,15 @@ test('call idempotency DDL is staged outside Prisma auto-discovered migrations',
     /call_submission_(?:idempotency|session_ownership)/i.test(name),
   );
   assert.deepEqual(forbidden, [], 'Unapproved call idempotency migrations must not be discoverable by Prisma');
+
+  // Renaming a migration folder must not bypass the safety gate. Examine
+  // contents of every auto-discovered migration.sql, regardless of its name.
+  for (const relative of entries) {
+    if (!relative.endsWith('migration.sql')) continue;
+    const sql = readFileSync(resolve(migrationDir, relative), 'utf8');
+    assert.doesNotMatch(sql, /call_submission_keys/i,
+      'Backend call idempotency schema is not approved for Prisma auto-deploy');
+  }
 });
 
 test('isolated verifier reads only staged SQL and rolls back its changes', () => {
