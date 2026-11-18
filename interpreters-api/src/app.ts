@@ -38,7 +38,7 @@ app.use(
         // Constant message: never echo attacker-controlled origin to logs.
         callback(AppError.forbidden('Cross-origin request is not allowed'));
       }
-    }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
