@@ -76,6 +76,79 @@ describe('Quick Log Server Action accounting ledger and safe failures', () => {
     });
   });
 
+  it('attributes a Quick Log crossing midnight to its call start day in Santo Domingo', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-19T04:01:00.000Z')); // 00:01 local
+    try {
+      // The call began on November 18 at 23:58 local, not November 19.
+      const response = await quickLog(form('3', '0'));
+      const previousDay = new Date('2026-11-18T12:00:00.000Z');
+      expect(response).toEqual({ success: true, data: { id: 18 } });
+      expect(tx.callSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          startedAt: new Date('2026-11-19T03:58:00.000Z'),
+          endedAt: new Date('2026-11-19T04:01:00.000Z'),
+          durationSeconds: 180,
+        }),
+        select: { id: true },
+      });
+      expect(tx.productionLog.findFirst).toHaveBeenCalledWith({
+        where: { interpreterId: 7, date: previousDay },
+      });
+      expect(tx.payrollRecord.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([{
+            interpreterId: 7,
+            periodStart: { lte: previousDay },
+            periodEnd: { gte: previousDay },
+          }]),
+        }),
+        select: { id: true },
+      });
+      expect(tx.productionLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          interpreterId: 7,
+          date: previousDay,
+          interpretedMinutes: 3,
+        }),
+        select: { id: true },
+      });
+      expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          productionDate: previousDay,
+          interpretedMinutes: 3,
+        }),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('blocks a crossing-midnight call if its *start day* payroll is finalized', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-19T04:01:00.000Z'));
+    try {
+      tx.payrollRecord.findFirst.mockResolvedValueOnce({ id: 'previous-day-approved' });
+      const result = await quickLog(form('3', '0'));
+      expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+      expect(tx.payrollRecord.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          OR: expect.arrayContaining([{
+            interpreterId: 7,
+            periodStart: { lte: new Date('2026-11-18T12:00:00Z') },
+            periodEnd: { gte: new Date('2026-11-18T12:00:00Z') },
+          }]),
+        }),
+        select: { id: true },
+      });
+      expect(tx.callSession.create).not.toHaveBeenCalled();
+      expect(tx.productionLog.create).not.toHaveBeenCalled();
+      expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('links an existing unsettled production log, without creating another day', async () => {
     tx.productionLog.findFirst.mockResolvedValueOnce({
       id: 40, interpretedMinutes: 5, callsAttended: 2, isSettled: false,
