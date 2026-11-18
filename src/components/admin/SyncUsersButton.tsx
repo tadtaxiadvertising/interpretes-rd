@@ -33,7 +33,7 @@ export function SyncUsersButton() {
           <Check size={14} />
           {syncedCount === 0 
             ? 'Todos los perfiles están sincronizados' 
-            : `¡Sincronizados ${syncedCount} usuarios nuevos con éxito!`}
+            : `Se actualizaron ${syncedCount} perfiles correctamente`}
         </span>
       )}
 
