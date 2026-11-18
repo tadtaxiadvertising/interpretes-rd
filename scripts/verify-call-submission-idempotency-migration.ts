@@ -159,7 +159,16 @@ async function main() {
       await client.query('ALTER TABLE public.call_submission_keys DROP CONSTRAINT call_submission_keys_digest_check');
       await client.query(`ALTER TABLE public.call_submission_keys
         ADD CONSTRAINT call_submission_keys_digest_check
-        CHECK (payload_sha256 ~ '^[0-9a-f]{64}
+        CHECK (payload_sha256 ~ '^[0-9a-f]{64}' OR TRUE)`);
+      if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'partial') {
+        throw new Error('Catalog reader accepted a weakened digest CHECK.');
+      }
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT check_weakened_digest_check');
+      await client.query('RELEASE SAVEPOINT check_weakened_digest_check');
+    }
+
+    await client.query('SAVEPOINT check_missing_default');
     try {
       await client.query('ALTER TABLE public.call_submission_keys ALTER COLUMN created_at DROP DEFAULT');
       if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'partial') {
