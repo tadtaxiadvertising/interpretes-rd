@@ -211,6 +211,12 @@ jobs:
           CI: 'true'
         run: npx tsx scripts/verify-call-submission-idempotency-migration.ts
 
+      - name: Verify idempotency catalog classifier
+        run: npx vitest run scripts/call-idempotency-schema-state.test.ts
+
+      - name: Verify read-only idempotency catalog inspection (isolated PostgreSQL)
+        run: npx tsx scripts/inspect-call-idempotency-schema.ts --check-only
+
       - name: Verify deployment preflight on isolated PostgreSQL
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: http://127.0.0.1:9/unused-frontend

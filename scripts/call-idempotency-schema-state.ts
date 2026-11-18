@@ -9,6 +9,7 @@ export interface CatalogColumn {
   column_name: string;
   data_type: string;
   is_nullable: string;
+  column_default: string | null;
 }
 
 export interface CatalogConstraint {
@@ -86,6 +87,14 @@ function validConstraint(actual: CatalogConstraint, expected: (typeof REQUIRED_C
 }
 
 export function classifyCallKeySchema(catalog: CallKeyCatalog): CallKeySchemaState {
+  // An unfinished failed Prisma migration blocks subsequent migrations even
+  // when its transaction rolled back and the physical table is absent. Do not
+  // mislead operators with "absent" or allow --require-complete to pass.
+  if (catalog.migrationRecords.some(row =>
+    (!row.succeeded && !row.rolled_back) ||
+    (row.succeeded && row.rolled_back))) {
+    return 'history-drift';
+  }
   const hasSucceededHistory = catalog.migrationRecords.some(row => row.succeeded && !row.rolled_back);
   if (!catalog.tableExists) {
     // History claiming an applied migration while the table is absent
@@ -101,6 +110,14 @@ export function classifyCallKeySchema(catalog: CallKeyCatalog): CallKeySchemaSta
       return 'partial';
     }
   }
+  // The staged DDL specifies a database-generated creation timestamp.
+  // A structurally identical column without its default would make future
+  // key inserts fail unless every writer explicitly supplies created_at.
+  const createdAt = catalog.columns.find(column => column.column_name === 'created_at');
+  if (!createdAt || !/^(?:CURRENT_TIMESTAMP|now\(\))$/i.test(createdAt.column_default?.trim() ?? '')) {
+    return 'partial';
+  }
+
   for (const expected of REQUIRED_CONSTRAINTS) {
     const actual = catalog.constraints.filter(row => row.conname === expected.name);
     if (actual.length !== 1 || !actual[0] || !validConstraint(actual[0], expected)) {
