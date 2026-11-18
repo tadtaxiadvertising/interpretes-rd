@@ -37,6 +37,13 @@ async function readSchemaState(client: Client) {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const inspectOnly = args.length === 1 && args[0] === '--check-only';
+  const requireComplete = args.length === 1 && args[0] === '--require-complete';
+  if (args.length > 0 && !inspectOnly && !requireComplete) {
+    throw new Error('Invalid VPN migration mode');
+  }
+  const readonly = inspectOnly || requireComplete;
   const root = process.cwd();
   const sqlFile = resolve(root, 'prisma/migrations/20261117130000_account_platform_vpn_config/migration.sql');
   const sql = await readFile(sqlFile, 'utf8');
@@ -51,11 +58,12 @@ async function main() {
   try {
     await client.connect();
     connected = true;
-    await client.query('BEGIN');
+    await client.query(readonly ? 'BEGIN READ ONLY' : 'BEGIN');
     inTransaction = true;
 
-    // Matches the lock used by scripts/run-migration.ts to prevent races.
-    await client.query('SELECT pg_advisory_xact_lock(194, 20261105)');
+    // Serialize writes with the deployment migration runner; inspection is
+    // strictly read-only and never acquires an exclusive migration lock.
+    if (!readonly) await client.query('SELECT pg_advisory_xact_lock(194, 20261105)');
     const state = await readSchemaState(client);
     // A completed migration recorded in Prisma history with no matching
     // schema signals drift. Do not silently replay it or rewrite history.
@@ -75,6 +83,17 @@ async function main() {
     }
     if (state === 'partial') {
       throw new Error('VPN migration schema is partially applied or incompatible');
+    }
+    if (readonly) {
+      if (requireComplete && state !== 'complete') {
+        throw new Error('VPN migration is missing; a reviewed write is required');
+      }
+      await client.query('ROLLBACK');
+      inTransaction = false;
+      console.log(state === 'complete'
+        ? 'Read-only VPN schema inspection: complete.'
+        : 'Read-only VPN schema inspection: missing; no SQL was applied.');
+      return;
     }
     if (state === 'missing') {
       await client.query(sql);
