@@ -209,80 +209,43 @@ describe('read-only call idempotency catalog diagnostics', () => {
     })).toBe('partial');
   });
 
-  it('accepts precise canonical CHECK output from PostgreSQL', () => {
+
+  it('accepts the exact PostgreSQL canonical forms for both checks', () => {
     const schema = complete();
+    const end = String.fromCharCode(36);
     const definitions = {
-      call_submission_keys_source_check: "CHECK ((source = ANY (ARRAY['quick_log_action'::text, 'quick_log_api'::text, 'admin_manual'::text])))",
-      call_submission_keys_digest_check: "CHECK ((payload_sha256 ~ '^[0-9a-f]{64}
-    const x = complete();
-    expect(classifyCallKeySchema({
-      ...x, rlsEnabled: false,
-      migrationRecords: [{
-        migration_name: '20261118213000_call_submission_session_ownership',
-        succeeded: true, rolled_back: false,
-      }],
-    })).toBe('partial');
-  });
-});
-::text))",
+      call_submission_keys_source_check:
+        "CHECK ((source = ANY (ARRAY['quick_log_action'::text, 'quick_log_api'::text, 'admin_manual'::text])))",
+      call_submission_keys_digest_check:
+        "CHECK ((payload_sha256 ~ '^[0-9a-f]{64}" + end + "'::text))",
     };
     expect(classifyCallKeySchema({
-      ...schema,
-      constraints: schema.constraints.map(row => ({
+      ...schema, constraints: schema.constraints.map(row => ({
         ...row,
         definition: definitions[row.conname as keyof typeof definitions] ?? row.definition,
       })),
     })).toBe('complete');
   });
 
-  it('rejects CHECK expressions which contain expected tokens but are tautologies', () => {
+  it('rejects CHECKs that contain expected terms but admit arbitrary rows', () => {
     const schema = complete();
+    const end = String.fromCharCode(36);
     const forged = [
-      ['call_submission_keys_source_check', "CHECK ((source IN ('quick_log_action', 'quick_log_api', 'admin_manual')) OR TRUE)"],
-      ['call_submission_keys_digest_check', "CHECK (payload_sha256 ~ '^[0-9a-f]{64}
-    const x = complete();
-    expect(classifyCallKeySchema({
-      ...x, rlsEnabled: false,
-      migrationRecords: [{
-        migration_name: '20261118213000_call_submission_session_ownership',
-        succeeded: true, rolled_back: false,
-      }],
-    })).toBe('partial');
-  });
-});
- OR TRUE)"],
-      ['call_submission_keys_source_check', "CHECK ((source = ANY (ARRAY['quick_log_action'::text, 'quick_log_api'::text, 'admin_manual'::text])) OR TRUE)"],
+      ['call_submission_keys_source_check',
+        "CHECK ((source IN ('quick_log_action', 'quick_log_api', 'admin_manual')) OR TRUE)"],
+      ['call_submission_keys_source_check',
+        "CHECK ((source = ANY (ARRAY['quick_log_action'::text, 'quick_log_api'::text, 'admin_manual'::text])) OR TRUE)"],
+      ['call_submission_keys_digest_check',
+        "CHECK (payload_sha256 ~ '^[0-9a-f]{64}" + end + "' OR TRUE)"],
+      ['call_submission_keys_source_check',
+        "CHECK (source IN ('quick_log_action', 'quick_log_api', 'admin_manual') OR source IS NULL)"],
+      ['call_submission_keys_digest_check',
+        "CHECK (payload_sha256 ~ '^[0-9a-f]{64}" + end + "' OR payload_sha256 IS NULL)"],
     ] as const;
     for (const [name, definition] of forged) {
       expect(classifyCallKeySchema({
-        ...schema,
-        constraints: schema.constraints.map(row => row.conname === name
-          ? { ...row, definition } : row),
-      })).toBe('partial');
-    }
-  });
-
-  it('rejects additional branch conditions even when the CHECK is not a tautology', () => {
-    const schema = complete();
-    const forged = [
-      ['call_submission_keys_source_check', "CHECK (source IN ('quick_log_action', 'quick_log_api', 'admin_manual') OR source IS NULL)"],
-      ['call_submission_keys_digest_check', "CHECK (payload_sha256 ~ '^[0-9a-f]{64}
-    const x = complete();
-    expect(classifyCallKeySchema({
-      ...x, rlsEnabled: false,
-      migrationRecords: [{
-        migration_name: '20261118213000_call_submission_session_ownership',
-        succeeded: true, rolled_back: false,
-      }],
-    })).toBe('partial');
-  });
-});
- OR payload_sha256 IS NULL)"],
-    ] as const;
-    for (const [name, definition] of forged) {
-      expect(classifyCallKeySchema({
-        ...schema, constraints: schema.constraints.map(row => row.conname === name
-          ? { ...row, definition } : row),
+        ...schema, constraints: schema.constraints.map(row =>
+          row.conname === name ? { ...row, definition } : row),
       })).toBe('partial');
     }
   });
