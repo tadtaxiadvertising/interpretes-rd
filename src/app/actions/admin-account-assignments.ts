@@ -6,6 +6,17 @@ import { revalidatePath } from 'next/cache';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { z } from 'zod';
 
+// Database mutations are committed before path invalidation. A transient
+// cache failure must not turn a saved assignment into a reported write failure.
+function refreshAssignmentViews() {
+  try {
+    revalidatePath('/admin/accounts');
+  } catch (error) {
+    // Framework/provider exceptions may include private connection details.
+    console.warn('[ADMIN_ACCOUNTS] Assignment saved but cache refresh failed', safeServerErrorCategory(error));
+  }
+}
+
 const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(value => {
   const date = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
@@ -58,10 +69,11 @@ export async function assignInterpreterToAccount(formData: FormData) {
 
       await tx.interpreterAccountAssignment.create({
         data: { accountId, interpreterId, startsAt, endsAt, notes: notes || null },
+        select: { id: true },
       });
     }, { isolationLevel: 'Serializable' });
 
-    revalidatePath('/admin/accounts');
+    refreshAssignmentViews();
     return { success: true };
   } catch (error) {
     const code = error instanceof Error ? error.message : '';
@@ -101,7 +113,7 @@ export async function endInterpreterAccountAssignment(formData: FormData) {
       data: { endsAt: parsed.data.endsAt },
     });
     if (!result.count) return { success: false, error: 'La asignación ya finalizó o no existe.' };
-    revalidatePath('/admin/accounts');
+    refreshAssignmentViews();
     return { success: true };
   } catch (error) {
     console.error('[ADMIN_ACCOUNTS] Assignment end failed', safeServerErrorCategory(error));
