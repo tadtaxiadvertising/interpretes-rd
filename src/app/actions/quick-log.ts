@@ -49,14 +49,18 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
     }
 
     const now = new Date();
+    const startedAt = new Date(now.getTime() - durationSeconds * 1000);
+    // Use the call's *start day* for all accounting. API Quick Log and
+    // endCall already use startedAt, not the submission/end timestamp.
+    // Otherwise a call logged at 00:01 that began at 23:59 can silently
+    // increment the next day's ProductionLog or evade yesterday's payroll lock.
     const dayStr = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'America/Santo_Domingo',
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-    }).format(now);
+    }).format(startedAt);
     const logDate = new Date(`${dayStr}T12:00:00Z`);
-    const startedAt = new Date(now.getTime() - durationSeconds * 1000);
     const tariffSnapshot = Number(interpreter.tariffPerMinute);
     const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
 
