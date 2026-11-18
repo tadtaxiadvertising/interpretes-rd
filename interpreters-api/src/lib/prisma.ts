@@ -73,7 +73,7 @@ export async function warmupPrisma(): Promise<void> {
   } catch (err) {
     console.error(
       '🔴 PRISMA: Failed to connect at startup:',
-      err instanceof Error ? err.name : 'UnknownError'
+      'DatabaseOperationError'
     );
     // Do NOT process.exit here — let the health check surface the failure.
     // The server.ts startup handler will decide whether to abort.
@@ -94,7 +94,7 @@ export async function disconnectPrisma(): Promise<void> {
   } catch (err) {
     console.error(
       '⚠️ PRISMA: Error during disconnect:',
-      err instanceof Error ? err.name : 'UnknownError'
+      'DatabaseOperationError'
     );
   }
 }
