@@ -14,6 +14,7 @@ import { POST } from '../route';
 
 const tx = {
   callSession: { create: vi.fn() },
+  payrollRecord: { findFirst: vi.fn() },
   productionLog: { findFirst: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
   callProductionEntry: { create: vi.fn() },
 };
@@ -40,6 +41,7 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
       endOfDay: new Date('2026-11-18T23:59:59.999Z'),
     });
     tx.callSession.create.mockResolvedValue({ id: 22, interpreterId: 7 });
+    tx.payrollRecord.findFirst.mockResolvedValue(null);
     tx.productionLog.findFirst.mockResolvedValue(null);
     tx.productionLog.create.mockResolvedValue({ id: 99 });
     tx.productionLog.updateMany.mockResolvedValue({ count: 1 });
@@ -95,7 +97,7 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
   it('persists a zero-minute ledger row for a sub-minute session without creating production', async () => {
     const response = await POST(request(0, 45));
     expect(response.status).toBe(200);
-    expect(tx.productionLog.findFirst).not.toHaveBeenCalled();
+    expect(tx.productionLog.findFirst).toHaveBeenCalledOnce();
     expect(tx.productionLog.create).not.toHaveBeenCalled();
     expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -120,6 +122,53 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
     const changed = await POST(request());
     expect(changed.status).toBe(409);
     expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('blocks approved payroll, paidAt and unknown statuses even before settlement', async () => {
+    const periods = [
+      { id: 'approved', status: 'APPROVED' },
+      { id: 'paid-at-only', status: 'PENDING', paidAt: new Date() },
+      { id: 'unknown-status', status: null },
+    ];
+    for (const period of periods) {
+      tx.payrollRecord.findFirst.mockResolvedValueOnce(period);
+      const response = await POST(request());
+      expect(response.status).toBe(409);
+    }
+    expect(tx.productionLog.create).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('checks linked payroll and locks sub-minute calls in finalized periods', async () => {
+    tx.productionLog.findFirst.mockResolvedValueOnce({
+      id: 41, isSettled: false, payrollRecordId: 'linked-approval',
+      interpretedMinutes: 5, callsAttended: 1,
+    });
+    tx.payrollRecord.findFirst.mockResolvedValueOnce({ id: 'linked-approval' });
+    const response = await POST(request(0, 25));
+    expect(response.status).toBe(409);
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+
+    expect(tx.payrollRecord.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            interpreterId: 7,
+            periodStart: { lte: expect.any(Date) },
+            periodEnd: { gte: expect.any(Date) },
+          },
+          { id: 'linked-approval' },
+        ],
+        AND: [{
+          OR: [
+            { paidAt: { not: null } },
+            { status: { notIn: ['PENDING', 'Pendiente'] } },
+            { status: null },
+          ],
+        }],
+      },
+      select: { id: true },
+    });
   });
 
   it('returns a private conflict on a serializable transaction race', async () => {
