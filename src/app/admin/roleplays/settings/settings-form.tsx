@@ -1,5 +1,5 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
@@ -30,6 +30,17 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
     compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  // A warning paragraph alone cannot stop an accidental tab close or reload.
+  // Register the native browser warning only while there is an unsaved draft.
+  useEffect(() => {
+    if (!hasUnsavedChanges && !pending) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges, pending]);
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     // A stale form is not allowed to retry until the admin explicitly reloads.
@@ -196,6 +207,15 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     </div>}
     <div className="flex flex-wrap items-center gap-3"><button disabled={editingDisabled || conflict} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
       <button type="button" onClick={() => void checkConnection()} disabled={editingDisabled || conflict || hasUnsavedChanges || !enabled || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
-      <Link href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</Link></div>
+      <Link href="/admin/roleplays/studio" onClick={event => {
+        if (editingDisabled) {
+          event.preventDefault();
+          return;
+        }
+        if (hasUnsavedChanges &&
+          !window.confirm('Hay cambios sin guardar, incluida cualquier clave nueva. ¿Quieres salir y descartarlos?')) {
+          event.preventDefault();
+        }
+      }} className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</Link></div>
   </form>;
 }
