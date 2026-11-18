@@ -10,6 +10,24 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 
+// The database mutation is fully committed before cache invalidation.
+// A transient cache failure must never report that sensitive banking data
+// was not saved, or ask an administrator to retry a completed reset.
+function refreshSavedOnboardingViews(interpreterId: number | null) {
+  for (const path of ['/admin/users', '/interpreters', '/dashboard']) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      console.warn('[ADMIN-ONBOARDING] Saved changes; path refresh failed:', safeServerErrorCategory(error));
+    }
+  }
+  try {
+    revalidateInterpreterProfileRecords(interpreterId);
+  } catch (error) {
+    console.warn('[ADMIN-ONBOARDING] Saved changes; profile refresh failed:', safeServerErrorCategory(error));
+  }
+}
+
 // ── Zod Schemas ──────────────────────────────────────────────────
 
 const AdminOnboardingUpdateSchema = z.object({
@@ -156,10 +174,7 @@ export async function adminUpdateOnboardingDetails(input: unknown): Promise<Acti
       return profile;
     });
 
-    revalidatePath('/admin/users');
-    revalidatePath('/interpreters');
-    revalidatePath('/dashboard');
-    revalidateInterpreterProfileRecords(result.interpreterId);
+    refreshSavedOnboardingViews(result.interpreterId);
 
     return {
       success: true,
@@ -230,10 +245,7 @@ export async function adminResetOnboarding(input: unknown): Promise<ActionResult
       return profile;
     });
 
-    revalidatePath('/admin/users');
-    revalidatePath('/interpreters');
-    revalidatePath('/dashboard');
-    revalidateInterpreterProfileRecords(result.interpreterId);
+    refreshSavedOnboardingViews(result.interpreterId);
 
     return { success: true };
   } catch (error) {
