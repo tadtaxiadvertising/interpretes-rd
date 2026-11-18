@@ -346,7 +346,7 @@ const ManualCallSchema = z.object({
   // with an explicit offset so server and browser cannot disagree about time.
   startedAt: z.string()
     .refine(value =>
-      /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/i.test(value) &&
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/i.test(value) &&
       Number.isFinite(Date.parse(value)),
     )
     .transform(value => new Date(value)),
