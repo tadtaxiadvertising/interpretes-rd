@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react';
+import type { MouseEventHandler, ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 import AudioStudioSettingsForm from './settings-form';
 
 vi.mock('next/link', () => ({
-  default: ({ href, children }: { href: string; children: ReactNode }) =>
-    <a href={href}>{children}</a>,
+  default: ({ href, children, onClick }: { href: string; children: ReactNode; onClick?: MouseEventHandler<HTMLAnchorElement> }) =>
+    <a href={href} onClick={onClick}>{children}</a>,
 }));
 vi.mock('@/app/actions/audio-studio-settings', () => ({
   inspectAudioStudioSettings: vi.fn(),
@@ -161,5 +161,54 @@ describe('Audio Studio admin partial settings payload', () => {
     expect(vi.mocked(saveAudioStudioSettings).mock.calls[1][0].get('expectedRevision')).toBe(updated.revision);
   });
 
+
+  it('warns on a browser unload only while editor changes are unsaved', async () => {
+    render(<AudioStudioSettingsForm initial={initial} />);
+    const cleanExit = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(cleanExit);
+    expect(cleanExit.defaultPrevented).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'compact' },
+    });
+    const dirtyExit = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirtyExit);
+    expect(dirtyExit.defaultPrevented).toBe(true);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    const afterSave = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(afterSave);
+    expect(afterSave.defaultPrevented).toBe(false);
+  });
+
+  it('does not navigate to Audio Studio if the admin refuses to discard a draft', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+        target: { value: 'SYNTHETIC_UNSAVED_SECRET' },
+      });
+      const followed = fireEvent.click(screen.getByRole('link', { name: 'Abrir Audio Studio' }));
+      expect(followed).toBe(false);
+      expect(confirm).toHaveBeenCalledOnce();
+      expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value).toBe('SYNTHETIC_UNSAVED_SECRET');
+    } finally {
+      confirm.mockRestore();
+    }
+  });
+
+  it('navigates to Audio Studio without confirmation when nothing is edited', () => {
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      const followed = fireEvent.click(screen.getByRole('link', { name: 'Abrir Audio Studio' }));
+      expect(followed).toBe(true);
+      expect(confirm).not.toHaveBeenCalled();
+    } finally {
+      confirm.mockRestore();
+    }
+  });
 
 });
