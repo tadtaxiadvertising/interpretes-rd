@@ -33,6 +33,7 @@ vi.mock('next/cache', () => ({
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 
 const PROFILE_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -187,6 +188,83 @@ describe('Admin Onboarding Actions', () => {
       expect(result.success).toBe(false);
       if (!result.success) expect(result.code).toBe('VALIDATION_ERROR');
       expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('banking and onboarding post-commit refresh safety', () => {
+    const validBanking = {
+      userId: PROFILE_ID,
+      bankName: 'Banreservas',
+      bankAccount: '9876543210',
+      bankAccountType: 'Corriente' as const,
+      bankCedula: '002-7654321-0',
+    };
+
+    it('returns success after banking commits even when the first cache path fails', async () => {
+      const tx = mockTransaction();
+      vi.mocked(revalidatePath).mockImplementationOnce(() => {
+        throw new Error('postgresql://svc:PRIVATE_BANK_DB_PASSWORD@db.internal');
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        const result = await adminUpdateOnboardingDetails(validBanking);
+        expect(result.success).toBe(true);
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(tx.userProfile.update).toHaveBeenCalledTimes(1);
+        expect(tx.interpreter.update).toHaveBeenCalledTimes(1);
+        expect(revalidatePath).toHaveBeenCalledTimes(3);
+        expect(revalidatePath).toHaveBeenCalledWith('/admin/users');
+        expect(revalidatePath).toHaveBeenCalledWith('/interpreters');
+        expect(revalidatePath).toHaveBeenCalledWith('/dashboard');
+        expect(revalidateInterpreterProfileRecords).toHaveBeenCalledWith(42);
+        expect(JSON.stringify(warn.mock.calls)).not.toMatch(/postgresql:|PRIVATE_BANK_DB_PASSWORD|db\\.internal/);
+      } finally { warn.mockRestore(); }
+    });
+
+    it('returns a committed reset as successful despite path and profile cache failures', async () => {
+      const tx = mockTransaction();
+      vi.mocked(revalidatePath).mockImplementationOnce(() => {
+        throw new Error('PRIVATE_CACHE_TOKEN');
+      });
+      vi.mocked(revalidateInterpreterProfileRecords).mockImplementationOnce(() => {
+        throw new Error('PRIVATE_PROFILE_TOKEN');
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      try {
+        const result = await adminResetOnboarding({ userId: PROFILE_ID });
+        expect(result).toEqual({ success: true });
+        expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+        expect(tx.userProfile.update).toHaveBeenCalledTimes(1);
+        expect(tx.interpreter.update).toHaveBeenCalledTimes(1);
+        expect(revalidatePath).toHaveBeenCalledTimes(3);
+        expect(revalidateInterpreterProfileRecords).toHaveBeenCalledWith(42);
+        expect(warn).toHaveBeenCalledTimes(2);
+        expect(JSON.stringify(warn.mock.calls)).not.toMatch(/PRIVATE_CACHE_TOKEN|PRIVATE_PROFILE_TOKEN/);
+      } finally { warn.mockRestore(); }
+    });
+
+    it('does not revalidate when the banking transaction genuinely fails', async () => {
+      vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error('PRIVATE_BANK_TRANSACTION_SECRET'));
+      const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const result = await adminUpdateOnboardingDetails(validBanking);
+        expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+        expect(revalidatePath).not.toHaveBeenCalled();
+        expect(revalidateInterpreterProfileRecords).not.toHaveBeenCalled();
+        expect(JSON.stringify([result, errorLog.mock.calls])).not.toContain('PRIVATE_BANK_TRANSACTION_SECRET');
+      } finally { errorLog.mockRestore(); }
+    });
+
+    it('preserves reset failure if the actual transaction fails', async () => {
+      vi.mocked(prisma.$transaction).mockRejectedValueOnce(new Error('PRIVATE_RESET_SECRET'));
+      const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      try {
+        const result = await adminResetOnboarding({ userId: PROFILE_ID });
+        expect(result).toMatchObject({ success: false, code: 'INTERNAL_ERROR' });
+        expect(revalidatePath).not.toHaveBeenCalled();
+        expect(revalidateInterpreterProfileRecords).not.toHaveBeenCalled();
+        expect(JSON.stringify([result, errorLog.mock.calls])).not.toContain('PRIVATE_RESET_SECRET');
+      } finally { errorLog.mockRestore(); }
     });
   });
 
