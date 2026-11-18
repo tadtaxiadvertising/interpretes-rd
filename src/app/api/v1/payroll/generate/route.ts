@@ -6,6 +6,7 @@ import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { getSantoDomingoPaymentDay } from '@/lib/payroll/payment-schedule-date';
 
 export async function POST(request: Request) {
   try {
@@ -15,10 +16,9 @@ export async function POST(request: Request) {
     const { targetDate } = await parseJsonBody(request, PayrollGenerateSchema);
     const dateToProcess = targetDate ?? new Date();
     
-    // Get day of month and day of week
-    const dayOfMonth = dateToProcess.getDate().toString();
-    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const dayOfWeek = days[dateToProcess.getDay()];
+    // Payment schedules are stored in Santo Domingo local dates. Using the
+    // server timezone (typically UTC in containers) can pay the wrong day.
+    const { dayOfMonth, dayOfWeek } = getSantoDomingoPaymentDay(dateToProcess);
 
     // A weekday alone cannot distinguish alternate-week pay cycles. The
     // interpreter model has no biweekly anchor date; treating these accounts as
