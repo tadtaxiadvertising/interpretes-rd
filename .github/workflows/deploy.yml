@@ -123,6 +123,11 @@ jobs:
       - name: Verify transactional payroll reconciliation guards
         run: npx vitest run src/lib/payroll/reconcile-production-minutes.test.ts src/app/api/reconcile/__tests__/route.test.ts src/app/actions/__tests__/payroll-reconcile-shared-guard.test.ts src/services/PayrollService.refresh.test.ts
 
+      # Verify the CSP explicitly substitutes only validated HTTPS origins.
+      # Keep the mandatory supply-chain gate unchanged after this regression.
+      - name: Verify custom CSP origin safety
+        run: npx vitest run src/lib/security/next-config-csp.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
