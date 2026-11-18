@@ -162,11 +162,11 @@ describe('full Supabase directory sync is safe and truthful', () => {
 
   it('updates roles for existing accounts without rewriting onboarding or identity fields', async () => {
     mocks.listUsers.mockResolvedValue(page([directoryUser('u1')]));
-    mocks.findProfile.mockResolvedValue({ id: 'u1', role: 'candidate', interpreterId: null });
+    mocks.findProfile.mockResolvedValue({ id: 'u1', role: 'admin', interpreterId: 19 });
     expect(await syncAllSupabaseUsers()).toMatchObject({ success: true, syncedCount: 1 });
     expect(mocks.updateProfile).toHaveBeenCalledWith({
       where: { id: 'u1' },
-      data: { role: 'candidate', interpreterId: undefined },
+      data: { role: 'admin', interpreterId: null },
       select: { id: true },
     });
   });
