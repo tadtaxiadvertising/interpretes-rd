@@ -32,8 +32,8 @@ export function SyncUsersButton() {
         <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-2xl animate-in fade-in slide-in-from-right-4 duration-300 flex items-center gap-1.5">
           <Check size={14} />
           {syncedCount === 0 
-            ? 'Todos los perfiles están sincronizados' 
-            : `¡Sincronizados ${syncedCount} usuarios nuevos con éxito!`}
+            ? 'No hubo perfiles nuevos ni cambios de rol' 
+            : `Se actualizaron ${syncedCount} perfiles correctamente`}
         </span>
       )}
 
