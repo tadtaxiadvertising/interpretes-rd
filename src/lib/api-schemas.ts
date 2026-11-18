@@ -42,7 +42,13 @@ export const PayrollGenerateSchema = z.object({
   targetDate: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     z.coerce.date(),
-  ]).optional(),
+  ]).refine((value) => {
+    // A regex-shaped date can still be impossible (e.g. February 30).
+    // Reject it as a validation error, not a 500 during schedule evaluation.
+    if (typeof value !== 'string') return true;
+    const noon = new Date(`${value}T12:00:00.000Z`);
+    return Number.isFinite(noon.getTime()) && noon.toISOString().slice(0, 10) === value;
+  }, { message: 'Invalid calendar day' }).optional(),
 });
 
 // A PATCH must not inject defaults from the interpreter creation schema.
