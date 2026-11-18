@@ -153,8 +153,11 @@ export async function saveHappyScribeSettings(input: {
     // from another tab. Explicit false and empty organization remain writable.
     const settings: [string, string][] = [];
     if (organizationId !== undefined) settings.push([ORG_KEY, organizationId]);
-    if (input.mediaImportEnabled !== undefined)
-      settings.push([MEDIA_KEY, String(input.mediaImportEnabled)]);
+    // Disabling the provider also revokes prior permission for costly VPS
+    // media transfers. Re-enabling SRT access alone cannot restore MP3.
+    const nextMediaImportEnabled = input.integrationEnabled === false ? false : input.mediaImportEnabled;
+    if (nextMediaImportEnabled !== undefined)
+      settings.push([MEDIA_KEY, String(nextMediaImportEnabled)]);
     if (input.integrationEnabled !== undefined)
       settings.push([ENABLED_KEY, String(input.integrationEnabled)]);
     if (input.excludeInterpreterByDefault !== undefined)

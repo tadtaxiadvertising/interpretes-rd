@@ -228,6 +228,23 @@ describe('HappyScribe encrypted admin settings', () => {
     expect((await getHappyScribeSettings()).token).toBe('');
   });
 
+  it('disabling HappyScribe permanently resets MP3 permission until separately re-enabled', async () => {
+    process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED = 'true';
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456',
+      mediaImportEnabled: true, integrationEnabled: true,
+    });
+    expect((await getHappyScribeSettings()).mediaImportEnabled).toBe(true);
+    const encrypted = store.get(TOKEN_KEY);
+    await saveHappyScribeSettings({ integrationEnabled: false });
+    expect(store.get('audio_studio_happyscribe_media_proxy')).toBe('false');
+    expect((await getHappyScribeSettingsStatus()).mediaImportEnabled).toBe(false);
+    expect(store.get(TOKEN_KEY)).toBe(encrypted);
+    await saveHappyScribeSettings({ integrationEnabled: true });
+    expect((await getHappyScribeSettings()).mediaImportEnabled).toBe(false);
+    expect((await getHappyScribeSettings()).token).toBe(testToken);
+  });
+
   it('allows explicit clearing of the organization and disabling of MP3 while leaving token alone', async () => {
     await saveHappyScribeSettings({
       token: testToken, organizationId: '123456', mediaImportEnabled: true,
