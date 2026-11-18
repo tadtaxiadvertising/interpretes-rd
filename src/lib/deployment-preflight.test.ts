@@ -14,7 +14,7 @@ const validEnv = {
 function fakeConnection() {
   const client = {
     connect: vi.fn().mockResolvedValue(undefined),
-    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true, library_archive_rls: true, roleplay_studio_constraints: true, roleplay_studio_column_types: true }] }),
+    query: vi.fn().mockResolvedValue({ rows: [{ account_unique: true, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true, library_archive_rls: true, roleplay_studio_constraints: true, roleplay_studio_column_types: true, account_platform_vpn_columns: true, account_platform_vpn_port_constraint: true }] }),
     end: vi.fn().mockResolvedValue(undefined),
   };
   return { client, createClient: vi.fn().mockReturnValue(client) };
@@ -144,29 +144,32 @@ describe('deployment credential boundary', () => {
       query_timeout: 10_000,
     }));
     const checks = client.query.mock.calls.map(([sql]) => sql);
-    expect(checks.slice(0, 7)).toEqual([
+    expect(checks.slice(0, 8)).toEqual([
       'BEGIN READ ONLY',
       'SELECT 1',
       'SELECT id, client_id, name, holder_name, email FROM public.accounts LIMIT 0',
       'SELECT id FROM public.clients LIMIT 0',
+      'SELECT vpn_provider, vpn_app, vpn_username_hint, vpn_secret_ref, vpn_country, vpn_region, vpn_server, vpn_exit_ip, vpn_profile, vpn_protocol, vpn_port FROM public.account_platforms LIMIT 0',
       'SELECT id, session_id, scenario_id, source_audio_path, status FROM public.roleplay_audio_jobs LIMIT 0',
       'SELECT base_audio_path FROM public.roleplay_sessions LIMIT 0',
       'SELECT fingerprint, archived_at, archived_by FROM public.roleplay_library_archives LIMIT 0',
     ]);
-    expect(checks[7]).toBe('SELECT studio_turn, studio_speaker, studio_language, source_start_sec, source_end_sec FROM public.roleplay_scenarios LIMIT 0');
-    expect(checks[8]).toContain('AS account_unique');
-    expect(checks[8]).toContain('AS client_fk');
-    expect(checks[8]).toContain('AS client_rls');
-    expect(checks[8]).toContain('AS roleplay_queue_table');
-    expect(checks[8]).toContain('AS roleplay_queue_foreign_keys');
-    expect(checks[8]).toContain('AS library_archive_rls');
-    expect(checks[8]).toContain('AS roleplay_studio_constraints');
-    expect(checks[8]).toContain('AS roleplay_studio_column_types');
-    expect(checks[9]).toBe('ROLLBACK');
+    expect(checks[8]).toBe('SELECT studio_turn, studio_speaker, studio_language, source_start_sec, source_end_sec FROM public.roleplay_scenarios LIMIT 0');
+    expect(checks[9]).toContain('AS account_unique');
+    expect(checks[9]).toContain('AS client_fk');
+    expect(checks[9]).toContain('AS client_rls');
+    expect(checks[9]).toContain('AS roleplay_queue_table');
+    expect(checks[9]).toContain('AS roleplay_queue_foreign_keys');
+    expect(checks[9]).toContain('AS library_archive_rls');
+    expect(checks[9]).toContain('AS roleplay_studio_constraints');
+    expect(checks[9]).toContain('AS roleplay_studio_column_types');
+    expect(checks[9]).toContain('AS account_platform_vpn_columns');
+    expect(checks[9]).toContain('AS account_platform_vpn_port_constraint');
+    expect(checks[10]).toBe('ROLLBACK');
     expect(client.end).toHaveBeenCalledOnce();
   });
 
-  it.each(['roleplay_studio_constraints', 'roleplay_studio_column_types'])(
+  it.each(['roleplay_studio_constraints', 'roleplay_studio_column_types', 'account_platform_vpn_columns', 'account_platform_vpn_port_constraint'])(
     'blocks deployment if %s is missing even with all other prerequisites satisfied',
     async (missing) => {
       const { client, createClient } = fakeConnection();
@@ -175,7 +178,7 @@ describe('deployment credential boundary', () => {
         client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true,
         roleplay_queue_unique: true, roleplay_queue_foreign_keys: true,
         roleplay_base_audio_path: true, library_archive_rls: true,
-        roleplay_studio_constraints: true, roleplay_studio_column_types: true,
+        roleplay_studio_constraints: true, roleplay_studio_column_types: true, account_platform_vpn_columns: true, account_platform_vpn_port_constraint: true,
       };
       client.query.mockImplementation(async (sql: string) => ({
         rows: sql.includes('AS account_unique') ? [{ ...valid, [missing]: false }] : [],
@@ -190,7 +193,7 @@ describe('deployment credential boundary', () => {
     const { client, createClient } = fakeConnection();
     client.query.mockImplementation(async (sql: string) => ({
       rows: sql.includes('AS account_unique')
-        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true, library_archive_rls: true, roleplay_studio_constraints: true, roleplay_studio_column_types: true }]
+        ? [{ account_unique: false, legacy_unique_absent: true, client_fk: true, client_rls: true, roleplay_queue_table: true, roleplay_queue_enum: true, roleplay_queue_unique: true, roleplay_queue_foreign_keys: true, roleplay_base_audio_path: true, library_archive_rls: true, roleplay_studio_constraints: true, roleplay_studio_column_types: true, account_platform_vpn_columns: true, account_platform_vpn_port_constraint: true }]
         : [],
     }));
     await expect(runDeploymentPreflight(validEnv, createClient, true)).rejects.toThrow(
