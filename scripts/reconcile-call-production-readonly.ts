@@ -95,6 +95,35 @@ const reconciliationQuery = `
       AND pl.date BETWEEN $1::date AND $2::date
     GROUP BY pl.interpreter_id, pl.date
   ),
+  -- Candidate duplicates only. An interpreter may legitimately record two
+  -- calls of equal duration close together, so never auto-delete/adjust pay.
+  -- Restrict the signal to app-owned Quick Log markers, not arbitrary notes.
+  quick_log_sequence AS (
+    SELECT
+      cs.interpreter_id,
+      cs.created_at,
+      LAG(cs.created_at) OVER (
+        PARTITION BY cs.interpreter_id, cs.duration_seconds, cs.notes
+        ORDER BY cs.created_at, cs.id
+      ) AS previous_created_at
+    FROM public.call_sessions cs
+    WHERE cs.interpreter_id IS NOT NULL
+      AND cs.started_at IS NOT NULL
+      AND cs.ended_at IS NOT NULL
+      AND cs.created_at IS NOT NULL
+      AND cs.duration_seconds IS NOT NULL
+      AND cs.notes IN ('Quick log by interpreter', 'Manual entry via Quick Log')
+      AND (cs.started_at AT TIME ZONE 'America/Santo_Domingo')::date
+          BETWEEN $1::date AND $2::date
+  ),
+  quick_log_candidate_duplicates AS (
+    SELECT COUNT(*) FILTER (
+      WHERE previous_created_at IS NOT NULL
+        AND created_at >= previous_created_at
+        AND created_at <= previous_created_at + INTERVAL '30 seconds'
+    )::bigint AS possible_duplicate_quicklog_sessions
+    FROM quick_log_sequence
+  ),
   keys AS (
     SELECT interpreter_id, production_date FROM session_daily
     UNION
@@ -144,6 +173,8 @@ const reconciliationQuery = `
     COALESCE(SUM(ended_missing_duration_count), 0)::bigint AS ended_missing_duration_sessions,
     COALESCE(SUM(ended_zero_duration_with_elapsed_count), 0)::bigint AS ended_zero_duration_with_elapsed_sessions,
     COALESCE(SUM(ended_missing_cost_count), 0)::bigint AS ended_missing_cost_sessions,
+    (SELECT possible_duplicate_quicklog_sessions FROM quick_log_candidate_duplicates)
+      AS possible_duplicate_quicklog_sessions,
     COALESCE(SUM(ended_session_minutes), 0)::bigint AS ended_session_minutes,
     COALESCE(SUM(ledger_entry_count), 0)::bigint AS ledger_entries,
     COALESCE(SUM(ledger_minutes), 0)::bigint AS ledger_minutes,
@@ -185,6 +216,7 @@ async function main() {
         'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
         'ended_missing_duration_sessions counts ended sessions with durationSeconds NULL; ended_zero_duration_with_elapsed_sessions counts zero-duration sessions with at least 60 seconds elapsed between stored timestamps.',
         'ended_missing_cost_sessions counts ended sessions with callCost NULL. These flags do not independently establish payable minutes or entitlement; investigate sources before correction.',
+        'possible_duplicate_quicklog_sessions counts extra app-marked Quick Log sessions with equal duration created within 30 seconds of the preceding matching session, not proven duplicates; verify before any correction.',
         'Historical counts include only sessions with an interpreterId and startedAt in the selected Santo Domingo date range; sessions missing startedAt are excluded.',
         'production_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
         'No row is classified as safe to import, and this report never repairs, inserts, updates, or deletes data.',
