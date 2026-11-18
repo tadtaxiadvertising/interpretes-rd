@@ -114,14 +114,14 @@ export async function getHappyScribeSettingsStatus() {
 }
 
 export async function saveHappyScribeSettings(input: {
-  token?: string; organizationId: string; mediaImportEnabled: boolean; removeToken?: boolean;
+  token?: string; organizationId?: string; mediaImportEnabled?: boolean; removeToken?: boolean;
   integrationEnabled?: boolean;
   excludeInterpreterByDefault?: boolean;
   compactViewDefault?: AudioStudioCompactViewDefault;
   protocolLanguageDefault?: 'en' | 'es';
   updatedBy?: string;
 }) {
-  const organizationId = input.organizationId.trim();
+  const organizationId = input.organizationId?.trim();
   if (organizationId && !/^\d{1,30}$/.test(organizationId)) throw new Error('ORGANIZATION_INVALID');
   if (input.token && (input.token.length > 2048 || input.token.trim().length < 8))
     throw new Error('TOKEN_INVALID');
@@ -130,6 +130,8 @@ export async function saveHappyScribeSettings(input: {
     throw new Error('COMPACT_MODE_INVALID');
   if (input.integrationEnabled !== undefined &&
       typeof input.integrationEnabled !== 'boolean') throw new Error('ENABLED_PREFERENCE_INVALID');
+  if (input.mediaImportEnabled !== undefined &&
+      typeof input.mediaImportEnabled !== 'boolean') throw new Error('MEDIA_PREFERENCE_INVALID');
   if (input.protocolLanguageDefault !== undefined &&
       input.protocolLanguageDefault !== 'en' && input.protocolLanguageDefault !== 'es')
     throw new Error('PROTOCOL_LANGUAGE_INVALID');
@@ -147,7 +149,15 @@ export async function saveHappyScribeSettings(input: {
       create: { key: TOKEN_KEY, value: encryptedToken, updatedBy: actor },
       update: { value: encryptedToken, updatedBy: actor },
     });
-    const settings: [string, string][] = [[ORG_KEY, organizationId], [MEDIA_KEY, String(input.mediaImportEnabled)]];
+    // An omitted field must not overwrite an administrator's newer change
+    // from another tab. Explicit false and empty organization remain writable.
+    const settings: [string, string][] = [];
+    if (organizationId !== undefined) settings.push([ORG_KEY, organizationId]);
+    // Disabling the provider also revokes prior permission for costly VPS
+    // media transfers. Re-enabling SRT access alone cannot restore MP3.
+    const nextMediaImportEnabled = input.integrationEnabled === false ? false : input.mediaImportEnabled;
+    if (nextMediaImportEnabled !== undefined)
+      settings.push([MEDIA_KEY, String(nextMediaImportEnabled)]);
     if (input.integrationEnabled !== undefined)
       settings.push([ENABLED_KEY, String(input.integrationEnabled)]);
     if (input.excludeInterpreterByDefault !== undefined)

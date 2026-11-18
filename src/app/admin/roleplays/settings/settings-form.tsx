@@ -30,16 +30,21 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData();
-    data.set('organizationId', org); data.set('token', token);
+    data.set('token', token);
+    if (org !== status.organizationId) data.set('organizationId', org);
     // Do not reactivate an integration disabled in another admin tab just
     // because this form saved unrelated editor defaults.
     if (enabled !== status.integrationEnabled)
       data.set('integrationEnabled', String(enabled));
-    data.set('excludeInterpreterByDefault', String(excludeDefault));
-    data.set('compactViewDefault', compactDefault);
-    data.set('protocolLanguageDefault', protocolDefault);
+    if (excludeDefault !== status.excludeInterpreterByDefault)
+      data.set('excludeInterpreterByDefault', String(excludeDefault));
+    if (compactDefault !== status.compactViewDefault)
+      data.set('compactViewDefault', compactDefault);
+    if (protocolDefault !== status.protocolLanguageDefault)
+      data.set('protocolLanguageDefault', protocolDefault);
     if (remove) data.set('removeToken', 'on');
-    if (media) data.set('mediaImportEnabled', 'on');
+    if (media !== status.mediaImportEnabled)
+      data.set('mediaImportEnabled', String(media));
     start(async () => {
       const result = await saveAudioStudioSettings(data);
       setNotice({ ok: result.success, message: result.message });
@@ -82,7 +87,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       <label className="flex items-start gap-3 text-sm text-slate-200">
         <input type="checkbox" checked={enabled} disabled={editingDisabled} onChange={e => setEnabled(e.target.checked)} />
         <span><strong className="block text-white">Habilitar conexión con HappyScribe</strong>
-          <span className="mt-1 block text-slate-400">Al desactivar, ninguna importación SRT o MP3 podrá consultar HappyScribe, incluso si Easypanel conserva una clave. Las credenciales cifradas no se borran.</span>
+          <span className="mt-1 block text-slate-400">Al desactivar, se bloquean nuevas importaciones SRT y MP3, incluso si Easypanel conserva una clave. El permiso MP3 queda apagado y requerirá activación manual. Las credenciales cifradas no se borran.</span>
         </span>
       </label>
       {!enabled && <p role="status" className="mt-3 text-sm text-amber-200">HappyScribe está desactivado {status.integrationEnabled ? '(sin guardar)' : 'para este sistema'}.</p>}
