@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
-import { resolveCurrentIdentity, resolveDestination } from '@/lib/identity/resolve-user';
+import { resolveCurrentIdentity, resolveDestination, requireOwnership, type ResolvedIdentity } from '@/lib/identity/resolve-user';
 
 // Mock all external dependencies BEFORE importing the module under test
 vi.mock('@/lib/supabase/server', () => ({
@@ -43,6 +43,65 @@ const mockCreateClient = createClient as vi.Mock;
 const mockPrisma = prisma as any;
 const mockResolveUserRoleByEmail = resolveUserRoleByEmail as vi.Mock;
 const mockAuth = auth as vi.Mock;
+
+describe('Identity ownership authorization', () => {
+  const interpreter = {
+    role: 'interpreter',
+    interpreterId: 42,
+  } as ResolvedIdentity;
+
+  it('permits a verified interpreter to use its own positive integer interpreter ID', () => {
+    expect(requireOwnership(interpreter, 42)).toBe(interpreter);
+  });
+
+  it('rejects a resource belonging to a different interpreter', () => {
+    expect(() => requireOwnership(interpreter, 43))
+      .toThrow('Access denied: not your resource');
+  });
+
+  it('never authorizes a pair of null interpreter IDs', () => {
+    expect(() => requireOwnership({ ...interpreter, interpreterId: null }, null))
+      .toThrow('Access denied: not your resource');
+  });
+
+  it('rejects an unassigned resource for an otherwise linked interpreter', () => {
+    expect(() => requireOwnership(interpreter, null))
+      .toThrow('Access denied: not your resource');
+  });
+
+  it('rejects an unassigned interpreter for a real resource', () => {
+    expect(() => requireOwnership({ ...interpreter, interpreterId: null }, 42))
+      .toThrow('Access denied: not your resource');
+  });
+
+  it('rejects a candidate even when a legacy profile has a matching interpreter ID', () => {
+    expect(() => requireOwnership({ ...interpreter, role: 'candidate' }, 42))
+      .toThrow('Access denied: not your resource');
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects malformed resource interpreter ID %s', id => {
+      expect(() => requireOwnership(interpreter, id))
+        .toThrow('Access denied: not your resource');
+    },
+  );
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects malformed actor interpreter ID %s', id => {
+      expect(() => requireOwnership({ ...interpreter, interpreterId: id }, 42))
+        .toThrow('Access denied: not your resource');
+    },
+  );
+
+  it('preserves authorized admin access to resources without assigned owners', () => {
+    const admin = { ...interpreter, role: 'admin' as const, interpreterId: null };
+    expect(requireOwnership(admin, null)).toBe(admin);
+  });
+
+  it('rejects absent identity before examining resource ownership', () => {
+    expect(() => requireOwnership(null, null)).toThrow('Not authenticated');
+  });
+});
 
 describe('resolveDestination access routing', () => {
   it('routes an incomplete interpreter to the resumable onboarding step', () => {
