@@ -8,6 +8,8 @@ Ejecutar sobre **la base de datos de la instancia afectada** con un operador aut
 
 ```sql
 SELECT current_database() AS database_name, current_schema() AS schema_name;
+SELECT to_regclass('public._prisma_migrations') AS migration_history_table;
+-- Ejecutar esta consulta SOLO si migration_history_table existe:
 SELECT migration_name, finished_at, rolled_back_at
 FROM public._prisma_migrations
 WHERE migration_name = '20261117130000_account_platform_vpn_config'
@@ -37,21 +39,21 @@ Se esperan **11 columnas nullable**, diez `text` y una `integer` (`vpn_port`), a
 | Historial Prisma | Columnas / CHECK | Acción |
 | --- | --- | --- |
 | Aplicada con `finished_at` | Completas | No repetir migración. Investigar SHA desplegado y conexión de la aplicación. |
-| Sin registro | Faltan todas | Planificar aplicación controlada de la migración existente mediante **el mecanismo de Prisma Migrate** aprobado para el despliegue, tras revisar migraciones previas, bloqueo de CI y respaldo. |
+| Sin registro | Faltan todas | Tras verificar destino, respaldo y ausencia de fallos o discrepancias históricos, solicitar la ejecución del workflow manual **Repair account VPN schema (manual, no deployment)**. No invocar Prisma Migrate de forma aislada. |
 | Aplicada con `finished_at` | Incompletas | **Detenerse**: desajuste historial/esquema; investigación y reconciliación aprobada, sin DDL automático. |
 | Sin registro / fallida | Parciales o CHECK ausente | **Detenerse**: investigar ejecución parcial o cambio manual; no volver a ejecutar el SQL sin reconciliar. |
 | `rolled_back_at` o migraciones fallidas | Cualquiera | Investigar el historial y resolver explícitamente antes de desplegar. |
 
-**Advertencia importante:** `npm run migrate -- ... --apply --transaction` ejecuta un archivo SQL directamente a través de `scripts/run-migration.ts`, **pero no escribe en `_prisma_migrations`**. No utilizarlo como sustituto de `prisma migrate deploy` para esta migración gestionada por Prisma; de lo contrario, puede quedar una discrepancia de historial. No ejecutar `prisma db push` ni `prisma migrate resolve --applied` para ocultar un estado desconocido.
+**Advertencia importante:** el despliegue real de este repositorio usa varias migraciones SQL mediante `scripts/run-migration.ts` y la migración VPN a través de `scripts/ensure-account-platform-vpn-migration.ts`. **Ninguno de estos ejecutores registra una fila nueva en `_prisma_migrations`.** Por tanto, no presumir que el historial de Prisma está completo, ni lanzar `prisma migrate deploy` sobre producción: podría intentar ejecutar migraciones históricas ya aplicadas manualmente. Reconciliar historial y esquema mediante un procedimiento independiente y revisado antes de cambiar de sistema de migraciones. Tampoco usar `prisma db push` ni `prisma migrate resolve --applied` para ocultar un estado desconocido.
 
 ## 3. Ventana controlada de corrección
 
 1. Asegurar que se usa `DIRECT_URL` del proyecto y base correctos, con TLS validado y privilegios mínimos; no imprimir su valor.
-2. Revisar el estado de **todas** las migraciones anteriores con `prisma migrate status`, y revisar `prisma/migrations/20261117130000_account_platform_vpn_config/migration.sql` antes de permitir cambios.
-3. Si el historial está limpio y faltan íntegramente las columnas, ejecutar `prisma migrate deploy` en el proceso autorizado del despliegue, con respaldo y ventana aprobada. No ejecutar DDL desde la interfaz web.
+2. Revisar `prisma/migrations/20261117130000_account_platform_vpn_config/migration.sql`, el historial accesible (si existe) y las columnas actuales. `prisma migrate status` es un diagnóstico posible, **no** autorización para aplicar todo el historial: otros SQL del proyecto se han ejecutado fuera de Prisma Migrate.
+3. Con aprobación del operador y respaldo confirmado, ejecutar desde `main` el workflow GitHub Actions `.github/workflows/manual-account-vpn-schema-repair.yml` (**Repair account VPN schema (manual, no deployment)**), seleccionando la confirmación explícita de respaldo y destino. El workflow usa el entorno protegido `production`, comprueba el esquema en solo lectura, aplica exclusivamente el SQL VPN cuando faltan **todas** las columnas y verifica la integridad. Rechaza estados parciales o incompatibles. No ejecutar DDL desde la interfaz web ni sustituir el flujo por `prisma migrate deploy`.
 4. Repetir las consultas de solo lectura del punto 1 y verificar todas las columnas y la restricción, no solamente `vpn_country`.
 5. Confirmar el commit exacto en ejecución, probar `/admin/accounts` con cuenta administrativa y verificar que ya no aparece P2022; comprobar carga de cuentas y asignaciones sin alterar registros.
-6. Solo tras pasar los controles de seguridad y CI (issues [#624](https://github.com/tadtaxiadvertising/interpretes-rd/issues/624) y [#465](https://github.com/tadtaxiadvertising/interpretes-rd/issues/465)), considerar el despliegue definitivo. Registrar evidencia redactada en #626.
+6. El workflow de reparación es excepcional y **no despliega código ni omite controles del pipeline normal**. Para cualquier despliegue nuevo, mantener el bloqueo de CI y seguridad de [#624](https://github.com/tadtaxiadvertising/interpretes-rd/issues/624) y la protección de [#465](https://github.com/tadtaxiadvertising/interpretes-rd/issues/465). Registrar solo evidencia redactada en #626.
 
 ## 4. Contención existente en la aplicación
 
