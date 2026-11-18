@@ -105,36 +105,57 @@ export async function updateUserProfile(userId: string, data: { displayName: str
   try {
     const { user } = await auth();
     if (!user || user.role !== 'admin') {
-      throw new Error('Unauthorized');
+      return { success: false, error: 'Acceso no autorizado.' };
     }
 
-    // Update locally in PostgreSQL
+    // Only expose fields needed by the caller, never an entire profile record.
     const updated = await prisma.userProfile.update({
       where: { id: userId },
       data: {
         displayName: data.displayName,
-        email: data.email
-      }
+        email: data.email,
+      },
+      select: { interpreterId: true, displayName: true, email: true },
     });
 
-    // Sync to Supabase Auth
+    // Supabase and PostgreSQL are independent systems. Once the local write
+    // commits, a failed provider sync must be an explicit PARTIAL outcome.
+    let providerSynced = false;
     try {
-      await supabaseAdmin.auth.admin.updateUserById(userId, {
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, {
         email: data.email,
         email_confirm: true,
-        user_metadata: { display_name: data.displayName }
+        user_metadata: { display_name: data.displayName },
       });
-    } catch (supabaseError) {
-      if (isAdminUnavailableError(supabaseError)) {
-        console.warn('⚠️ [updateUserProfile] Supabase Auth sync skipped:', ADMIN_UNAVAILABLE_MESSAGE);
+      if (error) {
+        console.warn('[ADMIN_USERS] Profile sync rejected:', safeServerErrorCategory(error));
       } else {
-        console.warn('[ADMIN_USERS] Profile sync warning:', safeServerErrorCategory(supabaseError));
+        providerSynced = true;
       }
+    } catch (supabaseError) {
+      console.warn(
+        '[ADMIN_USERS] Profile sync unavailable:',
+        isAdminUnavailableError(supabaseError) ? 'AdminUnavailable' : safeServerErrorCategory(supabaseError),
+      );
     }
 
-    revalidateInterpreterProfileRecords(updated.interpreterId);
+    // Local write has committed regardless of the provider outcome.
+    // Failure to invalidate a page must not ask the operator to repeat it.
+    try {
+      revalidateInterpreterProfileRecords(updated.interpreterId);
+    } catch (cacheError) {
+      console.warn('[ADMIN_USERS] Profile saved but cache refresh failed:', safeServerErrorCategory(cacheError));
+    }
+
+    if (!providerSynced) {
+      return {
+        success: false,
+        partial: true,
+        error: 'Perfil local actualizado, pero la sincronización con Supabase Auth quedó pendiente. Revisa el estado antes de volver a intentarlo.',
+      };
+    }
     return { success: true, profile: updated };
-  } catch (error: any) {
+  } catch (error) {
     console.error('[ADMIN_USERS] Profile update failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error al actualizar el perfil.' };
   }
