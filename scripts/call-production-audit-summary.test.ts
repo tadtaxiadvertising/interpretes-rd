@@ -8,6 +8,8 @@ const synthetic = {
   total_sessions: '6',
   ended_sessions: '5',
   ended_without_ledger_sessions: '2',
+  known_quicklog_without_ledger_sessions: '1',
+  known_admin_manual_without_ledger_sessions: '1',
   ended_missing_duration_sessions: '2',
   ended_zero_duration_with_elapsed_sessions: '1',
   ended_missing_cost_sessions: '3',
@@ -54,6 +56,8 @@ describe('read-only reconciliation report privacy', () => {
 
   it('refuses incomplete, fractional and unsafe integers instead of falsifying accounting totals', () => {
     expect(() => callProductionAuditSummary({ ...synthetic, ledger_minutes: undefined })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, known_quicklog_without_ledger_sessions: undefined })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, known_admin_manual_without_ledger_sessions: '-1' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_duration_sessions: undefined })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, ended_zero_duration_with_elapsed_sessions: '-1' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_cost_sessions: '1.5' })).toThrow();
@@ -70,6 +74,11 @@ describe('read-only reconciliation report privacy', () => {
     expect(script).toContain('output: \'AGGREGATE_ONLY\'');
     expect(script).toContain('FROM interpreter_day');
     expect(script).toContain('ended_missing_duration_count');
+    expect(script).toContain('known_quicklog_missing_ledger_count');
+    expect(script).toContain('known_admin_manual_missing_ledger_count');
+    expect(script).toContain('known_quicklog_without_ledger_sessions');
+    expect(script).toContain('known_admin_manual_without_ledger_sessions');
+    expect(script).toContain("cs.notes = 'Manual entry by Administrator'");
     expect(script).toContain('ended_zero_duration_with_elapsed_count');
     expect(script).toContain('ended_missing_cost_count');
     expect(script).toContain('quick_log_candidate_duplicates');
