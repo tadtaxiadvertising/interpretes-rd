@@ -6,7 +6,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # Temporary non-deploying branch validation; remove after results.
+    branches: [main, fix/audio-studio-admin-concurrent-saves-20261117]
   workflow_dispatch:
 
 permissions:
