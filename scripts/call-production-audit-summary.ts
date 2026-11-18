@@ -11,6 +11,7 @@ const METRIC_FIELDS = [
   'ended_missing_duration_sessions',
   'ended_zero_duration_with_elapsed_sessions',
   'ended_missing_cost_sessions',
+  'possible_duplicate_quicklog_sessions',
   'ended_session_minutes',
   'ledger_entries',
   'ledger_minutes',
