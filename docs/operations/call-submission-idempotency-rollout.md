@@ -108,12 +108,31 @@ La tabla debe estar ausente antes de aplicar esta migración por primera vez.
 Si aparece parcial, con otra definición o un historial incompatible, **detenerse**.
 No ejecutar SQL con `IF NOT EXISTS` que enmascare una tabla alterada.
 
-Solo después de autorización, **ambos** SQL se podrán aplicar secuencialmente
-con la invocación explícita `npm run migrate -- <ruta-sql> --apply --transaction`
-y conexión directa protegida, en un flujo operacional separado.
-No utilizar `prisma migrate deploy` para estos borradores. La aprobación
-debe determinar cómo registrar el resultado sin incoherencias en el
-historial de Prisma y qué hacer si un entorno aplicó una versión previa. La verificación posterior debe
+**No existe un comando de aplicación autorizado para estos borradores.**
+El ejecutor `scripts/run-migration.ts` rechaza por diseño los archivos
+ubicados en `docs/operations/staged-sql/`: sería incorrecto recomendar
+`npm run migrate -- docs/operations/staged-sql/... --apply --transaction`.
+No utilizar `prisma migrate deploy` para estos borradores ni mover los
+SQL de vuelta a sus carpetas de migraciones sin una revisión previa.
+
+Antes de decidir una aplicación, el DBA puede inspeccionar el esquema
+existente sin modificarlo usando `DIRECT_URL` con TLS verificado:
+
+```bash
+npx tsx scripts/inspect-call-idempotency-schema.ts --check-only
+```
+
+El diagnóstico emite exclusivamente `absent`, `complete`, `partial` o
+`history-drift` y una indicación de si hay entradas históricas de Prisma,
+sin presentar identificadores de llamadas ni credenciales. Opera dentro de
+`BEGIN READ ONLY` y ejecuta `ROLLBACK` antes de concluir. `--require-complete`
+retorna fallo si falta el esquema, pero **no** lo instala ni lo repara.
+
+Si la base ya contiene parte o todo el esquema, detenerse y planificar su
+conciliación. Si la base está ausente, el equipo DBA debe diseñar y aprobar
+una ruta ejecutable de mantenimiento, con respaldo restaurable, bloqueo
+controlado, compatibilidad de `_prisma_migrations` y atestación de despliegue.
+No aplicar un SQL de `docs/` por medios manuales improvisados. La verificación posterior debe
 confirmar las dos FKs originales, la FK compuesta de pertenencia a intérprete,
 la PK, la unicidad de sesión, los CHECKs, RLS y la ausencia de registros
 históricos. Las migraciones no eliminan ni crean pagos.
