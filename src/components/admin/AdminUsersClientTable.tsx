@@ -14,8 +14,6 @@ import { RoleBadge } from '../RoleBadge';
 import { UserActions } from './UserActions';
 import { InterpreterOnboardingPanel } from './InterpreterOnboardingPanel';
 
-
-
 export function AdminUsersClientTable({ users }: { users: AdminUserWithInterpreter[] }) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
@@ -64,7 +62,7 @@ export function AdminUsersClientTable({ users }: { users: AdminUserWithInterpret
                     </div>
                   </td>
                   <td className="py-6 px-6">
-                    <RoleBadge role={user.role as any} />
+                    <RoleBadge role={user.role} />
                   </td>
                   <td className="py-6 px-6">
                     {user.interpreter ? (
