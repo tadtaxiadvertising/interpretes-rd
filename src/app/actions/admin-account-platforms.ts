@@ -1,7 +1,8 @@
 'use server';
 
 import { getCurrentProfile } from '@/app/actions/auth';
-import prisma from '@/lib/prisma';
+import prisma, { getRawPool } from '@/lib/prisma';
+import { inspectAccountVpnSchema } from '@/lib/account-vpn-schema-readiness';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import { isIP } from 'node:net';
@@ -44,6 +45,13 @@ export async function createAccountPlatform(formData: FormData) {
   if (!parsed.success) return { success: false, error: 'Datos inválidos. Revisa la URL HTTPS, las referencias vault:// y el puerto VPN (1–65535).' };
 
   try {
+    // The UI may be stale (or this server action called directly) while the
+    // additive VPN migration is pending. Fail closed before attempting a write.
+    const vpnSchemaStatus = await inspectAccountVpnSchema(getRawPool());
+    if (vpnSchemaStatus !== 'complete') {
+      return { success: false, error: 'La configuración VPN está temporalmente no disponible. Contacta al administrador de despliegue.' };
+    }
+
     const {
       accountId, name, loginUrl, usernameHint, secretRef,
       vpnProvider, vpnApp, vpnUsernameHint, vpnSecretRef,
@@ -71,6 +79,8 @@ export async function createAccountPlatform(formData: FormData) {
         vpnPort: vpnPort === '' ? null : vpnPort,
         notes: notes || null,
       },
+      // Only the generated ID is needed; do not return VPN or secret columns.
+      select: { id: true },
     });
 
     // The database write already committed. Cache invalidation must not
