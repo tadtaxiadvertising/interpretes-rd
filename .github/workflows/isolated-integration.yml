@@ -6,7 +6,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # Temporary non-deploying branch validation; remove before delivery.
+    branches: [main, fix/audio-studio-conflict-recovery-20261117]
   workflow_dispatch:
 
 permissions:
