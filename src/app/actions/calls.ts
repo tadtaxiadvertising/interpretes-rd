@@ -12,6 +12,7 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 const db = prisma;
 
 class EndCallFinancialConflict extends Error {}
+class EndCallTimingError extends Error {}
 
 /**
  * ACTION: Start Call Session
@@ -118,15 +119,16 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
     const session = await db.$transaction(async (tx) => {
       // Claim the active session exactly once. Repeated/concurrent endCall
       // requests must never add the same call to ProductionLog more than once.
+      const endedAt = new Date();
       const claimed = await tx.callSession.updateMany({
         where: { id: sessionId, interpreterId, endedAt: null },
-        data: { endedAt: new Date() },
+        data: { endedAt },
       });
 
       const updated = await tx.callSession.findFirst({
         where: { id: sessionId, interpreterId },
         select: { durationSeconds: true, callCost: true, startedAt: true,
-          isSettled: true, payrollRecordId: true }
+          tariffSnapshot: true, isSettled: true, payrollRecordId: true }
       });
 
       if (!updated) {
@@ -138,6 +140,25 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         return updated;
       }
 
+      // When a live call starts, durationSeconds and callCost are still
+      // unset. Calculate them at end time from the server timestamps and
+      // the rate snapshot saved at call creation (never a later pay rate).
+      // All session, production and ledger writes are in one transaction.
+      const startMs = updated.startedAt?.getTime();
+      const elapsedMs = startMs === undefined ? NaN : endedAt.getTime() - startMs;
+      const tariff = Number(updated.tariffSnapshot);
+      const durationSeconds = Math.floor(elapsedMs / 1000);
+      const callCost = Math.round((durationSeconds / 60) * tariff * 100) / 100;
+      if (
+        !Number.isFinite(startMs) ||
+        !Number.isFinite(elapsedMs) || elapsedMs < 0 ||
+        !Number.isSafeInteger(durationSeconds) || durationSeconds > 2_147_483_647 ||
+        updated.tariffSnapshot == null || !Number.isFinite(tariff) || tariff < 0 ||
+        !Number.isFinite(callCost) || callCost < 0 || callCost > 99_999_999.99
+      ) {
+        throw new EndCallTimingError();
+      }
+
       // The claim above is part of this transaction and will roll back if
       // accounting is locked; no session or status change may commit alone.
       const getLocalDateStr = (d: Date) => new Intl.DateTimeFormat('en-CA', {
@@ -146,9 +167,9 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         month: '2-digit',
         day: '2-digit'
       }).format(d);
-      const dayStr = getLocalDateStr(updated.startedAt || new Date());
+      const dayStr = getLocalDateStr(updated.startedAt!);
       const logDate = new Date(`${dayStr}T12:00:00Z`);
-      const minutes = Math.max(0, Math.floor((updated.durationSeconds || 0) / 60));
+      const minutes = Math.floor(durationSeconds / 60);
       const callsAttended = minutes > 0 ? 1 : 0;
 
       const existingLog = await tx.productionLog.findFirst({
@@ -187,6 +208,12 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         select: { id: true },
       });
       if (lockedPayroll) throw new EndCallFinancialConflict();
+
+      await tx.callSession.update({
+        where: { id: sessionId },
+        data: { durationSeconds, callCost },
+        select: { id: true },
+      });
 
       await tx.interpreter.update({
         where: { id: interpreterId },
@@ -258,7 +285,7 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         },
       });
 
-      return updated;
+      return { ...updated, durationSeconds, callCost };
     }, { isolationLevel: 'Serializable' });
 
     // A committed session is successful even when cache refresh fails; a
@@ -276,6 +303,9 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
       },
     };
   } catch (error: unknown) {
+    if (error instanceof EndCallTimingError) {
+      return { success: false, error: 'Call timing or rate is invalid; contact an administrator.', code: 'CONFLICT' };
+    }
     if (error instanceof EndCallFinancialConflict ||
         (error && typeof error === 'object' && 'code' in error && error.code === 'P2034')) {
       return { success: false, error: 'Production or payroll period is locked; contact an administrator.', code: 'CONFLICT' };
