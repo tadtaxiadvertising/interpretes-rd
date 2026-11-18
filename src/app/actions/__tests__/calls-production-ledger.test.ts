@@ -271,6 +271,28 @@ describe('endCall production ledger', () => {
     });
   });
 
+  it('records a subminute call with zero ledger minutes and the correct cent value', async () => {
+    const tx = transactionMocks();
+    tx.callSession.findFirst.mockResolvedValueOnce({
+      startedAt: new Date('2026-11-10T15:01:40.000Z'),
+      durationSeconds: null, callCost: null, tariffSnapshot: 6,
+      isSettled: false, payrollRecordId: null,
+    });
+    const result = await endCall(99);
+    expect(result).toMatchObject({ success: true, data: { durationSeconds: 25, callCost: 2.5 } });
+    expect(tx.callSession.update).toHaveBeenCalledWith({
+      where: { id: 99 }, data: { durationSeconds: 25, callCost: 2.5 },
+      select: { id: true },
+    });
+    expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
+    expect(tx.productionLog.create).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        interpretedMinutes: 0, callsAttended: 0, productionLogId: null,
+      }),
+    });
+  });
+
   it('fails closed on missing start timestamp or impossible future start without partial accounting', async () => {
     const tx = transactionMocks();
     tx.callSession.findFirst.mockResolvedValueOnce({
