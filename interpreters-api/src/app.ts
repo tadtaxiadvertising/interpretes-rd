@@ -71,6 +71,7 @@ app.get('/health', (_req: Request, res: Response) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({
     status: 'ok',
+    timestamp: new Date().toISOString(),
     service: 'interpreters-api',
     uptime: Math.floor(process.uptime()),
   });
