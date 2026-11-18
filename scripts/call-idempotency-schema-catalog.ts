@@ -17,24 +17,27 @@ export async function readCallKeyCatalog(client: Client): Promise<CallKeyCatalog
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = 'call_submission_keys'`,
   ) : { rows: [] as CatalogColumn[] };
+  // PostgreSQL name[] has no default array parser in node-postgres. Emit
+  // JSON arrays instead so CatalogConstraint columns are real string[]
+  // (not textual "{id,interpreter_id}" values that silently fail checks).
   const constraints = tableExists ? await client.query<CatalogConstraint>(
     `SELECT c.conname, c.contype, c.convalidated,
-       ARRAY(
+       to_json(ARRAY(
          SELECT a.attname
          FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
          JOIN pg_attribute AS a
            ON a.attrelid = c.conrelid AND a.attnum = k.attnum
          ORDER BY k.ord
-       ) AS key_columns,
+       )) AS key_columns,
        rns.nspname AS references_schema,
        referenced.relname AS references_table,
-       ARRAY(
+       to_json(ARRAY(
          SELECT a.attname
          FROM unnest(c.confkey) WITH ORDINALITY AS k(attnum, ord)
          JOIN pg_attribute AS a
            ON a.attrelid = c.confrelid AND a.attnum = k.attnum
          ORDER BY k.ord
-       ) AS references_columns,
+       )) AS references_columns,
        c.confdeltype AS on_delete,
        c.confupdtype AS on_update,
        pg_get_constraintdef(c.oid) AS definition
