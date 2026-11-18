@@ -179,9 +179,9 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
   it('rejects missing and malformed revisions before touching persisted credentials', async () => {
     const form = settingsForm();
     form.delete('expectedRevision');
-    expect((await saveAudioStudioSettings(form)).success).toBe(false);
+    expect(await saveAudioStudioSettings(form)).toMatchObject({ success: false, conflict: true });
     form.set('expectedRevision', 'bad-revision');
-    expect((await saveAudioStudioSettings(form)).success).toBe(false);
+    expect(await saveAudioStudioSettings(form)).toMatchObject({ success: false, conflict: true });
     expect(saveHappyScribeSettings).not.toHaveBeenCalled();
   });
 
@@ -192,6 +192,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
       const result = await saveAudioStudioSettings(settingsForm());
       expect(result.success).toBe(false);
       expect(result.message).toContain('Otro administrador');
+      expect(result.conflict).toBe(true);
       expect(result.message).not.toContain(fakeToken);
       expect(revalidatePath).not.toHaveBeenCalled();
     } finally { log.mockRestore(); }
@@ -204,6 +205,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
       const result = await saveAudioStudioSettings(settingsForm());
       expect(result.success).toBe(false);
       expect(result.message).toContain('Otro administrador');
+      expect(result.conflict).toBe(true);
     } finally { log.mockRestore(); }
   });
 
