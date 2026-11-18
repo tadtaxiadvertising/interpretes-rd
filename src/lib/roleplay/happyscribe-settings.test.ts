@@ -212,6 +212,40 @@ describe('HappyScribe encrypted admin settings', () => {
     expect((await getHappyScribeSettingsStatus()).organizationId).toBe('');
   });
 
+  it('preserves another admin\'s provider configuration when only editor defaults are updated', async () => {
+    process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED = 'true';
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: true,
+      integrationEnabled: false,
+    });
+    const before = new Map(store);
+    await saveHappyScribeSettings({ compactViewDefault: 'expanded' });
+    expect(store.get(TOKEN_KEY)).toBe(before.get(TOKEN_KEY));
+    expect(store.get('audio_studio_happyscribe_organization_id')).toBe('123456');
+    expect(store.get('audio_studio_happyscribe_media_proxy')).toBe('true');
+    expect(store.get('audio_studio_happyscribe_enabled')).toBe('false');
+    expect((await getHappyScribeSettingsStatus()).compactViewDefault).toBe('expanded');
+    expect((await getHappyScribeSettings()).token).toBe('');
+  });
+
+  it('allows explicit clearing of the organization and disabling of MP3 while leaving token alone', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: true,
+    });
+    const encrypted = store.get(TOKEN_KEY);
+    await saveHappyScribeSettings({ organizationId: '', mediaImportEnabled: false });
+    expect(store.get(TOKEN_KEY)).toBe(encrypted);
+    expect((await getHappyScribeSettings()).organizationId).toBe('');
+    expect(store.get('audio_studio_happyscribe_media_proxy')).toBe('false');
+  });
+
+  it('rejects invalid MP3 preference without starting a transaction', async () => {
+    await expect(saveHappyScribeSettings({
+      mediaImportEnabled: 'maybe' as unknown as boolean,
+    })).rejects.toThrow('MEDIA_PREFERENCE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('rejects replacing and removing the API key in the same operation without writing', async () => {
     await expect(saveHappyScribeSettings({
       token: testToken, removeToken: true,
