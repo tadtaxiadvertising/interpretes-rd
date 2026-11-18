@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../lib/AppError.js';
-import { formatSafeApiErrorLog } from '../lib/safe-error-log.js';
+import { formatSafeApiErrorLog, safeConflictFieldNames } from '../lib/safe-error-log.js';
 
 /**
  * UNIFIED ERROR HANDLER MIDDLEWARE
@@ -81,7 +81,7 @@ export const globalErrorHandler = (
         error: {
           type: 'CONFLICT_ERROR',
           message: 'A record with this value already exists.',
-          target: (err.meta?.target as string[]) || [],
+          target: safeConflictFieldNames(err.meta?.target),
         },
       });
       return;
