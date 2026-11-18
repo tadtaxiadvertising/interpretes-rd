@@ -30,6 +30,8 @@ vi.mock('@/lib/auth-rbac', () => ({
 
 vi.mock('@/lib/admin-identity', () => ({
   resolveUserRoleByEmail: vi.fn(),
+  hasAuthoritativeAuthJsRole: (role: unknown) =>
+    typeof role === 'string' && ['ADMIN', 'HOLDER', 'INTERPRETER'].includes(role.toUpperCase()),
 }));
 
 import { createClient } from '@/lib/supabase/server';
@@ -225,6 +227,32 @@ describe('Identity Resolver', () => {
   });
 
   describe('Auth.js User Resolution', () => {
+    it('returns no identity for a revoked Auth.js session whose DB role was stripped', async () => {
+      mockCreateClient.mockResolvedValue({
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      });
+      mockAuth.mockResolvedValue({
+        user: { id: 'deleted-rbac-user', email: 'admin@example.com', role: undefined },
+      });
+      mockPrisma.userProfile.findUnique.mockResolvedValue({
+        id: 'stale-profile', role: 'admin', email: 'admin@example.com',
+      });
+      expect(await resolveCurrentIdentity()).toBeNull();
+      expect(mockPrisma.userProfile.findUnique).not.toHaveBeenCalled();
+      expect(mockPrisma.interpreter.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('rejects an unknown Auth.js role without consulting a similarly named Supabase profile', async () => {
+      mockCreateClient.mockResolvedValue({
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      });
+      mockAuth.mockResolvedValue({
+        user: { id: 'legacy-record', email: 'test@example.com', role: 'CANDIDATE' },
+      });
+      expect(await resolveCurrentIdentity()).toBeNull();
+      expect(mockPrisma.userProfile.findUnique).not.toHaveBeenCalled();
+    });
+
     it('should resolve identity for Auth.js user with interpreter', async () => {
       const mockSupabase = { auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) } };
       
