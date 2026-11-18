@@ -68,21 +68,37 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
     }
 
     const result = await db.$transaction(async (tx) => {
-      const paidPayroll = await tx.payrollRecord.findFirst({
-        where: {
-          interpreterId,
-          status: { in: ['PAID', 'Paid'] },
-          periodStart: { lte: logDate },
-          periodEnd: { gte: logDate },
-        },
-        select: { id: true },
-      });
-      if (paidPayroll) return { kind: 'PAID' as const };
-
       const existingLog = await tx.productionLog.findFirst({
         where: { interpreterId, date: logDate },
       });
       if (existingLog?.isSettled) return { kind: 'SETTLED' as const };
+
+      // A period can be financially immutable before payment occurs.
+      // Match the reconciler's allow-list: only PENDING/Pendiente with no
+      // paidAt can be changed. Check any explicit log/payroll link too.
+      const lockedPayroll = await tx.payrollRecord.findFirst({
+        where: {
+          OR: [
+            {
+              interpreterId,
+              periodStart: { lte: logDate },
+              periodEnd: { gte: logDate },
+            },
+            ...(existingLog?.payrollRecordId
+              ? [{ id: existingLog.payrollRecordId }]
+              : []),
+          ],
+          AND: [{
+            OR: [
+              { paidAt: { not: null } },
+              { status: { notIn: ['PENDING', 'Pendiente'] } },
+              { status: null },
+            ],
+          }],
+        },
+        select: { id: true },
+      });
+      if (lockedPayroll) return { kind: 'LOCKED_PAYROLL' as const };
 
       const session = await tx.callSession.create({
         data: {
@@ -142,8 +158,8 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
       return { kind: 'CREATED' as const, id: session.id };
     }, { isolationLevel: 'Serializable' });
 
-    if (result.kind === 'PAID') {
-      return { success: false, error: 'This production period has already been paid and cannot be changed.', code: 'CONFLICT' };
+    if (result.kind === 'LOCKED_PAYROLL') {
+      return { success: false, error: 'This payroll period is approved, paid or otherwise locked and cannot be changed.', code: 'CONFLICT' };
     }
     if (result.kind === 'SETTLED') {
       return { success: false, error: 'This production log is already settled and cannot be changed.', code: 'CONFLICT' };

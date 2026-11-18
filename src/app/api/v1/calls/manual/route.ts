@@ -74,18 +74,48 @@ export async function POST(req: Request) {
       const logDate = new Date(dayStr + 'T12:00:00Z');
       let productionLogId: number | null = null;
 
-      if (minutes > 0) {
-        const { startOfDay, endOfDay } = getDayBounds(startedAt);
-        const existingLog = await tx.productionLog.findFirst({
-          where: {
-            interpreterId: interpreter.id,
-            date: { gte: startOfDay, lte: endOfDay },
-          },
-          select: {
-            id: true, isSettled: true, interpretedMinutes: true, callsAttended: true,
-          },
-        });
+      const { startOfDay, endOfDay } = getDayBounds(startedAt);
+      const existingLog = await tx.productionLog.findFirst({
+        where: {
+          interpreterId: interpreter.id,
+          date: { gte: startOfDay, lte: endOfDay },
+        },
+        select: {
+          id: true, isSettled: true, interpretedMinutes: true,
+          callsAttended: true, payrollRecordId: true,
+        },
+      });
 
+      // Do not alter financially finalized periods, even when isSettled is
+      // false and payment has not yet been sent. Check the linked payroll
+      // as well as any record covering the operational call date.
+      const lockedPayroll = await tx.payrollRecord.findFirst({
+        where: {
+          OR: [
+            {
+              interpreterId: interpreter.id,
+              periodStart: { lte: logDate },
+              periodEnd: { gte: logDate },
+            },
+            ...(existingLog?.payrollRecordId
+              ? [{ id: existingLog.payrollRecordId }]
+              : []),
+          ],
+          AND: [{
+            OR: [
+              { paidAt: { not: null } },
+              { status: { notIn: ['PENDING', 'Pendiente'] } },
+              { status: null },
+            ],
+          }],
+        },
+        select: { id: true },
+      });
+      if (lockedPayroll || existingLog?.isSettled) {
+        throw new QuickLogConflictError();
+      }
+
+      if (minutes > 0) {
         if (existingLog) {
           // Never silently amend settled production. Conditional write refuses
           // settlement even if it happens after the initial read.

@@ -119,6 +119,52 @@ describe('Quick Log Server Action accounting ledger and safe failures', () => {
     expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
   });
 
+  it('rejects approved and paidAt-locked payroll periods without writing a session', async () => {
+    for (const payroll of [
+      { id: 'approved', status: 'APPROVED' },
+      { id: 'paid-at', status: 'PENDING', paidAt: new Date() },
+      { id: 'legacy-unknown', status: null },
+    ]) {
+      tx.payrollRecord.findFirst.mockResolvedValueOnce(payroll);
+      const result = await quickLog(form());
+      expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+    }
+    expect(tx.callSession.create).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it('checks linked payroll, not only the overlapping calendar date', async () => {
+    tx.productionLog.findFirst.mockResolvedValueOnce({
+      id: 40, isSettled: false, payrollRecordId: 'linked-approval',
+    });
+    tx.payrollRecord.findFirst.mockResolvedValueOnce({ id: 'linked-approval' });
+    const result = await quickLog(form());
+    expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+    expect(tx.callSession.create).not.toHaveBeenCalled();
+
+    expect(tx.payrollRecord.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          {
+            interpreterId: 7,
+            periodStart: { lte: expect.any(Date) },
+            periodEnd: { gte: expect.any(Date) },
+          },
+          { id: 'linked-approval' },
+        ],
+        AND: [{
+          OR: [
+            { paidAt: { not: null } },
+            { status: { notIn: ['PENDING', 'Pendiente'] } },
+            { status: null },
+          ],
+        }],
+      },
+      select: { id: true },
+    });
+  });
+
   it('reports a ledger insertion error as unsaved and does not refresh caches', async () => {
     tx.callProductionEntry.create.mockRejectedValueOnce(
       new Error('postgresql://private:ULTRA_PRIVATE_PASSWORD@db.invalid/data'),
