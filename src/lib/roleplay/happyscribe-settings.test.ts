@@ -41,6 +41,7 @@ beforeEach(() => {
   vi.mocked(prisma.$transaction).mockImplementation(async (callback: any) =>
     callback({
       systemConfig: {
+        findMany: async () => Array.from(store.entries()).map(([key, value]) => ({ key, value })),
         upsert: async ({ where, create, update }: any) => {
           store.set(where.key, store.has(where.key) ? update.value : create.value);
         },
@@ -263,6 +264,53 @@ describe('HappyScribe encrypted admin settings', () => {
     await expect(saveHappyScribeSettings({
       mediaImportEnabled: 'maybe' as unknown as boolean,
     })).rejects.toThrow('MEDIA_PREFERENCE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+
+  it('returns a stable non-secret revision for the same stored settings', async () => {
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456',
+      integrationEnabled: true, mediaImportEnabled: false,
+    });
+    const one = await getHappyScribeSettingsStatus();
+    const two = await getHappyScribeSettingsStatus();
+    expect(one.revision).toMatch(/^[a-f0-9]{64}$/);
+    expect(one.revision).toBe(two.revision);
+    expect(JSON.stringify(one)).not.toContain(testToken);
+    await saveHappyScribeSettings({ compactViewDefault: 'expanded' });
+    expect((await getHappyScribeSettingsStatus()).revision).not.toBe(one.revision);
+  });
+
+  it('rejects a stale admin transaction before any write', async () => {
+    await saveHappyScribeSettings({ organizationId: '123456', mediaImportEnabled: false });
+    const staleRevision = (await getHappyScribeSettingsStatus()).revision;
+    await saveHappyScribeSettings({ organizationId: '789012' });
+    const before = new Map(store);
+    await expect(saveHappyScribeSettings({
+      expectedRevision: staleRevision, integrationEnabled: true,
+      organizationId: '555555', token: testToken,
+    })).rejects.toThrow('SETTINGS_CONFLICT');
+    expect(store).toEqual(before);
+    expect(prisma.$transaction).toHaveBeenCalledWith(
+      expect.any(Function), { isolationLevel: 'Serializable' },
+    );
+  });
+
+  it('allows a current admin revision and then rotates it on save', async () => {
+    await saveHappyScribeSettings({ organizationId: '123456', mediaImportEnabled: false });
+    const revision = (await getHappyScribeSettingsStatus()).revision;
+    await saveHappyScribeSettings({
+      expectedRevision: revision, organizationId: '789012',
+    });
+    expect((await getHappyScribeSettingsStatus()).revision).not.toBe(revision);
+    expect((await getHappyScribeSettings()).organizationId).toBe('789012');
+  });
+
+  it('rejects invalid revision before starting any database transaction', async () => {
+    await expect(saveHappyScribeSettings({
+      expectedRevision: 'not-a-version', compactViewDefault: 'expanded',
+    })).rejects.toThrow('SETTINGS_REVISION_INVALID');
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
 

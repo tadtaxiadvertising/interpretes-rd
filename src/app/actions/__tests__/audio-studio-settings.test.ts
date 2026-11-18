@@ -16,8 +16,10 @@ import { inspectAudioStudioSettings, readAudioStudioEditorPreferences, saveAudio
 
 const syntheticAdmin = { user: { userId: 'test-admin', role: 'admin' } };
 const fakeToken = 'SYNTHETIC_NOT_A_PROVIDER_TOKEN_12345';
+const revision = 'a'.repeat(64);
 const settingsForm = () => {
   const form = new FormData();
+  form.set('expectedRevision', revision);
   form.set('token', fakeToken);
   form.set('organizationId', '123456');
   form.set('mediaImportEnabled', 'on');
@@ -53,7 +55,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
       expect(result.message).not.toContain(fakeToken);
       expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
         token: fakeToken, organizationId: '123456',
-        mediaImportEnabled: true, removeToken: false, updatedBy: 'test-admin',
+        mediaImportEnabled: true, removeToken: false, updatedBy: 'test-admin', expectedRevision: revision,
       });
       expect(revalidatePath).toHaveBeenCalledWith('/admin/roleplays/settings');
       expect(warn).toHaveBeenCalledWith('[Audio Studio settings] Saved; cache refresh failed');
@@ -82,7 +84,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
 
   it('never returns stored raw tokens when inspecting settings', async () => {
     const safeStatus = {
-      hasToken: true, credentialUsable: true, environmentFallbackAvailable: false,
+      revision, hasToken: true, credentialUsable: true, environmentFallbackAvailable: false,
       tokenSource: 'panel', organizationId: '123456',
       mediaImportEnabled: false, proxyAvailable: false, encryptionReady: true,
       excludeInterpreterByDefault: true,
@@ -122,7 +124,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     expect((await saveAudioStudioSettings(valid)).success).toBe(true);
     expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
       token: fakeToken, organizationId: '123456', mediaImportEnabled: true,
-      removeToken: false, updatedBy: 'test-admin',
+      removeToken: false, updatedBy: 'test-admin', expectedRevision: revision,
       protocolLanguageDefault: 'es',
     });
   });
@@ -140,24 +142,26 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     expect((await saveAudioStudioSettings(valid)).success).toBe(true);
     expect(saveHappyScribeSettings).toHaveBeenCalledWith({
       token: '', organizationId: '123456', mediaImportEnabled: true,
-      integrationEnabled: false, removeToken: false, updatedBy: 'test-admin',
+      integrationEnabled: false, removeToken: false, updatedBy: 'test-admin', expectedRevision: revision,
     });
   });
 
   it('updates only a changed editor default without resubmitting stale provider fields', async () => {
     const form = new FormData();
+  form.set('expectedRevision', revision);
     form.set('token', '');
     form.set('compactViewDefault', 'expanded');
     const result = await saveAudioStudioSettings(form);
     expect(result.success).toBe(true);
     expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
-      token: '', removeToken: false, updatedBy: 'test-admin',
+      token: '', removeToken: false, updatedBy: 'test-admin', expectedRevision: revision,
       compactViewDefault: 'expanded',
     });
   });
 
   it('requires an explicit valid value when changing MP3 transfer preference', async () => {
     const form = new FormData();
+  form.set('expectedRevision', revision);
     form.set('token', '');
     form.set('mediaImportEnabled', 'unexpected');
     expect((await saveAudioStudioSettings(form)).success).toBe(false);
@@ -166,9 +170,41 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     form.set('mediaImportEnabled', 'false');
     expect((await saveAudioStudioSettings(form)).success).toBe(true);
     expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
-      token: '', removeToken: false, updatedBy: 'test-admin',
+      token: '', removeToken: false, updatedBy: 'test-admin', expectedRevision: revision,
       mediaImportEnabled: false,
     });
+  });
+
+
+  it('rejects missing and malformed revisions before touching persisted credentials', async () => {
+    const form = settingsForm();
+    form.delete('expectedRevision');
+    expect((await saveAudioStudioSettings(form)).success).toBe(false);
+    form.set('expectedRevision', 'bad-revision');
+    expect((await saveAudioStudioSettings(form)).success).toBe(false);
+    expect(saveHappyScribeSettings).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale administrator save without claiming success', async () => {
+    vi.mocked(saveHappyScribeSettings).mockRejectedValueOnce(new Error('SETTINGS_CONFLICT'));
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await saveAudioStudioSettings(settingsForm());
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Otro administrador');
+      expect(result.message).not.toContain(fakeToken);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+
+  it('handles a concurrent serializable transaction rollback as a conflict', async () => {
+    vi.mocked(saveHappyScribeSettings).mockRejectedValueOnce({ code: 'P2034' });
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await saveAudioStudioSettings(settingsForm());
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Otro administrador');
+    } finally { log.mockRestore(); }
   });
 
   it('persists explicit defaults alongside the provider settings', async () => {
@@ -178,7 +214,7 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     expect((await saveAudioStudioSettings(form)).success).toBe(true);
     expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
       token: fakeToken, organizationId: '123456', mediaImportEnabled: true,
-      removeToken: false, updatedBy: 'test-admin', excludeInterpreterByDefault: false, compactViewDefault: 'expanded',
+      removeToken: false, updatedBy: 'test-admin', expectedRevision: revision, excludeInterpreterByDefault: false, compactViewDefault: 'expanded',
     });
   });
 

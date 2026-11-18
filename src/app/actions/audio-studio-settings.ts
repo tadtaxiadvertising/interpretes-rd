@@ -18,6 +18,9 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
   const protocolLanguageValue = form.get('protocolLanguageDefault');
   const integrationValue = form.get('integrationEnabled');
   const mediaValue = form.get('mediaImportEnabled');
+  const expectedRevision = form.get('expectedRevision');
+  if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision))
+    return { success: false, message: 'La sesión de ajustes está desactualizada. Recarga la pantalla antes de guardar.' };
   if (excludeValue !== null && excludeValue !== 'true' && excludeValue !== 'false')
     return { success: false, message: 'Preferencia de intérprete no válida.' };
   if (compactValue !== null && !['auto', 'compact', 'expanded'].includes(String(compactValue)))
@@ -36,6 +39,7 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
       removeToken: form.get('removeToken') === 'on',
       ...(integrationValue !== null ? { integrationEnabled: integrationValue === 'true' } : {}),
       updatedBy: auth.user.userId,
+      expectedRevision,
       ...(excludeValue !== null ? { excludeInterpreterByDefault: excludeValue === 'true' } : {}),
       ...(compactValue !== null ? { compactViewDefault: compactValue as 'auto' | 'compact' | 'expanded' } : {}),
       ...(protocolLanguageValue !== null ? { protocolLanguageDefault: protocolLanguageValue as 'en' | 'es' } : {}),
@@ -50,8 +54,12 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
     return { success: true, message: 'Configuración guardada. Las credenciales permanecen ocultas.' };
   } catch (error) {
     console.error('[Audio Studio settings]', safeServerErrorCategory(error));
-    const code = error instanceof Error ? error.message : '';
-    return { success: false, message: code === 'ENCRYPTION_KEY_MISSING'
+    const code = error && typeof error === 'object' && 'code' in error
+      ? String(error.code)
+      : error instanceof Error ? error.message : '';
+    return { success: false, message: code === 'SETTINGS_CONFLICT' || code === 'P2034'
+      ? 'Otro administrador modificó estos ajustes. No se guardaron tus cambios; recarga la pantalla y vuelve a revisarlos.'
+      : code === 'ENCRYPTION_KEY_MISSING'
       ? 'Falta AUDIO_STUDIO_ENCRYPTION_KEY (64 caracteres hexadecimales) en el servidor.'
       : code === 'ORGANIZATION_INVALID' ? 'El ID de organización debe contener solo números.'
       : code === 'TOKEN_INVALID' ? 'La clave API no tiene un formato válido.'
