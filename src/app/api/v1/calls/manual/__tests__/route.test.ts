@@ -10,7 +10,6 @@ vi.mock('@/lib/interpreter-metrics', () => ({ getDayBounds: vi.fn() }));
 import { getCurrentUser } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { getDayBounds } from '@/lib/interpreter-metrics';
-import { Prisma } from '@prisma/client';
 import { POST } from '../route';
 
 const tx = {
@@ -56,7 +55,7 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
     expect(response.headers.get('Vary')).toContain('Authorization');
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), {
-      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+      isolationLevel: 'Serializable',
     });
     expect(tx.callSession.create).toHaveBeenCalledOnce();
     expect(tx.productionLog.create).toHaveBeenCalledWith({
