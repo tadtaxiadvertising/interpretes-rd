@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@/lib/auth/actions', () => ({ getCurrentUser: vi.fn() }));
+vi.mock('@/lib/api-auth', () => ({ resolveApiActor: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({
   default: { interpreter: { findUnique: vi.fn() }, $transaction: vi.fn() },
 }));
 vi.mock('@/lib/interpreter-metrics', () => ({ getDayBounds: vi.fn() }));
 
-import { getCurrentUser } from '@/lib/auth/actions';
+import { resolveApiActor } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { getDayBounds } from '@/lib/interpreter-metrics';
 import { POST } from '../route';
@@ -29,8 +29,8 @@ const request = (durationMinutes = 5, seconds = 0) => new Request(
 describe('POST /api/v1/calls/manual ledger and error privacy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(getCurrentUser).mockResolvedValue({
-      profile: { role: 'interpreter', interpreterId: 7 },
+    vi.mocked(resolveApiActor).mockResolvedValue({
+      role: 'interpreter', interpreterId: 7, userId: 'synthetic-interpreter',
     } as never);
     vi.mocked(prisma.interpreter.findUnique).mockResolvedValue({
       id: 7, tariffPerMinute: 0.20,
@@ -164,12 +164,30 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
   });
 
   it('denies anonymous and non-interpreter requests before reading profile details', async () => {
-    vi.mocked(getCurrentUser).mockResolvedValueOnce(null as never);
+    vi.mocked(resolveApiActor).mockResolvedValueOnce(null);
     expect((await POST(request())).status).toBe(401);
-    vi.mocked(getCurrentUser).mockResolvedValueOnce({
-      profile: { role: 'candidate', interpreterId: 7 },
+    vi.mocked(resolveApiActor).mockResolvedValueOnce({
+      role: 'candidate', interpreterId: 7,
     } as never);
-    expect((await POST(request())).status).toBe(401);
+    expect((await POST(request())).status).toBe(403);
+    expect(prisma.interpreter.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('uses the explicit request credential resolver for Bearer requests', async () => {
+    const bearerRequest = new Request('https://interpretes.example/api/v1/calls/manual', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer synthetic-token',
+      },
+      body: JSON.stringify({ durationMinutes: 5, seconds: 0 }),
+    });
+    // The resolver decides whether the token is valid. Never fall back to a
+    // different browser identity inside this handler.
+    vi.mocked(resolveApiActor).mockResolvedValueOnce(null);
+    const response = await POST(bearerRequest);
+    expect(response.status).toBe(401);
+    expect(resolveApiActor).toHaveBeenCalledWith(bearerRequest);
     expect(prisma.interpreter.findUnique).not.toHaveBeenCalled();
   });
 });
