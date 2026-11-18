@@ -11,6 +11,7 @@ const synthetic = {
   ended_missing_duration_sessions: '2',
   ended_zero_duration_with_elapsed_sessions: '1',
   ended_missing_cost_sessions: '3',
+  possible_duplicate_quicklog_sessions: '2',
   ended_session_minutes: '110',
   ledger_entries: '3',
   ledger_minutes: '70',
@@ -56,6 +57,8 @@ describe('read-only reconciliation report privacy', () => {
     expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_duration_sessions: undefined })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, ended_zero_duration_with_elapsed_sessions: '-1' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_cost_sessions: '1.5' })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, possible_duplicate_quicklog_sessions: '-1' })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, possible_duplicate_quicklog_sessions: undefined })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: 'NaN' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: '1.5' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: '9007199254740993' })).toThrow();
@@ -69,6 +72,10 @@ describe('read-only reconciliation report privacy', () => {
     expect(script).toContain('ended_missing_duration_count');
     expect(script).toContain('ended_zero_duration_with_elapsed_count');
     expect(script).toContain('ended_missing_cost_count');
+    expect(script).toContain('quick_log_candidate_duplicates');
+    expect(script).toContain('possible_duplicate_quicklog_sessions');
+    expect(script).toContain("cs.notes IN ('Quick log by interpreter', 'Manual entry via Quick Log')");
+    expect(script).toContain("created_at <= previous_created_at + INTERVAL '30 seconds'");
     expect(script).toContain('cs.ended_at >= cs.started_at + INTERVAL \'60 seconds\'');
     expect(script).toContain('BEGIN READ ONLY');
     expect(script).toContain('callProductionAuditSummary(result.rows[0])');
