@@ -24,17 +24,16 @@ const SHUTDOWN_TIMEOUT_MS = 10_000; // 10s max to drain connections
 // These prevent the container from dying silently.
 // Errors are logged so Easypanel's log viewer captures them.
 
-process.on('unhandledRejection', (reason: unknown) => {
-  console.error(
-    '🔴 UNHANDLED REJECTION:',
-    reason instanceof Error ? reason.stack || reason.message : reason
-  );
+process.on('unhandledRejection', (_reason: unknown) => {
+  // Process-level exceptions may include database URLs or bearer credentials.
+  // Retain a stable category, never serialize the exception or its stack.
+  console.error('UNHANDLED_REJECTION');
   // Do NOT crash — let the error handler middleware deal with request errors.
   // Only truly fatal rejections (DB down) should trigger a restart via health check.
 });
 
-process.on('uncaughtException', (err: Error) => {
-  console.error('🔴 UNCAUGHT EXCEPTION (fatal):', err.stack || err.message);
+process.on('uncaughtException', (_err: Error) => {
+  console.error('UNCAUGHT_EXCEPTION_FATAL');
   // Uncaught exceptions leave the process in an undefined state.
   // Graceful shutdown, then let Easypanel restart the container.
   gracefulShutdown('UNCAUGHT_EXCEPTION');
@@ -60,7 +59,7 @@ async function bootstrap(): Promise<void> {
     if (err.code === 'EADDRINUSE') {
       console.error(`🔴 FATAL: Port ${PORT} is already in use. Exiting.`);
     } else {
-      console.error('🔴 FATAL: HTTP server error:', err.message);
+      console.error('FATAL_HTTP_SERVER_ERROR');
     }
     process.exit(1);
   });
@@ -81,8 +80,8 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-bootstrap().catch((err) => {
-  console.error('🔴 FATAL: Server failed to start:', err);
+bootstrap().catch((_err) => {
+  console.error('FATAL_SERVER_BOOTSTRAP');
   process.exit(1);
 });
 
