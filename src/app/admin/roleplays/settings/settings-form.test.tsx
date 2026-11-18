@@ -15,6 +15,7 @@ vi.mock('@/app/actions/audio-studio-settings', () => ({
 }));
 
 const initial = {
+  revision: 'a'.repeat(64),
   integrationEnabled: true,
   hasToken: true,
   credentialUsable: true,
@@ -52,6 +53,7 @@ describe('Audio Studio admin partial settings payload', () => {
     expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
     const submitted = vi.mocked(saveAudioStudioSettings).mock.calls[0][0];
     expect(submitted.get('compactViewDefault')).toBe('expanded');
+    expect(submitted.get('expectedRevision')).toBe(initial.revision);
     expect(submitted.get('organizationId')).toBeNull();
     expect(submitted.get('mediaImportEnabled')).toBeNull();
     expect(submitted.get('integrationEnabled')).toBeNull();
@@ -67,6 +69,7 @@ describe('Audio Studio admin partial settings payload', () => {
     });
     const submitted = vi.mocked(saveAudioStudioSettings).mock.calls[0][0];
     expect(submitted.get('integrationEnabled')).toBe('false');
+    expect(submitted.get('expectedRevision')).toBe(initial.revision);
     expect(submitted.get('organizationId')).toBeNull();
     expect(submitted.get('mediaImportEnabled')).toBeNull();
     expect(submitted.get('token')).toBe('');
