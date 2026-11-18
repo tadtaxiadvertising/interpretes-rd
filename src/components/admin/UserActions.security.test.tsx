@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const mocks = vi.hoisted(() => ({
   deleteUserAccess: vi.fn(),
@@ -33,7 +33,7 @@ describe('admin user access controls communicate the provider scope', () => {
     vi.stubGlobal('confirm', vi.fn(() => true));
     vi.stubGlobal('alert', vi.fn());
   });
-  afterEach(() => { vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it('warns that legacy NextAuth access is not automatically revoked before confirmation', () => {
     openRevocation();
