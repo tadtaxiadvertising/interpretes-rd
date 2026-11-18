@@ -71,6 +71,21 @@ describe('Express backend never logs secret-bearing exception data', () => {
     });
   });
 
+  it('also hides messages on 503 AppError incorrectly marked operational', () => {
+    const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const res = responseMock();
+    globalErrorHandler(
+      new AppError('Bearer SYNTHETIC_PRIVATE_TOKEN', 503, true),
+      request as never, res as never, vi.fn(),
+    );
+    expect(res.status).toHaveBeenCalledWith(503);
+    expect(res.json).toHaveBeenCalledWith({
+      success: false,
+      error: { type: 'SERVER_ERROR', message: 'Internal Server Error' },
+    });
+    expect(JSON.stringify(logs.mock.calls)).not.toContain(secret);
+  });
+
   it('retains reviewed operational 4xx text, but not request query parameters', () => {
     const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
     const res = responseMock();
