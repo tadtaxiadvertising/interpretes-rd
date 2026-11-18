@@ -153,7 +153,7 @@ export async function endCall(sessionId: number): Promise<ActionResult<{ duratio
         !Number.isFinite(startMs) ||
         !Number.isFinite(elapsedMs) || elapsedMs < 0 ||
         !Number.isSafeInteger(durationSeconds) || durationSeconds > 2_147_483_647 ||
-        !Number.isFinite(tariff) || tariff < 0 ||
+        updated.tariffSnapshot == null || !Number.isFinite(tariff) || tariff < 0 ||
         !Number.isFinite(callCost) || callCost < 0 || callCost > 99_999_999.99
       ) {
         throw new EndCallTimingError();
