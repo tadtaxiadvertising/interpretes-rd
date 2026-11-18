@@ -142,6 +142,11 @@ jobs:
       - name: Verify Express database readiness contract
         run: npx vitest run src/lib/security/backend-api-readiness.test.ts
 
+      # A public request may never choose its own administrative RBAC role.
+      # This is a hard requirement, evaluated before the supply-chain gate.
+      - name: Verify public registration cannot create privileged users
+        run: npx vitest run src/lib/security/backend-public-registration-role.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
