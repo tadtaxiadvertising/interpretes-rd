@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { AppError } from '../lib/AppError.js';
+import { formatSafeApiErrorLog } from '../lib/safe-error-log.js';
 
 /**
  * UNIFIED ERROR HANDLER MIDDLEWARE
@@ -37,7 +38,7 @@ export const globalErrorHandler = (
 
   // ── 1. ZOD VALIDATION ERRORS ────────────────────────────
   if (err instanceof ZodError) {
-    logInternal(req, 'VALIDATION_ERROR', err.message, 400);
+    logInternal(req, 'VALIDATION_ERROR', 400);
 
     res.status(400).json({
       success: false,
@@ -56,13 +57,15 @@ export const globalErrorHandler = (
 
   // ── 2. APPLICATION ERRORS (AppError) ────────────────────
   if (err instanceof AppError) {
-    logInternal(req, 'APP_ERROR', err.message, err.statusCode);
+    logInternal(req, 'APPLICATION_ERROR', err.statusCode);
 
     res.status(err.statusCode).json({
       success: false,
       error: {
         type: err.statusCode >= 500 ? 'SERVER_ERROR' : 'APPLICATION_ERROR',
-        message: err.message,
+        message: err.statusCode >= 500 || !err.isOperational
+          ? 'Internal Server Error'
+          : err.message,
       },
     });
     return;
@@ -70,7 +73,7 @@ export const globalErrorHandler = (
 
   // ── 3. PRISMA KNOWN REQUEST ERRORS ──────────────────────
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    logInternal(req, `PRISMA_${err.code}`, err.message);
+    logInternal(req, 'PRISMA_REQUEST', err.code === 'P2002' ? 409 : err.code === 'P2025' ? 404 : 400);
 
     if (err.code === 'P2002') {
       res.status(409).json({
@@ -100,7 +103,7 @@ export const globalErrorHandler = (
       error: {
         type: 'DATABASE_ERROR',
         message: 'Database request failed.',
-        code: err.code,
+        code: /^P\\d{4}$/.test(err.code) ? err.code : 'PRISMA_ERROR',
       },
     });
     return;
@@ -108,7 +111,7 @@ export const globalErrorHandler = (
 
   // ── 4. PRISMA VALIDATION ERRORS ─────────────────────────
   if (err instanceof Prisma.PrismaClientValidationError) {
-    logInternal(req, 'PRISMA_VALIDATION', err.message);
+    logInternal(req, 'PRISMA_VALIDATION', 400);
 
     res.status(400).json({
       success: false,
@@ -123,7 +126,7 @@ export const globalErrorHandler = (
   // ── 5. PRISMA INITIALIZATION ERRORS ─────────────────────
   // Indicates the DB is unreachable or credentials are wrong.
   if (err instanceof Prisma.PrismaClientInitializationError) {
-    logInternal(req, 'PRISMA_INIT_ERROR', err.message, 503);
+    logInternal(req, 'PRISMA_INITIALIZATION', 503);
 
     res.status(503).json({
       success: false,
@@ -149,8 +152,7 @@ export const globalErrorHandler = (
   }
 
   // ── 7. UNHANDLED / UNKNOWN ERRORS ───────────────────────
-  const unknownErr = err instanceof Error ? err : new Error(String(err));
-  logInternal(req, 'UNHANDLED_ERROR', unknownErr.message, 500, unknownErr.stack);
+  logInternal(req, 'UNHANDLED_REQUEST_ERROR', 500);
 
   res.status(500).json({
     success: false,
@@ -163,27 +165,8 @@ export const globalErrorHandler = (
 
 
 // ── Internal Logging (Easypanel Console) ──────────────────
-function logInternal(
-  req: Request,
-  type: string,
-  message: string,
-  statusCode?: number,
-  stack?: string
-): void {
-  const timestamp = new Date().toISOString();
-  const method = req.method;
-  const url = req.originalUrl || req.url;
-
-  console.error(
-    JSON.stringify({
-      timestamp,
-      type,
-      method,
-      url,
-      statusCode,
-      message: message.slice(0, 500), // Truncate long messages to save log space
-      // Stack only in dev — never in production to save disk/CPU
-      ...(process.env.NODE_ENV === 'development' && stack ? { stack } : {}),
-    })
-  );
+function logInternal(req: Request, category: string, statusCode: number): void {
+  // Safe operational diagnostics only. Do not add req.originalUrl, headers,
+  // err.message, err.name or stack; none can be assumed free of secrets.
+  console.error(formatSafeApiErrorLog(req.method, category, statusCode));
 }
