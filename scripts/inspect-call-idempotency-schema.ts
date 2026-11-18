@@ -24,7 +24,7 @@ async function inspectSchema(client: Client): Promise<CallKeyCatalog> {
   );
   const tableExists = table.rowCount === 1;
   const columns = tableExists ? await client.query<CatalogColumn>(
-    `SELECT column_name, data_type, is_nullable
+    `SELECT column_name, data_type, is_nullable, column_default
      FROM information_schema.columns
      WHERE table_schema = 'public' AND table_name = 'call_submission_keys'`,
   ) : { rows: [] as CatalogColumn[] };
