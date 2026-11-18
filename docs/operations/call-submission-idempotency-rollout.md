@@ -7,13 +7,22 @@ segunda sesión, segundo asiento ni nuevos minutos.
 
 ## Etapa 0: estructura aislada (este cambio)
 
-- SQL propuesto:
-  `prisma/migrations/20261118200000_call_submission_idempotency/migration.sql`.
+- SQLs propuestos (ambos requeridos, en ese orden):
+  `prisma/migrations/20261118200000_call_submission_idempotency/migration.sql`
+  y `prisma/migrations/20261118213000_call_submission_session_ownership/migration.sql`.
+  El primero crea la tabla; el segundo garantiza la correspondencia de
+  intérprete y sesión. **No aplicar solo el primer SQL en producción.**
 - Prueba en PostgreSQL descartable:
   `scripts/verify-call-submission-idempotency-migration.ts`.
 - La tabla propuesta `public.call_submission_keys` asocia un UUID de solicitud
   a **exactamente una** `call_sessions.id` por intérprete. Una restricción única
   adicional impide asignar dos claves diferentes a la misma sesión.
+- Las dos FKs **individuales** no bastan: sin una FK compuesta sería posible
+  asociar el UUID del intérprete A con una llamada existente del intérprete B.
+  El SQL adicional agrega la FK compuesta
+  `(call_session_id, interpreter_id) → call_sessions(id, interpreter_id)`,
+  apoyada por un índice único sobre esos dos campos. Esto también impide
+  reasignar posteriormente el propietario de una sesión ya vinculada.
 - `source` es un identificador controlado por el servidor. `payload_sha256`
   solo contiene el hash de un formato canónico versionado; **nunca** tokens de
   sesión, notas personales, nombres ni transcripciones.
@@ -83,11 +92,23 @@ La tabla debe estar ausente antes de aplicar esta migración por primera vez.
 Si aparece parcial, con otra definición o un historial incompatible, **detenerse**.
 No ejecutar SQL con `IF NOT EXISTS` que enmascare una tabla alterada.
 
-Solo después de autorización, el SQL se podrá aplicar con
-`scripts/run-migration.ts --apply --transaction` y conexión directa protegida,
-en un flujo operacional separado. La verificación posterior debe confirmar
-las dos referencias, la PK compuesta, la unicidad de sesión, los CHECKs, RLS
-y la ausencia de registros históricos. La migración no elimina ni crea pagos.
+Solo después de autorización, **ambos** SQL se podrán aplicar secuencialmente
+con `scripts/run-migration.ts --apply --transaction` y conexión directa
+protegida, en un flujo operacional separado. La verificación posterior debe
+confirmar las dos FKs originales, la FK compuesta de pertenencia a intérprete,
+la PK, la unicidad de sesión, los CHECKs, RLS y la ausencia de registros
+históricos. Las migraciones no eliminan ni crean pagos.
+
+**Impacto operativo del índice sobre `call_sessions`:** construir un índice
+único de `(id, interpreter_id)` sobre todas las sesiones consume espacio y
+tiempo; en una transacción DDL normal puede **bloquear inserciones o escrituras
+concurrentes** mientras se crea. El DBA debe revisar el tamaño real y elegir
+una ventana de mantenimiento con interrupción controlada o una preparación
+`CREATE UNIQUE INDEX CONCURRENTLY` fuera de transacción, seguida de la
+migración de FK adaptada y revisada. No ejecutar a ciegas ambos SQL contra
+una base de producción de alta carga. Si el índice existe con definición
+distinta o una primera aplicación fue parcial, detenerse y revisar drift:
+no usar `IF NOT EXISTS` como reparador silencioso.
 
 ## Etapa 2: integración aplicativa (PENDIENTE — otro PR)
 
