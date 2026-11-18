@@ -64,6 +64,65 @@ describe('admin user table minimization and role changes', () => {
     },
   );
 
+  it('denies self-demotion by Supabase user ID without modifying the database', async () => {
+    mocks.auth.mockResolvedValueOnce({
+      userId: 'self-admin',
+      user: { id: 'self-admin', role: 'admin', email: 'operator@example.test' },
+    });
+    const result = await updateUserRole('self-admin', 'interpreter');
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('propio acceso');
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+  });
+
+  it('denies self-demotion through a legacy Auth.js ID using normalized email', async () => {
+    mocks.auth.mockResolvedValueOnce({
+      userId: 'legacy-rbac-id',
+      user: { id: 'legacy-rbac-id', role: 'admin', email: ' OPERATOR@EXAMPLE.TEST ' },
+    });
+    mocks.findUnique.mockResolvedValueOnce({ email: 'operator@example.test' });
+    const result = await updateUserRole('different-supabase-user-id', 'candidate');
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.findUnique).toHaveBeenCalledWith({
+      where: { id: 'different-supabase-user-id' },
+      select: { email: true },
+    });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('denies self-demotion when only the auth user ID is available', async () => {
+    mocks.auth.mockResolvedValueOnce({
+      user: { id: 'self-admin', role: 'admin', email: null },
+    });
+    const result = await updateUserRole('self-admin', 'candidate');
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it('allows an admin to retain their role without blocking a same-role update', async () => {
+    mocks.auth.mockResolvedValueOnce({
+      userId: 'self-admin',
+      user: { id: 'self-admin', role: 'admin', email: 'operator@example.test' },
+    });
+    mocks.findUnique.mockResolvedValueOnce({ email: 'operator@example.test' });
+    expect(await updateUserRole('self-admin', 'admin')).toEqual({ success: true });
+    expect(mocks.update).toHaveBeenCalledWith({
+      where: { id: 'self-admin' },
+      data: { role: 'admin' },
+      select: { interpreterId: true },
+    });
+  });
+
+  it('allows authorized role changes to another user with a different email', async () => {
+    mocks.auth.mockResolvedValueOnce({
+      userId: 'acting-admin',
+      user: { id: 'acting-admin', role: 'admin', email: 'operator@example.test' },
+    });
+    expect(await updateUserRole('different-user', 'candidate')).toEqual({ success: true });
+    expect(mocks.update).toHaveBeenCalledOnce();
+  });
+
   it('prevents changing a protected administrator to a lower role', async () => {
     mocks.findUnique.mockResolvedValue({ email: PROTECTED_ADMIN_EMAILS[0] });
     const result = await updateUserRole('user-2', 'candidate');
