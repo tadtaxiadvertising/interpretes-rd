@@ -74,4 +74,62 @@ describe('Audio Studio admin partial settings payload', () => {
     expect(submitted.get('mediaImportEnabled')).toBeNull();
     expect(submitted.get('token')).toBe('');
   });
+  it('blocks stale retries and only discards secret and edits after explicit reload', async () => {
+    const newer = { ...initial, revision: 'b'.repeat(64), organizationId: '654321' };
+    vi.mocked(saveAudioStudioSettings)
+      .mockResolvedValueOnce({ success: false, conflict: true, message: 'Otro administrador modificó estos ajustes.' });
+    vi.mocked(inspectAudioStudioSettings).mockResolvedValueOnce(newer);
+    render(<AudioStudioSettingsForm initial={initial} />);
+    fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+      target: { value: 'SYNTHETIC_UNSAVED_SECRET' },
+    });
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'compact' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
+    const saveButton = screen.getByRole('button', { name: 'Guardar configuración' }) as HTMLButtonElement;
+    expect(saveButton.disabled).toBe(true);
+    expect(screen.getByRole('alert').textContent).toContain('Otro administrador');
+    expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value).toBe('SYNTHETIC_UNSAVED_SECRET');
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar mis cambios y cargar ajustes actuales' }));
+    });
+    expect(inspectAudioStudioSettings).toHaveBeenCalledOnce();
+    expect(saveButton.disabled).toBe(false);
+    expect((screen.getByLabelText('ID de organización') as HTMLInputElement).value).toBe('654321');
+    expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Vista inicial de intervenciones') as HTMLSelectElement).value).toBe('auto');
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'expanded' },
+    });
+    await act(async () => {
+      fireEvent.click(saveButton);
+    });
+    expect(vi.mocked(saveAudioStudioSettings).mock.calls[1][0].get('expectedRevision')).toBe(newer.revision);
+  });
+
+  it('keeps local changes if the explicit conflict refresh fails', async () => {
+    vi.mocked(saveAudioStudioSettings).mockResolvedValueOnce({
+      success: false, conflict: true, message: 'Conflicto de edición.',
+    });
+    vi.mocked(inspectAudioStudioSettings).mockRejectedValueOnce(new Error('offline'));
+    render(<AudioStudioSettingsForm initial={initial} />);
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'expanded' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar mis cambios y cargar ajustes actuales' }));
+    });
+    expect((screen.getByLabelText('Vista inicial de intervenciones') as HTMLSelectElement).value).toBe('expanded');
+    expect((screen.getByRole('button', { name: 'Guardar configuración' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
+  });
+
 });
