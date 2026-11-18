@@ -185,6 +185,7 @@ async function main() {
         'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
         'ended_missing_duration_sessions counts ended sessions with durationSeconds NULL; ended_zero_duration_with_elapsed_sessions counts zero-duration sessions with at least 60 seconds elapsed between stored timestamps.',
         'ended_missing_cost_sessions counts ended sessions with callCost NULL. These flags do not independently establish payable minutes or entitlement; investigate sources before correction.',
+        'Historical counts include only sessions with an interpreterId and startedAt in the selected Santo Domingo date range; sessions missing startedAt are excluded.',
         'production_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
         'No row is classified as safe to import, and this report never repairs, inserts, updates, or deletes data.',
       ],
