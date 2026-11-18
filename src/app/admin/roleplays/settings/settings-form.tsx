@@ -30,16 +30,21 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData();
-    data.set('organizationId', org); data.set('token', token);
+    data.set('token', token);
+    if (org !== status.organizationId) data.set('organizationId', org);
     // Do not reactivate an integration disabled in another admin tab just
     // because this form saved unrelated editor defaults.
     if (enabled !== status.integrationEnabled)
       data.set('integrationEnabled', String(enabled));
-    data.set('excludeInterpreterByDefault', String(excludeDefault));
-    data.set('compactViewDefault', compactDefault);
-    data.set('protocolLanguageDefault', protocolDefault);
+    if (excludeDefault !== status.excludeInterpreterByDefault)
+      data.set('excludeInterpreterByDefault', String(excludeDefault));
+    if (compactDefault !== status.compactViewDefault)
+      data.set('compactViewDefault', compactDefault);
+    if (protocolDefault !== status.protocolLanguageDefault)
+      data.set('protocolLanguageDefault', protocolDefault);
     if (remove) data.set('removeToken', 'on');
-    if (media) data.set('mediaImportEnabled', 'on');
+    if (media !== status.mediaImportEnabled)
+      data.set('mediaImportEnabled', String(media));
     start(async () => {
       const result = await saveAudioStudioSettings(data);
       setNotice({ ok: result.success, message: result.message });
