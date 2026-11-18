@@ -36,7 +36,19 @@ export const IncentiveConfigSchema = z.object({
 });
 
 export const PayrollGenerateSchema = z.object({
-  targetDate: z.coerce.date().optional(),
+  // Keep YYYY-MM-DD as a local calendar date. Coercing it with new Date()
+  // turns it into UTC midnight, which is the previous day in Santo Domingo.
+  // Full timestamps retain the existing Date coercion/instant behavior.
+  targetDate: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    z.coerce.date(),
+  ]).refine((value) => {
+    // A regex-shaped date can still be impossible (e.g. February 30).
+    // Reject it as a validation error, not a 500 during schedule evaluation.
+    if (typeof value !== 'string') return true;
+    const noon = new Date(`${value}T12:00:00.000Z`);
+    return Number.isFinite(noon.getTime()) && noon.toISOString().slice(0, 10) === value;
+  }, { message: 'Invalid calendar day' }).optional(),
 });
 
 // A PATCH must not inject defaults from the interpreter creation schema.
