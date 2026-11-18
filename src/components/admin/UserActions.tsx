@@ -111,7 +111,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
         setActiveModal(null);
         setIsOpen(false);
       } else {
-        alert('Error al vincular el intérprete');
+        alert(res.error || 'Error al vincular el intérprete');
       }
     } catch {
       alert('Ocurrió un error inesperado');
