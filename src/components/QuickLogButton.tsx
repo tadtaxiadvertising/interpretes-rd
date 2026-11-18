@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, X, Clock, Send, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -11,33 +11,59 @@ export function QuickLogButton() {
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [needsReview, setNeedsReview] = useState(false);
+  const submitInFlight = useRef(false);
 
   const router = useRouter();
 
+  const enteredMinutes = Number(minutes || '0');
+  const enteredSeconds = Number(seconds || '0');
+  const validDuration = Boolean(minutes || seconds) &&
+    Number.isInteger(enteredMinutes) && enteredMinutes >= 0 && enteredMinutes <= 100_000 &&
+    Number.isInteger(enteredSeconds) && enteredSeconds >= 0 && enteredSeconds <= 59 &&
+    (enteredMinutes > 0 || enteredSeconds > 0);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!minutes && !seconds) || isNaN(Number(minutes)) || isNaN(Number(seconds))) return;
-
+    // A ref is synchronous even when React has not committed disabled=true.
+    // This protects two submissions arriving in the same event batch.
+    if (submitInFlight.current || needsReview || !validDuration) return;
+    submitInFlight.current = true;
     setIsSubmitting(true);
+    setSubmissionError(null);
     try {
       const formData = new FormData();
       formData.append('durationMinutes', minutes || '0');
       formData.append('seconds', seconds || '0');
 
       const result = await quickLog(formData);
-
       if (!result.success) {
-        throw new Error(result.error || 'Failed to save log');
+        if (result.code === 'CONFLICT') {
+          setSubmissionError('No se guardó: el período de producción cambió o está bloqueado. Revisa tus registros antes de continuar.');
+        } else if (result.code === 'VALIDATION_ERROR') {
+          setSubmissionError('Revisa la duración ingresada. No se guardó la llamada.');
+        } else {
+          // A backend failure can happen after a DB commit. Without an
+          // idempotency key, retrying blindly risks a second paid call.
+          setNeedsReview(true);
+          setSubmissionError('No se pudo confirmar el guardado. Revisa tu historial antes de intentar registrar de nuevo esta llamada.');
+        }
+        return;
       }
 
       setIsOpen(false);
       setMinutes('');
       setSeconds('');
+      setNeedsReview(false);
       router.refresh();
-    } catch (error) {
-      console.error('Error logging call:', error);
-      alert('Error saving manual log. Please try again.');
+    } catch {
+      // A network drop cannot establish whether the database committed.
+      // Keep the draft and block retries until the operator reviews history.
+      setNeedsReview(true);
+      setSubmissionError('No se pudo confirmar el guardado. Revisa tu historial antes de intentar registrar de nuevo esta llamada.');
     } finally {
+      submitInFlight.current = false;
       setIsSubmitting(false);
     }
   };
@@ -57,14 +83,17 @@ export function QuickLogButton() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-slate-950/60 backdrop-blur-md transition-opacity animate-in fade-in duration-300"
-            onClick={() => setIsOpen(false)}
+            onClick={() => { if (!submitInFlight.current) setIsOpen(false); }}
           />
 
           <div className="relative w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl p-6 overflow-hidden animate-in fade-in zoom-in-95 duration-300">
             <div className="absolute top-0 right-0 p-32 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
 
             <button
-              onClick={() => setIsOpen(false)}
+              onClick={() => { if (!submitInFlight.current) setIsOpen(false); }}
+              disabled={isSubmitting}
+              type="button"
+              aria-label="Cerrar registro rápido"
               className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800 rounded-full transition-colors"
             >
               <X size={20} />
@@ -73,7 +102,7 @@ export function QuickLogButton() {
             <h3 className="text-xl font-bold text-white mb-1">Registrar Llamada Manual</h3>
             <p className="text-sm text-slate-400 mb-6">Ingresa la duración exacta de la llamada.</p>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} aria-label="Formulario de registro rápido" className="space-y-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="minutes" className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
@@ -85,8 +114,11 @@ export function QuickLogButton() {
                       id="minutes"
                       type="number"
                       min="0"
+                      max="100000"
+                      step="1"
+                      disabled={isSubmitting}
                       value={minutes}
-                      onChange={(e) => setMinutes(e.target.value)}
+                      onChange={(e) => { setMinutes(e.target.value); if (!needsReview) setSubmissionError(null); }}
                       placeholder="0"
                       className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 pl-12 pr-4 text-white placeholder:text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
                       autoFocus
@@ -104,9 +136,10 @@ export function QuickLogButton() {
                       id="seconds"
                       type="number"
                       min="0"
+                      disabled={isSubmitting}
                       max="59"
                       value={seconds}
-                      onChange={(e) => setSeconds(e.target.value)}
+                      onChange={(e) => { setSeconds(e.target.value); if (!needsReview) setSubmissionError(null); }}
                       placeholder="00"
                       className="w-full bg-slate-950 border border-slate-800 rounded-2xl py-3 pl-12 pr-4 text-white placeholder:text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-mono"
                     />
@@ -114,12 +147,18 @@ export function QuickLogButton() {
                 </div>
               </div>
 
+              {submissionError && (
+                <p role="alert" className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-sm text-amber-100">
+                  {submissionError}
+                </p>
+              )}
+
               <button
                 type="submit"
-                disabled={isSubmitting || (!minutes && !seconds)}
+                disabled={isSubmitting || needsReview || !validDuration}
                 className={cn(
                   "w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-lg transition-all",
-                  isSubmitting || (!minutes && !seconds)
+                  isSubmitting || needsReview || !validDuration
                     ? "bg-slate-800 text-slate-500 cursor-not-allowed"
                     : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20 active:scale-95"
                 )}
