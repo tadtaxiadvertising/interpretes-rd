@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { getSantoDomingoPaymentDay } from './payment-schedule-date';
+import { PayrollGenerateSchema } from '@/lib/api-schemas';
 
 describe('payroll payment day in America/Santo_Domingo', () => {
   it('uses the previous local day before 04:00 UTC', () => {
@@ -40,6 +41,19 @@ describe('payroll payment day in America/Santo_Domingo', () => {
       dayOfWeek: 'Thursday',
       dayOfMonth: '31',
     });
+  });
+
+  it('preserves explicit YYYY-MM-DD input instead of shifting it back a day', () => {
+    const { targetDate } = PayrollGenerateSchema.parse({ targetDate: '2026-11-18' });
+    expect(targetDate).toBe('2026-11-18');
+    expect(getSantoDomingoPaymentDay(targetDate!)).toEqual({
+      dayOfWeek: 'Wednesday',
+      dayOfMonth: '18',
+    });
+  });
+
+  it('rejects an impossible date-only calendar value', () => {
+    expect(() => getSantoDomingoPaymentDay('2026-02-30')).toThrow('Invalid payment calendar date');
   });
 
   it('rejects invalid timestamps rather than determining a wrong date', () => {
