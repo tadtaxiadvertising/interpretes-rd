@@ -3,10 +3,15 @@ import CreateAccountForm from '@/components/admin/CreateAccountForm';
 import EditOperationalAccountForm from '@/components/admin/EditOperationalAccountForm';
 import AccountAssignmentManager from '@/components/admin/AccountAssignmentManager';
 import WhoerAccessGate from '@/components/admin/WhoerAccessGate';
+import { getRawPool } from '@/lib/prisma';
+import { inspectAccountVpnSchema } from '@/lib/account-vpn-schema-readiness';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminAccountsPage() {
+  // A failed security gate can delay the additive VPN migration. Never let
+  // that schema drift take down the rest of the administrator's account list.
+  const vpnSchemaStatus = await inspectAccountVpnSchema(getRawPool());
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
   const [accounts, production, clients, companies, interpreters] = await Promise.all([
@@ -16,7 +21,7 @@ export default async function AdminAccountsPage() {
         id: true, name: true, holderName: true, email: true, description: true, clientId: true, companyId: true,
         client: { select: { name: true } },
         company: { select: { name: true } },
-        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { name: true, loginUrl: true, secretRef: true, vpnCountry: true, vpnProvider: true, vpnApp: true, vpnServer: true, vpnProfile: true, vpnProtocol: true, vpnPort: true } },
+        platforms: { where: { active: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { id: true, name: true, loginUrl: true, secretRef: true } },
         assignments: { where: { OR: [{ endsAt: null }, { endsAt: { gte: today } }] }, select: { id: true, interpreterId: true, startsAt: true, endsAt: true, interpreter: { select: { id: true, name: true } } } },
         _count: { select: { assignments: { where: { startsAt: { lte: today }, OR: [{ endsAt: null }, { endsAt: { gte: today } }] } } } },
       },
@@ -29,6 +34,19 @@ export default async function AdminAccountsPage() {
     prisma.company.findMany({ where: { active: true }, orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.interpreter.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
   ]);
+  // Query VPN metadata independently only when *all* eleven columns and the
+  // verified port constraint exist. Legacy installations can still list and
+  // edit account ownership while portal opening is intentionally blocked.
+  const vpnDetails = vpnSchemaStatus === 'complete'
+    ? await prisma.accountPlatform.findMany({
+        where: { id: { in: accounts.flatMap(account => account.platforms.map(item => item.id)) } },
+        select: {
+          id: true, vpnCountry: true, vpnProvider: true, vpnApp: true,
+          vpnServer: true, vpnProfile: true, vpnProtocol: true, vpnPort: true,
+        },
+      })
+    : [];
+  const vpnByPlatformId = new Map(vpnDetails.map(item => [item.id, item]));
   const productionByAccount = new Map(production.map(row => [row.accountId, row._sum]));
   const totalMinutes = production.reduce((sum, row) => sum + (row._sum.interpretedMinutes ?? 0), 0);
   const totalAssignedInterpreters = accounts.reduce((sum, account) => sum + account._count.assignments, 0);
@@ -38,6 +56,16 @@ export default async function AdminAccountsPage() {
       <h1 className="mt-2 text-3xl font-bold">Cuentas operativas</h1>
       <p className="mt-2 text-slate-400">Cada cuenta pertenece a un cliente. La compañía identifica a qué compañía corresponde, sin sustituir al cliente propietario. Las contraseñas nunca se muestran ni se almacenan en texto plano.</p>
     </header>
+    {vpnSchemaStatus !== 'complete' && (
+      <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+        <strong>Configuración VPN temporalmente no disponible.</strong>{' '}
+        {vpnSchemaStatus === 'missing'
+          ? 'La migración de campos VPN aún no se ha aplicado a esta base de datos.'
+          : 'Los campos VPN están incompletos o no cumplen sus restricciones.'}
+        {' '}Las cuentas y asignaciones siguen visibles; los enlaces a portales de trabajo permanecerán bloqueados hasta verificar la migración.
+        Contacta al administrador de despliegue. No vuelvas a guardar credenciales para intentar resolverlo.
+      </div>
+    )}
     <div className="grid gap-4 md:grid-cols-3">
       {[
         ['Cuentas registradas', accounts.length.toLocaleString('es-DO')],
@@ -54,10 +82,16 @@ export default async function AdminAccountsPage() {
         <tbody>{accounts.map(account => {
           const totals = productionByAccount.get(account.id);
           const platform = account.platforms.find(item => item.name === 'Plataforma principal') ?? account.platforms[0];
+          const vpn = platform ? vpnByPlatformId.get(platform.id) : undefined;
           return <tr key={account.id} className="border-t border-white/10 align-top">
             <td className="p-4"><strong className="text-white">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-slate-400">{account.name}</p>{account.description && <p className="mt-1 text-xs text-slate-500">{account.description}</p>}<EditOperationalAccountForm account={{ id: account.id, name: account.name, holderName: account.holderName, email: account.email, description: account.description, clientId: account.clientId, companyId: account.companyId, platform: platform ? { loginUrl: platform.loginUrl, secretRef: platform.secretRef } : null }} clients={clients} companies={companies} /></td>
             <td className="p-4">{account.email || 'Pendiente'}</td>
-            <td className="p-4">{platform?.loginUrl ? <div className="space-y-2"><p className="text-xs text-slate-400">{platform.name}</p><WhoerAccessGate url={platform.loginUrl} expectedCountry={platform.vpnCountry} />{(platform.vpnProvider || platform.vpnApp || platform.vpnServer) && <p className="text-[11px] text-slate-500">{[platform.vpnProvider, platform.vpnApp, platform.vpnServer, platform.vpnProfile, platform.vpnProtocol, platform.vpnPort ? `Puerto ${platform.vpnPort}` : null].filter(Boolean).join(' · ')}</p>}</div> : 'Sin página registrada'}</td>
+            <td className="p-4">{platform?.loginUrl ? <div className="space-y-2"><p className="text-xs text-slate-400">{platform.name}</p>{vpnSchemaStatus === 'complete' ? (
+              <WhoerAccessGate url={platform.loginUrl} expectedCountry={vpn?.vpnCountry} />
+            ) : (
+              <p className="text-xs text-amber-300">Acceso suspendido hasta verificar la configuración VPN.</p>
+            )}
+            {(vpn?.vpnProvider || vpn?.vpnApp || vpn?.vpnServer) && <p className="text-[11px] text-slate-500">{[vpn.vpnProvider, vpn.vpnApp, vpn.vpnServer, vpn.vpnProfile, vpn.vpnProtocol, vpn.vpnPort ? `Puerto ${vpn.vpnPort}` : null].filter(Boolean).join(' · ')}</p>}</div> : 'Sin página registrada'}</td>
             <td className="p-4">{account.client?.name || <span className="text-amber-300">Pendiente de identificar</span>}</td>
             <td className="p-4">{account.company?.name || 'Sin compañía'}</td>
             <td className="p-4"><span>{account._count.assignments}</span><AccountAssignmentManager accountId={account.id} interpreters={interpreters} today={today.toISOString().slice(0, 10)} assignments={account.assignments.map(item => ({ id: item.id, interpreterId: item.interpreterId, interpreterName: item.interpreter.name, startsAt: item.startsAt.toISOString().slice(0, 10), endsAt: item.endsAt?.toISOString().slice(0, 10) ?? null }))} /></td>
