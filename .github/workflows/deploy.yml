@@ -97,6 +97,12 @@ jobs:
       # dependency advisory blocks the full validation pipeline.
       - name: Verify call action error redaction
         run: npx vitest run src/app/actions/__tests__/calls-error-redaction.test.ts src/app/api/v1/calls/manual/__tests__/route.test.ts
+
+      # Freeze the versioned request-key and canonical digest contract.
+      # A breaking change here can duplicate financial rows on a replay.
+      # This is pure code: no database, schema or production mutation.
+      - name: Verify staged Quick Log request idempotency contract
+        run: npx vitest run src/lib/call-submission-idempotency.test.ts
       # Verify that archive/restore responses stay accurate after a committed
       # write even if Next.js cache invalidation subsequently throws.
       # The audit remains a hard gate; this unit test does not enable deploys.

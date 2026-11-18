@@ -27,6 +27,42 @@ segunda sesión, segundo asiento ni nuevos minutos.
   `ROLLBACK` y rechaza URLs ajenas al PostgreSQL aislado.
   No se consulta ninguna base real.
 
+## Etapa 0.5: contrato de solicitud revisable (SIN activar)
+
+Los archivos `src/lib/call-submission-idempotency.ts` y
+`src/lib/call-submission-idempotency.test.ts` preparan únicamente el
+contrato **puro del servidor** para ambas variantes de Quick Log.
+Ninguna ruta los importa todavía y no se introduce un cliente Prisma nuevo.
+
+- `request_key` es un **UUIDv4** generado con aleatoriedad criptográfica
+  para cada intento de llamada. Se normaliza a minúsculas, se conserva para
+  reintentos de **ese** intento y no se deriva del reloj, del intérprete,
+  de la duración ni de la tarifa.
+- `payload_sha256` v1 es el SHA-256 UTF-8 de la tupla JSON, en este orden:
+  `["interpretes-rd-call-submission",1,interpreterId,source,durationSeconds]`.
+  El ID procede del usuario **autenticado**, `source` de la ruta del servidor
+  (`quick_log_action` o `quick_log_api`) y `durationSeconds` es el
+  entero final que se almacena, no el texto sin normalizar del formulario.
+- Se rechazan valores fraccionarios, negativos, excesivos, IDs inválidos y
+  fuentes no permitidas. Una solicitud de 1.5 minutos y otra de 90 segundos
+  en la **misma ruta** generan idéntica huella (si el UUID es el mismo).
+- La tarifa vigente y el instante de registro se excluyen del hash: pueden
+  cambiar mientras se retransmite la misma solicitud, y el replay debe
+  recuperar el **registro original**, no crear uno nuevo ni recalcular su
+  importe. Tampoco se incorporan nombres, contraseñas, correos, notas,
+  tokens, audio o transcripciones.
+- Un UUID repetido con intérprete, fuente o duración distintos genera
+  `CONFLICT`; un replay exacto se vincula al `callSessionId` original.
+  El caso `NEW` de la función pura es solo orientativo: **no** autoriza
+  una secuencia consulta→insert sin reserva única transaccional.
+- El formulario administrativo **no** utiliza este contrato, ya que exige
+  incluir su hora de inicio y otros campos en un formato canónico propio.
+
+Este código no aporta idempotencia por sí solo. La integración efectiva exige
+la tabla instalada y verificada, todas las escrituras contables en la misma
+transacción, manejo de choques de clave mediante rollback y lectura posterior,
+pruebas de concurrencia real y aprobación financiera.
+
 ## Etapa 1: autorización y aplicación del esquema (PENDIENTE)
 
 Requiere revisión de integridad financiera, administrador de base de datos y
