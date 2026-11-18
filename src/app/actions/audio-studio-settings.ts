@@ -6,7 +6,7 @@ import {
 } from '@/lib/roleplay/happyscribe-settings';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
-export async function saveAudioStudioSettings(form: FormData): Promise<{ success: boolean; message: string }> {
+export async function saveAudioStudioSettings(form: FormData): Promise<{ success: boolean; message: string; conflict?: boolean }> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, message: 'No autorizado.' };
   const token = form.get('token');
@@ -20,7 +20,7 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
   const mediaValue = form.get('mediaImportEnabled');
   const expectedRevision = form.get('expectedRevision');
   if (typeof expectedRevision !== 'string' || !/^[a-f0-9]{64}$/.test(expectedRevision))
-    return { success: false, message: 'La sesión de ajustes está desactualizada. Recarga la pantalla antes de guardar.' };
+    return { success: false, conflict: true, message: 'La sesión de ajustes está desactualizada. Vuelve a cargar la configuración antes de guardar.' };
   if (excludeValue !== null && excludeValue !== 'true' && excludeValue !== 'false')
     return { success: false, message: 'Preferencia de intérprete no válida.' };
   if (compactValue !== null && !['auto', 'compact', 'expanded'].includes(String(compactValue)))
@@ -57,9 +57,14 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
     const code = error && typeof error === 'object' && 'code' in error
       ? String(error.code)
       : error instanceof Error ? error.message : '';
-    return { success: false, message: code === 'SETTINGS_CONFLICT' || code === 'P2034'
-      ? 'Otro administrador modificó estos ajustes. No se guardaron tus cambios; recarga la pantalla y vuelve a revisarlos.'
-      : code === 'ENCRYPTION_KEY_MISSING'
+    if (code === 'SETTINGS_CONFLICT' || code === 'P2034') {
+      return {
+        success: false,
+        conflict: true,
+        message: 'Otro administrador modificó estos ajustes. No se guardaron tus cambios; revisa y carga la versión actual antes de volver a guardar.',
+      };
+    }
+    return { success: false, message: code === 'ENCRYPTION_KEY_MISSING'
       ? 'Falta AUDIO_STUDIO_ENCRYPTION_KEY (64 caracteres hexadecimales) en el servidor.'
       : code === 'ORGANIZATION_INVALID' ? 'El ID de organización debe contener solo números.'
       : code === 'TOKEN_INVALID' ? 'La clave API no tiene un formato válido.'
