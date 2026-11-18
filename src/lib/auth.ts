@@ -1,7 +1,7 @@
 import { createClient, isSupabaseConfigError } from './supabase/server';
 import prisma from './prisma';
 import { auth as nextAuth } from './auth-rbac';
-import { resolveUserRoleByEmail } from './admin-identity';
+import { hasAuthoritativeAuthJsRole, resolveUserRoleByEmail } from './admin-identity';
 import { safeServerErrorCategory } from './security/safe-server-error';
 
 /**
@@ -44,7 +44,10 @@ export async function auth() {
   if (!user) {
     try {
       const session = await nextAuth();
-      if (session?.user) {
+      // No local RBAC identity means auth-rbac deliberately strips the role.
+      // Never reclassify a revoked or stale NextAuth session as interpreter.
+      if (session?.user?.id && session.user.email &&
+          hasAuthoritativeAuthJsRole((session.user as { role?: unknown }).role)) {
         user = {
           id: session.user.id,
           email: session.user.email,

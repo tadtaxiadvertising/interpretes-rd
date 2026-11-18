@@ -20,6 +20,18 @@ export function resolveUserRoleByEmail(
   return normalizedFallback === 'admin' ? 'admin' : 'interpreter';
 }
 
+/**
+ * The Auth.js session callback clears its role when the underlying RBAC
+ * identity no longer exists. Never manufacture an interpreter/admin role
+ * from such a session (or from an unrelated Supabase profile).
+ */
+export function hasAuthoritativeAuthJsRole(role: unknown): role is string {
+  return typeof role === 'string' &&
+    (role.toUpperCase() === 'ADMIN' ||
+     role.toUpperCase() === 'HOLDER' ||
+     role.toUpperCase() === 'INTERPRETER');
+}
+
 export function resolveRbacRoleByEmail(
   email: string | null | undefined,
   fallbackRole: string | null | undefined = 'INTERPRETER'

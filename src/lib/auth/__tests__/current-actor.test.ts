@@ -30,6 +30,8 @@ vi.mock('@/lib/auth-rbac', () => ({
 
 vi.mock('@/lib/admin-identity', () => ({
   resolveUserRoleByEmail: vi.fn((email, fallback) => (email === 'admin@test.com' ? 'admin' : fallback)),
+  hasAuthoritativeAuthJsRole: (role: unknown) =>
+    typeof role === 'string' && ['ADMIN', 'HOLDER', 'INTERPRETER'].includes(role.toUpperCase()),
 }));
 
 import { createClient } from '@/lib/supabase/server';
@@ -165,6 +167,35 @@ describe('CurrentActor abstraction', () => {
 
       expect(actor?.role).toBe('admin');
       expect(actor?.interpreterId).toBeNull();
+    });
+
+    it('rejects an Auth.js session whose RBAC identity was removed, even if a profile remains', async () => {
+      (createClient as any).mockResolvedValue({
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      });
+      (auth as any).mockResolvedValue({
+        user: { id: 'deleted-rbac-user', email: 'admin@test.com', role: undefined },
+      });
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        id: 'supabase-profile', email: 'admin@test.com', role: 'admin', interpreterId: 42,
+      });
+      expect(await getCurrentActor()).toBeNull();
+      expect(prisma.userProfile.findUnique).not.toHaveBeenCalled();
+      expect(prisma.interpreter.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('uses the authoritative RBAC session role rather than an unrelated profile role', async () => {
+      (createClient as any).mockResolvedValue({
+        auth: { getUser: vi.fn().mockResolvedValue({ data: { user: null } }) },
+      });
+      (auth as any).mockResolvedValue({
+        user: { id: 'rbac-interpreter', email: 'ordinary@test.com', role: 'INTERPRETER' },
+      });
+      (prisma.userProfile.findUnique as any).mockResolvedValue({
+        id: 'other-profile', role: 'admin', interpreterId: null,
+      });
+      const actor = await getCurrentActor();
+      expect(actor?.role).toBe('interpreter');
     });
 
     it('falls back to Auth.js when Supabase not configured', async () => {

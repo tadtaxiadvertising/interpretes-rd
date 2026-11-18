@@ -15,7 +15,11 @@ vi.mock('./prisma', () => ({
   default: { userProfile: { findUnique: mocks.findProfile } },
 }));
 vi.mock('./auth-rbac', () => ({ auth: mocks.nextAuth }));
-vi.mock('./admin-identity', () => ({ resolveUserRoleByEmail: mocks.resolveRole }));
+vi.mock('./admin-identity', () => ({
+  resolveUserRoleByEmail: mocks.resolveRole,
+  hasAuthoritativeAuthJsRole: (role: unknown) =>
+    typeof role === 'string' && ['ADMIN', 'HOLDER', 'INTERPRETER'].includes(role.toUpperCase()),
+}));
 import { auth } from './auth';
 
 describe('authentication bridge keeps provider diagnostics private', () => {
@@ -47,6 +51,31 @@ describe('authentication bridge keeps provider diagnostics private', () => {
     } finally {
       logged.mockRestore();
     }
+  });
+
+  it('rejects a stale Auth.js session with no RBAC role even for a privileged email', async () => {
+    mocks.nextAuth.mockResolvedValueOnce({
+      user: { id: 'deleted-rbac-user', email: 'protected@example.test', role: undefined },
+    });
+    expect(await auth()).toEqual({ userId: null, user: null });
+    expect(mocks.resolveRole).not.toHaveBeenCalled();
+  });
+
+  it('rejects forged or unknown Auth.js roles instead of manufacturing interpreter access', async () => {
+    for (const role of ['NOT_AN_AUTHORIZED_ROLE', '', 'candidate', null]) {
+      mocks.nextAuth.mockResolvedValueOnce({
+        user: { id: 'stale-rbac-user', email: 'stale@example.test', role },
+      });
+      expect(await auth()).toEqual({ userId: null, user: null });
+    }
+    expect(mocks.resolveRole).not.toHaveBeenCalled();
+  });
+
+  it('requires an immutable Auth.js ID for an otherwise valid legacy role', async () => {
+    mocks.nextAuth.mockResolvedValueOnce({
+      user: { email: 'legacy@example.test', role: 'INTERPRETER' },
+    });
+    expect(await auth()).toEqual({ userId: null, user: null });
   });
 
   it('still falls back to a valid legacy session after a Supabase connection failure', async () => {
