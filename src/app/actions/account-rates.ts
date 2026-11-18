@@ -7,8 +7,22 @@ import { Account, InterpreterAccountRate } from '@prisma/client';
 import { z } from 'zod';
 import { validateAction } from '@/lib/auth/actions';
 import { operationalAccountInputSchema } from '@/lib/client-validation';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
+
+// Revalidation runs after a committed database write. Do not report a saved
+// account or rate change as failed: retrying could duplicate financial audits.
+function refreshAccountRateViews(paths: readonly string[]) {
+  for (const path of paths) {
+    try {
+      revalidatePath(path);
+    } catch (error) {
+      // Errors from frameworks/providers can include database URLs or PII.
+      console.warn('[ACCOUNT_RATES] Saved but cache refresh failed:', safeServerErrorCategory(error));
+    }
+  }
+}
 const accountRateInputSchema = z.object({
   interpreterId: z.number().int().positive(),
   accountId: z.number().int().positive(),
@@ -34,10 +48,7 @@ export async function createAccount(name: string, description: string | undefine
       data: { name: parsed.data.name, description: parsed.data.description || null, clientId: client.id },
       select: { id: true, name: true, description: true, clientId: true, client: { select: { name: true } } }
     });
-    revalidatePath('/admin/payrates');
-    revalidatePath('/admin/accounts');
-    revalidatePath('/admin/clients');
-    revalidatePath('/settings');
+    refreshAccountRateViews(['/admin/payrates', '/admin/accounts', '/admin/clients', '/settings']);
     return { success: true, data: { ...account, clientName: client.name } };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
@@ -66,10 +77,7 @@ export async function updateAccount(id: number, name: string, description?: stri
       data: { name: parsed.data.name, description: parsed.data.description || null },
       select: { id: true, name: true, description: true, clientId: true, client: { select: { name: true } } }
     });
-    revalidatePath('/admin/payrates');
-    revalidatePath('/admin/accounts');
-    revalidatePath('/admin/clients');
-    revalidatePath('/settings');
+    refreshAccountRateViews(['/admin/payrates', '/admin/accounts', '/admin/clients', '/settings']);
     return { success: true, data: { ...account, clientName: account.client?.name ?? null } };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
@@ -88,10 +96,7 @@ export async function deleteAccount(id: number): Promise<ActionResult<void>> {
       where: { id },
       select: { id: true }
     });
-    revalidatePath('/admin/payrates');
-    revalidatePath('/admin/accounts');
-    revalidatePath('/admin/clients');
-    revalidatePath('/settings');
+    refreshAccountRateViews(['/admin/payrates', '/admin/accounts', '/admin/clients', '/settings']);
     return { success: true };
   } catch {
     return { success: false, error: 'Error al eliminar la cuenta (puede tener registros asociados)', code: 'INTERNAL_ERROR' };
@@ -114,7 +119,7 @@ export async function getAccounts(): Promise<ActionResult<AccountOption[]>> {
     });
     return { success: true, data: accounts };
   } catch (error) {
-    console.error('Error fetching accounts:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('[ACCOUNT_RATES] Fetch failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error fetching accounts', code: 'INTERNAL_ERROR' };
   }
 }
@@ -147,10 +152,10 @@ export async function setInterpreterAccountRate(
       });
       return rate;
     });
-    revalidatePath('/admin/payrates');
+    refreshAccountRateViews(['/admin/payrates']);
     return { success: true, data: result as InterpreterAccountRate };
   } catch (error) {
-    console.error('Error setting account rate:', error);
+    console.error('[ACCOUNT_RATES] Rate update failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error setting account rate', code: 'INTERNAL_ERROR' };
   }
 }
@@ -169,10 +174,10 @@ export async function deleteInterpreterAccountRate(
       where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
       select: { interpreterId: true }
     });
-    revalidatePath('/admin/payrates');
+    refreshAccountRateViews(['/admin/payrates']);
     return { success: true };
   } catch (error) {
-    console.error('Error deleting account rate:', error);
+    console.error('[ACCOUNT_RATES] Rate delete failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error deleting account rate', code: 'INTERNAL_ERROR' };
   }
 }
