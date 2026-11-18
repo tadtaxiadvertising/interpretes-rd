@@ -56,7 +56,12 @@ export function QuickLogButton() {
       setMinutes('');
       setSeconds('');
       setNeedsReview(false);
-      router.refresh();
+      // Database commit succeeded. A UI refresh failure is not a failed call.
+      try {
+        router.refresh();
+      } catch {
+        // The next page load will pick up the stored record.
+      }
     } catch {
       // A network drop cannot establish whether the database committed.
       // Keep the draft and block retries until the operator reviews history.
@@ -151,6 +156,33 @@ export function QuickLogButton() {
                 <p role="alert" className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3 text-sm text-amber-100">
                   {submissionError}
                 </p>
+              )}
+              {needsReview && (
+                <div className="space-y-3 rounded-xl border border-amber-500/30 p-3">
+                  <a
+                    href="/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-sm font-semibold text-blue-300 underline underline-offset-2"
+                  >
+                    Abrir historial de llamadas en otra pestaña
+                  </a>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      if (submitInFlight.current) return;
+                      setNeedsReview(false);
+                      setSubmissionError(null);
+                    }}
+                    className="w-full rounded-xl border border-amber-400/50 px-3 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-950/40"
+                  >
+                    Confirmo que la llamada no aparece; habilitar registro
+                  </button>
+                  <p className="text-xs text-slate-400">
+                    Si aparece en el historial, cierra este formulario sin reenviarlo.
+                  </p>
+                </div>
               )}
 
               <button

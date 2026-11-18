@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Plus, X, Loader2, Calendar, Clock, User, FileText } from 'lucide-react';
 import { addManualCall } from '@/app/actions/calls';
+import { useRouter } from 'next/navigation';
 
 function localDateTimeValue(date: Date) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -19,6 +20,7 @@ export default function ManualCallForm({ interpreters }: ManualCallFormProps) {
   const [needsReview, setNeedsReview] = useState(false);
   const [startTime, setStartTime] = useState('');
   const submitting = useRef(false);
+  const router = useRouter();
 
   // Initialize only on the client: datetime-local is in browser time.
   useEffect(() => { setStartTime(localDateTimeValue(new Date())); }, []);
@@ -46,6 +48,14 @@ export default function ManualCallForm({ interpreters }: ManualCallFormProps) {
         setIsOpen(false);
         form.reset();
         setStartTime(localDateTimeValue(new Date()));
+        setNeedsReview(false);
+        setError(null);
+        // Committed row must not be reported as failed due to UI refresh.
+        try {
+          router.refresh();
+        } catch {
+          // Next navigation or a new page load will refresh the call list.
+        }
       } else if (result.code === 'VALIDATION_ERROR' || result.code === 'NOT_FOUND' ||
                  result.code === 'UNAUTHORIZED') {
         setError('No se guardó la llamada. Revisa los campos y permisos.');
@@ -100,7 +110,36 @@ export default function ManualCallForm({ interpreters }: ManualCallFormProps) {
               <div role="alert" className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-center gap-3 text-red-400 text-sm">
                 <AlertCircle size={18} />
                 <div>{error}</div>
-                {needsReview && <a href="/admin/calls" className="underline font-semibold">Revisar historial</a>}
+                {needsReview && (
+                  <a
+                    href="/admin/calls"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline font-semibold"
+                  >
+                    Revisar historial
+                  </a>
+                )}
+              </div>
+            )}
+
+            {needsReview && (
+              <div className="mb-5 rounded-xl border border-amber-500/40 p-4 text-sm text-amber-100">
+                <button
+                  type="button"
+                  disabled={isLoading}
+                  onClick={() => {
+                    if (submitting.current) return;
+                    setNeedsReview(false);
+                    setError(null);
+                  }}
+                  className="rounded-lg border border-amber-400/50 px-3 py-2 font-semibold hover:bg-amber-950/30"
+                >
+                  Confirmo que la llamada no aparece; habilitar registro
+                </button>
+                <p className="mt-2 text-xs">
+                  Si la llamada aparece en el historial, cierra este formulario sin reenviarla.
+                </p>
               </div>
             )}
 

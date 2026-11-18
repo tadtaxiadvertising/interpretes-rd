@@ -2,8 +2,9 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ addManualCall: vi.fn() }));
+const mocks = vi.hoisted(() => ({ addManualCall: vi.fn(), refresh: vi.fn() }));
 vi.mock('@/app/actions/calls', () => ({ addManualCall: mocks.addManualCall }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: mocks.refresh }) }));
 import ManualCallForm from './ManualCallForm';
 
 function openForm() {
@@ -53,6 +54,41 @@ describe('admin manual call timezone and duplicate safeguards', () => {
     expect((screen.getByRole('button', { name: 'Save Call Record' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Revisar historial').getAttribute('href')).toBe('/admin/calls');
     fireEvent.submit(form);
+    expect(mocks.addManualCall).toHaveBeenCalledOnce();
+  });
+
+  it('recovers only after the operator explicitly checks history and acknowledges no record', async () => {
+    mocks.addManualCall.mockRejectedValueOnce(new Error('UNKNOWN_COMMIT'));
+    const form = openForm();
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Revisa el historial'));
+    const historyLink = screen.getByRole('link', { name: 'Revisar historial' });
+    expect(historyLink.getAttribute('target')).toBe('_blank');
+    expect(historyLink.getAttribute('rel')).toContain('noopener');
+    fireEvent.submit(form);
+    expect(mocks.addManualCall).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Confirmo que la llamada no aparece; habilitar registro',
+    }));
+    expect((screen.getByRole('button', { name: 'Save Call Record' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Start Time') as HTMLInputElement).value).toBe('2026-11-18T09:30');
+    mocks.addManualCall.mockResolvedValueOnce({ success: true, data: { id: 90 } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(mocks.addManualCall).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(document.querySelector('form')).toBeNull());
+    expect(mocks.refresh).toHaveBeenCalledOnce();
+  });
+
+  it('treats the committed manual call as saved despite a client refresh failure', async () => {
+    mocks.addManualCall.mockResolvedValueOnce({ success: true, data: { id: 77 } });
+    mocks.refresh.mockImplementationOnce(() => { throw new Error('REFRESH_FAILED'); });
+    const form = openForm();
+    fireEvent.submit(form);
+    await waitFor(() => expect(document.querySelector('form')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Add Manual Call' }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect((screen.getByRole('button', { name: 'Save Call Record' }) as HTMLButtonElement).disabled).toBe(false);
     expect(mocks.addManualCall).toHaveBeenCalledOnce();
   });
 
