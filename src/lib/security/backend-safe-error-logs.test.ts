@@ -139,5 +139,7 @@ describe('Express backend never logs secret-bearing exception data', () => {
     expect(source).not.toContain('reason instanceof Error ? reason.stack');
     expect(source).not.toContain("Server failed to start:', err");
     expect(prisma).not.toContain('err instanceof Error ? err.name');
+    expect(prisma).toContain('log: [],');
+    expect(prisma).not.toContain("['query', 'info', 'warn', 'error']");
   });
 });

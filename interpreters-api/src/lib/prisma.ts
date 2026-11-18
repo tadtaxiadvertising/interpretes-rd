@@ -42,9 +42,10 @@ function createPrismaClient(): PrismaClient {
 
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'production'
-      ? ['error']
-      : ['query', 'info', 'warn', 'error'],
+    // Prisma can print raw SQL/provider diagnostics (including private values).
+    // Request errors are reported via the category-only Express handler.
+    // Never enable Prisma's built-in message/query logging in the API image.
+    log: [],
   });
 }
 
