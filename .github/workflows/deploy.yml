@@ -126,7 +126,7 @@ jobs:
       # Verify the CSP explicitly substitutes only validated HTTPS origins.
       # Keep the mandatory supply-chain gate unchanged after this regression.
       - name: Verify custom CSP origin safety
-        run: npx vitest run next.config.security.test.ts
+        run: npx vitest run src/lib/security/next-config-csp.test.ts
 
       - name: Dependency Security Audit
         run: |
