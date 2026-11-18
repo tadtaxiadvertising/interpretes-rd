@@ -65,6 +65,7 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
     const callCost = Math.round((durationSeconds / 60) * tariffSnapshot * 100) / 100;
 
     if (
+      interpreter.tariffPerMinute == null ||
       !Number.isFinite(tariffSnapshot) || tariffSnapshot < 0 ||
       !Number.isFinite(callCost) || callCost < 0 || callCost > MAX_DB_AMOUNT
     ) {
@@ -182,8 +183,18 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input data', code: 'VALIDATION_ERROR' };
     }
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2034') {
-      return { success: false, error: 'The production period changed concurrently. Please retry.', code: 'CONFLICT' };
+    // P2025: the conditional productionLog.update({ id, isSettled:false })
+    // no longer matched, typically because the day settled/deleted after the
+    // initial read. P2034: the serializable transaction was aborted by a race.
+    // Neither is an unspecified server error and neither should invite a
+    // blind retry of an accounting operation without checking the day.
+    if (error && typeof error === 'object' && 'code' in error &&
+        (error.code === 'P2025' || error.code === 'P2034')) {
+      return {
+        success: false,
+        error: 'The production period changed or is locked. Review the call history before submitting again.',
+        code: 'CONFLICT',
+      };
     }
     console.error('quickLog failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to save quick log', code: 'INTERNAL_ERROR' };
