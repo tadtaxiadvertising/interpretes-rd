@@ -1,8 +1,12 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Plus, X, Loader2, Calendar, Clock, User, FileText } from 'lucide-react';
 import { addManualCall } from '@/app/actions/calls';
+
+function localDateTimeValue(date: Date) {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
 
 interface ManualCallFormProps {
   interpreters: { id: number; name: string }[];
@@ -12,25 +16,49 @@ export default function ManualCallForm({ interpreters }: ManualCallFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsReview, setNeedsReview] = useState(false);
+  const [startTime, setStartTime] = useState('');
+  const submitting = useRef(false);
+
+  // Initialize only on the client: datetime-local is in browser time.
+  useEffect(() => { setStartTime(localDateTimeValue(new Date())); }, []);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (submitting.current || needsReview) return;
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+    const rawTime = String(formData.get('startedAt') ?? '');
+    const parsedTime = new Date(rawTime);
+    if (!rawTime || !Number.isFinite(parsedTime.getTime())) {
+      setError('Introduce una fecha y hora válidas.');
+      return;
+    }
+    // Send an unambiguous timestamp instead of a datetime-local without a zone.
+    formData.set('startedAt', parsedTime.toISOString());
+
+    submitting.current = true;
     setIsLoading(true);
     setError(null);
-
     try {
-      const formData = new FormData(e.currentTarget);
       const result = await addManualCall(formData);
-
       if (result.success) {
         setIsOpen(false);
-        (e.target as HTMLFormElement).reset();
+        form.reset();
+        setStartTime(localDateTimeValue(new Date()));
+      } else if (result.code === 'VALIDATION_ERROR' || result.code === 'NOT_FOUND' ||
+                 result.code === 'UNAUTHORIZED') {
+        setError('No se guardó la llamada. Revisa los campos y permisos.');
       } else {
-        setError(result.error || 'Failed to add call');
+        // A response can be lost after DB commit. Do not retry automatically.
+        setNeedsReview(true);
+        setError('No se pudo confirmar el guardado. Revisa el historial de llamadas antes de volver a registrar.');
       }
-    } catch (err: any) {
-      setError('An unexpected error occurred');
+    } catch {
+      setNeedsReview(true);
+      setError('No se pudo confirmar el guardado. Revisa el historial de llamadas antes de volver a registrar.');
     } finally {
+      submitting.current = false;
       setIsLoading(false);
     }
   };
