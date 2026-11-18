@@ -6,6 +6,7 @@ import type { ActionResult } from '@/lib/types';
 import { revalidatePath } from 'next/cache';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { z } from 'zod';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
 const MAX_DURATION_MINUTES = 100_000;
@@ -96,27 +97,47 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
         select: { id: true },
       });
 
+      let productionLogId: number;
+      const minutes = Math.floor(durationSeconds / 60);
       if (existingLog) {
         await tx.productionLog.update({
           where: { id: existingLog.id, isSettled: false },
           data: {
-            interpretedMinutes: (existingLog.interpretedMinutes || 0) + Math.floor(durationSeconds / 60),
+            interpretedMinutes: (existingLog.interpretedMinutes || 0) + minutes,
             callsAttended: (existingLog.callsAttended || 0) + 1,
           },
         });
+        productionLogId = existingLog.id;
       } else {
-        await tx.productionLog.create({
+        const createdLog = await tx.productionLog.create({
           data: {
             interpreterId,
             date: logDate,
-            interpretedMinutes: Math.floor(durationSeconds / 60),
+            interpretedMinutes: minutes,
             callsAttended: 1,
             status: 'Completed',
             observaciones: 'Quick log sync',
             adherence: 100,
           },
+          select: { id: true },
         });
+        productionLogId = createdLog.id;
       }
+
+      // Persist provenance for every Quick Log within the same transaction.
+      // Keep the existing business behavior: even a sub-minute Quick Log
+      // increments callsAttended by 1, but contributes zero whole minutes.
+      // A failed ledger insert rolls back the session and production write.
+      await tx.callProductionEntry.create({
+        data: {
+          callSessionId: session.id,
+          interpreterId,
+          productionDate: logDate,
+          interpretedMinutes: minutes,
+          callsAttended: 1,
+          productionLogId,
+        },
+      });
 
       return { kind: 'CREATED' as const, id: session.id };
     }, { isolationLevel: 'Serializable' });
@@ -128,8 +149,14 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
       return { success: false, error: 'This production log is already settled and cannot be changed.', code: 'CONFLICT' };
     }
 
-    revalidatePath('/dashboard');
-    revalidateInterpreterProfileRecords(interpreterId);
+    // The transaction already committed. Cache failures must never report a
+    // completed call as unsaved, which can prompt a duplicate submission.
+    try {
+      revalidatePath('/dashboard');
+      revalidateInterpreterProfileRecords(interpreterId);
+    } catch (error) {
+      console.warn('Quick Log saved; cache revalidation failed:', safeServerErrorCategory(error));
+    }
     return { success: true, data: { id: result.id } };
   } catch (error) {
     if (error instanceof z.ZodError) {
@@ -138,7 +165,7 @@ export async function quickLog(formData: FormData): Promise<ActionResult<{ id: n
     if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2034') {
       return { success: false, error: 'The production period changed concurrently. Please retry.', code: 'CONFLICT' };
     }
-    console.error('quickLog failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('quickLog failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to save quick log', code: 'INTERNAL_ERROR' };
   }
 }
