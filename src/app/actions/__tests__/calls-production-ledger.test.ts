@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { endCall } from '../calls';
 
 vi.mock('@/lib/auth/actions', () => ({
@@ -32,10 +32,12 @@ function transactionMocks() {
   const tx = {
     callSession: {
       updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      update: vi.fn().mockResolvedValue({ id: 99 }),
       findFirst: vi.fn().mockResolvedValue({
         durationSeconds: 125,
         callCost: 12.5,
         startedAt: new Date('2026-11-10T15:00:00.000Z'),
+        tariffSnapshot: 6,
         isSettled: false,
         payrollRecordId: null,
       }),
@@ -65,16 +67,28 @@ function transactionMocks() {
 
 describe('endCall production ledger', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-10T15:02:05.000Z'));
     vi.clearAllMocks();
     (validateAction as any).mockResolvedValue(auth);
   });
+  afterEach(() => vi.useRealTimers());
 
   it('records one ledger row and increments the daily aggregate atomically', async () => {
     const tx = transactionMocks();
 
     const result = await endCall(99);
 
-    expect(result.success).toBe(true);
+    expect(result).toMatchObject({ success: true, data: { durationSeconds: 125, callCost: 12.5 } });
+    expect(tx.callSession.updateMany).toHaveBeenCalledWith({
+      where: { id: 99, interpreterId: 7, endedAt: null },
+      data: { endedAt: new Date('2026-11-10T15:02:05.000Z') },
+    });
+    expect(tx.callSession.update).toHaveBeenCalledWith({
+      where: { id: 99 },
+      data: { durationSeconds: 125, callCost: 12.5 },
+      select: { id: true },
+    });
     expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         callSessionId: 99,
@@ -99,6 +113,7 @@ describe('endCall production ledger', () => {
 
     expect(result.success).toBe(true);
     expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+    expect(tx.callSession.update).not.toHaveBeenCalled();
     expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
     expect(tx.payrollRecord.findFirst).not.toHaveBeenCalled();
     expect(tx.productionLog.create).not.toHaveBeenCalled();
@@ -148,7 +163,7 @@ describe('endCall production ledger', () => {
 
     tx.callSession.findFirst.mockResolvedValueOnce({
       startedAt: new Date('2026-11-10T15:00:00Z'),
-      durationSeconds: 125, callCost: 12.5, isSettled: true,
+      durationSeconds: 125, callCost: 12.5, tariffSnapshot: 6, isSettled: true,
     });
     expect((await endCall(99)).code).toBe('CONFLICT');
     expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
@@ -159,7 +174,7 @@ describe('endCall production ledger', () => {
     tx.callSession.findFirst.mockResolvedValueOnce({
       startedAt: new Date('2026-11-10T15:00:00Z'),
       durationSeconds: 125, callCost: 12.5,
-      isSettled: false, payrollRecordId: 'linked-session',
+      tariffSnapshot: 6, isSettled: false, payrollRecordId: 'linked-session',
     });
     tx.productionLog.findFirst.mockResolvedValueOnce({
       id: 22, isSettled: false, payrollRecordId: 'linked-production',
@@ -189,7 +204,7 @@ describe('endCall production ledger', () => {
     const tx = transactionMocks();
     tx.callSession.findFirst.mockResolvedValueOnce({
       startedAt: new Date('2026-11-10T15:00:00Z'),
-      durationSeconds: 25, callCost: 2.5, isSettled: false,
+      durationSeconds: 25, callCost: 2.5, tariffSnapshot: 6, isSettled: false,
     });
     tx.productionLog.findFirst.mockResolvedValueOnce(null);
     tx.payrollRecord.findFirst.mockResolvedValueOnce({ id: 'paid' });
@@ -216,6 +231,75 @@ describe('endCall production ledger', () => {
       expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_DB_PASSWORD');
       expect(warn).toHaveBeenCalledWith('Call ended; cache refresh failed:', 'Error');
     } finally { warn.mockRestore(); }
+  });
+
+  it('derives elapsed duration and price from the original rate snapshot, never legacy cached values', async () => {
+    const tx = transactionMocks();
+    tx.callSession.findFirst.mockResolvedValueOnce({
+      startedAt: new Date('2026-11-10T15:00:00.000Z'),
+      durationSeconds: null,
+      callCost: null,
+      tariffSnapshot: 3,
+      isSettled: false,
+      payrollRecordId: null,
+    });
+    const result = await endCall(99);
+    expect(result).toMatchObject({ success: true, data: { durationSeconds: 125, callCost: 6.25 } });
+    expect(tx.callSession.update).toHaveBeenCalledWith({
+      where: { id: 99 }, data: { durationSeconds: 125, callCost: 6.25 }, select: { id: true },
+    });
+    expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ interpretedMinutes: 2, callsAttended: 1 }),
+    });
+  });
+
+  it('attributes a call crossing midnight to its start date', async () => {
+    vi.setSystemTime(new Date('2026-11-11T04:01:30.000Z')); // 00:01:30 Santo Domingo
+    const tx = transactionMocks();
+    tx.callSession.findFirst.mockResolvedValueOnce({
+      startedAt: new Date('2026-11-11T03:59:00.000Z'), // 23:59 previous day locally
+      durationSeconds: null, callCost: null, tariffSnapshot: 6,
+      isSettled: false, payrollRecordId: null,
+    });
+    const result = await endCall(99);
+    expect(result).toMatchObject({ success: true, data: { durationSeconds: 150, callCost: 15 } });
+    expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        productionDate: new Date('2026-11-10T12:00:00Z'),
+        interpretedMinutes: 2,
+      }),
+    });
+  });
+
+  it('fails closed on missing start timestamp or impossible future start without partial accounting', async () => {
+    const tx = transactionMocks();
+    tx.callSession.findFirst.mockResolvedValueOnce({
+      startedAt: null, durationSeconds: null, callCost: null,
+      tariffSnapshot: 6, isSettled: false, payrollRecordId: null,
+    });
+    expect(await endCall(99)).toMatchObject({ success: false, code: 'CONFLICT' });
+    tx.callSession.findFirst.mockResolvedValueOnce({
+      startedAt: new Date('2026-11-10T15:03:00.000Z'),
+      durationSeconds: null, callCost: null,
+      tariffSnapshot: 6, isSettled: false, payrollRecordId: null,
+    });
+    expect(await endCall(99)).toMatchObject({ success: false, code: 'CONFLICT' });
+    expect(tx.callSession.update).not.toHaveBeenCalled();
+    expect(tx.productionLog.updateMany).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects an invalid or excessive snapshotted rate rather than booking the wrong amount', async () => {
+    const tx = transactionMocks();
+    for (const tariff of [null, -2, 99999999999]) {
+      tx.callSession.findFirst.mockResolvedValueOnce({
+        startedAt: new Date('2026-11-10T15:00:00.000Z'),
+        tariffSnapshot: tariff, durationSeconds: null, callCost: null, isSettled: false,
+      });
+      expect(await endCall(99)).toMatchObject({ success: false, code: 'CONFLICT' });
+    }
+    expect(tx.callSession.update).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
   });
 
   it('returns a failure when the ledger insert fails inside the transaction', async () => {
