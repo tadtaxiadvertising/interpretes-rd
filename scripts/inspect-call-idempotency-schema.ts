@@ -55,6 +55,14 @@ async function inspectSchema(client: Client): Promise<CallKeyCatalog> {
      WHERE c.conrelid = to_regclass('public.call_submission_keys')`,
   ) : { rows: [] as CatalogConstraint[] };
 
+  // The staged design has no direct-client RLS policies. A permissive
+  // policy added later requires renewed security review, even with RLS on.
+  const policies = await client.query<{ policy_count: number }>(
+    `SELECT COUNT(*)::int AS policy_count
+     FROM pg_policies
+     WHERE schemaname = 'public' AND tablename = 'call_submission_keys'`,
+  );
+
   const index = await client.query<{ valid: boolean }>(
     `SELECT EXISTS (
        SELECT 1
@@ -97,6 +105,7 @@ async function inspectSchema(client: Client): Promise<CallKeyCatalog> {
   return {
     tableExists,
     rlsEnabled: table.rows[0]?.rls_enabled === true,
+    policyCount: policies.rows[0]?.policy_count ?? -1,
     columns: columns.rows,
     constraints: constraints.rows,
     supportingIndexValid: index.rows[0]?.valid === true,
