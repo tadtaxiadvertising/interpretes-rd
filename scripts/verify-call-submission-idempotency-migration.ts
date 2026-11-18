@@ -82,6 +82,16 @@ async function main() {
     // recognizes the exact DDL proposed for a later DBA-approved rollout.
     // Previous CI exercised only the absent (rolled-back) state.
     const stagedCatalog = await readCallKeyCatalog(client);
+    // node-postgres does not parse pg_catalog name[] by default. Prevent
+    // regression to textual "{column_name}" values disguised as string[].
+    for (const constraint of stagedCatalog.constraints) {
+      if (!Array.isArray(constraint.key_columns) ||
+          !Array.isArray(constraint.references_columns) ||
+          !constraint.key_columns.every(column => typeof column === 'string') ||
+          !constraint.references_columns.every(column => typeof column === 'string')) {
+        throw new Error('Catalog column metadata must be decoded JSON arrays.');
+      }
+    }
     const completeState = classifyCallKeySchema(stagedCatalog);
     if (completeState !== 'complete') {
       // These are metadata from disposable CI PostgreSQL ONLY. Print no
