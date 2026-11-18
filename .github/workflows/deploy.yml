@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-      # Temporary validation of admin HappyScribe kill switch; deployment requires main.
-      - feat/admin-happyscribe-connection-kill-switch-20261117
   pull_request:
     branches:
       - main
