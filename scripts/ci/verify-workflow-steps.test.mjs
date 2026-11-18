@@ -82,8 +82,6 @@ test('an orphan or duplicated step introduced by merging two Docker checks is re
 
 test('static quality validates a single Express image build with verified TLS', () => {
   const text = readFileSync(new URL('static-quality.yml', workflowsDir), 'utf8');
-  const matched = text.match(/^- name: Build dedicated Express API image with verified TLS$/gm) ?? [];
-  // 6 spaces are intentionally omitted in regex; inspect exact indented line.
   const exact = text.match(/^      - name: Build dedicated Express API image with verified TLS$/gm) ?? [];
   assert.equal(exact.length, 1);
   assert.match(text, /run: docker build --file Dockerfile\.api --tag interpreters-api:static-ci \./);
