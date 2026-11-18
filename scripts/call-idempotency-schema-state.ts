@@ -27,6 +27,7 @@ export interface CatalogConstraint {
 export interface CallKeyCatalog {
   tableExists: boolean;
   rlsEnabled: boolean;
+  policyCount: number;
   columns: CatalogColumn[];
   constraints: CatalogConstraint[];
   supportingIndexValid: boolean;
@@ -91,17 +92,18 @@ export function classifyCallKeySchema(catalog: CallKeyCatalog): CallKeySchemaSta
     // indicates drift, not a valid pristine database.
     return hasSucceededHistory || catalog.supportingIndexValid ? 'history-drift' : 'absent';
   }
-  if (!catalog.rlsEnabled || !catalog.supportingIndexValid) return 'partial';
+  if (!catalog.rlsEnabled || catalog.policyCount !== 0 ||
+      !catalog.supportingIndexValid) return 'partial';
 
   for (const [name, type] of EXPECTED_COLUMNS) {
     const found = catalog.columns.filter(column => column.column_name === name);
-    if (found.length !== 1 || found[0].data_type !== type || found[0].is_nullable !== 'NO') {
+    if (found.length !== 1 || found[0]?.data_type !== type || found[0]?.is_nullable !== 'NO') {
       return 'partial';
     }
   }
   for (const expected of REQUIRED_CONSTRAINTS) {
     const actual = catalog.constraints.filter(row => row.conname === expected.name);
-    if (actual.length !== 1 || !validConstraint(actual[0], expected)) {
+    if (actual.length !== 1 || !actual[0] || !validConstraint(actual[0], expected)) {
       return 'partial';
     }
   }

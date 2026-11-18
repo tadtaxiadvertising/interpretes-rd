@@ -54,3 +54,23 @@ test('production deploy keeps staged DDL out of migration steps', () => {
   assert.match(deploy, /Verify proposed call submission idempotency schema \(isolated only\)/);
   assert.doesNotMatch(deploy, /(?:npm run migrate|prisma migrate deploy).*?(?:call-submission|call_submission)/);
 });
+
+test('the operational schema diagnostic cannot write or apply staged DDL', () => {
+  const inspector = readFileSync(
+    resolve(root, 'scripts/inspect-call-idempotency-schema.ts'), 'utf8',
+  );
+  assert.match(inspector, /BEGIN READ ONLY/);
+  assert.match(inspector, /ROLLBACK/);
+  assert.match(inspector, /--check-only/);
+  assert.match(inspector, /--require-complete/);
+  assert.match(inspector, /normalizeDirectDatabaseUrl/);
+  assert.match(inspector, /createDatabasePoolConfig/);
+  assert.doesNotMatch(inspector, /(?:INSERT INTO|DELETE FROM|ALTER TABLE|CREATE TABLE|DROP TABLE)\s+public\./i);
+
+  const runbook = readFileSync(
+    resolve(root, 'docs/operations/call-submission-idempotency-rollout.md'),
+    'utf8',
+  );
+  assert.match(runbook, /inspect-call-idempotency-schema\.ts --check-only/);
+  assert.match(runbook, /No existe un comando de aplicación autorizado/);
+});
