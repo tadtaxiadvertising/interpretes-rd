@@ -41,6 +41,10 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      # Catch orphaned or duplicated steps from concurrent workflow edits.
+      - name: Verify GitHub Actions step integrity
+        run: node --test scripts/ci/verify-workflow-steps.test.mjs
+
       - name: Install dependencies
         run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
 
