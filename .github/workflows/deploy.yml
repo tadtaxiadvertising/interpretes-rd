@@ -197,6 +197,12 @@ jobs:
       - name: Verify call production ledger migration on isolated PostgreSQL
         run: npx tsx scripts/verify-call-production-ledger-migration.ts
 
+      # Never allow the proposed idempotency DDL inside prisma/migrations.
+      # "prisma migrate deploy" applies pending migrations from that folder
+      # even when this workflow does not explicitly reference a filename.
+      - name: Verify staged idempotency SQL is not a deployable Prisma migration
+        run: node --test scripts/ci/verify-staged-idempotency.test.mjs
+
       # Stage the next financial idempotency change safely: only inspect its
       # candidate schema against disposable CI Postgres, always ROLLBACK.
       # This does NOT add the migration to production or change Prisma models.

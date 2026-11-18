@@ -5,11 +5,27 @@ Objetivo: que **el mismo intento** de registrar una llamada Quick Log, reenviado
 por error de red o desde otro proceso que conserve su clave, no produzca una
 segunda sesión, segundo asiento ni nuevos minutos.
 
+## AVISO — propuestas SQL, no migraciones ejecutables
+
+Estos archivos se han retirado de `prisma/migrations/`, porque
+`prisma migrate deploy` aplica automáticamente las migraciones pendientes
+que encuentra allí, independientemente de los pasos explícitos de este
+repositorio. Estar en `docs/operations/staged-sql/` significa que son
+**propuestas para revisión**, no cambios autorizados para ejecutar. No
+moverlos de nuevo a `prisma/migrations/` hasta haber aprobado la estrategia
+de despliegue y la compatibilidad con el historial de Prisma.
+
+**Atención:** si un entorno ejecutó las versiones anteriores antes de
+moverlas, retirar los archivos del repositorio NO revierte el DDL ya
+aplicado. Revisar solo con SQL de lectura `to_regclass` y el historial
+`_prisma_migrations` antes de cualquier reconciliación; no borrar
+tablas ni resolver migraciones automáticamente.
+
 ## Etapa 0: estructura aislada (este cambio)
 
 - SQLs propuestos (ambos requeridos, en ese orden):
-  `prisma/migrations/20261118200000_call_submission_idempotency/migration.sql`
-  y `prisma/migrations/20261118213000_call_submission_session_ownership/migration.sql`.
+  `docs/operations/staged-sql/call-submission-idempotency.sql`
+  y `docs/operations/staged-sql/call-submission-session-ownership.sql`.
   El primero crea la tabla; el segundo garantiza la correspondencia de
   intérprete y sesión. **No aplicar solo el primer SQL en producción.**
 - Prueba en PostgreSQL descartable:
@@ -93,8 +109,11 @@ Si aparece parcial, con otra definición o un historial incompatible, **deteners
 No ejecutar SQL con `IF NOT EXISTS` que enmascare una tabla alterada.
 
 Solo después de autorización, **ambos** SQL se podrán aplicar secuencialmente
-con `scripts/run-migration.ts --apply --transaction` y conexión directa
-protegida, en un flujo operacional separado. La verificación posterior debe
+con la invocación explícita `npm run migrate -- <ruta-sql> --apply --transaction`
+y conexión directa protegida, en un flujo operacional separado.
+No utilizar `prisma migrate deploy` para estos borradores. La aprobación
+debe determinar cómo registrar el resultado sin incoherencias en el
+historial de Prisma y qué hacer si un entorno aplicó una versión previa. La verificación posterior debe
 confirmar las dos FKs originales, la FK compuesta de pertenencia a intérprete,
 la PK, la unicidad de sesión, los CHECKs, RLS y la ausencia de registros
 históricos. Las migraciones no eliminan ni crean pagos.
