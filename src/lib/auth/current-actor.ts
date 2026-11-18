@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { cache } from 'react';
 import { UserRole } from '@/lib/types';
 import { auth } from '@/lib/auth-rbac';
-import { resolveUserRoleByEmail } from '@/lib/admin-identity';
+import { hasAuthoritativeAuthJsRole, resolveUserRoleByEmail } from '@/lib/admin-identity';
 
 export type AuthProvider = 'supabase' | 'authjs';
 
@@ -90,6 +90,8 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
   try {
     const session = await auth();
     if (!session?.user?.id) return null;
+    const authoritativeRole = (session.user as { role?: unknown }).role;
+    if (!hasAuthoritativeAuthJsRole(authoritativeRole)) return null;
     const userId = session.user.id;
     const email = session.user.email?.toLowerCase().trim() || null;
     if (!email) return null;
@@ -98,7 +100,7 @@ async function resolveActorFromAuthJs(): Promise<CurrentActor | null> {
       where: { email },
       select: { id: true, interpreterId: true, role: true },
     });
-    const fallbackRole = normalizeRbacRole((session.user as any).role ?? profile?.role);
+    const fallbackRole = normalizeRbacRole(authoritativeRole);
     const sessionInterpreterId = (session.user as any).interpreterId;
     let interpreterId = profile?.interpreterId ?? (typeof sessionInterpreterId === 'number' ? sessionInterpreterId : null);
     if (fallbackRole !== 'admin' && fallbackRole !== 'candidate' && !interpreterId) {
