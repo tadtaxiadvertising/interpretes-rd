@@ -6,12 +6,13 @@ const mocks = vi.hoisted(() => ({
   deleteAuthUser: vi.fn(),
   updateAuthUser: vi.fn(),
   localDelete: vi.fn(),
+  localUpdate: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('@/lib/prisma', () => ({
-  default: { userProfile: { delete: mocks.localDelete } },
+  default: { userProfile: { delete: mocks.localDelete, update: mocks.localUpdate } },
 }));
 vi.mock('@/lib/cache/revalidate-interpreter', () => ({
   revalidateInterpreterProfileRecords: mocks.refresh,
@@ -27,7 +28,7 @@ vi.mock('@/lib/supabase/admin', () => ({
   isAdminUnavailableError: (value: unknown) =>
     value instanceof Error && value.name === 'SupabaseAdminUnavailableError',
 }));
-import { deleteUserAccess, updateUserPassword } from './admin-users';
+import { deleteUserAccess, updateUserPassword, updateUserProfile } from './admin-users';
 
 describe('admin user access revocation and error privacy', () => {
   beforeEach(() => {
@@ -35,7 +36,85 @@ describe('admin user access revocation and error privacy', () => {
     mocks.auth.mockResolvedValue({ user: { role: 'admin' } });
     mocks.deleteAuthUser.mockResolvedValue({ data: {}, error: null });
     mocks.localDelete.mockResolvedValue({ interpreterId: 19 });
+    mocks.localUpdate.mockResolvedValue({ interpreterId: 19, displayName: 'Test User', email: 'user@example.test' });
     mocks.updateAuthUser.mockResolvedValue({ data: {}, error: null });
+  });
+
+  const updatedProfile = { displayName: 'Test User', email: 'user@example.test' };
+
+  it('reports a fully synchronized profile update only when Supabase acknowledges it', async () => {
+    const result = await updateUserProfile('user-123', updatedProfile);
+    expect(result).toMatchObject({
+      success: true,
+      profile: { displayName: 'Test User', email: 'user@example.test' },
+    });
+    expect(mocks.localUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'user-123' },
+      select: { interpreterId: true, displayName: true, email: true },
+    }));
+    expect(mocks.updateAuthUser).toHaveBeenCalledWith('user-123', expect.objectContaining({
+      email: 'user@example.test',
+    }));
+    expect(mocks.refresh).toHaveBeenCalledWith(19);
+  });
+
+  it('does not report complete profile sync if Supabase returns an error object', async () => {
+    mocks.updateAuthUser.mockResolvedValueOnce({
+      data: null, error: { message: 'Bearer PRIVATE_SYNC_TOKEN' },
+    });
+    const logged = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await updateUserProfile('user-123', updatedProfile);
+      expect(result).toMatchObject({ success: false, partial: true });
+      expect(result.error).toContain('sincronización con Supabase Auth');
+      expect(mocks.localUpdate).toHaveBeenCalledTimes(1);
+      expect(mocks.refresh).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify([result, logged.mock.calls])).not.toContain('PRIVATE_SYNC_TOKEN');
+    } finally { logged.mockRestore(); }
+  });
+
+  it('preserves a partial outcome if Supabase throws after the local write', async () => {
+    mocks.updateAuthUser.mockRejectedValueOnce(new Error('postgresql://svc:PRIVATE_DB_PASS@internal'));
+    const logged = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await updateUserProfile('user-123', updatedProfile);
+      expect(result).toMatchObject({ success: false, partial: true });
+      expect(mocks.localUpdate).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify([result, logged.mock.calls])).not.toMatch(/postgresql:|PRIVATE_DB_PASS/);
+    } finally { logged.mockRestore(); }
+  });
+
+  it('keeps success after provider sync when only cache invalidation fails', async () => {
+    mocks.refresh.mockImplementationOnce(() => { throw new Error('PRIVATE_CACHE_TOKEN'); });
+    const logged = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect(await updateUserProfile('user-123', updatedProfile)).toMatchObject({
+        success: true,
+      });
+      expect(mocks.localUpdate).toHaveBeenCalledTimes(1);
+      expect(mocks.updateAuthUser).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(logged.mock.calls)).not.toContain('PRIVATE_CACHE_TOKEN');
+    } finally { logged.mockRestore(); }
+  });
+
+  it('never attempts a provider profile update when the local write fails', async () => {
+    mocks.localUpdate.mockRejectedValueOnce(new Error('PRIVATE_LOCAL_DB_TOKEN'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await updateUserProfile('user-123', updatedProfile);
+      expect(result.success).toBe(false);
+      expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+      expect(mocks.refresh).not.toHaveBeenCalled();
+      expect(JSON.stringify([result, logged.mock.calls])).not.toContain('PRIVATE_LOCAL_DB_TOKEN');
+    } finally { logged.mockRestore(); }
+  });
+
+  it('never updates a profile for a non-administrator', async () => {
+    mocks.auth.mockResolvedValueOnce({ user: { role: 'interpreter' } });
+    const result = await updateUserProfile('user-123', updatedProfile);
+    expect(result.success).toBe(false);
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
   });
 
   it('revokes provider access before removing the local profile', async () => {
