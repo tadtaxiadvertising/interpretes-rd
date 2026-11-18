@@ -46,6 +46,8 @@ async function inspectSchema(client: Client): Promise<CallKeyCatalog> {
            ON a.attrelid = c.confrelid AND a.attnum = k.attnum
          ORDER BY k.ord
        ) AS references_columns,
+       c.confdeltype AS on_delete,
+       c.confupdtype AS on_update,
        pg_get_constraintdef(c.oid) AS definition
      FROM pg_constraint AS c
      LEFT JOIN pg_class AS referenced ON referenced.oid = c.confrelid
