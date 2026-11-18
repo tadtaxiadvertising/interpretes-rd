@@ -38,7 +38,7 @@ describe('admin user table minimization and role changes', () => {
     const args = mocks.findMany.mock.calls[0][0];
     expect(args).toHaveProperty('select.id', true);
     expect(args).toHaveProperty('select.email', true);
-    expect(args).toHaveProperty('select.interpreter.id', true);
+    expect(args).toHaveProperty('select.interpreter.select.id', true);
     expect(args).not.toHaveProperty('include');
     expect(JSON.stringify(args)).not.toMatch(/bankName|bankAccount|bankCedula|termsAcceptedAt|signatureDate/);
   });
