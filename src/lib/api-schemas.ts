@@ -1,11 +1,20 @@
 import { z } from 'zod';
 import { InterpreterSchema, PayrollRecordSchema, QAScoreSchema, RecruitmentCandidateSchema } from '@/lib/validators';
 
+// Match the Quick Log Server Action upper bound without rejecting existing
+// API clients that submit fractional minutes (e.g. 1.5 => 90 seconds).
+// Validate the *rounded* number of seconds that is actually stored.
+const MAX_MANUAL_CALL_MINUTES = 100_000;
+
 export const ManualCallSchema = z.object({
-  durationMinutes: z.coerce.number().min(0),
+  durationMinutes: z.coerce.number().finite().min(0).max(MAX_MANUAL_CALL_MINUTES),
   seconds: z.coerce.number().int().min(0).max(59).default(0),
-}).refine((data) => data.durationMinutes > 0 || data.seconds > 0, {
-  message: 'Duration must be greater than zero',
+}).refine((data) => {
+  const roundedSeconds = Math.round(data.durationMinutes * 60 + data.seconds);
+  return Number.isSafeInteger(roundedSeconds) && roundedSeconds > 0 &&
+    roundedSeconds <= MAX_MANUAL_CALL_MINUTES * 60 + 59;
+}, {
+  message: 'Duration must be between one second and the supported limit',
   path: ['durationMinutes'],
 });
 
