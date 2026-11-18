@@ -6,14 +6,14 @@ import { describe, expect, it } from 'vitest';
 describe('GitHub workflow step declarations', () => {
   it('requires every named step to define an executable action or run command', () => {
     const directory = join(process.cwd(), '.github', 'workflows');
-    const files = readdirSync(directory).filter(file => /\\.ya?ml$/.test(file));
+    const files = readdirSync(directory).filter(file => /\.ya?ml$/.test(file));
     expect(files.length).toBeGreaterThan(0);
 
     for (const file of files) {
-      const lines = readFileSync(join(directory, file), 'utf8').split(/\\r?\\n/);
+      const lines = readFileSync(join(directory, file), 'utf8').split(/\r?\n/);
       const names: Array<{ name: string; line: number; body: string }> = [];
       for (let index = 0; index < lines.length; index++) {
-        const match = lines[index].match(/^(\\s*)-\\s+name:\\s*(.*)$/);
+        const match = lines[index].match(/^(\s*)-\s+name:\s*(.*)$/);
         if (!match) continue;
         const indent = match[1].length;
         let end = index + 1;
@@ -25,14 +25,14 @@ describe('GitHub workflow step declarations', () => {
           }
           end++;
         }
-        names.push({ name: match[2], line: index + 1, body: lines.slice(index + 1, end).join('\\n') });
+        names.push({ name: match[2], line: index + 1, body: lines.slice(index + 1, end).join('\n') });
       }
 
       for (const step of names) {
         // YAML comments, display names and environment variables do not make
         // an otherwise empty step valid. Prevent the no-job workflow failure.
         expect(
-          /^\\s+(run|uses):/m.test(step.body),
+          /^\s+(run|uses):/m.test(step.body),
           `${file}:${step.line} has an empty action step: ${step.name}`,
         ).toBe(true);
       }
