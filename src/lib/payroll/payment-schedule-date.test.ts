@@ -53,6 +53,7 @@ describe('payroll payment day in America/Santo_Domingo', () => {
   });
 
   it('rejects an impossible date-only calendar value', () => {
+    expect(PayrollGenerateSchema.safeParse({ targetDate: '2026-02-30' }).success).toBe(false);
     expect(() => getSantoDomingoPaymentDay('2026-02-30')).toThrow('Invalid payment calendar date');
   });
 
