@@ -57,9 +57,12 @@ async function main() {
       throw new Error('Isolated database already has call submission keys; refusing modification.');
     }
 
+    // Staged SQL lives OUTSIDE prisma/migrations. Prisma migrate deploy
+    // discovers every pending migration.sql under that directory, so even
+    // a commented "staged only" file there is unsafe for later deployments.
     const sql = await readFile(resolve(
       process.cwd(),
-      'prisma/migrations/20261118200000_call_submission_idempotency/migration.sql',
+      'docs/operations/staged-sql/call-submission-idempotency.sql',
     ), 'utf8');
     if (!sql.trim()) throw new Error('Staged idempotency SQL missing.');
     await client.query(sql);
@@ -68,7 +71,7 @@ async function main() {
     // pair of independent foreign keys. Both files stay out of production.
     const ownershipSql = await readFile(resolve(
       process.cwd(),
-      'prisma/migrations/20261118213000_call_submission_session_ownership/migration.sql',
+      'docs/operations/staged-sql/call-submission-session-ownership.sql',
     ), 'utf8');
     if (!ownershipSql.trim()) throw new Error('Staged session ownership SQL missing.');
     await client.query(ownershipSql);
