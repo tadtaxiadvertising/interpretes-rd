@@ -7,13 +7,16 @@ vi.mock('@/app/actions/auth', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: { accountPlatform: { create: vi.fn() } },
+  getRawPool: vi.fn(() => ({})),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
+vi.mock('@/lib/account-vpn-schema-readiness', () => ({ inspectAccountVpnSchema: vi.fn() }));
 
 import { getCurrentProfile } from '@/app/actions/auth';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
+import { inspectAccountVpnSchema } from '@/lib/account-vpn-schema-readiness';
 import { createAccountPlatform } from '../admin-account-platforms';
 
 function makeForm(values: Record<string, string>) {
@@ -27,6 +30,7 @@ describe('createAccountPlatform VPN configuration', () => {
     vi.clearAllMocks();
     vi.mocked(getCurrentProfile).mockResolvedValue({ role: 'admin' } as never);
     vi.mocked(prisma.accountPlatform.create).mockResolvedValue({ id: 1 } as never);
+    vi.mocked(inspectAccountVpnSchema).mockResolvedValue('complete');
   });
 
   it('persists optional VPN metadata and a secret reference without plaintext passwords', async () => {
@@ -52,6 +56,7 @@ describe('createAccountPlatform VPN configuration', () => {
 
     expect(result).toEqual({ success: true });
     expect(prisma.accountPlatform.create).toHaveBeenCalledWith({
+      select: { id: true },
       data: expect.objectContaining({
         accountId: 12,
         name: 'Portal principal',
@@ -69,6 +74,52 @@ describe('createAccountPlatform VPN configuration', () => {
         vpnPort: 51820,
       }),
     });
+  });
+
+  it.each(['missing', 'partial'] as const)(
+    'rejects stale or direct platform submission before writing if VPN schema is %s',
+    async status => {
+      vi.mocked(inspectAccountVpnSchema).mockResolvedValueOnce(status);
+      const result = await createAccountPlatform(makeForm({
+        accountId: '12', name: 'Portal principal',
+        loginUrl: 'https://portal.example.test/login',
+        vpnCountry: 'United States',
+      }));
+      expect(result).toEqual({
+        success: false,
+        error: 'La configuración VPN está temporalmente no disponible. Contacta al administrador de despliegue.',
+      });
+      expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
+      expect(revalidatePath).not.toHaveBeenCalled();
+    },
+  );
+
+  it('fails closed without exposing connection diagnostics if the schema check fails', async () => {
+    vi.mocked(inspectAccountVpnSchema).mockRejectedValueOnce(
+      new Error('postgresql://internal:PRIVATE_CREDENTIAL@db.example.test/production'),
+    );
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await createAccountPlatform(makeForm({
+        accountId: '12', name: 'Portal principal',
+      }));
+      expect(result.success).toBe(false);
+      expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
+      expect(revalidatePath).not.toHaveBeenCalled();
+      expect(JSON.stringify([result, errorLog.mock.calls])).not.toMatch(/PRIVATE_CREDENTIAL|postgresql:/);
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  it('never queries VPN schema for a non-admin user', async () => {
+    vi.mocked(getCurrentProfile).mockResolvedValueOnce({ role: 'interpreter' } as never);
+    const result = await createAccountPlatform(makeForm({
+      accountId: '12', name: 'Portal principal',
+    }));
+    expect(result.success).toBe(false);
+    expect(inspectAccountVpnSchema).not.toHaveBeenCalled();
+    expect(prisma.accountPlatform.create).not.toHaveBeenCalled();
   });
 
   it('rejects an out-of-range VPN port before writing', async () => {
