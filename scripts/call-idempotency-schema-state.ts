@@ -19,6 +19,8 @@ export interface CatalogConstraint {
   references_schema: string | null;
   references_table: string | null;
   references_columns: string[];
+  on_delete: string;
+  on_update: string;
   definition: string;
 }
 
@@ -68,8 +70,7 @@ function validConstraint(actual: CatalogConstraint, expected: (typeof REQUIRED_C
     return actual.references_schema === expected.references.schema &&
       actual.references_table === expected.references.table &&
       sameList(actual.references_columns, expected.references.columns) &&
-      /ON DELETE RESTRICT/i.test(actual.definition) &&
-      /ON UPDATE NO ACTION/i.test(actual.definition);
+      actual.on_delete === 'r' && actual.on_update === 'a';
   }
   if (expected.name === 'call_submission_keys_source_check') {
     return ['quick_log_action', 'quick_log_api', 'admin_manual']
