@@ -69,6 +69,9 @@ jobs:
       - name: Prepare disposable PostgreSQL schema
         run: npx prisma db push
 
+      - name: Verify Roleplay and deployment-preflight test harness
+        run: npx vitest run src/app/admin/roleplays/studio/compact-editor.test.tsx src/lib/deployment-preflight.test.ts
+
       - name: Run full unit test suite
         run: npm test
 
