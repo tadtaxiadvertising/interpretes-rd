@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
 
+      - name: Verify GitHub Actions step structure
+        run: npx vitest run src/lib/security/github-workflow-steps.test.ts
+
       - name: Check Prisma schema
         run: npx prisma validate
 
