@@ -94,5 +94,10 @@ jobs:
       - name: Run isolated browser E2E
         run: npm run test:e2e
 
+      # Run the *actual* Express production image with one healthy and one
+      # intentionally unreachable local PostgreSQL endpoint. No remote URLs.
+      - name: Smoke Express readiness against local PostgreSQL
+        run: bash scripts/ci/smoke-backend-readiness.sh
+
       # This check is diagnostic, not a release approval. Deployment still
       # requires the mandatory Dependency Security Audit in deploy.yml.
