@@ -57,7 +57,6 @@ describe('authentication bridge keeps provider diagnostics private', () => {
     mocks.nextAuth.mockResolvedValueOnce({
       user: { id: 'deleted-rbac-user', email: 'protected@example.test', role: undefined },
     });
-    mocks.resolveRole.mockReturnValueOnce('admin');
     expect(await auth()).toEqual({ userId: null, user: null });
     expect(mocks.resolveRole).not.toHaveBeenCalled();
   });
