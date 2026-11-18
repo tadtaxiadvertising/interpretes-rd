@@ -191,6 +191,14 @@ jobs:
       - name: Verify call production ledger migration on isolated PostgreSQL
         run: npx tsx scripts/verify-call-production-ledger-migration.ts
 
+      # Stage the next financial idempotency change safely: only inspect its
+      # candidate schema against disposable CI Postgres, always ROLLBACK.
+      # This does NOT add the migration to production or change Prisma models.
+      - name: Verify proposed call submission idempotency schema (isolated only)
+        env:
+          CI: 'true'
+        run: npx tsx scripts/verify-call-submission-idempotency-migration.ts
+
       - name: Verify deployment preflight on isolated PostgreSQL
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: http://127.0.0.1:9/unused-frontend
