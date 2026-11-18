@@ -81,8 +81,35 @@ async function main() {
     // Verify that the *same SELECT-only catalog reader* used by operators
     // recognizes the exact DDL proposed for a later DBA-approved rollout.
     // Previous CI exercised only the absent (rolled-back) state.
-    const completeState = classifyCallKeySchema(await readCallKeyCatalog(client));
+    const stagedCatalog = await readCallKeyCatalog(client);
+    const completeState = classifyCallKeySchema(stagedCatalog);
     if (completeState !== 'complete') {
+      // These are metadata from disposable CI PostgreSQL ONLY. Print no
+      // SQL, connection URLs, ids, key material or data records.
+      const columnFlags = stagedCatalog.columns.map(column => ({
+        name: column.column_name,
+        type: column.data_type,
+        required: column.is_nullable === 'NO',
+        hasDefault: column.column_default != null,
+      }));
+      const constraintFlags = stagedCatalog.constraints.map(constraint => ({
+        name: constraint.conname,
+        type: constraint.contype,
+        valid: constraint.convalidated,
+        columns: constraint.key_columns,
+        references: constraint.references_columns,
+        onDelete: constraint.on_delete,
+        onUpdate: constraint.on_update,
+        checkContainsDigestPattern: constraint.definition.includes('[0-9a-f]{64}'),
+      }));
+      console.error('Disposable CI catalog shape:', JSON.stringify({
+        state: completeState,
+        rls: stagedCatalog.rlsEnabled,
+        policyCount: stagedCatalog.policyCount,
+        supportingIndex: stagedCatalog.supportingIndexValid,
+        columns: columnFlags,
+        constraints: constraintFlags,
+      }));
       throw new Error('Staged DDL did not match the operational catalog contract.');
     }
 
