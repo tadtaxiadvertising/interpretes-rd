@@ -36,7 +36,13 @@ export const IncentiveConfigSchema = z.object({
 });
 
 export const PayrollGenerateSchema = z.object({
-  targetDate: z.coerce.date().optional(),
+  // Keep YYYY-MM-DD as a local calendar date. Coercing it with new Date()
+  // turns it into UTC midnight, which is the previous day in Santo Domingo.
+  // Full timestamps retain the existing Date coercion/instant behavior.
+  targetDate: z.union([
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    z.coerce.date(),
+  ]).optional(),
 });
 
 // A PATCH must not inject defaults from the interpreter creation schema.
