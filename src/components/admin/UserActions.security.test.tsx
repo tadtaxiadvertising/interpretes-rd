@@ -35,6 +35,29 @@ describe('admin user access controls communicate the provider scope', () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+  it('offers only implemented roles, including candidate, never unsupported manager/recruiter', () => {
+    render(<UserActions user={user as never} />);
+    fireEvent.click(screen.getAllByRole('button')[0]);
+    expect(screen.getByRole('button', { name: 'candidate' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'interpreter' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'admin' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'manager' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'recruiter' })).toBeNull();
+  });
+
+  it('keeps the role menu open and displays the server rejection instead of claiming success', async () => {
+    mocks.updateUserRole.mockResolvedValueOnce({
+      success: false, error: 'El administrador protegido no puede perder su rol.',
+    });
+    render(<UserActions user={user as never} />);
+    fireEvent.click(screen.getAllByRole('button')[0]);
+    fireEvent.click(screen.getByRole('button', { name: 'candidate' }));
+    await waitFor(() => expect(globalThis.alert).toHaveBeenCalledWith(
+      'El administrador protegido no puede perder su rol.',
+    ));
+    expect(screen.getByRole('button', { name: 'candidate' })).toBeTruthy();
+  });
+
   it('warns that legacy NextAuth access is not automatically revoked before confirmation', () => {
     openRevocation();
     expect(screen.getByRole('alert').textContent).toContain('NextAuth');

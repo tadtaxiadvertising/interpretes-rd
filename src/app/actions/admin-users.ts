@@ -6,7 +6,7 @@ import { auth } from '@/lib/auth';
 import { UserRole } from '@/lib/types';
 import { supabaseAdmin, isAdminUnavailableError, ADMIN_UNAVAILABLE_MESSAGE } from '@/lib/supabase/admin';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
-import { resolveUserRoleByEmail } from '@/lib/admin-identity';
+import { resolveUserRoleByEmail, isProtectedAdminEmail } from '@/lib/admin-identity';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const prisma = prismaClient;
@@ -18,18 +18,17 @@ export async function getAdminUsers() {
   }
 
   return prisma.userProfile.findMany({
-    include: {
-      interpreter: {
-        select: {
-          id: true,
-          name: true,
-          campaign: true
-        }
-      }
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      role: true,
+      interpreterId: true,
+      onboardingComplete: true,
+      createdAt: true,
+      interpreter: { select: { id: true, name: true, campaign: true } },
     },
-    orderBy: {
-      createdAt: 'desc'
-    }
+    orderBy: { createdAt: 'desc' },
   });
 }
 
@@ -39,13 +38,34 @@ export async function updateUserRole(userId: string, role: UserRole) {
     throw new Error('Unauthorized');
   }
 
+  // TypeScript unions do not validate direct server-action calls at runtime.
+  const validRoles: readonly string[] = ['admin', 'candidate', 'interpreter'];
+  if (!validRoles.includes(role)) {
+    return { success: false, error: 'El rol seleccionado no está disponible.' };
+  }
+
+  const existing = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+  if (!existing) return { success: false, error: 'El usuario ya no existe.' };
+  if (isProtectedAdminEmail(existing.email) && role !== 'admin') {
+    return { success: false, error: 'El administrador protegido no puede perder su rol.' };
+  }
+
   const updated = await prisma.userProfile.update({
     where: { id: userId },
     data: { role },
-    select: { interpreterId: true }
+    select: { interpreterId: true },
   });
 
-  revalidateInterpreterProfileRecords(updated.interpreterId);
+  // The role mutation is already committed. Do not request a second role
+  // change when only the cached roster cannot be refreshed.
+  try {
+    revalidateInterpreterProfileRecords(updated.interpreterId);
+  } catch (error) {
+    console.warn('[ADMIN_USERS] Role saved but cache refresh failed:', safeServerErrorCategory(error));
+  }
   return { success: true };
 }
 
