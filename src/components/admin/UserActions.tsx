@@ -120,7 +120,7 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
   };
 
   const handleDeleteUser = async () => {
-    if (!confirm('¿Estás completamente seguro de eliminar el acceso de este usuario? Esta acción es irreversible y eliminará su cuenta en Supabase Auth.')) {
+    if (!confirm('¿Confirmas la revocación de Supabase Auth y la eliminación del perfil local? Es irreversible. Las cuentas o sesiones heredadas de NextAuth requieren comprobación independiente.')) {
       return;
     }
     setIsUpdating(true);
@@ -129,8 +129,9 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
       if (res.success) {
         setActiveModal(null);
         setIsOpen(false);
+        alert('Acceso de Supabase Auth revocado y perfil local eliminado. Verifica por separado las credenciales o sesiones heredadas de NextAuth.');
       } else {
-        alert(res.error || 'Error al eliminar el usuario');
+        alert(res.error || 'Error al revocar el acceso en Supabase Auth');
       }
     } catch {
       alert('Ocurrió un error inesperado');
@@ -225,7 +226,7 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition-all"
               >
                 <Trash2 size={16} />
-                Eliminar Acceso
+                Revocar acceso Supabase
               </button>
             </div>
           </div>
@@ -253,7 +254,7 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
                 {activeModal === 'edit' && 'Editar Datos del Usuario'}
                 {activeModal === 'password' && 'Actualizar Contraseña'}
                 {activeModal === 'link' && 'Vincular Intérprete Registrado'}
-                {activeModal === 'delete' && 'Confirmar Eliminación'}
+                {activeModal === 'delete' && 'Revocar acceso Supabase Auth'}
               </h3>
               <button
                 onClick={() => !isUpdating && setActiveModal(null)}
@@ -421,7 +422,8 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
               <div className="p-6 space-y-4">
                 <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-sm text-red-400 space-y-2">
                   <p className="font-bold flex items-center gap-1.5">⚠️ ALERTA CRÍTICA:</p>
-                  <p>Esto eliminará permanentemente la vinculación local del perfil de **{user.displayName || user.email}** y borrará su cuenta de autenticación de forma definitiva en Supabase Auth.</p>
+                  <p>Esto eliminará el perfil local de {user.displayName || user.email} y revocará su identidad de Supabase Auth.</p>
+                  <p role="alert" className="font-semibold">Importante: no revoca automáticamente posibles credenciales ni sesiones heredadas de NextAuth. Comprueba ese acceso por separado antes de dar por completada la baja.</p>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
@@ -438,7 +440,7 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
                     disabled={isUpdating}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
-                    {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Confirmar y Eliminar'}
+                    {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Revocar Supabase Auth'}
                   </button>
                 </div>
               </div>
