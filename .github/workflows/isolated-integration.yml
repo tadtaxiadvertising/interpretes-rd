@@ -1,0 +1,95 @@
+name: Unit and Browser E2E (isolated)
+
+# Diagnostics only: never deploy, migrate production, or call webhooks.
+# The original CI/CD Validate & Test security audit remains a deploy gate.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: interpretes-integration-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  isolated-integration:
+    name: Unit tests and local Chromium E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: interpreters_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d interpreters_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      CI: 'true'
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
+      AUTH_SECRET: isolated-integration-only-auth-secret-2026
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: isolated-e2e-placeholder-key
+      NEXT_PUBLIC_API_URL: http://127.0.0.1:4000
+      E2E_ALLOW_RUN: 'true'
+      E2E_ALLOW_DB_CLEANUP: 'true'
+      E2E_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e
+      E2E_START_SERVER: 'true'
+      BASE_URL: http://127.0.0.1:3001
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install pinned dependencies
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+
+      - name: Validate Prisma schema and generate client
+        run: |
+          npx prisma validate
+          npx prisma generate
+
+      - name: Prepare disposable PostgreSQL schema
+        run: npx prisma db push
+
+      - name: Run full unit test suite
+        run: npm test
+
+      - name: Build local standalone Next.js
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: npm run build
+
+      - name: Prepare standalone browser assets
+        run: |
+          test -f .next/standalone/server.js
+          mkdir -p .next/standalone/.next
+          cp -a .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -a public .next/standalone/public; fi
+
+      - name: Install local Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run isolated browser E2E
+        run: npm run test:e2e
+
+      # This check is diagnostic, not a release approval. Deployment still
+      # requires the mandatory Dependency Security Audit in deploy.yml.
