@@ -78,6 +78,91 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
     });
   });
 
+  it('rounds fractional minutes and the call cost to cents before persistence', async () => {
+    vi.mocked(prisma.interpreter.findUnique).mockResolvedValueOnce({
+      id: 7, tariffPerMinute: 0.33,
+    } as never);
+    const response = await POST(request(1, 10));
+    expect(response.status).toBe(200);
+    expect(tx.callSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        durationSeconds: 70,
+        tariffSnapshot: 0.33,
+        callCost: 0.39,
+      }),
+    });
+    expect(tx.callProductionEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        interpretedMinutes: 1,
+        callsAttended: 1,
+      }),
+    });
+  });
+
+  it('supports existing clients that submit decimal minutes and rounds to stored seconds', async () => {
+    const response = await POST(request(1.5));
+    expect(response.status).toBe(200);
+    expect(tx.callSession.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        durationSeconds: 90,
+        callCost: 0.3,
+      }),
+    });
+  });
+
+  it('uses one end timestamp to derive the exact startedAt and endedAt interval', async () => {
+    const response = await POST(request(3, 12));
+    expect(response.status).toBe(200);
+    const args = tx.callSession.create.mock.calls[0][0].data;
+    expect(args.endedAt).toBeInstanceOf(Date);
+    expect(args.startedAt).toBeInstanceOf(Date);
+    expect(args.endedAt.getTime() - args.startedAt.getTime()).toBe(192_000);
+  });
+
+  it('rejects excessive, non-finite, negative and sub-second durations before any write', async () => {
+    for (const duration of [
+      { durationMinutes: 100_001, seconds: 0 },
+      { durationMinutes: 'Infinity', seconds: 0 },
+      { durationMinutes: -1, seconds: 0 },
+      { durationMinutes: 0.001, seconds: 0 },
+      { durationMinutes: 0, seconds: 60 },
+      { durationMinutes: 1, seconds: 0.5 },
+    ]) {
+      const response = await POST(new Request('https://interpretes.example/api/v1/calls/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(duration),
+      }));
+      expect(response.status).toBe(400);
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.callSession.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects absent, negative, non-finite and overflowing tariffs without touching the ledger', async () => {
+    const cases = [
+      { tariffPerMinute: null, minutes: 5 },
+      { tariffPerMinute: -1, minutes: 5 },
+      { tariffPerMinute: 'NaN', minutes: 5 },
+      { tariffPerMinute: 100_000, minutes: 100_000 },
+    ];
+    for (const scenario of cases) {
+      vi.mocked(prisma.interpreter.findUnique).mockResolvedValueOnce({
+        id: 7, tariffPerMinute: scenario.tariffPerMinute,
+      } as never);
+      const response = await POST(request(scenario.minutes));
+      expect(response.status).toBe(422);
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(await response.json()).toEqual({
+        success: false,
+        error: 'Invalid call duration or tariff',
+      });
+    }
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(tx.callSession.create).not.toHaveBeenCalled();
+    expect(tx.callProductionEntry.create).not.toHaveBeenCalled();
+  });
+
   it('updates existing production with a conditional settlement guard and records ledger', async () => {
     tx.productionLog.findFirst.mockResolvedValueOnce({
       id: 41, isSettled: false, interpretedMinutes: 15, callsAttended: 3,

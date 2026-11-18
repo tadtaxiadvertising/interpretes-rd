@@ -39,7 +39,8 @@ export async function POST(req: Request) {
     }
 
     const interpreter = await prisma.interpreter.findUnique({
-      where: { id: actor.interpreterId }
+      where: { id: actor.interpreterId },
+      select: { id: true, tariffPerMinute: true },
     });
 
     if (!interpreter) {
@@ -47,10 +48,26 @@ export async function POST(req: Request) {
     }
 
     const { durationMinutes, seconds } = await parseJsonBody(req, ManualCallSchema);
-    const totalSeconds = Math.round((durationMinutes * 60) + seconds);
+    const totalSeconds = Math.round(durationMinutes * 60 + seconds);
     const tariffSnapshot = Number(interpreter.tariffPerMinute);
-    const callCost = (totalSeconds / 60) * tariffSnapshot;
-    const startedAt = new Date(Date.now() - totalSeconds * 1000);
+    // CallSession.callCost is DECIMAL(10,2). Round before writing and
+    // fail closed for absent, invalid, or overflowing rates and amounts.
+    const callCost = Math.round((totalSeconds / 60) * tariffSnapshot * 100) / 100;
+    if (
+      !Number.isSafeInteger(totalSeconds) || totalSeconds <= 0 ||
+      interpreter.tariffPerMinute == null ||
+      !Number.isFinite(tariffSnapshot) || tariffSnapshot < 0 ||
+      !Number.isFinite(callCost) || callCost < 0 || callCost > 99_999_999.99
+    ) {
+      return NextResponse.json({
+        success: false, error: 'Invalid call duration or tariff',
+      }, {
+        status: 422,
+        headers: { 'Cache-Control': 'private, no-store' },
+      });
+    }
+    const endedAt = new Date();
+    const startedAt = new Date(endedAt.getTime() - totalSeconds * 1000);
 
     const callSession = await prisma.$transaction(async (tx) => {
       // 1. Create the call session
@@ -58,7 +75,7 @@ export async function POST(req: Request) {
         data: {
           interpreterId: interpreter.id,
           startedAt,
-          endedAt: new Date(),
+          endedAt,
           durationSeconds: totalSeconds,
           tariffSnapshot: tariffSnapshot,
           callCost: callCost,
