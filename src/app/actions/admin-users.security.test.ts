@@ -7,12 +7,13 @@ const mocks = vi.hoisted(() => ({
   updateAuthUser: vi.fn(),
   localDelete: vi.fn(),
   localUpdate: vi.fn(),
+  findProfile: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('@/lib/prisma', () => ({
-  default: { userProfile: { delete: mocks.localDelete, update: mocks.localUpdate } },
+  default: { userProfile: { delete: mocks.localDelete, update: mocks.localUpdate, findUnique: mocks.findProfile } },
 }));
 vi.mock('@/lib/cache/revalidate-interpreter', () => ({
   revalidateInterpreterProfileRecords: mocks.refresh,
@@ -29,11 +30,13 @@ vi.mock('@/lib/supabase/admin', () => ({
     value instanceof Error && value.name === 'SupabaseAdminUnavailableError',
 }));
 import { deleteUserAccess, updateUserPassword, updateUserProfile } from './admin-users';
+import { PROTECTED_ADMIN_EMAILS } from '@/lib/admin-identity';
 
 describe('admin user access revocation and error privacy', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.auth.mockResolvedValue({ user: { role: 'admin' } });
+    mocks.auth.mockResolvedValue({ userId: 'current-admin', user: { id: 'current-admin', email: 'operator@example.test', role: 'admin' } });
+    mocks.findProfile.mockResolvedValue({ email: 'target@example.test' });
     mocks.deleteAuthUser.mockResolvedValue({ data: {}, error: null });
     mocks.localDelete.mockResolvedValue({ interpreterId: 19 });
     mocks.localUpdate.mockResolvedValue({ interpreterId: 19, displayName: 'Test User', email: 'user@example.test' });
@@ -115,6 +118,115 @@ describe('admin user access revocation and error privacy', () => {
     expect(result.success).toBe(false);
     expect(mocks.localUpdate).not.toHaveBeenCalled();
     expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
+  it('blocks changing the reserved admin email before local or provider updates', async () => {
+    mocks.findProfile.mockResolvedValueOnce({ email: PROTECTED_ADMIN_EMAILS[0] });
+    const result = await updateUserProfile('protected-id', {
+      displayName: 'Protected Operator',
+      email: 'renamed@example.test',
+    });
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('protegida');
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
+  it('blocks assigning the reserved admin email to an unrelated profile', async () => {
+    const result = await updateUserProfile('other-id', {
+      displayName: 'Other Operator',
+      email: PROTECTED_ADMIN_EMAILS[0].toUpperCase(),
+    });
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
+  it('allows a protected admin display-name change without changing the canonical email', async () => {
+    mocks.findProfile.mockResolvedValueOnce({ email: PROTECTED_ADMIN_EMAILS[0] });
+    const result = await updateUserProfile('protected-id', {
+      displayName: 'Protected Operator',
+      email: PROTECTED_ADMIN_EMAILS[0],
+    });
+    expect(result.success).toBe(true);
+    expect(mocks.localUpdate).toHaveBeenCalledOnce();
+    expect(mocks.updateAuthUser).toHaveBeenCalledOnce();
+  });
+
+  it('does not edit a profile that disappeared before the update', async () => {
+    mocks.findProfile.mockResolvedValueOnce(null);
+    const result = await updateUserProfile('missing-id', updatedProfile);
+    expect(result.success).toBe(false);
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
+  it('requires a real local profile before any external deletion', async () => {
+    mocks.findProfile.mockResolvedValueOnce(null);
+    const result = await deleteUserAccess('missing-target');
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.findProfile).toHaveBeenCalledWith({
+      where: { id: 'missing-target' },
+      select: { email: true },
+    });
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+    expect(mocks.localDelete).not.toHaveBeenCalled();
+  });
+
+  it('prevents a current administrator from revoking their own Supabase identity', async () => {
+    const result = await deleteUserAccess('current-admin');
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('propio acceso');
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+    expect(mocks.localDelete).not.toHaveBeenCalled();
+  });
+
+  it('prevents self-revocation through a legacy session with a different user ID', async () => {
+    mocks.auth.mockResolvedValueOnce({
+      userId: 'legacy-rbac-id',
+      user: { id: 'legacy-rbac-id', email: ' OPERATOR@EXAMPLE.TEST ', role: 'admin' },
+    });
+    mocks.findProfile.mockResolvedValueOnce({ email: 'operator@example.test' });
+    const result = await deleteUserAccess('supabase-uuid-for-same-person');
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+    expect(mocks.localDelete).not.toHaveBeenCalled();
+  });
+
+  it('prevents revoking the protected administrator regardless of stored role or email casing', async () => {
+    mocks.findProfile.mockResolvedValueOnce({
+      email: ` ${PROTECTED_ADMIN_EMAILS[0].toUpperCase()} `,
+    });
+    const result = await deleteUserAccess('protected-supabase-id');
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('protegida');
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+    expect(mocks.localDelete).not.toHaveBeenCalled();
+  });
+
+  it('allows revocation of a different, unprotected account after checking its identity', async () => {
+    const result = await deleteUserAccess('other-supabase-id');
+    expect(result).toEqual({ success: true });
+    expect(mocks.findProfile).toHaveBeenCalledTimes(1);
+    expect(mocks.deleteAuthUser).toHaveBeenCalledWith('other-supabase-id');
+    expect(mocks.localDelete).toHaveBeenCalledTimes(1);
+    const order = mocks.findProfile.mock.invocationCallOrder[0];
+    expect(order).toBeLessThan(mocks.deleteAuthUser.mock.invocationCallOrder[0]);
+    expect(mocks.deleteAuthUser.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.localDelete.mock.invocationCallOrder[0]);
+  });
+
+  it('never revokes provider access when the local identity lookup fails', async () => {
+    mocks.findProfile.mockRejectedValueOnce(new Error('postgresql://PRIVATE_DB_PASSWORD@internal'));
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await deleteUserAccess('other-supabase-id');
+      expect(result.success).toBe(false);
+      expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+      expect(mocks.localDelete).not.toHaveBeenCalled();
+      expect(JSON.stringify([result, logged.mock.calls]))
+        .not.toMatch(/postgresql:|PRIVATE_DB_PASSWORD/);
+    } finally { logged.mockRestore(); }
   });
 
   it('revokes provider access before removing the local profile', async () => {
