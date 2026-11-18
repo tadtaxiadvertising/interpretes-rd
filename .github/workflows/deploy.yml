@@ -128,6 +128,10 @@ jobs:
       - name: Verify custom CSP origin safety
         run: npx vitest run src/lib/security/next-config-csp.test.ts
 
+      # Block any regression to unauthenticated PostgreSQL TLS in the Express API.
+      - name: Verify dedicated API PostgreSQL trust policy
+        run: npx vitest run src/lib/security/backend-database-tls.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true

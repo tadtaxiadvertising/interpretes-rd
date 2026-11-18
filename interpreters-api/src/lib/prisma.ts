@@ -1,6 +1,9 @@
 import { PrismaClient } from '@prisma/client';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { createVerifiedDatabasePoolConfig } from './database-tls.js';
 
 /**
  * PRISMA CLIENT SINGLETON (interpreters-api)
@@ -31,13 +34,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient(): PrismaClient {
-  const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
-    max: 3,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
-    ssl: { rejectUnauthorized: false }
-  });
+  const pool = new pg.Pool(createVerifiedDatabasePoolConfig(
+    process.env.DATABASE_URL,
+    () => readFileSync(resolve(process.cwd(), 'certs/prod-ca-2021.crt'), 'utf8'),
+  ));
   const adapter = new PrismaPg(pool);
 
   return new PrismaClient({
@@ -73,7 +73,7 @@ export async function warmupPrisma(): Promise<void> {
   } catch (err) {
     console.error(
       '🔴 PRISMA: Failed to connect at startup:',
-      err instanceof Error ? err.message : err
+      err instanceof Error ? err.name : 'UnknownError'
     );
     // Do NOT process.exit here — let the health check surface the failure.
     // The server.ts startup handler will decide whether to abort.
@@ -94,7 +94,7 @@ export async function disconnectPrisma(): Promise<void> {
   } catch (err) {
     console.error(
       '⚠️ PRISMA: Error during disconnect:',
-      err instanceof Error ? err.message : err
+      err instanceof Error ? err.name : 'UnknownError'
     );
   }
 }

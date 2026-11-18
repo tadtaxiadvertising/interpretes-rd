@@ -47,6 +47,8 @@ COPY --chown=apiuser:nodejs --from=builder /app/dist ./dist
 COPY --chown=apiuser:nodejs --from=builder /app/prisma ./prisma
 COPY --chown=apiuser:nodejs --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --chown=apiuser:nodejs --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Runtime TLS verification needs the same pinned trust anchor as Next.js.
+COPY --chown=apiuser:nodejs certs/prod-ca-2021.crt ./certs/prod-ca-2021.crt
 
 ENV NODE_ENV=production
 ENV PORT=3000
