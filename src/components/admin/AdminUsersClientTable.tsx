@@ -9,16 +9,14 @@ import {
   ClipboardCheck,
   AlertTriangle,
 } from 'lucide-react';
-import { UserProfile } from '@prisma/client';
+import type { AdminUserWithInterpreter } from '@/lib/admin-user-summary';
 import { RoleBadge } from '../RoleBadge';
 import { UserActions } from './UserActions';
 import { InterpreterOnboardingPanel } from './InterpreterOnboardingPanel';
 
-type UserWithInterpreter = UserProfile & {
-  interpreter: { id: number; name: string; campaign: string | null } | null;
-};
 
-export function AdminUsersClientTable({ users }: { users: UserWithInterpreter[] }) {
+
+export function AdminUsersClientTable({ users }: { users: AdminUserWithInterpreter[] }) {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   return (
