@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
+  revision: string;
   integrationEnabled: boolean;
   hasToken: boolean; credentialUsable: boolean; environmentFallbackAvailable: boolean; tokenSource: string; organizationId: string;
   mediaImportEnabled: boolean; proxyAvailable: boolean; encryptionReady: boolean;
@@ -30,6 +31,9 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const data = new FormData();
+    // The server rejects concurrent edits rather than silently overwriting
+    // a newer administrator's provider or editor settings.
+    data.set('expectedRevision', status.revision);
     data.set('token', token);
     if (org !== status.organizationId) data.set('organizationId', org);
     // Do not reactivate an integration disabled in another admin tab just
