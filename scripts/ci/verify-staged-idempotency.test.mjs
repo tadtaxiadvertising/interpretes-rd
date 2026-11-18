@@ -52,6 +52,10 @@ test('isolated verifier reads only staged SQL and rolls back its changes', () =>
 test('production deploy keeps staged DDL out of migration steps', () => {
   const deploy = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
   assert.match(deploy, /Verify proposed call submission idempotency schema \(isolated only\)/);
+  assert.match(deploy, /Verify idempotency catalog classifier/);
+  assert.match(deploy, /npx vitest run scripts\/call-idempotency-schema-state\.test\.ts/);
+  assert.match(deploy, /Verify read-only idempotency catalog inspection \(isolated PostgreSQL\)/);
+  assert.match(deploy, /npx tsx scripts\/inspect-call-idempotency-schema\.ts --check-only/);
   assert.doesNotMatch(deploy, /(?:npm run migrate|prisma migrate deploy).*?(?:call-submission|call_submission)/);
 });
 
