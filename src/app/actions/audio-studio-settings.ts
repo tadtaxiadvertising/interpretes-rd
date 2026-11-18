@@ -11,12 +11,13 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
   if ('error' in auth) return { success: false, message: 'No autorizado.' };
   const token = form.get('token');
   const organization = form.get('organizationId');
-  if (typeof token !== 'string' || typeof organization !== 'string')
+  if (typeof token !== 'string' || (organization !== null && typeof organization !== 'string'))
     return { success: false, message: 'Solicitud inválida.' };
   const excludeValue = form.get('excludeInterpreterByDefault');
   const compactValue = form.get('compactViewDefault');
   const protocolLanguageValue = form.get('protocolLanguageDefault');
   const integrationValue = form.get('integrationEnabled');
+  const mediaValue = form.get('mediaImportEnabled');
   if (excludeValue !== null && excludeValue !== 'true' && excludeValue !== 'false')
     return { success: false, message: 'Preferencia de intérprete no válida.' };
   if (compactValue !== null && !['auto', 'compact', 'expanded'].includes(String(compactValue)))
@@ -25,10 +26,13 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
     return { success: false, message: 'Idioma predeterminado del protocolo no válido.' };
   if (integrationValue !== null && integrationValue !== 'true' && integrationValue !== 'false')
     return { success: false, message: 'Estado de conexión no válido.' };
+  if (mediaValue !== null && mediaValue !== 'true' && mediaValue !== 'false' && mediaValue !== 'on')
+    return { success: false, message: 'Preferencia de importación MP3 no válida.' };
   try {
     await saveHappyScribeSettings({
-      token, organizationId: organization,
-      mediaImportEnabled: form.get('mediaImportEnabled') === 'on',
+      token,
+      ...(organization !== null ? { organizationId: organization } : {}),
+      ...(mediaValue !== null ? { mediaImportEnabled: mediaValue === 'true' || mediaValue === 'on' } : {}),
       removeToken: form.get('removeToken') === 'on',
       ...(integrationValue !== null ? { integrationEnabled: integrationValue === 'true' } : {}),
       updatedBy: auth.user.userId,
