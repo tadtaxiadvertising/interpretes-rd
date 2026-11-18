@@ -132,4 +132,34 @@ describe('Audio Studio admin partial settings payload', () => {
     expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
   });
 
+  it('does not allow a second save after commit if the new revision cannot be reloaded', async () => {
+    const updated = { ...initial, revision: 'c'.repeat(64) };
+    vi.mocked(inspectAudioStudioSettings)
+      .mockRejectedValueOnce(new Error('synthetic unavailable database'))
+      .mockResolvedValueOnce(updated);
+    render(<AudioStudioSettingsForm initial={initial} />);
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'compact' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Configuración guardada. No se pudo actualizar/)).toBeTruthy();
+    const save = screen.getByRole('button', { name: 'Guardar configuración' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar mis cambios y cargar ajustes actuales' }));
+    });
+    expect(save.disabled).toBe(false);
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'expanded' },
+    });
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(vi.mocked(saveAudioStudioSettings).mock.calls[1][0].get('expectedRevision')).toBe(updated.revision);
+  });
+
+
 });
