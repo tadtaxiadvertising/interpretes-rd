@@ -6,7 +6,7 @@ import bcrypt from "bcryptjs";
 import type { JWT } from "next-auth/jwt";
 import type { Session } from "next-auth";
 import crypto from "crypto";
-import { resolveRbacRoleByEmail } from "@/lib/admin-identity";
+import { hasAuthoritativeAuthJsRole, resolveRbacRoleByEmail } from "@/lib/admin-identity";
 
 // ---------------------------------------------------------------------------
 // Dotenv fallback — load .env.local / .env when running standalone server
@@ -68,24 +68,26 @@ if (!process.env.AUTH_SECRET) {
 export async function requireRole(requiredRole: "ADMIN" | "HOLDER" | "INTERPRETER") {
   const session = await auth();
   const sessionUserId = session?.user?.id;
-  const email = session?.user?.email?.toLowerCase().trim();
+  const sessionRole = (session?.user as { role?: unknown } | undefined)?.role;
 
-  if (!sessionUserId && !email) {
+  // Auth.js validates token.sub against rbacUser.id in the session callback.
+  // If it cannot resolve that identity it clears the session role. Never
+  // reactivate a legacy token by looking up an unrelated user by email.
+  if (
+    typeof sessionUserId !== "string" ||
+    !sessionUserId.trim() ||
+    !hasAuthoritativeAuthJsRole(sessionRole) ||
+    sessionRole.toUpperCase() !== requiredRole
+  ) {
     throw new Error("Unauthorized");
   }
 
-  // Identity is keyed by immutable Auth.js user id. Email is only a legacy
-  // fallback for sessions created before ids were populated.
-  const user = sessionUserId
-    ? await prisma.rbacUser.findUnique({
-        where: { id: sessionUserId },
-        select: { id: true, email: true, name: true, role: true },
-      })
-    : await prisma.rbacUser.findUnique({
-        where: { email: email! },
-        select: { id: true, email: true, name: true, role: true },
-      });
+  const user = await prisma.rbacUser.findUnique({
+    where: { id: sessionUserId },
+    select: { id: true, email: true, name: true, role: true },
+  });
 
+  // Recheck the live database role, not merely the JWT/session claim.
   if (!user || user.role !== requiredRole) {
     throw new Error(`Unauthorized: ${requiredRole} role required`);
   }
