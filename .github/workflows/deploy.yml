@@ -137,6 +137,9 @@ jobs:
       - name: Verify GitHub Actions step integrity
         run: node --test scripts/ci/verify-workflow-steps.test.mjs
 
+      - name: Verify backend exception privacy and sanitized logs
+        run: npx vitest run src/lib/security/backend-safe-error-logs.test.ts
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
