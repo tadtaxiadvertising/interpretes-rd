@@ -159,7 +159,7 @@ describe('POST /api/v1/calls/manual ledger and error privacy', () => {
       expect(await response.json()).toEqual({ success: false, error: 'Internal Server Error' });
       expect(spy).toHaveBeenCalledWith('Error creating manual call log:', 'Error');
       expect(JSON.stringify(spy.mock.calls)).not.toMatch(
-        /PRIVATE_DB_PASSWORD|PRIVATE_ACCESS_TOKEN|private\\.host\\.invalid|postgresql:\\/\\//,
+        /PRIVATE_DB_PASSWORD|PRIVATE_ACCESS_TOKEN|private[.]host[.]invalid|postgresql:/,
       );
     } finally { spy.mockRestore(); }
   });
