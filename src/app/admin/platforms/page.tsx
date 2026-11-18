@@ -58,7 +58,7 @@ export default async function AccountPlatformsPage() {
       {p.vpn ? <div className="mt-3 rounded-lg border border-white/10 bg-slate-950/40 p-3 text-xs text-slate-300">
         <p className="font-semibold text-slate-200">Configuración VPN</p>
         <p className="mt-1">{[p.vpn.vpnProvider, p.vpn.vpnApp, p.vpn.vpnUsernameHint ? 'Usuario configurado' : null].filter(Boolean).join(' · ') || 'Proveedor y aplicación pendientes'}</p>
-        <p className="mt-1">{[p.vpn.vpnCountry, p.vpn.vpnRegion, p.vpn.vpnServer, p.vpn.vpnExitIp, p.vpn.vpnProfile, p.vpn.vpnProtocol, p.vpn.vpnPort ? `Puerto ${p.vpnPort}` : null].filter(Boolean).join(' · ') || 'Sin detalles de servidor o ubicación'}</p>
+        <p className="mt-1">{[p.vpn.vpnCountry, p.vpn.vpnRegion, p.vpn.vpnServer, p.vpn.vpnExitIp, p.vpn.vpnProfile, p.vpn.vpnProtocol, p.vpn.vpnPort ? `Puerto ${p.vpn.vpnPort}` : null].filter(Boolean).join(' · ') || 'Sin detalles de servidor o ubicación'}</p>
         <p className="mt-1">{p.vpn.vpnSecretRef ? 'Referencia segura VPN registrada' : 'Sin referencia segura VPN'}</p>
       </div> : <p className="mt-3 text-xs text-amber-300">Detalles VPN ocultos hasta verificar la migración.</p>}
       {p.loginUrl && <a href="https://whoer.net/" target="_blank" rel="noopener noreferrer" className="mt-3 inline-block text-sm text-blue-300 hover:underline">Comprobar VPN en Whoer.net ↗</a>}
