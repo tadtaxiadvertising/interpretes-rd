@@ -17,6 +17,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // Next resolves this marker itself; Vitest needs a test-only shim.
+      'server-only': path.resolve(__dirname, './src/test/server-only-shim.ts'),
     },
   },
 });
