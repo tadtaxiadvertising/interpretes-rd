@@ -33,3 +33,12 @@ export function formatSafeApiErrorLog(
     statusCode: safeStatus,
   });
 }
+
+/** Prisma metadata is not assumed safe: only expected field identifiers pass. */
+export function safeConflictFieldNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter(
+    (field): field is string =>
+      typeof field === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(field),
+  ).slice(0, 5);
+}
