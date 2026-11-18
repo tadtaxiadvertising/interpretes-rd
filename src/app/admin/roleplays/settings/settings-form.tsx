@@ -3,6 +3,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
+  integrationEnabled: boolean;
   hasToken: boolean; credentialUsable: boolean; environmentFallbackAvailable: boolean; tokenSource: string; organizationId: string;
   mediaImportEnabled: boolean; proxyAvailable: boolean; encryptionReady: boolean;
   excludeInterpreterByDefault: boolean; compactViewDefault: 'auto' | 'compact' | 'expanded';
@@ -10,6 +11,7 @@ type Initial = {
 };
 export default function AudioStudioSettingsForm({ initial }: { initial: Initial }) {
   const [org, setOrg] = useState(initial.organizationId);
+  const [enabled, setEnabled] = useState(initial.integrationEnabled);
   const [token, setToken] = useState('');
   const [remove, setRemove] = useState(false);
   const [media, setMedia] = useState(initial.mediaImportEnabled);
@@ -21,7 +23,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [pending, start] = useTransition();
   const hasToken = status.hasToken;
   const editingDisabled = pending || checking;
-  const hasUnsavedChanges = org !== status.organizationId || token.length > 0 || remove ||
+  const hasUnsavedChanges = enabled !== status.integrationEnabled || org !== status.organizationId || token.length > 0 || remove ||
     media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
     compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
@@ -29,6 +31,10 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     e.preventDefault();
     const data = new FormData();
     data.set('organizationId', org); data.set('token', token);
+    // Do not reactivate an integration disabled in another admin tab just
+    // because this form saved unrelated editor defaults.
+    if (enabled !== status.integrationEnabled)
+      data.set('integrationEnabled', String(enabled));
     data.set('excludeInterpreterByDefault', String(excludeDefault));
     data.set('compactViewDefault', compactDefault);
     data.set('protocolLanguageDefault', protocolDefault);
@@ -45,6 +51,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
           // The server trims the organization ID. Mirror its canonical value
           // so "Probar conexión" becomes available immediately after saving.
           setOrg(latest.organizationId);
+          setEnabled(latest.integrationEnabled);
           setExcludeDefault(latest.excludeInterpreterByDefault);
           setCompactDefault(latest.compactViewDefault);
           setProtocolDefault(latest.protocolLanguageDefault);
@@ -71,6 +78,15 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   return <form onSubmit={submit} className="space-y-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6">
     <div><h2 className="text-xl font-semibold text-white">HappyScribe</h2>
       <p className="mt-1 text-sm text-slate-400">Solo los administradores pueden cambiar estos valores. Las claves nunca se devuelven al navegador.</p></div>
+    <div className="rounded-xl border border-white/10 p-4">
+      <label className="flex items-start gap-3 text-sm text-slate-200">
+        <input type="checkbox" checked={enabled} disabled={editingDisabled} onChange={e => setEnabled(e.target.checked)} />
+        <span><strong className="block text-white">Habilitar conexión con HappyScribe</strong>
+          <span className="mt-1 block text-slate-400">Al desactivar, ninguna importación SRT o MP3 podrá consultar HappyScribe, incluso si Easypanel conserva una clave. Las credenciales cifradas no se borran.</span>
+        </span>
+      </label>
+      {!enabled && <p role="status" className="mt-3 text-sm text-amber-200">HappyScribe está desactivado {status.integrationEnabled ? '(sin guardar)' : 'para este sistema'}.</p>}
+    </div>
     <div><label htmlFor="happy-org" className="mb-2 block text-sm font-semibold text-slate-200">ID de organización</label>
       <input id="happy-org" disabled={editingDisabled} value={org} onChange={e => setOrg(e.target.value)} inputMode="numeric" pattern="[0-9]*" maxLength={30}
         placeholder="ID numérico" autoComplete="off" className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" /></div>
@@ -127,7 +143,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     </p>}
     {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
     <div className="flex flex-wrap items-center gap-3"><button disabled={pending || checking} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
-      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
+      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !enabled || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
       <Link href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</Link></div>
   </form>;
 }

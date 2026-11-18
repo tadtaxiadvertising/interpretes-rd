@@ -127,6 +127,23 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     });
   });
 
+
+  it('validates and persists an explicit disable without removing the API key', async () => {
+    const invalid = settingsForm();
+    invalid.set('integrationEnabled', 'maybe');
+    expect((await saveAudioStudioSettings(invalid)).success).toBe(false);
+    expect(saveHappyScribeSettings).not.toHaveBeenCalled();
+    const valid = settingsForm();
+    valid.delete('token');
+    valid.set('token', '');
+    valid.set('integrationEnabled', 'false');
+    expect((await saveAudioStudioSettings(valid)).success).toBe(true);
+    expect(saveHappyScribeSettings).toHaveBeenCalledWith({
+      token: '', organizationId: '123456', mediaImportEnabled: true,
+      integrationEnabled: false, removeToken: false, updatedBy: 'test-admin',
+    });
+  });
+
   it('persists explicit defaults alongside the provider settings', async () => {
     const form = settingsForm();
     form.set('excludeInterpreterByDefault', 'false');

@@ -113,6 +113,54 @@ describe('HappyScribe encrypted admin settings', () => {
     expect((await getHappyScribeSettings()).token).toBe(serverToken);
   });
 
+
+  it('immediately disables all provider access while retaining encrypted credentials', async () => {
+    process.env.HAPPY_SCRIBE_API_TOKEN = 'SYNTHETIC_SERVER_FALLBACK_KEY';
+    process.env.HAPPY_SCRIBE_ORGANIZATION_ID = '98765';
+    process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED = 'true';
+    await saveHappyScribeSettings({
+      token: testToken, organizationId: '123456', mediaImportEnabled: true,
+      integrationEnabled: false,
+    });
+    const ciphertext = store.get(TOKEN_KEY);
+    expect(ciphertext).toMatch(/^enc:v1:/);
+    expect(await getHappyScribeSettings()).toEqual({
+      token: '', organizationId: '', mediaImportEnabled: false,
+    });
+    const disabled = await getHappyScribeSettingsStatus();
+    expect(disabled.integrationEnabled).toBe(false);
+    expect(disabled.mediaImportEnabled).toBe(false);
+    expect(disabled.hasToken).toBe(true);
+    expect(JSON.stringify(disabled)).not.toContain(testToken);
+
+    await saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: true,
+      integrationEnabled: true,
+    });
+    expect(store.get(TOKEN_KEY)).toBe(ciphertext);
+    expect(await getHappyScribeSettings()).toEqual({
+      token: testToken, organizationId: '123456', mediaImportEnabled: true,
+    });
+  });
+
+  it('blocks environment-token fallback even if no panel token was saved', async () => {
+    process.env.HAPPY_SCRIBE_API_TOKEN = 'SYNTHETIC_OLD_SERVER_TOKEN';
+    process.env.HAPPY_SCRIBE_ORGANIZATION_ID = '123456';
+    await saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      integrationEnabled: false,
+    });
+    expect((await getHappyScribeSettings()).token).toBe('');
+  });
+
+  it('rejects malformed enablement flags before saving configuration', async () => {
+    await expect(saveHappyScribeSettings({
+      organizationId: '123456', mediaImportEnabled: false,
+      integrationEnabled: 'maybe' as unknown as boolean,
+    })).rejects.toThrow('ENABLED_PREFERENCE_INVALID');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
   it('fails closed without the runtime encryption key before any database write', async () => {
     delete process.env.AUDIO_STUDIO_ENCRYPTION_KEY;
     await expect(saveHappyScribeSettings({

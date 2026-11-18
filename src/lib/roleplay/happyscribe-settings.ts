@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import prisma from '@/lib/prisma';
 
 const TOKEN_KEY = 'audio_studio_happyscribe_token_v1';
+const ENABLED_KEY = 'audio_studio_happyscribe_enabled';
 const ORG_KEY = 'audio_studio_happyscribe_organization_id';
 const MEDIA_KEY = 'audio_studio_happyscribe_media_proxy';
 const EXCLUDE_KEY = 'audio_studio_exclude_interpreter_default';
@@ -58,10 +59,15 @@ function decrypt(value: string): string {
 
 export async function getHappyScribeSettings() {
   const rows = await prisma.systemConfig.findMany({
-    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY] } },
+    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY, ENABLED_KEY] } },
     select: { key: true, value: true },
   });
   const map = new Map(rows.map(row => [row.key, row.value]));
+  // An explicit administrator disable takes precedence over both encrypted
+  // panel credentials and an old environment token from Easypanel.
+  if (map.get(ENABLED_KEY) === 'false') return {
+    token: '', organizationId: '', mediaImportEnabled: false,
+  };
   let token = process.env.HAPPY_SCRIBE_API_TOKEN?.trim() || '';
   if (map.has(TOKEN_KEY)) token = decrypt(map.get(TOKEN_KEY)!);
   const organizationId = map.has(ORG_KEY)
@@ -76,7 +82,7 @@ export async function getHappyScribeSettings() {
 
 export async function getHappyScribeSettingsStatus() {
   const rows = await prisma.systemConfig.findMany({
-    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY, EXCLUDE_KEY, COMPACT_KEY, PROTOCOL_LANGUAGE_KEY] } },
+    where: { key: { in: [TOKEN_KEY, ORG_KEY, MEDIA_KEY, ENABLED_KEY, EXCLUDE_KEY, COMPACT_KEY, PROTOCOL_LANGUAGE_KEY] } },
     select: { key: true, value: true },
   });
   const map = new Map(rows.map(row => [row.key, row.value]));
@@ -87,6 +93,7 @@ export async function getHappyScribeSettingsStatus() {
     catch { credentialUsable = false; }
   }
   return {
+    integrationEnabled: map.get(ENABLED_KEY) !== 'false',
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
     // Safe metadata only: removing an admin token can reactivate a server key.
     environmentFallbackAvailable: Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
@@ -95,7 +102,8 @@ export async function getHappyScribeSettingsStatus() {
     organizationId: map.has(ORG_KEY) ? map.get(ORG_KEY)! : (process.env.HAPPY_SCRIBE_ORGANIZATION_ID?.trim() || ''),
     // Display the effective state, not merely a persisted preference:
     // media never flows through the VPS unless the deployment gate is on.
-    mediaImportEnabled: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true'
+    mediaImportEnabled: map.get(ENABLED_KEY) !== 'false'
+      && process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true'
       && map.get(MEDIA_KEY) === 'true',
     proxyAvailable: process.env.HAPPY_SCRIBE_MEDIA_PROXY_ENABLED === 'true',
     encryptionReady: Boolean(masterKey()),
@@ -107,6 +115,7 @@ export async function getHappyScribeSettingsStatus() {
 
 export async function saveHappyScribeSettings(input: {
   token?: string; organizationId: string; mediaImportEnabled: boolean; removeToken?: boolean;
+  integrationEnabled?: boolean;
   excludeInterpreterByDefault?: boolean;
   compactViewDefault?: AudioStudioCompactViewDefault;
   protocolLanguageDefault?: 'en' | 'es';
@@ -119,6 +128,8 @@ export async function saveHappyScribeSettings(input: {
   if (input.compactViewDefault !== undefined &&
       !['auto', 'compact', 'expanded'].includes(input.compactViewDefault))
     throw new Error('COMPACT_MODE_INVALID');
+  if (input.integrationEnabled !== undefined &&
+      typeof input.integrationEnabled !== 'boolean') throw new Error('ENABLED_PREFERENCE_INVALID');
   if (input.protocolLanguageDefault !== undefined &&
       input.protocolLanguageDefault !== 'en' && input.protocolLanguageDefault !== 'es')
     throw new Error('PROTOCOL_LANGUAGE_INVALID');
@@ -137,6 +148,8 @@ export async function saveHappyScribeSettings(input: {
       update: { value: encryptedToken, updatedBy: actor },
     });
     const settings: [string, string][] = [[ORG_KEY, organizationId], [MEDIA_KEY, String(input.mediaImportEnabled)]];
+    if (input.integrationEnabled !== undefined)
+      settings.push([ENABLED_KEY, String(input.integrationEnabled)]);
     if (input.excludeInterpreterByDefault !== undefined)
       settings.push([EXCLUDE_KEY, String(input.excludeInterpreterByDefault)]);
     if (input.compactViewDefault !== undefined)
