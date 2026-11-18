@@ -11,6 +11,8 @@ export default defineConfig({
       'src/**/*.{test,spec}.{ts,tsx}',
       'scripts/account-platform-vpn-schema.test.ts',
       'scripts/call-idempotency-schema-state.test.ts',
+      // Enforce the aggregate-only privacy boundary in normal npm test/CI.
+      'scripts/call-production-audit-summary.test.ts',
     ],
     coverage: {
       provider: 'v8',
