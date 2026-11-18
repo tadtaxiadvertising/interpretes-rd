@@ -2,6 +2,7 @@ import { createClient, isSupabaseConfigError } from './supabase/server';
 import prisma from './prisma';
 import { auth as nextAuth } from './auth-rbac';
 import { resolveUserRoleByEmail } from './admin-identity';
+import { safeServerErrorCategory } from './security/safe-server-error';
 
 /**
  * AUTH BRIDGE
@@ -34,7 +35,7 @@ export async function auth() {
     } else {
       console.warn(
         '⚠️ [AUTH_BRIDGE] Unable to resolve Supabase session; checking NextAuth session:',
-        error instanceof Error ? error.message : error
+        safeServerErrorCategory(error)
       );
     }
   }
@@ -52,7 +53,7 @@ export async function auth() {
         };
       }
     } catch (authError) {
-      console.warn('⚠️ [AUTH_BRIDGE] NextAuth session check failed:', authError);
+      console.warn('⚠️ [AUTH_BRIDGE] NextAuth session check failed:', safeServerErrorCategory(authError));
     }
   }
   

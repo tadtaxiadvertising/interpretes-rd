@@ -7,6 +7,7 @@ import { UserRole } from '@/lib/types';
 import { supabaseAdmin, isAdminUnavailableError, ADMIN_UNAVAILABLE_MESSAGE } from '@/lib/supabase/admin';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
 import { resolveUserRoleByEmail } from '@/lib/admin-identity';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const prisma = prismaClient;
 
@@ -83,8 +84,8 @@ export async function updateUserPassword(userId: string, newPassword: string) {
       });
 
       if (error) {
-        console.error('Supabase Auth Reset Password Error:', error);
-        return { success: false, error: error.message };
+        console.error('[ADMIN_USERS] Password update rejected:', safeServerErrorCategory(error));
+        return { success: false, error: 'No se pudo actualizar la contraseña.' };
       }
     } catch (adminError) {
       if (isAdminUnavailableError(adminError)) {
@@ -95,8 +96,8 @@ export async function updateUserPassword(userId: string, newPassword: string) {
 
     return { success: true };
   } catch (error: any) {
-    console.error('Reset Password Exception:', error);
-    return { success: false, error: error.message || 'Error del servidor' };
+    console.error('[ADMIN_USERS] Password update failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'No se pudo actualizar la contraseña.' };
   }
 }
 
@@ -127,15 +128,15 @@ export async function updateUserProfile(userId: string, data: { displayName: str
       if (isAdminUnavailableError(supabaseError)) {
         console.warn('⚠️ [updateUserProfile] Supabase Auth sync skipped:', ADMIN_UNAVAILABLE_MESSAGE);
       } else {
-        console.error('Supabase sync warning:', supabaseError);
+        console.warn('[ADMIN_USERS] Profile sync warning:', safeServerErrorCategory(supabaseError));
       }
     }
 
     revalidateInterpreterProfileRecords(updated.interpreterId);
     return { success: true, profile: updated };
   } catch (error: any) {
-    console.error('Update Profile Exception:', error);
-    return { success: false, error: error.message || 'Error al actualizar el perfil' };
+    console.error('[ADMIN_USERS] Profile update failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'Error al actualizar el perfil.' };
   }
 }
 
@@ -143,31 +144,54 @@ export async function deleteUserAccess(userId: string) {
   try {
     const { user } = await auth();
     if (!user || user.role !== 'admin') {
-      throw new Error('Unauthorized');
+      return { success: false, error: 'Acceso no autorizado.' };
     }
 
-    // De-link/Delete from local DB first to avoid dependency failures
-    const deleted = await prisma.userProfile.delete({
-      where: { id: userId },
-      select: { interpreterId: true }
-    });
-
-    // Delete in Supabase Auth
+    // Revoke external authentication FIRST. Deleting the local profile first
+    // would leave a still-authenticated Supabase user if the provider fails.
     try {
-      await supabaseAdmin.auth.admin.deleteUser(userId);
-    } catch (supabaseError) {
-      if (isAdminUnavailableError(supabaseError)) {
-        console.warn('⚠️ [deleteUserAccess] Supabase Auth delete skipped:', ADMIN_UNAVAILABLE_MESSAGE);
-      } else {
-        console.error('Supabase delete account warning:', supabaseError);
+      const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+      if (error) {
+        console.error('[ADMIN_USERS] Auth revocation rejected:', safeServerErrorCategory(error));
+        return { success: false, error: 'No se pudo revocar el acceso de autenticación. No se modificó el perfil local.' };
       }
+    } catch (adminError) {
+      if (isAdminUnavailableError(adminError)) {
+        return { success: false, error: ADMIN_UNAVAILABLE_MESSAGE };
+      }
+      console.error('[ADMIN_USERS] Auth revocation failed:', safeServerErrorCategory(adminError));
+      return { success: false, error: 'No se pudo revocar el acceso de autenticación. No se modificó el perfil local.' };
     }
 
-    revalidateInterpreterProfileRecords(deleted.interpreterId);
+    // Auth has been revoked. If local cleanup fails, distinguish a PARTIAL
+    // outcome so operators do not assume the provider account still exists.
+    let interpreterId: number | null;
+    try {
+      const deleted = await prisma.userProfile.delete({
+        where: { id: userId },
+        select: { interpreterId: true },
+      });
+      interpreterId = deleted.interpreterId;
+    } catch (error) {
+      console.error('[ADMIN_USERS] Local cleanup after auth revocation failed:', safeServerErrorCategory(error));
+      return {
+        success: false,
+        partial: true,
+        error: 'Acceso de autenticación revocado; la limpieza del perfil local quedó pendiente de revisión.',
+      };
+    }
+
+    // Local deletion already committed; cache failures must not produce a
+    // false revocation failure and encourage a second destructive operation.
+    try {
+      revalidateInterpreterProfileRecords(interpreterId);
+    } catch (error) {
+      console.warn('[ADMIN_USERS] Access removed but cache refresh failed:', safeServerErrorCategory(error));
+    }
     return { success: true };
-  } catch (error: any) {
-    console.error('Delete User Exception:', error);
-    return { success: false, error: error.message || 'Error al eliminar usuario' };
+  } catch (error) {
+    console.error('[ADMIN_USERS] Access deletion failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'No se pudo eliminar el acceso.' };
   }
 }
 
@@ -205,8 +229,8 @@ export async function syncAllSupabaseUsers() {
       });
 
       if (error) {
-        console.error('Error listing Supabase users:', error);
-        return { success: false, error: error.message };
+        console.error('[ADMIN_USERS] Supabase user listing failed:', safeServerErrorCategory(error));
+        return { success: false, error: 'No se pudo consultar el directorio de autenticación.' };
       }
       supabaseUsers = data.users;
     } catch (adminError) {
@@ -265,7 +289,7 @@ export async function syncAllSupabaseUsers() {
     revalidatePath('/admin/users');
     return { success: true, syncedCount };
   } catch (error: any) {
-    console.error('Sync Users Exception:', error);
-    return { success: false, error: error.message || 'Error al sincronizar' };
+    console.error('[ADMIN_USERS] User sync failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'Error al sincronizar los usuarios.' };
   }
 }
