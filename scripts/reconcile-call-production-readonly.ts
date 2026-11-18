@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client } from 'pg';
 import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
+import { callProductionAuditSummary } from './call-production-audit-summary';
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -88,7 +89,8 @@ const reconciliationQuery = `
     SELECT interpreter_id, production_date FROM ledger_daily
     UNION
     SELECT interpreter_id, production_date FROM production_daily
-  )
+  ),
+  interpreter_day AS (
   SELECT
     keys.interpreter_id,
     keys.production_date,
@@ -116,7 +118,25 @@ const reconciliationQuery = `
   LEFT JOIN production_daily p
     ON p.interpreter_id = keys.interpreter_id
    AND p.production_date = keys.production_date
-  ORDER BY keys.production_date, keys.interpreter_id
+  )
+  -- Aggregate inside PostgreSQL so identifiers and daily rows never
+  -- leave the database for an operator-facing report.
+  SELECT
+    COUNT(*)::bigint AS interpreter_day_groups,
+    COALESCE(SUM(session_count), 0)::bigint AS total_sessions,
+    COALESCE(SUM(ended_session_count), 0)::bigint AS ended_sessions,
+    COALESCE(SUM(ended_without_ledger_count), 0)::bigint AS ended_without_ledger_sessions,
+    COALESCE(SUM(ended_session_minutes), 0)::bigint AS ended_session_minutes,
+    COALESCE(SUM(ledger_entry_count), 0)::bigint AS ledger_entries,
+    COALESCE(SUM(ledger_minutes), 0)::bigint AS ledger_minutes,
+    COALESCE(SUM(production_log_count), 0)::bigint AS production_logs,
+    COALESCE(SUM(production_log_effective_minutes), 0)::bigint AS production_effective_minutes,
+    COALESCE(SUM(session_minus_ledger_minutes), 0)::bigint AS session_minus_ledger_minutes,
+    COALESCE(SUM(production_log_minus_ledger_minutes), 0)::bigint AS production_minus_ledger_minutes,
+    COUNT(*) FILTER (WHERE session_minus_ledger_minutes <> 0)::bigint AS groups_with_session_ledger_difference,
+    COUNT(*) FILTER (WHERE production_log_minus_ledger_minutes <> 0)::bigint AS groups_with_production_ledger_difference,
+    COUNT(*) FILTER (WHERE ended_without_ledger_count > 0)::bigint AS groups_with_ended_calls_without_ledger
+  FROM interpreter_day
 `;
 
 async function main() {
@@ -133,25 +153,21 @@ async function main() {
     await client.query("SET LOCAL statement_timeout = '60s'");
 
     const result = await client.query(reconciliationQuery, [fromDate, toDate]);
-    const rows = result.rows.map((row) => ({
-      ...row,
-      production_date: row.production_date instanceof Date
-        ? row.production_date.toISOString().slice(0, 10)
-        : row.production_date,
-    }));
+    if (result.rows.length !== 1) throw new Error('Invalid aggregate reconciliation result');
+    const summary = callProductionAuditSummary(result.rows[0]);
 
     console.log(JSON.stringify({
       mode: 'READ_ONLY',
+      output: 'AGGREGATE_ONLY',
       timezone: 'America/Santo_Domingo',
       fromDate,
       toDate,
-      rowCount: rows.length,
+      summary,
       interpretation: [
-        'ended_without_ledger_count identifies sessions without a per-session ledger entry; it does not prove they are absent from ProductionLog.',
-        'production_log_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
+        'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
+        'production_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
         'No row is classified as safe to import, and this report never repairs, inserts, updates, or deletes data.',
       ],
-      rows,
     }, null, 2));
   } finally {
     if (transactionStarted) await client.query('ROLLBACK');
@@ -159,7 +175,8 @@ async function main() {
   }
 }
 
-main().catch((error: unknown) => {
-  console.error('Read-only call reconciliation failed:', error);
+main().catch(() => {
+  // Driver failures can contain secret URLs, account values, or row data.
+  console.error('Read-only call reconciliation failed. Check secure operator diagnostics.');
   process.exitCode = 1;
 });

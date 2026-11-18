@@ -28,6 +28,9 @@ function validatedInteger(value: unknown, name: MetricName): number {
   if (typeof value !== 'number' && typeof value !== 'string') {
     throw new Error('Invalid aggregate reconciliation result');
   }
+  if (typeof value === 'string' && !/^-?[0-9]+$/.test(value)) {
+    throw new Error('Invalid aggregate reconciliation result');
+  }
   const num = Number(value);
   if (!Number.isSafeInteger(num) ||
       (name !== 'session_minus_ledger_minutes' &&
