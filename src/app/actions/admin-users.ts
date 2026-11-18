@@ -75,18 +75,63 @@ export async function linkUserToInterpreter(userId: string, interpreterId: numbe
     throw new Error('Unauthorized');
   }
 
+  // Server actions can receive untyped values despite the TypeScript signature.
+  if (interpreterId !== null && (!Number.isSafeInteger(interpreterId) || interpreterId <= 0)) {
+    return { success: false, error: 'El identificador del intérprete no es válido.' };
+  }
+
   const previous = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: { interpreterId: true }
+    select: { interpreterId: true, email: true, role: true },
   });
+  if (!previous) {
+    return { success: false, error: 'El usuario ya no existe.' };
+  }
 
-  await prisma.userProfile.update({
-    where: { id: userId },
-    data: { interpreterId }
-  });
+  // Admin identities must not acquire interpreter-linked data or be
+  // inadvertently reclassified by the management UI.
+  if (previous.role === 'admin' || isProtectedAdminEmail(previous.email)) {
+    return { success: false, error: 'No se puede vincular una cuenta administrativa a un intérprete.' };
+  }
 
-  revalidateInterpreterProfileRecords(previous?.interpreterId);
-  revalidateInterpreterProfileRecords(interpreterId);
+  if (interpreterId !== null) {
+    const interpreter = await prisma.interpreter.findUnique({
+      where: { id: interpreterId },
+      select: { id: true },
+    });
+    if (!interpreter) {
+      return { success: false, error: 'El intérprete seleccionado ya no existe.' };
+    }
+  }
+
+  try {
+    await prisma.userProfile.update({
+      where: { id: userId },
+      data: { interpreterId },
+      select: { interpreterId: true },
+    });
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? (error as { code?: unknown }).code : null;
+    if (code === 'P2002') {
+      return { success: false, error: 'El intérprete ya está vinculado a otra cuenta.' };
+    }
+    if (code === 'P2025') {
+      return { success: false, error: 'La cuenta o el intérprete ya no existe.' };
+    }
+    console.error('[ADMIN_USERS] Interpreter link update failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'No se pudo actualizar el vínculo del intérprete.' };
+  }
+
+  // Both views may need invalidation; a cache failure is not a failed write.
+  const ids = new Set([previous.interpreterId, interpreterId]);
+  for (const id of ids) {
+    try {
+      revalidateInterpreterProfileRecords(id);
+    } catch (error) {
+      console.warn('[ADMIN_USERS] Interpreter link saved but cache refresh failed:', safeServerErrorCategory(error));
+    }
+  }
   return { success: true };
 }
 
