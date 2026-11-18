@@ -3,6 +3,8 @@ import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
+import { readCallKeyCatalog } from './call-idempotency-schema-catalog';
+import { classifyCallKeySchema } from './call-idempotency-schema-state';
 
 // Never run this integration verifier against real/shared PostgreSQL.
 // Unlike production migrations, this script intentionally exercises rejected
@@ -75,6 +77,76 @@ async function main() {
     ), 'utf8');
     if (!ownershipSql.trim()) throw new Error('Staged session ownership SQL missing.');
     await client.query(ownershipSql);
+
+    // Verify that the *same SELECT-only catalog reader* used by operators
+    // recognizes the exact DDL proposed for a later DBA-approved rollout.
+    // Previous CI exercised only the absent (rolled-back) state.
+    const stagedCatalog = await readCallKeyCatalog(client);
+    // node-postgres does not parse pg_catalog name[] by default. Prevent
+    // regression to textual "{column_name}" values disguised as string[].
+    for (const constraint of stagedCatalog.constraints) {
+      if (!Array.isArray(constraint.key_columns) ||
+          !Array.isArray(constraint.references_columns) ||
+          !constraint.key_columns.every(column => typeof column === 'string') ||
+          !constraint.references_columns.every(column => typeof column === 'string')) {
+        throw new Error('Catalog column metadata must be decoded JSON arrays.');
+      }
+    }
+    const completeState = classifyCallKeySchema(stagedCatalog);
+    if (completeState !== 'complete') {
+      // These are metadata from disposable CI PostgreSQL ONLY. Print no
+      // SQL, connection URLs, ids, key material or data records.
+      const columnFlags = stagedCatalog.columns.map(column => ({
+        name: column.column_name,
+        type: column.data_type,
+        required: column.is_nullable === 'NO',
+        hasDefault: column.column_default != null,
+      }));
+      const constraintFlags = stagedCatalog.constraints.map(constraint => ({
+        name: constraint.conname,
+        type: constraint.contype,
+        valid: constraint.convalidated,
+        columns: constraint.key_columns,
+        references: constraint.references_columns,
+        onDelete: constraint.on_delete,
+        onUpdate: constraint.on_update,
+        checkContainsDigestPattern: constraint.definition.includes('[0-9a-f]{64}'),
+      }));
+      console.error('Disposable CI catalog shape:', JSON.stringify({
+        state: completeState,
+        rls: stagedCatalog.rlsEnabled,
+        policyCount: stagedCatalog.policyCount,
+        supportingIndex: stagedCatalog.supportingIndexValid,
+        columns: columnFlags,
+        constraints: constraintFlags,
+      }));
+      throw new Error('Staged DDL did not match the operational catalog contract.');
+    }
+
+    // Simulate an unexpected public RLS policy and a missing timestamp default:
+    // both must reject readiness, without leaving a change in CI PostgreSQL.
+    await client.query('SAVEPOINT check_unsafe_policy');
+    try {
+      await client.query(`CREATE POLICY ci_unapproved_policy
+        ON public.call_submission_keys FOR ALL USING (true) WITH CHECK (true)`);
+      if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'partial') {
+        throw new Error('Catalog reader failed to detect a permissive RLS policy.');
+      }
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT check_unsafe_policy');
+      await client.query('RELEASE SAVEPOINT check_unsafe_policy');
+    }
+
+    await client.query('SAVEPOINT check_missing_default');
+    try {
+      await client.query('ALTER TABLE public.call_submission_keys ALTER COLUMN created_at DROP DEFAULT');
+      if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'partial') {
+        throw new Error('Catalog reader failed to detect a missing timestamp default.');
+      }
+    } finally {
+      await client.query('ROLLBACK TO SAVEPOINT check_missing_default');
+      await client.query('RELEASE SAVEPOINT check_missing_default');
+    }
 
     const table = await client.query<{ rls_enabled: boolean }>(
       `SELECT c.relrowsecurity AS rls_enabled
@@ -209,8 +281,11 @@ async function main() {
     if (indexAfter.rows[0]?.exists) {
       throw new Error('Isolated verifier left the staged ownership index behind.');
     }
+    if (classifyCallKeySchema(await readCallKeyCatalog(client)) !== 'absent') {
+      throw new Error('Catalog reader failed to recognize pristine PostgreSQL after rollback.');
+    }
 
-    console.log('Staged call idempotency SQL verified on isolated PostgreSQL: uniqueness, ownership, RLS, foreign keys, checks and rollback.');
+    console.log('Staged call idempotency SQL verified on isolated PostgreSQL: complete/partial/absent catalog roundtrip, uniqueness, ownership, RLS, foreign keys, checks and rollback.');
   } finally {
     if (inTransaction) await client.query('ROLLBACK').catch(() => undefined);
     await client.end();

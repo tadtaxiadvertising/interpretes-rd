@@ -51,6 +51,12 @@ tablas ni resolver migraciones automáticamente.
 - CI ejecuta el SQL y sus aserciones dentro de una transacción que hace
   `ROLLBACK` y rechaza URLs ajenas al PostgreSQL aislado.
   No se consulta ninguna base real.
+- El verificador ejecuta el **mismo lector de catálogos** que utiliza el
+  operador, primero contra las dos propuestas SQL dentro de la transacción
+  aislada y finalmente después de revertirlas. Debe detectar `complete`
+  sobre el DDL íntegro, `partial` cuando se introduce una política RLS
+  inesperada o se elimina el default de `created_at`, y `absent` después
+  del `ROLLBACK`. Ninguna de estas pruebas consulta la base de Easypanel.
 
 ## Etapa 0.5: contrato de solicitud revisable (SIN activar)
 
