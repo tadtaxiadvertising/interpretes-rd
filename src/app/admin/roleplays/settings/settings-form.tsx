@@ -1,8 +1,9 @@
 'use client';
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { inspectAudioStudioSettings, saveAudioStudioSettings } from '@/app/actions/audio-studio-settings';
 type Initial = {
+  revision: string;
   integrationEnabled: boolean;
   hasToken: boolean; credentialUsable: boolean; environmentFallbackAvailable: boolean; tokenSource: string; organizationId: string;
   mediaImportEnabled: boolean; proxyAvailable: boolean; encryptionReady: boolean;
@@ -20,16 +21,34 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [protocolDefault, setProtocolDefault] = useState(initial.protocolLanguageDefault);
   const [status, setStatus] = useState(initial);
   const [checking, setChecking] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [conflict, setConflict] = useState(false);
   const [pending, start] = useTransition();
   const hasToken = status.hasToken;
-  const editingDisabled = pending || checking;
+  const editingDisabled = pending || checking || refreshing;
   const hasUnsavedChanges = enabled !== status.integrationEnabled || org !== status.organizationId || token.length > 0 || remove ||
     media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
     compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  // A warning paragraph alone cannot stop an accidental tab close or reload.
+  // Register the native browser warning only while there is an unsaved draft.
+  useEffect(() => {
+    if (!hasUnsavedChanges && !pending) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasUnsavedChanges, pending]);
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // A stale form is not allowed to retry until the admin explicitly reloads.
+    if (conflict || editingDisabled) return;
     const data = new FormData();
+    // The server rejects concurrent edits rather than silently overwriting
+    // a newer administrator's provider or editor settings.
+    data.set('expectedRevision', status.revision);
     data.set('token', token);
     if (org !== status.organizationId) data.set('organizationId', org);
     // Do not reactivate an integration disabled in another admin tab just
@@ -48,6 +67,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     start(async () => {
       const result = await saveAudioStudioSettings(data);
       setNotice({ ok: result.success, message: result.message });
+      setConflict(result.conflict === true);
       if (result.success) {
         setToken(''); setRemove(false);
         try {
@@ -61,9 +81,40 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
           setCompactDefault(latest.compactViewDefault);
           setProtocolDefault(latest.protocolLanguageDefault);
           setMedia(latest.mediaImportEnabled);
-        } catch { /* The save already succeeded; avoid misleading retry prompts. */ }
+        } catch {
+          // The save committed, but the next revision could not be loaded.
+          // Disable another save to avoid a stale retry or duplicate secret update.
+          setConflict(true);
+          setNotice({
+            ok: true,
+            message: 'Configuración guardada. No se pudo actualizar la pantalla; vuelve a cargar los ajustes antes de guardar otra vez.',
+          });
+        }
       }
     });
+  }
+  async function loadLatestSettings() {
+    setRefreshing(true);
+    try {
+      const latest = await inspectAudioStudioSettings();
+      // Discard unsaved changes and any pending secret only after the
+      // administrator deliberately requests the fresh configuration.
+      setStatus(latest);
+      setOrg(latest.organizationId);
+      setEnabled(latest.integrationEnabled);
+      setToken('');
+      setRemove(false);
+      setMedia(latest.mediaImportEnabled);
+      setExcludeDefault(latest.excludeInterpreterByDefault);
+      setCompactDefault(latest.compactViewDefault);
+      setProtocolDefault(latest.protocolLanguageDefault);
+      setConflict(false);
+      setNotice({ ok: true, message: 'Ajustes actuales cargados. Se descartaron tus cambios locales; revisa los valores antes de guardar.' });
+    } catch {
+      setNotice({ ok: false, message: 'No se pudo recuperar la configuración actual. Ningún cambio local se ha descartado.' });
+    } finally {
+      setRefreshing(false);
+    }
   }
   async function checkConnection() {
     setChecking(true);
@@ -146,9 +197,25 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     {hasUnsavedChanges && !pending && <p role="status" className="text-sm text-amber-200">
       Tienes cambios sin guardar. Guárdalos antes de probar la conexión o salir de esta pantalla.
     </p>}
-    {notice && <p role="status" className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
-    <div className="flex flex-wrap items-center gap-3"><button disabled={pending || checking} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
-      <button type="button" onClick={() => void checkConnection()} disabled={pending || checking || !enabled || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
-      <Link href="/admin/roleplays/studio" className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</Link></div>
+    {notice && <p role={conflict ? 'alert' : 'status'} className={notice.ok ? 'text-green-300' : 'text-red-300'}>{notice.message}</p>}
+    {conflict && <div className="space-y-2 rounded-xl border border-amber-500/30 p-4">
+      <p className="text-sm text-amber-200">El guardado está bloqueado hasta cargar la configuración actual. La acción siguiente descartará tus cambios sin guardar, incluida cualquier clave API escrita.</p>
+      <button type="button" disabled={editingDisabled} onClick={() => void loadLatestSettings()}
+        className="rounded-xl border border-amber-400/40 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">
+        {refreshing ? 'Cargando ajustes…' : 'Descartar mis cambios y cargar ajustes actuales'}
+      </button>
+    </div>}
+    <div className="flex flex-wrap items-center gap-3"><button disabled={editingDisabled || conflict} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
+      <button type="button" onClick={() => void checkConnection()} disabled={editingDisabled || conflict || hasUnsavedChanges || !enabled || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
+      <Link href="/admin/roleplays/studio" onClick={event => {
+        if (editingDisabled) {
+          event.preventDefault();
+          return;
+        }
+        if (hasUnsavedChanges &&
+          !window.confirm('Hay cambios sin guardar, incluida cualquier clave nueva. ¿Quieres salir y descartarlos?')) {
+          event.preventDefault();
+        }
+      }} className="text-sm text-blue-300 hover:underline">Abrir Audio Studio</Link></div>
   </form>;
 }
