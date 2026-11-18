@@ -173,6 +173,24 @@ export async function updateUserProfile(userId: string, data: { displayName: str
       return { success: false, error: 'Acceso no autorizado.' };
     }
 
+    // The protected admin allowlist is keyed by email. Never let an ordinary
+    // profile edit rename that identity or claim its reserved address, which
+    // would otherwise bypass protected role/deletion guards.
+    const existing = await prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!existing) {
+      return { success: false, error: 'El usuario ya no existe.' };
+    }
+    if (
+      (isProtectedAdminEmail(existing.email) &&
+        normalizeEmail(data.email) !== normalizeEmail(existing.email)) ||
+      (!isProtectedAdminEmail(existing.email) && isProtectedAdminEmail(data.email))
+    ) {
+      return { success: false, error: 'El correo de la identidad administrativa protegida no puede modificarse ni asignarse a otro perfil.' };
+    }
+
     // Only expose fields needed by the caller, never an entire profile record.
     const updated = await prisma.userProfile.update({
       where: { id: userId },
