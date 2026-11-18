@@ -64,6 +64,11 @@ describe('dedicated Express API database readiness', () => {
     expect(docker).toContain('/ready');
     expect(docker).not.toMatch(/HEALTHCHECK[^\n]*\n\s*CMD[^\n]*\/health/);
     expect(app).toContain("app.get('/health'");
+    // Keep the preexisting monitor payload stable while splitting readiness.
+    const liveness = app.split("app.get('/health'")[1].split("app.get('/ready'")[0];
+    expect(liveness).toContain("status: 'ok'");
+    expect(liveness).toContain('timestamp: new Date().toISOString()');
+    expect(liveness).toContain('uptime: Math.floor(process.uptime())');
     expect(app).toContain("app.get('/ready'");
     expect(app).toContain('await prisma.$queryRaw`SELECT 1`');
     expect(app).toContain('res.status(ready ? 200 : 503)');
