@@ -103,7 +103,7 @@ export const globalErrorHandler = (
       error: {
         type: 'DATABASE_ERROR',
         message: 'Database request failed.',
-        code: /^P\\d{4}$/.test(err.code) ? err.code : 'PRISMA_ERROR',
+        code: /^P\d{4}$/.test(err.code) ? err.code : 'PRISMA_ERROR',
       },
     });
     return;
@@ -139,8 +139,7 @@ export const globalErrorHandler = (
   }
 
   // ── 6. JSON PARSE ERRORS ────────────────────────────────
-  const errWithType = err as { type?: string };
-  if (errWithType.type === 'entity.parse.failed') {
+  if (err && typeof err === 'object' && 'type' in err && err.type === 'entity.parse.failed') {
     res.status(400).json({
       success: false,
       error: {
