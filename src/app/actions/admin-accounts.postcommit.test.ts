@@ -61,6 +61,41 @@ describe('operational account post-commit behavior and privacy', () => {
     } finally { warn.mockRestore(); error.mockRestore(); }
   });
 
+  it('does not request new VPN columns as part of an account creation response', async () => {
+    expect(await createOperationalAccount(accountForm())).toEqual({ success: true });
+    expect(prisma.account.create).toHaveBeenCalledWith(
+      expect.objectContaining({ select: { id: true } }),
+    );
+  });
+
+  it.each([true, false])(
+    'limits platform mutation responses to an ID when updating an account (platform exists: %s)',
+    async platformExists => {
+      const tx = {
+        account: { update: vi.fn().mockResolvedValue({ id: 12 }) },
+        accountPlatform: {
+          findFirst: vi.fn().mockResolvedValue(platformExists ? { id: 19 } : null),
+          update: vi.fn().mockResolvedValue({ id: 19 }),
+          create: vi.fn().mockResolvedValue({ id: 19 }),
+        },
+      };
+      vi.mocked(prisma.$transaction).mockImplementationOnce(async callback =>
+        callback(tx as never) as never,
+      );
+
+      expect(await updateOperationalAccount(accountForm())).toEqual({ success: true });
+      expect(tx.account.update).toHaveBeenCalledWith(
+        expect.objectContaining({ select: { id: true } }),
+      );
+      const mutation = platformExists ? tx.accountPlatform.update : tx.accountPlatform.create;
+      expect(mutation).toHaveBeenCalledWith(
+        expect.objectContaining({ select: { id: true } }),
+      );
+      expect(platformExists ? tx.accountPlatform.create : tx.accountPlatform.update)
+        .not.toHaveBeenCalled();
+    },
+  );
+
   it('reports a committed account update as successful when cache refresh fails', async () => {
     vi.mocked(revalidatePath).mockImplementationOnce(() => { throw new Error('PRIVATE_REFRESH_TOKEN'); });
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});

@@ -70,6 +70,7 @@ export async function createOperationalAccount(formData: FormData) {
           },
         },
       },
+      select: { id: true },
     });
     refreshAccountPagesAfterCommit();
     return { success: true };
@@ -123,6 +124,7 @@ export async function updateOperationalAccount(formData: FormData) {
       await tx.account.update({
         where: { id: accountId },
         data: { ...accountData, companyId: companyId ? Number(companyId) : null },
+        select: { id: true },
       });
       const platform = await tx.accountPlatform.findFirst({
         where: { accountId, name: 'Plataforma principal' },
@@ -132,10 +134,13 @@ export async function updateOperationalAccount(formData: FormData) {
         await tx.accountPlatform.update({
           where: { id: platform.id },
           data: { loginUrl, usernameHint: accountData.email, secretRef, active: true },
+          // Avoid Prisma selecting newly added VPN columns on legacy schemas.
+          select: { id: true },
         });
       } else {
         await tx.accountPlatform.create({
           data: { accountId, name: 'Plataforma principal', loginUrl, usernameHint: accountData.email, secretRef },
+          select: { id: true },
         });
       }
     });
