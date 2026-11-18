@@ -7,7 +7,8 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main]
+    # Temporary branch-only nondeploying check; remove before delivery.
+    branches: [main, fix/audio-studio-concurrency-current-main-20261117]
   workflow_dispatch:
 
 permissions:
