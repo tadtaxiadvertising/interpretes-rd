@@ -153,6 +153,8 @@ jobs:
         run: node --test scripts/ci/verify-eslint-minimatch-lock.test.mjs
 
       - name: Dependency Security Audit
+        id: dependency_security_audit
+        continue-on-error: true
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
           node -e '
@@ -269,6 +271,14 @@ jobs:
 
       - name: Run isolated end-to-end tests
         run: npm run test:e2e
+
+      # Keep the security audit as a hard gate, but run the remaining
+      # validation first so dependency findings do not hide unrelated defects.
+      - name: Enforce Dependency Security Audit result
+        if: always() && steps.dependency_security_audit.outcome == 'failure'
+        run: |
+          echo "::error::Dependency Security Audit found high or critical vulnerabilities. See its report above; deployment remains blocked."
+          exit 1
 
   deploy-interpreters:
     name: Deploy interpreters (Next.js)
