@@ -341,10 +341,21 @@ export async function getActiveCall(): Promise<ActionResult<CallSession | null>>
 }
 
 const ManualCallSchema = z.object({
-  interpreterId: z.coerce.number(),
-  startedAt: z.string().transform(s => new Date(s)),
-  durationMinutes: z.coerce.number().positive(),
-  notes: z.string().optional()
+  interpreterId: z.coerce.number().int().positive(),
+  // datetime-local values omit their timezone. Require a real ISO timestamp
+  // with an explicit offset so server and browser cannot disagree about time.
+  startedAt: z.string()
+    .refine(value =>
+      /^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2}(?:\\.\\d{1,3})?)?(?:Z|[+-]\\d{2}:\\d{2})$/i.test(value) &&
+      Number.isFinite(Date.parse(value)),
+    )
+    .transform(value => new Date(value)),
+  durationMinutes: z.coerce.number().finite().positive()
+    .refine(value => {
+      const seconds = Math.round(value * 60);
+      return Number.isSafeInteger(seconds) && seconds > 0 && seconds <= 2_147_483_647;
+    }),
+  notes: z.string().max(2_000).optional(),
 });
 
 /**
@@ -378,7 +389,13 @@ export async function addManualCall(formData: FormData): Promise<ActionResult<{ 
 
     const durationSeconds = Math.round(validated.durationMinutes * 60);
     const endedAt = new Date(validated.startedAt.getTime() + durationSeconds * 1000);
-    const callCost = (durationSeconds / 60) * Number(interpreter.tariffPerMinute);
+    const tariff = Number(interpreter.tariffPerMinute);
+    const callCost = Math.round((durationSeconds / 60) * tariff * 100) / 100;
+    if (!Number.isFinite(endedAt.getTime()) ||
+        !Number.isFinite(tariff) || tariff < 0 ||
+        !Number.isFinite(callCost) || callCost < 0 || callCost > 99_999_999.99) {
+      return { success: false, error: 'Invalid call time or rate', code: 'VALIDATION_ERROR' };
+    }
 
     const session = await db.callSession.create({
       data: {
@@ -393,7 +410,13 @@ export async function addManualCall(formData: FormData): Promise<ActionResult<{ 
       select: { id: true }
     });
 
-    revalidatePath('/admin/calls');
+    // The insert has committed. A failed cache refresh is not a failed
+    // manual call and must not encourage a duplicate administrative entry.
+    try {
+      revalidatePath('/admin/calls');
+    } catch (error) {
+      console.warn('Admin manual call saved; cache refresh failed:', safeServerErrorCategory(error));
+    }
     return { success: true, data: { id: session.id } };
   } catch (error: unknown) {
     if (error instanceof z.ZodError) {
