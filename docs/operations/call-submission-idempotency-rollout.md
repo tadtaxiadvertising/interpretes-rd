@@ -128,6 +128,17 @@ sin presentar identificadores de llamadas ni credenciales. Opera dentro de
 `BEGIN READ ONLY` y ejecuta `ROLLBACK` antes de concluir. `--require-complete`
 retorna fallo si falta el esquema, pero **no** lo instala ni lo repara.
 
+`history-drift` incluye migraciones históricas marcadas como aplicadas
+aunque el esquema esperado no exista, y **migraciones fallidas sin resolver**
+(incluso si su DDL se revirtió). Este estado requiere atención DBA antes
+de cualquier intento de aplicación; no ejecutar `prisma migrate resolve`
+automáticamente. Un estado `complete` también exige que `created_at`
+tenga su valor predeterminado temporal en PostgreSQL.
+
+La verificación aislada del CI ejecuta el diagnóstico con una base descartable
+sin el esquema instalado y espera `absent`. Esa prueba demuestra que el lector
+funciona, **no acredita el estado de la base usada por Easypanel**.
+
 Si la base ya contiene parte o todo el esquema, detenerse y planificar su
 conciliación. Si la base está ausente, el equipo DBA debe diseñar y aprobar
 una ruta ejecutable de mantenimiento, con respaldo restaurable, bloqueo
