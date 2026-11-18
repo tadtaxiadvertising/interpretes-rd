@@ -45,6 +45,18 @@ const reconciliationQuery = `
             WHERE cpe.call_session_id = cs.id
           )
       )::int AS ended_without_ledger_count,
+      -- Flags only: a legacy/manual session may have legitimate reasons for
+      -- differences. Do not infer missing payable minutes from timestamps.
+      COUNT(*) FILTER (
+        WHERE cs.ended_at IS NOT NULL AND cs.duration_seconds IS NULL
+      )::int AS ended_missing_duration_count,
+      COUNT(*) FILTER (
+        WHERE cs.ended_at >= cs.started_at + INTERVAL '60 seconds'
+          AND cs.duration_seconds = 0
+      )::int AS ended_zero_duration_with_elapsed_count,
+      COUNT(*) FILTER (
+        WHERE cs.ended_at IS NOT NULL AND cs.call_cost IS NULL
+      )::int AS ended_missing_cost_count,
       COALESCE(SUM(
         CASE
           WHEN cs.ended_at IS NOT NULL
@@ -97,6 +109,9 @@ const reconciliationQuery = `
     COALESCE(s.session_count, 0)::int AS session_count,
     COALESCE(s.ended_session_count, 0)::int AS ended_session_count,
     COALESCE(s.ended_without_ledger_count, 0)::int AS ended_without_ledger_count,
+    COALESCE(s.ended_missing_duration_count, 0)::int AS ended_missing_duration_count,
+    COALESCE(s.ended_zero_duration_with_elapsed_count, 0)::int AS ended_zero_duration_with_elapsed_count,
+    COALESCE(s.ended_missing_cost_count, 0)::int AS ended_missing_cost_count,
     COALESCE(s.ended_session_minutes, 0)::int AS ended_session_minutes,
     COALESCE(l.ledger_entry_count, 0)::int AS ledger_entry_count,
     COALESCE(l.ledger_minutes, 0)::int AS ledger_minutes,
@@ -126,6 +141,9 @@ const reconciliationQuery = `
     COALESCE(SUM(session_count), 0)::bigint AS total_sessions,
     COALESCE(SUM(ended_session_count), 0)::bigint AS ended_sessions,
     COALESCE(SUM(ended_without_ledger_count), 0)::bigint AS ended_without_ledger_sessions,
+    COALESCE(SUM(ended_missing_duration_count), 0)::bigint AS ended_missing_duration_sessions,
+    COALESCE(SUM(ended_zero_duration_with_elapsed_count), 0)::bigint AS ended_zero_duration_with_elapsed_sessions,
+    COALESCE(SUM(ended_missing_cost_count), 0)::bigint AS ended_missing_cost_sessions,
     COALESCE(SUM(ended_session_minutes), 0)::bigint AS ended_session_minutes,
     COALESCE(SUM(ledger_entry_count), 0)::bigint AS ledger_entries,
     COALESCE(SUM(ledger_minutes), 0)::bigint AS ledger_minutes,
@@ -165,6 +183,9 @@ async function main() {
       summary,
       interpretation: [
         'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
+        'ended_missing_duration_sessions counts ended sessions with durationSeconds NULL; ended_zero_duration_with_elapsed_sessions counts zero-duration sessions with at least 60 seconds elapsed between stored timestamps.',
+        'ended_missing_cost_sessions counts ended sessions with callCost NULL. These flags do not independently establish payable minutes or entitlement; investigate sources before correction.',
+        'Historical counts include only sessions with an interpreterId and startedAt in the selected Santo Domingo date range; sessions missing startedAt are excluded.',
         'production_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
         'No row is classified as safe to import, and this report never repairs, inserts, updates, or deletes data.',
       ],
