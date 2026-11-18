@@ -153,7 +153,20 @@ export function requireRole(actor: CurrentActor | null, requiredRoles: UserRole[
 
 export function requireOwnership(actor: CurrentActor | null, resourceInterpreterId: number | null): CurrentActor {
   const a = requireActor(actor);
-  if (a.role !== 'admin' && a.interpreterId !== resourceInterpreterId) {
+  // An unassigned record has no interpreter owner. Never consider null ===
+  // null to be proof of ownership. Candidates also cannot own interpreter
+  // resources, even when a stale profile still contains an interpreterId.
+  if (a.role === 'admin') return a;
+  if (
+    a.role !== 'interpreter' ||
+    !Number.isSafeInteger(a.interpreterId) ||
+    a.interpreterId === null ||
+    a.interpreterId <= 0 ||
+    !Number.isSafeInteger(resourceInterpreterId) ||
+    resourceInterpreterId === null ||
+    resourceInterpreterId <= 0 ||
+    a.interpreterId !== resourceInterpreterId
+  ) {
     throw new Error('Access denied: not your resource');
   }
   return a;
