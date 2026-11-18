@@ -1,0 +1,67 @@
+name: Public registration RBAC smoke (isolated)
+
+# Targeted security regression: public signup may never choose ADMIN/HOLDER.
+# Runs only for relevant changes, using disposable local PostgreSQL.
+# This job cannot deploy or replace the mandatory dependency audit.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'interpreters-api/src/modules/auth/**'
+      - 'scripts/ci/smoke-public-registration.sh'
+      - '.github/workflows/public-registration-security.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'interpreters-api/src/modules/auth/**'
+      - 'scripts/ci/smoke-public-registration.sh'
+      - '.github/workflows/public-registration-security.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  isolated-public-registration:
+    name: Reject privileged public registration
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: interpreters_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres -d interpreters_e2e"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
+      DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e?schema=public&sslmode=disable
+      AUTH_SECRET: isolated-public-registration-only-secret
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: isolated-public-signup-placeholder
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install pinned dependencies
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+
+      - name: Prepare isolated PostgreSQL schema
+        run: |
+          npx prisma validate
+          npx prisma generate
+          npx prisma db push
+
+      - name: Verify anonymous registration cannot obtain privileged roles
+        run: bash scripts/ci/smoke-public-registration.sh
