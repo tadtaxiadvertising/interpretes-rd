@@ -8,6 +8,8 @@ const METRIC_FIELDS = [
   'total_sessions',
   'ended_sessions',
   'ended_without_ledger_sessions',
+  'known_quicklog_without_ledger_sessions',
+  'known_admin_manual_without_ledger_sessions',
   'ended_missing_duration_sessions',
   'ended_zero_duration_with_elapsed_sessions',
   'ended_missing_cost_sessions',
