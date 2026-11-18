@@ -120,6 +120,47 @@ describe('admin user access revocation and error privacy', () => {
     expect(mocks.updateAuthUser).not.toHaveBeenCalled();
   });
 
+  it('blocks changing the reserved admin email before local or provider updates', async () => {
+    mocks.findProfile.mockResolvedValueOnce({ email: PROTECTED_ADMIN_EMAILS[0] });
+    const result = await updateUserProfile('protected-id', {
+      displayName: 'Protected Operator',
+      email: 'renamed@example.test',
+    });
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('protegida');
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
+  it('blocks assigning the reserved admin email to an unrelated profile', async () => {
+    const result = await updateUserProfile('other-id', {
+      displayName: 'Other Operator',
+      email: PROTECTED_ADMIN_EMAILS[0].toUpperCase(),
+    });
+    expect(result).toMatchObject({ success: false });
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
+  it('allows a protected admin display-name change without changing the canonical email', async () => {
+    mocks.findProfile.mockResolvedValueOnce({ email: PROTECTED_ADMIN_EMAILS[0] });
+    const result = await updateUserProfile('protected-id', {
+      displayName: 'Protected Operator',
+      email: PROTECTED_ADMIN_EMAILS[0],
+    });
+    expect(result.success).toBe(true);
+    expect(mocks.localUpdate).toHaveBeenCalledOnce();
+    expect(mocks.updateAuthUser).toHaveBeenCalledOnce();
+  });
+
+  it('does not edit a profile that disappeared before the update', async () => {
+    mocks.findProfile.mockResolvedValueOnce(null);
+    const result = await updateUserProfile('missing-id', updatedProfile);
+    expect(result.success).toBe(false);
+    expect(mocks.localUpdate).not.toHaveBeenCalled();
+    expect(mocks.updateAuthUser).not.toHaveBeenCalled();
+  });
+
   it('requires a real local profile before any external deletion', async () => {
     mocks.findProfile.mockResolvedValueOnce(null);
     const result = await deleteUserAccess('missing-target');
