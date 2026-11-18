@@ -4,6 +4,7 @@ import { prisma } from '../../lib/prisma.js';
 import { ENV } from '../../config/env.js';
 import { AppError } from '../../lib/AppError.js';
 import type { LoginInput, RegisterInput } from './auth.schemas.js';
+import { PUBLIC_REGISTRATION_ROLE } from './auth.schemas.js';
 
 /**
  * AUTH SERVICE — Business Logic
@@ -76,7 +77,7 @@ export class AuthService {
   }
 
   static async register(data: RegisterInput) {
-    const { email, password, name, role } = data;
+    const { email, password, name } = data;
 
     // Check for existing user before hashing (save CPU on duplicate)
     const existing = await prisma.rbacUser.findUnique({
@@ -95,7 +96,7 @@ export class AuthService {
         email: email.toLowerCase().trim(),
         password: hashedPassword,
         name: name.trim(),
-        role: role as any,
+        role: PUBLIC_REGISTRATION_ROLE,
       },
       select: USER_SAFE_SELECT,
     });
