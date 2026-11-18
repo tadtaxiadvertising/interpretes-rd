@@ -256,41 +256,90 @@ export async function getAllInterpretersList() {
 }
 
 export async function syncAllSupabaseUsers() {
+  let syncedCount = 0;
   try {
     const { user } = await auth();
     if (!user || user.role !== 'admin') {
-      throw new Error('Unauthorized');
+      return { success: false, error: 'Acceso no autorizado.' };
     }
 
-    // Fetch all users from Supabase Auth
-    let supabaseUsers;
-    try {
-      const { data, error } = await supabaseAdmin.auth.admin.listUsers({
-        perPage: 1000
-      });
+    // Read the COMPLETE provider directory before modifying PostgreSQL. A
+    // provider error on page 2 must not leave a half-imported roster.
+    const pageSize = 100;
+    const maxPages = 100;
+    const supabaseUsers: Array<{
+      id: string;
+      email?: string | null;
+      user_metadata?: { display_name?: unknown } | null;
+    }> = [];
+    const seenIds = new Set<string>();
+    let page = 1;
+    let fullyFetched = false;
 
-      if (error) {
-        console.error('[ADMIN_USERS] Supabase user listing failed:', safeServerErrorCategory(error));
-        return { success: false, error: 'No se pudo consultar el directorio de autenticación.' };
+    for (let request = 0; request < maxPages; request++) {
+      let data;
+      try {
+        const response = await supabaseAdmin.auth.admin.listUsers({
+          page,
+          perPage: pageSize,
+        });
+        if (response.error) {
+          console.error('[ADMIN_USERS] Supabase directory page rejected:', safeServerErrorCategory(response.error));
+          return { success: false, error: 'No se pudo consultar el directorio completo de autenticación.' };
+        }
+        data = response.data;
+      } catch (providerError) {
+        if (isAdminUnavailableError(providerError)) {
+          return { success: false, error: ADMIN_UNAVAILABLE_MESSAGE };
+        }
+        console.error('[ADMIN_USERS] Supabase directory page failed:', safeServerErrorCategory(providerError));
+        return { success: false, error: 'No se pudo consultar el directorio completo de autenticación.' };
       }
-      supabaseUsers = data.users;
-    } catch (adminError) {
-      if (isAdminUnavailableError(adminError)) {
-        return { success: false, error: ADMIN_UNAVAILABLE_MESSAGE };
+
+      if (!data || !Array.isArray(data.users) || data.users.length > pageSize) {
+        return { success: false, error: 'Supabase devolvió una respuesta de usuarios incompleta.' };
       }
-      throw adminError;
+
+      for (const entry of data.users) {
+        if (!entry || typeof entry.id !== 'string' || !entry.id || seenIds.has(entry.id)) {
+          // Repeated pages or missing IDs must never produce a falsely
+          // completed synchronization or an unsafe local reassignment.
+          return { success: false, error: 'La paginación de usuarios es inconsistente. No se modificaron perfiles.' };
+        }
+        seenIds.add(entry.id);
+        supabaseUsers.push(entry);
+      }
+
+      // Supabase GoTrue exposes nextPage on paginated responses. Also support
+      // SDK versions that only return the page items.
+      const nextPage = (data as { nextPage?: number | null }).nextPage;
+      if (nextPage !== undefined) {
+        if (nextPage === null) {
+          fullyFetched = true;
+          break;
+        }
+        if (!Number.isSafeInteger(nextPage) || nextPage <= page || nextPage > maxPages) {
+          return { success: false, error: 'La paginación de usuarios no es válida. No se modificaron perfiles.' };
+        }
+        page = nextPage;
+      } else if (data.users.length < pageSize) {
+        fullyFetched = true;
+        break;
+      } else {
+        page++;
+      }
+    }
+    if (!fullyFetched) {
+      return { success: false, error: 'El directorio excede el límite seguro de sincronización. No se modificaron perfiles.' };
     }
 
-    let syncedCount = 0;
-    
     for (const sUser of supabaseUsers) {
       if (!sUser.email) continue;
-      
-      // Check if profile already exists in public.user_profiles
-      const existing = await prisma.userProfile.findUnique({
-        where: { id: sUser.id }
-      });
 
+      const existing = await prisma.userProfile.findUnique({
+        where: { id: sUser.id },
+        select: { id: true, role: true, interpreterId: true },
+      });
       const role = resolveUserRoleByEmail(sUser.email, existing?.role || 'interpreter');
 
       if (existing) {
@@ -298,39 +347,58 @@ export async function syncAllSupabaseUsers() {
           await prisma.userProfile.update({
             where: { id: existing.id },
             data: { role, interpreterId: role === 'admin' ? null : undefined },
+            select: { id: true },
           });
           syncedCount++;
         }
         continue;
       }
 
-      if (!existing) {
-
-        // Auto-link to matching physical interpreter by email
-        const interpreter = await prisma.interpreter.findUnique({
-          where: { emailCorporativo: sUser.email },
-          select: { id: true }
-        });
-
-        await prisma.userProfile.create({
-          data: {
-            id: sUser.id,
-            email: sUser.email,
-            displayName: sUser.user_metadata?.display_name || sUser.email.split('@')[0],
-            role,
-            interpreterId: role === 'admin' ? null : (interpreter ? interpreter.id : null),
-            onboardingComplete: true
-          }
-        });
-        
-        syncedCount++;
-      }
+      const interpreter = await prisma.interpreter.findUnique({
+        where: { emailCorporativo: sUser.email },
+        select: { id: true },
+      });
+      await prisma.userProfile.create({
+        data: {
+          id: sUser.id,
+          email: sUser.email,
+          displayName:
+            typeof sUser.user_metadata?.display_name === 'string' &&
+            sUser.user_metadata.display_name.trim()
+              ? sUser.user_metadata.display_name
+              : sUser.email.split('@')[0],
+          role,
+          interpreterId: role === 'admin' ? null : (interpreter ? interpreter.id : null),
+          // A provider account is NOT proof that onboarding was completed.
+          onboardingComplete: false,
+        },
+        select: { id: true },
+      });
+      syncedCount++;
     }
 
-    revalidatePath('/admin/users');
+    try {
+      revalidatePath('/admin/users');
+    } catch (cacheError) {
+      console.warn('[ADMIN_USERS] User sync committed but cache refresh failed:', safeServerErrorCategory(cacheError));
+    }
     return { success: true, syncedCount };
-  } catch (error: any) {
+  } catch (error) {
     console.error('[ADMIN_USERS] User sync failed:', safeServerErrorCategory(error));
+    if (syncedCount > 0) {
+      // Already committed rows cannot be rolled back by a thrown error.
+      try {
+        revalidatePath('/admin/users');
+      } catch (cacheError) {
+        console.warn('[ADMIN_USERS] Partial sync cache refresh failed:', safeServerErrorCategory(cacheError));
+      }
+      return {
+        success: false,
+        partial: true,
+        syncedCount,
+        error: `Se actualizaron ${syncedCount} perfiles, pero la sincronización se interrumpió. Verifica el estado antes de repetirla.`,
+      };
+    }
     return { success: false, error: 'Error al sincronizar los usuarios.' };
   }
 }
