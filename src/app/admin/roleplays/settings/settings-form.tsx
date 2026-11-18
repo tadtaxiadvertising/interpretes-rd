@@ -31,7 +31,10 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     e.preventDefault();
     const data = new FormData();
     data.set('organizationId', org); data.set('token', token);
-    data.set('integrationEnabled', String(enabled));
+    // Do not reactivate an integration disabled in another admin tab just
+    // because this form saved unrelated editor defaults.
+    if (enabled !== status.integrationEnabled)
+      data.set('integrationEnabled', String(enabled));
     data.set('excludeInterpreterByDefault', String(excludeDefault));
     data.set('compactViewDefault', compactDefault);
     data.set('protocolLanguageDefault', protocolDefault);
