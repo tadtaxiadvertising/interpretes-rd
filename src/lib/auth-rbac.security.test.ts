@@ -1,6 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+// The global Vitest setup mocks '@/lib/auth-rbac' for unrelated UI tests.
+// Explicitly load the REAL module here so security regression tests exercise
+// requireRole and its Auth.js session callback rather than that placeholder.
+vi.unmock('@/lib/auth-rbac');
+
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   rbacFindUnique: vi.fn(),
