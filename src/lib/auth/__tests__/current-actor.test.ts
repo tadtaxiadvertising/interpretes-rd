@@ -292,5 +292,50 @@ describe('CurrentActor abstraction', () => {
     it('throws when interpreter accesses other resource', () => {
       expect(() => requireOwnership(baseActor, 99)).toThrow('Access denied: not your resource');
     });
+
+    it('never grants ownership when both interpreter and resource are unassigned', () => {
+      const unassigned = { ...baseActor, interpreterId: null };
+      expect(() => requireOwnership(unassigned, null))
+        .toThrow('Access denied: not your resource');
+    });
+
+    it('rejects an unassigned resource even for an interpreter linked to a real profile', () => {
+      expect(() => requireOwnership(baseActor, null))
+        .toThrow('Access denied: not your resource');
+    });
+
+    it('rejects a user without an interpreter link for a real resource', () => {
+      expect(() => requireOwnership({ ...baseActor, interpreterId: null }, 42))
+        .toThrow('Access denied: not your resource');
+    });
+
+    it('does not grant candidate role access to interpreter resources even when linked', () => {
+      expect(() => requireOwnership({ ...baseActor, role: 'candidate' }, 42))
+        .toThrow('Access denied: not your resource');
+    });
+
+    it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+      'refuses invalid resource interpreter id %s', resourceId => {
+        expect(() => requireOwnership(baseActor, resourceId))
+          .toThrow('Access denied: not your resource');
+      },
+    );
+
+    it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+      'refuses invalid actor interpreter id %s', actorId => {
+        expect(() => requireOwnership({ ...baseActor, interpreterId: actorId }, 42))
+          .toThrow('Access denied: not your resource');
+      },
+    );
+
+    it('still permits a fully authorized admin to inspect unassigned resources', () => {
+      const adminActor = { ...baseActor, role: 'admin' as const, interpreterId: null };
+      expect(requireOwnership(adminActor, null)).toEqual(adminActor);
+    });
+
+    it('requires authentication before ownership is checked', () => {
+      expect(() => requireOwnership(null, null)).toThrow('Not authenticated');
+    });
+
   });
 });
