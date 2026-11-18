@@ -45,6 +45,25 @@ const reconciliationQuery = `
             WHERE cpe.call_session_id = cs.id
           )
       )::int AS ended_without_ledger_count,
+      -- These are lower-bound source buckets, based ONLY on stable app notes
+      -- assigned by the two Quick Log flows and default admin manual flow.
+      -- Custom admin notes and historical variants remain unclassified.
+      COUNT(*) FILTER (
+        WHERE cs.ended_at IS NOT NULL
+          AND cs.notes IN ('Quick log by interpreter', 'Manual entry via Quick Log')
+          AND NOT EXISTS (
+            SELECT 1 FROM public.call_production_entries cpe
+            WHERE cpe.call_session_id = cs.id
+          )
+      )::int AS known_quicklog_missing_ledger_count,
+      COUNT(*) FILTER (
+        WHERE cs.ended_at IS NOT NULL
+          AND cs.notes = 'Manual entry by Administrator'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.call_production_entries cpe
+            WHERE cpe.call_session_id = cs.id
+          )
+      )::int AS known_admin_manual_missing_ledger_count,
       -- Flags only: a legacy/manual session may have legitimate reasons for
       -- differences. Do not infer missing payable minutes from timestamps.
       COUNT(*) FILTER (
@@ -138,6 +157,8 @@ const reconciliationQuery = `
     COALESCE(s.session_count, 0)::int AS session_count,
     COALESCE(s.ended_session_count, 0)::int AS ended_session_count,
     COALESCE(s.ended_without_ledger_count, 0)::int AS ended_without_ledger_count,
+    COALESCE(s.known_quicklog_missing_ledger_count, 0)::int AS known_quicklog_missing_ledger_count,
+    COALESCE(s.known_admin_manual_missing_ledger_count, 0)::int AS known_admin_manual_missing_ledger_count,
     COALESCE(s.ended_missing_duration_count, 0)::int AS ended_missing_duration_count,
     COALESCE(s.ended_zero_duration_with_elapsed_count, 0)::int AS ended_zero_duration_with_elapsed_count,
     COALESCE(s.ended_missing_cost_count, 0)::int AS ended_missing_cost_count,
@@ -170,6 +191,8 @@ const reconciliationQuery = `
     COALESCE(SUM(session_count), 0)::bigint AS total_sessions,
     COALESCE(SUM(ended_session_count), 0)::bigint AS ended_sessions,
     COALESCE(SUM(ended_without_ledger_count), 0)::bigint AS ended_without_ledger_sessions,
+    COALESCE(SUM(known_quicklog_missing_ledger_count), 0)::bigint AS known_quicklog_without_ledger_sessions,
+    COALESCE(SUM(known_admin_manual_missing_ledger_count), 0)::bigint AS known_admin_manual_without_ledger_sessions,
     COALESCE(SUM(ended_missing_duration_count), 0)::bigint AS ended_missing_duration_sessions,
     COALESCE(SUM(ended_zero_duration_with_elapsed_count), 0)::bigint AS ended_zero_duration_with_elapsed_sessions,
     COALESCE(SUM(ended_missing_cost_count), 0)::bigint AS ended_missing_cost_sessions,
@@ -214,6 +237,8 @@ async function main() {
       summary,
       interpretation: [
         'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
+        'known_quicklog_without_ledger_sessions is a subset identified by the two exact Quick Log note markers, not evidence that payable minutes are missing.',
+        'known_admin_manual_without_ledger_sessions counts only default-tagged administrator manual calls; manually edited notes are not classified, and admin calls are not assumed payable.',
         'ended_missing_duration_sessions counts ended sessions with durationSeconds NULL; ended_zero_duration_with_elapsed_sessions counts zero-duration sessions with at least 60 seconds elapsed between stored timestamps.',
         'ended_missing_cost_sessions counts ended sessions with callCost NULL. These flags do not independently establish payable minutes or entitlement; investigate sources before correction.',
         'possible_duplicate_quicklog_sessions counts extra app-marked Quick Log sessions with equal duration created within 30 seconds of the preceding matching session, not proven duplicates; verify before any correction.',
