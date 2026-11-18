@@ -164,8 +164,8 @@ async function main() {
       toDate,
       summary,
       interpretation: [
-        'ended_without_ledger_count identifies sessions without a per-session ledger entry; it does not prove they are absent from ProductionLog.',
-        'production_log_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
+        'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
+        'production_minus_ledger_minutes is diagnostic only: ProductionLog can also contain manual/imported minutes and verified adjustments.',
         'No row is classified as safe to import, and this report never repairs, inserts, updates, or deletes data.',
       ],
     }, null, 2));
