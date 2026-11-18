@@ -6,7 +6,7 @@ import { auth } from '@/lib/auth';
 import { UserRole } from '@/lib/types';
 import { supabaseAdmin, isAdminUnavailableError, ADMIN_UNAVAILABLE_MESSAGE } from '@/lib/supabase/admin';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
-import { resolveUserRoleByEmail, isProtectedAdminEmail } from '@/lib/admin-identity';
+import { resolveUserRoleByEmail, isProtectedAdminEmail, normalizeEmail } from '@/lib/admin-identity';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const prisma = prismaClient;
@@ -228,9 +228,29 @@ export async function updateUserProfile(userId: string, data: { displayName: str
 
 export async function deleteUserAccess(userId: string) {
   try {
-    const { user } = await auth();
+    const { user, userId: currentUserId } = await auth();
     if (!user || user.role !== 'admin') {
       return { success: false, error: 'Acceso no autorizado.' };
+    }
+
+    // Fail closed BEFORE calling the external, destructive Auth API. The
+    // protected administrator and the current actor may never self-revoke,
+    // including through the legacy NextAuth bridge where user IDs differ.
+    const target = await prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    });
+    if (!target) {
+      return { success: false, error: 'El perfil solicitado ya no existe. Verifica su estado antes de continuar.' };
+    }
+    if (isProtectedAdminEmail(target.email)) {
+      return { success: false, error: 'No se puede revocar la cuenta administrativa protegida.' };
+    }
+    if (
+      (currentUserId != null && currentUserId === userId) ||
+      (typeof user.email === 'string' && normalizeEmail(user.email) === normalizeEmail(target.email))
+    ) {
+      return { success: false, error: 'No puedes revocar tu propio acceso administrativo.' };
     }
 
     // Revoke external authentication FIRST. Deleting the local profile first
