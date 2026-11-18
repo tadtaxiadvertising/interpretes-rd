@@ -144,6 +144,33 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
     });
   });
 
+  it('updates only a changed editor default without resubmitting stale provider fields', async () => {
+    const form = new FormData();
+    form.set('token', '');
+    form.set('compactViewDefault', 'expanded');
+    const result = await saveAudioStudioSettings(form);
+    expect(result.success).toBe(true);
+    expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
+      token: '', removeToken: false, updatedBy: 'test-admin',
+      compactViewDefault: 'expanded',
+    });
+  });
+
+  it('requires an explicit valid value when changing MP3 transfer preference', async () => {
+    const form = new FormData();
+    form.set('token', '');
+    form.set('mediaImportEnabled', 'unexpected');
+    expect((await saveAudioStudioSettings(form)).success).toBe(false);
+    expect(saveHappyScribeSettings).not.toHaveBeenCalled();
+
+    form.set('mediaImportEnabled', 'false');
+    expect((await saveAudioStudioSettings(form)).success).toBe(true);
+    expect(saveHappyScribeSettings).toHaveBeenCalledExactlyOnceWith({
+      token: '', removeToken: false, updatedBy: 'test-admin',
+      mediaImportEnabled: false,
+    });
+  });
+
   it('persists explicit defaults alongside the provider settings', async () => {
     const form = settingsForm();
     form.set('excludeInterpreterByDefault', 'false');
