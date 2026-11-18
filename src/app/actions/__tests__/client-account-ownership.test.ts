@@ -146,6 +146,7 @@ describe('client ownership actions', () => {
     expect(result.success).toBe(true);
     expect(prisma.account.create).toHaveBeenCalledWith({
       data: { clientId: 3, name: 'Support Account', holderName: 'Account Holder', email: 'holder@example.com', description: 'Support queue', companyId: null, platforms: { create: { name: 'Plataforma principal', loginUrl: 'https://portal.example.com/login', usernameHint: 'holder@example.com', secretRef: 'vault://org/account/main' } } },
+      select: { id: true },
     });
     expect(revalidatePath).toHaveBeenCalledWith('/admin/accounts');
     expect(revalidatePath).toHaveBeenCalledWith('/admin/clients');
@@ -166,9 +167,11 @@ describe('client ownership actions', () => {
     expect(second.success).toBe(true);
     expect(prisma.account.create).toHaveBeenNthCalledWith(1, {
       data: { clientId: 3, name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', description: '', companyId: null, platforms: { create: { name: 'Plataforma principal', loginUrl: 'https://portal.example.com/login', usernameHint: 'holder@example.com', secretRef: 'vault://org/account/main' } } },
+      select: { id: true },
     });
     expect(prisma.account.create).toHaveBeenNthCalledWith(2, {
       data: { clientId: 4, name: 'Shared Queue', holderName: 'Account Holder', email: 'holder@example.com', description: '', companyId: null, platforms: { create: { name: 'Plataforma principal', loginUrl: 'https://portal.example.com/login', usernameHint: 'holder@example.com', secretRef: 'vault://org/account/main' } } },
+      select: { id: true },
     });
   });
 
