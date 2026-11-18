@@ -76,6 +76,9 @@ jobs:
           test -f .next/standalone/server.js
           test -d .next/static
 
+      - name: Build dedicated Express API image
+        run: docker build --file Dockerfile.api --tag interpreters-api:static-ci .
+
       # IMPORTANT: A successful static-quality run is not release approval.
       # CI/CD Pipeline > Validate & Test still contains the mandatory
       # Dependency Security Audit; its failure must keep deploy jobs skipped.
