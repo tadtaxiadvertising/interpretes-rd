@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ addManualCall: vi.fn() }));
 vi.mock('@/app/actions/calls', () => ({ addManualCall: mocks.addManualCall }));
-import ManualCallForm from '../ManualCallForm';
+import ManualCallForm from './ManualCallForm';
 
 function openForm() {
   render(<ManualCallForm interpreters={[{ id: 7, name: 'Synthetic Interpreter' }]} />);
