@@ -14,7 +14,7 @@ import {
   Loader2,
   ClipboardCheck
 } from 'lucide-react';
-import { UserProfile } from '@prisma/client';
+import type { AdminUserSummary } from '@/lib/admin-user-summary';
 import type { UserRole } from '@/lib/types';
 import {
   updateUserRole,
@@ -32,7 +32,7 @@ interface InterpreterItem {
   campaign: string | null;
 }
 
-export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onViewOnboarding?: () => void }) {
+export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary; onViewOnboarding?: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [activeModal, setActiveModal] = useState<'edit' | 'password' | 'link' | 'delete' | null>(null);
@@ -50,8 +50,9 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
   const handleRoleChange = async (newRole: string) => {
     setIsUpdating(true);
     try {
-      await updateUserRole(user.id, newRole as UserRole);
-      setIsOpen(false);
+      const result = await updateUserRole(user.id, newRole as UserRole);
+      if (result.success) setIsOpen(false);
+      else alert(result.error || 'No se pudo actualizar el rol');
     } catch {
       alert('Error al actualizar el rol');
     } finally {
@@ -172,7 +173,7 @@ export function UserActions({ user, onViewOnboarding }: { user: UserProfile; onV
             <div className="p-3 border-b border-white/5 bg-white/5">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Cambiar Rol</p>
               <div className="grid grid-cols-1 gap-1">
-                {['admin', 'interpreter', 'recruiter', 'manager'].map((role) => (
+                {(['admin', 'interpreter', 'candidate'] as const).map((role) => (
                   <button
                     key={role}
                     disabled={isUpdating || user.role === role}
