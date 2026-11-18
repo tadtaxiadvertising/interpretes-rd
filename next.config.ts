@@ -13,8 +13,23 @@ import type { NextConfig } from "next";
  */
 
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "https://interpretes.rd.ibusiness.com.do";
-const CUSTOM_DOMAIN = process.env.CUSTOM_DOMAIN || "https://interpretes.rd.ibusiness.com.do";
-const CUSTOM_DOMAIN_API = process.env.CUSTOM_DOMAIN_API || "https://interpretes.rd.ibusiness.com.do";
+// Only complete HTTPS origins may enter CSP. Never interpolate raw env values.
+function safeCspHttpsOrigin(raw: string | undefined, fallback: string): string {
+  if (!raw) return fallback;
+  const candidate = raw.trim();
+  if (/[\u0000-\u001f\u007f]/.test(candidate)) return fallback;
+  try {
+    const url = new URL(candidate);
+    if (url.protocol !== 'https:' || url.username || url.password ||
+        url.pathname !== '/' || url.search || url.hash) return fallback;
+    return url.origin;
+  } catch {
+    return fallback;
+  }
+}
+const DEFAULT_CSP_ORIGIN = 'https://interpretes.rd.ibusiness.com.do';
+const CUSTOM_DOMAIN = safeCspHttpsOrigin(process.env.CUSTOM_DOMAIN, DEFAULT_CSP_ORIGIN);
+const CUSTOM_DOMAIN_API = safeCspHttpsOrigin(process.env.CUSTOM_DOMAIN_API, DEFAULT_CSP_ORIGIN);
 
 const nextConfig: NextConfig = {
   output: 'standalone',
@@ -45,11 +60,11 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob:",
               "font-src 'self'",
-              "connect-src 'self' https://kzbkygppplknynrwmtmf.supabase.co wss://kzbkygppplknynrwmtmf.supabase.co https://interpretes.rd.ibusiness.com.do https://interpretes.rd.ibusiness.com.do ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
+              `connect-src 'self' https://kzbkygppplknynrwmtmf.supabase.co wss://kzbkygppplknynrwmtmf.supabase.co https://interpretes.rd.ibusiness.com.do https://interpretes.rd.ibusiness.com.do ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}`,
               "media-src 'self' https://kzbkygppplknynrwmtmf.supabase.co blob:",
               "frame-ancestors 'none'",
               "base-uri 'self'",
-              "form-action 'self' https://interpretes.rd.ibusiness.com.do https://interpretes.rd.ibusiness.com.do ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}",
+              `form-action 'self' https://interpretes.rd.ibusiness.com.do https://interpretes.rd.ibusiness.com.do ${CUSTOM_DOMAIN} ${CUSTOM_DOMAIN_API}`,
             ].join('; ');
 
     return [
