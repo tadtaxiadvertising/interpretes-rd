@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
 
+      - name: Verify GitHub Actions step structure
+        run: npx vitest run src/lib/security/github-workflow-steps.test.ts
+
       - name: Check Prisma schema
         run: npx prisma validate
 
@@ -76,7 +79,6 @@ jobs:
           test -f .next/standalone/server.js
           test -d .next/static
 
-      - name: Build dedicated Express API image
       # Compile the independent Express backend image and its bundled CA.
       # No runtime connection or remote database credentials are involved.
       - name: Build dedicated API image with verified TLS
