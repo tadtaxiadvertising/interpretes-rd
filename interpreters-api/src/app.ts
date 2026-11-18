@@ -7,6 +7,8 @@ import productionRoutes from './routes/production.js';
 import { globalErrorHandler } from './middlewares/errorHandler.js';
 import { asyncHandler } from './lib/asyncHandler.js';
 import { prisma } from './lib/prisma.js';
+import { AppError } from './lib/AppError.js';
+import { resolveAllowedCorsOrigins, isCorsOriginAllowed } from './lib/cors-policy.js';
 
 /**
  * EXPRESS APPLICATION SETUP
@@ -24,23 +26,19 @@ const app = express();
 
 // ── Core Middlewares ──────────────────────────────────────
 // CORS: Only allow known frontends. NEVER use cors() with no config in production.
-const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const ALLOWED_ORIGINS = resolveAllowedCorsOrigins(process.env.CORS_ORIGINS, IS_PRODUCTION);
 
 app.use(
   cors({
-    origin: ALLOWED_ORIGINS.length > 0
-      ? (origin, callback) => {
-          // Allow requests with no origin (server-to-server, health checks)
-          if (!origin || ALLOWED_ORIGINS.includes(origin)) {
-            callback(null, true);
-          } else {
-            callback(new Error(`CORS: Origin ${origin} not allowed`));
-          }
-        }
-      : true, // Fallback to open in development if CORS_ORIGINS is not set
+    origin: (origin, callback) => {
+      if (isCorsOriginAllowed(origin, ALLOWED_ORIGINS, IS_PRODUCTION)) {
+        callback(null, true);
+      } else {
+        // Constant message: never echo attacker-controlled origin to logs.
+        callback(AppError.forbidden('Cross-origin request is not allowed'));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

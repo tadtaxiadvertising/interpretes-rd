@@ -76,6 +76,7 @@ jobs:
           test -f .next/standalone/server.js
           test -d .next/static
 
+      - name: Build dedicated Express API image
       # Compile the independent Express backend image and its bundled CA.
       # No runtime connection or remote database credentials are involved.
       - name: Build dedicated API image with verified TLS
