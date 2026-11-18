@@ -33,7 +33,7 @@ export async function getAdminUsers() {
 }
 
 export async function updateUserRole(userId: string, role: UserRole) {
-  const { user } = await auth();
+  const { user, userId: actorUserId } = await auth();
   if (!user || user.role !== 'admin') {
     throw new Error('Unauthorized');
   }
@@ -51,6 +51,19 @@ export async function updateUserRole(userId: string, role: UserRole) {
   if (!existing) return { success: false, error: 'El usuario ya no existe.' };
   if (isProtectedAdminEmail(existing.email) && role !== 'admin') {
     return { success: false, error: 'El administrador protegido no puede perder su rol.' };
+  }
+  // Prevent administrator lockouts through self-demotion. Auth.js/NextAuth
+  // legacy identities can have a different immutable ID than Supabase Auth,
+  // so also compare normalized emails ONLY to refuse this destructive action.
+  if (
+    role !== 'admin' &&
+    ((actorUserId != null && actorUserId === userId) ||
+      (typeof user.id === 'string' && user.id === userId) ||
+      (typeof user.email === 'string' &&
+        normalizeEmail(user.email) !== '' &&
+        normalizeEmail(user.email) === normalizeEmail(existing.email)))
+  ) {
+    return { success: false, error: 'No puedes quitarte tu propio acceso administrativo.' };
   }
 
   const updated = await prisma.userProfile.update({
