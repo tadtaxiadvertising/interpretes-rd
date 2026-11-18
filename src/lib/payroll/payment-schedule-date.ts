@@ -11,7 +11,7 @@ export function getSantoDomingoPaymentDay(date: Date | string): {
 } {
   // YYYY-MM-DD is an explicit calendar day, not a timestamp in UTC.
   // Noon UTC is safely within the requested Santo Domingo calendar day.
-  let instant = date;
+  let instant: Date;
   if (typeof date === 'string') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new Error('Invalid payment calendar date');
@@ -20,6 +20,8 @@ export function getSantoDomingoPaymentDay(date: Date | string): {
     if (!Number.isFinite(instant.getTime()) || instant.toISOString().slice(0, 10) !== date) {
       throw new Error('Invalid payment calendar date');
     }
+  } else {
+    instant = date;
   }
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Santo_Domingo',
