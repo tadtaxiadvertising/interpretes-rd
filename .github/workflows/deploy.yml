@@ -147,6 +147,11 @@ jobs:
       - name: Verify public registration cannot create privileged users
         run: npx vitest run src/lib/security/backend-public-registration-role.test.ts
 
+      # Detect a regression of the native upstream minimatch patch.
+      # This guard supplements, but never replaces, the mandatory full audit.
+      - name: Verify patched ESLint minimatch lockfile
+        run: node --test scripts/ci/verify-eslint-minimatch-lock.test.mjs
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
