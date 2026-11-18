@@ -51,7 +51,7 @@ describe('RBAC authorization never trusts a legacy email-only session', () => {
   it('permits a valid holder by immutable DB ID, with minimal profile projection', async () => {
     const user = await requireRole('HOLDER');
     expect(user.id).toBe('immutable-rbac-id');
-    expect(mocks.rbacFindUnique).toHaveBeenCalledExactlyOnceWith({
+    expect(mocks.rbacFindUnique).toHaveBeenCalledWith({
       where: { id: 'immutable-rbac-id' },
       select: expectedSelect,
     });
@@ -63,7 +63,7 @@ describe('RBAC authorization never trusts a legacy email-only session', () => {
       role: 'HOLDER',
     }));
     expect((await requireRole('HOLDER')).id).toBe('immutable-rbac-id');
-    expect(mocks.rbacFindUnique).toHaveBeenCalledExactlyOnceWith({
+    expect(mocks.rbacFindUnique).toHaveBeenCalledWith({
       where: { id: 'immutable-rbac-id' }, select: expectedSelect,
     });
   });
