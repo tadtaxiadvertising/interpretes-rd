@@ -97,13 +97,13 @@ export function classifyCallKeySchema(catalog: CallKeyCatalog): CallKeySchemaSta
 
   for (const [name, type] of EXPECTED_COLUMNS) {
     const found = catalog.columns.filter(column => column.column_name === name);
-    if (found.length !== 1 || found[0].data_type !== type || found[0].is_nullable !== 'NO') {
+    if (found.length !== 1 || found[0]?.data_type !== type || found[0]?.is_nullable !== 'NO') {
       return 'partial';
     }
   }
   for (const expected of REQUIRED_CONSTRAINTS) {
     const actual = catalog.constraints.filter(row => row.conname === expected.name);
-    if (actual.length !== 1 || !validConstraint(actual[0], expected)) {
+    if (actual.length !== 1 || !actual[0] || !validConstraint(actual[0], expected)) {
       return 'partial';
     }
   }
