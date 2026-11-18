@@ -527,7 +527,19 @@ export function requireOwnership(
   resourceInterpreterId: number | null
 ): ResolvedIdentity {
   const i = requireIdentity(identity);
-  if (i.role !== 'admin' && i.interpreterId !== resourceInterpreterId) {
+  // A missing owner is not proof of ownership (null === null). Keep this
+  // guard aligned with src/lib/auth/current-actor.ts:requireOwnership.
+  if (i.role === 'admin') return i;
+  if (
+    i.role !== 'interpreter' ||
+    !Number.isSafeInteger(i.interpreterId) ||
+    i.interpreterId === null ||
+    i.interpreterId <= 0 ||
+    !Number.isSafeInteger(resourceInterpreterId) ||
+    resourceInterpreterId === null ||
+    resourceInterpreterId <= 0 ||
+    i.interpreterId !== resourceInterpreterId
+  ) {
     throw new Error('Access denied: not your resource');
   }
   return i;
