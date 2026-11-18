@@ -222,7 +222,10 @@ describe('HappyScribe encrypted admin settings', () => {
     await saveHappyScribeSettings({ compactViewDefault: 'expanded' });
     expect(store.get(TOKEN_KEY)).toBe(before.get(TOKEN_KEY));
     expect(store.get('audio_studio_happyscribe_organization_id')).toBe('123456');
-    expect(store.get('audio_studio_happyscribe_media_proxy')).toBe('true');
+    // The kill switch resets MP3 consent by design; a later editor-only
+    // save must preserve that safe value instead of restoring the old one.
+    expect(before.get('audio_studio_happyscribe_media_proxy')).toBe('false');
+    expect(store.get('audio_studio_happyscribe_media_proxy')).toBe(before.get('audio_studio_happyscribe_media_proxy'));
     expect(store.get('audio_studio_happyscribe_enabled')).toBe('false');
     expect((await getHappyScribeSettingsStatus()).compactViewDefault).toBe('expanded');
     expect((await getHappyScribeSettings()).token).toBe('');
