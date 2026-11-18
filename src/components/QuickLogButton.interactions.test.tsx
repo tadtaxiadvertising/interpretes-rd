@@ -52,6 +52,41 @@ describe('Quick Log button protects against duplicate writes', () => {
     expect(mocks.refresh).not.toHaveBeenCalled();
   });
 
+  it('allows a deliberate resend only after acknowledging the reviewed history', async () => {
+    mocks.quickLog.mockRejectedValueOnce(new Error('UNCERTAIN_NETWORK_OUTCOME'));
+    const form = openAndEnter('6', '15');
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Revisa tu historial'));
+    const historyLink = screen.getByRole('link', { name: 'Abrir historial de llamadas en otra pestaña' });
+    expect(historyLink.getAttribute('href')).toBe('/dashboard');
+    expect(historyLink.getAttribute('target')).toBe('_blank');
+
+    fireEvent.submit(form);
+    expect(mocks.quickLog).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole('button', {
+      name: 'Confirmo que la llamada no aparece; habilitar registro',
+    }));
+    expect((screen.getByRole('button', { name: 'Guardar Registro' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Minutos') as HTMLInputElement).value).toBe('6');
+
+    mocks.quickLog.mockResolvedValueOnce({ success: true, data: { id: 55 } });
+    fireEvent.submit(form);
+    await waitFor(() => expect(mocks.quickLog).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Formulario de registro rápido' })).toBeNull());
+  });
+
+  it('does not mark a committed call uncertain if a client refresh throws', async () => {
+    mocks.quickLog.mockResolvedValueOnce({ success: true, data: { id: 44 } });
+    mocks.refresh.mockImplementationOnce(() => { throw new Error('REFRESH_FAILURE'); });
+    const form = openAndEnter();
+    fireEvent.submit(form);
+    await waitFor(() => expect(screen.queryByRole('form', { name: 'Formulario de registro rápido' })).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Registro Rápido' }));
+    expect((screen.getByRole('button', { name: 'Guardar Registro' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(mocks.quickLog).toHaveBeenCalledOnce();
+  });
+
   it('keeps the form available after an explicit payroll conflict without leaking server errors', async () => {
     mocks.quickLog.mockResolvedValueOnce({
       success: false, code: 'CONFLICT', error: 'PRIVATE_DATABASE_CREDENTIAL',
