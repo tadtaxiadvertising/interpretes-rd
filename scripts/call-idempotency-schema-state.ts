@@ -118,7 +118,8 @@ function validConstraint(actual: CatalogConstraint, expected: (typeof REQUIRED_C
   }
   if (expected.name === 'call_submission_keys_digest_check') {
     return canonicalCheckExpression(actual.definition) ===
-      "payload_sha256~'^[0-9a-f]{64}
+      "payload_sha256~'^[0-9a-f]{64}$'";
+  }
   return true;
 }
 
