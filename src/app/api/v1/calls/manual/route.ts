@@ -5,7 +5,6 @@ import { ManualCallSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { getDayBounds } from '@/lib/interpreter-metrics';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
-import { Prisma } from '@prisma/client';
 
 /**
  * Format a Timestamptz value to a Santo Domingo date string.
@@ -122,7 +121,7 @@ export async function POST(req: Request) {
       });
 
       return session;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    }, { isolationLevel: 'Serializable' });
 
     return NextResponse.json({ success: true, data: callSession }, {
       headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' },
