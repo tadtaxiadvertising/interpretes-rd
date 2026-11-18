@@ -1,5 +1,5 @@
 import 'server-only';
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import prisma from '@/lib/prisma';
 
 const TOKEN_KEY = 'audio_studio_happyscribe_token_v1';
@@ -9,6 +9,16 @@ const MEDIA_KEY = 'audio_studio_happyscribe_media_proxy';
 const EXCLUDE_KEY = 'audio_studio_exclude_interpreter_default';
 const COMPACT_KEY = 'audio_studio_compact_view_default';
 const PROTOCOL_LANGUAGE_KEY = 'audio_studio_protocol_language_default';
+const SETTING_KEYS = [
+  TOKEN_KEY, ENABLED_KEY, ORG_KEY, MEDIA_KEY, EXCLUDE_KEY, COMPACT_KEY, PROTOCOL_LANGUAGE_KEY,
+] as const;
+
+function revisionFor(rows: readonly { key: string; value: string }[]): string {
+  // Hash the complete stored snapshot, including ciphertext, without exposing
+  // any raw configuration or provider credential to the browser.
+  const snapshot = rows.map(({ key, value }) => [key, value]).sort((a, b) => a[0].localeCompare(b[0]));
+  return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+}
 
 export type AudioStudioCompactViewDefault = 'auto' | 'compact' | 'expanded';
 
@@ -93,6 +103,7 @@ export async function getHappyScribeSettingsStatus() {
     catch { credentialUsable = false; }
   }
   return {
+    revision: revisionFor(rows),
     integrationEnabled: map.get(ENABLED_KEY) !== 'false',
     hasToken: map.has(TOKEN_KEY) || Boolean(process.env.HAPPY_SCRIBE_API_TOKEN?.trim()),
     // Safe metadata only: removing an admin token can reactivate a server key.
@@ -120,6 +131,7 @@ export async function saveHappyScribeSettings(input: {
   compactViewDefault?: AudioStudioCompactViewDefault;
   protocolLanguageDefault?: 'en' | 'es';
   updatedBy?: string;
+  expectedRevision?: string;
 }) {
   const organizationId = input.organizationId?.trim();
   if (organizationId && !/^\d{1,30}$/.test(organizationId)) throw new Error('ORGANIZATION_INVALID');
@@ -138,11 +150,20 @@ export async function saveHappyScribeSettings(input: {
   if (input.excludeInterpreterByDefault !== undefined &&
       typeof input.excludeInterpreterByDefault !== 'boolean')
     throw new Error('EXCLUDE_PREFERENCE_INVALID');
+  if (input.expectedRevision !== undefined && !/^[a-f0-9]{64}$/.test(input.expectedRevision))
+    throw new Error('SETTINGS_REVISION_INVALID');
   if (input.token?.trim() && input.removeToken) throw new Error('TOKEN_OPERATION_CONFLICT');
   if (input.token && !masterKey()) throw new Error('ENCRYPTION_KEY_MISSING');
   const actor = input.updatedBy?.trim() || null;
   const encryptedToken = input.token ? encrypt(input.token.trim()) : null;
   await prisma.$transaction(async tx => {
+    if (input.expectedRevision) {
+      const current = await tx.systemConfig.findMany({
+        where: { key: { in: [...SETTING_KEYS] } },
+        select: { key: true, value: true },
+      });
+      if (revisionFor(current) !== input.expectedRevision) throw new Error('SETTINGS_CONFLICT');
+    }
     if (input.removeToken) await tx.systemConfig.deleteMany({ where: { key: TOKEN_KEY } });
     else if (encryptedToken) await tx.systemConfig.upsert({
       where: { key: TOKEN_KEY },
@@ -171,5 +192,5 @@ export async function saveHappyScribeSettings(input: {
         where: { key }, create: { key, value, updatedBy: actor }, update: { value, updatedBy: actor },
       });
     }
-  });
+  }, input.expectedRevision ? { isolationLevel: 'Serializable' } : undefined);
 }
