@@ -134,6 +134,9 @@ jobs:
       - name: Verify dedicated API PostgreSQL trust policy
         run: npx vitest run src/lib/security/backend-database-tls.test.ts
 
+      - name: Verify GitHub Actions step integrity
+        run: node --test scripts/ci/verify-workflow-steps.test.mjs
+
       - name: Dependency Security Audit
         run: |
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
