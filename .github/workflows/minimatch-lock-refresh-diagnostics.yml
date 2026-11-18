@@ -1,0 +1,53 @@
+name: Temporary locked eslint dependency refresh (read-only diagnostics)
+
+# Temporary read-only job for computing an exact npm lockfile delta.
+# Only runs on the isolated audit-remediation branch; REMOVE before merge.
+on:
+  push:
+    branches: [security/refresh-eslint-minimatch-20261117]
+
+permissions:
+  contents: read
+
+jobs:
+  calculate-minimatch-refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Compute exact npm lock delta without executing lifecycle scripts
+        run: |
+          cp package-lock.json "$RUNNER_TEMP/pre-lock.json"
+          npm update @typescript-eslint/parser @typescript-eslint/eslint-plugin @typescript-eslint/typescript-estree --package-lock-only --ignore-scripts --legacy-peer-deps --no-fund
+          node <<'NODE'
+          const fs = require('node:fs');
+          const before = JSON.parse(fs.readFileSync(process.env.RUNNER_TEMP + '/pre-lock.json', 'utf8'));
+          const after = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const selected = after.packages['node_modules/@typescript-eslint/typescript-estree'];
+          const matches = Object.entries(after.packages).filter(([k]) => /minimatch$/.test(k));
+          if (!selected || !selected.dependencies || selected.dependencies.minimatch !== '^11.0.1' ||
+              !matches.some(([k,v]) => k.includes('@typescript-eslint/typescript-estree/node_modules/minimatch') && /^11\./.test(v.version))) {
+            console.error('No compatible upstream minimatch 11 update found. No lock patch generated.');
+            console.error('typescript-estree version:', selected?.version, 'minimatch spec:', selected?.dependencies?.minimatch);
+            console.error('minimatch versions:', JSON.stringify(matches.map(([k,v]) => [k,v.version])));
+            process.exit(1);
+          }
+          const oldPkgs = before.packages || {};
+          const newPkgs = after.packages || {};
+          const patches = {};
+          for (const key of new Set([...Object.keys(oldPkgs), ...Object.keys(newPkgs)])) {
+            if (JSON.stringify(oldPkgs[key]) !== JSON.stringify(newPkgs[key])) {
+              patches[key] = newPkgs[key] ?? null;
+            }
+          }
+          const rootKeys = ['name', 'version', 'lockfileVersion', 'requires'];
+          const root = {};
+          for (const key of rootKeys) if (JSON.stringify(before[key]) !== JSON.stringify(after[key])) root[key] = after[key] ?? null;
+          const record = {baseSha: process.env.GITHUB_SHA, count:Object.keys(patches).length, root, patches};
+          console.log('LOCK_DELTA_BEGIN');
+          console.log(JSON.stringify(record));
+          console.log('LOCK_DELTA_END');
+          NODE
