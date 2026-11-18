@@ -49,6 +49,7 @@ function complete(): CallKeyCatalog {
   return {
     tableExists: true,
     rlsEnabled: true,
+    policyCount: 0,
     supportingIndexValid: true,
     columns: cols.map(([column_name, data_type]) =>
       ({ column_name, data_type, is_nullable: 'NO' })),
@@ -107,6 +108,7 @@ describe('read-only call idempotency catalog diagnostics', () => {
   it('fails closed on missing RLS, index, or required columns', () => {
     const x = complete();
     expect(classifyCallKeySchema({ ...x, rlsEnabled: false })).toBe('partial');
+    expect(classifyCallKeySchema({ ...x, policyCount: 1 })).toBe('partial');
     expect(classifyCallKeySchema({ ...x, supportingIndexValid: false })).toBe('partial');
     expect(classifyCallKeySchema({
       ...x, columns: x.columns.filter(row => row.column_name !== 'request_key'),
