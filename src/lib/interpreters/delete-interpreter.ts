@@ -17,6 +17,22 @@ export class InterpreterHasHistoricalRecordsError extends Error {
   }
 }
 
+/** A possible Auth.js/RBAC login requires a reviewed cross-provider identity resolution. */
+export class InterpreterLegacyIdentityReviewRequiredError extends Error {
+  constructor() {
+    super('Interpreter may still have an independent legacy login');
+    this.name = 'InterpreterLegacyIdentityReviewRequiredError';
+  }
+}
+
+/** The legacy login directory must be readable before destructive operations. */
+export class InterpreterLegacyIdentityCheckUnavailableError extends Error {
+  constructor() {
+    super('Legacy identity check unavailable');
+    this.name = 'InterpreterLegacyIdentityCheckUnavailableError';
+  }
+}
+
 /**
  * Removes an interpreter account while preserving auditable Roleplay history.
  *
@@ -40,7 +56,8 @@ export async function deleteInterpreterDatabaseRecords(tx: any, interpreterId: n
     where: { id: interpreterId },
     select: {
       id: true,
-      userProfile: { select: { id: true } },
+      emailCorporativo: true,
+      userProfile: { select: { id: true, email: true } },
     },
   });
   if (!interpreter) {
@@ -64,6 +81,41 @@ export async function deleteInterpreterDatabaseRecords(tx: any, interpreterId: n
 
   if (historicalReferences.some(Boolean)) {
     throw new InterpreterHasHistoricalRecordsError();
+  }
+
+  // Auth.js credentials from public.rbac_users are an independent login
+  // provider. Supabase Admin deletion cannot revoke one. A matching email
+  // indicates *possible* linked access, never identity equivalence.
+  // Block destructive deletion for human review; never delete RBAC by email.
+  // The same guard runs inside the locked DB transaction for both API and
+  // Server Action, before any local rows or Roleplay history are changed.
+  if (interpreter.userProfile && !interpreter.userProfile.email?.trim()) {
+    throw new InterpreterLegacyIdentityCheckUnavailableError();
+  }
+  const candidateEmails = [...new Set(
+    [interpreter.emailCorporativo, interpreter.userProfile?.email]
+      .filter((email): email is string => typeof email === 'string' && email.trim().length > 0)
+      .map((email) => email.trim().toLowerCase()),
+  )];
+  if (candidateEmails.length > 0) {
+    let possibleLegacyLogin: { id: string } | null;
+    try {
+      possibleLegacyLogin = await tx.rbacUser.findFirst({
+        where: {
+          OR: candidateEmails.map((email) => ({
+            email: { equals: email, mode: 'insensitive' as const },
+          })),
+        },
+        select: { id: true },
+      });
+    } catch {
+      // A failed directory check must not be treated as absence. Do not log
+      // provider errors, which can contain credentials or personal data.
+      throw new InterpreterLegacyIdentityCheckUnavailableError();
+    }
+    if (possibleLegacyLogin) {
+      throw new InterpreterLegacyIdentityReviewRequiredError();
+    }
   }
 
   // Do not cascade-delete Roleplay evidence (sessions, scenarios, responses,
