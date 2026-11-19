@@ -46,6 +46,13 @@ function request(method: 'GET' | 'POST', authorization?: string): Request {
   });
 }
 
+function expectPrivate(response: Response) {
+  expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+  for (const dimension of ['Cookie', 'Authorization', 'Origin']) {
+    expect(response.headers.get('Vary')).toContain(dimension);
+  }
+}
+
 describe('Presence cookie/Bearer identity safety', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -64,6 +71,7 @@ describe('Presence cookie/Bearer identity safety', () => {
   it('keeps browser cookie-only presence reads working', async () => {
     const res = await GET(request('GET'));
     expect(res.status).toBe(200);
+    expectPrivate(res);
     expect(m.actorFromBearer).not.toHaveBeenCalled();
     expect(m.findUnique).toHaveBeenCalledWith({
       where: { id: 42 },
@@ -88,9 +96,7 @@ describe('Presence cookie/Bearer identity safety', () => {
     const res = await GET(request('GET', 'Bearer other-user'));
     expect(res.status).toBe(403);
     expect(m.findUnique).not.toHaveBeenCalled();
-    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(res.headers.get('Vary')).toContain('Authorization');
-    expect(res.headers.get('Vary')).toContain('Cookie');
+    expectPrivate(res);
   });
 
   it('blocks a different interpreter assignment even for the same user', async () => {
@@ -148,6 +154,39 @@ describe('Presence cookie/Bearer identity safety', () => {
     });
     const res = await POST(request('POST', 'Bearer unavailable'));
     expect(res.status).toBe(403);
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it('does not permit caching an authenticated heartbeat response', async () => {
+    const res = await POST(request('POST'));
+    expect(res.status).toBe(200);
+    expectPrivate(res);
+    expect((await res.json()).heartbeat).toBe(true);
+  });
+
+  it('protects the anonymous-like offline fallback from intermediary caches', async () => {
+    m.getCurrentUser.mockResolvedValueOnce(null);
+    const res = await GET(request('GET'));
+    expect(res.status).toBe(200);
+    expectPrivate(res);
+    expect(await res.json()).toEqual({ online: false });
+    expect(m.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('protects failed presence reads from intermediary caches', async () => {
+    m.findUnique.mockRejectedValueOnce(new Error('Synthetic database error'));
+    const res = await GET(request('GET'));
+    expect(res.status).toBe(500);
+    expectPrivate(res);
+    expect(await res.json()).toEqual({ online: false });
+  });
+
+  it('protects schema/handler errors without exposing their details', async () => {
+    m.parseJsonBody.mockRejectedValueOnce(new Error('PRIVATE_PRESENCE_TOKEN'));
+    const res = await POST(request('POST'));
+    expect(res.status).toBe(500);
+    expectPrivate(res);
+    expect(JSON.stringify(await res.json())).not.toContain('PRIVATE_PRESENCE_TOKEN');
     expect(m.update).not.toHaveBeenCalled();
   });
 
