@@ -422,7 +422,7 @@ jobs:
           # replay the request automatically or print its secret URL.
           if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
             echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
-            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 1
           fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
@@ -464,7 +464,7 @@ jobs:
           # replay the request automatically or print its secret URL.
           if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
             echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
-            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 1
           fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook Roleplay worker aceptado (HTTP $HTTP_CODE); readiness y SHA no verificados"; printf 'Roleplay worker: solicitud aceptada HTTP %s; contenedor no verificado.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: Roleplay worker webhook returned HTTP $HTTP_CODE"; exit 1;; esac
@@ -504,7 +504,7 @@ jobs:
           # replay the request automatically or print its secret URL.
           if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
             echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
-            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 1
           fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters-api aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters API: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters-api webhook returned HTTP $HTTP_CODE"; exit 1;; esac
