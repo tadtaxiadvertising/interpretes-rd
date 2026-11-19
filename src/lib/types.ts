@@ -62,7 +62,7 @@ export interface ActionResult<T = void> {
   success: boolean;
   data?: T;
   error?: string;
-  code?: 'VALIDATION_ERROR' | 'NOT_FOUND' | 'UNAUTHORIZED' | 'SERVICE_UNAVAILABLE' | 'CONFLICT' | 'INTERNAL_ERROR' | 'BAD_REQUEST';
+  code?: 'VALIDATION_ERROR' | 'NOT_FOUND' | 'UNAUTHORIZED' | 'SERVICE_UNAVAILABLE' | 'CONFLICT' | 'PARTIAL_FAILURE' | 'INTERNAL_ERROR' | 'BAD_REQUEST';
 }
 
 // Timer state stored in localStorage
