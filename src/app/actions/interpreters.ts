@@ -149,7 +149,14 @@ export async function createInterpreter(data: InterpreterInput): Promise<ActionR
       return { id: interpreter.id, name: interpreter.name };
     });
 
-    revalidateInterpreterProfileRecords(result.id);
+    // Local and Auth writes have already succeeded. Cache refresh is
+    // post-commit: a cache outage must not return a false creation failure,
+    // which could encourage an unsafe second submission.
+    try {
+      revalidateInterpreterProfileRecords(result.id);
+    } catch (cacheError) {
+      console.warn('[CREATE_INTERPRETER] Cache refresh failed after commit:', safeServerErrorCategory(cacheError));
+    }
     return { success: true, data: result };
   } catch (error: unknown) {
     // Neither provider messages nor error objects can be returned/logged:
