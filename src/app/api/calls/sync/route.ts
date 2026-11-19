@@ -14,6 +14,7 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 async function verifyExplicitSyncBearer(
   request: NextRequest,
   cookieUserId: string,
+  cookieRole: unknown,
 ): Promise<{ allowed: boolean; interpreterId: number | null }> {
   if (!request.headers.has('authorization')) {
     return { allowed: true, interpreterId: null };
@@ -25,7 +26,8 @@ async function verifyExplicitSyncBearer(
     // If the provider fails, fail closed rather than use cookie fallback.
   }
   if (!bearer || bearer.userId !== cookieUserId ||
-      bearer.role !== 'interpreter' || !bearer.interpreterId) {
+      cookieRole !== 'interpreter' || bearer.role !== cookieRole ||
+      !bearer.interpreterId) {
     return { allowed: false, interpreterId: null };
   }
   return { allowed: true, interpreterId: bearer.interpreterId };
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const credential = await verifyExplicitSyncBearer(request, userId);
+    const credential = await verifyExplicitSyncBearer(request, userId, user.role);
     if (!credential.allowed) {
       return privateAdminJson({ success: false, error: 'Forbidden' }, { status: 403 });
     }
@@ -89,7 +91,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const credential = await verifyExplicitSyncBearer(request, userId);
+    const credential = await verifyExplicitSyncBearer(request, userId, user.role);
     if (!credential.allowed) {
       return privateAdminJson({ success: false, error: 'Forbidden' }, { status: 403 });
     }
