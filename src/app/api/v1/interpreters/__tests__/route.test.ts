@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   profileUpsert: vi.fn(),
   guard: vi.fn(),
   provision: vi.fn(),
+  findAuth: vi.fn(),
   adminAuth: vi.fn(),
 }));
 
@@ -20,7 +21,10 @@ vi.mock('@/lib/prisma', () => ({
 }));
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: m.guard }));
 vi.mock('@/lib/api-security', () => ({ withSecurity: (handler: unknown) => handler }));
-vi.mock('@/lib/supabase/auth-users', () => ({ upsertConfirmedAuthUser: m.provision }));
+vi.mock('@/lib/supabase/auth-users', () => ({
+  upsertConfirmedAuthUser: m.provision,
+  findAuthUserByEmail: m.findAuth,
+}));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: { get auth() { return m.adminAuth(); } },
 }));
@@ -51,6 +55,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     m.findMany.mockResolvedValue([{ id: 77, name: 'Private Employee', emailCorporativo: input.emailCorporativo }]);
     m.profileUpsert.mockResolvedValue({ id: 'auth-id-1' });
     m.provision.mockResolvedValue({ id: 'auth-id-1' });
+    m.findAuth.mockResolvedValue(null);
   });
 
   it('guards the interpreter list before reading employee data', async () => {
@@ -83,6 +88,70 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('blocks an already-used Supabase Auth email before local writes', async () => {
+    m.findAuth.mockResolvedValueOnce({ id: 'preexisting-auth-id' });
+    const res = await POST(postRequest(), undefined);
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    const response = await res.json();
+    expect(response).toEqual({
+      success: false,
+      code: 'AUTH_ACCOUNT_ALREADY_EXISTS',
+      error: 'An authentication account already uses this corporate email. Review the existing identity before creating an interpreter.',
+    });
+    expect(JSON.stringify(response)).not.toContain('preexisting-auth-id');
+    expect(JSON.stringify(response)).not.toContain(input.emailCorporativo);
+    expect(m.findAuth).toHaveBeenCalledOnce();
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.provision).not.toHaveBeenCalled();
+    expect(m.profileUpsert).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the Supabase Auth email lookup fails', async () => {
+    const failure = new Error('postgresql://PRIVATE_AUTH_PASSWORD@internal.invalid');
+    failure.name = 'Bearer PRIVATE_AUTH_TOKEN';
+    m.findAuth.mockRejectedValueOnce(failure);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await POST(postRequest(), undefined);
+      expect(res.status).toBe(503);
+      expect(await res.json()).toEqual({
+        success: false,
+        error: 'Authentication administration is unavailable. No interpreter was created.',
+      });
+      expect(JSON.stringify(warning.mock.calls)).not.toMatch(/PRIVATE_|postgresql:|internal\.invalid/);
+      expect(m.create).not.toHaveBeenCalled();
+      expect(m.provision).not.toHaveBeenCalled();
+      expect(m.profileUpsert).not.toHaveBeenCalled();
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it('verifies an available Auth email before any local creation', async () => {
+    const res = await POST(postRequest(), undefined);
+    expect(res.status).toBe(201);
+    expect(m.findAuth).toHaveBeenCalledOnce();
+    expect(m.create).toHaveBeenCalledOnce();
+    expect(m.findAuth.mock.invocationCallOrder[0])
+      .toBeLessThan(m.create.mock.invocationCallOrder[0]);
+    expect(m.create.mock.invocationCallOrder[0])
+      .toBeLessThan(m.provision.mock.invocationCallOrder[0]);
+    expect(m.provision.mock.invocationCallOrder[0])
+      .toBeLessThan(m.profileUpsert.mock.invocationCallOrder[0]);
+  });
+
+  it('does not inspect the Auth directory for an interpreter without a password', async () => {
+    const req = new NextRequest('http://localhost/api/v1/interpreters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...input, password: undefined }),
+    });
+    expect((await POST(req, undefined)).status).toBe(201);
+    expect(m.findAuth).not.toHaveBeenCalled();
+    expect(m.provision).not.toHaveBeenCalled();
   });
 
   it('keeps admin interpreter listing and creation private', async () => {
