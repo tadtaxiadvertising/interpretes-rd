@@ -31,6 +31,8 @@ vi.mock('@/lib/interpreters/delete-interpreter', () => ({
   deleteInterpreterDatabaseRecords: m.deleteRecords,
   InterpreterNotFoundError: class InterpreterNotFoundError extends Error {},
   InterpreterHasHistoricalRecordsError: class InterpreterHasHistoricalRecordsError extends Error {},
+  InterpreterLegacyIdentityReviewRequiredError: class InterpreterLegacyIdentityReviewRequiredError extends Error {},
+  InterpreterLegacyIdentityCheckUnavailableError: class InterpreterLegacyIdentityCheckUnavailableError extends Error {},
 }));
 
 import { deleteInterpreter } from './interpreters';
@@ -137,6 +139,32 @@ describe('interpreter deletion: PostgreSQL commit and external Auth status', () 
     } finally {
       log.mockRestore();
     }
+  });
+
+  it('blocks a possible Auth.js login before any provider revocation', async () => {
+    const { InterpreterLegacyIdentityReviewRequiredError } = await import('@/lib/interpreters/delete-interpreter');
+    m.transaction.mockRejectedValueOnce(new InterpreterLegacyIdentityReviewRequiredError());
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await deleteInterpreter(23);
+      expect(result).toMatchObject({ success: false, code: 'CONFLICT' });
+      expect(result.error).toContain('acceso heredado');
+      expect(m.deleteUser).not.toHaveBeenCalled();
+      expect(m.revalidate).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
+  });
+
+  it('reports legacy identity lookup unavailability before any Auth revocation', async () => {
+    const { InterpreterLegacyIdentityCheckUnavailableError } = await import('@/lib/interpreters/delete-interpreter');
+    m.transaction.mockRejectedValueOnce(new InterpreterLegacyIdentityCheckUnavailableError());
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await deleteInterpreter(23);
+      expect(result).toMatchObject({ success: false, code: 'SERVICE_UNAVAILABLE' });
+      expect(result.error).toContain('No se eliminó ningún registro');
+      expect(m.deleteUser).not.toHaveBeenCalled();
+      expect(m.revalidate).not.toHaveBeenCalled();
+    } finally { log.mockRestore(); }
   });
 
   it('does not mistake a provider error with not-found text for a missing interpreter', async () => {
