@@ -7,9 +7,14 @@ describe('deleteInterpreterDatabaseRecords', () => {
     const tx = {
       $queryRaw: vi.fn((_sql: TemplateStringsArray, _id: number) => Promise.resolve([{ id: 42 }])),
       interpreter: {
-        findUnique: vi.fn().mockResolvedValue({ id: 42, userProfile: { id: 'auth-user-1' } }),
+        findUnique: vi.fn().mockResolvedValue({
+          id: 42,
+          emailCorporativo: 'fixture@example.test',
+          userProfile: { id: 'auth-user-1', email: 'fixture@example.test' },
+        }),
         delete: vi.fn().mockResolvedValue({ id: 42 }),
       },
+      rbacUser: { findFirst: vi.fn().mockResolvedValue(null) },
       roleplaySession: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
       userProfile: { deleteMany: vi.fn() },
       interpreterAccountRate: { deleteMany: vi.fn() },
@@ -31,6 +36,14 @@ describe('deleteInterpreterDatabaseRecords', () => {
       where: { interpreterId: 42 },
       select: { id: true },
     });
+    expect(tx.rbacUser.findFirst).toHaveBeenCalledWith({
+      where: { OR: [
+        { email: { equals: 'fixture@example.test', mode: 'insensitive' } },
+      ] },
+      select: { id: true },
+    });
+    expect(tx.rbacUser.findFirst.mock.invocationCallOrder[0])
+      .toBeLessThan(tx.roleplaySession.updateMany.mock.invocationCallOrder[0]);
     expect(tx.roleplaySession.updateMany).toHaveBeenNthCalledWith(1, {
       where: {
         interpreterId: 42,
