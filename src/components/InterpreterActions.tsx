@@ -36,6 +36,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
   const [newPassword, setNewPassword] = useState('');
   const [isResetting, setIsResetting] = useState(false);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [resetNeedsReview, setResetNeedsReview] = useState(false);
   const router = useRouter();
 
   const handleDelete = async () => {
@@ -65,19 +66,22 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    // A provider operation with an uncertain result is not safe to repeat.
+    if (isResetting || resetNeedsReview) return;
     setIsResetting(true);
     setResetError(null);
-
     try {
       const result = await resetInterpreterPassword(interpreter.id, newPassword);
-      if (!result.success) throw new Error(result.error);
-
+      if (!result.success) {
+        setResetError(result.error || 'No se pudo confirmar el restablecimiento. Verifica el estado antes de reintentar.');
+        if (result.code === 'PARTIAL_FAILURE') setResetNeedsReview(true);
+        return;
+      }
       setShowResetModal(false);
       setNewPassword('');
-      alert('Password reset successfully');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      setResetError(message);
+      alert('Contraseña actualizada correctamente');
+    } catch {
+      setResetError('No se pudo confirmar el restablecimiento. Verifica el estado antes de reintentar.');
     } finally {
       setIsResetting(false);
     }
@@ -165,8 +169,9 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
       >
         <form onSubmit={handleResetPassword} className="space-y-6">
           {resetError && (
-            <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+            <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
               {resetError}
+              {resetNeedsReview && <p className="mt-2 font-semibold">No vuelvas a enviar esta contraseña. Revisa la identidad y el acceso en Auth.</p>}
             </div>
           )}
           <div className="space-y-2">
@@ -186,11 +191,11 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
           </div>
           <button
             type="submit"
-            disabled={isResetting}
+            disabled={isResetting || resetNeedsReview}
             className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
           >
             {isResetting ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
-            Update Password
+            {resetNeedsReview ? 'Revisión de Auth necesaria' : 'Actualizar contraseña'}
           </button>
         </form>
       </Modal>
