@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 const m = vi.hoisted(() => ({
   create: vi.fn(),
   findMany: vi.fn(),
+  findFirst: vi.fn(),
   profileUpsert: vi.fn(),
   guard: vi.fn(),
   provision: vi.fn(),
@@ -13,7 +14,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    interpreter: { create: m.create, findMany: m.findMany },
+    interpreter: { create: m.create, findMany: m.findMany, findFirst: m.findFirst },
     userProfile: { upsert: m.profileUpsert },
   },
 }));
@@ -46,6 +47,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     m.guard.mockResolvedValue(null);
     m.adminAuth.mockReturnValue({ admin: {} });
     m.create.mockResolvedValue({ id: 77, name: 'Test Interpreter' });
+    m.findFirst.mockResolvedValue(null);
     m.findMany.mockResolvedValue([{ id: 77, name: 'Private Employee', emailCorporativo: input.emailCorporativo }]);
     m.profileUpsert.mockResolvedValue({ id: 'auth-id-1' });
     m.provision.mockResolvedValue({ id: 'auth-id-1' });
@@ -106,6 +108,95 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
       log.mockRestore();
       notice.mockRestore();
     }
+  });
+
+  it('rejects a repeated external ID before creating any local or Auth records', async () => {
+    m.findFirst.mockResolvedValueOnce({ id: 77 });
+    const res = await POST(postRequest(), undefined);
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Authorization');
+    expect(await res.json()).toEqual({
+      success: false,
+      code: 'INTERPRETER_ALREADY_EXISTS',
+      error: 'An interpreter with this identifier or corporate email already exists. Review the existing record before retrying.',
+    });
+    expect(m.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { externalId: { equals: input.externalId, mode: 'insensitive' } },
+          { emailCorporativo: { equals: input.emailCorporativo, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    });
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.provision).not.toHaveBeenCalled();
+    expect(m.profileUpsert).not.toHaveBeenCalled();
+  });
+
+  it('checks corporate email case-insensitively even when the external ID differs', async () => {
+    m.findFirst.mockResolvedValueOnce({ id: 34 });
+    const req = new NextRequest('http://localhost/api/v1/interpreters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...input, externalId: 'INT-TEST-NEW', emailCorporativo: 'PRIVATE.EMPLOYEE@EXAMPLE.TEST',
+      }),
+    });
+    const res = await POST(req, undefined);
+    expect(res.status).toBe(409);
+    expect(m.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        OR: [
+          { externalId: { equals: 'INT-TEST-NEW', mode: 'insensitive' } },
+          { emailCorporativo: {
+            equals: 'PRIVATE.EMPLOYEE@EXAMPLE.TEST', mode: 'insensitive',
+          } },
+        ],
+      },
+    }));
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.provision).not.toHaveBeenCalled();
+  });
+
+  it('turns a raced database unique violation into 409 without calling Auth', async () => {
+    m.create.mockRejectedValueOnce(Object.assign(
+      new Error('postgresql://PRIVATE_DB_PASSWORD@internal.invalid'),
+      { code: 'P2002', meta: { target: ['email_corporativo'] } },
+    ));
+    const res = await POST(postRequest(), undefined);
+    expect(res.status).toBe(409);
+    expect(JSON.stringify(await res.json())).not.toMatch(/PRIVATE_|postgresql:|email_corporativo/);
+    expect(m.findFirst).toHaveBeenCalledOnce();
+    expect(m.provision).not.toHaveBeenCalled();
+    expect(m.profileUpsert).not.toHaveBeenCalled();
+  });
+
+  it('fails closed on a read-only duplicate lookup failure before creating anything', async () => {
+    m.findFirst.mockRejectedValueOnce(new Error('Synthetic database outage'));
+    await expect(POST(postRequest(), undefined)).rejects.toThrow('Synthetic database outage');
+    // withSecurity is mocked in this suite; production wrapper sanitizes unexpected errors.
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.provision).not.toHaveBeenCalled();
+  });
+
+  it('allows an existing-free interpreter without a corporate email when no Auth account is requested', async () => {
+    const req = new NextRequest('http://localhost/api/v1/interpreters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...input, emailCorporativo: null, password: undefined }),
+    });
+    const response = await POST(req, undefined);
+    expect(response.status).toBe(201);
+    expect(m.findFirst).toHaveBeenCalledWith({
+      where: { OR: [
+        { externalId: { equals: input.externalId, mode: 'insensitive' } },
+      ] },
+      select: { id: true },
+    });
+    expect(m.provision).not.toHaveBeenCalled();
+    expect(m.profileUpsert).not.toHaveBeenCalled();
   });
 
   it('does not send or log a provider connection string on partial Auth creation failure', async () => {
