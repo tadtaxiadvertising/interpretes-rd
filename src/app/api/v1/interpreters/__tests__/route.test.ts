@@ -135,6 +135,8 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     expect(res.status).toBe(201);
     expect(m.findAuth).toHaveBeenCalledOnce();
     expect(m.create).toHaveBeenCalledOnce();
+    expect(m.findFirst.mock.invocationCallOrder[0])
+      .toBeLessThan(m.findAuth.mock.invocationCallOrder[0]);
     expect(m.findAuth.mock.invocationCallOrder[0])
       .toBeLessThan(m.create.mock.invocationCallOrder[0]);
     expect(m.create.mock.invocationCallOrder[0])
@@ -200,6 +202,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
       select: { id: true },
     });
     expect(m.create).not.toHaveBeenCalled();
+    expect(m.findAuth).not.toHaveBeenCalled();
     expect(m.provision).not.toHaveBeenCalled();
     expect(m.profileUpsert).not.toHaveBeenCalled();
   });
