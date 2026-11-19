@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 
@@ -6,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   const denied = await guardApiAuth(req, 'admin');
-  if (denied) return denied;
+  if (denied) return privateAdminResponse(denied);
 
   try {
     const interpreters = await prisma.interpreter.findMany({
@@ -25,20 +26,13 @@ export async function GET(req: Request) {
       orderBy: { name: 'asc' },
     });
 
-    return NextResponse.json(
-      { interpreters },
-      {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate',
-          Pragma: 'no-cache',
-        },
-      }
-    );
+    return privateAdminJson({ interpreters });
   } catch (error) {
-    console.error('[presence/roster] Error:', error);
-    return NextResponse.json(
+    // Prisma errors may include connection strings or interpreter data.
+    console.error('[presence/roster] Error:', safeServerErrorCategory(error));
+    return privateAdminJson(
       { error: 'Failed to fetch roster' },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
