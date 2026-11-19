@@ -142,7 +142,7 @@ describe('read-only reconciliation report privacy', () => {
     expect(callProductionReconciliationQuery).toContain('FROM interpreter_day');
     expect(callProductionReconciliationQuery).toContain('ended_missing_duration_count');
     expect(callProductionReconciliationQuery).toContain('known_quicklog_missing_ledger_count');
-    expect(script).toContain('LEFT JOIN public.call_sessions cs ON cs.id = cpe.call_session_id');
+    expect(callProductionReconciliationQuery).toContain('LEFT JOIN public.call_sessions cs ON cs.id = cpe.call_session_id');
     expect(callProductionReconciliationQuery).toContain('ledger_orphan_count');
     expect(callProductionReconciliationQuery).toContain('ledger_owner_mismatch_count');
     expect(callProductionReconciliationQuery).toContain('ledger_day_mismatch_count');
@@ -161,7 +161,7 @@ describe('read-only reconciliation report privacy', () => {
     expect(callProductionReconciliationQuery).toContain('possible_duplicate_quicklog_sessions');
     expect(callProductionReconciliationQuery).toContain("cs.notes IN ('Quick log by interpreter', 'Manual entry via Quick Log')");
     expect(callProductionReconciliationQuery).toContain("created_at <= previous_created_at + INTERVAL '30 seconds'");
-    expect(script).toContain('cs.ended_at >= cs.started_at + INTERVAL \'60 seconds\'');
+    expect(callProductionReconciliationQuery).toContain('cs.ended_at >= cs.started_at + INTERVAL \'60 seconds\'');
     expect(script).toContain('BEGIN READ ONLY');
     expect(script).toContain('callProductionAuditSummary(result.rows[0])');
     expect(script).not.toContain('rowCount: rows.length');
