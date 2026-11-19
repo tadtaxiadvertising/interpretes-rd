@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   create: vi.fn(),
   findMany: vi.fn(),
   findFirst: vi.fn(),
+  findLegacy: vi.fn(),
   profileUpsert: vi.fn(),
   guard: vi.fn(),
   provision: vi.fn(),
@@ -17,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     interpreter: { create: m.create, findMany: m.findMany, findFirst: m.findFirst },
     userProfile: { upsert: m.profileUpsert },
+    rbacUser: { findFirst: m.findLegacy },
   },
 }));
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: m.guard }));
@@ -52,6 +54,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     m.adminAuth.mockReturnValue({ admin: {} });
     m.create.mockResolvedValue({ id: 77, name: 'Test Interpreter' });
     m.findFirst.mockResolvedValue(null);
+    m.findLegacy.mockResolvedValue(null);
     m.findMany.mockResolvedValue([{ id: 77, name: 'Private Employee', emailCorporativo: input.emailCorporativo }]);
     m.profileUpsert.mockResolvedValue({ id: 'auth-id-1' });
     m.provision.mockResolvedValue({ id: 'auth-id-1' });
@@ -88,6 +91,70 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it('stops a matching legacy RBAC login before any new local or Supabase identity', async () => {
+    m.findLegacy.mockResolvedValueOnce({ id: 'existing-rbac-uuid' });
+    const result = await POST(postRequest(), undefined);
+    expect(result.status).toBe(409);
+    expect(result.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(result.headers.get('Vary')).toContain('Authorization');
+    expect(await result.json()).toEqual({
+      success: false,
+      code: 'LEGACY_IDENTITY_REVIEW_REQUIRED',
+      error: 'An existing legacy login requires identity review before creating a new authentication account.',
+    });
+    expect(m.findLegacy).toHaveBeenCalledWith({
+      where: {
+        email: { equals: input.emailCorporativo, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    expect(m.findAuth).not.toHaveBeenCalled();
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.provision).not.toHaveBeenCalled();
+    expect(m.profileUpsert).not.toHaveBeenCalled();
+  });
+
+  it('does not assume absence of legacy identity when the DB lookup fails', async () => {
+    const error = new Error('postgresql://PRIVATE_LEGACY_PASSWORD@internal.invalid');
+    error.name = 'Bearer PRIVATE_LEGACY_TOKEN';
+    m.findLegacy.mockRejectedValueOnce(error);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await POST(postRequest(), undefined);
+      expect(result.status).toBe(503);
+      expect(await result.json()).toEqual({
+        success: false,
+        code: 'LEGACY_IDENTITY_CHECK_UNAVAILABLE',
+        error: 'Legacy identity verification is unavailable. No interpreter was created.',
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toMatch(/PRIVATE_|postgresql:|internal\.invalid/);
+      expect(warn).toHaveBeenCalledWith('[API_INTERPRETERS_POST] Legacy identity preflight failed:', 'Error');
+      expect(m.findAuth).not.toHaveBeenCalled();
+      expect(m.create).not.toHaveBeenCalled();
+      expect(m.provision).not.toHaveBeenCalled();
+      expect(m.profileUpsert).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('normalizes corporate email for case-insensitive legacy lookup', async () => {
+    const req = new NextRequest('http://localhost/api/v1/interpreters', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...input, emailCorporativo: 'PRIVATE.EMPLOYEE@EXAMPLE.TEST' }),
+    });
+    const result = await POST(req, undefined);
+    expect(result.status).toBe(201);
+    expect(m.findLegacy).toHaveBeenCalledWith({
+      where: {
+        email: { equals: input.emailCorporativo, mode: 'insensitive' },
+      },
+      select: { id: true },
+    });
+    expect(m.create).toHaveBeenCalledOnce();
   });
 
   it('blocks an already-used Supabase Auth email before local writes', async () => {
@@ -133,9 +200,12 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
   it('verifies an available Auth email before any local creation', async () => {
     const res = await POST(postRequest(), undefined);
     expect(res.status).toBe(201);
+    expect(m.findLegacy).toHaveBeenCalledOnce();
     expect(m.findAuth).toHaveBeenCalledOnce();
     expect(m.create).toHaveBeenCalledOnce();
     expect(m.findFirst.mock.invocationCallOrder[0])
+      .toBeLessThan(m.findLegacy.mock.invocationCallOrder[0]);
+    expect(m.findLegacy.mock.invocationCallOrder[0])
       .toBeLessThan(m.findAuth.mock.invocationCallOrder[0]);
     expect(m.findAuth.mock.invocationCallOrder[0])
       .toBeLessThan(m.create.mock.invocationCallOrder[0]);
@@ -152,6 +222,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
       body: JSON.stringify({ ...input, password: undefined }),
     });
     expect((await POST(req, undefined)).status).toBe(201);
+    expect(m.findLegacy).not.toHaveBeenCalled();
     expect(m.findAuth).not.toHaveBeenCalled();
     expect(m.provision).not.toHaveBeenCalled();
   });
@@ -202,6 +273,7 @@ describe('interpreter admin API privacy and Auth provisioning failures', () => {
       select: { id: true },
     });
     expect(m.create).not.toHaveBeenCalled();
+    expect(m.findLegacy).not.toHaveBeenCalled();
     expect(m.findAuth).not.toHaveBeenCalled();
     expect(m.provision).not.toHaveBeenCalled();
     expect(m.profileUpsert).not.toHaveBeenCalled();
