@@ -85,22 +85,6 @@ export const POST = withSecurity(async (request: NextRequest) => {
     );
   }
 
-  // Check the local Auth admin configuration before creating a database row.
-  // This prevents a predictable orphan when service credentials are missing.
-  // It does not test network connectivity or guarantee later provisioning.
-  if (password) {
-    try {
-      const { supabaseAdmin } = await import('@/lib/supabase/admin');
-      void supabaseAdmin.auth;
-    } catch (adminError) {
-      console.warn('[API_INTERPRETERS_POST] Auth admin preflight failed:', safeServerErrorCategory(adminError));
-      return privateAdminJson(
-        { success: false, error: 'Authentication administration is unavailable. No interpreter was created.' },
-        { status: 503 }
-      );
-    }
-  }
-
   // A retry after a partial Auth provisioning failure must not silently
   // create another interpreter. Check natural identifiers without returning
   // matched PII or assuming an existing record is safe to overwrite.
@@ -126,6 +110,39 @@ export const POST = withSecurity(async (request: NextRequest) => {
       code: 'INTERPRETER_ALREADY_EXISTS',
       error: 'An interpreter with this identifier or corporate email already exists. Review the existing record before retrying.',
     }, { status: 409 });
+  }
+
+  // Probe Auth BEFORE creating a local interpreter. The existing user
+  // lookup inside upsertConfirmedAuthUser otherwise rejects an already-used
+  // email only AFTER the local record has been committed. A matching email
+  // must never be used to link, reset or overwrite an existing Auth identity.
+  // This read-only preflight is not a cross-provider transaction: a concurrent
+  // Auth registration can still happen after it; such failures remain partial.
+  if (password) {
+    try {
+      const { supabaseAdmin } = await import('@/lib/supabase/admin');
+      const { findAuthUserByEmail } = await import('@/lib/supabase/auth-users');
+      void supabaseAdmin.auth;
+      const existingAuthUser = await findAuthUserByEmail(
+        supabaseAdmin,
+        interpreterData.emailCorporativo!,
+      );
+      if (existingAuthUser) {
+        return privateAdminJson({
+          success: false,
+          code: 'AUTH_ACCOUNT_ALREADY_EXISTS',
+          error: 'An authentication account already uses this corporate email. Review the existing identity before creating an interpreter.',
+        }, { status: 409 });
+      }
+    } catch (adminError) {
+      // Failure to inspect the Auth directory must not cause a local orphan.
+      // Report a generic response without logging provider error details.
+      console.warn('[API_INTERPRETERS_POST] Auth admin preflight failed:', safeServerErrorCategory(adminError));
+      return privateAdminJson(
+        { success: false, error: 'Authentication administration is unavailable. No interpreter was created.' },
+        { status: 503 }
+      );
+    }
   }
 
   console.info('[API_INTERPRETERS_POST] Creating interpreter record');
