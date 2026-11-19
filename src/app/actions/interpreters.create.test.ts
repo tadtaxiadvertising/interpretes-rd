@@ -171,6 +171,23 @@ describe('admin interpreter form action: safe cross-provider preflight', () => {
     expect(m.revalidate).toHaveBeenCalledWith(117);
   });
 
+  it('does not report a failed creation if post-commit cache refresh throws', async () => {
+    const failure = new Error('PRIVATE_CACHE_REFRESH_FAILURE');
+    m.revalidate.mockImplementationOnce(() => { throw failure; });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await createInterpreter(input as never);
+      expect(result).toEqual({ success: true, data: { id: 117, name: input.name } });
+      expect(m.transaction).toHaveBeenCalledOnce();
+      expect(m.provision).toHaveBeenCalledOnce();
+      expect(m.upsertProfile).toHaveBeenCalledOnce();
+      expect(warn).toHaveBeenCalledWith('[CREATE_INTERPRETER] Cache refresh failed after commit:', 'Error');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_CACHE_REFRESH_FAILURE');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it('skips external and legacy checks on a deliberately passwordless create', async () => {
     const { password: _password, ...passwordless } = input;
     const result = await createInterpreter(passwordless as never);
