@@ -3,15 +3,34 @@ import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
 
 const db = prisma;
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const auth = await validateAction('interpreter');
     if ('error' in auth) return privateRoleplayResponse({ success: false, error: auth.error }, { status: 403 });
 
     const interpreterId = auth.profile?.interpreterId;
+    // This dashboard intentionally requires a browser cookie identity.
+    // A caller that also supplies Authorization must prove the SAME
+    // interpreter. Do not let an unrelated explicit Bearer read cookie-owned
+    // roleplay metadata, including scores and assessment status.
+    if (req.headers.has('authorization')) {
+      let bearer: Awaited<ReturnType<typeof actorFromBearer>> = null;
+      try {
+        bearer = await actorFromBearer(req);
+      } catch {
+        // An invalid/unavailable Bearer must never fall back to cookies.
+      }
+      if (!bearer || bearer.role !== 'interpreter' ||
+          bearer.userId !== auth.user.userId ||
+          bearer.interpreterId !== interpreterId) {
+        return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+    }
+
     if (!interpreterId) {
       return privateRoleplayResponse({ success: false, error: 'No interpreter profile found' }, { status: 404 });
     }
