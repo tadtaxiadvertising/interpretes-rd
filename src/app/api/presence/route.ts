@@ -1,10 +1,32 @@
 import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/actions';
+import { actorFromBearer } from '@/lib/api-auth';
+import { privateAdminJson } from '@/lib/security/private-admin-response';
 import prisma from '@/lib/prisma';
 import { PresenceSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 
 const db = prisma;
+
+/** Cookie-bound presence. An explicit Bearer must independently resolve to
+ * the SAME user, role and interpreter assignment before any database access.
+ * A malformed/expired Bearer never falls back to another user's cookie. */
+async function matchesCookieIdentity(
+  request: Request,
+  user: NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>,
+): Promise<boolean> {
+  if (!request.headers.has('authorization')) return true;
+  try {
+    const bearer = await actorFromBearer(request);
+    return Boolean(bearer &&
+      bearer.userId === user.id &&
+      bearer.role === user.profile.role &&
+      bearer.interpreterId === user.profile.interpreterId);
+  } catch {
+    return false;
+  }
+}
+
 const GRACE_PERIOD_MS = 30_000; // 30 seconds grace before marking offline
 
 // Valid presence states
@@ -34,7 +56,10 @@ export async function POST(req: Request) {
     const userData = await getCurrentUser();
 
     if (!userData) {
-      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
+      return privateAdminJson({ success: false, error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!(await matchesCookieIdentity(req, userData))) {
+      return privateAdminJson({ success: false, error: 'Forbidden' }, { status: 403 });
     }
 
     const body = await parseJsonBody(req, PresenceSchema);
@@ -207,6 +232,9 @@ export async function POST(req: Request) {
 export async function GET(req: Request) {
   try {
     const userData = await getCurrentUser();
+    if (userData && !(await matchesCookieIdentity(req, userData))) {
+      return privateAdminJson({ success: false, error: 'Forbidden' }, { status: 403 });
+    }
     if (!userData?.profile?.interpreterId) {
       return NextResponse.json({ online: false });
     }
