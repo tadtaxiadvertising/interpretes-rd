@@ -112,6 +112,39 @@ export const POST = withSecurity(async (request: NextRequest) => {
     }, { status: 409 });
   }
 
+  // The legacy Auth.js credentials provider still accepts rbac_users.
+  // A matching email is not proof that two provider identities are the same
+  // person. An administrator must review that ambiguity before provisioning
+  // a second, independent Supabase login. Never link or delete by email.
+  if (password) {
+    try {
+      const legacyIdentity = await prisma.rbacUser.findFirst({
+        where: {
+          email: {
+            equals: interpreterData.emailCorporativo!.trim().toLowerCase(),
+            mode: 'insensitive',
+          },
+        },
+        select: { id: true },
+      });
+      if (legacyIdentity) {
+        return privateAdminJson({
+          success: false,
+          code: 'LEGACY_IDENTITY_REVIEW_REQUIRED',
+          error: 'An existing legacy login requires identity review before creating a new authentication account.',
+        }, { status: 409 });
+      }
+    } catch (legacyError) {
+      // A failed identity lookup cannot be treated as proof of absence.
+      console.warn('[API_INTERPRETERS_POST] Legacy identity preflight failed:', safeServerErrorCategory(legacyError));
+      return privateAdminJson({
+        success: false,
+        code: 'LEGACY_IDENTITY_CHECK_UNAVAILABLE',
+        error: 'Legacy identity verification is unavailable. No interpreter was created.',
+      }, { status: 503 });
+    }
+  }
+
   // Probe Auth BEFORE creating a local interpreter. The existing user
   // lookup inside upsertConfirmedAuthUser otherwise rejects an already-used
   // email only AFTER the local record has been committed. A matching email
