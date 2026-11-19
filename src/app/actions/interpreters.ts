@@ -6,8 +6,10 @@ import prisma from '@/lib/prisma';
 import { InterpreterSchema, InterpreterInput } from '@/lib/validators';
 import { ActionResult } from '@/lib/types';
 import { supabaseAdmin, isAdminUnavailableError, getSupabaseServiceRoleKey, ADMIN_UNAVAILABLE_MESSAGE } from '@/lib/supabase/admin';
-import { upsertConfirmedAuthUser } from '@/lib/supabase/auth-users';
+import { findAuthUserByEmail, upsertConfirmedAuthUser } from '@/lib/supabase/auth-users';
 import { Interpreter, Prisma } from '@prisma/client';
+import { z } from 'zod';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { validateAction } from '@/lib/auth/actions';
 import { UpdateInterpreterStatusSchema } from '@/lib/validators/interpreters';
 import { deleteInterpreterDatabaseRecords } from '@/lib/interpreters/delete-interpreter';
@@ -36,31 +38,94 @@ export async function createInterpreter(data: InterpreterInput): Promise<ActionR
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
+  // The Auth provider can commit outside Prisma's transaction. If anything
+  // fails after provisioning starts, the administrator must verify both
+  // systems before trying again; never infer a safe automatic retry.
+  let authProvisioningStarted = false;
   try {
     const validated = InterpreterSchema.parse(data);
     const { password, ...interpreterData } = validated;
+    const email = interpreterData.emailCorporativo?.trim().toLowerCase() ?? null;
+
+    if (password && !email) {
+      return { success: false, code: 'VALIDATION_ERROR',
+        error: 'Se requiere correo corporativo para crear una cuenta con contraseña.' };
+    }
+
+    // This Server Action is used by the administrator's actual form.
+    // Reject a known local account BEFORE attempting any external Auth work.
+    // The unique indexes remain authoritative for exact-key races; this
+    // read-only check alone is not a distributed idempotency guarantee.
+    const existingInterpreter = await db.interpreter.findFirst({
+      where: {
+        OR: [
+          { externalId: { equals: interpreterData.externalId, mode: 'insensitive' } },
+          ...(email ? [{ emailCorporativo: { equals: email, mode: 'insensitive' as const } }] : []),
+        ],
+      },
+      select: { id: true },
+    });
+    if (existingInterpreter) {
+      return { success: false, code: 'CONFLICT',
+        error: 'Ya existe un intérprete con ese identificador o correo. Revisa el registro antes de repetir el alta.' };
+    }
+
+    if (password && email) {
+      // A matching legacy RBAC email signals possible cross-provider access,
+      // NOT proof that both accounts belong to the same person.
+      // Never merge, reset or delete an identity by an email match.
+      try {
+        const legacyIdentity = await db.rbacUser.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
+          select: { id: true },
+        });
+        if (legacyIdentity) {
+          return { success: false, code: 'CONFLICT',
+            error: 'Existe un acceso heredado que requiere revisión de identidad antes de crear la cuenta.' };
+        }
+      } catch (legacyError) {
+        console.warn('[CREATE_INTERPRETER] Legacy identity preflight failed:', safeServerErrorCategory(legacyError));
+        return { success: false, code: 'SERVICE_UNAVAILABLE',
+          error: 'No se pudo verificar el acceso heredado. No se creó ninguna cuenta.' };
+      }
+
+      // Probe the same directory as the API route, without creating or
+      // modifying a Supabase Auth user. A failed lookup must fail closed.
+      try {
+        void supabaseAdmin.auth;
+        const existingAuth = await findAuthUserByEmail(supabaseAdmin, email);
+        if (existingAuth) {
+          return { success: false, code: 'CONFLICT',
+            error: 'Ese correo ya tiene una cuenta de autenticación. Revisa su identidad antes de continuar.' };
+        }
+      } catch (providerError) {
+        console.warn('[CREATE_INTERPRETER] Auth identity preflight failed:', safeServerErrorCategory(providerError));
+        return { success: false, code: 'SERVICE_UNAVAILABLE',
+          error: 'No se pudo verificar el directorio de autenticación. No se creó ninguna cuenta.' };
+      }
+    }
 
     const result = await db.$transaction(async (tx) => {
-      // 1. Create interpreter record
       const interpreter = await tx.interpreter.create({
         data: interpreterData,
-        select: { id: true, name: true, emailCorporativo: true }
+        select: { id: true, name: true, emailCorporativo: true },
       });
 
-      // 2. If password provided, create Auth user and UserProfile
       if (password) {
         if (!interpreter.emailCorporativo) {
-          throw new Error('Email corporativo is required for account creation');
+          throw new Error('Missing corporate email for provisioned interpreter');
         }
 
+        // This external call is not rolled back if a later Prisma operation
+        // fails; the result is deliberately flagged for manual reconciliation.
+        authProvisioningStarted = true;
         const authUser = await createInterpreterAuthUser(
           interpreter.emailCorporativo,
           password,
-          interpreter.name
+          interpreter.name,
         );
-
         if (!authUser) {
-          throw new Error('No se pudo crear el usuario de autenticación.');
+          throw new Error('Auth provider returned no identity');
         }
 
         await tx.userProfile.upsert({
@@ -69,7 +134,7 @@ export async function createInterpreter(data: InterpreterInput): Promise<ActionR
             email: interpreter.emailCorporativo,
             displayName: interpreter.name,
             interpreterId: interpreter.id,
-            onboardingComplete: true
+            onboardingComplete: true,
           },
           create: {
             id: authUser.id,
@@ -77,27 +142,37 @@ export async function createInterpreter(data: InterpreterInput): Promise<ActionR
             displayName: interpreter.name,
             role: 'interpreter',
             interpreterId: interpreter.id,
-            onboardingComplete: true
-          }
+            onboardingComplete: true,
+          },
         });
       }
-
       return { id: interpreter.id, name: interpreter.name };
     });
 
     revalidateInterpreterProfileRecords(result.id);
     return { success: true, data: result };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [createInterpreter]:', error);
-
+    // Neither provider messages nor error objects can be returned/logged:
+    // they may include credentials, signed links or database connection URLs.
+    console.error('[CREATE_INTERPRETER] Failed:', safeServerErrorCategory(error));
+    if (error instanceof z.ZodError) {
+      return { success: false, code: 'VALIDATION_ERROR',
+        error: 'Los datos del intérprete no son válidos.' };
+    }
+    if (authProvisioningStarted) {
+      return { success: false, code: 'INTERNAL_ERROR',
+        error: 'No se pudo confirmar el alta. La cuenta de autenticación podría existir. Revisa su estado antes de reintentar.' };
+    }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return { success: false, error: 'Un intérprete con este ID externo o Email ya existe.', code: 'CONFLICT' };
+      return { success: false, code: 'CONFLICT',
+        error: 'Un intérprete con ese identificador o correo ya existe.' };
     }
-    const errorMsg = error instanceof Error ? error.message : 'Error al crear el intérprete';
-    if (isAdminUnavailableError(error) || errorMsg === ADMIN_UNAVAILABLE_MESSAGE) {
-      return { success: false, error: ADMIN_UNAVAILABLE_MESSAGE, code: 'SERVICE_UNAVAILABLE' };
+    if (isAdminUnavailableError(error)) {
+      return { success: false, code: 'SERVICE_UNAVAILABLE',
+        error: 'El servicio de autenticación no está disponible. No se confirmó el alta.' };
     }
-    return { success: false, error: errorMsg, code: 'INTERNAL_ERROR' };
+    return { success: false, code: 'INTERNAL_ERROR',
+      error: 'No se pudo crear el intérprete. Verifica el estado antes de reintentar.' };
   }
 }
 
