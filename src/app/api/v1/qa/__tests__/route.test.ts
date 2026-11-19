@@ -87,6 +87,53 @@ describe('admin QA score API privacy and error isolation', () => {
     expect(prisma.qAScore.create).toHaveBeenCalledOnce();
   });
 
+  it('returns a private 409 when the database rejects a duplicate production QA', async () => {
+    // The production_log_id unique index is the final arbiter under
+    // concurrent requests; a second submission must not overwrite the first.
+    const conflict = Object.assign(new Error('postgresql://PRIVATE_PASSWORD@internal.invalid'), {
+      code: 'P2002',
+      meta: { target: ['production_log_id'], secret: 'PRIVATE_QA_TOKEN' },
+    });
+    vi.mocked(prisma.qAScore.create).mockRejectedValueOnce(conflict);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(postRequest(validScore));
+      expect(res.status).toBe(409);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      for (const field of ['Authorization', 'Cookie', 'Origin']) {
+        expect(res.headers.get('Vary')).toContain(field);
+      }
+      const body = await res.json();
+      expect(body).toEqual({
+        success: false,
+        code: 'QA_ALREADY_RECORDED',
+        error: 'This production log already has a QA evaluation. Refresh before submitting again.',
+      });
+      expect(JSON.stringify(body)).not.toMatch(/PRIVATE_|postgresql:|production_log_id/);
+      expect(prisma.$transaction).toHaveBeenCalledOnce();
+      expect(prisma.qAScore.create).toHaveBeenCalledOnce();
+      expect(prisma.qAScore.findUnique).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('does not disguise unrelated database failures as duplicate evaluations', async () => {
+    const failure = Object.assign(new Error('PRIVATE_DATABASE_DETAILS'), { code: 'P2034' });
+    vi.mocked(prisma.qAScore.create).mockRejectedValueOnce(failure);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await POST(postRequest(validScore));
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({ success: false, error: 'Unable to create QA score' });
+      expect(JSON.stringify(log.mock.calls)).not.toContain('PRIVATE_DATABASE_DETAILS');
+      expect(log).toHaveBeenCalledWith('QA API ERROR:', 'Error');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it('returns generic private errors for failed QA writes, not leaked credentials', async () => {
     vi.mocked(prisma.qAScore.create).mockRejectedValueOnce(
       new Error('PRIVATE_QA_DATABASE_TOKEN'),
