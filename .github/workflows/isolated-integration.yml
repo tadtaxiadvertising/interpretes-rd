@@ -69,6 +69,11 @@ jobs:
       - name: Prepare disposable PostgreSQL schema
         run: npx prisma db push
 
+      # The operator audit SQL is executed against this disposable Postgres,
+      # with rollback-only synthetic fixtures and no production credentials.
+      - name: Verify call reconciliation SQL on isolated PostgreSQL
+        run: npx tsx scripts/ci/verify-call-production-audit-query.ts
+
       - name: Verify Roleplay and deployment-preflight test harness
         run: npx vitest run src/app/admin/roleplays/studio/compact-editor.test.tsx src/lib/deployment-preflight.test.ts
 
