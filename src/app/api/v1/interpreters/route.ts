@@ -85,6 +85,33 @@ export const POST = withSecurity(async (request: NextRequest) => {
     );
   }
 
+  // A retry after a partial Auth provisioning failure must not silently
+  // create another interpreter. Check natural identifiers without returning
+  // matched PII or assuming an existing record is safe to overwrite.
+  // This is best-effort: the database's unique constraints still protect
+  // exact-key races; case-variant concurrent inserts need a future schema
+  // rollout with an audited case-insensitive uniqueness constraint.
+  const existingInterpreter = await prisma.interpreter.findFirst({
+    where: {
+      OR: [
+        { externalId: { equals: interpreterData.externalId, mode: 'insensitive' } },
+        ...(interpreterData.emailCorporativo
+          ? [{ emailCorporativo: {
+              equals: interpreterData.emailCorporativo, mode: 'insensitive' as const,
+            } }]
+          : []),
+      ],
+    },
+    select: { id: true },
+  });
+  if (existingInterpreter) {
+    return privateAdminJson({
+      success: false,
+      code: 'INTERPRETER_ALREADY_EXISTS',
+      error: 'An interpreter with this identifier or corporate email already exists. Review the existing record before retrying.',
+    }, { status: 409 });
+  }
+
   // Probe Auth BEFORE creating a local interpreter. The existing user
   // lookup inside upsertConfirmedAuthUser otherwise rejects an already-used
   // email only AFTER the local record has been committed. A matching email
@@ -116,33 +143,6 @@ export const POST = withSecurity(async (request: NextRequest) => {
         { status: 503 }
       );
     }
-  }
-
-  // A retry after a partial Auth provisioning failure must not silently
-  // create another interpreter. Check natural identifiers without returning
-  // matched PII or assuming an existing record is safe to overwrite.
-  // This is best-effort: the database's unique constraints still protect
-  // exact-key races; case-variant concurrent inserts need a future schema
-  // rollout with an audited case-insensitive uniqueness constraint.
-  const existingInterpreter = await prisma.interpreter.findFirst({
-    where: {
-      OR: [
-        { externalId: { equals: interpreterData.externalId, mode: 'insensitive' } },
-        ...(interpreterData.emailCorporativo
-          ? [{ emailCorporativo: {
-              equals: interpreterData.emailCorporativo, mode: 'insensitive' as const,
-            } }]
-          : []),
-      ],
-    },
-    select: { id: true },
-  });
-  if (existingInterpreter) {
-    return privateAdminJson({
-      success: false,
-      code: 'INTERPRETER_ALREADY_EXISTS',
-      error: 'An interpreter with this identifier or corporate email already exists. Review the existing record before retrying.',
-    }, { status: 409 });
   }
 
   console.info('[API_INTERPRETERS_POST] Creating interpreter record');
