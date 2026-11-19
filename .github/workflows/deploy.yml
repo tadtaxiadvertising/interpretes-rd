@@ -417,7 +417,14 @@ jobs:
             echo "ERROR: EASYPANEL_WEBHOOK_INTERPRETERS must be a valid URL starting with http:// or https://."
             exit 78
           fi
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
+          # These POST deploy hooks have no caller-provided idempotency key.
+          # A timeout may happen after Easypanel accepted a deployment; never
+          # replay the request automatically or print its secret URL.
+          if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
+            echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
+            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 1
+          fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
@@ -452,7 +459,14 @@ jobs:
             echo "::error::EASYPANEL_WEBHOOK_ROLEPLAY_WORKER must be a valid HTTP(S) URL."
             exit 78
           fi
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
+          # These POST deploy hooks have no caller-provided idempotency key.
+          # A timeout may happen after Easypanel accepted a deployment; never
+          # replay the request automatically or print its secret URL.
+          if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
+            echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
+            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 1
+          fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook Roleplay worker aceptado (HTTP $HTTP_CODE); readiness y SHA no verificados"; printf 'Roleplay worker: solicitud aceptada HTTP %s; contenedor no verificado.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: Roleplay worker webhook returned HTTP $HTTP_CODE"; exit 1;; esac
 
   deploy-interpreters-api:
@@ -485,7 +499,14 @@ jobs:
             echo "ERROR: EASYPANEL_WEBHOOK_API must be a valid URL starting with http:// or https://."
             exit 78
           fi
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 3 --retry-delay 5 --retry-all-errors -X POST "$WEBHOOK_URL")
+          # These POST deploy hooks have no caller-provided idempotency key.
+          # A timeout may happen after Easypanel accepted a deployment; never
+          # replay the request automatically or print its secret URL.
+          if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
+            echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
+            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+            exit 1
+          fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters-api aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters API: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters-api webhook returned HTTP $HTTP_CODE"; exit 1;; esac
         env:
           EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
