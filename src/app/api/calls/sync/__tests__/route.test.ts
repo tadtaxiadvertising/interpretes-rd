@@ -48,7 +48,7 @@ describe('legacy call sync is non-mutating until ledger reconciliation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(auth).mockResolvedValue({
-      userId: 'interpreter-profile-7', user: { id: 'interpreter-profile-7' },
+      userId: 'interpreter-profile-7', user: { id: 'interpreter-profile-7', role: 'interpreter' },
     } as never);
     vi.mocked(actorFromBearer).mockResolvedValue({
       userId: 'interpreter-profile-7',
@@ -141,6 +141,18 @@ describe('legacy call sync is non-mutating until ledger reconciliation', () => {
       userId: 'another-user', role: 'interpreter', interpreterId: 7,
     } as never);
     const response = await GET(request('GET', 'Bearer other-user'));
+    expect(response.status).toBe(403);
+    expect(prisma.userProfile.findUnique).not.toHaveBeenCalled();
+    expect(prisma.callSession.count).not.toHaveBeenCalled();
+    noMutations();
+  });
+
+  it('denies role confusion if the cookie has a different role', async () => {
+    vi.mocked(auth).mockResolvedValueOnce({
+      userId: 'interpreter-profile-7',
+      user: { id: 'interpreter-profile-7', role: 'admin' },
+    } as never);
+    const response = await GET(request('GET', 'Bearer interpreter-role'));
     expect(response.status).toBe(403);
     expect(prisma.userProfile.findUnique).not.toHaveBeenCalled();
     expect(prisma.callSession.count).not.toHaveBeenCalled();
