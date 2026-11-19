@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   deleteUser: vi.fn(),
   updateUserById: vi.fn(),
   adminAuth: vi.fn(),
+  revalidate: vi.fn(),
 }));
 
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: m.guard }));
@@ -23,7 +24,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 vi.mock('@/lib/cache/revalidate-interpreter', () => ({
-  revalidateInterpreterProfileRecords: vi.fn(),
+  revalidateInterpreterProfileRecords: m.revalidate,
 }));
 vi.mock('@/lib/interpreters/delete-interpreter', () => ({
   deleteInterpreterDatabaseRecords: m.deleteRecords,
@@ -78,6 +79,7 @@ describe('interpreter detail admin API privacy', () => {
     m.guard.mockResolvedValue(null);
     m.adminAuth.mockReturnValue({ admin: { deleteUser: m.deleteUser, updateUserById: m.updateUserById } });
     m.updateUserById.mockResolvedValue({ error: null });
+    m.deleteUser.mockResolvedValue({ error: null });
     m.update.mockResolvedValue({ id: 12, name: 'Updated Interpreter', emailCorporativo: null });
     m.updateMany.mockResolvedValue({ count: 1 });
     m.transaction.mockImplementation(async (cb: (tx: unknown) => unknown) => cb({
@@ -342,6 +344,71 @@ describe('interpreter detail admin API privacy', () => {
       expect(JSON.stringify(spy.mock.calls)).not.toMatch(/SECRET_VALUE|postgresql:/);
     } finally {
       spy.mockRestore();
+    }
+  });
+
+  it('confirms linked Auth deletion before reporting a successful DELETE', async () => {
+    m.deleteRecords.mockResolvedValueOnce({ authUserId: 'fictional-auth-id' });
+    const res = await DELETE(deleteRequest(), params);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true });
+    expect(m.deleteUser).toHaveBeenCalledWith('fictional-auth-id');
+    expect(m.revalidate).toHaveBeenCalledWith(12);
+    expect(m.transaction).toHaveBeenCalledOnce();
+  });
+
+  it('returns a private 409 if Auth rejects revocation after the local delete', async () => {
+    m.deleteRecords.mockResolvedValueOnce({ authUserId: 'fictional-auth-id' });
+    const err = new Error('postgresql://SECRET_TOKEN@auth.internal');
+    err.name = 'SECRET_BEARER_TOKEN';
+    m.deleteUser.mockResolvedValueOnce({ error: err });
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await DELETE(deleteRequest(), params);
+      expect(res.status).toBe(409);
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+      expect(res.headers.get('Vary')).toContain('Authorization');
+      const body = await res.json();
+      expect(body).toMatchObject({ success: false, code: 'AUTH_REVOCATION_UNCONFIRMED' });
+      expect(body.error).toContain('Do not repeat deletion');
+      expect(JSON.stringify([body, spy.mock.calls])).not.toMatch(/SECRET_|postgresql:|auth\.internal/);
+      expect(m.transaction).toHaveBeenCalledOnce();
+      expect(m.deleteUser).toHaveBeenCalledOnce();
+      expect(m.revalidate).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('returns a private 409 if the Auth provider throws after PostgreSQL committed', async () => {
+    m.deleteRecords.mockResolvedValueOnce({ authUserId: 'fictional-auth-id' });
+    m.deleteUser.mockRejectedValueOnce(new Error('PRIVATE_PROVIDER_DETAILS'));
+    const spy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await DELETE(deleteRequest(), params);
+      const body = await res.json();
+      expect(res.status).toBe(409);
+      expect(body.code).toBe('AUTH_REVOCATION_UNCONFIRMED');
+      expect(JSON.stringify([body, spy.mock.calls])).not.toContain('PRIVATE_PROVIDER_DETAILS');
+      expect(m.transaction).toHaveBeenCalledOnce();
+      expect(m.deleteUser).toHaveBeenCalledOnce();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('preserves success if post-commit cache refresh fails after confirmed revocation', async () => {
+    m.deleteRecords.mockResolvedValueOnce({ authUserId: 'fictional-auth-id' });
+    m.revalidate.mockImplementationOnce(() => { throw new Error('PRIVATE_CACHE_ERROR'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const res = await DELETE(deleteRequest(), params);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(m.deleteUser).toHaveBeenCalledOnce();
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_CACHE_ERROR');
+    } finally {
+      warn.mockRestore();
     }
   });
 
