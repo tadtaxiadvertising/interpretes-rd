@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { validateAction } from '@/lib/auth/actions';
 import { UpdateInterpreterStatusSchema } from '@/lib/validators/interpreters';
-import { deleteInterpreterDatabaseRecords } from '@/lib/interpreters/delete-interpreter';
+import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError, InterpreterHasHistoricalRecordsError } from '@/lib/interpreters/delete-interpreter';
 
 const db = prisma;
 
@@ -224,40 +224,77 @@ export async function deleteInterpreter(id: number): Promise<ActionResult> {
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
   try {
-    // 1. Validar cliente de Supabase Admin access
+    // Check only the local admin configuration before changing PostgreSQL.
+    // This is not a network guarantee that Auth revocation will succeed.
     try {
       void supabaseAdmin.auth;
-    } catch (err) {
-      if (isAdminUnavailableError(err)) {
+    } catch (error) {
+      console.warn('[DELETE_INTERPRETER] Auth admin preflight failed:', safeServerErrorCategory(error));
+      return {
+        success: false,
+        code: 'SERVICE_UNAVAILABLE',
+        error: 'No se pudo verificar el servicio de autenticación. No se eliminaron registros.',
+      };
+    }
+
+    // Historical records are protected by the transaction helper. After this
+    // transaction commits, a later Auth failure cannot be rolled back.
+    const { authUserId } = await db.$transaction((tx: any) =>
+      deleteInterpreterDatabaseRecords(tx, id),
+    );
+
+    if (authUserId) {
+      try {
+        const { error } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
+        if (error) {
+          console.warn('[DELETE_INTERPRETER] Auth revocation not confirmed:', safeServerErrorCategory(error));
+          return {
+            success: false,
+            code: 'PARTIAL_FAILURE',
+            error: 'Los registros locales se eliminaron, pero no se confirmó la revocación del acceso. No repitas la baja: solicita revisión administrativa de Auth.',
+          };
+        }
+      } catch (error) {
+        // The provider might have completed the revocation before failing to
+        // return a response. Do not claim failure OR success of that operation.
+        console.warn('[DELETE_INTERPRETER] Auth revocation status unknown:', safeServerErrorCategory(error));
         return {
           success: false,
-          error: ADMIN_UNAVAILABLE_MESSAGE,
-          code: 'SERVICE_UNAVAILABLE'
+          code: 'PARTIAL_FAILURE',
+          error: 'Los registros locales se eliminaron, pero no se confirmó la revocación del acceso. No repitas la baja: solicita revisión administrativa de Auth.',
         };
       }
-      throw err;
     }
 
-    // 2. Perform DB deletion
-    const { authUserId } = await db.$transaction((tx: any) => deleteInterpreterDatabaseRecords(tx, id));
-
-    // 3. Delete Supabase Auth user if client is ready and user is linked
-    if (authUserId) {
-      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
-      if (authError) console.warn('⚠️ Fallo al borrar usuario de Auth:', authError.message);
+    // Cache invalidation happens after the database commit and Auth step.
+    // A cache error must not turn a completed deletion into a retry prompt.
+    try {
+      revalidateInterpreterProfileRecords(id);
+    } catch (error) {
+      console.warn('[DELETE_INTERPRETER] Post-delete cache refresh failed:', safeServerErrorCategory(error));
     }
-
-    revalidateInterpreterProfileRecords(id);
     return { success: true };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [deleteInterpreter]:', error);
-
-    const errorMsg = error instanceof Error ? error.message : 'Error desconocido';
-    if (errorMsg === 'Intérprete no encontrado') {
-      return { success: false, error: 'El intérprete no se encuentra o ya fue eliminado.', code: 'NOT_FOUND' };
+    console.error('[DELETE_INTERPRETER] Failed before completion:', safeServerErrorCategory(error));
+    if (error instanceof InterpreterNotFoundError) {
+      return {
+        success: false,
+        code: 'NOT_FOUND',
+        error: 'El intérprete no se encuentra o ya fue eliminado. Verifica el acceso de Auth por separado.',
+      };
     }
-
-    return { success: false, error: errorMsg || 'Error al eliminar el intérprete', code: 'INTERNAL_ERROR' };
+    if (error instanceof InterpreterHasHistoricalRecordsError) {
+      return {
+        success: false,
+        code: 'CONFLICT',
+        error: 'El intérprete tiene registros históricos y no puede eliminarse. Desactiva la cuenta mediante el procedimiento autorizado.',
+      };
+    }
+    return {
+      success: false,
+      code: 'INTERNAL_ERROR',
+      error: 'No se pudo completar la baja. Verifica el estado antes de reintentar.',
+    };
   }
 }
 
