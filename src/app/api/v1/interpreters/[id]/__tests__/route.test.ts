@@ -412,13 +412,38 @@ describe('interpreter detail admin API privacy', () => {
     }
   });
 
-  it('treats a typed missing interpreter as an idempotent success', async () => {
+  it('does not claim Auth revocation for a missing local interpreter', async () => {
     const { InterpreterNotFoundError } = await import('@/lib/interpreters/delete-interpreter');
     m.transaction.mockRejectedValueOnce(new InterpreterNotFoundError());
     const res = await DELETE(deleteRequest(), params);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(409);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(await res.json()).toEqual({ success: true });
+    expect(await res.json()).toEqual({
+      success: false,
+      code: 'INTERPRETER_NOT_FOUND_AUTH_UNVERIFIED',
+      error: 'The local interpreter no longer exists. Auth revocation cannot be verified; request an administrator review instead of retrying.',
+    });
+    expect(m.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('does not present a blind retry after partial Auth failure as successful', async () => {
+    m.deleteRecords.mockResolvedValueOnce({ authUserId: 'fictional-auth-id' });
+    m.deleteUser.mockResolvedValueOnce({ error: new Error('Synthetic provider outage') });
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const first = await DELETE(deleteRequest(), params);
+      expect(first.status).toBe(409);
+      expect((await first.json()).code).toBe('AUTH_REVOCATION_UNCONFIRMED');
+
+      const { InterpreterNotFoundError } = await import('@/lib/interpreters/delete-interpreter');
+      m.transaction.mockRejectedValueOnce(new InterpreterNotFoundError());
+      const retry = await DELETE(deleteRequest(), params);
+      expect(retry.status).toBe(409);
+      expect((await retry.json()).code).toBe('INTERPRETER_NOT_FOUND_AUTH_UNVERIFIED');
+      expect(m.deleteUser).toHaveBeenCalledOnce();
+    } finally {
+      warning.mockRestore();
+    }
   });
 
   it('rejects deletion with historical references before deleting Auth', async () => {
