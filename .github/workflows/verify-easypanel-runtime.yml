@@ -1,0 +1,46 @@
+name: Verify live Easypanel runtime SHA (read only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: 'Optional full 40-character expected commit SHA; defaults to selected main HEAD'
+        required: false
+        type: string
+
+# Manual diagnostics: no migrations, no webhook calls, no database connections.
+permissions:
+  contents: read
+
+concurrency:
+  group: interpreters-runtime-version-readonly
+  cancel-in-progress: false
+
+jobs:
+  verify-runtime:
+    name: Verify live public release SHA without redeploying
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    steps:
+      - name: Checkout selected main commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Read-only GET of public version endpoint
+        env:
+          EASYPANEL_RELEASE_VERIFY_URL: ${{ vars.EASYPANEL_RELEASE_VERIFY_URL }}
+          EXPECTED_GIT_SHA: ${{ inputs.expected_sha || github.sha }}
+          EASYPANEL_VERIFY_ATTEMPTS: '1'
+        run: |
+          set -euo pipefail
+          if [ -z "${EASYPANEL_RELEASE_VERIFY_URL:-}" ]; then
+            echo '::error::EASYPANEL_RELEASE_VERIFY_URL is not configured for the production environment. No deployment was attempted.'
+            exit 1
+          fi
+          node scripts/ci/verify-easypanel-version.mjs
