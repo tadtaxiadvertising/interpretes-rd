@@ -50,4 +50,14 @@ test('manual runtime SHA attestation cannot trigger writes or deployments', () =
   assert.match(manual, /EASYPANEL_VERIFY_ATTEMPTS: '1'/);
   assert.match(manual, /node scripts\/ci\/verify-easypanel-version\.mjs/);
   assert.doesNotMatch(manual, /curl .*\-X POST|\.auth\.admin\.|DIRECT_URL:|EASYPANEL_WEBHOOK_/);
+test('all Easypanel deployment webhooks use a bounded single POST attempt', () => {
+  // POST webhooks have no idempotency key. An unanswered request may already
+  // have triggered a deployment, so retries can produce duplicate releases.
+  for (const job of ['deploy-interpreters', 'deploy-roleplay-audio-worker', 'deploy-interpreters-api']) {
+    const source = jobBody(job);
+    assert.match(source, /--connect-timeout 15 --max-time 120 --retry 0 -X POST/);
+    assert.doesNotMatch(source, /--retry-all-errors|--retry [1-9]/);
+    assert.match(source, /Easypanel webhook response was not confirmed/);
+    assert.match(source, /Inspect Easypanel deployment history and runtime SHA before another request/);
+  }
 });

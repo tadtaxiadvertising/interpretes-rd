@@ -34,18 +34,32 @@ export async function POST(
     }
 
     const { supabaseAdmin, isAdminUnavailableError } = await import('@/lib/supabase/admin');
+    // Config resolution precedes the provider write. Once a remote request
+    // starts, an error or lost response cannot prove the password is unchanged.
+    // Never present an uncertain remote result as a safe-to-retry 500/503.
+    let providerWriteStarted = false;
     try {
-      const { error } = await supabaseAdmin.auth.admin.updateUserById(
+      const authAdmin = supabaseAdmin.auth.admin;
+      providerWriteStarted = true;
+      const { error } = await authAdmin.updateUserById(
         interpreter.userProfile.id,
         { password, email_confirm: true },
       );
       if (error) throw error;
     } catch (error: unknown) {
-      if (isAdminUnavailableError(error)) {
+      if (!providerWriteStarted && isAdminUnavailableError(error)) {
         return privateAdminJson(
-          { success: false, error: 'Authentication administration is unavailable.' },
+          { success: false, error: 'Authentication administration is unavailable. No password update was attempted.' },
           { status: 503 },
         );
+      }
+      if (providerWriteStarted) {
+        console.warn('Interpreter Auth password update unconfirmed:', safeServerErrorCategory(error));
+        return privateAdminJson({
+          success: false,
+          code: 'AUTH_PASSWORD_UPDATE_UNCONFIRMED',
+          error: 'The password update could not be confirmed. Verify the Auth account before retrying.',
+        }, { status: 409 });
       }
       throw error;
     }

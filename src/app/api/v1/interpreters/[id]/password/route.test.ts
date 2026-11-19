@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   guard: vi.fn(),
   findUnique: vi.fn(),
   updateUserById: vi.fn(),
+  adminAuth: vi.fn(),
 }));
 
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: m.guard }));
@@ -12,7 +13,7 @@ vi.mock('@/lib/prisma', () => ({
   default: { interpreter: { findUnique: m.findUnique } },
 }));
 vi.mock('@/lib/supabase/admin', () => ({
-  supabaseAdmin: { auth: { admin: { updateUserById: m.updateUserById } } },
+  supabaseAdmin: { get auth() { return m.adminAuth(); } },
   isAdminUnavailableError: (error: unknown) =>
     error instanceof Error && error.name === 'SupabaseAdminUnavailableError',
 }));
@@ -41,6 +42,7 @@ describe('interpreter password reset admin privacy boundary', () => {
       id: 12, userProfile: { id: 'verified-auth-uid' },
     });
     m.updateUserById.mockResolvedValue({ error: null });
+    m.adminAuth.mockReturnValue({ admin: { updateUserById: m.updateUserById } });
   });
 
   it('rejects unauthorized callers before interpreting input or reading personnel records', async () => {
@@ -85,31 +87,69 @@ describe('interpreter password reset admin privacy boundary', () => {
     expect(m.updateUserById).not.toHaveBeenCalled();
   });
 
-  it('keeps configuration-unavailable errors static and private', async () => {
+  it('returns private 503 without a write if the admin client cannot initialize', async () => {
     const error = new Error('private admin secret: ' + secret);
     error.name = 'SupabaseAdminUnavailableError';
-    m.updateUserById.mockRejectedValueOnce(error);
+    m.adminAuth.mockImplementationOnce(() => { throw error; });
     const response = await POST(request(), params());
     expect(response.status).toBe(503);
     expectPrivate(response);
     const body = await response.json();
     expect(body).toEqual({
-      success: false, error: 'Authentication administration is unavailable.',
+      success: false,
+      error: 'Authentication administration is unavailable. No password update was attempted.',
     });
     expect(JSON.stringify(body)).not.toContain('SUPER_SECRET');
+    expect(m.updateUserById).not.toHaveBeenCalled();
   });
 
-  it('never logs or returns upstream Auth credentials or arbitrary provider errors', async () => {
-    m.updateUserById.mockResolvedValueOnce({ error: new Error(secret) });
-    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('treats provider unavailability after starting the write as unconfirmed', async () => {
+    const error = new Error(secret);
+    error.name = 'SupabaseAdminUnavailableError';
+    m.updateUserById.mockRejectedValueOnce(error);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       const response = await POST(request(), params());
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(409);
       expectPrivate(response);
-      expect(await response.json()).toEqual({ success: false, error: 'Error resetting password' });
-      expect(log).toHaveBeenCalledWith('Error resetting interpreter password:', 'Error');
-      expect(JSON.stringify(log.mock.calls)).not.toMatch(/SUPER_SECRET|internal\.test|postgresql:/);
-    } finally { log.mockRestore(); }
+      expect(await response.json()).toEqual({
+        success: false,
+        code: 'AUTH_PASSWORD_UPDATE_UNCONFIRMED',
+        error: 'The password update could not be confirmed. Verify the Auth account before retrying.',
+      });
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('SUPER_SECRET');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('redacts returned Auth errors and reports the outcome as uncertain', async () => {
+    m.updateUserById.mockResolvedValueOnce({ error: new Error(secret) });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const response = await POST(request(), params());
+      expect(response.status).toBe(409);
+      expectPrivate(response);
+      expect(await response.json()).toEqual({
+        success: false,
+        code: 'AUTH_PASSWORD_UPDATE_UNCONFIRMED',
+        error: 'The password update could not be confirmed. Verify the Auth account before retrying.',
+      });
+      expect(warn).toHaveBeenCalledWith('Interpreter Auth password update unconfirmed:', 'Error');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('SUPER_SECRET');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('redacts thrown Auth errors after an attempted remote update', async () => {
+    m.updateUserById.mockRejectedValueOnce(new Error(secret));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const response = await POST(request(), params());
+      expect(response.status).toBe(409);
+      expectPrivate(response);
+      const body = await response.json();
+      expect(body.code).toBe('AUTH_PASSWORD_UPDATE_UNCONFIRMED');
+      expect(JSON.stringify([body, warn.mock.calls])).not.toContain('SUPER_SECRET');
+      expect(m.updateUserById).toHaveBeenCalledOnce();
+    } finally { warn.mockRestore(); }
   });
 
   it('redacts database errors as well as Supabase errors', async () => {
