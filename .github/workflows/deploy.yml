@@ -182,6 +182,11 @@ jobs:
       - name: Prepare isolated E2E database
         run: npx prisma db push
 
+      # The operator audit SQL is executed against this disposable Postgres,
+      # with rollback-only synthetic fixtures and no production credentials.
+      - name: Verify call reconciliation SQL on isolated PostgreSQL
+        run: npx tsx scripts/ci/verify-call-production-audit-query.ts
+
       - name: Verify roleplay library archive migration on isolated PostgreSQL
         run: npx tsx scripts/verify-roleplay-library-archive-migration.ts
 
