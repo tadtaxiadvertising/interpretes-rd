@@ -4,6 +4,8 @@ import {
   deleteInterpreterDatabaseRecords,
   InterpreterNotFoundError,
   InterpreterHasHistoricalRecordsError,
+  InterpreterLegacyIdentityReviewRequiredError,
+  InterpreterLegacyIdentityCheckUnavailableError,
 } from '../delete-interpreter';
 
 const protectedModels = [
@@ -27,10 +29,15 @@ function makeTransaction() {
   return {
     $queryRaw: vi.fn((_query: TemplateStringsArray, _id: number) => Promise.resolve([{ id: 12 }])),
     interpreter: {
-      findUnique: vi.fn().mockResolvedValue({ id: 12, userProfile: { id: 'fictional-auth-id' } }),
+      findUnique: vi.fn().mockResolvedValue({
+        id: 12,
+        emailCorporativo: 'corporate@example.test',
+        userProfile: { id: 'fictional-auth-id', email: 'profile@example.test' },
+      }),
       delete: vi.fn().mockResolvedValue({ id: 12 }),
     },
     roleplaySession: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    rbacUser: { findFirst: vi.fn().mockResolvedValue(null) },
     userProfile: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
     interpreterAccountRate: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
     payrollRecord: withDeletion(),
@@ -57,6 +64,17 @@ describe('interpreter hard-delete historical evidence guard', () => {
     for (const model of protectedModels) {
       expect(tx[model].findFirst).toHaveBeenCalledOnce();
     }
+    expect(tx.rbacUser.findFirst).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { email: { equals: 'corporate@example.test', mode: 'insensitive' } },
+          { email: { equals: 'profile@example.test', mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true },
+    });
+    expect(tx.rbacUser.findFirst.mock.invocationCallOrder[0])
+      .toBeLessThan(tx.roleplaySession.updateMany.mock.invocationCallOrder[0]);
     expect(tx.interpreter.delete).toHaveBeenCalledWith({ where: { id: 12 } });
   });
 
@@ -81,6 +99,72 @@ describe('interpreter hard-delete historical evidence guard', () => {
     expect(tx.payrollRecord.deleteMany).not.toHaveBeenCalled();
     expect(tx.callSession.deleteMany).not.toHaveBeenCalled();
     expect(tx.productionLog.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['corporate@example.test', 'profile@example.test'])(
+    'blocks a possible independent legacy login associated with %s before all destructive writes',
+    async (matchedEmail) => {
+      const tx = makeTransaction();
+      tx.rbacUser.findFirst.mockResolvedValueOnce({ id: 'unrelated-or-legacy-identity' });
+      await expect(deleteInterpreterDatabaseRecords(tx, 12))
+        .rejects.toBeInstanceOf(InterpreterLegacyIdentityReviewRequiredError);
+      expect(tx.rbacUser.findFirst).toHaveBeenCalledOnce();
+      expect(tx.rbacUser.findFirst.mock.calls[0][0].where.OR).toContainEqual({
+        email: { equals: matchedEmail, mode: 'insensitive' },
+      });
+      expect(tx.roleplaySession.updateMany).not.toHaveBeenCalled();
+      expect(tx.userProfile.deleteMany).not.toHaveBeenCalled();
+      expect(tx.interpreter.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  it('normalizes and deduplicates the two emails before inspecting Auth.js', async () => {
+    const tx = makeTransaction();
+    tx.interpreter.findUnique.mockResolvedValueOnce({
+      id: 12,
+      emailCorporativo: '  Employee@Example.Test  ',
+      userProfile: { id: 'fictional-auth-id', email: 'employee@example.test' },
+    });
+    const result = await deleteInterpreterDatabaseRecords(tx, 12);
+    expect(result).toEqual({ authUserId: 'fictional-auth-id' });
+    expect(tx.rbacUser.findFirst).toHaveBeenCalledWith({
+      where: { OR: [{ email: { equals: 'employee@example.test', mode: 'insensitive' } }] },
+      select: { id: true },
+    });
+  });
+
+  it('fails closed on legacy directory query failure before any destructive writes', async () => {
+    const tx = makeTransaction();
+    tx.rbacUser.findFirst.mockRejectedValueOnce(
+      new Error('postgresql://PRIVATE_DB_PASSWORD@synthetic.invalid'),
+    );
+    await expect(deleteInterpreterDatabaseRecords(tx, 12))
+      .rejects.toBeInstanceOf(InterpreterLegacyIdentityCheckUnavailableError);
+    expect(tx.roleplaySession.updateMany).not.toHaveBeenCalled();
+    expect(tx.userProfile.deleteMany).not.toHaveBeenCalled();
+    expect(tx.interpreter.delete).not.toHaveBeenCalled();
+  });
+
+  it('fails closed if the linked Auth profile has no verifiable email', async () => {
+    const tx = makeTransaction();
+    tx.interpreter.findUnique.mockResolvedValueOnce({
+      id: 12, emailCorporativo: null, userProfile: { id: 'fictional-auth-id', email: '' },
+    });
+    await expect(deleteInterpreterDatabaseRecords(tx, 12))
+      .rejects.toBeInstanceOf(InterpreterLegacyIdentityCheckUnavailableError);
+    expect(tx.rbacUser.findFirst).not.toHaveBeenCalled();
+    expect(tx.interpreter.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not query legacy identity directory for passwordless interpreters with no email', async () => {
+    const tx = makeTransaction();
+    tx.interpreter.findUnique.mockResolvedValueOnce({
+      id: 12, emailCorporativo: null, userProfile: null,
+    });
+    const result = await deleteInterpreterDatabaseRecords(tx, 12);
+    expect(result).toEqual({ authUserId: null });
+    expect(tx.rbacUser.findFirst).not.toHaveBeenCalled();
+    expect(tx.interpreter.delete).toHaveBeenCalledOnce();
   });
 
   it('fails closed on a history lookup failure', async () => {
