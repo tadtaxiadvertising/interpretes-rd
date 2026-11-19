@@ -30,6 +30,8 @@ vi.mock('@/lib/interpreters/delete-interpreter', () => ({
   deleteInterpreterDatabaseRecords: m.deleteRecords,
   InterpreterNotFoundError: class InterpreterNotFoundError extends Error {},
   InterpreterHasHistoricalRecordsError: class InterpreterHasHistoricalRecordsError extends Error {},
+  InterpreterLegacyIdentityReviewRequiredError: class InterpreterLegacyIdentityReviewRequiredError extends Error {},
+  InterpreterLegacyIdentityCheckUnavailableError: class InterpreterLegacyIdentityCheckUnavailableError extends Error {},
 }));
 vi.mock('@/lib/supabase/admin', () => ({
   supabaseAdmin: { get auth() { return m.adminAuth(); } },
@@ -458,6 +460,37 @@ describe('interpreter detail admin API privacy', () => {
       error: 'Cannot delete an interpreter with historical records. Deactivate the account instead.',
     });
     expect(m.deleteUser).not.toHaveBeenCalled();
+  });
+
+  it('returns private HTTP 409 without revoking Auth for a legacy login candidate', async () => {
+    const { InterpreterLegacyIdentityReviewRequiredError } = await import('@/lib/interpreters/delete-interpreter');
+    m.transaction.mockRejectedValueOnce(new InterpreterLegacyIdentityReviewRequiredError());
+    const res = await DELETE(deleteRequest(), params);
+    expect(res.status).toBe(409);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(res.headers.get('Vary')).toContain('Authorization');
+    expect(await res.json()).toEqual({
+      success: false,
+      code: 'LEGACY_IDENTITY_REVIEW_REQUIRED',
+      error: 'A potential legacy login must be reviewed before deleting this interpreter. No records were deleted.',
+    });
+    expect(m.deleteUser).not.toHaveBeenCalled();
+    expect(m.revalidate).not.toHaveBeenCalled();
+  });
+
+  it('returns private HTTP 503 on missing legacy directory, without any revocation', async () => {
+    const { InterpreterLegacyIdentityCheckUnavailableError } = await import('@/lib/interpreters/delete-interpreter');
+    m.transaction.mockRejectedValueOnce(new InterpreterLegacyIdentityCheckUnavailableError());
+    const res = await DELETE(deleteRequest(), params);
+    expect(res.status).toBe(503);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(await res.json()).toEqual({
+      success: false,
+      code: 'LEGACY_IDENTITY_CHECK_UNAVAILABLE',
+      error: 'Legacy login verification is unavailable. No interpreter records were deleted.',
+    });
+    expect(m.deleteUser).not.toHaveBeenCalled();
+    expect(m.revalidate).not.toHaveBeenCalled();
   });
 
   it('does not report success for a provider error with the former not-found text', async () => {
