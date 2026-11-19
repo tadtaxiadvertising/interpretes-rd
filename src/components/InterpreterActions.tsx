@@ -28,6 +28,8 @@ interface InterpreterActionsProps {
 export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteNeedsReview, setDeleteNeedsReview] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showResetModal, setShowResetModal] = useState(false);
@@ -37,17 +39,25 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
   const router = useRouter();
 
   const handleDelete = async () => {
+    // A partial deprovisioning cannot safely be retried from this dialog:
+    // the local record is gone and the external Auth result is uncertain.
+    if (isDeleting || deleteNeedsReview) return;
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       const result = await deleteInterpreter(interpreter.id);
-      if (!result.success) throw new Error(result.error);
-      
+      if (!result.success) {
+        setDeleteError(result.error || 'No se pudo confirmar la baja. Verifica el estado antes de reintentar.');
+        if (result.code === 'PARTIAL_FAILURE') {
+          setDeleteNeedsReview(true);
+        }
+        return;
+      }
       setShowDeleteConfirm(false);
       router.refresh();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(error);
-      alert(`Error deleting interpreter: ${message}`);
+    } catch {
+      // Browser errors from Server Actions may contain sensitive strings.
+      setDeleteError('No se pudo confirmar la baja. Verifica el estado antes de reintentar.');
     } finally {
       setIsDeleting(false);
     }
@@ -117,6 +127,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
             <button 
               className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-colors"
               onClick={() => {
+                setDeleteError(null);
                 setShowDeleteConfirm(true);
                 setIsOpen(false);
               }}
@@ -195,9 +206,19 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
           <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mx-auto mb-6">
             <AlertTriangle size={32} />
           </div>
-          <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-            Are you sure you want to remove <span className="text-white font-bold">{interpreter.name}</span>? This will also delete their access account.
+          <p className="text-gray-400 text-sm mb-5 leading-relaxed">
+            ¿Eliminar a <span className="text-white font-bold">{interpreter.name}</span>?
+            Se eliminarán sus registros locales permitidos y se intentará revocar su acceso.
+            Si la revocación no se confirma, será necesaria una revisión administrativa.
           </p>
+          {deleteError && (
+            <div role="alert" className="text-left text-red-300 text-sm bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-5">
+              {deleteError}
+              {deleteNeedsReview && (
+                <p className="mt-2 font-semibold">No vuelvas a ejecutar esta baja. Verifica la cuenta en Auth con un administrador.</p>
+              )}
+            </div>
+          )}
           <div className="flex gap-4">
             <button 
               onClick={() => setShowDeleteConfirm(false)}
@@ -207,11 +228,11 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
             </button>
             <button 
               onClick={handleDelete}
-              disabled={isDeleting}
+              disabled={isDeleting || deleteNeedsReview}
               className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
             >
               {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-              Delete
+              {deleteNeedsReview ? 'Revisión necesaria' : 'Eliminar'}
             </button>
           </div>
         </div>

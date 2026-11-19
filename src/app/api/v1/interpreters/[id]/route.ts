@@ -36,13 +36,33 @@ export async function DELETE(
       try {
         const { supabaseAdmin } = await import('@/lib/supabase/admin');
         const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
-        if (authError) console.warn('Auth user deletion failed:', safeServerErrorCategory(authError));
+        if (authError) {
+          console.warn('Auth user revocation unconfirmed:', safeServerErrorCategory(authError));
+          return privateAdminJson({
+            success: false,
+            code: 'AUTH_REVOCATION_UNCONFIRMED',
+            error: 'Local interpreter records were deleted, but Auth revocation could not be confirmed. Do not repeat deletion; request an administrator review.',
+          }, { status: 409 });
+        }
       } catch (err: unknown) {
-        console.warn('Auth user deletion failed:', safeServerErrorCategory(err));
+        // The provider may have completed the operation before its response
+        // was lost. A repeat delete cannot resolve that uncertainty.
+        console.warn('Auth user revocation status unknown:', safeServerErrorCategory(err));
+        return privateAdminJson({
+          success: false,
+          code: 'AUTH_REVOCATION_UNCONFIRMED',
+          error: 'Local interpreter records were deleted, but Auth revocation could not be confirmed. Do not repeat deletion; request an administrator review.',
+        }, { status: 409 });
       }
     }
 
-    revalidateInterpreterProfileRecords(interpreterId);
+    // This runs after database commit and external Auth processing.
+    // It cannot turn a completed deletion into an apparent failure.
+    try {
+      revalidateInterpreterProfileRecords(interpreterId);
+    } catch (cacheError) {
+      console.warn('Interpreter deletion cache refresh failed:', safeServerErrorCategory(cacheError));
+    }
     return privateAdminJson({ success: true });
 
   } catch (error) {
