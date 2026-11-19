@@ -347,6 +347,14 @@ export async function resetInterpreterPassword(id: number, password: string): Pr
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
+  if (!Number.isSafeInteger(id) || id <= 0 || typeof password !== 'string' || password.trim().length < 6) {
+    return { success: false, code: 'VALIDATION_ERROR', error: 'Selecciona un intérprete y una contraseña válida de al menos seis caracteres.' };
+  }
+
+  // Provider updates can commit before an error is returned, and a newly
+  // created Auth user can survive a subsequent UserProfile write failure.
+  // Never instruct the administrator to retry blindly after that point.
+  let providerWriteStarted = false;
   try {
     const interpreter = await db.interpreter.findUnique({
       where: { id },
@@ -354,68 +362,100 @@ export async function resetInterpreterPassword(id: number, password: string): Pr
         id: true,
         name: true,
         emailCorporativo: true,
-        userProfile: { select: { id: true } }
-      }
+        userProfile: { select: { id: true } },
+      },
     });
-
-    if (!interpreter) return { success: false, error: 'Intérprete no encontrado', code: 'NOT_FOUND' };
-
-    let userProfileId = interpreter.userProfile?.id;
-
-    try {
-      void supabaseAdmin.auth;
-    } catch (err) {
-      if (isAdminUnavailableError(err) && !userProfileId) {
-        return { success: false, error: ADMIN_UNAVAILABLE_MESSAGE, code: 'SERVICE_UNAVAILABLE' };
-      }
+    if (!interpreter) {
+      return { success: false, code: 'NOT_FOUND', error: 'Intérprete no encontrado.' };
     }
 
-    if (!userProfileId) {
-      if (!interpreter.emailCorporativo) {
-        return { success: false, error: 'No hay cuenta vinculada ni email corporativo configurado.', code: 'VALIDATION_ERROR' };
+    // Initialization is an availability preflight, not a guarantee that the
+    // provider will accept a later write.
+    try {
+      void supabaseAdmin.auth;
+    } catch (error) {
+      console.warn('[RESET_INTERPRETER_PASSWORD] Admin preflight failed:', safeServerErrorCategory(error));
+      return { success: false, code: 'SERVICE_UNAVAILABLE', error: 'No se pudo verificar el servicio de autenticación. No se intentó cambiar la contraseña.' };
+    }
+
+    const linkedAuthId = interpreter.userProfile?.id;
+    if (linkedAuthId) {
+      // Updating an already-linked UUID never needs to infer identity by
+      // email. Do not create or link a second account in this branch.
+      providerWriteStarted = true;
+      const { error } = await supabaseAdmin.auth.admin.updateUserById(linkedAuthId, {
+        password,
+        email_confirm: true,
+      });
+      if (error) throw error;
+    } else {
+      const email = interpreter.emailCorporativo?.trim().toLowerCase();
+      if (!email) {
+        return { success: false, code: 'VALIDATION_ERROR', error: 'No hay cuenta vinculada ni correo corporativo configurado.' };
       }
 
+      // A legacy Auth.js/RBAC login may be independent of Supabase. A matching
+      // email requires identity review; it is never grounds for auto-linking.
+      try {
+        const legacyUser = await db.rbacUser.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } },
+          select: { id: true },
+        });
+        if (legacyUser) {
+          return { success: false, code: 'CONFLICT', error: 'Hay un acceso heredado que requiere revisión de identidad antes de crear una cuenta de autenticación.' };
+        }
+      } catch (error) {
+        console.warn('[RESET_INTERPRETER_PASSWORD] Legacy lookup failed:', safeServerErrorCategory(error));
+        return { success: false, code: 'SERVICE_UNAVAILABLE', error: 'No se pudo verificar el acceso heredado. No se creó ninguna cuenta.' };
+      }
+
+      try {
+        const existing = await findAuthUserByEmail(supabaseAdmin, email);
+        if (existing) {
+          return { success: false, code: 'CONFLICT', error: 'El correo ya tiene una cuenta de Auth que requiere revisión antes de vincularla.' };
+        }
+      } catch (error) {
+        console.warn('[RESET_INTERPRETER_PASSWORD] Auth lookup failed:', safeServerErrorCategory(error));
+        return { success: false, code: 'SERVICE_UNAVAILABLE', error: 'No se pudo verificar el directorio de Auth. No se creó ninguna cuenta.' };
+      }
+
+      // This path intentionally retains the existing "set password and
+      // provision missing profile" UX, but performs both identity checks first.
+      providerWriteStarted = true;
       const authUser = await upsertConfirmedAuthUser({
-        email: interpreter.emailCorporativo,
+        email,
         password,
         displayName: interpreter.name,
       });
-
-      // 2. Link Profile
-      if (authUser) {
-        await db.userProfile.upsert({
-          where: { id: authUser.id },
-          update: { interpreterId: interpreter.id, onboardingComplete: true },
-          create: {
-            id: authUser.id,
-            email: interpreter.emailCorporativo,
-            displayName: interpreter.name,
-            role: 'interpreter',
-            interpreterId: interpreter.id,
-            onboardingComplete: true
-          }
-        });
-      }
-    } else {
-      try {
-        const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userProfileId, {
-          password,
-          email_confirm: true,
-        });
-        if (authError) throw authError;
-      } catch (authErr) {
-        if (isAdminUnavailableError(authErr)) {
-          return { success: false, error: ADMIN_UNAVAILABLE_MESSAGE, code: 'SERVICE_UNAVAILABLE' };
-        }
-        throw authErr;
-      }
+      if (!authUser) throw new Error('Provider returned no identity');
+      await db.userProfile.upsert({
+        where: { id: authUser.id },
+        update: { interpreterId: interpreter.id, onboardingComplete: true },
+        create: {
+          id: authUser.id,
+          email,
+          displayName: interpreter.name,
+          role: 'interpreter',
+          interpreterId: interpreter.id,
+          onboardingComplete: true,
+        },
+      });
     }
 
-    revalidateInterpreterProfileRecords(id);
+    // This is post-commit/cache work. A cache failure must not trigger an
+    // unsafe password reset retry after the provider was already updated.
+    try {
+      revalidateInterpreterProfileRecords(id);
+    } catch (error) {
+      console.warn('[RESET_INTERPRETER_PASSWORD] Cache refresh failed:', safeServerErrorCategory(error));
+    }
     return { success: true };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [resetInterpreterPassword]:', error);
-    return { success: false, error: 'Error al resetear contraseña', code: 'INTERNAL_ERROR' };
+    console.error('[RESET_INTERPRETER_PASSWORD] Failure:', safeServerErrorCategory(error));
+    if (providerWriteStarted) {
+      return { success: false, code: 'PARTIAL_FAILURE', error: 'No se pudo confirmar el estado de Auth. La contraseña o la cuenta podrían haber cambiado. Verifica la identidad antes de reintentar.' };
+    }
+    return { success: false, code: 'INTERNAL_ERROR', error: 'No se pudo completar la operación. Verifica el estado antes de reintentar.' };
   }
 }
 
