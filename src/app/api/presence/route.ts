@@ -1,7 +1,6 @@
-import { NextResponse } from 'next/server';
 import { getCurrentUser } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
-import { privateAdminJson } from '@/lib/security/private-admin-response';
+import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
 import prisma from '@/lib/prisma';
 import { PresenceSchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
@@ -70,7 +69,7 @@ export async function POST(req: Request) {
     const targetState = normalizeState(body);
 
     if (!eventType) {
-      return NextResponse.json({ success: false, error: 'Invalid presence event type' }, { status: 400 });
+      return privateAdminJson({ success: false, error: 'Invalid presence event type' }, { status: 400 });
     }
 
     // ── HEARTBEAT ─────────────────────────────────────────────
@@ -83,13 +82,13 @@ export async function POST(req: Request) {
           select: { id: true },
         });
       }
-      return NextResponse.json({ success: true, heartbeat: true, ts: now.toISOString() });
+      return privateAdminJson({ success: true, heartbeat: true, ts: now.toISOString() });
     }
 
     // ── ONLINE ────────────────────────────────────────────────
     if (eventType === 'online' || targetState === 'Online') {
       if (!profile?.interpreterId) {
-        return NextResponse.json({ success: true, skipped: true });
+        return privateAdminJson({ success: true, skipped: true });
       }
 
       const interpreter = await db.interpreter.findUnique({
@@ -127,13 +126,13 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      return NextResponse.json({ success: true, status: 'Online', tabId });
+      return privateAdminJson({ success: true, status: 'Online', tabId });
     }
 
     // ── OFFLINE (tab closed / logout) ────────────────────────
     if (eventType === 'offline' || targetState === 'Offline') {
       if (!profile?.interpreterId) {
-        return NextResponse.json({ success: true, skipped: true });
+        return privateAdminJson({ success: true, skipped: true });
       }
 
       const interpreter = await db.interpreter.findUnique({
@@ -143,7 +142,7 @@ export async function POST(req: Request) {
 
       // Grace period: if another tab is still active, don't mark offline
       if (interpreter?.browserTabId && body.tabId && interpreter.browserTabId !== body.tabId) {
-        return NextResponse.json({ success: true, keptActive: true });
+        return privateAdminJson({ success: true, keptActive: true });
       }
 
       const previousStatus = interpreter?.realtimeStatus || 'Online';
@@ -173,13 +172,13 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      return NextResponse.json({ success: true, status: 'Offline' });
+      return privateAdminJson({ success: true, status: 'Offline' });
     }
 
     // ── STATUS CHANGE (away, busy, etc.) ─────────────────────
     if (eventType === 'status_change' || PRESENCE_STATES.includes(targetState)) {
       if (!profile?.interpreterId) {
-        return NextResponse.json({ success: true, skipped: true });
+        return privateAdminJson({ success: true, skipped: true });
       }
 
       const interpreter = await db.interpreter.findUnique({
@@ -217,12 +216,12 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      return NextResponse.json({ success: true, status: targetState });
+      return privateAdminJson({ success: true, status: targetState });
     }
 
-    return NextResponse.json({ success: false, error: 'Unknown presence type' }, { status: 400 });
+    return privateAdminJson({ success: false, error: 'Unknown presence type' }, { status: 400 });
   } catch (error) {
-    return apiError({ error, fallback: 'Internal Server Error' });
+    return privateAdminResponse(apiError({ error, fallback: 'Internal Server Error' }));
   }
 }
 
@@ -236,7 +235,7 @@ export async function GET(req: Request) {
       return privateAdminJson({ success: false, error: 'Forbidden' }, { status: 403 });
     }
     if (!userData?.profile?.interpreterId) {
-      return NextResponse.json({ online: false });
+      return privateAdminJson({ online: false });
     }
 
     const interpreter = await db.interpreter.findUnique({
@@ -250,7 +249,7 @@ export async function GET(req: Request) {
     });
 
     if (!interpreter) {
-      return NextResponse.json({ online: false });
+      return privateAdminJson({ online: false });
     }
 
     const now = Date.now();
@@ -258,7 +257,7 @@ export async function GET(req: Request) {
       ? now - new Date(interpreter.lastHeartbeat).getTime()
       : Infinity;
 
-    return NextResponse.json({
+    return privateAdminJson({
       online: interpreter.realtimeStatus !== 'Offline',
       status: interpreter.realtimeStatus,
       heartbeatAgeMs: heartbeatAge,
@@ -267,6 +266,6 @@ export async function GET(req: Request) {
       statusChangedAt: interpreter.statusChangedAt?.toISOString(),
     });
   } catch {
-    return NextResponse.json({ online: false }, { status: 500 });
+    return privateAdminJson({ online: false }, { status: 500 });
   }
 }
