@@ -8,12 +8,16 @@ const mocks = vi.hoisted(() => ({
   localDelete: vi.fn(),
   localUpdate: vi.fn(),
   findProfile: vi.fn(),
+  findLegacy: vi.fn(),
   refresh: vi.fn(),
 }));
 
 vi.mock('@/lib/auth', () => ({ auth: mocks.auth }));
 vi.mock('@/lib/prisma', () => ({
-  default: { userProfile: { delete: mocks.localDelete, update: mocks.localUpdate, findUnique: mocks.findProfile } },
+  default: {
+    userProfile: { delete: mocks.localDelete, update: mocks.localUpdate, findUnique: mocks.findProfile },
+    rbacUser: { findFirst: mocks.findLegacy },
+  },
 }));
 vi.mock('@/lib/cache/revalidate-interpreter', () => ({
   revalidateInterpreterProfileRecords: mocks.refresh,
@@ -37,6 +41,7 @@ describe('admin user access revocation and error privacy', () => {
     vi.clearAllMocks();
     mocks.auth.mockResolvedValue({ userId: 'current-admin', user: { id: 'current-admin', email: 'operator@example.test', role: 'admin' } });
     mocks.findProfile.mockResolvedValue({ email: 'target@example.test' });
+    mocks.findLegacy.mockResolvedValue(null);
     mocks.deleteAuthUser.mockResolvedValue({ data: {}, error: null });
     mocks.localDelete.mockResolvedValue({ interpreterId: 19 });
     mocks.localUpdate.mockResolvedValue({ interpreterId: 19, displayName: 'Test User', email: 'user@example.test' });
@@ -204,14 +209,74 @@ describe('admin user access revocation and error privacy', () => {
     expect(mocks.localDelete).not.toHaveBeenCalled();
   });
 
+  it('blocks Supabase-only revocation if a potentially related legacy login exists', async () => {
+    mocks.findProfile.mockResolvedValueOnce({ email: ' Target@Example.Test ' });
+    mocks.findLegacy.mockResolvedValueOnce({ id: 'legacy-user-with-separate-id' });
+    const result = await deleteUserAccess('supabase-target-id');
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('revisión de identidad');
+    expect(mocks.findLegacy).toHaveBeenCalledWith({
+      where: { email: { equals: 'target@example.test', mode: 'insensitive' } },
+      select: { id: true },
+    });
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+    expect(mocks.localDelete).not.toHaveBeenCalled();
+    expect(mocks.refresh).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('legacy-user-with-separate-id');
+  });
+
+  it('fails closed without deleting either identity when legacy lookup is unavailable', async () => {
+    const error = new Error('postgresql://operator:PRIVATE_LEGACY_PASSWORD@db.internal');
+    error.name = 'Bearer PRIVATE_LEGACY_TOKEN';
+    mocks.findLegacy.mockRejectedValueOnce(error);
+    const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await deleteUserAccess('supabase-target-id');
+      expect(result).toMatchObject({ success: false });
+      expect(result.error).toContain('acceso heredado');
+      expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+      expect(mocks.localDelete).not.toHaveBeenCalled();
+      expect(JSON.stringify([result, warning.mock.calls]))
+        .not.toMatch(/PRIVATE_LEGACY_|postgresql:|db\.internal/);
+      expect(warning).toHaveBeenCalledWith('[ADMIN_USERS] Legacy identity preflight failed:', 'Error');
+    } finally {
+      warning.mockRestore();
+    }
+  });
+
+  it('blocks revocation when the target identity has no verifiable email', async () => {
+    mocks.findProfile.mockResolvedValueOnce({ email: '   ' });
+    const result = await deleteUserAccess('supabase-target-id');
+    expect(result).toMatchObject({ success: false });
+    expect(result.error).toContain('verificar la identidad');
+    expect(mocks.findLegacy).not.toHaveBeenCalled();
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+    expect(mocks.localDelete).not.toHaveBeenCalled();
+  });
+
+  it('does not even inspect legacy accounts for a non-admin or protected target', async () => {
+    mocks.auth.mockResolvedValueOnce({ user: { role: 'interpreter' } });
+    expect((await deleteUserAccess('target')).success).toBe(false);
+    mocks.findProfile.mockResolvedValueOnce({ email: PROTECTED_ADMIN_EMAILS[0] });
+    expect((await deleteUserAccess('protected')).success).toBe(false);
+    expect(mocks.findLegacy).not.toHaveBeenCalled();
+    expect(mocks.deleteAuthUser).not.toHaveBeenCalled();
+  });
+
   it('allows revocation of a different, unprotected account after checking its identity', async () => {
     const result = await deleteUserAccess('other-supabase-id');
     expect(result).toEqual({ success: true });
     expect(mocks.findProfile).toHaveBeenCalledTimes(1);
+    expect(mocks.findLegacy).toHaveBeenCalledWith({
+      where: { email: { equals: 'target@example.test', mode: 'insensitive' } },
+      select: { id: true },
+    });
     expect(mocks.deleteAuthUser).toHaveBeenCalledWith('other-supabase-id');
     expect(mocks.localDelete).toHaveBeenCalledTimes(1);
     const order = mocks.findProfile.mock.invocationCallOrder[0];
-    expect(order).toBeLessThan(mocks.deleteAuthUser.mock.invocationCallOrder[0]);
+    expect(order).toBeLessThan(mocks.findLegacy.mock.invocationCallOrder[0]);
+    expect(mocks.findLegacy.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.deleteAuthUser.mock.invocationCallOrder[0]);
     expect(mocks.deleteAuthUser.mock.invocationCallOrder[0])
       .toBeLessThan(mocks.localDelete.mock.invocationCallOrder[0]);
   });
