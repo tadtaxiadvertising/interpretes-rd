@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { validateAction } from '@/lib/auth/actions';
 import { UpdateInterpreterStatusSchema } from '@/lib/validators/interpreters';
-import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError, InterpreterHasHistoricalRecordsError } from '@/lib/interpreters/delete-interpreter';
+import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError, InterpreterHasHistoricalRecordsError, InterpreterLegacyIdentityReviewRequiredError, InterpreterLegacyIdentityCheckUnavailableError } from '@/lib/interpreters/delete-interpreter';
 
 const db = prisma;
 
@@ -288,6 +288,20 @@ export async function deleteInterpreter(id: number): Promise<ActionResult> {
         success: false,
         code: 'CONFLICT',
         error: 'El intérprete tiene registros históricos y no puede eliminarse. Desactiva la cuenta mediante el procedimiento autorizado.',
+      };
+    }
+    if (error instanceof InterpreterLegacyIdentityReviewRequiredError) {
+      return {
+        success: false,
+        code: 'CONFLICT',
+        error: 'Hay un posible acceso heredado de Auth.js. No se eliminó el intérprete: revisa la identidad antes de proceder.',
+      };
+    }
+    if (error instanceof InterpreterLegacyIdentityCheckUnavailableError) {
+      return {
+        success: false,
+        code: 'SERVICE_UNAVAILABLE',
+        error: 'No se pudo verificar el acceso heredado. No se eliminó ningún registro.',
       };
     }
     return {
