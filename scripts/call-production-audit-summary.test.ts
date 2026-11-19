@@ -46,6 +46,8 @@ describe('read-only reconciliation report privacy', () => {
   it('permits negative reconciliation differences but rejects negative counts', () => {
     const summary = callProductionAuditSummary({
       ...synthetic,
+      ended_session_minutes: '60',
+      production_effective_minutes: '67',
       session_minus_ledger_minutes: '-10',
       production_minus_ledger_minutes: -3,
     });
@@ -67,6 +69,60 @@ describe('read-only reconciliation report privacy', () => {
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: '1.5' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, total_sessions: '9007199254740993' })).toThrow();
     expect(() => callProductionAuditSummary(null)).toThrow();
+  });
+
+  it('rejects accounting subsets larger than their parent totals', () => {
+    for (const overrides of [
+      { ended_sessions: '7' },
+      { ended_without_ledger_sessions: '6' },
+      { known_quicklog_without_ledger_sessions: '2' },
+      { known_admin_manual_without_ledger_sessions: '2' },
+      { ended_missing_duration_sessions: '6' },
+      { ended_zero_duration_with_elapsed_sessions: '6' },
+      { ended_missing_cost_sessions: '6' },
+      { possible_duplicate_quicklog_sessions: '6' },
+      { groups_with_session_ledger_difference: '5' },
+      { groups_with_production_ledger_difference: '5' },
+      { groups_with_ended_calls_without_ledger: '5' },
+    ]) {
+      expect(() => callProductionAuditSummary({ ...synthetic, ...overrides }))
+        .toThrow('Invalid aggregate reconciliation result');
+    }
+  });
+
+  it('rejects inconsistencies between aggregate minute totals and reported differences', () => {
+    expect(() => callProductionAuditSummary({
+      ...synthetic,
+      session_minus_ledger_minutes: '41',
+    })).toThrow('Invalid aggregate reconciliation result');
+    expect(() => callProductionAuditSummary({
+      ...synthetic,
+      production_minus_ledger_minutes: '34',
+    })).toThrow('Invalid aggregate reconciliation result');
+    // Very large-but-safe totals must not silently round differences.
+    expect(() => callProductionAuditSummary({
+      ...synthetic,
+      ended_session_minutes: Number.MAX_SAFE_INTEGER,
+      ledger_minutes: '1',
+      session_minus_ledger_minutes: Number.MAX_SAFE_INTEGER,
+    })).toThrow('Invalid aggregate reconciliation result');
+  });
+
+  it('accepts an empty audit and fully accounted sessions', () => {
+    const empty = Object.fromEntries(
+      Object.keys(synthetic).map(key => [key, '0']),
+    );
+    expect(callProductionAuditSummary(empty))
+      .toEqual(Object.fromEntries(Object.keys(synthetic).map(key => [key, 0])));
+
+    const complete = {
+      ...synthetic,
+      ended_without_ledger_sessions: '0',
+      known_quicklog_without_ledger_sessions: '0',
+      known_admin_manual_without_ledger_sessions: '0',
+      groups_with_ended_calls_without_ledger: '0',
+    };
+    expect(callProductionAuditSummary(complete).ended_without_ledger_sessions).toBe(0);
   });
 
   it('maintains the privacy boundary in the SQL-driven CLI', () => {
