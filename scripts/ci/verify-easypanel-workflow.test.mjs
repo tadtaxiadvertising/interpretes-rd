@@ -50,6 +50,8 @@ test('manual runtime SHA attestation cannot trigger writes or deployments', () =
   assert.match(manual, /EASYPANEL_VERIFY_ATTEMPTS: '1'/);
   assert.match(manual, /node scripts\/ci\/verify-easypanel-version\.mjs/);
   assert.doesNotMatch(manual, /curl .*\-X POST|\.auth\.admin\.|DIRECT_URL:|EASYPANEL_WEBHOOK_/);
+});
+
 test('all Easypanel deployment webhooks use a bounded single POST attempt', () => {
   // POST webhooks have no idempotency key. An unanswered request may already
   // have triggered a deployment, so retries can produce duplicate releases.
