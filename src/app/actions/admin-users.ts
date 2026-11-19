@@ -284,6 +284,34 @@ export async function deleteUserAccess(userId: string) {
       return { success: false, error: 'No puedes revocar tu propio acceso administrativo.' };
     }
 
+    // Supabase Auth and legacy Auth.js (rbac_users) are independent.
+    // A matching email is NOT proof that they belong to the same person,
+    // so never remove an RBAC identity by email. It is, however, enough
+    // uncertainty to BLOCK an irreversible Supabase-only revocation and
+    // require a reviewed cross-provider identity resolution (#679).
+    //
+    // Fail closed if this read-only preflight cannot run: otherwise a
+    // successful response could conceal an active legacy login.
+    const normalizedTargetEmail = normalizeEmail(target.email);
+    if (!normalizedTargetEmail) {
+      return { success: false, error: 'No se pudo verificar la identidad en todos los métodos de acceso. No se modificaron cuentas.' };
+    }
+    try {
+      const possibleLegacyIdentity = await prisma.rbacUser.findFirst({
+        where: { email: { equals: normalizedTargetEmail, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      if (possibleLegacyIdentity) {
+        return {
+          success: false,
+          error: 'Hay un acceso heredado que requiere revisión de identidad antes de revocar esta cuenta. No se modificaron cuentas.',
+        };
+      }
+    } catch (legacyLookupError) {
+      console.warn('[ADMIN_USERS] Legacy identity preflight failed:', safeServerErrorCategory(legacyLookupError));
+      return { success: false, error: 'No se pudo verificar el acceso heredado. No se modificaron cuentas.' };
+    }
+
     // Revoke external authentication FIRST. Deleting the local profile first
     // would leave a still-authenticated Supabase user if the provider fails.
     try {
