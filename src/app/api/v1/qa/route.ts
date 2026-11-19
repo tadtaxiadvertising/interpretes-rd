@@ -126,6 +126,15 @@ export async function POST(request: Request) {
         { status: error.status, headers: corsHeaders(request) },
       );
     }
+    // The DB enforces one QAScore per ProductionLog. Concurrent submissions
+    // cannot both win; expose the unique-constraint race as a safe conflict,
+    // never as a generic server failure or an automatic overwrite.
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      return privateAdminJson(
+        { success: false, code: 'QA_ALREADY_RECORDED', error: 'This production log already has a QA evaluation. Refresh before submitting again.' },
+        { status: 409, headers: corsHeaders(request) },
+      );
+    }
     console.error('QA API ERROR:', safeServerErrorCategory(error));
     return privateAdminResponse(apiError({ error, fallback: 'Unable to create QA score', exposeMessage: false }));
   }
