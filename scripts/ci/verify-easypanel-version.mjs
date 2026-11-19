@@ -34,6 +34,7 @@ export async function verifyEasypanelVersion({
     throw new Error('Invalid release verification retry budget.');
   }
   let lastReason = 'not_reachable';
+  let lastObservedSha = null;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       const response = await fetchFn(endpoint, {
@@ -44,11 +45,15 @@ export async function verifyEasypanelVersion({
       });
       if (response.ok) {
         const body = await response.json();
-        if (body && typeof body === 'object' && body.buildId === expectedSha) {
+        // Only include a validated 40-hex provenance SHA in diagnostics,
+        // never untrusted response bodies, URLs, or arbitrary text.
+        const observed = typeof body?.buildId === 'string' && SHA_PATTERN.test(body.buildId)
+          ? body.buildId.toLowerCase() : null;
+        if (observed) lastObservedSha = observed;
+        if (observed && observed === expectedSha.toLowerCase()) {
           return { sha: expectedSha, attempt };
         }
-        lastReason = typeof body?.buildId === 'string' && SHA_PATTERN.test(body.buildId)
-          ? 'running_different_sha' : 'missing_valid_provenance';
+        lastReason = observed ? 'running_different_sha' : 'missing_valid_provenance';
       } else {
         lastReason = 'http_error';
       }
@@ -58,7 +63,8 @@ export async function verifyEasypanelVersion({
     }
     if (attempt < attempts) await sleepFn(intervalMs);
   }
-  throw new Error(`Easypanel release SHA not verified after ${attempts} attempts (${lastReason}).`);
+  const evidence = lastObservedSha ? `; last_observed_sha=${lastObservedSha}` : '';
+  throw new Error(`Easypanel release SHA not verified after ${attempts} attempts (${lastReason}${evidence}).`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -66,6 +72,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const result = await verifyEasypanelVersion({
       baseUrl: process.env.EASYPANEL_RELEASE_VERIFY_URL,
       expectedSha: process.env.EXPECTED_GIT_SHA,
+      // Manual diagnostics use one GET; automated release verification keeps
+      // its existing eventual-consistency polling when this is unset.
+      attempts: process.env.EASYPANEL_VERIFY_ATTEMPTS === undefined
+        ? 18 : Number(process.env.EASYPANEL_VERIFY_ATTEMPTS),
     });
     const message = `Verified running Easypanel frontend SHA: ${result.sha} (attempt ${result.attempt})`;
     console.log(message);

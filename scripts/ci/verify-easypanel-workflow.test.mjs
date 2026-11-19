@@ -37,6 +37,19 @@ test('runtime verification is still fail-closed after the backend request', () =
   assert.match(workflow, /node --test scripts\/ci\/verify-easypanel-version\.test\.mjs scripts\/ci\/verify-easypanel-workflow\.test\.mjs/);
 });
 
+test('manual runtime SHA attestation cannot trigger writes or deployments', () => {
+  const manual = readFileSync(
+    new URL('../../.github/workflows/verify-easypanel-runtime.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(manual, /workflow_dispatch:/);
+  assert.match(manual, /if: github\.ref == 'refs\/heads\/main'/);
+  assert.match(manual, /environment: production/);
+  assert.match(manual, /EASYPANEL_RELEASE_VERIFY_URL: \$\{\{ vars\.EASYPANEL_RELEASE_VERIFY_URL \}\}/);
+  assert.match(manual, /EXPECTED_GIT_SHA: \$\{\{ inputs\.expected_sha \|\| github\.sha \}\}/);
+  assert.match(manual, /EASYPANEL_VERIFY_ATTEMPTS: '1'/);
+  assert.match(manual, /node scripts\/ci\/verify-easypanel-version\.mjs/);
+  assert.doesNotMatch(manual, /curl .*\-X POST|\.auth\.admin\.|DIRECT_URL:|EASYPANEL_WEBHOOK_/);
 test('all Easypanel deployment webhooks use a bounded single POST attempt', () => {
   // POST webhooks have no idempotency key. An unanswered request may already
   // have triggered a deployment, so retries can produce duplicate releases.
