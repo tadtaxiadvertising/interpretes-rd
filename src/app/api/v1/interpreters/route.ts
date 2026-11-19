@@ -101,10 +101,51 @@ export const POST = withSecurity(async (request: NextRequest) => {
     }
   }
 
-  console.info('[API_INTERPRETERS_POST] Creating interpreter record');
-  const newInterpreter = await prisma.interpreter.create({
-    data: interpreterData as never,
+  // A retry after a partial Auth provisioning failure must not silently
+  // create another interpreter. Check natural identifiers without returning
+  // matched PII or assuming an existing record is safe to overwrite.
+  // This is best-effort: the database's unique constraints still protect
+  // exact-key races; case-variant concurrent inserts need a future schema
+  // rollout with an audited case-insensitive uniqueness constraint.
+  const existingInterpreter = await prisma.interpreter.findFirst({
+    where: {
+      OR: [
+        { externalId: { equals: interpreterData.externalId, mode: 'insensitive' } },
+        ...(interpreterData.emailCorporativo
+          ? [{ emailCorporativo: {
+              equals: interpreterData.emailCorporativo, mode: 'insensitive' as const,
+            } }]
+          : []),
+      ],
+    },
+    select: { id: true },
   });
+  if (existingInterpreter) {
+    return privateAdminJson({
+      success: false,
+      code: 'INTERPRETER_ALREADY_EXISTS',
+      error: 'An interpreter with this identifier or corporate email already exists. Review the existing record before retrying.',
+    }, { status: 409 });
+  }
+
+  console.info('[API_INTERPRETERS_POST] Creating interpreter record');
+  let newInterpreter: Awaited<ReturnType<typeof prisma.interpreter.create>>;
+  try {
+    newInterpreter = await prisma.interpreter.create({
+      data: interpreterData as never,
+    });
+  } catch (error) {
+    // The DB remains authoritative for concurrent submissions with exact
+    // unique keys. Never resume or redo external Auth provisioning on P2002.
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
+      return privateAdminJson({
+        success: false,
+        code: 'INTERPRETER_ALREADY_EXISTS',
+        error: 'An interpreter with this identifier or corporate email already exists. Review the existing record before retrying.',
+      }, { status: 409 });
+    }
+    throw error;
+  }
   console.info('[API_INTERPRETERS_POST] Interpreter record created');
 
   // 2. If password provided, create Auth user and UserProfile
