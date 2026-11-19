@@ -16,6 +16,9 @@ const synthetic = {
   possible_duplicate_quicklog_sessions: '2',
   ended_session_minutes: '110',
   ledger_entries: '3',
+  ledger_orphan_entries: '1',
+  ledger_owner_mismatch_entries: '0',
+  ledger_day_mismatch_entries: '1',
   ledger_minutes: '70',
   production_logs: '3',
   production_effective_minutes: '105',
@@ -58,6 +61,9 @@ describe('read-only reconciliation report privacy', () => {
 
   it('refuses incomplete, fractional and unsafe integers instead of falsifying accounting totals', () => {
     expect(() => callProductionAuditSummary({ ...synthetic, ledger_minutes: undefined })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, ledger_orphan_entries: undefined })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, ledger_owner_mismatch_entries: '-1' })).toThrow();
+    expect(() => callProductionAuditSummary({ ...synthetic, ledger_day_mismatch_entries: '1.5' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, known_quicklog_without_ledger_sessions: undefined })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, known_admin_manual_without_ledger_sessions: '-1' })).toThrow();
     expect(() => callProductionAuditSummary({ ...synthetic, ended_missing_duration_sessions: undefined })).toThrow();
@@ -81,6 +87,9 @@ describe('read-only reconciliation report privacy', () => {
       { ended_zero_duration_with_elapsed_sessions: '6' },
       { ended_missing_cost_sessions: '6' },
       { possible_duplicate_quicklog_sessions: '6' },
+      { ledger_orphan_entries: '4' },
+      { ledger_owner_mismatch_entries: '4' },
+      { ledger_day_mismatch_entries: '4' },
       { groups_with_session_ledger_difference: '5' },
       { groups_with_production_ledger_difference: '5' },
       { groups_with_ended_calls_without_ledger: '5' },
@@ -131,6 +140,15 @@ describe('read-only reconciliation report privacy', () => {
     expect(script).toContain('FROM interpreter_day');
     expect(script).toContain('ended_missing_duration_count');
     expect(script).toContain('known_quicklog_missing_ledger_count');
+    expect(script).toContain('LEFT JOIN public.call_sessions cs ON cs.id = cpe.call_session_id');
+    expect(script).toContain('ledger_orphan_count');
+    expect(script).toContain('ledger_owner_mismatch_count');
+    expect(script).toContain('ledger_day_mismatch_count');
+    expect(script).toContain('ledger_orphan_entries');
+    expect(script).toContain('ledger_owner_mismatch_entries');
+    expect(script).toContain('ledger_day_mismatch_entries');
+    expect(script).toContain('cs.interpreter_id IS DISTINCT FROM cpe.interpreter_id');
+    expect(script).toContain('IS DISTINCT FROM cpe.production_date');
     expect(script).toContain('known_admin_manual_missing_ledger_count');
     expect(script).toContain('known_quicklog_without_ledger_sessions');
     expect(script).toContain('known_admin_manual_without_ledger_sessions');

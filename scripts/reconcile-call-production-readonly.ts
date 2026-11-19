@@ -95,9 +95,23 @@ const reconciliationQuery = `
       cpe.interpreter_id,
       cpe.production_date,
       COUNT(*)::int AS ledger_entry_count,
+      -- A ledger row may exist with no matching source session, or it may
+      -- disagree with the session's owner/operational date. These are
+      -- diagnostic flags ONLY; never automatically rewrite payroll.
+      COUNT(*) FILTER (WHERE cs.id IS NULL)::int AS ledger_orphan_count,
+      COUNT(*) FILTER (
+        WHERE cs.id IS NOT NULL
+          AND cs.interpreter_id IS DISTINCT FROM cpe.interpreter_id
+      )::int AS ledger_owner_mismatch_count,
+      COUNT(*) FILTER (
+        WHERE cs.id IS NOT NULL
+          AND (cs.started_at AT TIME ZONE 'America/Santo_Domingo')::date
+              IS DISTINCT FROM cpe.production_date
+      )::int AS ledger_day_mismatch_count,
       COALESCE(SUM(cpe.interpreted_minutes), 0)::int AS ledger_minutes,
       COALESCE(SUM(cpe.calls_attended), 0)::int AS ledger_calls
     FROM public.call_production_entries cpe
+    LEFT JOIN public.call_sessions cs ON cs.id = cpe.call_session_id
     WHERE cpe.production_date BETWEEN $1::date AND $2::date
     GROUP BY cpe.interpreter_id, cpe.production_date
   ),
@@ -164,6 +178,9 @@ const reconciliationQuery = `
     COALESCE(s.ended_missing_cost_count, 0)::int AS ended_missing_cost_count,
     COALESCE(s.ended_session_minutes, 0)::int AS ended_session_minutes,
     COALESCE(l.ledger_entry_count, 0)::int AS ledger_entry_count,
+    COALESCE(l.ledger_orphan_count, 0)::int AS ledger_orphan_count,
+    COALESCE(l.ledger_owner_mismatch_count, 0)::int AS ledger_owner_mismatch_count,
+    COALESCE(l.ledger_day_mismatch_count, 0)::int AS ledger_day_mismatch_count,
     COALESCE(l.ledger_minutes, 0)::int AS ledger_minutes,
     COALESCE(l.ledger_calls, 0)::int AS ledger_calls,
     COALESCE(p.production_log_count, 0)::int AS production_log_count,
@@ -200,6 +217,9 @@ const reconciliationQuery = `
       AS possible_duplicate_quicklog_sessions,
     COALESCE(SUM(ended_session_minutes), 0)::bigint AS ended_session_minutes,
     COALESCE(SUM(ledger_entry_count), 0)::bigint AS ledger_entries,
+    COALESCE(SUM(ledger_orphan_count), 0)::bigint AS ledger_orphan_entries,
+    COALESCE(SUM(ledger_owner_mismatch_count), 0)::bigint AS ledger_owner_mismatch_entries,
+    COALESCE(SUM(ledger_day_mismatch_count), 0)::bigint AS ledger_day_mismatch_entries,
     COALESCE(SUM(ledger_minutes), 0)::bigint AS ledger_minutes,
     COALESCE(SUM(production_log_count), 0)::bigint AS production_logs,
     COALESCE(SUM(production_log_effective_minutes), 0)::bigint AS production_effective_minutes,
@@ -237,6 +257,9 @@ async function main() {
       summary,
       interpretation: [
         'ended_without_ledger_sessions counts ended sessions lacking per-session ledger entries; it does not prove they are missing from ProductionLog.',
+        'ledger_orphan_entries counts ledger rows whose call_session_id does not resolve to a call; it does not authorize deletion or payment changes.',
+        'ledger_owner_mismatch_entries counts ledger rows whose interpreter differs from their source call; missing source calls are counted separately.',
+        'ledger_day_mismatch_entries counts ledger rows with a different Santo Domingo date than their source call, including missing start timestamps; review historical conventions before corrections.',
         'known_quicklog_without_ledger_sessions is a subset identified by the two exact Quick Log note markers, not evidence that payable minutes are missing.',
         'known_admin_manual_without_ledger_sessions counts only default-tagged administrator manual calls; manually edited notes are not classified, and admin calls are not assumed payable.',
         'ended_missing_duration_sessions counts ended sessions with durationSeconds NULL; ended_zero_duration_with_elapsed_sessions counts zero-duration sessions with at least 60 seconds elapsed between stored timestamps.',

@@ -16,6 +16,9 @@ const METRIC_FIELDS = [
   'possible_duplicate_quicklog_sessions',
   'ended_session_minutes',
   'ledger_entries',
+  'ledger_orphan_entries',
+  'ledger_owner_mismatch_entries',
+  'ledger_day_mismatch_entries',
   'ledger_minutes',
   'production_logs',
   'production_effective_minutes',
@@ -74,6 +77,9 @@ export function callProductionAuditSummary(result: unknown): Record<MetricName, 
     summary.ended_zero_duration_with_elapsed_sessions > ended ||
     summary.ended_missing_cost_sessions > ended ||
     summary.possible_duplicate_quicklog_sessions > ended ||
+    summary.ledger_orphan_entries > summary.ledger_entries ||
+    summary.ledger_owner_mismatch_entries > summary.ledger_entries ||
+    summary.ledger_day_mismatch_entries > summary.ledger_entries ||
     summary.groups_with_session_ledger_difference > groups ||
     summary.groups_with_production_ledger_difference > groups ||
     summary.groups_with_ended_calls_without_ledger > groups ||
