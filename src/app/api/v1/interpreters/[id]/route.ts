@@ -1,7 +1,7 @@
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
-import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError, InterpreterHasHistoricalRecordsError } from '@/lib/interpreters/delete-interpreter';
+import { deleteInterpreterDatabaseRecords, InterpreterNotFoundError, InterpreterHasHistoricalRecordsError, InterpreterLegacyIdentityReviewRequiredError, InterpreterLegacyIdentityCheckUnavailableError } from '@/lib/interpreters/delete-interpreter';
 import { InterpreterPatchSchema } from '@/lib/api-schemas';
 import { apiError, numericIdParamSchema, parseJsonBody } from '@/lib/api-responses';
 import { privateAdminResponse, privateAdminJson } from '@/lib/security/private-admin-response';
@@ -80,6 +80,18 @@ export async function DELETE(
       return privateAdminJson(
         { success: false, error: 'Cannot delete an interpreter with historical records. Deactivate the account instead.' },
         { status: 409 }
+      );
+    }
+    if (error instanceof InterpreterLegacyIdentityReviewRequiredError) {
+      return privateAdminJson(
+        { success: false, code: 'LEGACY_IDENTITY_REVIEW_REQUIRED', error: 'A potential legacy login must be reviewed before deleting this interpreter. No records were deleted.' },
+        { status: 409 },
+      );
+    }
+    if (error instanceof InterpreterLegacyIdentityCheckUnavailableError) {
+      return privateAdminJson(
+        { success: false, code: 'LEGACY_IDENTITY_CHECK_UNAVAILABLE', error: 'Legacy login verification is unavailable. No interpreter records were deleted.' },
+        { status: 503 },
       );
     }
     console.error('Error deleting interpreter:', safeServerErrorCategory(error));
