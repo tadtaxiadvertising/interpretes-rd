@@ -47,12 +47,32 @@ test('does not accept missing or fabricated provenance', async () => {
   );
 });
 
-test('rejects an unchanged older release after the retry budget', async () => {
+test('rejects an unchanged older release and identifies only its valid public SHA', async () => {
   await assert.rejects(
     verifyEasypanelVersion({ baseUrl, expectedSha, attempts: 2,
       sleepFn: noSleep, fetchFn: async () => Response.json({ buildId: otherSha }) }),
-    /running_different_sha/,
+    error => error.message.includes('running_different_sha') &&
+      error.message.includes('last_observed_sha=' + otherSha),
   );
+});
+
+test('diagnostics never print untrusted error text instead of a validated SHA', async () => {
+  const secret = 'PRIVATE_PROVIDER_TOKEN=https://internal.invalid/secret';
+  await assert.rejects(
+    verifyEasypanelVersion({ baseUrl, expectedSha, attempts: 1,
+      fetchFn: async () => Response.json({ buildId: secret }) }),
+    error => error.message.includes('missing_valid_provenance') &&
+      !error.message.includes(secret) &&
+      !error.message.includes('last_observed_sha='),
+  );
+});
+
+test('matches uppercase valid SHA without treating it as another release', async () => {
+  const result = await verifyEasypanelVersion({
+    baseUrl, expectedSha: expectedSha.toUpperCase(), attempts: 1,
+    fetchFn: async () => Response.json({ buildId: expectedSha }),
+  });
+  assert.equal(result.sha, expectedSha.toUpperCase());
 });
 
 test('retry network errors without silently treating them as a deployment', async () => {
