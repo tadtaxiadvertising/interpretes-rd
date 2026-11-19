@@ -66,9 +66,15 @@ export async function DELETE(
     return privateAdminJson({ success: true });
 
   } catch (error) {
-    // Only a typed missing-record error is idempotent; provider messages are not.
+    // A missing local record does NOT prove that the separate Auth account
+    // was revoked. Returning idempotent success here can hide an earlier
+    // partially completed delete followed by a blind retry.
     if (error instanceof InterpreterNotFoundError) {
-      return privateAdminJson({ success: true });
+      return privateAdminJson({
+        success: false,
+        code: 'INTERPRETER_NOT_FOUND_AUTH_UNVERIFIED',
+        error: 'The local interpreter no longer exists. Auth revocation cannot be verified; request an administrator review instead of retrying.',
+      }, { status: 409 });
     }
     if (error instanceof InterpreterHasHistoricalRecordsError) {
       return privateAdminJson(
