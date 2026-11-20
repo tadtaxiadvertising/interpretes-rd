@@ -407,6 +407,7 @@ jobs:
         run: bash scripts/ci/check-current-main-head.sh
 
       - name: Call Easypanel Webhook — interpreters
+        id: frontend_webhook
         if: steps.recheck_head.outputs.current == 'true'
         run: |
           set -euo pipefail
@@ -441,6 +442,18 @@ jobs:
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
         env:
           EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
+
+      # Diagnose only after this webhook step fails. The existing failure
+      # remains authoritative; this step cannot trigger another deployment.
+      # The probe performs DNS/TCP only, without sending the webhook path.
+      - name: Diagnose failed frontend webhook (read-only DNS/TCP)
+        if: ${{ failure() && steps.frontend_webhook.outcome == 'failure' }}
+        env:
+          EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
+          EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
+        run: |
+          node scripts/ci/probe-easypanel-connectivity.mjs
+          echo "::notice::DNS/TCP-only diagnostics complete; Easypanel deployment and runtime SHA remain unverified."
 
   deploy-roleplay-audio-worker:
     name: Deploy Roleplay audio worker (optional)
