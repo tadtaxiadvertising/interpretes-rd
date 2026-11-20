@@ -27,6 +27,18 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
+      - name: Verify read-only endpoint probe (synthetic/offline)
+        run: node --test scripts/ci/probe-easypanel-connectivity.test.mjs
+
+      # Only DNS and TCP connect; does not call webhook paths, send HTTP
+      # requests, or output secret URLs/IPs. This is a manual diagnostic,
+      # not confirmation that an Easypanel deployment happened.
+      - name: Diagnose Easypanel webhook reachability without triggering deploy
+        env:
+          EASYPANEL_WEBHOOK_INTERPRETERS: ${{ secrets.EASYPANEL_WEBHOOK_INTERPRETERS }}
+          EASYPANEL_WEBHOOK_API: ${{ secrets.EASYPANEL_WEBHOOK_API }}
+        run: node scripts/ci/probe-easypanel-connectivity.mjs
+
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
