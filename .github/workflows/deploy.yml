@@ -66,6 +66,11 @@ jobs:
       - name: Verify ONNX Runtime CPU binding
         run: node -e "const ort = require('onnxruntime-node'); if (typeof ort.InferenceSession?.create !== 'function') process.exit(1)"
 
+      # This probe is fully offline in CI: test doubles replace DNS/TCP.
+      # The actual endpoint check runs only in the manual read-only workflow.
+      - name: Verify safe Easypanel connectivity diagnostics
+        run: node --test scripts/ci/probe-easypanel-connectivity.test.mjs
+
       # Validate the deployment safety guard even while a supply-chain advisory
       # blocks the broader pipeline. This does NOT bypass the audit gate.
       - name: Verify VPN migration guard regression tests
