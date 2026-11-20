@@ -70,6 +70,6 @@ test('all Easypanel deployment webhooks use a bounded single POST attempt', () =
     assert.equal((source.match(/curl -s -o \/dev\/null/g) || []).length, 1,
       `Only one webhook curl POST is allowed in ${job}`);
     assert.doesNotMatch(source, /curl -v|curl -S|--trace|--include|--location/);
-    assert.doesNotMatch(source, /echo "\$WEBHOOK_URL"|printf .*"\$WEBHOOK_URL"/);
+    assert.doesNotMatch(source, /echo.*\$WEBHOOK_URL|::debug.*\$WEBHOOK_URL/);
   }
 });
