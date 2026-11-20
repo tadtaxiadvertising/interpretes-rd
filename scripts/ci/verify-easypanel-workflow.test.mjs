@@ -59,7 +59,17 @@ test('all Easypanel deployment webhooks use a bounded single POST attempt', () =
     const source = jobBody(job);
     assert.match(source, /--connect-timeout 15 --max-time 120 --retry 0 -X POST/);
     assert.doesNotMatch(source, /--retry-all-errors|--retry [1-9]/);
-    assert.match(source, /Easypanel webhook response was not confirmed/);
+    assert.match(source, /Easypanel webhook response unconfirmed/);
     assert.match(source, /Inspect Easypanel deployment history and runtime SHA before another request/);
+    // Numeric-only curl write-out: no URL, response body or provider error.
+    assert.match(source, /%\{http_code\};%\{time_namelookup\};%\{time_connect\};%\{time_appconnect\};%\{time_starttransfer\};%\{time_total\}/);
+    assert.match(source, /CURL_EXIT=\$\?/);
+    assert.match(source, /curl_exit=\$CURL_EXIT/);
+    assert.match(source, /GITHUB_STEP_SUMMARY/);
+    assert.match(source, /HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS/);
+    assert.equal((source.match(/curl -s -o \/dev\/null/g) || []).length, 1,
+      `Only one webhook curl POST is allowed in ${job}`);
+    assert.doesNotMatch(source, /curl -v|curl -S|--trace|--include|--location/);
+    assert.doesNotMatch(source, /echo.*\$WEBHOOK_URL|::debug.*\$WEBHOOK_URL/);
   }
 });

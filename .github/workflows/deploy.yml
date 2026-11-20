@@ -420,9 +420,17 @@ jobs:
           # These POST deploy hooks have no caller-provided idempotency key.
           # A timeout may happen after Easypanel accepted a deployment; never
           # replay the request automatically or print its secret URL.
-          if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
-            echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
-            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          # Write-out is made exclusively from curl's numeric status/timers.
+          # Preserve the original curl exit code and never log URL, response
+          # body, headers or stderr (which may include the secret webhook path).
+          CURL_METRICS=''
+          if CURL_METRICS=$(curl -s -o /dev/null -w "%{http_code};%{time_namelookup};%{time_connect};%{time_appconnect};%{time_starttransfer};%{time_total}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
+            IFS=';' read -r HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS <<< "$CURL_METRICS"
+          else
+            CURL_EXIT=$?
+            IFS=';' read -r HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS <<< "$CURL_METRICS"
+            echo "::error::Easypanel webhook response unconfirmed (curl_exit=$CURL_EXIT, http=${HTTP_CODE:-000}, dns=${DNS_SECONDS:-na}s, tcp=${TCP_SECONDS:-na}s, tls=${TLS_SECONDS:-na}s, first_byte=${FIRST_BYTE_SECONDS:-na}s, total=${TOTAL_SECONDS:-na}s). Check deployment history before any retry."
+            printf 'Webhook response unconfirmed (curl_exit=%s; http=%s; dns=%ss; tcp=%ss; tls=%ss; first_byte=%ss; total=%ss). Inspect Easypanel deployment history and runtime SHA before another request.\n' "$CURL_EXIT" "${HTTP_CODE:-000}" "${DNS_SECONDS:-na}" "${TCP_SECONDS:-na}" "${TLS_SECONDS:-na}" "${FIRST_BYTE_SECONDS:-na}" "${TOTAL_SECONDS:-na}" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 1
           fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters webhook returned HTTP $HTTP_CODE"; exit 1;; esac
@@ -462,9 +470,17 @@ jobs:
           # These POST deploy hooks have no caller-provided idempotency key.
           # A timeout may happen after Easypanel accepted a deployment; never
           # replay the request automatically or print its secret URL.
-          if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
-            echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
-            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          # Write-out is made exclusively from curl's numeric status/timers.
+          # Preserve the original curl exit code and never log URL, response
+          # body, headers or stderr (which may include the secret webhook path).
+          CURL_METRICS=''
+          if CURL_METRICS=$(curl -s -o /dev/null -w "%{http_code};%{time_namelookup};%{time_connect};%{time_appconnect};%{time_starttransfer};%{time_total}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
+            IFS=';' read -r HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS <<< "$CURL_METRICS"
+          else
+            CURL_EXIT=$?
+            IFS=';' read -r HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS <<< "$CURL_METRICS"
+            echo "::error::Easypanel webhook response unconfirmed (curl_exit=$CURL_EXIT, http=${HTTP_CODE:-000}, dns=${DNS_SECONDS:-na}s, tcp=${TCP_SECONDS:-na}s, tls=${TLS_SECONDS:-na}s, first_byte=${FIRST_BYTE_SECONDS:-na}s, total=${TOTAL_SECONDS:-na}s). Check deployment history before any retry."
+            printf 'Webhook response unconfirmed (curl_exit=%s; http=%s; dns=%ss; tcp=%ss; tls=%ss; first_byte=%ss; total=%ss). Inspect Easypanel deployment history and runtime SHA before another request.\n' "$CURL_EXIT" "${HTTP_CODE:-000}" "${DNS_SECONDS:-na}" "${TCP_SECONDS:-na}" "${TLS_SECONDS:-na}" "${FIRST_BYTE_SECONDS:-na}" "${TOTAL_SECONDS:-na}" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 1
           fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook Roleplay worker aceptado (HTTP $HTTP_CODE); readiness y SHA no verificados"; printf 'Roleplay worker: solicitud aceptada HTTP %s; contenedor no verificado.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: Roleplay worker webhook returned HTTP $HTTP_CODE"; exit 1;; esac
@@ -502,9 +518,17 @@ jobs:
           # These POST deploy hooks have no caller-provided idempotency key.
           # A timeout may happen after Easypanel accepted a deployment; never
           # replay the request automatically or print its secret URL.
-          if ! HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
-            echo "::error::Easypanel webhook response was not confirmed. Check deployment history before any retry."
-            printf 'Webhook outcome uncertain. Inspect Easypanel deployment history and runtime SHA before another request.\n' >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          # Write-out is made exclusively from curl's numeric status/timers.
+          # Preserve the original curl exit code and never log URL, response
+          # body, headers or stderr (which may include the secret webhook path).
+          CURL_METRICS=''
+          if CURL_METRICS=$(curl -s -o /dev/null -w "%{http_code};%{time_namelookup};%{time_connect};%{time_appconnect};%{time_starttransfer};%{time_total}" --connect-timeout 15 --max-time 120 --retry 0 -X POST "$WEBHOOK_URL"); then
+            IFS=';' read -r HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS <<< "$CURL_METRICS"
+          else
+            CURL_EXIT=$?
+            IFS=';' read -r HTTP_CODE DNS_SECONDS TCP_SECONDS TLS_SECONDS FIRST_BYTE_SECONDS TOTAL_SECONDS <<< "$CURL_METRICS"
+            echo "::error::Easypanel webhook response unconfirmed (curl_exit=$CURL_EXIT, http=${HTTP_CODE:-000}, dns=${DNS_SECONDS:-na}s, tcp=${TCP_SECONDS:-na}s, tls=${TLS_SECONDS:-na}s, first_byte=${FIRST_BYTE_SECONDS:-na}s, total=${TOTAL_SECONDS:-na}s). Check deployment history before any retry."
+            printf 'Webhook response unconfirmed (curl_exit=%s; http=%s; dns=%ss; tcp=%ss; tls=%ss; first_byte=%ss; total=%ss). Inspect Easypanel deployment history and runtime SHA before another request.\n' "$CURL_EXIT" "${HTTP_CODE:-000}" "${DNS_SECONDS:-na}" "${TCP_SECONDS:-na}" "${TLS_SECONDS:-na}" "${FIRST_BYTE_SECONDS:-na}" "${TOTAL_SECONDS:-na}" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"
             exit 1
           fi
           case "$HTTP_CODE" in 200|201|202|204) echo "OK: webhook interpreters-api aceptado (HTTP $HTTP_CODE); despliegue y SHA no verificados"; printf 'Interpreters API: solicitud aceptada HTTP %s; imagen en ejecución no verificada.\n' "$HTTP_CODE" >> "${GITHUB_STEP_SUMMARY:-/dev/null}";; *) echo "FAIL: interpreters-api webhook returned HTTP $HTTP_CODE"; exit 1;; esac
