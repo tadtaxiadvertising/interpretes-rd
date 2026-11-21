@@ -1367,6 +1367,12 @@ export default function RoleplayStudioPage() {
         // configuration code should display the recovery instructions.
         if (response.status === 503 && body?.code === 'HAPPYSCRIBE_CONFIGURATION_UNAVAILABLE') {
           setHappyScribeConfigUnavailable(true);
+          // A disabled/unreadable provider configuration invalidates the
+          // prior catalog selection and import proofs in this browser view.
+          setHappyScribeItems([]);
+          setHappyScribeSelectedId('');
+          setHappyScribeHasMore(false);
+          setHappyScribeMediaEnabled(false);
         }
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible consultar HappyScribe.');
       }
