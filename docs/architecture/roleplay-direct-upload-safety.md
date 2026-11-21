@@ -14,6 +14,12 @@ El nuevo helper `src/lib/roleplay/direct-upload-contract.ts` solo valida una dec
 
 El componente no identifica al administrador, no recupera objetos de Storage y no verifica por sí mismo que el SHA esperado corresponda a una reserva legítima. Debe ejecutarse **después** de comprobar propiedad, expiración, estado y ruta inmutable de un lote. Tampoco evita el consumo de ancho de banda: recuperar 25 archivos de 15 MiB para verificarlos en Next.js supondría transferir hasta 375 MiB por el VPS, aunque la memoria sea constante. Se necesita un proceso de verificación cercano al almacenamiento o un worker con límites de tráfico y recursos antes de activar la función.
 
+## Preflight de publicación del lote (todavía inactivo)
+
+`src/lib/roleplay/direct-upload-publication-gate.ts` valida un **snapshot persistido de reserva** y la evidencia de verificación de todos sus objetos. Comprueba coincidencia estricta con el administrador autenticado, que la reserva sigue vigente, estado `VERIFIED`, 1–25 posiciones completas sin duplicados, rutas canónicas de staging, tamaño exacto, digest y marcas temporales de verificación. No permite publicar un lote `PUBLISHED` o `CANCELLED` de nuevo. Rechaza datos incompletos o modificados mediante códigos de error que no incluyen datos personales.
+
+**Límite de confianza:** la firma de la función no convierte un objeto arbitrario en evidencia real. El servicio futuro deberá cargar tanto la reserva como sus verificaciones desde **almacenamiento confiable del servidor**, nunca desde el JSON del navegador. La comprobación pura no evita carreras de dos administradores: el servicio de publicación tendrá que reclamar `VERIFIED -> PUBLISHED` con actualización condicional/idempotente **dentro de una única transacción**, tras confirmar permisos y antes de dar por completada la asignación. Tampoco valida permisos de lectura del bucket ni genera URLs.
+
 ## Requisitos antes de activar la función
 
 1. **Privacidad y proyecto correcto (#287/#368):** verificar en modo lectura el campo `storage.buckets.public` y políticas de `storage.objects` del proyecto Supabase realmente utilizado. La conexión actual expone otros proyectos, no el que figura en la configuración histórica. No leer grabaciones clínicas. No cambiar las ACL de un bucket cuyos enlaces públicos ya consumen sesiones y biblioteca.
