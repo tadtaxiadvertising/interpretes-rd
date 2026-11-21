@@ -1,9 +1,10 @@
 /**
  * Cached readiness probe for the small shared PostgreSQL pool.
  *
- * Docker probes every 30s, but unauthenticated public HTTP requests to /ready
- * must not create an unbounded stream of DB queries. Coalesce requests and
- * retry briefly after failure so a recovered database can become ready again.
+ * External monitoring and diagnostic requests to /ready must not create
+ * an unbounded stream of DB queries. The container's /health liveness probe
+ * remains DB-independent; coalesce readiness requests and retry briefly
+ * after failure so a recovered database can become ready again.
  */
 export function createCachedReadinessProbe(
   check: () => Promise<unknown>,
