@@ -11,6 +11,7 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/li
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
+import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 import {
   blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentBatchScope,
   interpreterAssignmentScope,
@@ -40,6 +41,10 @@ async function guardRoleplayAdmin(req: NextRequest): Promise<NextResponse | null
 }
 
 const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
+// Legacy multipart accepts 25 x 15 MiB plus generous metadata/boundary headroom.
+// This is a hard upper bound, NOT a safe memory budget for the small VPS:
+// direct uploads to Storage are still required to solve issue #290.
+const MAX_ROLEPLAY_MULTIPART_BYTES = ROLEPLAY_MAX_SCENARIOS * MAX_AUDIO_SIZE + 2 * 1024 * 1024;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
 const MAX_DURATION_SEC = ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
@@ -125,7 +130,13 @@ export async function POST(req: NextRequest) {
     const forbidden = await guardRoleplayAdmin(req);
     if (forbidden) return forbidden;
 
-    const formData = await req.formData();
+    // Content-Length is only a cheap preflight; it may be missing or false.
+    // The bounded reader also checks bytes as they arrive, before parsing.
+    const declaredBytes = Number(req.headers.get('content-length') ?? 0);
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_ROLEPLAY_MULTIPART_BYTES) {
+      return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
+    }
+    const formData = await readBoundedMultipartFormData(req, MAX_ROLEPLAY_MULTIPART_BYTES);
     const participantType = formData.get('participantType');
     const participantId = formData.get('participantId');
     const rawScenarios = formData.get('scenarios');
@@ -685,6 +696,9 @@ export async function POST(req: NextRequest) {
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
     }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
   } catch (error: unknown) {
+    if (error instanceof MultipartBodyTooLargeError) {
+      return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     // Storage and database exceptions can include signed URLs, credentials,
     // or infrastructure details; preserve an error category, not its payload.
