@@ -8,6 +8,12 @@ Hasta 25 × 15 MiB pueden representar 375 MiB en la memoria del servicio Next.js
 
 El nuevo helper `src/lib/roleplay/direct-upload-contract.ts` solo valida una declaración por posición (1–25, orden 0–24, tipo MIME autorizado, 1–15 MiB por archivo y SHA-256 hexadecimal exacto). Genera rutas temporales como `staging/roleplay/<uuid-servidor>/<posición>.<extensión>`. Rechaza nombres originales, rutas, URLs u otros campos propuestos por el cliente. La UUID debe crearla exclusivamente el servidor. El helper **no permite subir archivos**, no verifica propiedad, no utiliza API keys y no está conectado a la ruta existente.
 
+## Verificación incremental disponible (no conectada a Storage)
+
+`src/lib/roleplay/direct-upload-stream-verifier.ts` puede comprobar un único stream de bytes contra los valores `sizeBytes` y `sha256` esperados, sin guardar el archivo entero en memoria. Si la secuencia excede el tamaño declarado, termina incompleta, cambia su digest, se cancela o falla la fuente, devuelve **solo códigos de error fijos** sin revelar URL firmada, ruta ni mensajes del proveedor. Las pruebas incluyen un archivo sintético de 15 MiB alimentado por fragmentos de 64 KiB.
+
+El componente no identifica al administrador, no recupera objetos de Storage y no verifica por sí mismo que el SHA esperado corresponda a una reserva legítima. Debe ejecutarse **después** de comprobar propiedad, expiración, estado y ruta inmutable de un lote. Tampoco evita el consumo de ancho de banda: recuperar 25 archivos de 15 MiB para verificarlos en Next.js supondría transferir hasta 375 MiB por el VPS, aunque la memoria sea constante. Se necesita un proceso de verificación cercano al almacenamiento o un worker con límites de tráfico y recursos antes de activar la función.
+
 ## Requisitos antes de activar la función
 
 1. **Privacidad y proyecto correcto (#287/#368):** verificar en modo lectura el campo `storage.buckets.public` y políticas de `storage.objects` del proyecto Supabase realmente utilizado. La conexión actual expone otros proyectos, no el que figura en la configuración histórica. No leer grabaciones clínicas. No cambiar las ACL de un bucket cuyos enlaces públicos ya consumen sesiones y biblioteca.
