@@ -156,13 +156,28 @@ export async function saveHappyScribeSettings(input: {
   if (input.token && !masterKey()) throw new Error('ENCRYPTION_KEY_MISSING');
   const actor = input.updatedBy?.trim() || null;
   const encryptedToken = input.token ? encrypt(input.token.trim()) : null;
+  // A token encrypted with an older/missing key must never be silently
+  // overwritten or deleted. The original ciphertext may be recoverable.
+  const changesToken = Boolean(input.removeToken || encryptedToken);
   await prisma.$transaction(async tx => {
-    if (input.expectedRevision) {
+    if (input.expectedRevision || changesToken) {
       const current = await tx.systemConfig.findMany({
         where: { key: { in: [...SETTING_KEYS] } },
         select: { key: true, value: true },
       });
-      if (revisionFor(current) !== input.expectedRevision) throw new Error('SETTINGS_CONFLICT');
+      if (input.expectedRevision && revisionFor(current) !== input.expectedRevision)
+        throw new Error('SETTINGS_CONFLICT');
+      if (changesToken) {
+        const stored = current.find(row => row.key === TOKEN_KEY);
+        if (stored) {
+          try {
+            decrypt(stored.value);
+          } catch {
+            // No plaintext, crypto exception, or ciphertext in logs.
+            throw new Error('CREDENTIAL_RECOVERY_REQUIRED');
+          }
+        }
+      }
     }
     if (input.removeToken) await tx.systemConfig.deleteMany({ where: { key: TOKEN_KEY } });
     else if (encryptedToken) await tx.systemConfig.upsert({
@@ -192,5 +207,5 @@ export async function saveHappyScribeSettings(input: {
         where: { key }, create: { key, value, updatedBy: actor }, update: { value, updatedBy: actor },
       });
     }
-  }, input.expectedRevision ? { isolationLevel: 'Serializable' } : undefined);
+  }, input.expectedRevision || changesToken ? { isolationLevel: 'Serializable' } : undefined);
 }
