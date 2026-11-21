@@ -111,6 +111,31 @@ describe('HappyScribe library on-demand pagination', () => {
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
+  it('clears stale provider selections if a refresh reports missing server configuration', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({
+        success: true, data: [item(a, 'Previously available')],
+        hasMore: true, mediaImportEnabled: true,
+      }))
+      .mockResolvedValueOnce(Response.json({
+        error: 'La configuración no está disponible.',
+        code: 'HAPPYSCRIBE_CONFIGURATION_UNAVAILABLE',
+      }, { status: 503 }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    expect(screen.getByLabelText('Transcripción de HappyScribe')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    expect(screen.queryByLabelText('Transcripción de HappyScribe')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Cargar más transcripciones (50)' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Revisar configuración de Audio Studio' })).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
   it('does not mistake a provider rate limit for a missing encryption key', async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(
       Response.json({ error: 'HappyScribe limitó temporalmente las consultas.' }, { status: 503 }),
