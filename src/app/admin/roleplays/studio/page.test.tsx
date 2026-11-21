@@ -75,6 +75,80 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByLabelText('Título')).toBeTruthy();
   });
 
+  it('saves a local JSON via Ctrl+S only with editor work and never uploads the source', async () => {
+    const audio = new File(['ID3'], 'quick-save.mp3', { type: 'audio/mpeg' });
+    vi.spyOn(audio, 'slice').mockImplementation(() => ({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }) as unknown as Blob);
+    vi.stubGlobal('crypto', {
+      randomUUID: () => 'quick-save-turn',
+      subtle: { digest: vi.fn(async () => new Uint8Array(32).buffer) },
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { container } = render(<RoleplayStudioPage />);
+
+    const cleanShortcut = new KeyboardEvent('keydown', {
+      key: 's', ctrlKey: true, bubbles: true, cancelable: true,
+    });
+    window.dispatchEvent(cleanShortcut);
+    expect(cleanShortcut.defaultPrevented).toBe(false);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [audio] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(screen.getByText(/Atajo: Ctrl\/⌘\+S/)).toBeTruthy();
+
+    const shortcut = new KeyboardEvent('keydown', {
+      key: 's', ctrlKey: true, bubbles: true, cancelable: true,
+    });
+    await act(async () => {
+      window.dispatchEvent(shortcut);
+      await Promise.resolve();
+    });
+    expect(shortcut.defaultPrevented).toBe(true);
+    expect(download).toHaveBeenCalledOnce();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(screen.getByText(/Plan de cortes local descargado/i)).toBeTruthy();
+  });
+
+  it('does not duplicate a slow local save when Ctrl+S is pressed again', async () => {
+    const audio = new File(['ID3'], 'slow-save.mp3', { type: 'audio/mpeg' });
+    vi.spyOn(audio, 'slice').mockImplementation(() => ({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }) as unknown as Blob);
+    let finishDigest!: (value: ArrayBuffer) => void;
+    const digest = vi.fn(() => new Promise<ArrayBuffer>(resolve => { finishDigest = resolve; }));
+    vi.stubGlobal('crypto', { randomUUID: () => 'slow-save-turn', subtle: { digest } });
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [audio] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+      fireEvent.keyDown(window, { key: 's', metaKey: true });
+      await Promise.resolve();
+    });
+    expect(digest).toHaveBeenCalledOnce();
+    expect(download).not.toHaveBeenCalled();
+
+    await act(async () => {
+      finishDigest(new Uint8Array(32).buffer);
+      await Promise.resolve();
+    });
+    expect(download).toHaveBeenCalledOnce();
+  });
+
   it('opens MP3 above two hours in local mode and rejects media above twelve hours', () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
