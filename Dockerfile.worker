@@ -26,6 +26,7 @@ COPY scripts/roleplay-audio-worker.ts ./scripts/roleplay-audio-worker.ts
 # tsx depends on esbuild; only the builder uses either development tool.
 # Bundle @/lib imports to avoid requiring the TS path alias or tsx in runtime.
 # External node_modules preserve Prisma and ffmpeg-static's native binaries.
+RUN node scripts/ci/assert-build-memory.mjs
 RUN ./node_modules/.bin/esbuild scripts/roleplay-audio-worker.ts \
     --bundle --platform=node --format=esm --target=node22 --packages=external \
     --tsconfig=tsconfig.scripts.json --alias:@=./src \
