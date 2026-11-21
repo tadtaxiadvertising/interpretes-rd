@@ -452,9 +452,9 @@ export default function RoleplayStudioPage() {
     }));
     // Importing a valid SRT/VTT can replace all existing edited cuts. Prompt
     // only when there is actual work to lose; never silently discard it.
-    if (segments.length > 0 && !window.confirm(
-      'Aplicar estos subtítulos reemplazará las intervenciones actuales. ' +
-      'Guarda el proyecto si deseas conservarlas. ¿Continuar?',
+    if ((segments.length > 0 || suggestedClips.length > 0) && !window.confirm(
+      'Aplicar estos subtítulos reemplazará las intervenciones o los cortes sugeridos pendientes. ' +
+      'Guarda las intervenciones y revisa las sugerencias antes de descartarlas. ¿Continuar?',
     )) {
       setNotice('Importación de cortes cancelada. Las intervenciones actuales se conservaron.');
       return false;
@@ -653,6 +653,15 @@ export default function RoleplayStudioPage() {
 
   const importSubtitles = async (file: File) => {
     if (!audio || !duration) return;
+    // Reading another subtitle file would overwrite in-memory review choices,
+    // which are deliberately not included in the portable project JSON.
+    if (reviewCues.length > 0 && !window.confirm(
+      'Importar otra transcripción reemplazará los turnos SRT pendientes y su selección. ' +
+      'Conserva el archivo de subtítulos original si necesitas esa revisión. ¿Continuar?',
+    )) {
+      setNotice('Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
+      return;
+    }
     const revision = ++subtitleImportRevision.current;
     setError('');
     setNotice('');
