@@ -20,6 +20,8 @@ Mientras Easypanel y SSH no estén verificados, **no construir imágenes dentro 
 
 - Workflow solamente con `workflow_dispatch`; sin `push`, `pull_request` ni `schedule`.
 - Solo acepta ejecución de `main` tras confirmación explícita; el script rechaza cualquier runner que no sea `github-hosted`.
+- Antes de cualquier `docker build`, verifica por API autenticada de GitHub que `main` todavía apunta al SHA del evento y que el CI/CD principal, calidad estática y E2E aislado del **mismo SHA**, con evento `push`, estén `completed/success`. Si faltan evidencias, una prueba está pendiente o la API falla, se bloquea la operación sin construir nada.
+- Para el modo `publish-ghcr`, comprueba nuevamente el SHA y los tres workflows **después de compilar e inmediatamente antes de autenticar/publicar**. El token solo requiere `actions: read` / `contents: read` para la consulta; el permiso `packages: write` se mantiene exclusivamente en el job de publicación.
 - `build-only` conserva exclusivamente `contents: read`, sin acceso de escritura al registro.
 - `publish-ghcr` se autentica a `ghcr.io` exclusivamente y no llama SSH, panel ni servicios de producción.
 - Solo imágenes etiquetadas con `sha-<SHA>`, jamás `:latest`. La identificación final de despliegue requiere digest.
@@ -27,4 +29,4 @@ Mientras Easypanel y SSH no estén verificados, **no construir imágenes dentro 
 
 ## Limitación crítica
 
-El workflow **no resuelve un VPS caído**. Con la protección activa y el SSH perdido, la única vía de recuperación del panel y la máquina es el proveedor/console fuera de banda o soporte. Tampoco existe confirmación desde aquí de que Easypanel haya desactivado su Auto Deploy nativo. Mantener el PR sin fusionar mientras esa incertidumbre persista.
+El workflow **no resuelve un VPS caído**. Con la protección activa y el SSH perdido, la única vía de recuperación del panel y la máquina es el proveedor/console fuera de banda o soporte. Tampoco existe confirmación desde aquí de que Easypanel haya desactivado su Auto Deploy nativo. No activar el workflow ni configurar una publicación nueva mientras esa incertidumbre persista. Los PR de endurecimiento posteriores deben quedar en borrador hasta verificar el Auto Deploy externo.
