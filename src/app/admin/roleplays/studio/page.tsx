@@ -1434,8 +1434,13 @@ export default function RoleplayStudioPage() {
       if (!response.ok || !body?.success || typeof body.data?.content !== 'string') {
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible importar el SRT.');
       }
-      if (controller.signal.aborted || revisionAtRequest !== subtitleImportRevision.current ||
-          activeAudioFile.current !== sourceAtRequest) return;
+      if (controller.signal.aborted || activeAudioFile.current !== sourceAtRequest) return;
+      if (revisionAtRequest !== subtitleImportRevision.current) {
+        // A filter, cue selection or other local edit supersedes this export.
+        // Explain the discarded response without overwriting the newer work.
+        setNotice('La transcripción remota no se aplicó porque la edición cambió durante la descarga.');
+        return;
+      }
       if (!sameEditorEdits(approvedEdits)) {
         setNotice('No se aplicó la transcripción remota: la edición cambió durante la descarga.');
         return;
