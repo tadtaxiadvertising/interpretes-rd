@@ -29,6 +29,8 @@ COPY prisma ./prisma
 # Dar permisos de ejecución a todos los binarios y compilar
 RUN chmod -R +x ./node_modules/.bin
 RUN npx prisma generate
+# Re-check before the TypeScript build, after Prisma tooling has run.
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm run build
 
 # --- STAGE 2: Runner ---
