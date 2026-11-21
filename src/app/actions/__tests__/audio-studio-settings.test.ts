@@ -76,7 +76,9 @@ describe('Audio Studio admin settings: consent, privacy and post-commit status',
       expect(result.success).toBe(false);
       expect(result.message).toMatch(/AUDIO_STUDIO_ENCRYPTION_KEY/);
       expect(result.message).not.toContain(fakeToken);
-      expect(error).toHaveBeenCalledWith('[Audio Studio settings]', 'Error');
+      // Missing encryption is a known, safely handled configuration state.
+      // It must not be logged as a generic unexpected server error.
+      expect(error).not.toHaveBeenCalled();
       expect(JSON.stringify(error.mock.calls)).not.toContain(fakeToken);
       expect(revalidatePath).not.toHaveBeenCalled();
     } finally { error.mockRestore(); }
