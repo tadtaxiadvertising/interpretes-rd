@@ -316,7 +316,9 @@ describe('Audio Studio clip review player', () => {
       getChannelData: () => samples,
     }));
     const makeContext = vi.fn(function FakeAudioContext() {
-      return { decodeAudioData: decode, close: vi.fn(async () => {}) };
+      // The real AudioContext exposes a sample rate before decodeAudioData.
+      // Omitting it incorrectly drives the PCM safety gate into limited mode.
+      return { sampleRate: 16000, decodeAudioData: decode, close: vi.fn(async () => {}) };
     });
     vi.stubGlobal('AudioContext', makeContext);
     const fetcher = vi.fn();
