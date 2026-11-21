@@ -3,6 +3,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES } from '@/lib/roleplay/direct-upload-contract';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
+import { lookupRoleplayCreationReceipt } from '@/lib/roleplay/creation-receipt';
 
 /**
  * A UUID identifies a retry, it is NOT an authorization capability.
@@ -142,7 +143,7 @@ export type RoleplayCreationClaim =
  * 5) reconcile ambiguous IN_PROGRESS rows before considering any retry.
  */
 export async function claimRoleplayCreation(
-  db: Pick<PrismaClient, 'roleplayCreationRequest'>,
+  db: Pick<PrismaClient, 'roleplayCreationRequest' | 'roleplaySession'>,
   actorUserId: string,
   requestKey: string,
   payloadHash: string,
@@ -155,10 +156,6 @@ export async function claimRoleplayCreation(
     actorUserId: true,
     payloadHash: true,
     status: true,
-    sessionIds: true,
-    createdCount: true,
-    skippedCount: true,
-    scenarioCount: true,
   } as const;
 
   try {
@@ -184,24 +181,17 @@ export async function claimRoleplayCreation(
     return { kind: 'CONFLICT' };
   }
   if (existing.status !== 'COMPLETED') return { kind: 'IN_PROGRESS' };
-  // A corrupted/incomplete ledger row must never be used for a claimed
-  // successful replay or to authorize a new upload.
-  if (!Number.isSafeInteger(existing.createdCount) || (existing.createdCount ?? 0) < 1 ||
-      !Number.isSafeInteger(existing.skippedCount) || (existing.skippedCount ?? -1) < 0 ||
-      !Number.isSafeInteger(existing.scenarioCount) || (existing.scenarioCount ?? 0) < 1 ||
-      (existing.scenarioCount ?? 0) > ROLEPLAY_MAX_SCENARIOS ||
-      !Array.isArray(existing.sessionIds) ||
-      existing.sessionIds.length !== existing.createdCount ||
-      existing.sessionIds.some(id => typeof id !== 'string' || !id.trim()) ||
-      new Set(existing.sessionIds).size !== existing.sessionIds.length) {
-    return { kind: 'IN_PROGRESS' };
-  }
+  // The single receipt validator checks completion metadata AND verifies that
+  // every referenced session still exists. An orphaned/corrupt ledger cannot
+  // authorize a successful replay or a fresh upload.
+  const receipt = await lookupRoleplayCreationReceipt(db, actorUserId, requestKey);
+  if (receipt.status !== 'COMPLETED') return { kind: 'IN_PROGRESS' };
   return {
     kind: 'REPLAY',
-    sessionIds: [...existing.sessionIds],
-    createdCount: existing.createdCount!,
-    skippedCount: existing.skippedCount!,
-    scenarioCount: existing.scenarioCount!,
+    sessionIds: receipt.sessionIds,
+    createdCount: receipt.createdCount,
+    skippedCount: receipt.skippedCount,
+    scenarioCount: receipt.scenarioCount,
   };
 }
 
