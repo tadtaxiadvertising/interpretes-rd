@@ -7,6 +7,8 @@ import { proposeLocalVadCuts } from '@/lib/roleplay-studio/vad-suggestions';
 
 type ExistingCut = { start: number; end: number };
 
+const clipKey = (clip: StudioSuggestedClip) => `${clip.start}:${clip.end}`;
+
 export default function LocalVadAssistant({
   snapshot, duration, existing, onApply,
 }: {
@@ -16,11 +18,16 @@ export default function LocalVadAssistant({
   onApply: (segments: StudioSuggestedClip[]) => void;
 }) {
   const [reviewed, setReviewed] = useState(false);
+  const [excludedCuts, setExcludedCuts] = useState<Set<string>>(() => new Set());
   const proposal = useMemo(
     () => proposeLocalVadCuts(snapshot?.segments ?? [], duration, existing),
     [snapshot, duration, existing],
   );
-  useEffect(() => { setReviewed(false); }, [snapshot]);
+  useEffect(() => {
+    setReviewed(false);
+    setExcludedCuts(new Set());
+  }, [snapshot]);
+  const selectedClips = proposal.clips.filter(clip => !excludedCuts.has(clipKey(clip)));
 
   const status = snapshot?.status ?? 'loading';
   const ready = status === 'ready';
@@ -66,17 +73,33 @@ export default function LocalVadAssistant({
           ) : (
             <div className="mt-3 space-y-2">
               <p className="text-xs text-amber-100">
-                Se añadirán únicamente cortes completos que no se solapen con las
-                intervenciones existentes. Los turnos breves pueden quedar omitidos.
+                Elige las regiones que deseas añadir. Solo se incluirán cortes completos
+                que no se solapen con intervenciones existentes; revisa cada región antes de guardar.
               </p>
               <button type="button"
-                onClick={() => { onApply(proposal.clips); setReviewed(false); }}
-                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white">
-                Añadir {proposal.clips.length} cortes revisables
+                onClick={() => { onApply(selectedClips); setReviewed(false); }}
+                disabled={selectedClips.length === 0}
+                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                Añadir {selectedClips.length} {selectedClips.length === 1 ? 'corte revisable' : 'cortes revisables'}
               </button>
               <ol className="grid gap-1 text-xs text-slate-300 sm:grid-cols-2">
                 {proposal.clips.map((cut, index) => (
-                  <li key={index}>Región {index + 1}: {cut.start.toFixed(2)}–{cut.end.toFixed(2)} s</li>
+                  <li key={clipKey(cut)}>
+                    <label className="flex items-center gap-2 rounded-lg border border-white/10 p-2">
+                      <input type="checkbox" aria-label={`Incluir región ${index + 1}`}
+                        checked={!excludedCuts.has(clipKey(cut))}
+                        onChange={event => {
+                          const checked = event.currentTarget.checked;
+                          setExcludedCuts(previous => {
+                            const next = new Set(previous);
+                            if (checked) next.delete(clipKey(cut));
+                            else next.add(clipKey(cut));
+                            return next;
+                          });
+                        }} />
+                      Región {index + 1}: {cut.start.toFixed(2)}–{cut.end.toFixed(2)} s
+                    </label>
+                  </li>
                 ))}
               </ol>
             </div>
