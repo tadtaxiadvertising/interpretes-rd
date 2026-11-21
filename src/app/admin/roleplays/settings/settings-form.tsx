@@ -74,7 +74,20 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     if (media !== status.mediaImportEnabled)
       data.set('mediaImportEnabled', String(media));
     start(async () => {
-      const result = await saveAudioStudioSettings(data);
+      let result: Awaited<ReturnType<typeof saveAudioStudioSettings>>;
+      try {
+        result = await saveAudioStudioSettings(data);
+      } catch {
+        // A rejected Server Action is an ambiguous outcome: the database may
+        // already have committed before the transport failed. Do not permit
+        // an automatic second submission of a provider credential.
+        setConflict(true);
+        setNotice({
+          ok: false,
+          message: 'No se pudo confirmar el guardado. No vuelvas a enviar la clave API: carga primero los ajustes actuales para comprobar el resultado.',
+        });
+        return;
+      }
       setNotice({ ok: result.success, message: result.message });
       setConflict(result.conflict === true);
       if (result.success) {
