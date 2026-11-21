@@ -482,6 +482,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
+      // A 5xx may be returned after a successful DB commit (or after
+      // losing its acknowledgment). Even a JSON success:false at this
+      // status is not proof that publishing was rolled back. Likewise, a
+      // transport/proxy error must never echo its body in the UI.
+      if (typeof res.status === 'number' && res.status >= 500) {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
+
       let raw: unknown;
       try {
         raw = await res.json();
@@ -515,10 +524,25 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(typeof data.error === 'string' && data.error.trim()
           ? data.error : 'El servidor rechazó la creación del roleplay.');
       }
-      // The successful-response structure was checked above.
-      if (!data.data) throw new Error(unknownResultMessage);
+      // A non-error HTTP status must not manufacture a success view when
+      // the backend's session identity / bulk counters are missing. Keep
+      // compatibility with older single-session responses providing either
+      // an inviteLink or a sessionId.
+      const payload = data.data;
+      const validBulk = payload?.bulk === true &&
+        Number.isSafeInteger(payload.createdCount) && (payload.createdCount ?? 0) > 0 &&
+        Number.isSafeInteger(payload.skippedCount) && (payload.skippedCount ?? -1) >= 0 &&
+        Number.isSafeInteger(payload.scenarioCount) && (payload.scenarioCount ?? 0) > 0 &&
+        (payload.scenarioCount ?? 0) <= ROLEPLAY_MAX_SCENARIOS;
+      const validSingle = (payload?.bulk === undefined || payload.bulk === false) &&
+        ((typeof payload?.inviteLink === 'string' && payload.inviteLink.trim().length > 0) ||
+          (typeof payload?.sessionId === 'string' && payload.sessionId.trim().length > 0));
+      if (res.ok === false || (!validBulk && !validSingle)) {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
 
-      if (data.data.bulk) {
+      if (payload!.bulk) {
         setSuccess({
           link: `${window.location.origin}/admin/roleplays`,
           participantName: `${data.data.createdCount} active interpreter(s)`,
