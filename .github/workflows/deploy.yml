@@ -75,6 +75,10 @@ jobs:
       - name: Verify Docker low-memory build safety
         run: node --test scripts/ci/assert-build-memory.test.mjs
 
+      # Policy tests are offline: they cannot publish images or call the VPS.
+      - name: Verify off-host image build and GHCR safety gates
+        run: node --test scripts/ci/build-image-offhost.test.mjs
+
       # Validate the deployment safety guard even while a supply-chain advisory
       # blocks the broader pipeline. This does NOT bypass the audit gate.
       - name: Verify VPN migration guard regression tests
