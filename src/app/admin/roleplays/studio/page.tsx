@@ -1419,6 +1419,13 @@ export default function RoleplayStudioPage() {
     segment.speakerRole === 'unknown' || segment.speakerRole === 'interpreter' ||
     segment.language === 'unknown';
   const pendingReviewCount = segments.filter(needsReview).length;
+  const reviewedCount = segments.length - pendingReviewCount;
+  const unidentifiedSpeakerCount = segments.filter(
+    segment => segment.speakerRole === 'unknown',
+  ).length;
+  const unreviewedLanguageCount = segments.filter(
+    segment => segment.language === 'unknown' && segment.speakerRole !== 'interpreter',
+  ).length;
   const originalInterpreterCount = segments.filter(
     segment => segment.speakerRole === 'interpreter',
   ).length;
@@ -2070,6 +2077,15 @@ export default function RoleplayStudioPage() {
                 className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir fragmento</button>
             </div>
           </div>
+          {segments.length > 0 && (
+            <p role="status" aria-label="Resumen de revisión de intervenciones"
+              className="text-xs text-slate-300">
+              Revisión: {reviewedCount}/{segments.length} completas ·
+              {' '}{unidentifiedSpeakerCount} sin hablante · {unreviewedLanguageCount} sin idioma
+              {originalInterpreterCount > 0 &&
+                <> · {originalInterpreterCount} del intérprete original por excluir</>}
+            </p>
+          )}
           <details open={!sourceRequiresLocal} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-teal-100">
               Protocolos de interpretación consecutiva (opcional)
