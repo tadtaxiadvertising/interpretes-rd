@@ -44,7 +44,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     // A stale form is not allowed to retry until the admin explicitly reloads.
-    if (conflict || editingDisabled) return;
+    if (conflict || editingDisabled || !hasUnsavedChanges) return;
     if ((token.trim() || remove) &&
         status.tokenSource === 'panel' && !status.credentialUsable) {
       // Keep the only possibly recoverable ciphertext until the ORIGINAL
@@ -251,7 +251,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
         {refreshing ? 'Cargando ajustes…' : 'Descartar mis cambios y cargar ajustes actuales'}
       </button>
     </div>}
-    <div className="flex flex-wrap items-center gap-3"><button disabled={editingDisabled || conflict} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
+    <div className="flex flex-wrap items-center gap-3"><button disabled={editingDisabled || conflict || !hasUnsavedChanges} type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{pending ? 'Guardando…' : 'Guardar configuración'}</button>
       <button type="button" onClick={() => void checkConnection()} disabled={editingDisabled || conflict || hasUnsavedChanges || !enabled || !hasToken || !status.credentialUsable || !org.trim() || Boolean(token.trim()) || org !== status.organizationId || remove} className="rounded-xl border border-white/20 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5 disabled:opacity-50">{checking ? 'Comprobando…' : 'Probar conexión'}</button>
       <Link href="/admin/roleplays/studio" onClick={event => {
         if (editingDisabled) {
