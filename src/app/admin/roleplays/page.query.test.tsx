@@ -61,4 +61,27 @@ describe('Admin roleplay list query uses the displayed page and proper ownership
       }),
     );
   });
+
+  it('logs a fixed error category instead of leaking Prisma connection details', async () => {
+    const privateDetail = 'postgresql://ci-user:FAKE_PRIVATE_PASSWORD@db.invalid';
+    const dbError = new Error(privateDetail);
+    dbError.stack = 'stack with SIGNED_AUDIO_URL_FAKE';
+    vi.mocked(prisma.roleplaySession.count).mockRejectedValueOnce(dbError);
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const page = await AdminRoleplaysPage({ searchParams: Promise.resolve({}) });
+      expect(page).toBeTruthy();
+      expect(log).toHaveBeenCalledOnce();
+      expect(log).toHaveBeenCalledWith(
+        '[ADMIN ROLEPLAYS] Failed to load roleplay sessions:', 'Error',
+      );
+      const serialized = JSON.stringify(log.mock.calls);
+      expect(serialized).not.toContain('FAKE_PRIVATE_PASSWORD');
+      expect(serialized).not.toContain('SIGNED_AUDIO_URL_FAKE');
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+
 });
