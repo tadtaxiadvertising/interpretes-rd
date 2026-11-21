@@ -71,6 +71,10 @@ jobs:
       - name: Verify safe Easypanel connectivity diagnostics
         run: node --test scripts/ci/probe-easypanel-connectivity.test.mjs
 
+      # This is offline: only synthetic host/cgroup values are exercised.
+      - name: Verify Docker low-memory build safety
+        run: node --test scripts/ci/assert-build-memory.test.mjs
+
       # Validate the deployment safety guard even while a supply-chain advisory
       # blocks the broader pipeline. This does NOT bypass the audit gate.
       - name: Verify VPN migration guard regression tests
