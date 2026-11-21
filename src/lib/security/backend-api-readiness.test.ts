@@ -57,18 +57,22 @@ describe('dedicated Express API database readiness', () => {
     expect(check).toHaveBeenCalledTimes(2);
   });
 
-  it('Docker/Easypanel uses readiness, not a misleading liveness check', () => {
+  it('Docker/Easypanel probes process liveness while exposing separate database readiness', () => {
     const docker = readFileSync('Dockerfile.api', 'utf8');
     const app = readFileSync('interpreters-api/src/app.ts', 'utf8');
-    expect(docker).toMatch(/HEALTHCHECK[^\n]*start-period=60s/);
-    expect(docker).toContain('/ready');
-    expect(docker).not.toMatch(/HEALTHCHECK[^\n]*\n\s*CMD[^\n]*\/health/);
+    const healthcheck = docker.match(/HEALTHCHECK[^\n]*\\\r?\n\s*CMD[^\n]*/)?.[0];
+    expect(healthcheck).toBeDefined();
+    expect(healthcheck).toContain('--start-period=60s');
+    expect(healthcheck).toContain('http://localhost:${PORT:-3000}/health');
+    expect(healthcheck).not.toContain('/ready');
     expect(app).toContain("app.get('/health'");
-    // Keep the preexisting monitor payload stable while splitting readiness.
+    // Liveness must remain independent of the database: a brief outage
+    // must not cause Easypanel/Swarm to replace a responsive API container.
     const liveness = app.split("app.get('/health'")[1].split("app.get('/ready'")[0];
     expect(liveness).toContain("status: 'ok'");
     expect(liveness).toContain('timestamp: new Date().toISOString()');
     expect(liveness).toContain('uptime: Math.floor(process.uptime())');
+    expect(liveness).not.toMatch(/checkDatabaseReadiness|\$queryRaw|prisma\./);
     expect(app).toContain("app.get('/ready'");
     expect(app).toContain('await prisma.$queryRaw`SELECT 1`');
     expect(app).toContain('res.status(ready ? 200 : 503)');
