@@ -120,6 +120,39 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(screen.queryByText(/2 pausas detectadas/i)).toBeNull();
   });
 
+  it('preserves pending silence suggestions if SRT replacement is declined without existing cuts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => result })));
+    loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    });
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i })).toBeTruthy();
+    const file = new File(['srt'], 'source.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () =>
+      '1\n00:00:00,000 --> 00:00:05,000\nDoctor: First turn' });
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i })).toBeTruthy();
+    expect(screen.getByText(/Importación de cortes cancelada/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
+  });
+
   it('preserves edited interventions and filters when the administrator declines a suggested replacement', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => result }));
     vi.stubGlobal('fetch', fetchMock);

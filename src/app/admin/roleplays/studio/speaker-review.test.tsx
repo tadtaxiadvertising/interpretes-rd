@@ -333,6 +333,50 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(apply.disabled).toBe(false);
   });
 
+  it('keeps a pending 26-turn SRT review when another transcript import is declined', async () => {
+    selectAudio();
+    const first = new File(['srt'], 'first.srt', { type: 'text/plain' });
+    const content = Array.from({ length: 26 }, (_, index) => {
+      const start = String(index * 2).padStart(2, '0');
+      const end = String(index * 2 + 1).padStart(2, '0');
+      return `${index + 1}\n00:00:${start},000 --> 00:00:${end},000\nDoctor: Old turn ${index}`;
+    }).join('\n\n');
+    Object.defineProperty(first, 'text', { value: async () => content });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [first] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(screen.getByText(/26 turnos disponibles y 1 seleccionados/)).toBeTruthy();
+
+    const replacement = new File(['srt'], 'replacement.srt', { type: 'text/plain' });
+    Object.defineProperty(replacement, 'text', {
+      value: async () => '1\n00:00:00,000 --> 00:00:05,000\nDoctor: New turn',
+    });
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [replacement] },
+      });
+    });
+    expect(confirmation).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/26 turnos disponibles y 1 seleccionados/)).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByText(/Cambio de transcripción cancelado/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [replacement] },
+      });
+    });
+    expect(confirmation).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Seleccionar turnos de la transcripción/)).toBeNull();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+  });
+
   it('does not automatically select original interpreter cues when a long SRT requires review', async () => {
     selectAudio();
     fireEvent.click(screen.getByLabelText(/Excluir intervenciones del intérprete original al importar/i));
