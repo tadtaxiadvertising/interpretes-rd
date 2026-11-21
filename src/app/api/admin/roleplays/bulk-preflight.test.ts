@@ -106,7 +106,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
     const req = bulkRequest(25);
     req.headers.delete('content-length');
     const response = await POST(req);
-    expect(response.status).toBe(409);
+    expect(response.status, await response.clone().text()).toBe(409);
     expect((await response.json()).skippedCount).toBe(2);
     expect(mocks.upload).not.toHaveBeenCalled();
   });
@@ -118,7 +118,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
     ]);
 
     const response = await POST(bulkRequest());
-    expect(response.status).toBe(409);
+    expect(response.status, await response.clone().text()).toBe(409);
     const data = await response.json();
     expect(data).toMatchObject({
       success: false,
@@ -142,7 +142,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
     const response = await POST(bulkRequest());
     // Once the eligibility preflight passes, missing storage config is the
     // next expected error. No transaction or writes occur in this test.
-    expect(response.status).toBe(503);
+    expect(response.status, await response.clone().text()).toBe(503);
     expect(await response.json()).toMatchObject({
       success: false,
       error: 'Storage is not configured',
@@ -163,7 +163,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
       .mockResolvedValueOnce({ error: { message: 'Upload rejected' } });
 
     const response = await POST(singleInterpreterRequest(2));
-    expect(response.status).toBe(500);
+    expect(response.status, await response.clone().text()).toBe(500);
     expect(mocks.transaction).toHaveBeenCalledOnce(); // Reserving the draft is not publishing.
     expect(mocks.remove).toHaveBeenCalledOnce();
     const removed = mocks.remove.mock.calls[0][0] as string[];
@@ -179,7 +179,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
       .mockResolvedValueOnce({ error: { message: 'Temporary storage failure' } });
 
     const response = await POST(bulkRequest(2));
-    expect(response.status).toBe(500);
+    expect(response.status, await response.clone().text()).toBe(500);
     expect(await response.json()).toMatchObject({
       success: false,
       error: 'No fue posible subir un audio. Revisa el archivo e inténtalo de nuevo.',
@@ -200,7 +200,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
     mocks.transaction.mockRejectedValueOnce(new Error('Transaction acknowledgment lost'));
 
     const response = await POST(bulkRequest());
-    expect(response.status).toBe(500);
+    expect(response.status, await response.clone().text()).toBe(500);
     expect(mocks.transaction).toHaveBeenCalledOnce();
     expect(mocks.remove).not.toHaveBeenCalled();
   });
@@ -215,7 +215,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const response = await POST(bulkRequest(2));
-    expect(response.status).toBe(500);
+    expect(response.status, await response.clone().text()).toBe(500);
     expect(mocks.remove).toHaveBeenCalledOnce();
     expect(log).toHaveBeenCalledWith('Roleplay pre-commit audio cleanup failed');
     log.mockRestore();
@@ -227,7 +227,7 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
     mocks.existingSessions.mockResolvedValue([]);
 
     const response = await POST(bulkRequest());
-    expect(response.status).toBe(503);
+    expect(response.status, await response.clone().text()).toBe(503);
     expect(mocks.existingSessions.mock.calls[0][0].where.recruitmentCandidateId).toBeNull();
   });
 });
