@@ -41,7 +41,7 @@ describe('Roleplay admin: uncertain creation outcome', () => {
       .toContain('podría haberse creado'));
     const link = screen.getByRole('link', { name: 'Comprobar los roleplays existentes' });
     expect(link.getAttribute('href')).toBe('/admin/roleplays');
-    expect(screen.getByText('Intervención sintética')).toBeTruthy();
+    expect(screen.getByText(/1\. Intervención sintética/)).toBeTruthy();
     expect(screen.getByText('No se pudo confirmar el resultado de la creación.')).toBeTruthy();
     expect(document.body.textContent).not.toContain('PRIVATE_SIGNED_TOKEN_SYNTHETIC');
     expect(fetchSpy).toHaveBeenCalledTimes(1);
