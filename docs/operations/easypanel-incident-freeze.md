@@ -30,3 +30,13 @@ No hay evidencia suficiente para atribuir la indisponibilidad del VPS a un commi
 Si el acceso al panel sigue caído, continuar el desarrollo únicamente en ramas o PRs de GitHub sin fusionar hasta entender el mecanismo de despliegue externo.
 
 Seguimiento: #747, #626, #465.
+
+## Protección adicional para construcciones Docker en VPS pequeños
+
+El frontend conserva un `NODE_OPTIONS=--max-old-space-size=2048` durante `npm run build`, mientras el Dockerfile indica que el despliegue histórico apunta a un VPS de aproximadamente 457 MB. El valor de heap es un **límite máximo**, no una medida de consumo real ni prueba de causa raíz. No obstante, compilar Next.js y preparar dependencias Prisma/ONNX/FFmpeg en el mismo VPS puede consumir memoria y disco suficientes para afectar Easypanel, Docker y SSH.
+
+La propuesta `safety/fail-fast-low-memory-easypanel-builds-20261120` añade una protección al principio de los tres Dockerfiles: antes de `npm ci`, leer los límites Linux del host y de cgroup (si existen), rechazar compilaciones cuando hay menos de **3072 MiB totales** o **2048 MiB disponibles** y mostrar un error seguro sin credenciales ni endpoints. Son umbrales conservadores de seguridad, no requisitos oficiales de Next.js ni garantía de capacidad.
+
+**La solución preferida a largo plazo no es elevar el heap o forzar la compilación local:** construir en un runner externo con recursos suficientes, publicar imágenes inmutables y después hacer que Easypanel **solo descargue** la imagen aprobada, con límites de CPU/RAM, rollback y comprobación SHA de ejecución. Configurar esto requiere revisar los registros, el acceso al registry y los servicios de Easypanel cuando vuelva a estar disponible. No activar un pipeline de entrega ni un cambio de Dockerfile en `main` mientras pueda existir un Auto Deploy externo.
+
+Estos controles no son un mecanismo de recuperación del SSH ni sustituyen la revisión de memoria, disco, swap, logs y procesos en el VPS.
