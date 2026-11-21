@@ -123,11 +123,6 @@ export default function RoleplayStudioPage() {
   const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
   const hasReplacementWork = (edits: typeof audioReplacementEdits.current) =>
     edits.segments.length > 0 || edits.reviewCues.length > 0 || edits.suggestedClips.length > 0;
-  const sameEditorEdits = (snapshot: typeof audioReplacementEdits.current) => {
-    const live = audioReplacementEdits.current;
-    return live.segments === snapshot.segments && live.reviewCues === snapshot.reviewCues &&
-      live.suggestedClips === snapshot.suggestedClips && live.captionTexts === snapshot.captionTexts;
-  };
   // The JSON project omits the original audio and private transcript context.
   // Guard the in-memory editor even after an export: leaving can discard
   // pending cue selections and editorial context not present in the download.
@@ -448,9 +443,7 @@ export default function RoleplayStudioPage() {
     setUrl(URL.createObjectURL(file));
   };
 
-  const loadSelectedCues = (
-    selected: TimedTranscriptCue[], excludedCount: number, approvedReplacement = false,
-  ): boolean => {
+  const loadSelectedCues = (selected: TimedTranscriptCue[], excludedCount: number): boolean => {
     const prepared: Segment[] = toPublishableStudioSegments(selected).map((segment, index) => ({
       ...segment,
       id: crypto.randomUUID(),
@@ -459,7 +452,7 @@ export default function RoleplayStudioPage() {
     }));
     // Importing a valid SRT/VTT can replace all existing edited cuts. Prompt
     // only when there is actual work to lose; never silently discard it.
-    if ((segments.length > 0 || suggestedClips.length > 0) && !approvedReplacement && !window.confirm(
+    if ((segments.length > 0 || suggestedClips.length > 0) && !window.confirm(
       'Aplicar estos subtítulos reemplazará las intervenciones o los cortes sugeridos pendientes. ' +
       'Guarda las intervenciones y revisa las sugerencias antes de descartarlas. ¿Continuar?',
     )) {
@@ -658,18 +651,14 @@ export default function RoleplayStudioPage() {
     setNotice('Cortes sugeridos aplicados. Son aproximaciones basadas en pausas, no separación de voces. Revisa cada inicio, fin, rol e idioma antes de exportar.');
   };
 
-  const confirmPendingSrtReviewReplacement = (
-    providerDurationSeconds?: number | null, includeCurrentCuts = false,
-  ) => {
+  const confirmPendingSrtReviewReplacement = (providerDurationSeconds?: number | null) => {
     // Provider metadata is only a warning signal, not proof that two sources
     // are identical. Do not incur a remote export for an obvious mismatch
     // without asking; missing or imprecise metadata should not block work.
     const durationMismatch = typeof providerDurationSeconds === 'number' &&
       Number.isFinite(providerDurationSeconds) && providerDurationSeconds > 0 &&
       Math.abs(providerDurationSeconds - duration) > Math.max(3, duration * 0.05);
-    const replacesCurrentCuts = includeCurrentCuts &&
-      (segments.length > 0 || suggestedClips.length > 0);
-    if (!reviewCues.length && !durationMismatch && !replacesCurrentCuts) return true;
+    if (!reviewCues.length && !durationMismatch) return true;
     const warnings = [
       ...(durationMismatch
         ? [`La grabación abierta dura ${formatTime(duration)}, pero HappyScribe indica ${formatTime(providerDurationSeconds)}. Comprueba que corresponden al mismo audio antes de importar.`]
@@ -677,32 +666,21 @@ export default function RoleplayStudioPage() {
       ...(reviewCues.length > 0
         ? ['Importar otra transcripción reemplazará los turnos SRT pendientes y su selección. Conserva el archivo de subtítulos original si necesitas esa revisión.']
         : []),
-      ...(replacesCurrentCuts
-        ? ['Aplicar el nuevo SRT sustituirá las intervenciones o sugerencias pendientes. Guarda tu proyecto y revisa las sugerencias si quieres conservarlas.']
-        : []),
     ];
     if (window.confirm(`${warnings.join(' ')} ¿Continuar?`)) return true;
     setNotice(durationMismatch
       ? 'Importación cancelada: comprueba la duración y el origen de la transcripción. Se conservó la edición actual.'
-      : replacesCurrentCuts
-        ? 'Importación cancelada. Se conservaron las intervenciones y las sugerencias existentes.'
-        : 'Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
+      : 'Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
     return false;
   };
 
-  const importSubtitles = async (
-    file: File,
-    approval?: { revision: number; edits: typeof audioReplacementEdits.current },
-  ) => {
+  const importSubtitles = async (file: File, approvedReviewRevision?: number) => {
     if (!audio || !duration) return;
-    // Remote approval only covers the exact editor snapshot. Do not apply
-    // fetched subtitles if any turn, suggestion or private reference changed.
-    if (approval && (approval.revision !== subtitleImportRevision.current ||
-        !sameEditorEdits(approval.edits))) {
-      setNotice('No se aplicó la transcripción remota: la edición cambió durante la descarga.');
-      return;
-    }
-    if (!approval && reviewCues.length > 0 && !confirmPendingSrtReviewReplacement()) return;
+    // Remote exports may be preapproved before the provider request starts.
+    // Skip a duplicate prompt only while the exact editor revision survives.
+    if (reviewCues.length > 0 &&
+        approvedReviewRevision !== subtitleImportRevision.current &&
+        !confirmPendingSrtReviewReplacement()) return;
     const revision = ++subtitleImportRevision.current;
     setError('');
     setNotice('');
@@ -713,8 +691,7 @@ export default function RoleplayStudioPage() {
       }
       const transcript = await file.text();
       // The file may have changed, or a newer import/edit may have started.
-      if (revision !== subtitleImportRevision.current ||
-          (approval && !sameEditorEdits(approval.edits))) return;
+      if (revision !== subtitleImportRevision.current) return;
       const cues = parseTimedTranscriptForReview(transcript, usesLocalLongMode(audio, duration));
       const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
       if (!selected.length) {
@@ -733,7 +710,7 @@ export default function RoleplayStudioPage() {
       }
       if (canApplyAll) {
         // Confirm before changing existing cuts, cue-review state or filters.
-        if (!loadSelectedCues(selected, excludedCount, Boolean(approval))) return;
+        if (!loadSelectedCues(selected, excludedCount)) return;
         setCueSearch('');
         setShowOnlySelectedCues(false);
         setReviewCues([]);
@@ -1415,9 +1392,8 @@ export default function RoleplayStudioPage() {
     }
     // Ask before a remote SRT export consumes provider bandwidth. Cancelled
     // edits remain untouched and no POST is sent to the frontend VPS.
-    if (!confirmPendingSrtReviewReplacement(item.durationSeconds, true)) return;
+    if (!confirmPendingSrtReviewReplacement(item.durationSeconds)) return;
     // Discard provider exports that finish after an audio replacement or edit.
-    const approvedEdits = audioReplacementEdits.current;
     const sourceAtRequest = audio;
     const revisionAtRequest = subtitleImportRevision.current;
     const controller = new AbortController();
@@ -1436,14 +1412,10 @@ export default function RoleplayStudioPage() {
       }
       if (controller.signal.aborted || revisionAtRequest !== subtitleImportRevision.current ||
           activeAudioFile.current !== sourceAtRequest) return;
-      if (!sameEditorEdits(approvedEdits)) {
-        setNotice('No se aplicó la transcripción remota: la edición cambió durante la descarga.');
-        return;
-      }
       const file = new File([body.data.content], item.name.replace(/\\.[^.]+$/, '') + '.srt', {
         type: 'application/x-subrip',
       });
-      await importSubtitles(file, { revision: revisionAtRequest, edits: approvedEdits });
+      await importSubtitles(file, revisionAtRequest);
     } catch (cause) {
       if (!controller.signal.aborted && revisionAtRequest === subtitleImportRevision.current &&
           activeAudioFile.current === sourceAtRequest) {
