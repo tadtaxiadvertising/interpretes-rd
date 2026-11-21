@@ -118,6 +118,19 @@ describe('future Roleplay creation: content fingerprint without PII logging', ()
     }
   });
 
+  it('rejects incorrectly typed text and expected-key metadata before hashing', () => {
+    const cases: RoleplayCreationFingerprintInput[] = [
+      { ...input(), scenarios: [{ ...scenario, scriptPrompt: Number.NaN as unknown as string }] },
+      { ...input(), scenarios: [{ ...scenario, studioSpeaker: Number.POSITIVE_INFINITY as unknown as string }] },
+      { ...input(), scenarios: [{ ...scenario, studioLanguage: Number.NaN as unknown as string }] },
+      { ...input(), scenarios: [{ ...scenario, expectedKeys: [Number.NaN as unknown as string] }] },
+      { ...input(), scenarios: [{ ...scenario, expectedKeys: null as unknown as string[] }] },
+    ];
+    for (const request of cases) {
+      expect(() => fingerprintRoleplayCreation(request)).toThrow(InvalidRoleplayCreationKeyError);
+    }
+  });
+
   it('preserves finite fractional clip times and a valid bounded duration', () => {
     const baseline = input();
     const valid: RoleplayCreationFingerprintInput = {
