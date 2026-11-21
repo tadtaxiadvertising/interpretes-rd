@@ -59,6 +59,26 @@ describe('reuse VAD results without re-decoding or uploading the MP3', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('previews just the chosen region without changing selections or using the network', () => {
+    const request = vi.fn();
+    vi.stubGlobal('fetch', request);
+    const preview = vi.fn();
+    const apply = vi.fn();
+    render(<LocalVadAssistant
+      snapshot={{ status: 'ready', segments: [
+        { start: 1, end: 4, signalLevel: 0.7 },
+        { start: 8, end: 12, signalLevel: 0.8 },
+      ] }}
+      duration={20} existing={[]} onApply={apply} onPreview={preview}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar región 2' }));
+    expect(preview).toHaveBeenCalledExactlyOnceWith({ start: 8, end: 12 });
+    expect((screen.getByRole('checkbox', { name: 'Incluir región 2' }) as HTMLInputElement).checked).toBe(true);
+    expect(apply).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
   it('disables applying cuts when all proposed regions are deselected', () => {
     const apply = vi.fn();
     render(<LocalVadAssistant
