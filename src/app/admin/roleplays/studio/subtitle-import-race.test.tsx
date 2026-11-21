@@ -62,6 +62,101 @@ describe('Audio Studio subtitle import lifecycle', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar transcripción' })).toBeNull();
   });
 
+  it('does not request a remote SRT when replacing a pending review is declined', async () => {
+    const fetcher = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? Response.json({ success: true, data: {
+          content: '1\n00:00:00,000 --> 00:00:05,000\nDoctor: Remote accepted',
+        } })
+        : Response.json({ success: true, data: [{
+          id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
+          language: 'en', durationSeconds: 60, createdAt: null, folder: null,
+        }], mediaImportEnabled: false }),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    const source = new File(['srt'], 'pending.srt', { type: 'text/plain' });
+    const captions = Array.from({ length: 26 }, (_, i) =>
+      `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\nDoctor: Original ${i}`).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => captions });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(confirmation).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    });
+    expect(confirmation).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(screen.queryByText(/Seleccionar turnos de la transcripción/)).toBeNull();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+  });
+
+  it('ignores a preapproved remote SRT when manual selections change during transfer', async () => {
+    let resolvePost!: (response: Response) => void;
+    const fetcher = vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Promise<Response>(resolve => { resolvePost = resolve; })
+        : Promise.resolve(Response.json({ success: true, data: [{
+          id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
+          language: 'en', durationSeconds: 60, createdAt: null, folder: null,
+        }], mediaImportEnabled: false })),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    const source = new File(['srt'], 'pending.srt', { type: 'text/plain' });
+    const captions = Array.from({ length: 26 }, (_, i) =>
+      `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\nDoctor: Original ${i}`).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => captions });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(confirmation).toHaveBeenCalledOnce();
+    // The original approval does not permit erasing subsequent local changes.
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    expect(screen.getByText(/26 turnos disponibles y 0 seleccionados/)).toBeTruthy();
+    await act(async () => {
+      resolvePost(Response.json({ success: true, data: {
+        content: '1\n00:00:00,000 --> 00:00:05,000\nDoctor: Stale remote',
+      } }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/26 turnos disponibles y 0 seleccionados/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(confirmation).toHaveBeenCalledOnce();
+  });
+
   it('aborts an obsolete HappyScribe SRT request when the administrator replaces the recording', async () => {
     let pendingImportSignal: AbortSignal | undefined;
     const list = {
