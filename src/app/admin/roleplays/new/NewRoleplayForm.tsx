@@ -887,7 +887,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       )}
       {submissionUncertain && (
         <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
-          La conexión o la respuesta se interrumpió. El roleplay podría haberse creado.
+          El servidor no pudo confirmar la operación o se interrumpió la conexión. El roleplay podría haberse creado.
           {' '}<Link href="/admin/roleplays" className="font-semibold underline underline-offset-2">
             Comprobar los roleplays existentes
           </Link>{' '}antes de volver a enviar los audios.
