@@ -10,10 +10,31 @@ The repository has **two different applications**. The web frontend is the root 
 | Build context/path | repository root (`.`) | repository root (`.`) |
 | Image command | `node dist/server.js` | `node server.js` |
 | Internal port | `3000` | `3000` |
-| Container health URL | `/health` | `/api/health` |
-| Health JSON service | `interpreters-api` | `free-interpreters-os` |
+| Container health URL (liveness) | `/health` | `/api/health` |
+| Database readiness diagnostic (separate) | `/ready` | `/api/admin/system-readiness` (admin only) |
+| Health JSON service | `interpreters-api` | `interpretes-rd` |
 
 **Do not set the backend's build context to `interpreters-api/`**. `Dockerfile.api` copies the `interpreters-api/` subdirectory *and* the root `prisma/` folder. All paths are relative to repository root.
+
+## Liveness versus database readiness
+
+`GET /health` is a no-database HTTP liveness check. The backend Docker
+`HEALTHCHECK` must use this route to avoid converting a temporary Supabase
+connection problem into repeated Docker Swarm task replacements or a failed
+rollout. `GET /ready` executes a cached read-only PostgreSQL check and
+responds with 503 when the DB is unavailable; use it separately for
+diagnostics and, if needed, deliberate upstream traffic-gating. A 200 from
+`/health` does **not** mean database queries work.
+
+The repository also contains a historical `interpreters-api/Dockerfile`.
+That path is **not** the validated root-context `Dockerfile.api`. Confirm the
+actual Easypanel service's source/build path and health override before
+deploying any revision. A different configured health path overrides the
+image's intended liveness/readiness separation.
+
+Do not switch this setting in production without a reviewed rollout plan,
+confirmed rollback, resource monitoring and a known-good DB connection.
+GitHub CI success does not attest to the runtime configuration in Easypanel.
 
 ## Evidence motivating this runbook
 
