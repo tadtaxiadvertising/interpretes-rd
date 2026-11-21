@@ -651,13 +651,26 @@ export default function RoleplayStudioPage() {
     setNotice('Cortes sugeridos aplicados. Son aproximaciones basadas en pausas, no separación de voces. Revisa cada inicio, fin, rol e idioma antes de exportar.');
   };
 
-  const confirmPendingSrtReviewReplacement = () => {
-    if (!reviewCues.length) return true;
-    if (window.confirm(
-      'Importar otra transcripción reemplazará los turnos SRT pendientes y su selección. ' +
-      'Conserva el archivo de subtítulos original si necesitas esa revisión. ¿Continuar?',
-    )) return true;
-    setNotice('Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
+  const confirmPendingSrtReviewReplacement = (providerDurationSeconds?: number | null) => {
+    // Provider metadata is only a warning signal, not proof that two sources
+    // are identical. Do not incur a remote export for an obvious mismatch
+    // without asking; missing or imprecise metadata should not block work.
+    const durationMismatch = typeof providerDurationSeconds === 'number' &&
+      Number.isFinite(providerDurationSeconds) && providerDurationSeconds > 0 &&
+      Math.abs(providerDurationSeconds - duration) > Math.max(3, duration * 0.05);
+    if (!reviewCues.length && !durationMismatch) return true;
+    const warnings = [
+      ...(durationMismatch
+        ? [`La grabación abierta dura ${formatTime(duration)}, pero HappyScribe indica ${formatTime(providerDurationSeconds)}. Comprueba que corresponden al mismo audio antes de importar.`]
+        : []),
+      ...(reviewCues.length > 0
+        ? ['Importar otra transcripción reemplazará los turnos SRT pendientes y su selección. Conserva el archivo de subtítulos original si necesitas esa revisión.']
+        : []),
+    ];
+    if (window.confirm(`${warnings.join(' ')} ¿Continuar?`)) return true;
+    setNotice(durationMismatch
+      ? 'Importación cancelada: comprueba la duración y el origen de la transcripción. Se conservó la edición actual.'
+      : 'Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
     return false;
   };
 
@@ -1379,7 +1392,7 @@ export default function RoleplayStudioPage() {
     }
     // Ask before a remote SRT export consumes provider bandwidth. Cancelled
     // edits remain untouched and no POST is sent to the frontend VPS.
-    if (!confirmPendingSrtReviewReplacement()) return;
+    if (!confirmPendingSrtReviewReplacement(item.durationSeconds)) return;
     // Discard provider exports that finish after an audio replacement or edit.
     const sourceAtRequest = audio;
     const revisionAtRequest = subtitleImportRevision.current;
