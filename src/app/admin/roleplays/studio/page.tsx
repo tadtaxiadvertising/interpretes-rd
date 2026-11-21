@@ -2055,17 +2055,40 @@ export default function RoleplayStudioPage() {
             {hasActiveEditorWork && (
               <span className="text-xs text-indigo-200">Atajo: Ctrl/⌘+S · descarga local</span>
             )}
-            <label className="block text-sm text-indigo-100">
-              Abrir proyecto JSON de la grabación seleccionada
-              <input type="file" accept=".json,application/json"
-                disabled={busy || draftBusy}
-                onChange={event => {
-                  const file = event.currentTarget.files?.[0];
-                  event.currentTarget.value = '';
-                  if (file) void openDraftFile(file);
+            <div className="space-y-2">
+              <label className="block text-sm text-indigo-100">
+                Abrir proyecto JSON de la grabación seleccionada
+                <input type="file" accept=".json,application/json"
+                  disabled={busy || draftBusy}
+                  onChange={event => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = '';
+                    if (file) void openDraftFile(file);
+                  }}
+                  className="mt-2 block w-full text-xs text-slate-300 disabled:opacity-50"/>
+              </label>
+              <div role="group" aria-label="Zona para recuperar proyecto JSON"
+                onDragOver={event => {
+                  if (!busy && !draftBusy) event.preventDefault();
                 }}
-                className="mt-2 block w-full text-xs text-slate-300 disabled:opacity-50"/>
-            </label>
+                onDrop={event => {
+                  event.preventDefault();
+                  if (busy || draftBusy) return;
+                  const files = event.dataTransfer?.files;
+                  if (!files?.length) return;
+                  if (files.length !== 1) {
+                    setError('Arrastra un único archivo de proyecto JSON. Los proyectos múltiples no se pueden combinar.');
+                    return;
+                  }
+                  // Reuse the same source fingerprint verification and explicit
+                  // replacement confirmation as the file input above.
+                  void openDraftFile(files[0]);
+                }}
+                className="rounded-lg border border-dashed border-indigo-300/30 bg-slate-950/40 px-3 py-2 text-xs text-indigo-100">
+                O arrastra aquí un único proyecto JSON. Primero selecciona su grabación original.
+                No se sube ningún archivo.
+              </div>
+            </div>
           </div>
         </section>
       )}
