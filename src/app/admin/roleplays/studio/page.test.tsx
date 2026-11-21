@@ -85,11 +85,18 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(player, 'duration', { configurable: true, value: 4 });
     fireEvent.loadedMetadata(player);
 
+    // Audio decoding and React's effect that resets the review state are
+    // asynchronous. Readiness of the button alone is not proof that VAD
+    // finished publishing a speech-region snapshot.
     await waitFor(() => {
+      expect(screen.getByText(/1 regiones con actividad detectadas/)).toBeTruthy();
       expect((screen.getByRole('button', { name: 'Revisar actividad local' }) as HTMLButtonElement).disabled).toBe(false);
     });
     fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Escuchar región 1' }));
+    // Wait for review state to settle before checking bounded playback. This
+    // verifies the actual user control instead of assuming synchronous effects.
+    const listen = await screen.findByRole('button', { name: 'Escuchar región 1' });
+    fireEvent.click(listen);
     expect(player.play).toHaveBeenCalledOnce();
     expect(player.currentTime).toBeGreaterThan(0);
     expect(player.currentTime).toBeLessThan(2);
