@@ -153,6 +153,48 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
   });
 
+  it('does not export a HappyScribe SRT before approving the loss of pending pause suggestions', async () => {
+    const fetcher = vi.fn((_url: string, init?: RequestInit) => Promise.resolve(
+      _url === '/api/admin/roleplays/studio/silences'
+        ? { ok: true, json: async () => result } as Response
+        : init?.method === 'POST'
+          ? Response.json({ success: true, data: {
+            content: '1\n00:00:00,000 --> 00:00:05,000\nDoctor: Accepted SRT',
+          } })
+          : Response.json({ success: true, data: [{
+            id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
+            language: 'en', durationSeconds: 12, createdAt: null, folder: null,
+          }], mediaImportEnabled: false }),
+    ));
+    vi.stubGlobal('fetch', fetcher);
+    loadMp3();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Autorizo subir este MP3 al servidor/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Detectar pausas en servidor/i }));
+    });
+    expect(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i })).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+
+    vi.mocked(window.confirm).mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls.filter(([url, init]) =>
+      url === '/api/admin/happyscribe/transcriptions' && init?.method === 'POST')).toHaveLength(0);
+    expect(screen.getByRole('button', { name: /Reemplazar con 3 cortes sugeridos/i })).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    });
+    expect(window.confirm).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.filter(([url, init]) =>
+      url === '/api/admin/happyscribe/transcriptions' && init?.method === 'POST')).toHaveLength(1);
+    expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+  });
+
   it('preserves edited interventions and filters when the administrator declines a suggested replacement', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => result }));
     vi.stubGlobal('fetch', fetchMock);
