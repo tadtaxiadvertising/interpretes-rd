@@ -66,7 +66,7 @@ describe('Audio Studio subtitle import lifecycle', () => {
     const fetcher = vi.fn(async (_url: string, init?: RequestInit) =>
       init?.method === 'POST'
         ? Response.json({ success: true, data: {
-          content: '1\\n00:00:00,000 --> 00:00:05,000\\nDoctor: Remote accepted',
+          content: '1\n00:00:00,000 --> 00:00:05,000\nDoctor: Remote accepted',
         } })
         : Response.json({ success: true, data: [{
           id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
@@ -83,7 +83,7 @@ describe('Audio Studio subtitle import lifecycle', () => {
     fireEvent.loadedMetadata(player);
     const source = new File(['srt'], 'pending.srt', { type: 'text/plain' });
     const captions = Array.from({ length: 26 }, (_, i) =>
-      `${i + 1}\\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\\nDoctor: Original ${i}`).join('\\n\\n');
+      `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\nDoctor: Original ${i}`).join('\n\n');
     Object.defineProperty(source, 'text', { value: async () => captions });
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
@@ -106,7 +106,7 @@ describe('Audio Studio subtitle import lifecycle', () => {
     expect(confirmation).toHaveBeenCalledTimes(2);
     expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
     expect(screen.queryByText(/Seleccionar turnos de la transcripción/)).toBeNull();
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
   it('ignores a preapproved remote SRT when manual selections change during transfer', async () => {
@@ -129,7 +129,7 @@ describe('Audio Studio subtitle import lifecycle', () => {
     fireEvent.loadedMetadata(player);
     const source = new File(['srt'], 'pending.srt', { type: 'text/plain' });
     const captions = Array.from({ length: 26 }, (_, i) =>
-      `${i + 1}\\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\\nDoctor: Original ${i}`).join('\\n\\n');
+      `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\nDoctor: Original ${i}`).join('\n\n');
     Object.defineProperty(source, 'text', { value: async () => captions });
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
@@ -148,12 +148,12 @@ describe('Audio Studio subtitle import lifecycle', () => {
     expect(screen.getByText(/26 turnos disponibles y 0 seleccionados/)).toBeTruthy();
     await act(async () => {
       resolvePost(Response.json({ success: true, data: {
-        content: '1\\n00:00:00,000 --> 00:00:05,000\\nDoctor: Stale remote',
+        content: '1\n00:00:00,000 --> 00:00:05,000\nDoctor: Stale remote',
       } }));
       await Promise.resolve();
     });
     expect(screen.getByText(/26 turnos disponibles y 0 seleccionados/)).toBeTruthy();
-    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(confirmation).toHaveBeenCalledOnce();
   });
 
