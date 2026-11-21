@@ -33,6 +33,10 @@ case "$component" in
   *) echo "::error::Unsupported image component."; exit 78 ;;
 esac
 
+# No Docker build on the basis of pending or failed checks. This also
+# verifies the selected main SHA has not been superseded.
+node scripts/ci/verify-offhost-release-gate.mjs
+
 repo="${GITHUB_REPOSITORY,,}"
 image="ghcr.io/${repo}-${component}:sha-${GITHUB_SHA,,}"
 if [[ -n "${GITHUB_ENV:-}" ]]; then
