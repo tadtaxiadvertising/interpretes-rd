@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { AlertTriangle, AudioLines, Copy, Layers3, Library, Plus } from 'lucide-react';
 import prisma from '@/lib/prisma';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
 
@@ -76,7 +77,7 @@ async function getLibrary() {
     }
     return { items, scanned: sessions.length, error: null as string | null };
   } catch (error) {
-    console.error('[ADMIN ROLEPLAY LIBRARY] Failed to load existing scenario snapshots:', error);
+    console.error('[ADMIN ROLEPLAY LIBRARY] Failed to load existing scenario snapshots:', safeServerErrorCategory(error));
     return {
       items: [],
       scanned: 0,
