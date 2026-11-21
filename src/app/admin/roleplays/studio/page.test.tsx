@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import RoleplayStudioPage from './page';
+import { createLongMediaDraft } from '@/lib/roleplay-studio/long-media';
 
 vi.mock('next/link', () => ({
   default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) =>
@@ -147,6 +148,67 @@ describe('Audio Studio clip review player', () => {
       await Promise.resolve();
     });
     expect(download).toHaveBeenCalledOnce();
+  });
+
+  it('restores a dropped local JSON only after verifying the selected recording', async () => {
+    const source = new File(['ID3'], 'source.mp3', { type: 'audio/mpeg' });
+    vi.spyOn(source, 'slice').mockImplementation(() => ({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }) as unknown as Blob);
+    vi.stubGlobal('crypto', {
+      randomUUID: () => 'recovered-turn',
+      subtle: { digest: vi.fn(async () => new Uint8Array(32).buffer) },
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [source] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    const saved = createLongMediaDraft(source.size, '00'.repeat(32), [{
+      title: 'Médico · 1', start: 12, end: 20, scriptPrompt: '',
+      responseLimit: 120, speakerRole: 'doctor', language: 'en',
+    }], 90);
+    const project = new File([JSON.stringify(saved)], 'studio-project.json', { type: 'application/json' });
+    Object.defineProperty(project, 'text', { value: async () => JSON.stringify(saved) });
+    const dropTarget = screen.getByRole('group', { name: 'Zona para recuperar proyecto JSON' });
+    await act(async () => {
+      fireEvent.drop(dropTarget, { dataTransfer: { files: [project] } });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByText(/Proyecto vinculado por tamaño, duración y huella parcial, restaurado/)).toBeTruthy();
+    });
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid or multiple dropped files without replacing existing turns', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'source.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const dropTarget = screen.getByRole('group', { name: 'Zona para recuperar proyecto JSON' });
+    fireEvent.drop(dropTarget, { dataTransfer: { files: [
+      new File(['{}'], 'one.json'), new File(['{}'], 'two.json'),
+    ] } });
+    expect(screen.getByRole('alert').textContent).toContain('un único archivo de proyecto JSON');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.drop(dropTarget, { dataTransfer: { files: [new File(['not-a-project'], 'ignored.txt')] } });
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('alert').textContent).toContain('Selecciona un proyecto JSON');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
   it('opens MP3 above two hours in local mode and rejects media above twelve hours', () => {
