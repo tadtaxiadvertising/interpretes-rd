@@ -301,10 +301,10 @@ jobs:
   deploy-interpreters:
     name: Deploy interpreters (Next.js)
     needs: validate
-    # INCIDENT HOLD: never deploy on a main push. Requires an explicit
-    # workflow_dispatch AND an operator-enabled repository variable.
-    # All migration and Easypanel POST steps remain behind this job gate.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && vars.ENABLE_EASYPANEL_DEPLOY == 'true'
+    # INCIDENT FREEZE: no GitHub-triggered production writes or webhook calls,
+    # even on workflow_dispatch or if repository variables were enabled.
+    # Recovery requires a reviewed code change and confirmed Easypanel health.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     environment: production
     outputs:
@@ -448,7 +448,8 @@ jobs:
   deploy-roleplay-audio-worker:
     name: Deploy Roleplay audio worker (optional)
     needs: [validate, deploy-interpreters]
-    if: github.ref == 'refs/heads/main' && vars.ENABLE_ROLEPLAY_AUDIO_WORKER == 'true' && needs.deploy-interpreters.outputs.is_current == 'true'
+    # Defense in depth: do not rely solely on the frontend dependency gate.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -496,7 +497,8 @@ jobs:
   deploy-interpreters-api:
     name: Deploy interpreters-api (Backend)
     needs: [validate, deploy-interpreters]
-    if: github.ref == 'refs/heads/main' && needs.deploy-interpreters.outputs.is_current == 'true'
+    # Defense in depth: do not rely solely on the frontend dependency gate.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     environment: production
     steps:
