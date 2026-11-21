@@ -4,12 +4,14 @@ name: 🔎 Roleplay audio inventory (read-only)
 # #408 defines age-gated, concurrency-safe cleanup for recordings.
 on:
   # INCIDENT FREEZE: pause weekly production database/storage inventory.
-  # Manual audit remains available after operator review; no writes.
+  # Manual audit is also paused until storage/database health is confirmed.
   workflow_dispatch:
 
 jobs:
   audit:
     name: Read-only Roleplay audio inventory
+    # INCIDENT FREEZE: avoid potentially expensive production inventory calls.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: ${{ secrets.DIRECT_URL }}
