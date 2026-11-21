@@ -9,7 +9,7 @@ import {
   parseTimedTranscriptForReview, toPublishableStudioSegments,
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
-import { selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
+import { fillCompatibleTimedCueSelection, selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -502,6 +502,33 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const completeFilteredCueSelection = (candidateIndices: readonly number[]) => {
+    try {
+      const next = fillCompatibleTimedCueSelection(
+        reviewCues, chosenCueIndices, candidateIndices,
+      );
+      const added = next.length - chosenCueIndices.length;
+      if (!added) {
+        setNotice('No se añadieron turnos: revisa filtros, solapamientos y el límite de 25 cortes o 15 minutos.');
+        return;
+      }
+      subtitleImportRevision.current += 1;
+      setChosenCueIndices(next);
+      setError('');
+      setNotice(`${added} turnos compatibles añadidos a la selección. Revisa idiomas, hablantes y texto antes de aplicar.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Corrige la selección antes de completarla.');
+    }
+  };
+
+  const clearCueSelection = () => {
+    if (!chosenCueIndices.length) return;
+    subtitleImportRevision.current += 1;
+    setChosenCueIndices([]);
+    setError('');
+    setNotice('Selección SRT vaciada. Las intervenciones existentes no se han modificado.');
+  };
+
   const toggleCueSelection = (index: number) => {
     subtitleImportRevision.current += 1;
     if (chosenCueIndices.includes(index)) {
@@ -666,8 +693,9 @@ export default function RoleplayStudioPage() {
         setShowOnlySelectedCues(false);
         setCuePage(0);
         setReviewCues(selected);
-        setChosenCueIndices(allIndices.slice(0, ROLEPLAY_MAX_SCENARIOS));
-        setNotice(`${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Elige hasta ${ROLEPLAY_MAX_SCENARIOS} turnos compatibles y pulsa “Aplicar selección”. El borrador no se reemplazó.`);
+        const compatible = fillCompatibleTimedCueSelection(selected, [], allIndices);
+        setChosenCueIndices(compatible);
+        setNotice(`${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Se sugirieron ${compatible.length} turnos sin solapamientos ni voz etiquetada del intérprete. Revisa antes de aplicar; el borrador no se reemplazó.`);
       }
     } catch (cause) {
       if (revision !== subtitleImportRevision.current) return;
@@ -1985,6 +2013,17 @@ export default function RoleplayStudioPage() {
                 className="h-4 w-4 accent-amber-400"/>
               Solo seleccionados
             </label>
+            <button type="button"
+              onClick={() => completeFilteredCueSelection(filteredCueEntries.map(entry => entry.index))}
+              disabled={filteredCueEntries.length === 0 || chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS}
+              className="rounded border border-amber-300/30 px-2 py-1 text-xs font-semibold text-amber-100 disabled:opacity-40">
+              Completar con turnos compatibles visibles
+            </button>
+            <button type="button" onClick={clearCueSelection}
+              disabled={chosenCueIndices.length === 0}
+              className="rounded border border-white/15 px-2 py-1 text-xs disabled:opacity-40">
+              Limpiar selección SRT
+            </button>
           </div>
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
             <span>
