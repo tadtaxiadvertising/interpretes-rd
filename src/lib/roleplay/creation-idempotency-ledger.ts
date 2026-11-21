@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES } from '@/lib/roleplay/direct-upload-contract';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 import { lookupRoleplayCreationReceipt } from '@/lib/roleplay/creation-receipt';
@@ -88,6 +88,39 @@ export function fingerprintRoleplayCreation(
   for (const scenario of input.scenarios) {
     if (!scenario || typeof scenario.title !== 'string' ||
         scenario.title.trim().length < 1 || scenario.title.length > 200) {
+      throw new InvalidRoleplayCreationKeyError();
+    }
+    // Reject non-string scenario metadata too: a future caller bypassing
+    // validation could pass NaN in a string slot, which JSON.stringify
+    // would silently serialize as null.
+    if ((scenario.scriptPrompt !== null && typeof scenario.scriptPrompt !== 'string') ||
+        (scenario.studioSpeaker != null && typeof scenario.studioSpeaker !== 'string') ||
+        (scenario.studioLanguage != null && typeof scenario.studioLanguage !== 'string') ||
+        (scenario.expectedKeys !== undefined &&
+         (!Array.isArray(scenario.expectedKeys) ||
+          scenario.expectedKeys.some(key => typeof key !== 'string')))) {
+      throw new InvalidRoleplayCreationKeyError();
+    }
+    // JSON.stringify silently serializes NaN and Infinity as null.
+    // Reject malformed numeric metadata before hashing so a changed
+    // scenario cannot collide with the legitimate null representation.
+    if (scenario.durationLimitSec !== null &&
+        (!Number.isSafeInteger(scenario.durationLimitSec) ||
+         scenario.durationLimitSec < 1 ||
+         scenario.durationLimitSec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC)) {
+      throw new InvalidRoleplayCreationKeyError();
+    }
+    if (scenario.studioTurn != null &&
+        (!Number.isSafeInteger(scenario.studioTurn) ||
+         scenario.studioTurn < 1 || scenario.studioTurn > 10000)) {
+      throw new InvalidRoleplayCreationKeyError();
+    }
+    const start = scenario.sourceStartSec;
+    const end = scenario.sourceEndSec;
+    if ((start == null) !== (end == null) ||
+        (start != null && end != null &&
+         (!Number.isFinite(start) || !Number.isFinite(end) ||
+          start < 0 || end > 7200 || end <= start))) {
       throw new InvalidRoleplayCreationKeyError();
     }
   }
