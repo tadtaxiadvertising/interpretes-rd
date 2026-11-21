@@ -84,6 +84,30 @@ describe('admin FFmpeg silence analysis boundaries', () => {
     expect((await POST(request(large) as never)).status).toBe(400);
   });
 
+  it('rejects an actual oversized multipart stream even without Content-Length', async () => {
+    // The old req.formData() path buffered the entire payload when the
+    // optional Content-Length header was omitted, despite its 15 MiB
+    // per-file post-parse check.
+    const large = new File([new Uint8Array(15 * 1024 * 1024 + 100_001)],
+      'large.mp3', { type: 'audio/mpeg' });
+    const req = request(large);
+    req.headers.delete('content-length');
+
+    const response = await POST(req as never);
+    expect(response.status).toBe(413);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await response.json()).error).toContain('15 MiB');
+  });
+
+  it('rejects a falsely small Content-Length rather than trusting it', async () => {
+    const large = new File([new Uint8Array(15 * 1024 * 1024 + 100_001)],
+      'large.mp3', { type: 'audio/mpeg' });
+    const req = request(large);
+    req.headers.set('content-length', '1');
+    const response = await POST(req as never);
+    expect(response.status).toBe(413);
+  });
+
   it('does not leak FFmpeg decoding errors or malformed audio metadata to the caller', async () => {
     const result = await POST(request() as never);
     const body = await result.json();
