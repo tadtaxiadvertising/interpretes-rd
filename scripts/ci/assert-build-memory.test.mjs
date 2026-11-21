@@ -48,16 +48,28 @@ test('unknown host or bounded cgroup usage fails closed', () => {
   }).reason, 'CGROUP_USAGE_UNKNOWN');
 });
 
-test('all production Dockerfiles check memory before npm installs', () => {
+test('every Docker stage checks memory before npm install or compilation', () => {
   for (const file of ['Dockerfile', 'Dockerfile.api', 'Dockerfile.worker']) {
     const source = readFileSync(file, 'utf8');
-    const copy = source.indexOf('COPY scripts/ci/assert-build-memory.mjs');
-    const guard = source.indexOf('RUN node scripts/ci/assert-build-memory.mjs');
-    const compileGuard = source.lastIndexOf('RUN node scripts/ci/assert-build-memory.mjs');
-    const install = source.indexOf('RUN npm');
-    assert.ok(copy >= 0, file + ': memory guard script must be copied');
-    assert.ok(guard > copy, file + ': memory guard must follow the COPY');
-    assert.ok(install > guard, file + ': memory guard must run before npm ci');
-    assert.ok(compileGuard > install, file + ': memory guard must be rechecked before compilation');
+    const stages = source.split(/(?=^FROM\\s+)/m).filter(part => /^FROM\\s/.test(part));
+    let protectedStages = 0;
+    for (const stage of stages) {
+      const copy = stage.indexOf('COPY scripts/ci/assert-build-memory.mjs');
+      const guard = stage.indexOf('RUN node scripts/ci/assert-build-memory.mjs');
+      const install = stage.search(/^RUN [^\\n]*\\bnpm ci\\b/m);
+      const compile = stage.search(/^RUN (?:npm run build|\\.\\/node_modules\\/\\.bin\\/esbuild)\\b/m);
+      const commands = [install, compile].filter(position => position >= 0);
+      if (!commands.length) continue;
+      protectedStages++;
+      const first = Math.min(...commands);
+      assert.ok(copy >= 0, file + ': guard file missing from Docker stage');
+      assert.ok(guard > copy, file + ': preflight must follow COPY in same Docker stage');
+      assert.ok(guard < first, file + ': unprotected install or compilation');
+      if (install >= 0 && compile >= 0) {
+        const compileGuard = stage.lastIndexOf('RUN node scripts/ci/assert-build-memory.mjs', compile);
+        assert.ok(compileGuard > install, file + ': memory must be rechecked after npm install');
+      }
+    }
+    assert.equal(protectedStages, 2, file + ': builder and runner/deps stages must be audited');
   }
 });
