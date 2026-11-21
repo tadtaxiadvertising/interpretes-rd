@@ -45,6 +45,14 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     e.preventDefault();
     // A stale form is not allowed to retry until the admin explicitly reloads.
     if (conflict || editingDisabled) return;
+    if ((token.trim() || remove) &&
+        status.tokenSource === 'panel' && !status.credentialUsable) {
+      // Keep the only possibly recoverable ciphertext until the ORIGINAL
+      // key is restored. The server also enforces this against stale tabs.
+      setNotice({ ok: false, message:
+        'No se borró ni se reemplazó la credencial: restaura primero la clave de cifrado ORIGINAL en el servicio Next.js de Easypanel. Se conservaron tus cambios locales.' });
+      return;
+    }
     if (token.trim() && !status.encryptionReady) {
       // Avoid submitting a secret when the server already reports that it
       // cannot encrypt it. Do not erase the admin's unsaved input.
@@ -194,7 +202,7 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
         No hay un token API utilizable en el servidor o en el panel. Configura una credencial válida y un ID de organización numérico antes de probar la conexión.
       </p>}
       {status.tokenSource === 'panel' && <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
-        <input type="checkbox" disabled={editingDisabled} checked={remove} onChange={e => {
+        <input type="checkbox" disabled={editingDisabled || !status.credentialUsable} checked={remove} onChange={e => {
           setRemove(e.target.checked);
           if (e.target.checked) setToken('');
         }} /> Borrar la clave guardada en el panel
