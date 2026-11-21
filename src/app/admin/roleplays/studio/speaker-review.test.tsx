@@ -149,7 +149,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     const summary = () => screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' }).textContent || '';
-    expect(summary()).toMatch(/Revisión:\s*0\/2 completas/);
+    expect(summary()).toMatch(/Revisión de roles e idiomas:\s*0\/2 sin pendientes/);
     expect(summary()).toContain('2 sin hablante');
     expect(summary()).toContain('2 sin idioma');
 
@@ -157,14 +157,14 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     const languages = screen.getAllByLabelText('Idioma de la intervención');
     fireEvent.change(speakers[0], { target: { value: 'doctor' } });
     fireEvent.change(languages[0], { target: { value: 'en' } });
-    expect(summary()).toMatch(/Revisión:\s*1\/2 completas/);
+    expect(summary()).toMatch(/Revisión de roles e idiomas:\s*1\/2 sin pendientes/);
     expect(summary()).toContain('1 sin hablante');
     expect(summary()).toContain('1 sin idioma');
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Intervención 2' },
     });
-    expect(summary()).toMatch(/Revisión:\s*1\/2 completas/);
+    expect(summary()).toMatch(/Revisión de roles e idiomas:\s*1\/2 sin pendientes/);
     expect(summary()).toContain('1 sin hablante');
   });
 
@@ -178,7 +178,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       target: { value: 'en' },
     });
     const summary = screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' });
-    expect(summary.textContent).toMatch(/Revisión:\s*0\/1 completas/);
+    expect(summary.textContent).toMatch(/Revisión de roles e idiomas:\s*0\/1 sin pendientes/);
     expect(summary.textContent).toContain('1 del intérprete original por excluir');
     expect(summary.textContent).toContain('0 sin idioma');
   });
