@@ -7,6 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+# Avoid large audio/Prisma toolchain installs on undersized VPS builders.
+COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
 
 COPY prisma/schema.prisma ./prisma/schema.prisma
