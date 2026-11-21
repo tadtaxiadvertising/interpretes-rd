@@ -87,6 +87,7 @@ export default function RoleplayStudioPage() {
   const [happyScribeLoading, setHappyScribeLoading] = useState(false);
   const [happyScribePage, setHappyScribePage] = useState(0);
   const [happyScribeHasMore, setHappyScribeHasMore] = useState(false);
+  const [happyScribeConfigUnavailable, setHappyScribeConfigUnavailable] = useState(false);
   const [happyScribeImporting, setHappyScribeImporting] = useState(false);
   const [happyScribeMediaImporting, setHappyScribeMediaImporting] = useState(false);
   const [happyScribeMediaEnabled, setHappyScribeMediaEnabled] = useState(false);
@@ -1354,6 +1355,7 @@ export default function RoleplayStudioPage() {
     happyScribeListAbort.current = controller;
     setHappyScribeLoading(true);
     setError('');
+    setHappyScribeConfigUnavailable(false);
     try {
       const response = await fetch(`/api/admin/happyscribe/transcriptions?page=${page}`, {
         credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
@@ -1361,6 +1363,17 @@ export default function RoleplayStudioPage() {
       const body = await response.json().catch(() => null);
       if (controller.signal.aborted || happyScribeListAbort.current !== controller) return;
       if (!response.ok || !body?.success || !Array.isArray(body.data)) {
+        // Provider rate limits also return 503. Only an explicit server-side
+        // configuration code should display the recovery instructions.
+        if (response.status === 503 && body?.code === 'HAPPYSCRIBE_CONFIGURATION_UNAVAILABLE') {
+          setHappyScribeConfigUnavailable(true);
+          // A disabled/unreadable provider configuration invalidates the
+          // prior catalog selection and import proofs in this browser view.
+          setHappyScribeItems([]);
+          setHappyScribeSelectedId('');
+          setHappyScribeHasMore(false);
+          setHappyScribeMediaEnabled(false);
+        }
         throw new Error(typeof body?.error === 'string' ? body.error : 'No fue posible consultar HappyScribe.');
       }
       const items = body.data as typeof happyScribeItems;
@@ -1696,6 +1709,17 @@ export default function RoleplayStudioPage() {
               {happyScribeLoading ? 'Consultando…' : 'Actualizar biblioteca'}
             </button>
           </div>
+          {happyScribeConfigUnavailable && (
+            <div role="alert" className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-100">
+              <p>La biblioteca no está disponible por la configuración del servidor. No se ha descargado ningún audio ni transcripción.</p>
+              <Link href="/admin/roleplays/settings" className="mt-2 inline-block font-semibold text-blue-300 underline hover:text-blue-200">
+                Revisar configuración de Audio Studio
+              </Link>
+              <p className="mt-2 text-xs text-amber-200">
+                Si ya existe una credencial cifrada, recupera la clave original de Easypanel. No la sustituyas por una nueva sin recuperar la anterior.
+              </p>
+            </div>
+          )}
           {happyScribeItems.length > 0 && (
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <select aria-label="Transcripción de HappyScribe"

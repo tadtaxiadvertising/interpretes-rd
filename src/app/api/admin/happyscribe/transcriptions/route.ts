@@ -62,7 +62,8 @@ export async function GET(req: NextRequest) {
 
   const config = await configuration();
   if (!config) return privateRoleplayResponse(
-    { error: 'HappyScribe no está disponible. Revisa la configuración en Administración → Roleplays → Configuración Audio Studio.' },
+    { error: 'HappyScribe no está disponible. Revisa la configuración en Administración → Roleplays → Configuración Audio Studio.',
+      code: 'HAPPYSCRIBE_CONFIGURATION_UNAVAILABLE' },
     { status: 503 },
   );
 

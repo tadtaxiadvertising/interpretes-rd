@@ -252,7 +252,9 @@ describe('HappyScribe SRT import download boundary', () => {
     ));
     expect(response.status).toBe(503);
     expect(cancel).toHaveBeenCalledOnce();
-    expect((await response.json()).error).toContain('limitó');
+    const body = await response.json();
+    expect(body.error).toContain('limitó');
+    expect(body.code).toBeUndefined();
   });
 
   it('checks connectivity without returning transcription metadata to the admin settings form', async () => {
@@ -321,7 +323,10 @@ describe('HappyScribe SRT import download boundary', () => {
     vi.mocked(getHappyScribeSettings).mockRejectedValueOnce(new Error('synthetic unavailable credentials'));
     const response = await GET(new NextRequest('http://localhost/api/admin/happyscribe/transcriptions'));
     expect(response.status).toBe(503);
-    expect((await response.json()).error).toContain('HappyScribe');
+    const body = await response.json();
+    expect(body.error).toContain('HappyScribe');
+    expect(body.code).toBe('HAPPYSCRIBE_CONFIGURATION_UNAVAILABLE');
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
