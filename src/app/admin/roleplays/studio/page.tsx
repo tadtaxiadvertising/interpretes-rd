@@ -651,17 +651,23 @@ export default function RoleplayStudioPage() {
     setNotice('Cortes sugeridos aplicados. Son aproximaciones basadas en pausas, no separación de voces. Revisa cada inicio, fin, rol e idioma antes de exportar.');
   };
 
-  const importSubtitles = async (file: File) => {
-    if (!audio || !duration) return;
-    // Reading another subtitle file would overwrite in-memory review choices,
-    // which are deliberately not included in the portable project JSON.
-    if (reviewCues.length > 0 && !window.confirm(
+  const confirmPendingSrtReviewReplacement = () => {
+    if (!reviewCues.length) return true;
+    if (window.confirm(
       'Importar otra transcripción reemplazará los turnos SRT pendientes y su selección. ' +
       'Conserva el archivo de subtítulos original si necesitas esa revisión. ¿Continuar?',
-    )) {
-      setNotice('Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
-      return;
-    }
+    )) return true;
+    setNotice('Cambio de transcripción cancelado. Se conservaron los turnos y la selección SRT.');
+    return false;
+  };
+
+  const importSubtitles = async (file: File, approvedReviewRevision?: number) => {
+    if (!audio || !duration) return;
+    // Remote exports may be preapproved before the provider request starts.
+    // Skip a duplicate prompt only while the exact editor revision survives.
+    if (reviewCues.length > 0 &&
+        approvedReviewRevision !== subtitleImportRevision.current &&
+        !confirmPendingSrtReviewReplacement()) return;
     const revision = ++subtitleImportRevision.current;
     setError('');
     setNotice('');
@@ -1371,6 +1377,9 @@ export default function RoleplayStudioPage() {
       setError('Selecciona una transcripción completada en HappyScribe.');
       return;
     }
+    // Ask before a remote SRT export consumes provider bandwidth. Cancelled
+    // edits remain untouched and no POST is sent to the frontend VPS.
+    if (!confirmPendingSrtReviewReplacement()) return;
     // Discard provider exports that finish after an audio replacement or edit.
     const sourceAtRequest = audio;
     const revisionAtRequest = subtitleImportRevision.current;
@@ -1393,7 +1402,7 @@ export default function RoleplayStudioPage() {
       const file = new File([body.data.content], item.name.replace(/\\.[^.]+$/, '') + '.srt', {
         type: 'application/x-subrip',
       });
-      await importSubtitles(file);
+      await importSubtitles(file, revisionAtRequest);
     } catch (cause) {
       if (!controller.signal.aborted && revisionAtRequest === subtitleImportRevision.current &&
           activeAudioFile.current === sourceAtRequest) {
