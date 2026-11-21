@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   calculateWaveformPeaks,
   canRenderWaveform,
+  canDecodeWaveformWithinMemoryBudget,
+  WAVEFORM_MAX_ESTIMATED_PCM_BYTES,
   WAVEFORM_MAX_PREVIEW_BYTES,
   WAVEFORM_MAX_PREVIEW_SECONDS,
 } from './audio-peaks';
@@ -16,6 +18,17 @@ describe('Audio Studio local waveform safety and peak sampling', () => {
     expect(canRenderWaveform(Number.NaN, 1000)).toBe(false);
     expect(canRenderWaveform(0, 1000)).toBe(false);
     expect(canRenderWaveform(20, 0)).toBe(false);
+  });
+
+  it('skips compressed previews estimated to expand beyond the PCM budget', () => {
+    expect(canDecodeWaveformWithinMemoryBudget(240, 48000)).toBe(true);
+    expect(canDecodeWaveformWithinMemoryBudget(240, 192000)).toBe(false);
+    expect(canDecodeWaveformWithinMemoryBudget(240, 48000)).toBe(
+      240 * 48000 * 2 * 4 <= WAVEFORM_MAX_ESTIMATED_PCM_BYTES,
+    );
+    expect(canDecodeWaveformWithinMemoryBudget(240, Number.NaN)).toBe(false);
+    expect(canDecodeWaveformWithinMemoryBudget(240, 0)).toBe(false);
+    expect(canDecodeWaveformWithinMemoryBudget(300, 16000)).toBe(false);
   });
 
   it('creates deterministic peaks from both channels without amplifying silence', () => {
