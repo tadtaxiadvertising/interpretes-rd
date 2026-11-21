@@ -1,5 +1,6 @@
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import type { TimedTranscriptCue } from './transcript';
+import { classifySpeakerRole } from './speaker-profiles';
 
 const MAX_PACKAGE_AUDIO_SECONDS = 900;
 
@@ -40,4 +41,39 @@ export function selectTimedCues(
     selected.push(cue);
   }
   return selected;
+}
+
+/**
+ * Fill a manual review selection with non-overlapping cues from the visible
+ * SRT/VTT candidates, without replacing any existing selection. Every added
+ * cue must pass the same 25-turn / 15-minute rules used at export.
+ *
+ * This is a suggestion, not speaker diarization. Never automatically pick a
+ * cue explicitly labeled as the original interpreter; an administrator may
+ * still inspect and manually select it, but export will reject it.
+ */
+export function fillCompatibleTimedCueSelection(
+  available: readonly TimedTranscriptCue[],
+  chosenIndices: readonly number[],
+  candidateIndices: readonly number[],
+): number[] {
+  // A malformed manual selection must be corrected explicitly, not silently
+  // thrown away or turned into an apparently valid different selection.
+  if (chosenIndices.length) selectTimedCues(available, chosenIndices);
+  const selection = new Set(chosenIndices);
+  for (const index of [...new Set(candidateIndices)].sort((a, b) => a - b)) {
+    if (selection.size >= ROLEPLAY_MAX_SCENARIOS) break;
+    if (!Number.isSafeInteger(index) || index < 0 || index >= available.length) continue;
+    if (selection.has(index) ||
+        classifySpeakerRole(available[index].speaker) === 'interpreter') continue;
+    const proposed = [...selection, index].sort((a, b) => a - b);
+    try {
+      selectTimedCues(available, proposed);
+      selection.add(index);
+    } catch {
+      // Do not select overlaps, excessive durations, or invalid timestamps.
+      // Keep the administrator's manually chosen clips unchanged.
+    }
+  }
+  return [...selection].sort((a, b) => a - b);
 }
