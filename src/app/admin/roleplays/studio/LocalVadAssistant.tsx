@@ -57,7 +57,8 @@ export default function LocalVadAssistant({
       </div>
       {status === 'limited' && (
         <p role="status" className="mt-2 text-xs text-amber-200">
-          Para cuidar la memoria, el análisis local requiere MP3 de hasta 4 minutos y 8 MiB.
+          Para cuidar la memoria, el análisis local requiere MP3 de hasta 4 minutos y 8 MiB,
+          y una decodificación que respete el presupuesto de memoria del navegador.
           Marca los cortes manualmente o utiliza subtítulos temporizados.
         </p>
       )}

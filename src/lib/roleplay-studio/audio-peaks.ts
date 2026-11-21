@@ -8,6 +8,16 @@
 export const WAVEFORM_MAX_PREVIEW_SECONDS = 240;
 export const WAVEFORM_MAX_PREVIEW_BYTES = 8 * 1024 * 1024;
 export const WAVEFORM_BAR_COUNT = 240;
+// Decoding compressed audio can allocate far more memory than file.size.
+// The browser decoder normally resamples PCM to its AudioContext.sampleRate;
+// estimate a stereo preview before allocating that decoded PCM.
+export const WAVEFORM_MAX_ESTIMATED_PCM_BYTES = 96 * 1024 * 1024;
+
+export function canDecodeWaveformWithinMemoryBudget(duration: number, sampleRate: number): boolean {
+  return Number.isFinite(duration) && duration > 0 && duration <= WAVEFORM_MAX_PREVIEW_SECONDS &&
+    Number.isFinite(sampleRate) && sampleRate >= 8000 && sampleRate <= 192000 &&
+    duration * sampleRate * 2 * Float32Array.BYTES_PER_ELEMENT <= WAVEFORM_MAX_ESTIMATED_PCM_BYTES;
+}
 
 export function canRenderWaveform(duration: number, fileSize: number): boolean {
   return Number.isFinite(duration) && duration > 0 &&

@@ -157,7 +157,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     }));
     const close = vi.fn(async () => {});
     const makeContext = vi.fn(function FakeAudioContext() {
-      return { decodeAudioData: decode, close };
+      return { sampleRate: 16000, decodeAudioData: decode, close };
     });
     const fetcher = vi.fn();
     stubBrowserDecoder(makeContext);
@@ -182,6 +182,29 @@ describe('Roleplay Studio accessible waveform timeline', () => {
       onSeek={seek} onLocalVadResult={notify}/>);
     expect(decode).toHaveBeenCalledTimes(1);
     expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('does not expand a small compressed MP3 at an excessive device sample rate', async () => {
+    const source = audio();
+    const read = vi.fn(async () => new ArrayBuffer(16));
+    Object.defineProperty(source, 'arrayBuffer', { configurable: true, value: read });
+    const decode = vi.fn();
+    const close = vi.fn(async () => {});
+    stubBrowserDecoder(vi.fn(function HighRateAudioContext() {
+      return { sampleRate: 192000, decodeAudioData: decode, close };
+    }));
+    const notify = vi.fn((_source: File, _result: LocalVadSnapshot) => {});
+
+    render(<StudioWaveform file={source} duration={240} currentTime={15}
+      segments={[]} onSeek={vi.fn()} onLocalVadResult={notify}/>);
+    await waitFor(() => expect(notify).toHaveBeenCalledWith(
+      source, { status: 'limited', segments: [] },
+    ));
+    expect(read).toHaveBeenCalledOnce();
+    expect(decode).not.toHaveBeenCalled();
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
+    expect(screen.getByText(/Vista de tiempo simplificada/)).toBeTruthy();
+    expect(screen.getByRole('slider', { name: /Posición del reproductor en segundos/i })).toBeTruthy();
   });
 
   it('never decodes a source above 4 minutes or 8 MiB', () => {
@@ -213,7 +236,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
       bytes.byteLength === 4 ? oldResult : Promise.reject(new Error('unsupported codec')));
     const close = vi.fn(async () => {});
     stubBrowserDecoder(vi.fn(function FakeAudioContext() {
-      return { decodeAudioData: decode, close };
+      return { sampleRate: 16000, decodeAudioData: decode, close };
     }));
     const notify = vi.fn((_source: File, _result: LocalVadSnapshot) => {});
     const { rerender } = render(<StudioWaveform
