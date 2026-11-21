@@ -1,24 +1,25 @@
 /**
- * Read only a bounded response for the HappyScribe settings connectivity test.
- * Even if an upstream proxy ignores per_page=1, it must not force the VPS
- * to buffer an unbounded transcription catalog.
+ * Bounded provider JSON decoding shared by the settings connection probe
+ * and the organization-scoped transcription library. The normal library
+ * previously used Response.json(), which could buffer an arbitrarily large
+ * upstream response on a memory-constrained VPS.
  */
 export const HAPPY_SCRIBE_PROBE_MAX_BYTES = 128 * 1024;
+export const HAPPY_SCRIBE_LIST_MAX_BYTES = 1024 * 1024;
 
-export async function isValidHappyScribeProbe(response: Response): Promise<boolean> {
-  if (!response.body) return false;
-  // Prefer failing before downloading a known-oversized provider body.
-  // The streaming bound below still applies if Content-Length is missing or
-  // inaccurate (including when a response is transparently decompressed).
+async function readBoundedJson(response: Response, maxBytes: number): Promise<unknown | null> {
+  if (!response.body) return null;
   const declaredLength = response.headers.get('content-length');
   if (declaredLength !== null && /^\d+$/.test(declaredLength) &&
-      Number(declaredLength) > HAPPY_SCRIBE_PROBE_MAX_BYTES) {
+      Number(declaredLength) > maxBytes) {
     try { await response.body.cancel(); } catch { /* Preserve bounded failure. */ }
-    return false;
+    return null;
   }
+
   let reader: ReadableStreamDefaultReader<Uint8Array>;
   try { reader = response.body.getReader(); }
-  catch { return false; }
+  catch { return null; }
+
   const decoder = new TextDecoder('utf-8', { fatal: true });
   let bytes = 0;
   let json = '';
@@ -27,20 +28,30 @@ export async function isValidHappyScribeProbe(response: Response): Promise<boole
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > HAPPY_SCRIBE_PROBE_MAX_BYTES) {
-        try { await reader.cancel(); } catch { /* Keep the probe failure result. */ }
-        return false;
+      if (bytes > maxBytes) {
+        try { await reader.cancel(); } catch { /* Preserve bounded failure. */ }
+        return null;
       }
       json += decoder.decode(value, { stream: true });
     }
     json += decoder.decode();
-    const payload: unknown = JSON.parse(json);
-    return Boolean(payload && typeof payload === 'object' &&
-      'results' in payload && Array.isArray(payload.results));
+    return JSON.parse(json) as unknown;
   } catch {
-    try { await reader.cancel(); } catch { /* Avoid leaking upstream failures. */ }
-    return false;
+    try { await reader.cancel(); } catch { /* Do not expose provider details. */ }
+    return null;
   } finally {
     reader.releaseLock();
   }
+}
+
+/** Return parsed provider metadata, or null when malformed/oversized. */
+export async function readBoundedHappyScribeListing(response: Response): Promise<unknown | null> {
+  return readBoundedJson(response, HAPPY_SCRIBE_LIST_MAX_BYTES);
+}
+
+/** Connection checks must not expose catalog entries or download large bodies. */
+export async function isValidHappyScribeProbe(response: Response): Promise<boolean> {
+  const payload = await readBoundedJson(response, HAPPY_SCRIBE_PROBE_MAX_BYTES);
+  return Boolean(payload && typeof payload === 'object' &&
+    'results' in payload && Array.isArray(payload.results));
 }
