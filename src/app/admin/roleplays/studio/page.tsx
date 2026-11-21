@@ -2014,10 +2014,10 @@ export default function RoleplayStudioPage() {
               Solo seleccionados
             </label>
             <button type="button"
-              onClick={() => completeFilteredCueSelection(filteredCueEntries.map(entry => entry.index))}
-              disabled={filteredCueEntries.length === 0 || chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS}
+              onClick={() => completeFilteredCueSelection(visibleCues.map(entry => entry.index))}
+              disabled={visibleCues.length === 0 || chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS}
               className="rounded border border-amber-300/30 px-2 py-1 text-xs font-semibold text-amber-100 disabled:opacity-40">
-              Completar con turnos compatibles visibles
+              Completar con turnos compatibles de esta página
             </button>
             <button type="button" onClick={clearCueSelection}
               disabled={chosenCueIndices.length === 0}
