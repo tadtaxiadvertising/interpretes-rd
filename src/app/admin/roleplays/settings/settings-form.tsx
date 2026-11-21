@@ -134,6 +134,23 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   return <form onSubmit={submit} className="space-y-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6">
     <div><h2 className="text-xl font-semibold text-white">HappyScribe</h2>
       <p className="mt-1 text-sm text-slate-400">Solo los administradores pueden cambiar estos valores. Las claves nunca se devuelven al navegador.</p></div>
+    {!status.encryptionReady && (
+      <div role="alert" className="rounded-xl border border-amber-400/35 bg-amber-400/5 p-4 text-sm text-amber-100">
+        <p className="font-semibold">AUDIO_STUDIO_ENCRYPTION_KEY no está configurada correctamente en el servicio Next.js.</p>
+        {status.tokenSource === 'panel' ? (
+          <p className="mt-2">Ya existe una credencial cifrada en el panel. Restaura la clave ORIGINAL de 64 caracteres hexadecimales desde el gestor de secretos de Easypanel. No generes otra clave, no borres el registro ni reemplaces la credencial antes de recuperar el secreto original.</p>
+        ) : (
+          <p className="mt-2">Para guardar una nueva clave API desde este panel, configura primero una clave de cifrado de 64 caracteres hexadecimales en el servicio Next.js de Easypanel. Si se trata de una instalación nueva sin credenciales cifradas, puedes generar una clave segura; una clave nueva no recupera datos cifrados anteriormente.</p>
+        )}
+        <p className="mt-2 text-amber-200">No introduzcas esta clave de cifrado en el campo «Clave API de HappyScribe» ni la compartas por chat o registros. El token de entorno, si existe, se administra por separado.</p>
+      </div>
+    )}
+    {status.encryptionReady && status.tokenSource === 'panel' && !status.credentialUsable && (
+      <div role="alert" className="rounded-xl border border-amber-400/35 bg-amber-400/5 p-4 text-sm text-amber-100">
+        <p className="font-semibold">La clave de cifrado tiene formato válido, pero la credencial guardada no se puede descifrar.</p>
+        <p className="mt-2">Comprueba que la variable de Easypanel contiene la clave ORIGINAL utilizada al guardar el token. No borres ni reemplaces automáticamente la credencial: si la clave se perdió, hace falta una rotación controlada.</p>
+      </div>
+    )}
     <div className="rounded-xl border border-white/10 p-4">
       <label className="flex items-start gap-3 text-sm text-slate-200">
         <input type="checkbox" checked={enabled} disabled={editingDisabled} onChange={e => setEnabled(e.target.checked)} />
@@ -151,10 +168,9 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
         autoComplete="new-password" maxLength={2048} disabled={remove || editingDisabled} placeholder={hasToken ? 'Configurada · escribir para reemplazar' : 'Pegar nueva clave API'}
         className="w-full rounded-xl border border-white/10 bg-slate-950 p-3 text-white" />
       <p className="mt-2 text-sm text-slate-400">Estado: {hasToken ? 'Configurada' : 'Sin configurar'} · {status.credentialUsable ? 'Clave accesible' : 'No disponible'}. Origen: {status.tokenSource}. Nunca se muestra la clave.</p>
-      {hasToken && !status.credentialUsable && <p role="alert" className="mt-2 text-sm text-amber-300">
-        La clave guardada no puede utilizarse. Comprueba la clave de cifrado del servidor o sustituye la credencial.
+      {!status.credentialUsable && status.tokenSource !== 'panel' && <p role="status" className="mt-2 text-sm text-amber-200">
+        No hay un token API utilizable en el servidor o en el panel. Configura una credencial válida y un ID de organización numérico antes de probar la conexión.
       </p>}
-      {!status.encryptionReady && <p role="alert" className="mt-2 text-sm text-amber-300">Para guardar claves nuevas, configura AUDIO_STUDIO_ENCRYPTION_KEY en el servidor.</p>}
       {status.tokenSource === 'panel' && <label className="mt-3 flex items-center gap-2 text-sm text-slate-300">
         <input type="checkbox" disabled={editingDisabled} checked={remove} onChange={e => {
           setRemove(e.target.checked);
