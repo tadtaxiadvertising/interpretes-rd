@@ -194,25 +194,40 @@ export async function updateInterpreter(id: number, data: Partial<InterpreterInp
     const validated = InterpreterSchema.partial().parse(data);
     const { password, ...updateData } = validated;
 
-    const interpreter = await db.interpreter.update({
-      where: { id },
-      data: updateData,
-      select: { id: true, name: true, emailCorporativo: true }
+    // Keep the administrative interpreter record and its linked profile in
+    // the same PostgreSQL transaction. If profile synchronization fails, the
+    // interpreter update must roll back instead of silently committing half
+    // of the edit. No Supabase Auth provider call happens in this transaction.
+    const interpreter = await db.$transaction(async (tx) => {
+      const updated = await tx.interpreter.update({
+        where: { id },
+        data: updateData,
+        select: { id: true, name: true, emailCorporativo: true },
+      });
+
+      await tx.userProfile.updateMany({
+        where: { interpreterId: id },
+        data: {
+          displayName: updated.name,
+          ...(updated.emailCorporativo ? { email: updated.emailCorporativo } : {}),
+        },
+      });
+      return updated;
     });
 
-    await db.userProfile.updateMany({
-      where: { interpreterId: id },
-      data: {
-        displayName: interpreter.name,
-        ...(interpreter.emailCorporativo ? { email: interpreter.emailCorporativo } : {}),
-      },
-    });
-
-    revalidateInterpreterProfileRecords(id);
+    // The transaction has committed. A cache failure must never turn a
+    // successful edit into a retry prompt that could overwrite newer data.
+    try {
+      revalidateInterpreterProfileRecords(id);
+    } catch (cacheError) {
+      console.warn('[UPDATE_INTERPRETER] Cache refresh failed after commit:', safeServerErrorCategory(cacheError));
+    }
     return { success: true, data: interpreter };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [updateInterpreter]:', error);
-    return { success: false, error: 'Error al actualizar el intérprete', code: 'INTERNAL_ERROR' };
+    // Prisma/driver errors can contain connection strings and personal data.
+    // Never send the original Error or its stack to the server logs.
+    console.error('[UPDATE_INTERPRETER] Failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'No se confirmó la actualización. Comprueba los datos antes de volver a intentarlo.', code: 'INTERNAL_ERROR' };
   }
 }
 
@@ -335,7 +350,7 @@ export async function getInterpretersForSelect(): Promise<ActionResult<{ id: num
 
     return { success: true, data: interpreters };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [getInterpretersForSelect]:', error);
+    console.error('[GET_INTERPRETERS_FOR_SELECT] Failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error al obtener intérpretes', code: 'INTERNAL_ERROR' };
   }
 }
