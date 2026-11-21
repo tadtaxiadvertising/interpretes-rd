@@ -6,7 +6,7 @@ En administración, `GET /api/admin/happyscribe/transcriptions?page=0` devuelve 
 ## Dónde ocurre
 - El endpoint está en `src/app/api/admin/happyscribe/transcriptions/route.ts` (Next.js).
 - `src/lib/roleplay/happyscribe-settings.ts` lee `AUDIO_STUDIO_ENCRYPTION_KEY` únicamente del entorno de ejecución del servicio Next.js; requiere exactamente **64 caracteres hexadecimales** (32 bytes) y usa AES-256-GCM.
-- El token del panel se almacena cifrado en la fila `system_config` cuya clave es `audio_studio_happyscribe_token_v1`. Si esta fila existe, prevalece sobre `HAPPY_SCRIBE_API_TOKEN` (no hay fallback ante fallos de descifrado).
+- El token del panel se almacena cifrado en la fila `public.system_configs` cuya clave es `audio_studio_happyscribe_token_v1`. Si esta fila existe, prevalece sobre `HAPPY_SCRIBE_API_TOKEN` (no hay fallback ante fallos de descifrado).
 - El endpoint también exige token utilizable y un ID de organización numérico (panel o `HAPPY_SCRIBE_ORGANIZATION_ID`). Por tanto, 503 no demuestra por sí solo que la clave de cifrado sea la única configuración ausente.
 
 ## Recuperación sin exponer secretos
