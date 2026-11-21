@@ -71,6 +71,10 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
       return { success: false, message:
         'Falta AUDIO_STUDIO_ENCRYPTION_KEY (64 caracteres hexadecimales) en el servicio Next.js. Si ya existe una credencial cifrada, restaura la clave original en Easypanel antes de intentar guardarla.' };
     }
+    if (code === 'CREDENTIAL_RECOVERY_REQUIRED') {
+      return { success: false, message:
+        'La credencial de HappyScribe almacenada no se puede descifrar. Para protegerla, no se borró ni se reemplazó. Restaura la clave de cifrado original en el servicio Next.js de Easypanel; si se perdió, solicita una rotación controlada.' };
+    }
     if (code === 'ORGANIZATION_INVALID') {
       return { success: false, message: 'El ID de organización debe contener solo números.' };
     }
