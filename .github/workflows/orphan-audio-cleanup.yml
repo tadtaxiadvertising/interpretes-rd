@@ -3,8 +3,8 @@ name: 🔎 Roleplay audio inventory (read-only)
 # No deletion option: all Storage reconciliation is read-only until issue
 # #408 defines age-gated, concurrency-safe cleanup for recordings.
 on:
-  schedule:
-    - cron: '0 3 * * 0' # Weekly, Sunday 03:00 UTC
+  # INCIDENT FREEZE: pause weekly production database/storage inventory.
+  # Manual audit remains available after operator review; no writes.
   workflow_dispatch:
 
 jobs:
