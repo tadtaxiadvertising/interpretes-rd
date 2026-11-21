@@ -86,6 +86,18 @@ describe('Audio Studio settings: safe classified save errors', () => {
     expect(log).toHaveBeenCalledWith('[Audio Studio settings] Unexpected save failure:', 'Error');
   });
 
+  it('returns recovery guidance without leaking details when an existing ciphertext is unreadable', async () => {
+    mocks.saveHappyScribeSettings.mockRejectedValueOnce(
+      new Error('CREDENTIAL_RECOVERY_REQUIRED'),
+    );
+    const result = await saveAudioStudioSettings(settingsForm());
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('no se borró ni se reemplazó');
+    expect(result.message).toContain('clave de cifrado original');
+    expect(log).not.toHaveBeenCalled();
+    expect(mocks.revalidatePath).not.toHaveBeenCalled();
+  });
+
   it('preserves optimistic concurrency protections', async () => {
     mocks.saveHappyScribeSettings.mockRejectedValueOnce(new Error('SETTINGS_CONFLICT'));
     const result = await saveAudioStudioSettings(settingsForm());
