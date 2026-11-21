@@ -13,14 +13,14 @@ This platform uses a **decoupled two-service architecture**:
 | Service | Description | Tech |
 | :------ | :---------- | :--- |
 | `interpretes-rd` | Aplicación principal: interfaz, autenticación y acceso directo a datos | Next.js 15.5.28, Prisma 7, Tailwind v4 |
-| `interpreters-api` | REST Service: Webhooks, External integrations | Next.js 16 API Routes, Prisma 7 |
+| `interpreters-api` | REST Service: Webhooks, External integrations | Express 4, TypeScript, Prisma 7 |
 
 ### Dual-Service Synchronization in Easypanel
 
 In this environment:
 
 1. **Direct Data Layer**: Server-side logic (Server Components & Server Actions) communicates directly with the database via a Prisma singleton. This prevents DNS-related latency and errors (`EAI_AGAIN`) during internal service calls.
-2. **Decoupled REST API**: Legacy and external-facing endpoints reside in `src/app/api/` and are served via `Dockerfile.api`.
+2. **Decoupled REST API**: The independent Express API lives in `interpreters-api/src/` and is built from the repository root with `Dockerfile.api`. Next.js route handlers in `src/app/api/` belong to the frontend service (`Dockerfile`), not the Express image.
 
 **Key Variables**:
 
@@ -40,7 +40,7 @@ While built as two separate services, the code currently resides in this single 
 ```text
 interpretes-rd/          
 ├── src/app/                   # Frontend pages & Layouts
-├── src/app/api/               # Backend REST endpoints (interpreters-api)
+├── src/app/api/               # Next.js route handlers in the frontend service
 ├── src/app/actions/           # Shared Server Actions
 ├── src/components/            # React UI components (shared)
 ├── src/lib/                   # Shared logic (Prisma, Supabase, Utils)
@@ -48,7 +48,8 @@ interpretes-rd/
 ├── documentation/             # Corporate SOPs & templates
 ├── prisma/                    # Master Schema & Migrations
 ├── Dockerfile                 # Frontend production build (Port 3000)
-├── Dockerfile.api             # Backend production build (Port 4000)
+├── interpreters-api/          # Independent Express REST API source
+├── Dockerfile.api             # Express backend production build (Port 3000)
 └── easypanel/                 # Deployment documentation
 ```
 
@@ -62,19 +63,23 @@ npm install
 npm run dev                    # http://localhost:3001
 ```
 
-### Backend (interpreters-api repo)
+### Backend (co-located `interpreters-api/` directory)
 
 ```bash
-cp .env.example .env          # Fill in values
-npm install
+cd interpreters-api
+# Set the required environment variables without committing secrets.
+npm ci
 npx prisma generate
-npm run dev                    # http://localhost:4000
+npm run dev                    # default: http://localhost:3000
 ```
 
 ## Deployment
 
-Both services deploy to **Easypanel** via GitHub webhook on push to `main`.  
-See [easypanel/README.md](./easypanel/README.md) for configuration details.
+The repository has separate production images: `Dockerfile` (Next.js frontend) and `Dockerfile.api` (Express API). **Both build contexts must be the repository root (`.`)**; configuring the API to build with the frontend Dockerfile can exhaust the small Easypanel VPS and deploy the wrong application. The internal default port is `3000` for each container; route by service/domain, not by assuming that the API runs on port `4000`.
+
+The Express image uses `GET /health` for process liveness; `GET /ready` checks PostgreSQL independently and may return 503 during database outages. A healthy liveness response does not prove database connectivity. Before any production change, verify the actual Easypanel build file, health override, available resources and rollback target. CI success or a successful webhook attempt does not by itself prove the deployed image revision.
+
+Deployments are triggered through GitHub Actions/Easypanel webhooks after eligible `main` workflows; the optional audio worker is separately gated. See [easypanel/README.md](./easypanel/README.md) for service-specific configuration and [GitHub Actions](./.github/workflows/) for the current deployment conditions.
 
 ## Documentation
 

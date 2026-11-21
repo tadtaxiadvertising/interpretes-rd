@@ -74,7 +74,7 @@ Each service has its own **webhook URL** for triggering deployments via GitHub A
 
 1. **Create Services:** Create the frontend and API services. Add `roleplay-audio-worker` as a private worker service when the Roleplay queue migration is deployed.
 2. **Source:** Connect the `interpretes-rd` GitHub repository to each service.
-3. **Build:** Use `Dockerfile` at root with context `.`.
+3. **Build:** For `interpreters` use root `Dockerfile` with context `.`; for `interpreters-api` use root `Dockerfile.api` with context `.`. Do not use `interpreters-api/Dockerfile` or set `interpreters-api/` as the build context: that is not the validated production layout.
 4. **Env:** Copy variables from the tables above to the **Environment** tab. Mark sensitive vars as runtime-only.
 5. **Domains:** Map `interpretes.rd.ibusiness.com.do` to the frontend service `interpreters`; keep the API service on its configured internal/Easypanel endpoint unless a separate API subdomain is provisioned.
 6. **Webhooks:** Copy webhook URLs from each service's Settings → Webhook section. Store them as GitHub Secrets (see below).
@@ -124,6 +124,7 @@ gh secret list -R tadtaxiadvertising/interpretes-rd
 ## Monitoring & Logs
 
 - **Resource Usage:** Run `docker stats` in the Easypanel terminal.
-- **App Health:** Check the "Logs" tab for real-time output.
+- **App Health:** Frontend liveness: `GET /api/health`. Express backend liveness: `GET /health` (must not depend on PostgreSQL). Express backend database readiness: `GET /ready` (read-only probe; may return 503 on DB outage). If Easypanel has a service-level healthcheck override, confirm it uses the intended route before deploying. A healthy `/health` is not proof that the database is ready.
+- **Runtime Verification:** Compare the deployed image revision with the intended Git commit, check actual build file/context and confirm no Swarm restart loop. Do not treat a successful webhook HTTP request as deployment confirmation.
 - **Network:** App listens on internal port `3000`.
 - **Deploy Logs:** GitHub Actions → workflow runs → check "Deploy interpreters" and "Deploy interpreters-api" jobs.
