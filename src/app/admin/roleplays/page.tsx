@@ -2,6 +2,7 @@ import React from 'react';
 import { AlertTriangle, CheckCircle2, Clock3, Mic2, Waves, Library, Settings } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import {
   ADMIN_ROLEPLAY_FILTERABLE_STATUSES, ADMIN_ROLEPLAY_PAGE_SIZE,
   boundAdminRoleplayPage, buildAdminRoleplayWhere, parseAdminRoleplayFilters,
@@ -46,7 +47,7 @@ async function getRoleplays(filters: AdminRoleplayFilters) {
     const counts = Object.fromEntries(statusGroups.map((entry) => [entry.status, entry._count._all])) as Record<string, number>;
     return { data, total, page, counts, error: null as string | null };
   } catch (error) {
-    console.error('[ADMIN ROLEPLAYS] Failed to load roleplay sessions:', error);
+    console.error('[ADMIN ROLEPLAYS] Failed to load roleplay sessions:', safeServerErrorCategory(error));
     return {
       data: [],
       total: 0,
