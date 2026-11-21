@@ -144,6 +144,45 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
   });
 
+  it('shows global review progress independent of search filters and updates after edits', () => {
+    selectAudio();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const summary = () => screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' }).textContent || '';
+    expect(summary()).toMatch(/Revisión de roles e idiomas:\s*0\/2 sin pendientes/);
+    expect(summary()).toContain('2 sin hablante');
+    expect(summary()).toContain('2 sin idioma');
+
+    const speakers = screen.getAllByLabelText('Perfil del hablante');
+    const languages = screen.getAllByLabelText('Idioma de la intervención');
+    fireEvent.change(speakers[0], { target: { value: 'doctor' } });
+    fireEvent.change(languages[0], { target: { value: 'en' } });
+    expect(summary()).toMatch(/Revisión de roles e idiomas:\s*1\/2 sin pendientes/);
+    expect(summary()).toContain('1 sin hablante');
+    expect(summary()).toContain('1 sin idioma');
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 2' },
+    });
+    expect(summary()).toMatch(/Revisión de roles e idiomas:\s*1\/2 sin pendientes/);
+    expect(summary()).toContain('1 sin hablante');
+  });
+
+  it('identifies original interpreter turns as pending until excluded', () => {
+    selectAudio();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), {
+      target: { value: 'interpreter' },
+    });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), {
+      target: { value: 'en' },
+    });
+    const summary = screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' });
+    expect(summary.textContent).toMatch(/Revisión de roles e idiomas:\s*0\/1 sin pendientes/);
+    expect(summary.textContent).toContain('1 del intérprete original por excluir');
+    expect(summary.textContent).toContain('0 sin idioma');
+  });
+
   it('navigates visible pending turns in chronological order without editing audio', () => {
     selectAudio();
     for (let i = 0; i < 3; i++) {
