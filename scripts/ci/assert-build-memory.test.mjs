@@ -53,9 +53,11 @@ test('all production Dockerfiles check memory before npm installs', () => {
     const source = readFileSync(file, 'utf8');
     const copy = source.indexOf('COPY scripts/ci/assert-build-memory.mjs');
     const guard = source.indexOf('RUN node scripts/ci/assert-build-memory.mjs');
+    const compileGuard = source.lastIndexOf('RUN node scripts/ci/assert-build-memory.mjs');
     const install = source.indexOf('RUN npm');
     assert.ok(copy >= 0, file + ': memory guard script must be copied');
     assert.ok(guard > copy, file + ': memory guard must follow the COPY');
     assert.ok(install > guard, file + ': memory guard must run before npm ci');
+    assert.ok(compileGuard > install, file + ': memory guard must be rechecked before compilation');
   }
 });
