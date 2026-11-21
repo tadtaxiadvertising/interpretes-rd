@@ -7,11 +7,15 @@ import { validateAction } from '@/lib/auth/actions';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { parseFinalFfmpegOutputSeconds } from '@/lib/roleplay-studio/ffmpeg-progress';
 import { parseStudioSilences } from '@/lib/roleplay-studio/silence-analysis';
+import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const MAX_MP3_BYTES = 15 * 1024 * 1024;
+// Keep the existing 100 KB multipart overhead allowance, but enforce it
+// on actual streamed bytes, not just an optional Content-Length header.
+const MAX_MULTIPART_BYTES = MAX_MP3_BYTES + 100_000;
 const MAX_PROCESS_MS = 45_000;
 const MAX_STDERR_BYTES = 256_000;
 const MAX_STDOUT_BYTES = 32_000;
@@ -117,7 +121,7 @@ export async function POST(req: NextRequest) {
     });
   }
   const declaredSize = Number(req.headers.get('content-length') ?? 0);
-  if (Number.isFinite(declaredSize) && declaredSize > MAX_MP3_BYTES + 100_000) {
+  if (Number.isFinite(declaredSize) && declaredSize > MAX_MULTIPART_BYTES) {
     return privateRoleplayResponse({ error: 'El MP3 supera 15 MiB.' }, { status: 413 });
   }
   if (activeAnalyses >= MAX_ACTIVE_ANALYSES) {
@@ -128,7 +132,7 @@ export async function POST(req: NextRequest) {
   activeAnalyses++;
   try {
     if (req.signal.aborted) return privateRoleplayResponse({ error: 'Solicitud cancelada' }, { status: 499 });
-    const data = await req.formData();
+    const data = await readBoundedMultipartFormData(req, MAX_MULTIPART_BYTES);
     const audio = data.get('audio');
     if (!(audio instanceof File) || audio.size < 1 || audio.size > MAX_MP3_BYTES ||
         !['', 'audio/mpeg', 'audio/mp3'].includes(audio.type) || !/\.mp3$/i.test(audio.name)) {
@@ -146,7 +150,10 @@ export async function POST(req: NextRequest) {
       },
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof MultipartBodyTooLargeError) {
+      return privateRoleplayResponse({ error: 'El MP3 supera 15 MiB.' }, { status: 413 });
+    }
     return privateRoleplayResponse(
       { error: 'No fue posible analizar las pausas. Revisa el MP3 y vuelve a intentarlo.' },
       { status: 422, headers: { 'Cache-Control': 'private, no-store' } },

@@ -84,6 +84,51 @@ describe('admin FFmpeg silence analysis boundaries', () => {
     expect((await POST(request(large) as never)).status).toBe(400);
   });
 
+  function oversizedStreamingRequest(): Request {
+    // 64 KiB chunks keep the fixture's memory budget tiny while the total
+    // delivered body would exceed 15 MiB if the parser did not stop it.
+    const boundary = 'stream-limited-test';
+    const prefix = new TextEncoder().encode(
+      '--' + boundary + '\r\nContent-Disposition: form-data; name="audio"; filename="large.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n',
+    );
+    const chunk = new Uint8Array(64 * 1024);
+    let emitted = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (emitted === 0) controller.enqueue(prefix);
+        else if (emitted <= 250) controller.enqueue(chunk);
+        else {
+          controller.enqueue(new TextEncoder().encode('\r\n--' + boundary + '--\r\n'));
+          controller.close();
+        }
+        emitted++;
+      },
+    });
+    return new Request('http://localhost/api/admin/roleplays/studio/silences', {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=' + boundary },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+  }
+
+  it('rejects actual oversized streaming bytes even without Content-Length', async () => {
+    const req = oversizedStreamingRequest();
+    expect(req.headers.get('content-length')).toBeNull();
+
+    const response = await POST(req as never);
+    expect(response.status).toBe(413);
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await response.json()).error).toContain('15 MiB');
+  });
+
+  it('rejects a falsely small Content-Length instead of trusting it', async () => {
+    const req = oversizedStreamingRequest();
+    req.headers.set('content-length', '1');
+    const response = await POST(req as never);
+    expect(response.status).toBe(413);
+  });
+
   it('does not leak FFmpeg decoding errors or malformed audio metadata to the caller', async () => {
     const result = await POST(request() as never);
     const body = await result.json();
