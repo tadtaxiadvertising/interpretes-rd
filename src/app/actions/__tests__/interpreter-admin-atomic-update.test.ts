@@ -60,7 +60,7 @@ describe('administrative interpreter edit: atomicity and private errors', () => 
       id: 42, name: 'Nombre nuevo', emailCorporativo: 'new@example.invalid',
     });
     mocks.txProfileUpdate.mockResolvedValue({ count: 1 });
-    mocks.transaction.mockImplementation(async (fn: (tx: typeof tx) => Promise<unknown>) => fn(tx));
+    mocks.transaction.mockImplementation(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx));
   });
 
   it('synchronizes Interpreter and UserProfile within the SAME transaction', async () => {
