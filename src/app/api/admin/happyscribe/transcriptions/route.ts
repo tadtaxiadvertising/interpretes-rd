@@ -4,7 +4,7 @@ import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from '@/lib
 import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
-import { isValidHappyScribeProbe } from '@/lib/roleplay/happyscribe-probe';
+import { isValidHappyScribeProbe, readBoundedHappyScribeListing } from '@/lib/roleplay/happyscribe-probe';
 import { validateAction } from '@/lib/auth/actions';
 import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
@@ -101,7 +101,9 @@ export async function GET(req: NextRequest) {
         { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie, Authorization' } },
       );
     }
-    const payload: unknown = await upstream.json();
+    // Cap provider catalog bytes before parsing; a large or malformed listing
+    // must not exhaust the small Easypanel VPS.
+    const payload: unknown = await readBoundedHappyScribeListing(upstream);
     if (!payload || typeof payload !== 'object' || !('results' in payload) || !Array.isArray(payload.results)) {
       return privateRoleplayResponse({ error: 'HappyScribe devolvió una lista no válida.' }, { status: 502 });
     }
