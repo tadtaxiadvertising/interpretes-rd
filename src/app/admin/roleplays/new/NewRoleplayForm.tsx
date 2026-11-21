@@ -68,6 +68,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
   const [isCreating, setIsCreating] = useState(false);
+  // Transport failures do not tell us whether the server committed the roleplay.
+  const [submissionUncertain, setSubmissionUncertain] = useState(false);
   // A state-driven disabled button updates on render; the ref also prevents
   // duplicate POST requests fired before React commits that render.
   const createPending = useRef(false);
@@ -440,6 +442,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
     setIsCreating(true);
     setError(null);
+    setSubmissionUncertain(false);
 
     try {
       const formData = new FormData();
@@ -465,14 +468,55 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         formData.append('scenarioAudioSha256', JSON.stringify(scenarios.map((scenario) => scenario.sha256 ?? null)));
       }
 
-      const res = await fetch('/api/admin/roleplays', {
-        method: 'POST',
-        body: formData,
-      });
+      // A network failure or an unreadable response may happen after the DB
+      // transaction committed. Do not imply the request definitely failed.
+      const unknownResultMessage = 'No se pudo confirmar el resultado de la creación.';
+      let res: Response;
+      try {
+        res = await fetch('/api/admin/roleplays', {
+          method: 'POST',
+          body: formData,
+        });
+      } catch {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
 
-      const data = await res.json();
+      let raw: unknown;
+      try {
+        raw = await res.json();
+      } catch {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw) ||
+          typeof (raw as { success?: unknown }).success !== 'boolean' ||
+          ((raw as { success: boolean }).success &&
+            (!(raw as { data?: unknown }).data ||
+             typeof (raw as { data?: unknown }).data !== 'object' ||
+             Array.isArray((raw as { data?: unknown }).data)))) {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
 
-      if (!data.success) throw new Error(data.error || 'Failed to create roleplay');
+      const data = raw as {
+        success: boolean;
+        error?: unknown;
+        data?: {
+          bulk?: boolean;
+          createdCount?: number;
+          skippedCount?: number;
+          scenarioCount?: number;
+          inviteLink?: string;
+          sessionId?: string;
+        };
+      };
+      if (!data.success) {
+        throw new Error(typeof data.error === 'string' && data.error.trim()
+          ? data.error : 'El servidor rechazó la creación del roleplay.');
+      }
+      // The successful-response structure was checked above.
+      if (!data.data) throw new Error(unknownResultMessage);
 
       if (data.data.bulk) {
         setSuccess({
@@ -816,6 +860,14 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <AlertCircle />
           <span>{error}</span>
         </div>
+      )}
+      {submissionUncertain && (
+        <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
+          La conexión o la respuesta se interrumpió. El roleplay podría haberse creado.
+          {' '}<Link href="/admin/roleplays" className="font-semibold underline underline-offset-2">
+            Comprobar los roleplays existentes
+          </Link>{' '}antes de volver a enviar los audios.
+        </p>
       )}
 
       <button
