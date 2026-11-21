@@ -240,6 +240,36 @@ describe('Audio Studio admin partial settings payload', () => {
     expect(screen.queryByText(/Ya existe una credencial cifrada en el panel/)).toBeNull();
   });
 
+  it('blocks token submission when encryption is unavailable while preserving unsaved input', async () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, encryptionReady: false, credentialUsable: false,
+    }} />);
+    fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+      target: { value: 'SYNTHETIC_UNSAVED_SECRET' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+    expect(screen.getByText(/No se guardó la clave API/)).toBeTruthy();
+    expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value)
+      .toBe('SYNTHETIC_UNSAVED_SECRET');
+  });
+
+  it('allows changing an editor preference without a new token when the encryption key is missing', async () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, encryptionReady: false, credentialUsable: false,
+    }} />);
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'compact' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
+    expect(vi.mocked(saveAudioStudioSettings).mock.calls[0][0].get('token')).toBe('');
+  });
+
   it('navigates to Audio Studio without confirmation when nothing is edited', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     try {
