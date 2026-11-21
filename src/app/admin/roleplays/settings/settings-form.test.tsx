@@ -42,6 +42,31 @@ afterEach(() => {
 });
 
 describe('Audio Studio admin partial settings payload', () => {
+  it('does not save unchanged settings or report false success while HappyScribe is unconfigured', async () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, tokenSource: 'ninguna', hasToken: false, credentialUsable: false,
+      encryptionReady: false,
+    }} />);
+    const save = screen.getByRole('button', { name: 'Guardar configuración' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    const form = save.closest('form') as HTMLFormElement;
+    await act(async () => {
+      // A synthetic form submission must obey the no-op guard too.
+      fireEvent.submit(form);
+    });
+    expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'compact' },
+    });
+    expect(save.disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(save);
+    });
+    expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
+    expect(vi.mocked(saveAudioStudioSettings).mock.calls[0][0].get('compactViewDefault')).toBe('compact');
+  });
+
   it('does not resubmit untouched organization, MP3, or connection state', async () => {
     render(<AudioStudioSettingsForm initial={initial} />);
     fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
