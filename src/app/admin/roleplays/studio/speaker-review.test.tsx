@@ -247,6 +247,77 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.queryByRole('button', { name: 'Ir al siguiente pendiente' })).toBeNull();
   });
 
+
+  it('completes an SRT review selection from filtered cues without changing existing clips', async () => {
+    selectAudio();
+    const source = new File(['srt'], 'many.srt', { type: 'text/plain' });
+    const transcript = Array.from({ length: 28 }, (_, index) => {
+      const start = String(index * 2).padStart(2, '0');
+      const end = String(index * 2 + 1).padStart(2, '0');
+      const label = index === 10 || index === 20 ? 'Special case' : 'Other turn';
+      return `${index + 1}\n00:00:${start},000 --> 00:00:${end},000\nDoctor: ${label}`;
+    }).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => transcript });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+    expect(screen.getByText(/28 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    expect(screen.getByText(/28 turnos disponibles y 0 seleccionados/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar turnos en transcripción' }), {
+      target: { value: 'Special case' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Completar con turnos compatibles de esta página' }));
+    expect(screen.getByText(/28 turnos disponibles y 2 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor \(2\)/i }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.queryByText(/Seleccionar turnos de la transcripción/)).toBeNull();
+  });
+
+  it('fills only the displayed SRT page, not unseen turns on other pages', async () => {
+    selectAudio();
+    const source = new File(['srt'], 'paged.srt', { type: 'text/plain' });
+    const timestamp = (seconds: number) =>
+      `00:${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')},000`;
+    const transcript = Array.from({ length: 80 }, (_, index) =>
+      `${index + 1}\n${timestamp(index)} --> ${timestamp(index + 1)}\nDoctor: Case ${index}`).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => transcript });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Completar con turnos compatibles de esta página' }));
+    expect(screen.getByText(/80 turnos disponibles y 20 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }) as HTMLInputElement).checked)
+      .toBe(false);
+  });
+
+  it('does not automatically select original interpreter cues when a long SRT requires review', async () => {
+    selectAudio();
+    fireEvent.click(screen.getByLabelText(/Excluir intervenciones del intérprete original al importar/i));
+    const source = new File(['srt'], 'large.srt', { type: 'text/plain' });
+    const transcript = Array.from({ length: 27 }, (_, index) => {
+      const start = String(index * 2).padStart(2, '0');
+      const end = String(index * 2 + 1).padStart(2, '0');
+      return `${index + 1}\n00:00:${start},000 --> 00:00:${end},000\n${index === 3 ? 'Interpreter' : 'Doctor'}: Scene ${index}`;
+    }).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => transcript });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+    expect(screen.getByText(/27 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 4' }) as HTMLInputElement).checked)
+      .toBe(false);
+  });
+
   it('updates generated titles without another click but respects manual titles', async () => {
     selectAudio();
     const subtitle = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });
