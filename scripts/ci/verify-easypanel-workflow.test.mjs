@@ -85,3 +85,28 @@ test('Express backend Docker healthcheck uses process liveness, not database rea
   assert.match(app, /app\.get\('\/health'/);
   assert.match(app, /app\.get\('\/ready'/);
 });
+
+
+test('the checked-in Dockerfiles and runbooks keep Next.js and Express build targets separate', () => {
+  const frontend = readFileSync(new URL('../../Dockerfile', import.meta.url), 'utf8');
+  const backend = readFileSync(new URL('../../Dockerfile.api', import.meta.url), 'utf8');
+  const rootReadme = readFileSync(new URL('../../README.md', import.meta.url), 'utf8');
+  const easypanelReadme = readFileSync(new URL('../../easypanel/README.md', import.meta.url), 'utf8');
+
+  // A wrong backend build target previously compiled the heavy Next.js
+  // frontend on the tiny Easypanel VPS. Verify actual image entrypoints,
+  // rather than trusting service labels or prose alone.
+  assert.match(frontend, /^CMD \["node", "server\.js"\]$/m);
+  assert.match(backend, /^COPY interpreters-api\/src \.\/src$/m);
+  assert.match(backend, /^CMD \["node", "dist\/server\.js"\]$/m);
+  assert.match(backend, /^EXPOSE 3000$/m);
+  assert.doesNotMatch(backend, /next build|\.next\/standalone/);
+
+  // The same root context is essential: the API Dockerfile also copies the
+  // repository-root prisma/ schema. This does NOT validate the remote
+  // Easypanel service setting; that still requires runtime attestation.
+  assert.match(backend, /^COPY prisma \.\/prisma$/m);
+  assert.match(easypanelReadme, /for \`interpreters-api\` use root \`Dockerfile\.api\` with context \`.\`/);
+  assert.match(rootReadme, /\`Dockerfile\.api\` \(Express API\)/);
+  assert.match(rootReadme, /build contexts must be the repository root/);
+});
