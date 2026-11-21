@@ -73,10 +73,12 @@ ENV NODE_OPTIONS="--max-old-space-size=256"
 
 USER apiuser
 
-# The liveness route remains lightweight, but readiness must fail when
-# PostgreSQL is unreachable; allow enough time for the first DB/TLS handshake.
+# Docker Swarm/Easypanel uses the image health status for service lifecycle.
+# Check process liveness only: a temporary PostgreSQL outage must not
+# turn a healthy HTTP process into a repeatedly replaced container.
+# Keep /ready available separately for DB-aware, read-only diagnostics.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD curl --fail --silent http://localhost:${PORT:-3000}/ready > /dev/null || exit 1
+  CMD curl --fail --silent http://localhost:${PORT:-3000}/health > /dev/null || exit 1
 
 EXPOSE 3000
 
