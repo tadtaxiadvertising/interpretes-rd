@@ -1,0 +1,94 @@
+name: Prepare Docker image off-VPS (manual; no deploy)
+
+# No push, pull_request or schedule triggers: never build as a side effect
+# of changes to main while Easypanel/SSH availability is unverified.
+on:
+  workflow_dispatch:
+    inputs:
+      component:
+        description: 'Build exactly one image, on a GitHub-hosted runner'
+        type: choice
+        required: true
+        options:
+          - frontend
+          - api
+          - worker
+      mode:
+        description: 'Build only, or publish a SHA-tagged image to GHCR'
+        type: choice
+        required: true
+        default: build-only
+        options:
+          - build-only
+          - publish-ghcr
+      confirmation:
+        description: 'This never deploys or changes Easypanel; confirm explicitly'
+        type: choice
+        required: true
+        default: NO
+        options:
+          - NO
+          - CONFIRMO_COMPILACION_FUERA_DEL_VPS
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offhost-image-${{ github.ref }}-${{ inputs.component }}
+  cancel-in-progress: false
+
+jobs:
+  build-only:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'CONFIRMO_COMPILACION_FUERA_DEL_VPS' && inputs.mode == 'build-only' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build selected Docker image on GitHub infrastructure
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.RELEASE_NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.RELEASE_NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_API_URL: ${{ vars.RELEASE_NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_APP_ROLE: ${{ vars.RELEASE_NEXT_PUBLIC_APP_ROLE }}
+          COMPONENT: ${{ inputs.component }}
+        run: bash scripts/ci/build-image-offhost.sh "$COMPONENT"
+      - name: Confirm no registry or production write was requested
+        run: echo 'Image built on GitHub-hosted runner only. No push, SSH, migration or Easypanel webhook occurred.'
+
+  publish-ghcr:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.confirmation == 'CONFIRMO_COMPILACION_FUERA_DEL_VPS' && inputs.mode == 'publish-ghcr' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout reviewed main
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build selected Docker image on GitHub infrastructure
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ vars.RELEASE_NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.RELEASE_NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_API_URL: ${{ vars.RELEASE_NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_APP_ROLE: ${{ vars.RELEASE_NEXT_PUBLIC_APP_ROLE }}
+          COMPONENT: ${{ inputs.component }}
+        run: bash scripts/ci/build-image-offhost.sh "$COMPONENT"
+      - name: Authenticate only to GitHub Container Registry
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+      - name: Publish SHA-tagged image to GHCR only
+        run: |
+          set -euo pipefail
+          : "${OFFHOST_IMAGE:?Missing image reference from previous build}"
+          docker push "$OFFHOST_IMAGE"
+          echo 'GHCR image published; no deployment, webhook, or VPS connection was attempted.'
