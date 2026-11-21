@@ -1436,11 +1436,16 @@ export default function RoleplayStudioPage() {
   const pendingSpeakerIds = visibleSegments.filter(({ segment }) =>
     segment.speakerRole === 'unknown').map(({ segment }) => segment.id);
   const visiblePendingTurns = visibleSegments.filter(({ segment }) => needsReview(segment));
-  const focusNextPendingTurn = () => {
+  const focusPendingTurn = (direction: -1 | 1) => {
     if (!visiblePendingTurns.length) return;
     const currentIndex = visiblePendingTurns.findIndex(({ segment }) =>
       segment.id === reviewFocusRequest?.id);
-    const next = visiblePendingTurns[(currentIndex + 1) % visiblePendingTurns.length].segment;
+    // If filtering hid the previously selected turn, start from the first
+    // pending in the chosen direction rather than navigating a hidden row.
+    const index = currentIndex < 0
+      ? direction === 1 ? 0 : visiblePendingTurns.length - 1
+      : (currentIndex + direction + visiblePendingTurns.length) % visiblePendingTurns.length;
+    const next = visiblePendingTurns[index].segment;
     setExpandedSegmentId(next.id);
     setReviewFocusRequest({ id: next.id, attempt: ++reviewFocusAttempt.current });
   };
@@ -2027,8 +2032,15 @@ export default function RoleplayStudioPage() {
                   className="accent-blue-500"/>
                 Pendientes ({pendingReviewCount})
               </label>
+              {visiblePendingTurns.length > 1 && (
+                <button type="button" onClick={() => focusPendingTurn(-1)}
+                  aria-label="Ir al pendiente anterior"
+                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10">
+                  Anterior pendiente
+                </button>
+              )}
               {visiblePendingTurns.length > 0 && (
-                <button type="button" onClick={focusNextPendingTurn}
+                <button type="button" onClick={() => focusPendingTurn(1)}
                   aria-label="Ir al siguiente pendiente"
                   className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10">
                   Siguiente pendiente
