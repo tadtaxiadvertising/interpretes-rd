@@ -53,7 +53,8 @@ test('builder enforces GitHub-hosted runner and precise SHA before Docker work',
     timeout: 2000,
   });
   assert.equal(result.status, 78);
-  assert.match(result.stderr, /refusing self-hosted\/VPS execution/);
+  // GitHub workflow command diagnostics are emitted on stdout.
+  assert.match(result.stdout + result.stderr, /refusing self-hosted\/VPS execution/);
 });
 
 test('frontend image configuration uses public build variables and fails closed if absent', () => {
