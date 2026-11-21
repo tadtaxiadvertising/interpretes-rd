@@ -1474,6 +1474,21 @@ export default function RoleplayStudioPage() {
       return [{ cue, index }];
     });
   }, [reviewCues, cueSearch, showOnlySelectedCues, chosenCueIndices]);
+  // Reuse the export selection validator before the administrator applies a
+  // SRT review. At most 25 cues are inspected, entirely in the browser.
+  const cueSelectionStatus = useMemo(() => {
+    if (!chosenCueIndices.length) {
+      return { seconds: 0, issue: 'Selecciona al menos una intervención.' };
+    }
+    try {
+      const selected = selectTimedCues(reviewCues, chosenCueIndices);
+      const seconds = selected.reduce((total, cue) => total + cue.end - cue.start, 0);
+      return { seconds, issue: null };
+    } catch (cause) {
+      return { seconds: 0, issue: cause instanceof Error
+        ? cause.message : 'Revisa los tiempos y solapamientos de los turnos seleccionados.' };
+    }
+  }, [reviewCues, chosenCueIndices]);
   const pageCount = Math.max(1, Math.ceil(filteredCueEntries.length / CUES_PER_PAGE));
   const currentCuePage = Math.min(cuePage, pageCount - 1);
   const visibleCues = filteredCueEntries.slice(
@@ -2086,8 +2101,15 @@ export default function RoleplayStudioPage() {
               </div>
             ); })}
           </div>
+          <p role="status" aria-label="Estado de selección SRT"
+            className="text-xs leading-5 text-slate-200">
+            {cueSelectionStatus.issue
+              ? `Selección no válida: ${cueSelectionStatus.issue}`
+              : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)} de 15:00 como máximo. Verifica los roles antes de aplicar.`}
+          </p>
           <button type="button" onClick={applyCueSelection}
-            className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30">
+            disabled={cueSelectionStatus.issue !== null}
+            className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40">
             Aplicar selección al editor ({chosenCueIndices.length})
           </button>
         </section>
