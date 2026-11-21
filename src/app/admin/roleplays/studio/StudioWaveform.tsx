@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { detectLocalSpeech, type LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import {
   calculateWaveformPeaks,
+  canDecodeWaveformWithinMemoryBudget,
   canRenderWaveform,
   WAVEFORM_BAR_COUNT,
 } from '@/lib/roleplay-studio/audio-peaks';
@@ -107,6 +108,17 @@ export default function StudioWaveform({
         const data = await file.arrayBuffer();
         if (cancelled) return;
         context = new window.AudioContext();
+        // Even a small MP3 may expand to hundreds of MiB on a high-rate
+        // device. Preserve the lightweight time ruler instead of allocating
+        // potentially excessive decoded PCM. This is an estimate, not a
+        // guarantee of the browser decoder's peak internal memory usage.
+        if (!canDecodeWaveformWithinMemoryBudget(duration, context.sampleRate)) {
+          if (!cancelled) {
+            setStatus('limited');
+            send({ status: 'limited', segments: [] });
+          }
+          return;
+        }
         const decoded = await context.decodeAudioData(data);
         if (cancelled) return;
         if (decoded.duration <= 0 || decoded.duration > 240 ||
@@ -293,8 +305,8 @@ export default function StudioWaveform({
       {status === 'limited' && (
         <p className="mt-3 text-xs leading-5 text-amber-200">
           Para proteger la memoria del navegador, las ondas solo se calculan en grabaciones
-          de hasta 4 minutos y 8 MiB. Los marcadores de fragmentos y la navegación temporal con zoom fino
-          siguen disponibles para audios y videos más largos.
+          de hasta 4 minutos y 8 MiB y cuando su tamaño estimado tras decodificar es seguro.
+          La línea de tiempo y el zoom siguen disponibles sin decodificar el audio.
         </p>
       )}
       {status === 'unavailable' && (
