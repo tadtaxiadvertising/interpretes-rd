@@ -44,6 +44,7 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: read
+      actions: read
     steps:
       - name: Checkout reviewed main
         uses: actions/checkout@v4
@@ -56,6 +57,7 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ vars.RELEASE_NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_APP_ROLE: ${{ vars.RELEASE_NEXT_PUBLIC_APP_ROLE }}
           COMPONENT: ${{ inputs.component }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/ci/build-image-offhost.sh "$COMPONENT"
       - name: Confirm no registry or production write was requested
         run: echo 'Image built on GitHub-hosted runner only. No push, SSH, migration or Easypanel webhook occurred.'
@@ -66,6 +68,7 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: read
+      actions: read
       packages: write
     steps:
       - name: Checkout reviewed main
@@ -79,7 +82,15 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ vars.RELEASE_NEXT_PUBLIC_API_URL }}
           NEXT_PUBLIC_APP_ROLE: ${{ vars.RELEASE_NEXT_PUBLIC_APP_ROLE }}
           COMPONENT: ${{ inputs.component }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash scripts/ci/build-image-offhost.sh "$COMPONENT"
+      # A long image build may outlive another push to main. Re-check all
+      # three required workflows and branch SHA immediately before registry write.
+      - name: Recheck approved main SHA before GHCR publication
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/ci/verify-offhost-release-gate.mjs
+
       - name: Authenticate only to GitHub Container Registry
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
