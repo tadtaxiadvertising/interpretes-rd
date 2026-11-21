@@ -25,7 +25,9 @@ concurrency:
 jobs:
   repair-account-vpn-schema:
     name: Controlled VPN schema repair only
-    if: ${{ github.ref == 'refs/heads/main' && inputs.backup_and_target_confirmed == 'CONFIRMO_BACKUP_Y_DESTINO_PRODUCCION' }}
+    # INCIDENT FREEZE: even confirmed manual requests must not mutate the
+    # production database until the Easypanel/VPS incident is resolved.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 20
