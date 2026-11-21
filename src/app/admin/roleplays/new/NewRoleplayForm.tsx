@@ -868,7 +868,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Comprobar los roleplays existentes
           </Link>{' '}antes de volver a enviar los audios.
         </p>
-      )
+      )}
 
       <button
         onClick={handleCreate}
