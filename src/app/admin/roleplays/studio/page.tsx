@@ -986,7 +986,7 @@ export default function RoleplayStudioPage() {
     });
   };
 
-  const saveDraft = async () => {
+  const saveDraft = useCallback(async () => {
     // Keyboard and button activations can occur before React updates draftBusy.
     // Only one local download may be hashing the same source at a time.
     if (!audio || !duration || busy || draftBusy || savingDraft.current) return;
@@ -1030,7 +1030,7 @@ export default function RoleplayStudioPage() {
       savingDraft.current = false;
       if (operation === draftOperationRevision.current) setDraftBusy(false);
     }
-  };
+  }, [audio, duration, busy, draftBusy, segments, allowServerZipExport]);
 
   // Ctrl+S / Cmd+S saves the existing local JSON draft instead of asking the
   // browser to save the entire webpage. No API, storage or audio upload.
