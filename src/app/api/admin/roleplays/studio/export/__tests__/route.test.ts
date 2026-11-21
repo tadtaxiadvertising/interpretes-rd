@@ -100,10 +100,13 @@ describe('admin roleplay studio export security and input boundaries', () => {
   });
 
   it('never logs private diagnostic messages from failed export decoding', async () => {
-    const req = request([validSegment]);
-    const error = new Error('PRIVATE_AUDIO_TOKEN /tmp/medical-interpreting.mp3');
-    error.name = 'PRIVATE_ERROR_NAME';
-    vi.spyOn(req, 'formData').mockRejectedValueOnce(error);
+    // Malformed multipart can contain private metadata in parser errors.
+    // The endpoint now uses a bounded stream, not req.formData() directly.
+    const req = new Request('http://localhost/api/admin/roleplays/studio/export', {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=absent' },
+      body: 'PRIVATE_AUDIO_TOKEN /tmp/medical-interpreting.mp3',
+    });
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const res = await POST(req as never);
@@ -117,6 +120,51 @@ describe('admin roleplay studio export security and input boundaries', () => {
     } finally {
       log.mockRestore();
     }
+  });
+
+  function overflowingStreamRequest(): Request {
+    // This is a lazy, bounded-memory fixture: 64-KiB chunks represent a
+    // >15 MiB upload without allocating the entire payload in the test.
+    const boundary = 'oversized-export-fixture';
+    const prefix = new TextEncoder().encode(
+      '--' + boundary + '\r\nContent-Disposition: form-data; name="audio"; filename="test.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n',
+    );
+    const chunk = new Uint8Array(64 * 1024);
+    let sent = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (sent === 0) controller.enqueue(prefix);
+        else if (sent < 260) controller.enqueue(chunk);
+        else {
+          controller.enqueue(new TextEncoder().encode('\r\n--' + boundary + '--\r\n'));
+          controller.close();
+        }
+        sent++;
+      },
+    });
+    return new Request('http://localhost/api/admin/roleplays/studio/export', {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=' + boundary },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+  }
+
+  it('refuses oversized streaming exports without Content-Length before FFmpeg', async () => {
+    const req = overflowingStreamRequest();
+    expect(req.headers.get('content-length')).toBeNull();
+    const res = await POST(req as never);
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toBe('Audio exceeds 15 MiB');
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+  });
+
+  it('refuses oversized streaming exports with a falsely small Content-Length', async () => {
+    const req = overflowingStreamRequest();
+    req.headers.set('content-length', '1');
+    const res = await POST(req as never);
+    expect(res.status).toBe(413);
+    expect((await res.json()).error).toBe('Audio exceeds 15 MiB');
   });
 
   it('rejects audio with the wrong extension', async () => {
