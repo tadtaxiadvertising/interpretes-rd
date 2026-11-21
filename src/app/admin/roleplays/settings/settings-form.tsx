@@ -45,6 +45,15 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     e.preventDefault();
     // A stale form is not allowed to retry until the admin explicitly reloads.
     if (conflict || editingDisabled) return;
+    if (token.trim() && !status.encryptionReady) {
+      // Avoid submitting a secret when the server already reports that it
+      // cannot encrypt it. Do not erase the admin's unsaved input.
+      setNotice({ ok: false, message:
+        status.tokenSource === 'panel'
+          ? 'No se guardó la clave API. Restaura primero la clave de cifrado original en el servicio Next.js de Easypanel.'
+          : 'No se guardó la clave API. Configura primero AUDIO_STUDIO_ENCRYPTION_KEY en el servicio Next.js de Easypanel.' });
+      return;
+    }
     const data = new FormData();
     // The server rejects concurrent edits rather than silently overwriting
     // a newer administrator's provider or editor settings.
@@ -65,7 +74,20 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     if (media !== status.mediaImportEnabled)
       data.set('mediaImportEnabled', String(media));
     start(async () => {
-      const result = await saveAudioStudioSettings(data);
+      let result: Awaited<ReturnType<typeof saveAudioStudioSettings>>;
+      try {
+        result = await saveAudioStudioSettings(data);
+      } catch {
+        // A rejected Server Action is an ambiguous outcome: the database may
+        // already have committed before the transport failed. Do not permit
+        // an automatic second submission of a provider credential.
+        setConflict(true);
+        setNotice({
+          ok: false,
+          message: 'No se pudo confirmar el guardado. No vuelvas a enviar la clave API: carga primero los ajustes actuales para comprobar el resultado.',
+        });
+        return;
+      }
       setNotice({ ok: result.success, message: result.message });
       setConflict(result.conflict === true);
       if (result.success) {

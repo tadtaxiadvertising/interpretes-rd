@@ -53,9 +53,10 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
     }
     return { success: true, message: 'Configuración guardada. Las credenciales permanecen ocultas.' };
   } catch (error) {
-    console.error('[Audio Studio settings]', safeServerErrorCategory(error));
-    const code = error && typeof error === 'object' && 'code' in error
-      ? String(error.code)
+    // Only classify exact, documented codes. Arbitrary error messages, Prisma
+    // metadata, provider tokens and stack traces must never enter logs or UI.
+    const code = error && typeof error === 'object' && 'code' in error &&
+      typeof error.code === 'string' ? error.code
       : error instanceof Error ? error.message : '';
     if (code === 'SETTINGS_CONFLICT' || code === 'P2034') {
       return {
@@ -64,12 +65,34 @@ export async function saveAudioStudioSettings(form: FormData): Promise<{ success
         message: 'Otro administrador modificó estos ajustes. No se guardaron tus cambios; revisa y carga la versión actual antes de volver a guardar.',
       };
     }
-    return { success: false, message: code === 'ENCRYPTION_KEY_MISSING'
-      ? 'Falta AUDIO_STUDIO_ENCRYPTION_KEY (64 caracteres hexadecimales) en el servidor.'
-      : code === 'ORGANIZATION_INVALID' ? 'El ID de organización debe contener solo números.'
-      : code === 'TOKEN_INVALID' ? 'La clave API no tiene un formato válido.'
-      : code === 'TOKEN_OPERATION_CONFLICT' ? 'No puedes borrar y reemplazar la clave al mismo tiempo.'
-      : 'No se pudieron guardar los cambios.' };
+    if (code === 'ENCRYPTION_KEY_MISSING') {
+      // This is an expected configuration guard, not an unknown server error.
+      // Do not log it as the opaque "[Audio Studio settings] Error".
+      return { success: false, message:
+        'Falta AUDIO_STUDIO_ENCRYPTION_KEY (64 caracteres hexadecimales) en el servicio Next.js. Si ya existe una credencial cifrada, restaura la clave original en Easypanel antes de intentar guardarla.' };
+    }
+    if (code === 'ORGANIZATION_INVALID') {
+      return { success: false, message: 'El ID de organización debe contener solo números.' };
+    }
+    if (code === 'TOKEN_INVALID') {
+      return { success: false, message: 'La clave API no tiene un formato válido.' };
+    }
+    if (code === 'TOKEN_OPERATION_CONFLICT') {
+      return { success: false, message: 'No puedes borrar y reemplazar la clave al mismo tiempo.' };
+    }
+    if (code === 'P2021' || code === 'P2022') {
+      console.warn('[Audio Studio settings] Database schema unavailable');
+      return { success: false, message:
+        'La estructura de configuración de la base de datos no está lista. Verifica el esquema y las migraciones con el procedimiento seguro de despliegue. No se han guardado estos cambios.' };
+    }
+    if (code === 'P1001' || code === 'P1002' || code === 'P1003') {
+      console.warn('[Audio Studio settings] Database connection unavailable');
+      return { success: false, message:
+        'No se pudo conectar con la base de datos de configuración. Comprueba el estado de PostgreSQL e inténtalo más tarde. No se han guardado estos cambios.' };
+    }
+    console.error('[Audio Studio settings] Unexpected save failure:', safeServerErrorCategory(error));
+    return { success: false, message:
+      'No se pudieron guardar los cambios. Revisa los servicios de aplicación y base de datos; no vuelvas a enviar una clave API hasta comprobar el estado de la configuración.' };
   }
 }
 
