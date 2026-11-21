@@ -199,6 +199,47 @@ describe('Audio Studio admin partial settings payload', () => {
     }
   });
 
+  it('warns to restore the ORIGINAL encryption key when a panel token is already encrypted', () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, encryptionReady: false, credentialUsable: false,
+    }} />);
+    const warning = screen.getByRole('alert');
+    expect(warning.textContent).toContain('Restaura la clave ORIGINAL');
+    expect(warning.textContent).toContain('No generes otra clave');
+    expect(warning.textContent).toContain('servicio Next.js');
+    expect(warning.textContent).not.toContain('SYNTHETIC_UNSAVED_SECRET');
+  });
+
+  it('distinguishes a new panel setup from recovery of previously encrypted credentials', () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, tokenSource: 'ninguna', hasToken: false,
+      encryptionReady: false, credentialUsable: false,
+    }} />);
+    const warning = screen.getByRole('alert');
+    expect(warning.textContent).toContain('instalación nueva sin credenciales cifradas');
+    expect(warning.textContent).not.toContain('Restaura la clave ORIGINAL');
+    expect(screen.getByText(/No hay un token API utilizable/)).toBeTruthy();
+  });
+
+  it('does not diagnose a missing key when a saved token cannot be decrypted with a valid-format key', () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, encryptionReady: true, credentialUsable: false,
+    }} />);
+    const warning = screen.getByRole('alert');
+    expect(warning.textContent).toContain('formato válido');
+    expect(warning.textContent).toContain('clave ORIGINAL');
+    expect(warning.textContent).not.toContain('no está configurada correctamente');
+  });
+
+  it('does not claim the encryption key is missing when a usable server token is present', () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, tokenSource: 'servidor', credentialUsable: true,
+      encryptionReady: false,
+    }} />);
+    expect(screen.getByRole('alert').textContent).toContain('Para guardar una nueva clave API');
+    expect(screen.queryByText(/Ya existe una credencial cifrada en el panel/)).toBeNull();
+  });
+
   it('navigates to Audio Studio without confirmation when nothing is edited', () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     try {
