@@ -1,9 +1,10 @@
 // @vitest-environment node
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import {
   claimRoleplayCreation,
+  completeRoleplayCreationInTransaction,
   fingerprintRoleplayCreation,
   InvalidRoleplayCreationKeyError,
   type RoleplayCreationFingerprintInput,
@@ -209,5 +210,59 @@ describe('durable Roleplay idempotency ledger: unique key claim', () => {
       }),
     ).digest('hex'));
     expect(fingerprint).not.toContain('PRIVATE_HEALTH_CONTEXT_NOT_IN_LOG');
+  });
+});
+
+
+describe('Roleplay ledger: conditional completion in the publisher transaction', () => {
+  const result = {
+    actorUserId: actor, requestKey: key, payloadHash: digest,
+    sessionIds: ['session-synthetic-1', 'session-synthetic-2'],
+    skippedCount: 1, scenarioCount: 25,
+  };
+  function mockTx(count: number) {
+    const updateMany = vi.fn().mockResolvedValue({ count });
+    const tx = { roleplayCreationRequest: { updateMany } } as unknown as
+      Pick<Prisma.TransactionClient, 'roleplayCreationRequest'>;
+    return { tx, updateMany };
+  }
+
+  it('transitions only a matching pending record in the publisher transaction', async () => {
+    const { tx, updateMany } = mockTx(1);
+    await expect(completeRoleplayCreationInTransaction(tx, result)).resolves.toBeUndefined();
+    expect(updateMany).toHaveBeenCalledOnce();
+    expect(updateMany).toHaveBeenCalledWith({
+      where: {
+        actorUserId: actor, requestKey: key, payloadHash: digest,
+        status: 'IN_PROGRESS',
+      },
+      data: expect.objectContaining({
+        status: 'COMPLETED',
+        sessionIds: ['session-synthetic-1', 'session-synthetic-2'],
+        createdCount: 2, skippedCount: 1, scenarioCount: 25,
+        completedAt: expect.any(Date),
+      }),
+    });
+  });
+
+  it('fails closed when another publisher already finished or removed the claim', async () => {
+    const { tx } = mockTx(0);
+    await expect(completeRoleplayCreationInTransaction(tx, result))
+      .rejects.toBeInstanceOf(InvalidRoleplayCreationKeyError);
+  });
+
+  it('never updates a ledger with no sessions, repeated IDs or bad counters', async () => {
+    const { tx, updateMany } = mockTx(1);
+    for (const invalid of [
+      { ...result, sessionIds: [] },
+      { ...result, sessionIds: ['duplicate', 'duplicate'] },
+      { ...result, skippedCount: -1 },
+      { ...result, scenarioCount: 26 },
+      { ...result, payloadHash: 'invalid-hash' },
+    ]) {
+      await expect(completeRoleplayCreationInTransaction(tx, invalid))
+        .rejects.toBeInstanceOf(InvalidRoleplayCreationKeyError);
+    }
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });
