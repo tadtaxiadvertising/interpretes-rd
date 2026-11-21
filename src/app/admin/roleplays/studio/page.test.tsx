@@ -211,6 +211,74 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
+  it('does not misrepresent a pending SRT selection as a recoverable empty project', async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'dialogue.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    const lines = Array.from({ length: 26 }, (_, i) =>
+      `${i + 1}\n00:00:${String(i * 2).padStart(2, '0')},000 --> 00:00:${String(i * 2 + 1).padStart(2, '0')},000\nDoctor: Example ${i}`).join('\n\n');
+    const subtitles = new File(['srt'], 'review.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitles, 'text', { value: async () => lines });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitles] },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/26 intervenciones disponibles/)).toBeTruthy();
+    expect(screen.getByLabelText('Contenido no incluido en el proyecto JSON')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar proyecto JSON' }));
+    expect(screen.getByRole('alert').textContent).toContain('Todavía no hay cortes aplicados para guardar');
+    expect(download).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('warns that downloaded metadata does not include imported transcript references', async () => {
+    const audio = new File(['ID3'], 'dialogue.mp3', { type: 'audio/mpeg' });
+    vi.spyOn(audio, 'slice').mockImplementation(() => ({
+      arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+    }) as unknown as Blob);
+    vi.stubGlobal('crypto', {
+      randomUUID: () => 'restorable-turn',
+      subtle: { digest: vi.fn(async () => new Uint8Array(32).buffer) },
+    });
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [audio] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    const subtitles = new File(['srt'], 'privacy.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitles, 'text', { value: async () =>
+      '1\n00:00:01,000 --> 00:00:04,000\nDoctor: Sensitive reference', configurable: true });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitles] },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByLabelText('Contenido no incluido en el proyecto JSON')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar proyecto JSON' }));
+      await Promise.resolve();
+    });
+    expect(download).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Atención: el JSON no guarda referencias privadas de transcripción/)).toBeTruthy();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('opens MP3 above two hours in local mode and rejects media above twelve hours', () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
