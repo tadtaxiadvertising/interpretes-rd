@@ -982,6 +982,28 @@ model RoleplaySession {
   @@schema("public")
 }
 
+// Server-only, durable request ledger for future idempotent Roleplay creation.
+// This model is intentionally NOT connected to the live POST path until the
+// corresponding migration and safe replay/reconciliation flow are verified.
+model RoleplayCreationRequest {
+  id            String    @id @default(cuid())
+  actorUserId   String    @map("actor_user_id")
+  requestKey    String    @map("request_key") @db.Uuid
+  payloadHash   String    @map("payload_hash") @db.VarChar(64)
+  status        String    @default("IN_PROGRESS") @db.VarChar(20)
+  sessionIds    String[]  @default([]) @map("session_ids")
+  createdCount  Int?      @map("created_count")
+  skippedCount  Int?      @map("skipped_count")
+  scenarioCount Int?      @map("scenario_count")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@unique([actorUserId, requestKey], map: "roleplay_creation_requests_actor_key")
+  @@index([status, createdAt], map: "idx_roleplay_creation_requests_status_created")
+  @@map("roleplay_creation_requests")
+  @@schema("public")
+}
+
 model RoleplayAccess {
   id            String   @id @default(cuid())
   sessionId     String   @map("session_id")
