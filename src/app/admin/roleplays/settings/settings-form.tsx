@@ -45,6 +45,15 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     e.preventDefault();
     // A stale form is not allowed to retry until the admin explicitly reloads.
     if (conflict || editingDisabled) return;
+    if (token.trim() && !status.encryptionReady) {
+      // Avoid submitting a secret when the server already reports that it
+      // cannot encrypt it. Do not erase the admin's unsaved input.
+      setNotice({ ok: false, message:
+        status.tokenSource === 'panel'
+          ? 'No se guardó la clave API. Restaura primero la clave de cifrado original en el servicio Next.js de Easypanel.'
+          : 'No se guardó la clave API. Configura primero AUDIO_STUDIO_ENCRYPTION_KEY en el servicio Next.js de Easypanel.' });
+      return;
+    }
     const data = new FormData();
     // The server rejects concurrent edits rather than silently overwriting
     // a newer administrator's provider or editor settings.
