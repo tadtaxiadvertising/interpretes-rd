@@ -325,4 +325,21 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 
+
+  it('bounds an oversized library catalog and never creates an import proof', async () => {
+    const cancel = vi.fn();
+    const upstream = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(1024 * 1024 + 1)); },
+      cancel,
+    }));
+    mocks.fetch.mockResolvedValueOnce(upstream);
+
+    const response = await GET(new NextRequest('http://localhost/api/admin/happyscribe/transcriptions'));
+    expect(response.status).toBe(502);
+    expect((await response.json()).error).toContain('lista no válida');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+
 });
