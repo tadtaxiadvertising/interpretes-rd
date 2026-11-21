@@ -47,4 +47,53 @@ describe('PostgreSQL runtime TLS boundary', () => {
       expect(message).not.toContain('private-password');
     }
   });
+
+  it.each([
+    '?host=attacker.example.test',
+    '?hostaddr=203.0.113.22',
+    '?port=6543',
+  ])('rejects host/port overrides even when the URL hostname is loopback (%s)', suffix => {
+    const base = local.split('?')[0];
+    expect(() => createDatabasePoolConfig(base + suffix))
+      .toThrow('DATABASE_URL connection target overrides are not allowed');
+  });
+
+  it.each([
+    '?host=127.0.0.1',
+    '?hostaddr=127.0.0.1',
+    '?port=5432',
+  ])('rejects a remote URL that attempts to change the connection target (%s)', suffix => {
+    const base = remote.split('?')[0];
+    expect(() => createDatabasePoolConfig(base + suffix, ca))
+      .toThrow('DATABASE_URL connection target overrides are not allowed');
+  });
+
+  it('keeps legitimate frontend pooler options and CI loopback compatibility', () => {
+    expect(createDatabasePoolConfig(remote, ca)).toMatchObject({
+      connectionString: remote,
+      ssl: { rejectUnauthorized: true, ca },
+      max: 5,
+    });
+    expect(createDatabasePoolConfig(local)).toMatchObject({
+      connectionString: local,
+      ssl: false,
+      max: 5,
+    });
+  });
+
+  it('does not expose sensitive query parameters in rejected override errors', () => {
+    const secret = 'super-secret-query-credential';
+    let errorMessage = '';
+    try {
+      createDatabasePoolConfig(
+        local.split('?')[0] + '?host=attacker.example.test&password=' + secret,
+      );
+    } catch (error) {
+      errorMessage = (error as Error).message;
+    }
+    expect(errorMessage).toContain('connection target overrides are not allowed');
+    expect(errorMessage).not.toContain(secret);
+  });
+
+
 });
