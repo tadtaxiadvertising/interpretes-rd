@@ -154,6 +154,7 @@ describe('durable Roleplay idempotency ledger: unique key claim', () => {
     for (const existing of [
       row({ actorUserId: 'other-admin' }),
       row({ status: 'COMPLETED', createdCount: 2, skippedCount: 0, scenarioCount: 1, sessionIds: ['only-one'] }),
+      row({ status: 'COMPLETED', createdCount: 2, skippedCount: 0, scenarioCount: 1, sessionIds: ['same-session', 'same-session'] }),
       row({ status: 'COMPLETED', createdCount: 1, skippedCount: 0, scenarioCount: 0, sessionIds: ['one'] }),
       row({ status: 'FAILED', createdCount: 1, skippedCount: 0, scenarioCount: 1, sessionIds: ['one'] }),
     ]) {
