@@ -9,11 +9,15 @@ import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { parseFinalFfmpegOutputSeconds } from '@/lib/roleplay-studio/ffmpeg-progress';
+import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 const MAX_INPUT_BYTES = 15 * 1024 * 1024;
+// Preserve the established 100 KB multipart allowance, but also enforce it
+// on the streamed body when clients omit or falsify Content-Length.
+const MAX_MULTIPART_BYTES = MAX_INPUT_BYTES + 100_000;
 const MAX_TOTAL_SECONDS = 900;
 const MAX_METADATA_CHARS = 150_000;
 const MAX_CONCURRENT_EXPORTS = 2; // Process-local admission control. Not a distributed quota.
@@ -178,7 +182,7 @@ export async function POST(req: NextRequest) {
     status: 429, headers: createRateLimitHeaders(limit),
   });
   const contentLength = Number(req.headers.get('content-length') ?? 0);
-  if (contentLength > MAX_INPUT_BYTES + 100000) {
+  if (contentLength > MAX_MULTIPART_BYTES) {
     return privateRoleplayResponse({ error: 'Audio exceeds 15 MiB' }, { status: 413 });
   }
   if (activeExports >= MAX_CONCURRENT_EXPORTS) {
@@ -188,7 +192,7 @@ export async function POST(req: NextRequest) {
   const deadline = Date.now() + MAX_EXPORT_TIME_MS;
   try {
     if (req.signal.aborted) return privateRoleplayResponse({ error: 'Solicitud cancelada' }, { status: 499 });
-    const form = await req.formData();
+    const form = await readBoundedMultipartFormData(req, MAX_MULTIPART_BYTES);
     const audio = form.get('audio');
     const segments = parseSegments(typeof form.get('segments') === 'string' ? form.get('segments') as string : null);
     if (!(audio instanceof File) || audio.size < 1 || audio.size > MAX_INPUT_BYTES ||
@@ -220,6 +224,9 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
+    if (error instanceof MultipartBodyTooLargeError) {
+      return privateRoleplayResponse({ error: 'Audio exceeds 15 MiB' }, { status: 413 });
+    }
     console.error('[ROLEPLAY STUDIO] Export failed:', safeServerErrorCategory(error));
     if (error instanceof Error && error.message.startsWith('El intervalo solicitado supera el audio real')) {
       return privateRoleplayResponse({ error: 'Una intervención termina después del audio original. Revisa su inicio y final antes de exportar.' }, { status: 422 });
