@@ -73,3 +73,15 @@ test('all Easypanel deployment webhooks use a bounded single POST attempt', () =
     assert.doesNotMatch(source, /echo.*\$WEBHOOK_URL|::debug.*\$WEBHOOK_URL/);
   }
 });
+
+
+test('Express backend Docker healthcheck uses process liveness, not database readiness', () => {
+  const docker = readFileSync(new URL('../../Dockerfile.api', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../../interpreters-api/src/app.ts', import.meta.url), 'utf8');
+  const probe = docker.match(/HEALTHCHECK[^\n]*\\\n\s*CMD[^\n]*/);
+  assert.ok(probe, 'Backend Dockerfile must have a defined HEALTHCHECK');
+  assert.match(probe[0], /localhost:\$\{PORT:-3000\}\/health/);
+  assert.doesNotMatch(probe[0], /\/ready/);
+  assert.match(app, /app\.get\('\/health'/);
+  assert.match(app, /app\.get\('\/ready'/);
+});
