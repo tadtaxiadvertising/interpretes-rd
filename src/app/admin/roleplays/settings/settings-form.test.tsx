@@ -124,13 +124,15 @@ describe('Audio Studio admin partial settings payload', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Descartar mis cambios y cargar ajustes actuales' }));
     });
     expect(inspectAudioStudioSettings).toHaveBeenCalledOnce();
-    expect(saveButton.disabled).toBe(false);
+    // After a successful explicit reload, there is no unsaved change to save.
+    expect(saveButton.disabled).toBe(true);
     expect((screen.getByLabelText('ID de organización') as HTMLInputElement).value).toBe('654321');
     expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('Vista inicial de intervenciones') as HTMLSelectElement).value).toBe('auto');
     fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
       target: { value: 'expanded' },
     });
+    expect(saveButton.disabled).toBe(false);
     await act(async () => {
       fireEvent.click(saveButton);
     });
@@ -157,9 +159,15 @@ describe('Audio Studio admin partial settings payload', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Descartar mis cambios y cargar ajustes actuales' }));
     });
-    expect(save.disabled).toBe(false);
+    // The ambiguous save was resolved by fetching the latest revision. A
+    // clean form stays disabled until the admin makes a new change.
+    expect(save.disabled).toBe(true);
     expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value).toBe('');
     expect((screen.getByLabelText('ID de organización') as HTMLInputElement).value).toBe('789123');
+    fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+      target: { value: 'expanded' },
+    });
+    expect(save.disabled).toBe(false);
   });
 
   it('keeps local changes if the explicit conflict refresh fails', async () => {
@@ -201,10 +209,11 @@ describe('Audio Studio admin partial settings payload', () => {
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Descartar mis cambios y cargar ajustes actuales' }));
     });
-    expect(save.disabled).toBe(false);
+    expect(save.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
       target: { value: 'expanded' },
     });
+    expect(save.disabled).toBe(false);
     await act(async () => {
       fireEvent.click(save);
     });
