@@ -275,7 +275,7 @@ describe('Audio Studio clip review player', () => {
       await Promise.resolve();
     });
     expect(download).toHaveBeenCalledOnce();
-    expect(screen.getByText(/Atención: el JSON no guarda referencias privadas de transcripción/)).toBeTruthy();
+    expect(screen.getByText(/Plan de cortes local descargado.*Atención: el JSON no guarda referencias privadas de transcripción/)).toBeTruthy();
     expect(fetcher).not.toHaveBeenCalled();
   });
 
