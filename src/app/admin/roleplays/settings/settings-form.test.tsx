@@ -283,7 +283,7 @@ describe('Audio Studio admin partial settings payload', () => {
       .toBe('SYNTHETIC_REPLACEMENT_TOKEN');
   });
 
-  it('blocks token submission when encryption is unavailable while preserving unsaved input', async () => {
+  it('prioritizes recovery of existing ciphertext when its original encryption key is missing', async () => {
     render(<AudioStudioSettingsForm initial={{
       ...initial, encryptionReady: false, credentialUsable: false,
     }} />);
@@ -294,9 +294,26 @@ describe('Audio Studio admin partial settings payload', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
     });
     expect(saveAudioStudioSettings).not.toHaveBeenCalled();
-    expect(screen.getByText(/No se guardó la clave API/)).toBeTruthy();
+    expect(screen.getByText(/No se borró ni se reemplazó la credencial/)).toBeTruthy();
     expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value)
       .toBe('SYNTHETIC_UNSAVED_SECRET');
+  });
+
+  it('requests an encryption key before the first token on a new installation', async () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, tokenSource: 'ninguna', hasToken: false,
+      encryptionReady: false, credentialUsable: false,
+    }} />);
+    fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+      target: { value: 'SYNTHETIC_NEW_INSTALL_TOKEN' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+    expect(screen.getByText(/No se guardó la clave API/)).toBeTruthy();
+    expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value)
+      .toBe('SYNTHETIC_NEW_INSTALL_TOKEN');
   });
 
   it('allows changing an editor preference without a new token when the encryption key is missing', async () => {
