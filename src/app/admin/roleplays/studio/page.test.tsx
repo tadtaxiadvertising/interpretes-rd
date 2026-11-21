@@ -34,6 +34,47 @@ describe('Audio Studio clip review player', () => {
     vi.unstubAllGlobals();
   });
 
+  it('warns before unloading an edited project but not an empty editor', () => {
+    const { container } = render(<RoleplayStudioPage />);
+    const initialEvent = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(initialEvent);
+    expect(initialEvent.defaultPrevented).toBe(false);
+
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'unsaved.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(player);
+    const noEditsEvent = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(noEditsEvent);
+    expect(noEditsEvent.defaultPrevented).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const dirtyEvent = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirtyEvent);
+    expect(dirtyEvent.defaultPrevented).toBe(true);
+  });
+
+  it('lets an administrator reject each internal navigation without losing edits', () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'keep.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    vi.mocked(window.confirm).mockReturnValue(false);
+
+    for (const linkName of ['Volver a roleplays', 'Configurar Audio Studio', 'Importar y asignar']) {
+      expect(fireEvent.click(screen.getByRole('link', { name: linkName }))).toBe(false);
+    }
+    expect(window.confirm).toHaveBeenCalledTimes(3);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByLabelText('Título')).toBeTruthy();
+  });
+
   it('opens MP3 above two hours in local mode and rejects media above twelve hours', () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
