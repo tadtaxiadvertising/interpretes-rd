@@ -224,6 +224,24 @@ export default function RoleplayStudioPage() {
     });
   };
 
+  /** Preview a suggested local VAD region in the existing player, without exporting or uploading audio. */
+  const previewVadRegion = ({ start, end }: StudioSuggestedClip) => {
+    const audioPlayer = player.current;
+    if (!audioPlayer || !Number.isFinite(start) || !Number.isFinite(end) ||
+        start < 0 || end <= start || end > duration) return;
+    // Reuse the same bounded playback marker as editorial cuts. Seeking does
+    // not pause the player, avoiding an old onPause clearing the new marker.
+    stopPairPreview();
+    audioPlayer.currentTime = start;
+    setPlayhead(start);
+    previewEnd.current = end;
+    setPreviewingId(null);
+    void audioPlayer.play().catch(() => {
+      previewEnd.current = null;
+      setError('No fue posible escuchar la región sugerida.');
+    });
+  };
+
   /** Only previews the seam: no export, no transcode and no server request. */
   const previewPairWithoutGap = (id: string) => {
     if (pairPreviewId === id) { stopPairPreview(); return; }
@@ -1695,6 +1713,7 @@ export default function RoleplayStudioPage() {
                 snapshot={localVadSnapshot}
                 duration={duration}
                 existing={segments}
+                onPreview={previewVadRegion}
                 onApply={(detected) => {
                   if (!detected.length) return;
                   subtitleImportRevision.current += 1;
