@@ -54,7 +54,11 @@ test('every Docker stage checks memory before npm install or compilation', () =>
     const stages = source.split(/(?=^FROM\s+)/m).filter(part => /^FROM\s/.test(part));
     let protectedStages = 0;
     for (const stage of stages) {
-      const copy = stage.indexOf('COPY scripts/ci/assert-build-memory.mjs');
+      // The frontend builder copies the entire source context via COPY . .,
+      // while runner/dependency stages copy the guard explicitly.
+      const explicitCopy = stage.indexOf('COPY scripts/ci/assert-build-memory.mjs');
+      const contextCopy = stage.indexOf('COPY . .');
+      const copy = explicitCopy >= 0 ? explicitCopy : contextCopy;
       const guard = stage.indexOf('RUN node scripts/ci/assert-build-memory.mjs');
       const install = stage.search(/^RUN\s+.*\bnpm\s+ci\b/m);
       const compile = stage.search(/^RUN\s+(?:npm\s+run\s+build|\.\/node_modules\/\.bin\/esbuild)\b/m);
