@@ -66,9 +66,12 @@ export function prepareRoleplayDirectUploadBatch(
     }
 
     const mime = declaration.mime;
+    const sha256 = declaration.sha256;
     const ext = typeof mime === 'string' ? getAdminRoleplayAudioExtension(mime) : null;
-    if (!ext || typeof declaration.sha256 !== 'string' ||
-        !/^[a-f0-9]{64}$/.test(declaration.sha256)) {
+    // Validate both values directly so TypeScript narrows the optional
+    // declaration fields before constructing a PreparedRoleplayUpload.
+    if (typeof mime !== 'string' || !ext || typeof sha256 !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(sha256)) {
       throw new Error('INVALID_ROLEPLAY_UPLOAD_MEDIA_OR_DIGEST');
     }
 
@@ -80,7 +83,7 @@ export function prepareRoleplayDirectUploadBatch(
       order: index,
       mime,
       sizeBytes: declaration.sizeBytes,
-      sha256: declaration.sha256,
+      sha256,
       path: 'staging/roleplay/' + batchId + '/' + index + '.' + ext,
     });
   }
