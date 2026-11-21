@@ -51,13 +51,13 @@ test('unknown host or bounded cgroup usage fails closed', () => {
 test('every Docker stage checks memory before npm install or compilation', () => {
   for (const file of ['Dockerfile', 'Dockerfile.api', 'Dockerfile.worker']) {
     const source = readFileSync(file, 'utf8');
-    const stages = source.split(/(?=^FROM\\s+)/m).filter(part => /^FROM\\s/.test(part));
+    const stages = source.split(/(?=^FROM\s+)/m).filter(part => /^FROM\s/.test(part));
     let protectedStages = 0;
     for (const stage of stages) {
       const copy = stage.indexOf('COPY scripts/ci/assert-build-memory.mjs');
       const guard = stage.indexOf('RUN node scripts/ci/assert-build-memory.mjs');
-      const install = stage.search(/^RUN [^\\n]*\\bnpm ci\\b/m);
-      const compile = stage.search(/^RUN (?:npm run build|\\.\\/node_modules\\/\\.bin\\/esbuild)\\b/m);
+      const install = stage.search(/^RUN\s+.*\bnpm\s+ci\b/m);
+      const compile = stage.search(/^RUN\s+(?:npm\s+run\s+build|\.\/node_modules\/\.bin\/esbuild)\b/m);
       const commands = [install, compile].filter(position => position >= 0);
       if (!commands.length) continue;
       protectedStages++;
