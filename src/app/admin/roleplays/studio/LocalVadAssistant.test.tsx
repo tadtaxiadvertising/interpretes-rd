@@ -79,6 +79,40 @@ describe('reuse VAD results without re-decoding or uploading the MP3', () => {
     expect(request).not.toHaveBeenCalled();
   });
 
+  it('keeps review controls stable across rerenders and resets only for a new decoded snapshot', () => {
+    const preview = vi.fn();
+    const first = { status: 'ready' as const, segments: [
+      { start: 1, end: 4, signalLevel: 0.6 },
+    ] };
+    const second = { status: 'ready' as const, segments: [
+      { start: 7, end: 10, signalLevel: 0.8 },
+    ] };
+    const { rerender } = render(<LocalVadAssistant
+      snapshot={first} duration={20} existing={[]} onApply={vi.fn()} onPreview={preview}
+    />);
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    expect(screen.getByRole('button', { name: 'Escuchar región 1' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Incluir región 1' }));
+    // Parent rerenders must not collapse the review or restore excluded cues.
+    rerender(<LocalVadAssistant
+      snapshot={first} duration={20} existing={[]} onApply={vi.fn()} onPreview={preview}
+    />);
+    expect(screen.getByRole('button', { name: 'Escuchar región 1' })).toBeTruthy();
+    expect((screen.getByRole('checkbox', { name: 'Incluir región 1' }) as HTMLInputElement).checked)
+      .toBe(false);
+
+    // A genuinely new decoded result must never display old review controls.
+    rerender(<LocalVadAssistant
+      snapshot={second} duration={20} existing={[]} onApply={vi.fn()} onPreview={preview}
+    />);
+    expect(screen.queryByRole('button', { name: 'Escuchar región 1' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    expect((screen.getByRole('checkbox', { name: 'Incluir región 1' }) as HTMLInputElement).checked)
+      .toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar región 1' }));
+    expect(preview).toHaveBeenCalledExactlyOnceWith({ start: 7, end: 10 });
+  });
+
   it('disables applying cuts when all proposed regions are deselected', () => {
     const apply = vi.fn();
     render(<LocalVadAssistant

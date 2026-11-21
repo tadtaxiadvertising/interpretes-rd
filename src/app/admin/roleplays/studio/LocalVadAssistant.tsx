@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import type { StudioSuggestedClip } from '@/lib/roleplay-studio/silence-analysis';
 import { proposeLocalVadCuts } from '@/lib/roleplay-studio/vad-suggestions';
@@ -18,20 +18,20 @@ export default function LocalVadAssistant({
   onApply: (segments: StudioSuggestedClip[]) => void;
   onPreview?: (region: StudioSuggestedClip) => void;
 }) {
-  const [reviewed, setReviewed] = useState(false);
+  // Keep review tied to the exact decoded snapshot. An effect that resets
+  // `reviewed` after each snapshot update can race against a user's click
+  // and unexpectedly hide the preview controls while they are reviewing.
+  const [reviewedSnapshot, setReviewedSnapshot] = useState<LocalVadSnapshot | null>(null);
   const [excludedCuts, setExcludedCuts] = useState<Set<string>>(() => new Set());
   const proposal = useMemo(
     () => proposeLocalVadCuts(snapshot?.segments ?? [], duration, existing),
     [snapshot, duration, existing],
   );
-  useEffect(() => {
-    setReviewed(false);
-    setExcludedCuts(new Set());
-  }, [snapshot]);
   const selectedClips = proposal.clips.filter(clip => !excludedCuts.has(clipKey(clip)));
 
   const status = snapshot?.status ?? 'loading';
   const ready = status === 'ready';
+  const reviewed = ready && reviewedSnapshot === snapshot;
   const availableSlots = Math.max(0, 25 - existing.length);
 
   return (
@@ -43,7 +43,10 @@ export default function LocalVadAssistant({
         no palabras, identidad del hablante ni idioma. Todos los cortes requieren revisión.
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setReviewed(true)}
+        <button type="button" onClick={() => {
+          setExcludedCuts(new Set());
+          setReviewedSnapshot(snapshot);
+        }}
           disabled={!ready || availableSlots === 0}
           className="rounded-lg border border-cyan-300/30 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50">
           {status === 'loading' ? 'Preparando audio local…' : 'Revisar actividad local'}
@@ -79,7 +82,7 @@ export default function LocalVadAssistant({
                 hablantes e idioma antes de guardar.
               </p>
               <button type="button"
-                onClick={() => { onApply(selectedClips); setReviewed(false); }}
+                onClick={() => { onApply(selectedClips); setReviewedSnapshot(null); }}
                 disabled={selectedClips.length === 0}
                 className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Añadir {selectedClips.length} {selectedClips.length === 1 ? 'corte revisable' : 'cortes revisables'}
