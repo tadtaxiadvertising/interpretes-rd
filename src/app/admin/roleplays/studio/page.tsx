@@ -2080,7 +2080,7 @@ export default function RoleplayStudioPage() {
           {segments.length > 0 && (
             <p role="status" aria-label="Resumen de revisión de intervenciones"
               className="text-xs text-slate-300">
-              Revisión: {reviewedCount}/{segments.length} completas ·
+              Revisión de roles e idiomas: {reviewedCount}/{segments.length} sin pendientes ·
               {' '}{unidentifiedSpeakerCount} sin hablante · {unreviewedLanguageCount} sin idioma
               {originalInterpreterCount > 0 &&
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
