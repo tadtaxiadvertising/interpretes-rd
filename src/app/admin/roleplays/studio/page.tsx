@@ -2033,7 +2033,8 @@ export default function RoleplayStudioPage() {
               {filteredCueEntries.length !== reviewCues.length ? ` · ${reviewCues.length} en origen` : ''}
             </span>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setCuePage(page => Math.max(0, page - 1))}
+              <button type="button" aria-label="Anterior página SRT"
+                onClick={() => setCuePage(page => Math.max(0, page - 1))}
                 disabled={currentCuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
                 Anterior
               </button>
@@ -2050,7 +2051,8 @@ export default function RoleplayStudioPage() {
                   className="w-14 rounded border border-white/15 bg-slate-900 px-1 py-1 text-center text-xs text-white"/>
                 / {pageCount}
               </label>
-              <button type="button" onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
+              <button type="button" aria-label="Siguiente página SRT"
+                onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
                 disabled={currentCuePage >= pageCount - 1}
                 className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
                 Siguiente
