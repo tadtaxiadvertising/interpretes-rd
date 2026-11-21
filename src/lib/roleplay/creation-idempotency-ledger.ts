@@ -98,7 +98,7 @@ export function fingerprintRoleplayCreation(
         (scenario.studioLanguage != null && typeof scenario.studioLanguage !== 'string') ||
         (scenario.expectedKeys !== undefined &&
          (!Array.isArray(scenario.expectedKeys) ||
-          scenario.expectedKeys.some(key => typeof key !== 'string')))) {
+          scenario.expectedKeys.some((key: unknown) => typeof key !== 'string')))) {
       throw new InvalidRoleplayCreationKeyError();
     }
     // JSON.stringify silently serializes NaN and Infinity as null.
