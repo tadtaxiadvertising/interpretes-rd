@@ -157,6 +157,48 @@ describe('Audio Studio subtitle import lifecycle', () => {
     expect(confirmation).toHaveBeenCalledOnce();
   });
 
+  it('explains a discarded provider response when the interpreter filter changes in flight', async () => {
+    let finish!: (response: Response) => void;
+    const fetcher = vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Promise<Response>(resolve => { finish = resolve; })
+        : Promise.resolve(Response.json({ success: true, data: [{
+          id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
+          language: 'en', durationSeconds: 60, createdAt: null, folder: null,
+        }], mediaImportEnabled: false })),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+
+    const filter = screen.getByRole('checkbox', {
+      name: /Excluir intervenciones del intérprete original al importar/,
+    }) as HTMLInputElement;
+    expect(filter.checked).toBe(true);
+    fireEvent.click(filter);
+    expect(filter.checked).toBe(false);
+    await act(async () => {
+      finish(Response.json({ success: true, data: {
+        content: '1\n00:00:00,000 --> 00:00:05,000\nDoctor: Stale provider transcript',
+      } }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/transcripción remota no se aplicó porque la edición cambió/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: Stale provider transcript')).toBeNull();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+  });
+
   it('warns before spending provider bandwidth if HappyScribe duration differs from the local recording', async () => {
     const fetcher = vi.fn((_url: string, init?: RequestInit) => Promise.resolve(
       init?.method === 'POST'
