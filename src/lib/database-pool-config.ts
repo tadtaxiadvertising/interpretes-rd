@@ -34,6 +34,15 @@ export function createDatabasePoolConfig(
     'localhost', '127.0.0.1', '::1', '[::1]',
   ].includes(hostname);
 
+  // Query parameters can override the authority parsed from the URL. In
+  // particular, a loopback URL with ?host=... could select a remote server
+  // while our loopback exception disables certificate validation. The host
+  // and port must come only from the URL authority, for every environment.
+  const targetOverrides = ['host', 'hostaddr', 'port'];
+  if (targetOverrides.some(key => url.searchParams.has(key))) {
+    throw new Error('DATABASE_URL connection target overrides are not allowed.');
+  }
+
   if (!isLoopbackDatabase) {
     const overrides = ['sslmode', 'sslrootcert', 'sslcert', 'sslkey', 'ssl', 'uselibpqcompat'];
     if (overrides.some((key) => url.searchParams.has(key))) {
