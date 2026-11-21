@@ -79,6 +79,9 @@ jobs:
       - name: Verify off-host image build and GHCR safety gates
         run: node --test scripts/ci/build-image-offhost.test.mjs
 
+      - name: Verify release approval gate for off-host images (offline)
+        run: node --test scripts/ci/verify-offhost-release-gate.test.mjs
+
       # Validate the deployment safety guard even while a supply-chain advisory
       # blocks the broader pipeline. This does NOT bypass the audit gate.
       - name: Verify VPN migration guard regression tests
