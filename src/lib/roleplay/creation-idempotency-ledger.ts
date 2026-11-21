@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES } from '@/lib/roleplay/direct-upload-contract';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
@@ -202,4 +202,61 @@ export async function claimRoleplayCreation(
     skippedCount: existing.skippedCount!,
     scenarioCount: existing.scenarioCount!,
   };
+}
+
+
+export type CompletedRoleplayCreation = {
+  actorUserId: string;
+  requestKey: string;
+  payloadHash: string;
+  sessionIds: readonly string[];
+  skippedCount: number;
+  scenarioCount: number;
+};
+
+/**
+ * Run INSIDE the same Prisma $transaction that publishes the session(s).
+ * If the conditional update affects no claim, throw so the caller's entire
+ * publishing transaction rolls back. This is not a separate post-commit step.
+ *
+ * A repeated/parallel publisher cannot transition a completed row twice.
+ * Do not attempt to recover an IN_PROGRESS row automatically after timeout;
+ * reconcile its session/audio effects first.
+ */
+export async function completeRoleplayCreationInTransaction(
+  tx: Pick<Prisma.TransactionClient, 'roleplayCreationRequest'>,
+  result: CompletedRoleplayCreation,
+): Promise<void> {
+  if (!result || !validCreationIdentity(result.actorUserId, result.requestKey, result.payloadHash) ||
+      !Array.isArray(result.sessionIds) || result.sessionIds.length < 1 ||
+      result.sessionIds.length > 100000 ||
+      result.sessionIds.some(id => typeof id !== 'string' || !id.trim()) ||
+      new Set(result.sessionIds).size !== result.sessionIds.length ||
+      !Number.isSafeInteger(result.skippedCount) || result.skippedCount < 0 ||
+      !Number.isSafeInteger(result.scenarioCount) || result.scenarioCount < 1 ||
+      result.scenarioCount > ROLEPLAY_MAX_SCENARIOS) {
+    throw new InvalidRoleplayCreationKeyError();
+  }
+
+  const updated = await tx.roleplayCreationRequest.updateMany({
+    where: {
+      actorUserId: result.actorUserId,
+      requestKey: result.requestKey,
+      payloadHash: result.payloadHash,
+      status: 'IN_PROGRESS',
+    },
+    data: {
+      status: 'COMPLETED',
+      sessionIds: [...result.sessionIds],
+      createdCount: result.sessionIds.length,
+      skippedCount: result.skippedCount,
+      scenarioCount: result.scenarioCount,
+      completedAt: new Date(),
+    },
+  });
+  if (updated.count !== 1) {
+    // Conflict, already completed, absent or tampered claim. An enclosing
+    // transaction must abort, rather than risk publishing duplicate sessions.
+    throw new InvalidRoleplayCreationKeyError();
+  }
 }
