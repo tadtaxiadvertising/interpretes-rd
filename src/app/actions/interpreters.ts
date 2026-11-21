@@ -481,54 +481,81 @@ export async function updateRealtimeStatus(id: number, status: 'Online' | 'Offli
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
 
-  try {
-    // If user is interpreter, they can only update their own status
-    if (auth.profile.role === 'interpreter' && auth.profile.interpreterId !== id) {
-      return { success: false, error: 'Acceso denegado', code: 'UNAUTHORIZED' };
-    }
+  // Server Action arguments are untrusted at runtime even when typed in TS.
+  if (!Number.isSafeInteger(id) || id <= 0 ||
+      (status !== 'Online' && status !== 'Offline' && status !== 'Busy')) {
+    return { success: false, error: 'Estado o intérprete inválido.', code: 'VALIDATION_ERROR' };
+  }
 
+  // An interpreter may change ONLY their own presence, never a colleague's.
+  if (auth.user.role === 'interpreter' && auth.user.interpreterId !== id) {
+    return { success: false, error: 'Acceso denegado', code: 'UNAUTHORIZED' };
+  }
+
+  try {
     await db.interpreter.update({
       where: { id },
       data: { realtimeStatus: status },
-      select: { id: true }
+      select: { id: true },
     });
-
-    revalidateInterpreterProfileRecords(id);
-    return { success: true };
   } catch (error: unknown) {
-    console.error('🔴 ERROR [updateRealtimeStatus]:', error);
+    // Driver messages can contain database URLs, provider keys or personal data.
+    console.error('[UPDATE_REALTIME_STATUS] Failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error al actualizar estado realtime', code: 'INTERNAL_ERROR' };
   }
+
+  // DB commit has succeeded. Cache failure must not invite a duplicate edit.
+  try {
+    revalidateInterpreterProfileRecords(id);
+  } catch (cacheError) {
+    console.warn('[UPDATE_REALTIME_STATUS] Cache refresh failed after commit:', safeServerErrorCategory(cacheError));
+  }
+  return { success: true };
 }
 
 export async function updateInterpreterStatusAction(data: unknown): Promise<{ success: boolean; data?: { id: number; status: string }; error?: string }> {
   const auth = await validateAction('admin');
   if ('error' in auth) return { success: false, error: auth.error };
 
+  let updatedInterpreter: { id: number; status: string | null };
+  let interpreterId: number;
   try {
     const parsedData = UpdateInterpreterStatusSchema.strict().parse(data);
-
-    const updatedInterpreter = await db.interpreter.update({
+    interpreterId = parsedData.id;
+    updatedInterpreter = await db.interpreter.update({
       where: { id: parsedData.id },
       data: { status: parsedData.status },
       select: { id: true, status: true },
     });
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      return { success: false, error: 'Estado o intérprete inválido.' };
+    }
+    // Never expose Prisma or provider exception details to the browser.
+    console.error('[UPDATE_INTERPRETER_STATUS] Failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'No se pudo actualizar el estado del intérprete.' };
+  }
 
-    revalidatePath('/admin/roster');
-    revalidatePath('/interpreters');
-    revalidateInterpreterProfileRecords(parsedData.id);
+  // All cache invalidations run after a confirmed write. Try each location
+  // independently so one cache failure doesn't prevent refreshing the rest.
+  for (const path of ['/admin/roster', '/interpreters']) {
+    try {
+      revalidatePath(path);
+    } catch (cacheError) {
+      console.warn('[UPDATE_INTERPRETER_STATUS] Cache refresh failed after commit:', safeServerErrorCategory(cacheError));
+    }
+  }
+  try {
+    revalidateInterpreterProfileRecords(interpreterId);
+  } catch (cacheError) {
+    console.warn('[UPDATE_INTERPRETER_STATUS] Profile cache refresh failed after commit:', safeServerErrorCategory(cacheError));
+  }
 
-    const normalizedInterpreter = {
+  return {
+    success: true,
+    data: {
       id: updatedInterpreter.id,
       status: updatedInterpreter.status ?? 'Activo',
-    };
-
-    return {
-      success: true,
-      data: normalizedInterpreter,
-    };
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'No se pudo actualizar el estado del intérprete';
-    return { success: false, error: message };
-  }
+    },
+  };
 }
