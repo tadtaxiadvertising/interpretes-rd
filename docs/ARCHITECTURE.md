@@ -3,77 +3,73 @@
 > **Architecture**: Unified Data Layer (Direct Prisma) + Decoupled REST for Clients
 > **Runtime**: Easypanel (Docker/VPS) — Self-Hosted
 > **Auth**: Supabase Auth (native, with RLS)
-> **Framework**: Next.js 15.2.6 (Monorepo deployment)
-> **Last Updated**: 2026-10-01
+> **Framework**: Next.js 15.5.28 (frontend) + Express 4.22.1 (independent API)
+> **Last Updated**: 2026-11-21 (code-level reconciliation; production configuration not independently verified)
 
 ---
 
 ## 1. Technology Stack
 
-| Layer       | Technology                            | Version  | Service           | Rationale                                    |
-| :---------- | :------------------------------------ | :------- | :---------------- | :------------------------------------------- |
-| Framework   | Next.js (App Router)                  | 15.2.6   | Both              | SSR/SSG + API Routes + Server Actions        |
-| Runtime     | React                                 | 19.0.0   | Both              | Concurrent features, Server Components       |
-| Auth        | Supabase Auth                         | 2.105.1  | Frontend (SSR)    | Native auth, RLS integration, free tier      |
-| Database    | Supabase PostgreSQL                   | —        | Backend only      | Managed Postgres, connection pooling         |
-| ORM         | Prisma + `@prisma/adapter-pg`         | 7.8.0    | Backend only      | Type-safe queries, ESM support, pg adapter   |
-| Validation  | Zod                                   | 4.4.3    | Both              | Runtime + compile-time type safety           |
-| Styling     | Tailwind CSS + Lucide Icons           | v4       | Frontend only     | Utility-first, tree-shakeable                |
-| Deployment  | Easypanel (Docker on VPS)             | —        | Both              | Self-hosted, webhook-driven CI/CD            |
+These versions and boundaries reflect the tracked package manifests, not an attestation of what Easypanel currently runs.
+
+| Layer | Technology | Current tracked version | Runtime |
+| :-- | :-- | :-- | :-- |
+| Web framework | Next.js App Router + React | Next.js 15.5.28 / React 19.0.3 | `interpreters` (`Dockerfile`) |
+| REST service | Express + TypeScript | Express 4.22.1 | `interpreters-api` (`Dockerfile.api`) |
+| Database | Supabase PostgreSQL via `pg` pools | PostgreSQL managed; `pg` ^8.20.0 | Both services access it directly |
+| ORM | Prisma + `@prisma/adapter-pg` | Frontend ^7.10.1; API ^7.8.0 | Both services |
+| Validation | Zod | Frontend ^4.6.7; API ^4.4.3 | Both services |
+| Browser UI | Tailwind CSS, Lucide | Tailwind v4 | Frontend |
+| Production orchestration | Easypanel / Docker | Configured outside GitHub | Verify deployment runtime independently |
 
 ## 2. Service Architecture
 
 ### 2.1 Service Boundary
 
-| Service              | Repository (Current)    | Easypanel App        | Port | Build Target     | Responsibility                               |
-| :------------------- | :---------------------- | :------------------- | :--- | :--------------- | :------------------------------------------- |
-| **interpreters-os**  | `interpretes-rd`  | `interpreters`       | 3000 | `Dockerfile`     | UI, Legacy Auth (Supabase), Direct DB        |
-| **portal-rbac**      | `interpretes-rd`  | `interpreters`       | 3000 | `Dockerfile`     | Secure Vault UI, RBAC Auth (Auth.js)         |
-| **interpreters-api** | `interpretes-rd`  | `interpreters-api`   | 4000 | `Dockerfile.api` | External REST, webhooks, legacy modules      |
+| Runtime | Easypanel service name | Internal port | Dockerfile (repository root build context `.`) | Responsibility |
+| :-- | :-- | :-- | :-- | :-- |
+| Next.js | `interpreters` | 3000 | `Dockerfile` | Web UI, server actions, Next route handlers `src/app/api/`, Supabase and Auth.js sessions, direct Prisma access |
+| Express | `interpreters-api` | 3000 | `Dockerfile.api` | Independent REST endpoints from `interpreters-api/src/`, own Prisma pool |
+| Optional private audio worker | `roleplay-audio-worker` | No public HTTP port | `Dockerfile.worker` | Serial FFmpeg conversion jobs when enabled, not a public API |
 
-> **Dual-Authentication Architecture**: The platform uses two authentication systems in parallel:
->
-> 1. **Supabase Auth**: Managed auth for the main interpreter roster, onboarding, and dashboard.
-> 2. **Auth.js (NextAuth v5)**: Dedicated, session-based auth for the **Portal RBAC** (`/portal-rbac/*`), providing strict role-based access for Admin, Holders, and Interpreters.
+`portal-rbac` is a feature inside the Next.js application, **not** a third standalone application or an additional Easypanel service. The legacy `interpreters-api/Dockerfile` is not the validated root-context build target.
+
+> **Authentication boundary:** Supabase Auth and Auth.js coexist in the Next.js application. They must not be treated as interchangeable authorization systems. Review individual route guards before extending an endpoint; do not infer that a global middleware authenticates every service.
 
 ### 2.2 Communication Flow
 
 ```text
-┌──────────────┐   Direct Logic     ┌──────────────────┐   TCP/pgBouncer   ┌──────────────┐
-│  Browser      │ ──────────────── → │  interpreters-os  │                   │              │
-│  (User)       │ ← ──────────────── │  (Server Actions) │                   │              │
-└──────────────┘   HTML/JSON         └────────┬─────────┘                   │              │
-                                              │                             │   Supabase   │
-                                     Internal │  Prisma Client              │   PostgreSQL │
-                                     (No DNS) ▼                             │              │
-                                     ┌──────────────────┐   Prisma/pg      │              │
-                                     │  interpreters-api │ ───────────────→ │              │
-                                     │  (External REST)  │                  │              │
-                                     └──────────────────┘                   └──────────────┘
+Browser ── HTTPS ──> Next.js frontend (`interpreters`, port 3000)
+                         ├── Server Actions / Next route handlers
+                         └── Prisma + pg ──> Supabase PostgreSQL pooler
+External REST client ── HTTPS ──> Express API (`interpreters-api`, port 3000)
+                                     └── Prisma + pg ──> Supabase PostgreSQL pooler
+Optional private Roleplay worker ──> PostgreSQL + Supabase Storage
 ```
 
-- **Frontend → Backend**: Server-side logic consumes Prisma directly via `src/lib/prisma.ts`.
-- **Portal RBAC**: Protected by `lib/auth-rbac.ts`. Uses `RbacUser` model for local authentication.
-- **Client → Backend**: Client-side interactivity uses Server Actions (`src/app/actions/*`).
-- **Auth Verification**: Middleware (`src/middleware.ts`) detects the route and verifies the corresponding session (Supabase or Auth.js).
+- Next.js server logic uses `src/lib/prisma.ts` directly; it does not require HTTP proxying through the Express API for ordinary internal data access.
+- Express mounts routes under `interpreters-api/src/`; the separately built API does **not** serve `src/app/api/`.
+- Container ports are independent despite both being 3000. Domain/ingress routing selects the service.
+- A successful CI run or deployment webhook does not verify the deployed image or the live database connection.
 
 ### 2.3 Database Connection Strategy
 
-```text
-┌─────────────────┐   Transaction Pool (port 6543)   ┌──────────────┐
-│ interpreters-api │ ──────────────────────────────→  │  Supabase    │
-│ (Runtime)        │   DATABASE_URL + pgBouncer       │  Pooler      │
-└─────────────────┘                                   └──────────────┘
+`DATABASE_URL` is the runtime connection string for both Next.js and Express. The documented production topology uses the Supabase transaction pooler (typically port 6543), while `DIRECT_URL` is reserved for controlled migrations and schema checks. Never print these values in CI logs or documentation.
 
-┌─────────────────┐   Direct Session (port 5432)      ┌──────────────┐
-│ prisma migrate   │ ──────────────────────────────→  │  Supabase    │
-│ (CI/CD only)     │   DIRECT_URL                     │  Direct DB   │
-└─────────────────┘                                   └──────────────┘
+The tracked pool configuration currently limits frontend connections to **5** (`src/lib/database-pool-config.ts`, timeout 10 s), and Express connections to **3** (`interpreters-api/src/lib/database-tls.ts`, timeout 5 s). Remote connections require CA-validated TLS; bypassing hostname/certificate verification is not an acceptable workaround.
+
+```text
+Next.js      ── DATABASE_URL ──┐
+                               ├── Supabase PostgreSQL pooler (runtime)
+Express API  ── DATABASE_URL ──┘
+Migrations   ── DIRECT_URL ─────── Supabase direct/session connection
 ```
 
-> **Memory Constraint**: The Easypanel VPS allocates ~457 MB to the API container. The `pg.Pool` is configured with `max: 5` connections and `connectionTimeoutMillis: 10000` to stay within budget. Always use port **6543** (transaction pooler) for `DATABASE_URL` in production.
+**Resource caution:** The VPS has historically had a tight memory budget. Actual container limits, Docker build context, healthcheck overrides, DB pooler connectivity, deployed Git SHA, and rollback target must be verified in Easypanel rather than inferred from this repository.
 
-## 3. Breaking Changes Log (Next.js 15.2.6)
+The Express Docker healthcheck queries `GET /health` for process liveness. `GET /ready` checks PostgreSQL separately; failures there may produce 503 without automatically replacing the live HTTP container. The frontend liveness path is `GET /api/health`.
+
+## 3. Next.js 15 Runtime Notes
 
 ### 3.1 Async Dynamic Route Parameters
 
@@ -93,11 +89,11 @@ export async function GET(
 
 ### 3.2 Middleware → Proxy Transition
 
-As documented in the Next.js 15 specifications and verified by our deployment logs, the `middleware.ts` convention is deprecated.
+The tracked Next.js version is 15.5.28. The `src/middleware.ts` entry point remains in use; do not assume a migration to the newer `proxy.ts` convention has happened. Review the actual authentication and middleware code before changing route handling or upgrading Next.js.
 
-- **Current State**: `src/middleware.ts` handles **only** Supabase Auth session refreshing.
-- **Future State**: All interceptor logic should move to the **Proxy** layer.
-- **Rewrites**: All API forwarding and URL masking must reside in `next.config.ts` `rewrites()`. This ensures the standalone build routes traffic correctly through the Node.js server.
+- **Current State**: `src/middleware.ts` is part of the frontend request pipeline, not the Express process.
+- **Upgrade consideration**: Re-evaluate `proxy.ts` and Next.js runtime behavior during a separately tested framework upgrade.
+- **Routing**: `next.config.ts` rewrites, if configured, affect Next.js traffic only; they do not turn `Dockerfile.api` into a Next.js image.
 
 ### 3.3 Configuration Surface
 
