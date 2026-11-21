@@ -45,6 +45,10 @@ RUN chown -R apiuser:nodejs /app
 
 # Instalar solo dependencias de producción (como el usuario apiuser)
 COPY --chown=apiuser:nodejs interpreters-api/package.json interpreters-api/package-lock.json ./
+# The runner is a fresh Docker stage: the builder's memory preflight does
+# not carry over. Check before npm ci can exhaust a small Easypanel host.
+COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Copiar build y binarios generados de Prisma desde builder
