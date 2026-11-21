@@ -265,6 +265,24 @@ describe('Audio Studio admin partial settings payload', () => {
     expect(screen.queryByText(/Ya existe una credencial cifrada en el panel/)).toBeNull();
   });
 
+  it('blocks both token replacement and deletion when a saved credential is unreadable', async () => {
+    render(<AudioStudioSettingsForm initial={{
+      ...initial, encryptionReady: true, credentialUsable: false,
+    }} />);
+    const removeToken = screen.getByRole('checkbox', { name: /Borrar la clave guardada en el panel/ }) as HTMLInputElement;
+    expect(removeToken.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+      target: { value: 'SYNTHETIC_REPLACEMENT_TOKEN' },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+    });
+    expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+    expect(screen.getByText(/No se borró ni se reemplazó la credencial/)).toBeTruthy();
+    expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value)
+      .toBe('SYNTHETIC_REPLACEMENT_TOKEN');
+  });
+
   it('blocks token submission when encryption is unavailable while preserving unsaved input', async () => {
     render(<AudioStudioSettingsForm initial={{
       ...initial, encryptionReady: false, credentialUsable: false,
