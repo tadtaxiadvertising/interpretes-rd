@@ -108,6 +108,7 @@ export default function RoleplayStudioPage() {
   const previewEnd = useRef<number | null>(null);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
+  const savingDraft = useRef(false);
   const silenceRevision = useRef(0);
   const silenceAbort = useRef<AbortController | null>(null);
   const exportRevision = useRef(0);
@@ -986,7 +987,10 @@ export default function RoleplayStudioPage() {
   };
 
   const saveDraft = async () => {
-    if (!audio || !duration || busy || draftBusy) return;
+    // Keyboard and button activations can occur before React updates draftBusy.
+    // Only one local download may be hashing the same source at a time.
+    if (!audio || !duration || busy || draftBusy || savingDraft.current) return;
+    savingDraft.current = true;
     const revision = subtitleImportRevision.current;
     const operation = ++draftOperationRevision.current;
     // Persist in timeline order even if a new gap was filled after later clips.
@@ -1023,9 +1027,24 @@ export default function RoleplayStudioPage() {
         setError(cause instanceof Error ? cause.message : 'No fue posible guardar el proyecto.');
       }
     } finally {
+      savingDraft.current = false;
       if (operation === draftOperationRevision.current) setDraftBusy(false);
     }
   };
+
+  // Ctrl+S / Cmd+S saves the existing local JSON draft instead of asking the
+  // browser to save the entire webpage. No API, storage or audio upload.
+  useEffect(() => {
+    if (!audio || duration <= 0 || !hasActiveEditorWork) return;
+    const onSaveShortcut = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() !== 's' || (!event.ctrlKey && !event.metaKey) ||
+          event.altKey || event.shiftKey || event.isComposing) return;
+      event.preventDefault();
+      if (!event.repeat) void saveDraft();
+    };
+    window.addEventListener('keydown', onSaveShortcut);
+    return () => window.removeEventListener('keydown', onSaveShortcut);
+  }, [audio, duration, hasActiveEditorWork, saveDraft]);
 
   const openDraftFile = async (file: File) => {
     if (!audio || !duration || busy || draftBusy) return;
@@ -2033,6 +2052,9 @@ export default function RoleplayStudioPage() {
               className="rounded-xl border border-indigo-300/30 bg-indigo-500/20 px-4 py-2 text-sm font-semibold text-indigo-100 disabled:opacity-50">
               {draftBusy ? 'Verificando proyecto…' : 'Guardar proyecto JSON'}
             </button>
+            {hasActiveEditorWork && (
+              <span className="text-xs text-indigo-200">Atajo: Ctrl/⌘+S · descarga local</span>
+            )}
             <label className="block text-sm text-indigo-100">
               Abrir proyecto JSON de la grabación seleccionada
               <input type="file" accept=".json,application/json"
