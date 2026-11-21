@@ -122,6 +122,23 @@ export default function RoleplayStudioPage() {
   const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
   const hasReplacementWork = (edits: typeof audioReplacementEdits.current) =>
     edits.segments.length > 0 || edits.reviewCues.length > 0 || edits.suggestedClips.length > 0;
+  // The JSON project omits the original audio and private transcript context.
+  // Guard the in-memory editor even after an export: leaving can discard
+  // pending cue selections and editorial context not present in the download.
+  const hasActiveEditorWork = hasReplacementWork(audioReplacementEdits.current) ||
+    Object.keys(captionTexts).length > 0;
+  const leaveEditorPrompt = 'Salir de Audio Studio descartará los cortes y las selecciones de esta pestaña. Comprueba que guardaste tu proyecto y conservas el audio original. ¿Continuar?';
+  useEffect(() => {
+    if (!hasActiveEditorWork) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasActiveEditorWork]);
+  const confirmEditorNavigation = () =>
+    !hasActiveEditorWork || window.confirm(leaveEditorPrompt);
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
@@ -1489,7 +1506,9 @@ export default function RoleplayStudioPage() {
     <main className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <Link href="/admin/roleplays" className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
+          <Link href="/admin/roleplays" onClick={event => {
+            if (!confirmEditorNavigation()) event.preventDefault();
+          }} className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
           <h1 className="text-3xl font-bold text-white">Estudio de audio para roleplays</h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
             Prepara intervenciones desde una grabación de audio o video sin crear sesiones
@@ -1499,8 +1518,12 @@ export default function RoleplayStudioPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/admin/roleplays/settings" className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5">Configurar Audio Studio</Link>
-          <Link href="/admin/roleplays/new" className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
+          <Link href="/admin/roleplays/settings" onClick={event => {
+            if (!confirmEditorNavigation()) event.preventDefault();
+          }} className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5">Configurar Audio Studio</Link>
+          <Link href="/admin/roleplays/new" onClick={event => {
+            if (!confirmEditorNavigation()) event.preventDefault();
+          }} className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
         </div>
       </header>
       <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
