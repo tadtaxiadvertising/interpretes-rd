@@ -62,8 +62,10 @@ app.use('/api/v1/production', productionRoutes);
 
 // ── Liveness and Readiness ───────────────────────────────
 // /health is only process liveness, not proof that PostgreSQL is available.
-// Docker/Easypanel MUST use /ready to avoid marking a DB-unavailable backend
-// as healthy. Coalesce public requests to protect the tiny shared DB pool.
+// The Docker/Easypanel image HEALTHCHECK uses /health for process liveness:
+// a temporary PostgreSQL outage should not trigger Swarm task churn.
+// /ready separately reports database readiness; coalesce public requests
+// to protect the tiny shared DB pool.
 const checkDatabaseReadiness = createCachedReadinessProbe(async () => {
   await prisma.$queryRaw`SELECT 1`;
 });
