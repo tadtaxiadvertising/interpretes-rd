@@ -482,6 +482,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
+      // A 5xx may be returned after a successful DB commit (or after
+      // losing its acknowledgment). Even a JSON success:false at this
+      // status is not proof that publishing was rolled back. Likewise, a
+      // transport/proxy error must never echo its body in the UI.
+      if (typeof res.status === 'number' && res.status >= 500) {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
+
       let raw: unknown;
       try {
         raw = await res.json();
@@ -515,18 +524,33 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(typeof data.error === 'string' && data.error.trim()
           ? data.error : 'El servidor rechazó la creación del roleplay.');
       }
-      // The successful-response structure was checked above.
-      if (!data.data) throw new Error(unknownResultMessage);
+      // A non-error HTTP status must not manufacture a success view when
+      // the backend's session identity / bulk counters are missing. Keep
+      // compatibility with older single-session responses providing either
+      // an inviteLink or a sessionId.
+      const payload = data.data;
+      const validBulk = payload?.bulk === true &&
+        Number.isSafeInteger(payload.createdCount) && (payload.createdCount ?? 0) > 0 &&
+        Number.isSafeInteger(payload.skippedCount) && (payload.skippedCount ?? -1) >= 0 &&
+        Number.isSafeInteger(payload.scenarioCount) && (payload.scenarioCount ?? 0) > 0 &&
+        (payload.scenarioCount ?? 0) <= ROLEPLAY_MAX_SCENARIOS;
+      const validSingle = (payload?.bulk === undefined || payload?.bulk === false) &&
+        ((typeof payload?.inviteLink === 'string' && payload.inviteLink.trim().length > 0) ||
+          (typeof payload?.sessionId === 'string' && payload.sessionId.trim().length > 0));
+      if (!payload || res.ok === false || (!validBulk && !validSingle)) {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
 
-      if (data.data.bulk) {
+      if (payload.bulk) {
         setSuccess({
           link: `${window.location.origin}/admin/roleplays`,
-          participantName: `${data.data.createdCount} active interpreter(s)`,
-          summary: `${data.data.createdCount} sesiones creadas · ${data.data.skippedCount} omitidas. ${data.data.scenarioCount} escenarios ${librarySource ? 'reutilizados desde la biblioteca' : 'subidos una vez y compartidos entre sesiones'}.`,
+          participantName: `${payload.createdCount} active interpreter(s)`,
+          summary: `${payload.createdCount} sesiones creadas · ${payload.skippedCount} omitidas. ${payload.scenarioCount} escenarios ${librarySource ? 'reutilizados desde la biblioteca' : 'subidos una vez y compartidos entre sesiones'}.`,
         });
       } else {
         setSuccess({
-          link: data.data.inviteLink || `${window.location.origin}/roleplays/${data.data.sessionId}`,
+          link: payload.inviteLink || `${window.location.origin}/roleplays/${payload.sessionId}`,
           participantName: participantType === 'interpreter'
             ? interpreters.find(i => i.id === parseInt(selectedParticipantId))?.name || 'Intérprete'
             : candidates.find(c => c.id === parseInt(selectedParticipantId))?.name || 'Candidato',
@@ -863,7 +887,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       )}
       {submissionUncertain && (
         <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
-          La conexión o la respuesta se interrumpió. El roleplay podría haberse creado.
+          El servidor no pudo confirmar la operación o se interrumpió la conexión. El roleplay podría haberse creado.
           {' '}<Link href="/admin/roleplays" className="font-semibold underline underline-offset-2">
             Comprobar los roleplays existentes
           </Link>{' '}antes de volver a enviar los audios.

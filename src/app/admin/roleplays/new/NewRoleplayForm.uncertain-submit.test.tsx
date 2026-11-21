@@ -84,4 +84,53 @@ describe('Roleplay admin: uncertain creation outcome', () => {
     expect(screen.queryByRole('link', { name: 'Comprobar los roleplays existentes' })).toBeNull();
     expect(screen.queryByText('No se pudo confirmar el resultado de la creación.')).toBeNull();
   });
+  it('treats a structured HTTP 500 as ambiguous because DB commit may have succeeded', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: false, status: 500,
+      json: async () => ({
+        success: false,
+        error: 'FAKE_DB_CONNECTION_STRING',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    submit();
+
+    await waitFor(() => expect(screen.getByText('No se pudo confirmar el resultado de la creación.')).toBeTruthy());
+    expect(screen.getByRole('link', { name: 'Comprobar los roleplays existentes' })).toBeTruthy();
+    expect(document.body.textContent).not.toContain('FAKE_DB_CONNECTION_STRING');
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a missing single-session identity even when success is true', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ success: true, data: {} }),
+    }));
+    submit();
+
+    await waitFor(() => expect(screen.getByText('No se pudo confirmar el resultado de la creación.')).toBeTruthy());
+    expect(screen.getByRole('link', { name: 'Comprobar los roleplays existentes' })).toBeTruthy();
+    expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+    expect(document.body.textContent).not.toContain('undefined');
+  });
+
+  it('rejects success from an HTTP conflict response as an inconsistent outcome', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 409,
+      json: async () => ({ success: true, data: { inviteLink: '/roleplays/not-confirmed' } }),
+    }));
+    submit();
+    await waitFor(() => expect(screen.getByText('No se pudo confirmar el resultado de la creación.')).toBeTruthy());
+    expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+  });
+
+  it('keeps accepting a valid successful single-session payload', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ success: true, data: { sessionId: 'synthetic-session-id' } }),
+    }));
+    submit();
+    await waitFor(() => expect(screen.getByText('¡Roleplay creado correctamente!')).toBeTruthy());
+    expect(screen.queryByRole('link', { name: 'Comprobar los roleplays existentes' })).toBeNull();
+  });
+
 });
