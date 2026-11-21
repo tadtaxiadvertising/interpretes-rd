@@ -16,6 +16,9 @@ ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 # Copiar solo el subdirectorio interpreters-api (no el frontend entero)
 COPY interpreters-api/package.json interpreters-api/package-lock.json ./
+# Reject a low-memory build host before installing the backend toolchain.
+COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm ci --legacy-peer-deps
 
 # Copiar código fuente del backend
