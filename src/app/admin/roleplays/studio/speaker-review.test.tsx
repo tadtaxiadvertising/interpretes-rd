@@ -144,6 +144,41 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
   });
 
+  it('navigates visible pending turns in chronological order without editing audio', () => {
+    selectAudio();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    const next = screen.getByRole('button', { name: 'Ir al siguiente pendiente' });
+    fireEvent.click(next);
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-1');
+    fireEvent.click(next);
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-2');
+
+    // A search filter constrains navigation. If the prior turn is hidden,
+    // the first visible pending turn receives focus.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 3' },
+    });
+    fireEvent.click(next);
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-3');
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: '' },
+    });
+    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
+      .map(element => element.value)).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('hides next-pending navigation after the only turn is fully reviewed', () => {
+    selectAudio();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(screen.getByRole('button', { name: 'Ir al siguiente pendiente' })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    expect(screen.queryByRole('button', { name: 'Ir al siguiente pendiente' })).toBeNull();
+  });
+
   it('updates generated titles without another click but respects manual titles', async () => {
     selectAudio();
     const subtitle = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });

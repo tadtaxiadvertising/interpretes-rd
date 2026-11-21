@@ -149,6 +149,8 @@ export default function RoleplayStudioPage() {
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
   const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number } | null>(null);
   const exportFocusAttempt = useRef(0);
+  const [reviewFocusRequest, setReviewFocusRequest] = useState<{ id: string; attempt: number } | null>(null);
+  const reviewFocusAttempt = useRef(0);
   // Focus the first invalid clip after filters have been cleared and the row
   // has been rendered again. No media file is read or uploaded by this action.
   useEffect(() => {
@@ -157,6 +159,14 @@ export default function RoleplayStudioPage() {
     article?.focus({ preventScroll: true });
     article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   }, [invalidExportTurn]);
+  // Navigating the review queue changes only focus and the open editor.
+  // It never seeks, plays, uploads, or alters intervention content.
+  useEffect(() => {
+    if (!reviewFocusRequest) return;
+    const article = document.getElementById(`studio-intervention-${reviewFocusRequest.id}`);
+    article?.focus({ preventScroll: true });
+    article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+  }, [reviewFocusRequest]);
   const [turnActionFeedback, setTurnActionFeedback] = useState<{
     id: string; message: string; error: boolean;
   } | null>(null);
@@ -1425,6 +1435,15 @@ export default function RoleplayStudioPage() {
     .map(({ segment }) => segment.id);
   const pendingSpeakerIds = visibleSegments.filter(({ segment }) =>
     segment.speakerRole === 'unknown').map(({ segment }) => segment.id);
+  const visiblePendingTurns = visibleSegments.filter(({ segment }) => needsReview(segment));
+  const focusNextPendingTurn = () => {
+    if (!visiblePendingTurns.length) return;
+    const currentIndex = visiblePendingTurns.findIndex(({ segment }) =>
+      segment.id === reviewFocusRequest?.id);
+    const next = visiblePendingTurns[(currentIndex + 1) % visiblePendingTurns.length].segment;
+    setExpandedSegmentId(next.id);
+    setReviewFocusRequest({ id: next.id, attempt: ++reviewFocusAttempt.current });
+  };
 
   const mediaHandlers = {
     onPlay: () => setEditorPlaybackRevision(n => n + 1),
@@ -2008,6 +2027,13 @@ export default function RoleplayStudioPage() {
                   className="accent-blue-500"/>
                 Pendientes ({pendingReviewCount})
               </label>
+              {visiblePendingTurns.length > 0 && (
+                <button type="button" onClick={focusNextPendingTurn}
+                  aria-label="Ir al siguiente pendiente"
+                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10">
+                  Siguiente pendiente
+                </button>
+              )}
               <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
                 aria-pressed={compactRows}
                 className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200">
