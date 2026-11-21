@@ -299,6 +299,40 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .toBe(false);
   });
 
+  it('shows invalid overlapping SRT selections before apply and enables apply after correction', async () => {
+    selectAudio();
+    const source = new File(['srt'], 'overlapping.srt', { type: 'text/plain' });
+    const stamp = (seconds: number) =>
+      `00:${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')},000`;
+    const transcript = Array.from({ length: 26 }, (_, index) => {
+      const start = index === 0 ? 0 : index === 1 ? 2 : 4 + (index - 2) * 2;
+      const end = index === 0 ? 3 : index === 1 ? 4 : start + 1;
+      return `${index + 1}\n${stamp(start)} --> ${stamp(end)}\nDoctor: Turn ${index + 1}`;
+    }).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => transcript });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+
+    const status = screen.getByRole('status', { name: 'Estado de selección SRT' });
+    const apply = screen.getByRole('button', { name: /Aplicar selección al editor/i }) as HTMLButtonElement;
+    expect(status.textContent).toContain('Audio seleccionado:');
+    expect(apply.disabled).toBe(false);
+    // The suggested first cue overlaps the second one. Make space in the
+    // 25-turn selection, then deliberately choose that conflicting cue.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 3' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(status.textContent).toMatch(/Selección no válida:.*solapadas/);
+    expect(apply.disabled).toBe(true);
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(status.textContent).toContain('Audio seleccionado:');
+    expect(apply.disabled).toBe(false);
+  });
+
   it('does not automatically select original interpreter cues when a long SRT requires review', async () => {
     selectAudio();
     fireEvent.click(screen.getByLabelText(/Excluir intervenciones del intérprete original al importar/i));
