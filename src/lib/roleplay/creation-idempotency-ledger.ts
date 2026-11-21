@@ -90,6 +90,17 @@ export function fingerprintRoleplayCreation(
         scenario.title.trim().length < 1 || scenario.title.length > 200) {
       throw new InvalidRoleplayCreationKeyError();
     }
+    // Reject non-string scenario metadata too: a future caller bypassing
+    // validation could pass NaN in a string slot, which JSON.stringify
+    // would silently serialize as null.
+    if ((scenario.scriptPrompt !== null && typeof scenario.scriptPrompt !== 'string') ||
+        (scenario.studioSpeaker != null && typeof scenario.studioSpeaker !== 'string') ||
+        (scenario.studioLanguage != null && typeof scenario.studioLanguage !== 'string') ||
+        (scenario.expectedKeys !== undefined &&
+         (!Array.isArray(scenario.expectedKeys) ||
+          scenario.expectedKeys.some(key => typeof key !== 'string')))) {
+      throw new InvalidRoleplayCreationKeyError();
+    }
     // JSON.stringify silently serializes NaN and Infinity as null.
     // Reject malformed numeric metadata before hashing so a changed
     // scenario cannot collide with the legitimate null representation.
