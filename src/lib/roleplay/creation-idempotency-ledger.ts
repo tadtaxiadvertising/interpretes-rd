@@ -192,7 +192,8 @@ export async function claimRoleplayCreation(
       (existing.scenarioCount ?? 0) > ROLEPLAY_MAX_SCENARIOS ||
       !Array.isArray(existing.sessionIds) ||
       existing.sessionIds.length !== existing.createdCount ||
-      existing.sessionIds.some(id => typeof id !== 'string' || !id.trim())) {
+      existing.sessionIds.some(id => typeof id !== 'string' || !id.trim()) ||
+      new Set(existing.sessionIds).size !== existing.sessionIds.length) {
     return { kind: 'IN_PROGRESS' };
   }
   return {
