@@ -42,6 +42,10 @@ WORKDIR /app
 # Use npm's frozen production dependency graph, rather than copying all
 # builder tools (Vitest, Vite, ESLint, tsx, etc.) into the live container.
 COPY package.json package-lock.json ./
+# Runner-stage npm installs are also memory-intensive on low-RAM servers.
+# Always check this stage independently from the builder stage.
+COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm_config_onnxruntime_node_install=skip npm ci --omit=dev --legacy-peer-deps && \
     npm cache clean --force
 
