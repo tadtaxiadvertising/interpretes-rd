@@ -11,6 +11,7 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/li
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
+import { isParsedMultipartFile } from '@/lib/roleplay/parsed-multipart-file';
 import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 import {
   blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentBatchScope,
@@ -316,7 +317,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!useLibrary) for (const audio of scenarioAudios) {
-      if (!(audio instanceof File)) {
+      if (!isParsedMultipartFile(audio)) {
         return privateRoleplayJson({ success: false, error: 'Invalid scenario audio payload' }, { status: 400 });
       }
       if (audio.size <= 0 || audio.size > MAX_AUDIO_SIZE) {
@@ -335,7 +336,7 @@ export async function POST(req: NextRequest) {
         const expected = expectedAudioChecksums[index];
         if (!expected) continue;
         const audio = scenarioAudios[index];
-        if (!(audio instanceof File)) continue;
+        if (!isParsedMultipartFile(audio)) continue;
         const actual = await sha256RoleplayFile(audio);
         if (actual !== expected.toLowerCase()) {
           return privateRoleplayJson({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
