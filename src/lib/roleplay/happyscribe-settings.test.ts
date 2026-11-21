@@ -183,6 +183,43 @@ describe('HappyScribe encrypted admin settings', () => {
     await expect(getHappyScribeSettings()).rejects.toThrow();
   });
 
+  it('preserves stored ciphertext when the original key is unavailable during removal or replacement', async () => {
+    await saveHappyScribeSettings({ token: testToken, organizationId: '123456' });
+    const snapshot = new Map(store);
+    process.env.AUDIO_STUDIO_ENCRYPTION_KEY = 'b'.repeat(64);
+    expect((await getHappyScribeSettingsStatus()).credentialUsable).toBe(false);
+
+    await expect(saveHappyScribeSettings({
+      removeToken: true, organizationId: '789012',
+    })).rejects.toThrow('CREDENTIAL_RECOVERY_REQUIRED');
+    await expect(saveHappyScribeSettings({
+      token: 'SYNTHETIC_DIFFERENT_TOKEN_NOT_REAL',
+    })).rejects.toThrow('CREDENTIAL_RECOVERY_REQUIRED');
+    expect(store).toEqual(snapshot);
+
+    // Non-secret editor preferences remain editable without destroying
+    // the original token, even if the current encryption key is incorrect.
+    await saveHappyScribeSettings({ compactViewDefault: 'compact' });
+    expect(store.get(TOKEN_KEY)).toBe(snapshot.get(TOKEN_KEY));
+    expect((await getAudioStudioEditorPreferences()).compactViewDefault).toBe('compact');
+
+    // Restoring the original key makes an authorized removal possible.
+    process.env.AUDIO_STUDIO_ENCRYPTION_KEY = 'a'.repeat(64);
+    await saveHappyScribeSettings({ removeToken: true });
+    expect(store.has(TOKEN_KEY)).toBe(false);
+  });
+
+  it('fails closed when a ciphertext is malformed without losing the existing token record', async () => {
+    await saveHappyScribeSettings({ token: testToken, organizationId: '123456' });
+    const altered = store.get(TOKEN_KEY)!.replace('enc:v1:', 'enc:unknown:');
+    store.set(TOKEN_KEY, altered);
+    await expect(saveHappyScribeSettings({ removeToken: true }))
+      .rejects.toThrow('CREDENTIAL_RECOVERY_REQUIRED');
+    await expect(saveHappyScribeSettings({ token: 'SYNTHETIC_NEW_TOKEN_NOT_REAL' }))
+      .rejects.toThrow('CREDENTIAL_RECOVERY_REQUIRED');
+    expect(store.get(TOKEN_KEY)).toBe(altered);
+  });
+
   it('keeps VPS media proxy off without the independent deployment flag', async () => {
     await saveHappyScribeSettings({
       token: testToken, organizationId: '123456', mediaImportEnabled: true,
