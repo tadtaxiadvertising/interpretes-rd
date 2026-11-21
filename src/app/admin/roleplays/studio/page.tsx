@@ -128,6 +128,10 @@ export default function RoleplayStudioPage() {
   // pending cue selections and editorial context not present in the download.
   const hasActiveEditorWork = hasReplacementWork(audioReplacementEdits.current) ||
     Object.keys(captionTexts).length > 0;
+  // Neither private transcript references, pending SRT choices, nor
+  // unapplied silence suggestions are part of the portable JSON schema.
+  const hasUnstoredDraftContext = reviewCues.length > 0 ||
+    suggestedClips.length > 0 || Object.keys(captionTexts).length > 0;
   const leaveEditorPrompt = 'Salir de Audio Studio descartará los cortes y las selecciones de esta pestaña. Comprueba que guardaste tu proyecto y conservas el audio original. ¿Continuar?';
   useEffect(() => {
     if (!hasActiveEditorWork) return;
@@ -990,6 +994,13 @@ export default function RoleplayStudioPage() {
     // Keyboard and button activations can occur before React updates draftBusy.
     // Only one local download may be hashing the same source at a time.
     if (!audio || !duration || busy || draftBusy || savingDraft.current) return;
+    if (!segments.length && (reviewCues.length > 0 || suggestedClips.length > 0)) {
+      // An empty JSON cannot restore uncommitted SRT selections or proposed
+      // cuts. Do not present such a download as a successful backup.
+      setError('Todavía no hay cortes aplicados para guardar. Aplica los turnos SRT o las sugerencias antes de descargar el JSON; conserva también el archivo de subtítulos original.');
+      setNotice('');
+      return;
+    }
     savingDraft.current = true;
     const revision = subtitleImportRevision.current;
     const operation = ++draftOperationRevision.current;
@@ -1019,9 +1030,12 @@ export default function RoleplayStudioPage() {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice(localOnly
+      setNotice((localOnly
         ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
-        : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.');
+        : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.') +
+        (hasUnstoredDraftContext
+          ? ' Atención: el JSON no guarda referencias privadas de transcripción, turnos SRT sin aplicar ni sugerencias sin confirmar. Conserva los SRT/VTT originales para volver a importarlos.'
+          : ''));
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No fue posible guardar el proyecto.');
@@ -1030,7 +1044,8 @@ export default function RoleplayStudioPage() {
       savingDraft.current = false;
       if (operation === draftOperationRevision.current) setDraftBusy(false);
     }
-  }, [audio, duration, busy, draftBusy, segments, allowServerZipExport]);
+  }, [audio, duration, busy, draftBusy, segments, allowServerZipExport,
+    reviewCues.length, suggestedClips.length, hasUnstoredDraftContext]);
 
   // Ctrl+S / Cmd+S saves the existing local JSON draft instead of asking the
   // browser to save the entire webpage. No API, storage or audio upload.
@@ -2046,6 +2061,13 @@ export default function RoleplayStudioPage() {
             El JSON no contiene audio, video ni transcripción, pero sí títulos e instrucciones:
             protégelo si contienen información sensible.
           </p>
+          {hasUnstoredDraftContext && (
+            <p className="text-xs leading-5 text-amber-100" aria-label="Contenido no incluido en el proyecto JSON">
+              Atención: el JSON no guarda referencias privadas de transcripción, turnos SRT
+              todavía sin aplicar ni sugerencias sin confirmar. Aplica los cortes que necesites
+              y conserva los SRT/VTT originales antes de abandonar el editor.
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-4">
             <button type="button" onClick={() => void saveDraft()}
               disabled={busy || draftBusy}
