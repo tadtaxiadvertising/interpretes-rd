@@ -236,6 +236,89 @@ describe('Audio Studio subtitle import lifecycle', () => {
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
+  it('asks before exporting a remote SRT that would overwrite edited cuts', async () => {
+    const fetcher = vi.fn((_url: string, init?: RequestInit) => Promise.resolve(
+      init?.method === 'POST'
+        ? Response.json({ success: true, data: {
+          content: '1\n00:00:04,000 --> 00:00:10,000\nDoctor: Approved replacement',
+        } })
+        : Response.json({ success: true, data: [{
+          id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
+          language: 'en', durationSeconds: 60, createdAt: null, folder: null,
+        }], mediaImportEnabled: false }),
+    ));
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    const confirmation = vi.spyOn(window, 'confirm')
+      .mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(confirmation).toHaveBeenCalledTimes(1);
+    expect(confirmation.mock.calls[0][0]).toMatch(/intervenciones o sugerencias pendientes/);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByText(/Importación cancelada. Se conservaron las intervenciones/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    });
+    expect(confirmation).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.getByText(/1 intervenciones cargadas/)).toBeTruthy();
+  });
+
+  it('discards remote subtitles after a new cut is created during an approved transfer', async () => {
+    let finish!: (response: Response) => void;
+    const fetcher = vi.fn((_url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? new Promise<Response>(resolve => { finish = resolve; })
+        : Promise.resolve(Response.json({ success: true, data: [{
+          id: 'a'.repeat(32), name: 'remote.srt', state: 'done',
+          language: 'en', durationSeconds: 60, createdAt: null, folder: null,
+        }], mediaImportEnabled: false })),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'local.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
+    });
+    const confirmation = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Importar transcripción' }));
+    expect(confirmation).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    await act(async () => {
+      finish(Response.json({ success: true, data: {
+        content: '1\n00:00:04,000 --> 00:00:10,000\nDoctor: Outdated remote',
+      } }));
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: Outdated remote')).toBeNull();
+    expect(confirmation).toHaveBeenCalledOnce();
+  });
+
   it('aborts an obsolete HappyScribe SRT request when the administrator replaces the recording', async () => {
     let pendingImportSignal: AbortSignal | undefined;
     const list = {
