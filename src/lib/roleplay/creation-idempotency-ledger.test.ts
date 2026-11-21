@@ -100,6 +100,35 @@ describe('future Roleplay creation: content fingerprint without PII logging', ()
     }
   });
 
+  it('rejects non-finite numbers before JSON serialization can turn them into null', () => {
+    const cases: RoleplayCreationFingerprintInput[] = [
+      { ...input(), scenarios: [{ ...scenario, durationLimitSec: Number.NaN }] },
+      { ...input(), scenarios: [{ ...scenario, durationLimitSec: Number.POSITIVE_INFINITY }] },
+      { ...input(), scenarios: [{ ...scenario, durationLimitSec: 301 }] },
+      { ...input(), scenarios: [{ ...scenario, studioTurn: Number.NaN }] },
+      { ...input(), scenarios: [{ ...scenario, studioTurn: Number.POSITIVE_INFINITY }] },
+      { ...input(), scenarios: [{ ...scenario, sourceStartSec: Number.NaN, sourceEndSec: 20 }] },
+      { ...input(), scenarios: [{ ...scenario, sourceStartSec: 0, sourceEndSec: Number.NEGATIVE_INFINITY }] },
+      { ...input(), scenarios: [{ ...scenario, sourceStartSec: 15, sourceEndSec: null }] },
+      { ...input(), scenarios: [{ ...scenario, sourceStartSec: -1, sourceEndSec: 15 }] },
+      { ...input(), scenarios: [{ ...scenario, sourceStartSec: 15, sourceEndSec: 15 }] },
+    ];
+    for (const request of cases) {
+      expect(() => fingerprintRoleplayCreation(request)).toThrow(InvalidRoleplayCreationKeyError);
+    }
+  });
+
+  it('preserves finite fractional clip times and a valid bounded duration', () => {
+    const baseline = input();
+    const valid: RoleplayCreationFingerprintInput = {
+      ...baseline,
+      scenarios: [{ ...scenario, durationLimitSec: 300, studioTurn: 10000,
+        sourceStartSec: 0.125, sourceEndSec: 7200 }],
+    };
+    expect(fingerprintRoleplayCreation(valid)).toMatch(/^[a-f0-9]{64}$/);
+    expect(fingerprintRoleplayCreation(valid)).not.toBe(fingerprintRoleplayCreation(baseline));
+  });
+
   it('does not use original filenames in a request fingerprint', () => {
     const request = input();
     const withFileName = {
