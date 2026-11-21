@@ -170,6 +170,35 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'unknown']);
   });
 
+  it('navigates backwards through pending turns and returns forwards without media playback', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    const previous = screen.getByRole('button', { name: 'Ir al pendiente anterior' });
+    const next = screen.getByRole('button', { name: 'Ir al siguiente pendiente' });
+    fireEvent.click(previous);
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-3');
+    fireEvent.click(previous);
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-2');
+    fireEvent.click(next);
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-3');
+    expect(player.play).not.toHaveBeenCalled();
+  });
+
+  it('respects filtered pending turns when navigating backwards', () => {
+    selectAudio();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 3' },
+    });
+    expect(screen.queryByRole('button', { name: 'Ir al pendiente anterior' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ir al siguiente pendiente' }));
+    expect((document.activeElement as HTMLElement)?.id).toBe('studio-intervention-studio-3');
+  });
+
   it('hides next-pending navigation after the only turn is fully reviewed', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
