@@ -8,6 +8,9 @@ RUN apk add --no-cache libc6-compat openssl
 WORKDIR /app
 
 COPY package.json package-lock.json ./
+# Reject an undersized VPS before npm/prisma/Next.js can exhaust the host.
+COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
+RUN node scripts/ci/assert-build-memory.mjs
 COPY prisma ./prisma/
 # Browser local ASR uses ONNX Runtime Web (WASM). The native CUDA provider
 # is not needed in this frontend image; retain CPU binaries, skip GPU NuGet.
@@ -36,6 +39,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm run build
 
 FROM node:22-alpine AS runner

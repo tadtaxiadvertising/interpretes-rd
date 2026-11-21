@@ -16,6 +16,9 @@ ENV BUILD_TIMESTAMP=${BUILD_TIMESTAMP}
 
 # Copiar solo el subdirectorio interpreters-api (no el frontend entero)
 COPY interpreters-api/package.json interpreters-api/package-lock.json ./
+# Reject a low-memory build host before installing the backend toolchain.
+COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm ci --legacy-peer-deps
 
 # Copiar código fuente del backend
@@ -26,6 +29,8 @@ COPY prisma ./prisma
 # Dar permisos de ejecución a todos los binarios y compilar
 RUN chmod -R +x ./node_modules/.bin
 RUN npx prisma generate
+# Re-check before the TypeScript build, after Prisma tooling has run.
+RUN node scripts/ci/assert-build-memory.mjs
 RUN npm run build
 
 # --- STAGE 2: Runner ---
