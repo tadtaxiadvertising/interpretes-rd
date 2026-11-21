@@ -2,7 +2,7 @@
 
 > **Architecture**: Unified Data Layer (Direct Prisma) + Decoupled REST for Clients
 > **Runtime**: Easypanel (Docker/VPS) — Self-Hosted
-> **Auth**: Supabase Auth (native, with RLS)
+> **Auth**: Supabase + Auth.js in Next.js; a separate JWT guard in Express (verify each route)
 > **Framework**: Next.js 15.5.28 (frontend) + Express 4.22.1 (independent API)
 > **Last Updated**: 2026-11-21 (code-level reconciliation; production configuration not independently verified)
 
@@ -99,9 +99,11 @@ The tracked Next.js version is 15.5.28. The `src/middleware.ts` entry point rema
 
 `outputFileTracingIncludes` has been promoted from `experimental` to a top-level property in `next.config.ts`. The `serverExternalPackages` property replaces `experimental.serverComponentsExternalPackages`.
 
-## 4. Authentication & Authorization (Supabase RBAC)
+## 4. Authentication & Authorization
 
 ### Roles
+
+The rows below are a high-level inventory, **not** an authorization policy or exhaustive role mapping. Frontend Supabase roles, Auth.js RBAC roles, and Express JWT claims are separate contexts; permissions are established by each route/action and must be reviewed there.
 
 | Role              | Permissions                                           |
 | :---------------- | :---------------------------------------------------- |
@@ -120,13 +122,16 @@ Request → Supabase Middleware (SSR) → Session Refresh → Page Render
                └─ Admin: /admin/*, /payroll/*, /qa/*
 ```
 
-> **Note**: The middleware gracefully degrades if `NEXT_PUBLIC_SUPABASE_URL` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` are missing at runtime — it logs a warning and passes the request through instead of crashing the container with a 502.
+> **Security note**: The Next.js middleware may skip Supabase session refresh if configuration is unavailable, but its protected-route and API gates still need independent authorization checks. Do **not** treat the presence of an Auth.js cookie as proof of role or scope: handlers and server actions validate current identity and permissions.
 
-### API Auth Flow (Backend)
+### API Auth Flow (Express)
 
 ```text
-Request → CORS Check → Bearer Token Extraction → Supabase Token Verify → Route Handler
+Request → Express CORS / JSON limit → route-specific JWT authGuard (where applied)
+        → route-specific authorization → handler → sanitized error handling
 ```
+
+The Express API's `authGuard` uses a JWT verified with its own configured secret, not the Next.js middleware's Supabase token verification. `/api/auth/login` and `/api/auth/register` are intentionally public; `/api/auth/me` is JWT-protected. Do not assume all Express routes are protected by a global guard; audit each mounted router. The frontend's Next.js `/api/*` path has a separate gate and per-handler permissions.
 
 ## 5. Caching Strategy
 
@@ -138,12 +143,14 @@ Request → CORS Check → Bearer Token Extraction → Supabase Token Verify →
 | Payroll Records  | On-demand         | 0    | Always fresh (financial)       |
 | System Config    | Server-side cache | 300s | Manual revalidation            |
 
-## 6. Map of Services
+## 6. Logical Module Map
 
-1. **Interpreter Hub**: Master roster CRUD (Backend API).
-2. **Production Telemetry**: CSV import + real-time call tracking (Backend API).
-3. **QA Service**: Weighted evaluation forms with auto-fail logic (Backend API).
-4. **Payroll Engine**: DB-side aggregation → transactional record creation (Backend API).
-5. **Recruitment Pipeline**: Webhook-driven state machine for candidates (Backend API).
-6. **Notification Service**: User-scoped alerts with read/unread state (Backend API).
+This is a domain/function inventory, not a promise that every feature is implemented by the independent Express service. Consult the specific Next.js route handler, server action, or Express router before making changes.
+
+1. **Interpreter Hub**: Master roster CRUD (frontend/API as routed).
+2. **Production Telemetry**: CSV import + real-time call tracking (route ownership must be checked).
+3. **QA Service**: Weighted evaluation forms with auto-fail logic (route ownership must be checked).
+4. **Payroll Engine**: DB-side aggregation → transactional record creation (route ownership must be checked).
+5. **Recruitment Pipeline**: Webhook-driven state machine for candidates (route ownership must be checked).
+6. **Notification Service**: User-scoped alerts with read/unread state (route ownership must be checked).
 7. **Frontend Shell**: SSR pages, auth sessions, UI components (Frontend).
