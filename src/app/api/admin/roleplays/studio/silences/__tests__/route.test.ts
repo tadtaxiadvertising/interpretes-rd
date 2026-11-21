@@ -84,14 +84,37 @@ describe('admin FFmpeg silence analysis boundaries', () => {
     expect((await POST(request(large) as never)).status).toBe(400);
   });
 
-  it('rejects an actual oversized multipart stream even without Content-Length', async () => {
-    // The old req.formData() path buffered the entire payload when the
-    // optional Content-Length header was omitted, despite its 15 MiB
-    // per-file post-parse check.
-    const large = new File([new Uint8Array(15 * 1024 * 1024 + 100_001)],
-      'large.mp3', { type: 'audio/mpeg' });
-    const req = request(large);
-    req.headers.delete('content-length');
+  function oversizedStreamingRequest(): Request {
+    // 64 KiB chunks keep the fixture's memory budget tiny while the total
+    // delivered body would exceed 15 MiB if the parser did not stop it.
+    const boundary = 'stream-limited-test';
+    const prefix = new TextEncoder().encode(
+      '--' + boundary + '\r\nContent-Disposition: form-data; name="audio"; filename="large.mp3"\r\nContent-Type: audio/mpeg\r\n\r\n',
+    );
+    const chunk = new Uint8Array(64 * 1024);
+    let emitted = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (emitted === 0) controller.enqueue(prefix);
+        else if (emitted <= 250) controller.enqueue(chunk);
+        else {
+          controller.enqueue(new TextEncoder().encode('\r\n--' + boundary + '--\r\n'));
+          controller.close();
+        }
+        emitted++;
+      },
+    });
+    return new Request('http://localhost/api/admin/roleplays/studio/silences', {
+      method: 'POST',
+      headers: { 'content-type': 'multipart/form-data; boundary=' + boundary },
+      body: stream,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+  }
+
+  it('rejects actual oversized streaming bytes even without Content-Length', async () => {
+    const req = oversizedStreamingRequest();
+    expect(req.headers.get('content-length')).toBeNull();
 
     const response = await POST(req as never);
     expect(response.status).toBe(413);
@@ -99,10 +122,8 @@ describe('admin FFmpeg silence analysis boundaries', () => {
     expect((await response.json()).error).toContain('15 MiB');
   });
 
-  it('rejects a falsely small Content-Length rather than trusting it', async () => {
-    const large = new File([new Uint8Array(15 * 1024 * 1024 + 100_001)],
-      'large.mp3', { type: 'audio/mpeg' });
-    const req = request(large);
+  it('rejects a falsely small Content-Length instead of trusting it', async () => {
+    const req = oversizedStreamingRequest();
     req.headers.set('content-length', '1');
     const response = await POST(req as never);
     expect(response.status).toBe(413);
