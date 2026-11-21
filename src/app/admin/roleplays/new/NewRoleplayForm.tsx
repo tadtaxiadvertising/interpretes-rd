@@ -534,23 +534,23 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         Number.isSafeInteger(payload.skippedCount) && (payload.skippedCount ?? -1) >= 0 &&
         Number.isSafeInteger(payload.scenarioCount) && (payload.scenarioCount ?? 0) > 0 &&
         (payload.scenarioCount ?? 0) <= ROLEPLAY_MAX_SCENARIOS;
-      const validSingle = (payload?.bulk === undefined || payload.bulk === false) &&
+      const validSingle = (payload?.bulk === undefined || payload?.bulk === false) &&
         ((typeof payload?.inviteLink === 'string' && payload.inviteLink.trim().length > 0) ||
           (typeof payload?.sessionId === 'string' && payload.sessionId.trim().length > 0));
-      if (res.ok === false || (!validBulk && !validSingle)) {
+      if (!payload || res.ok === false || (!validBulk && !validSingle)) {
         setSubmissionUncertain(true);
         throw new Error(unknownResultMessage);
       }
 
-      if (payload!.bulk) {
+      if (payload.bulk) {
         setSuccess({
           link: `${window.location.origin}/admin/roleplays`,
-          participantName: `${data.data.createdCount} active interpreter(s)`,
-          summary: `${data.data.createdCount} sesiones creadas · ${data.data.skippedCount} omitidas. ${data.data.scenarioCount} escenarios ${librarySource ? 'reutilizados desde la biblioteca' : 'subidos una vez y compartidos entre sesiones'}.`,
+          participantName: `${payload.createdCount} active interpreter(s)`,
+          summary: `${payload.createdCount} sesiones creadas · ${payload.skippedCount} omitidas. ${payload.scenarioCount} escenarios ${librarySource ? 'reutilizados desde la biblioteca' : 'subidos una vez y compartidos entre sesiones'}.`,
         });
       } else {
         setSuccess({
-          link: data.data.inviteLink || `${window.location.origin}/roleplays/${data.data.sessionId}`,
+          link: payload.inviteLink || `${window.location.origin}/roleplays/${payload.sessionId}`,
           participantName: participantType === 'interpreter'
             ? interpreters.find(i => i.id === parseInt(selectedParticipantId))?.name || 'Intérprete'
             : candidates.find(c => c.id === parseInt(selectedParticipantId))?.name || 'Candidato',
