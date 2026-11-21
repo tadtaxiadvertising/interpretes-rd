@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { ScenarioCard } from './ScenarioCard';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
+import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 
@@ -154,6 +155,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const scenarioCount = librarySource?.scenarios.length ?? scenarios.length;
   const readyScenarioCount = librarySource?.scenarios.length ??
     scenarios.filter((scenario) => scenario.title.trim() && scenario.baseAudioFile).length;
+  // Preview only; never materialize file bytes and never replace server limits.
+  const selectedAudioBytes = librarySource ? 0 :
+    scenarios.reduce((bytes, scenario) => bytes + (scenario.baseAudioFile?.size ?? 0), 0);
   const defaultResponseLimitCount = librarySource ? 0 :
     scenarios.filter(scenario => scenario.durationLimitSec === 0).length;
 
@@ -411,6 +415,20 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         });
         return false;
       }
+    }
+    // A manifest may have changed after import, or another component may
+    // supply an audio that bypasses the card's selection-time validation.
+    // Reject it before constructing or transferring a potentially huge body.
+    const preflight = inspectRoleplayAdminAudioDraft(scenarios);
+    if (preflight.invalid) {
+      const { index, message } = preflight.invalid;
+      const scenario = scenarios[index];
+      pendingFieldValidation.current = scenario ? { scenarioId: scenario.id, field: 'audio', message } : null;
+      setError(message);
+      if (scenario) setValidationFocus({
+        scenarioId: scenario.id, field: 'audio', requestId: ++validationFocusSequence.current,
+      });
+      return false;
     }
     pendingFieldValidation.current = null;
     return true;
@@ -771,6 +789,17 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         <p className="text-sm text-slate-300">
           Escenarios listos: <span className="font-medium text-white">{readyScenarioCount} de {scenarioCount}</span>
         </p>
+        {!librarySource && selectedAudioBytes > 0 && (
+          <p className="text-sm text-slate-300">
+            Audio seleccionado: <span className="font-medium text-white">{(selectedAudioBytes / (1024 * 1024)).toFixed(1)} MiB</span>
+          </p>
+        )}
+        {!librarySource && selectedAudioBytes > 96 * 1024 * 1024 && (
+          <p className="text-xs text-amber-200">
+            Este lote es voluminoso. La publicación actual envía los audios al servidor.
+            Si se interrumpe, comprueba primero la lista de roleplays antes de repetir la operación.
+          </p>
+        )}
         {(!isBulk && !selectedParticipantId) ? (
           <p className="text-xs text-amber-200">Elige un destinatario antes de crear. El formulario te llevará al primer dato pendiente.</p>
         ) : readyScenarioCount !== scenarioCount || scenarioCount === 0 ? (
