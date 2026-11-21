@@ -290,10 +290,11 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       });
     });
     fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente página SRT' }));
+    expect(screen.getByText('Mostrando 61–80 de 80 turnos')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Completar con turnos compatibles de esta página' }));
     expect(screen.getByText(/80 turnos disponibles y 20 seleccionados/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Anterior' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior página SRT' }));
     expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }) as HTMLInputElement).checked)
       .toBe(false);
   });
