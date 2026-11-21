@@ -33,16 +33,22 @@ function ledger(maybeRow: unknown = null, createError: unknown = null) {
   if (createError) create.mockRejectedValue(createError);
   else create.mockResolvedValue({ id: 'id-1' });
   const findUnique = vi.fn().mockResolvedValue(maybeRow);
-  const db = { roleplayCreationRequest: { create, findUnique } } as unknown as
-    Pick<PrismaClient, 'roleplayCreationRequest'>;
-  return { db, create, findUnique };
+  const findMany = vi.fn().mockImplementation(async (query: { where: { id: { in: string[] } } }) =>
+    query.where.id.in.map(id => ({ id })));
+  const db = {
+    roleplayCreationRequest: { create, findUnique },
+    roleplaySession: { findMany },
+  } as unknown as Pick<PrismaClient, 'roleplayCreationRequest' | 'roleplaySession'>;
+  return { db, create, findUnique, findMany };
 }
 
 function row(overrides: Record<string, unknown> = {}) {
   return {
     actorUserId: actor, payloadHash: digest, status: 'IN_PROGRESS',
     sessionIds: [], createdCount: null, skippedCount: null,
-    scenarioCount: null, ...overrides,
+    scenarioCount: null, completedAt: overrides.status === 'COMPLETED'
+      ? new Date('2026-11-21T00:00:00.000Z') : null,
+    ...overrides,
   };
 }
 
@@ -128,7 +134,7 @@ describe('durable Roleplay idempotency ledger: unique key claim', () => {
     expect(duplicate.kind).toBe('IN_PROGRESS');
     expect(second.findUnique).toHaveBeenCalledWith({
       where: { actorUserId_requestKey: { actorUserId: actor, requestKey: key } },
-      select: expect.objectContaining({ payloadHash: true, sessionIds: true }),
+      select: expect.objectContaining({ payloadHash: true, status: true }),
     });
   });
 
@@ -148,6 +154,31 @@ describe('durable Roleplay idempotency ledger: unique key claim', () => {
       kind: 'REPLAY', sessionIds: ['roleplay-session-1', 'roleplay-session-2'],
       createdCount: 2, skippedCount: 1, scenarioCount: 25,
     });
+    expect(store.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ['roleplay-session-1', 'roleplay-session-2'] } },
+      select: { id: true },
+    });
+  });
+
+  it('never replays missing sessions from a completed claim', async () => {
+    const store = ledger(row({
+      status: 'COMPLETED', sessionIds: ['session-1', 'session-2'],
+      createdCount: 2, skippedCount: 0, scenarioCount: 1,
+    }), { code: 'P2002' });
+    store.findMany.mockResolvedValueOnce([{ id: 'session-1' }]);
+    expect(await claimRoleplayCreation(store.db, actor, key, digest))
+      .toEqual({ kind: 'IN_PROGRESS' });
+    expect(store.findMany).toHaveBeenCalledOnce();
+  });
+
+  it('fails closed when session verification is unavailable', async () => {
+    const store = ledger(row({
+      status: 'COMPLETED', sessionIds: ['session-1'],
+      createdCount: 1, skippedCount: 0, scenarioCount: 1,
+    }), { code: 'P2002' });
+    store.findMany.mockRejectedValueOnce(new Error('SYNTHETIC_DB_UNAVAILABLE'));
+    await expect(claimRoleplayCreation(store.db, actor, key, digest))
+      .rejects.toThrow('SYNTHETIC_DB_UNAVAILABLE');
   });
 
   it('fails closed on corrupted or incomplete results, or mismatched actor', async () => {
@@ -155,6 +186,7 @@ describe('durable Roleplay idempotency ledger: unique key claim', () => {
       row({ actorUserId: 'other-admin' }),
       row({ status: 'COMPLETED', createdCount: 2, skippedCount: 0, scenarioCount: 1, sessionIds: ['only-one'] }),
       row({ status: 'COMPLETED', createdCount: 2, skippedCount: 0, scenarioCount: 1, sessionIds: ['same-session', 'same-session'] }),
+      row({ status: 'COMPLETED', completedAt: null, createdCount: 1, skippedCount: 0, scenarioCount: 1, sessionIds: ['only-one'] }),
       row({ status: 'COMPLETED', createdCount: 1, skippedCount: 0, scenarioCount: 0, sessionIds: ['one'] }),
       row({ status: 'FAILED', createdCount: 1, skippedCount: 0, scenarioCount: 1, sessionIds: ['one'] }),
     ]) {
