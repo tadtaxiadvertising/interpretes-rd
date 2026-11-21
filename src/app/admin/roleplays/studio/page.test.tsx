@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import RoleplayStudioPage from './page';
 
 vi.mock('next/link', () => ({
@@ -53,6 +53,52 @@ describe('Audio Studio clip review player', () => {
     Object.defineProperty(player, 'duration', { configurable: true, value: 7200 });
     fireEvent.loadedMetadata(player);
     expect(screen.getByRole('button', { name: /Añadir fragmento/i })).toBeTruthy();
+  });
+
+  it('previews a local VAD region using the existing audio player and stops at its end', async () => {
+    const source = new File(['ID3'], 'local-preview.mp3', { type: 'audio/mpeg' });
+    Object.defineProperty(source, 'arrayBuffer', {
+      configurable: true, value: vi.fn(async () => new ArrayBuffer(16)),
+    });
+    const samples = new Float32Array(16000 * 4);
+    for (let i = 16000; i < 16000 * 2.7; i++) {
+      samples[i] = Math.sin(i / 8) * 0.2;
+    }
+    const decode = vi.fn(async () => ({
+      duration: 4,
+      sampleRate: 16000,
+      numberOfChannels: 1,
+      getChannelData: () => samples,
+    }));
+    const makeContext = vi.fn(function FakeAudioContext() {
+      return { decodeAudioData: decode, close: vi.fn(async () => {}) };
+    });
+    vi.stubGlobal('AudioContext', makeContext);
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [source] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 4 });
+    fireEvent.loadedMetadata(player);
+
+    await waitFor(() => {
+      expect((screen.getByRole('button', { name: 'Revisar actividad local' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar región 1' }));
+    expect(player.play).toHaveBeenCalledOnce();
+    expect(player.currentTime).toBeGreaterThan(0);
+    expect(player.currentTime).toBeLessThan(2);
+
+    player.currentTime = 3.5;
+    fireEvent.timeUpdate(player);
+    expect(pause).toHaveBeenCalledOnce();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(decode).toHaveBeenCalledOnce();
   });
 
   it('prepares a short MP3 locally by default without posting media to the server', async () => {

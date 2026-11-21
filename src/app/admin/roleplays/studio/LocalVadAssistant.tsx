@@ -10,12 +10,13 @@ type ExistingCut = { start: number; end: number };
 const clipKey = (clip: StudioSuggestedClip) => `${clip.start}:${clip.end}`;
 
 export default function LocalVadAssistant({
-  snapshot, duration, existing, onApply,
+  snapshot, duration, existing, onApply, onPreview,
 }: {
   snapshot: LocalVadSnapshot | null;
   duration: number;
   existing: readonly ExistingCut[];
   onApply: (segments: StudioSuggestedClip[]) => void;
+  onPreview?: (region: StudioSuggestedClip) => void;
 }) {
   const [reviewed, setReviewed] = useState(false);
   const [excludedCuts, setExcludedCuts] = useState<Set<string>>(() => new Set());
@@ -73,8 +74,9 @@ export default function LocalVadAssistant({
           ) : (
             <div className="mt-3 space-y-2">
               <p className="text-xs text-amber-100">
-                Elige las regiones que deseas añadir. Solo se incluirán cortes completos
-                que no se solapen con intervenciones existentes; revisa cada región antes de guardar.
+                Escucha cada región y elige las que deseas añadir. Solo se incluirán
+                cortes completos que no se solapen con intervenciones existentes; revisa
+                hablantes e idioma antes de guardar.
               </p>
               <button type="button"
                 onClick={() => { onApply(selectedClips); setReviewed(false); }}
@@ -84,8 +86,8 @@ export default function LocalVadAssistant({
               </button>
               <ol className="grid gap-1 text-xs text-slate-300 sm:grid-cols-2">
                 {proposal.clips.map((cut, index) => (
-                  <li key={clipKey(cut)}>
-                    <label className="flex items-center gap-2 rounded-lg border border-white/10 p-2">
+                  <li key={clipKey(cut)} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 p-2">
+                    <label className="flex flex-1 items-center gap-2">
                       <input type="checkbox" aria-label={`Incluir región ${index + 1}`}
                         checked={!excludedCuts.has(clipKey(cut))}
                         onChange={event => {
@@ -99,6 +101,13 @@ export default function LocalVadAssistant({
                         }} />
                       Región {index + 1}: {cut.start.toFixed(2)}–{cut.end.toFixed(2)} s
                     </label>
+                    {onPreview && (
+                      <button type="button" onClick={() => onPreview(cut)}
+                        aria-label={`Escuchar región ${index + 1}`}
+                        className="rounded-md border border-cyan-300/30 px-3 py-1.5 text-cyan-100 hover:bg-cyan-500/15">
+                        Escuchar
+                      </button>
+                    )}
                   </li>
                 ))}
               </ol>
