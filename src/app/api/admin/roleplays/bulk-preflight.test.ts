@@ -50,10 +50,11 @@ function bulkRequest(count = 1): NextRequest {
   for (let index = 0; index < count; index++) {
     form.append('scenarioAudios', new File(['ID3'], `consulta-${index}.mp3`, { type: 'audio/mpeg' }));
   }
-  return {
-    headers: new Headers(),
-    formData: async () => form,
-  } as unknown as NextRequest;
+  // Use a real Request stream, just like Next.js, so the multipart byte
+  // limit is exercised instead of bypassed by a formData-only stub.
+  return new Request('http://localhost/api/admin/roleplays', {
+    method: 'POST', body: form,
+  }) as NextRequest;
 }
 
 function singleInterpreterRequest(count = 1): NextRequest {
@@ -68,10 +69,11 @@ function singleInterpreterRequest(count = 1): NextRequest {
   for (let index = 0; index < count; index++) {
     form.append('scenarioAudios', new File(['ID3'], `individual-${index}.mp3`, { type: 'audio/mpeg' }));
   }
-  return {
-    headers: new Headers(),
-    formData: async () => form,
-  } as unknown as NextRequest;
+  // Use a real Request stream, just like Next.js, so the multipart byte
+  // limit is exercised instead of bypassed by a formData-only stub.
+  return new Request('http://localhost/api/admin/roleplays', {
+    method: 'POST', body: form,
+  }) as NextRequest;
 }
 
 describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
@@ -86,6 +88,27 @@ describe('bulk roleplay creation: avoid unnecessary storage uploads', () => {
 
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it('rejects oversized declared batches before parsing or touching the database', async () => {
+    const req = bulkRequest(25);
+    req.headers.set('content-length', String(25 * 15 * 1024 * 1024 + 2 * 1024 * 1024 + 1));
+    const res = await POST(req);
+    expect(res.status).toBe(413);
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await res.json()).error).toContain('lote de audio');
+    expect(mocks.activeInterpreters).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+
+  it('parses all 25 small clips and reaches eligibility without blocking legitimate counts', async () => {
+    mocks.existingSessions.mockResolvedValue([{ interpreterId: 11 }, { interpreterId: 22 }]);
+    const req = bulkRequest(25);
+    req.headers.delete('content-length');
+    const response = await POST(req);
+    expect(response.status).toBe(409);
+    expect((await response.json()).skippedCount).toBe(2);
+    expect(mocks.upload).not.toHaveBeenCalled();
   });
 
   it('returns 409 before storage configuration or writes when every active interpreter is blocked', async () => {
