@@ -96,7 +96,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'eliminación';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -125,6 +125,8 @@ export default function RoleplayStudioPage() {
   const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
+  const [bulkSpeakerRole, setBulkSpeakerRole] =
+    useState<'doctor' | 'patient' | 'nurse' | 'operator'>('doctor');
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const preferenceEdits = useRef({ exclude: false, compact: false, protocolLanguage: false });
   useEffect(() => {
@@ -298,6 +300,8 @@ export default function RoleplayStudioPage() {
     setExpandedSegmentId(lastStructuralEdit.expandedId);
     setNotice(lastStructuralEdit.kind === 'idiomas'
       ? 'Asignación masiva de idiomas deshecha. Revisa los idiomas pendientes.'
+      : lastStructuralEdit.kind === 'hablantes'
+        ? 'Asignación masiva de hablantes deshecha. Revisa los perfiles pendientes.'
       : lastStructuralEdit.kind === 'eliminación'
         ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
         : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
@@ -857,6 +861,45 @@ export default function RoleplayStudioPage() {
     setNotice(`Idioma ${language.toUpperCase()} asignado a ${pendingIds.size} intervenciones pendientes, sin modificar idiomas ya revisados ni al intérprete original. Puedes deshacerlo; verifica cada audio antes de exportar.`);
   };
 
+  const setSpeakerForPendingTurns = (
+    role: 'doctor' | 'patient' | 'nurse' | 'operator', visibleIds: readonly string[],
+  ) => {
+    const visible = new Set(visibleIds);
+    const pendingIds = new Set(segments.filter(item =>
+      visible.has(item.id) && item.speakerRole === 'unknown',
+    ).map(item => item.id));
+    if (!pendingIds.size) return;
+    // An administrator must explicitly choose the generic role. Never infer
+    // speaker identity from audio, overwrite reviewed labels, or bulk-classify
+    // the original interpreter (whose exclusion requires individual review).
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'hablantes', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    setSegments(previous => {
+      const indexById = new Map([...previous]
+        .sort((a, b) => a.start - b.start)
+        .map((item, index) => [item.id, index] as const));
+      return previous.map(item => {
+        if (!pendingIds.has(item.id)) return item;
+        return {
+          ...item,
+          speakerRole: role,
+          title: titleAfterProfileChange(
+            item.title, item.speakerRole, item.language,
+            indexById.get(item.id) ?? 0, role, item.language,
+          ),
+        };
+      });
+    });
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice(`Perfil ${role} asignado a ${pendingIds.size} intervenciones visibles sin hablante. Revisa cada audio; puedes deshacer esta asignación.`);
+  };
+
   const addSegment = () => {
     if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
       setError('Se alcanzó el límite de intervenciones exportables.');
@@ -1380,6 +1423,8 @@ export default function RoleplayStudioPage() {
   const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
     segment.language === 'unknown' && segment.speakerRole !== 'interpreter')
     .map(({ segment }) => segment.id);
+  const pendingSpeakerIds = visibleSegments.filter(({ segment }) =>
+    segment.speakerRole === 'unknown').map(({ segment }) => segment.id);
 
   const mediaHandlers = {
     onPlay: () => setEditorPlaybackRevision(n => n + 1),
@@ -1974,6 +2019,8 @@ export default function RoleplayStudioPage() {
                     ? 'Deshacer exclusión de intérpretes'
                     : lastStructuralEdit.kind === 'idiomas'
                       ? 'Deshacer asignación de idiomas'
+                      : lastStructuralEdit.kind === 'hablantes'
+                        ? 'Deshacer asignación de hablantes'
                       : lastStructuralEdit.kind === 'eliminación'
                         ? 'Deshacer eliminación de intervención'
                         : 'Deshacer última división o unión'}
@@ -2015,6 +2062,28 @@ export default function RoleplayStudioPage() {
               </label>
             </div>
           </details>
+          {pendingSpeakerIds.length > 1 && (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2">
+              <span className="mr-auto text-xs text-slate-300">
+                {pendingSpeakerIds.length} intervenciones visibles sin hablante. Se respetarán los perfiles revisados y los filtros actuales.
+              </span>
+              <label className="flex items-center gap-2 text-xs text-slate-200">
+                Perfil
+                <select aria-label="Hablante para pendientes" value={bulkSpeakerRole}
+                  onChange={event => setBulkSpeakerRole(event.target.value as typeof bulkSpeakerRole)}
+                  className="rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white">
+                  <option value="doctor">Médico</option>
+                  <option value="patient">Paciente</option>
+                  <option value="nurse">Enfermería</option>
+                  <option value="operator">Operador</option>
+                </select>
+              </label>
+              <button type="button" onClick={() => setSpeakerForPendingTurns(bulkSpeakerRole, pendingSpeakerIds)}
+                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
+                Asignar hablante a {pendingSpeakerIds.length} pendientes
+              </button>
+            </div>
+          )}
           {pendingLanguageIds.length > 1 && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2">
               <span className="mr-auto text-xs text-slate-300">

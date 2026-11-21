@@ -103,6 +103,47 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getByText('Interpreter: Original rendition')).toBeTruthy();
   });
 
+  it('assigns a chosen speaker only to pending visible turns and supports undo', () => {
+    selectAudio();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    const speakers = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
+    expect(speakers).toHaveLength(3);
+    fireEvent.change(speakers[0], { target: { value: 'patient' } });
+
+    const bulk = screen.getByRole('combobox', { name: 'Hablante para pendientes' });
+    fireEvent.change(bulk, { target: { value: 'nurse' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar hablante a 2 pendientes' }));
+
+    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
+      .map(element => element.value)).toEqual(['patient', 'nurse', 'nurse']);
+    expect(screen.getByText(/Perfil nurse asignado a 2 intervenciones/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de hablantes' }));
+    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
+      .map(element => element.value)).toEqual(['patient', 'unknown', 'unknown']);
+  });
+
+  it('applies bulk speaker review only to turns currently shown by the search filter', () => {
+    selectAudio();
+    for (let i = 0; i < 4; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    const titles = screen.getAllByLabelText('Título') as HTMLInputElement[];
+    fireEvent.change(titles[0], { target: { value: 'Afuera de búsqueda' } });
+    fireEvent.change(titles[1], { target: { value: 'Afuera de búsqueda 2' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar hablante a 2 pendientes' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: '' },
+    });
+    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
+      .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
+  });
+
   it('updates generated titles without another click but respects manual titles', async () => {
     selectAudio();
     const subtitle = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });
