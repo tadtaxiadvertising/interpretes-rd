@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseTimedTranscript, parseTimedTranscriptForReview } from './transcript';
-import { selectTimedCues } from './cue-selection';
+import { selectTimedCues, fillCompatibleTimedCueSelection } from './cue-selection';
 
 function makeSubtitle(count: number) {
   return Array.from({ length: count }, (_, index) => {
@@ -44,6 +44,50 @@ Doctor: Next line`;
     expect(cues).toHaveLength(3);
     expect(() => selectTimedCues(cues, [0, 1])).toThrow(/solapadas/);
     expect(selectTimedCues(cues, [0, 2]).map(cue => cue.start)).toEqual([0, 5]);
+  });
+
+
+  it('suggests nonoverlapping cues but never auto-picks a labeled interpreter', () => {
+    const cues = [
+      { start: 0, end: 3, text: 'Doctor 1', speaker: 'Doctor' },
+      { start: 2, end: 4, text: 'Overlap', speaker: 'Patient' },
+      { start: 4, end: 6, text: 'Interpretation', speaker: 'Interpreter' },
+      { start: 6, end: 8, text: 'Patient', speaker: 'Paciente' },
+      { start: 9, end: 11, text: 'Unknown', speaker: null },
+    ];
+    expect(fillCompatibleTimedCueSelection(cues, [], [0, 1, 2, 3, 4]))
+      .toEqual([0, 3, 4]);
+    expect(selectTimedCues(cues, [0, 3, 4])).toHaveLength(3);
+    // An administrator's already selected valid choices remain untouched.
+    expect(fillCompatibleTimedCueSelection(cues, [1], [0, 2, 3, 4]))
+      .toEqual([1, 3, 4]);
+    expect(() => fillCompatibleTimedCueSelection(cues, [0, 1], [3]))
+      .toThrow(/solapadas/);
+  });
+
+  it('obeys 25 scenarios and 15 minutes even when selecting across many pages', () => {
+    const many = Array.from({ length: 40 }, (_, index) => ({
+      start: index * 10, end: index * 10 + 3,
+      speaker: 'Doctor', text: 'Cue',
+    }));
+    const picked = fillCompatibleTimedCueSelection(many, [], many.map((_, i) => i));
+    expect(picked).toEqual(Array.from({ length: 25 }, (_, i) => i));
+    const long = Array.from({ length: 8 }, (_, index) => ({
+      start: index * 300, end: index * 300 + 280,
+      speaker: 'Doctor', text: 'Cue',
+    }));
+    expect(fillCompatibleTimedCueSelection(long, [], long.map((_, i) => i)))
+      .toEqual([0, 1, 2]);
+    expect(selectTimedCues(long, [0, 1, 2])).toHaveLength(3);
+  });
+
+  it('does not mutate manual selections or candidate lists', () => {
+    const cues = parseTimedTranscriptForReview(makeSubtitle(30));
+    const chosen = [9, 2];
+    const visible = [11, 10, 2, 9];
+    expect(fillCompatibleTimedCueSelection(cues, chosen, visible)).toEqual([2, 9, 10, 11]);
+    expect(chosen).toEqual([9, 2]);
+    expect(visible).toEqual([11, 10, 2, 9]);
   });
 
   it('rejects corrupt manual selections and transcript size exhaustion', () => {
