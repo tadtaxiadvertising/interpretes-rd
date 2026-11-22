@@ -8,6 +8,7 @@ import {
   ROLEPLAY_WORKER_BASE_POLL_MS,
   nextRoleplayWorkerIdleDelayMs,
   shouldRunRoleplayWorkerStaleCleanup,
+  waitForRoleplayWorkerPoll,
 } from '@/lib/roleplay-audio-worker-polling';
 
 interface ClaimedAudioJob {
@@ -30,10 +31,7 @@ const workerId = `${workerPrefix}-${randomUUID()}`;
 // still recovering a crashed worker within a single deploy window.
 const STALE_LOCK_MINUTES = 5;
 let stopping = false;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+const shutdown = new AbortController();
 
 async function failExhaustedStaleJobs(): Promise<void> {
   await prisma.$executeRaw`
@@ -246,7 +244,7 @@ async function run(): Promise<void> {
       const job = await claimNextJob();
       if (!job) {
         consecutiveEmptyPolls++;
-        await sleep(nextRoleplayWorkerIdleDelayMs(consecutiveEmptyPolls));
+        await waitForRoleplayWorkerPoll(nextRoleplayWorkerIdleDelayMs(consecutiveEmptyPolls), shutdown.signal);
         continue;
       }
 
@@ -262,7 +260,7 @@ async function run(): Promise<void> {
         '[ROLEPLAY AUDIO WORKER] Queue polling failed:',
         error instanceof Error ? 'Error' : 'UnknownError',
       );
-      await sleep(ROLEPLAY_WORKER_BASE_POLL_MS);
+      await waitForRoleplayWorkerPoll(ROLEPLAY_WORKER_BASE_POLL_MS, shutdown.signal);
     }
   }
 }
@@ -277,10 +275,13 @@ if (missingEnvVars.length > 0) {
 
 process.on('SIGTERM', () => {
   stopping = true;
+  // Cancel only an idle timer, never the in-flight audio conversion.
+  shutdown.abort();
   console.info('[ROLEPLAY AUDIO WORKER] SIGTERM received; finishing current job');
 });
 process.on('SIGINT', () => {
   stopping = true;
+  shutdown.abort();
   console.info('[ROLEPLAY AUDIO WORKER] SIGINT received; finishing current job');
 });
 
