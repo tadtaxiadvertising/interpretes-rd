@@ -252,6 +252,18 @@ export async function POST(req: NextRequest) {
       await discardHappyScribeDownload(fileResponse);
       return privateRoleplayResponse({ error: 'No fue posible descargar el SRT desde HappyScribe.' }, { status: 502 });
     }
+    // A provider error or Markdown export must never be accepted as SRT,
+    // even if its body contains an incidental timestamp-like line. Reject
+    // before streaming bytes into the constrained Next.js VPS.
+    const mediaType = fileResponse.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (mediaType === 'text/markdown' || mediaType === 'text/html' ||
+        mediaType === 'application/json' || mediaType === 'application/problem+json' ||
+        mediaType === 'application/xhtml+xml') {
+      await discardHappyScribeDownload(fileResponse);
+      return privateRoleplayResponse({
+        error: 'HappyScribe devolvió un documento, no subtítulos SRT. Selecciona la exportación SRT en HappyScribe.',
+      }, { status: 502 });
+    }
     const declaredLength = Number(fileResponse.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > 5_000_000) {
       await discardHappyScribeDownload(fileResponse);
