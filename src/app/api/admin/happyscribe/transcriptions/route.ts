@@ -4,6 +4,7 @@ import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from '@/lib
 import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
+import { readBoundedHappyScribeImportBody } from '@/lib/roleplay/happyscribe-import-body';
 import { isValidHappyScribeProbe, readBoundedHappyScribeListing } from '@/lib/roleplay/happyscribe-probe';
 import { validateAction } from '@/lib/auth/actions';
 import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
@@ -155,7 +156,16 @@ export async function POST(req: NextRequest) {
 
   let id = '';
   try {
-    const body: unknown = await req.json();
+    const parsed = await readBoundedHappyScribeImportBody(req);
+    if (parsed.kind === 'too-large') return privateRoleplayResponse(
+      { error: 'La solicitud de importación SRT es demasiado grande.' },
+      { status: 413 },
+    );
+    if (parsed.kind === 'invalid') return privateRoleplayResponse(
+      { error: 'No fue posible importar la transcripción desde HappyScribe.' },
+      { status: 502 },
+    );
+    const body: unknown = parsed.value;
     if (body && typeof body === 'object' && 'id' in body && typeof body.id === 'string') id = body.id;
     if (!isValidHappyScribeId(id)) return privateRoleplayResponse({ error: 'Identificador de transcripción no válido.' }, { status: 400 });
     const proof = body && typeof body === 'object' && 'proof' in body ? body.proof : null;
