@@ -3,6 +3,8 @@ import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
 import { verifyHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
+import { readBoundedHappyScribeImportBody } from '@/lib/roleplay/happyscribe-import-body';
+import { readBoundedHappyScribeListing, readBoundedHappyScribeMetadata } from '@/lib/roleplay/happyscribe-probe';
 import { validateAction } from '@/lib/auth/actions';
 import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
@@ -72,7 +74,16 @@ export async function POST(req: NextRequest) {
   );
 
   try {
-    const body: unknown = await req.json();
+    const parsed = await readBoundedHappyScribeImportBody(req);
+    if (parsed.kind === 'too-large') return privateRoleplayResponse(
+      { success: false, error: 'La solicitud de importación MP3 es demasiado grande.' },
+      { status: 413 },
+    );
+    if (parsed.kind === 'invalid') return privateRoleplayResponse(
+      { success: false, error: 'La solicitud de importación MP3 no es válida.' },
+      { status: 400 },
+    );
+    const body: unknown = parsed.value;
     const id = body && typeof body === 'object' && 'id' in body && typeof body.id === 'string'
       ? body.id : '';
     if (!isValidHappyScribeId(id)) return privateRoleplayResponse(
@@ -87,14 +98,20 @@ export async function POST(req: NextRequest) {
     );
 
     const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, token, undefined, req.signal);
-    if (!detailResponse.ok) return privateRoleplayResponse(
-      { success: false, error: detailResponse.status === 404
-        ? 'Transcripción no encontrada.' : 'No fue posible verificar el archivo en HappyScribe.' },
-      { status: detailResponse.status === 404 ? 404 : 502 },
+    if (!detailResponse.ok) {
+      await discardHappyScribeDownload(detailResponse);
+      return privateRoleplayResponse(
+        { success: false, error: detailResponse.status === 404
+          ? 'Transcripción no encontrada.' : 'No fue posible verificar el archivo en HappyScribe.' },
+        { status: detailResponse.status === 404 ? 404 : 502 },
+      );
+    }
+    const detail: unknown = await readBoundedHappyScribeListing(detailResponse);
+    if (!detail || typeof detail !== 'object') return privateRoleplayResponse(
+      { success: false, error: 'HappyScribe devolvió detalles de audio no válidos o demasiado grandes.' },
+      { status: 502 },
     );
-    const detail: unknown = await detailResponse.json();
-    if (!detail || typeof detail !== 'object' || !('state' in detail) ||
-        detail.state !== 'automatic_done') {
+    if (!('state' in detail) || detail.state !== 'automatic_done') {
       return privateRoleplayResponse(
         { success: false, error: 'El audio solo está disponible cuando HappyScribe termina de procesar la transcripción.' },
         { status: 409 },
@@ -106,10 +123,17 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ export: { format: 'mp3', transcription_ids: [id] } }),
     }, req.signal);
-    if (!exportResponse.ok) return privateRoleplayResponse(
-      { success: false, error: 'HappyScribe no pudo preparar el audio original.' }, { status: 502 },
+    if (!exportResponse.ok) {
+      await discardHappyScribeDownload(exportResponse);
+      return privateRoleplayResponse(
+        { success: false, error: 'HappyScribe no pudo preparar el audio original.' }, { status: 502 },
+      );
+    }
+    const exported: unknown = await readBoundedHappyScribeMetadata(exportResponse);
+    if (!exported || typeof exported !== 'object') return privateRoleplayResponse(
+      { success: false, error: 'HappyScribe devolvió metadatos de audio no válidos o demasiado grandes.' },
+      { status: 502 },
     );
-    const exported: unknown = await exportResponse.json();
     const downloadLink = exported && typeof exported === 'object' &&
       'download_link' in exported && typeof exported.download_link === 'string'
       ? exported.download_link : null;
