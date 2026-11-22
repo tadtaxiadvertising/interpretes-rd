@@ -24,6 +24,10 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [checking, setChecking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [recheckingEncryption, setRecheckingEncryption] = useState(false);
+  const [versionChecking, setVersionChecking] = useState(false);
+  const [runtimeVersion, setRuntimeVersion] = useState<
+    { kind: 'known'; sha: string } | { kind: 'unknown' | 'error'; message: string } | null
+  >(null);
   const [conflict, setConflict] = useState(false);
   const [pending, start] = useTransition();
   const hasToken = status.hasToken;
@@ -235,6 +239,29 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       setNotice({ ok: false, message: 'No se pudo contactar con HappyScribe.' });
     } finally { setChecking(false); }
   }
+  async function checkRuntimeVersion() {
+    if (versionChecking) return;
+    setVersionChecking(true);
+    setRuntimeVersion(null);
+    try {
+      const response = await fetch('/api/version', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error('Version endpoint unavailable');
+      const payload: unknown = await response.json();
+      // Never reflect arbitrary response text: only a valid public full SHA
+      // can be displayed, even if a proxy returns malformed release metadata.
+      const rawSha = payload && typeof payload === 'object' && 'buildId' in payload
+        ? payload.buildId : null;
+      const sha = typeof rawSha === 'string' && /^[a-f0-9]{40}$/i.test(rawSha)
+        ? rawSha.toLowerCase() : null;
+      setRuntimeVersion(sha
+        ? { kind: 'known', sha }
+        : { kind: 'unknown', message: 'La instancia no informa un SHA verificable. Comprueba GIT_SHA en el servicio Next.js de Easypanel antes de atribuirle una versión de GitHub.' });
+    } catch {
+      setRuntimeVersion({ kind: 'error', message: 'No se pudo consultar la versión de Next.js. No se ha modificado la configuración ni se ha intentado desplegar.' });
+    } finally {
+      setVersionChecking(false);
+    }
+  }
   return <form onSubmit={submit} className="space-y-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6">
     <div><h2 className="text-xl font-semibold text-white">HappyScribe</h2>
       <p className="mt-1 text-sm text-slate-400">Solo los administradores pueden cambiar estos valores. Las claves nunca se devuelven al navegador.</p>
@@ -244,6 +271,23 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       </button>
       <p className="mt-1 text-xs text-slate-400">Solo copia indicadores de configuración ya cargados; nunca claves, tokens, ID de organización ni cambios sin guardar.</p>
       {copyNotice && <p role="status" className={copyNotice.ok ? 'mt-2 text-sm text-green-300' : 'mt-2 text-sm text-red-300'}>{copyNotice.message}</p>}
+      <div className="mt-3 rounded-lg border border-white/10 p-3">
+        <button type="button" disabled={versionChecking} onClick={() => void checkRuntimeVersion()}
+          className="rounded-lg border border-white/20 px-3 py-2 text-sm font-semibold text-blue-200 hover:bg-white/5 disabled:opacity-50">
+          {versionChecking ? 'Consultando versión…' : 'Verificar versión de Next.js (solo lectura)'}
+        </button>
+        <p className="mt-1 text-xs text-slate-400">
+          Consulta /api/version sin guardar preferencias, enviar claves, reconstruir imágenes ni ejecutar despliegues.
+        </p>
+        {runtimeVersion && <div role="status" className="mt-2 break-words text-xs text-slate-200">
+          {runtimeVersion.kind === 'known' ? (
+            <>
+              <p>SHA informado por la instancia Next.js: <code className="font-mono">{runtimeVersion.sha}</code></p>
+              <p className="mt-1">Compáralo con el commit actual de main en GitHub. Un SHA coincidente no verifica por sí solo los demás servicios.</p>
+            </>
+          ) : <p>{runtimeVersion.message}</p>}
+        </div>}
+      </div>
       <button type="button" disabled={editingDisabled || conflict}
         onClick={() => void recheckEncryptionReadiness()}
         className="mt-3 ml-3 rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-blue-200 hover:bg-white/5 disabled:opacity-50">
