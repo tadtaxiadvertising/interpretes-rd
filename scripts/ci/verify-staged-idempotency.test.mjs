@@ -82,3 +82,29 @@ test('the operational schema diagnostic cannot write or apply staged DDL', () =>
   assert.match(runbook, /inspect-call-idempotency-schema\.ts --check-only/);
   assert.match(runbook, /No existe un comando de aplicación autorizado/);
 });
+
+test('roleplay upload reservation DDL remains staged and cannot be auto-deployed', () => {
+  const name = 'roleplay-upload-reservations.sql';
+  const candidate = resolve(stagedDir, name);
+  assert.equal(existsSync(candidate), true, 'Staged upload reservation SQL must exist');
+  const sql = readFileSync(candidate, 'utf8');
+  assert.match(sql, /STAGED DESIGN ONLY/);
+  assert.match(sql, /roleplay_upload_reservations_actor_key/);
+  assert.match(sql, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(sql, /REVOKE ALL ON TABLE/);
+
+  // Reject accidental Prisma auto-discovery even if a migration is renamed.
+  const entries = readdirSync(migrationDir, { recursive: true }).map(String);
+  assert.deepEqual(entries.filter(name =>
+    /roleplay_upload_reservations|roleplay.upload.reservations/i.test(name)), []);
+  for (const relative of entries) {
+    if (!relative.endsWith('migration.sql')) continue;
+    const deployableSql = readFileSync(resolve(migrationDir, relative), 'utf8');
+    assert.doesNotMatch(deployableSql, /roleplay_upload_reservations/i,
+      'Proposed reservation table must not be auto-applied by Prisma');
+  }
+
+  const deployment = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
+  assert.doesNotMatch(deployment,
+    /(?:npm run migrate|prisma migrate deploy)[^\n]*roleplay.upload.reservations/i);
+});
