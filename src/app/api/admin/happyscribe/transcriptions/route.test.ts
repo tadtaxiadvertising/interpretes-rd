@@ -149,6 +149,58 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
+  it('cancels the provider detail body on a rejected transcription without leaking content', async () => {
+    const cancel = vi.fn();
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      status: 404,
+    }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(404);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PRIVATE_PROVIDER_DETAIL');
+  });
+
+  it('cancels a rejected SRT export-creation response before returning 502', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 503,
+      }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PRIVATE_EXPORT_ERROR');
+  });
+
+  it('cancels a rejected export-status poll without repeatedly querying HappyScribe', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 429,
+      }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('5');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('preserves the correct error response when cancelling a rejected provider stream fails', async () => {
+    const cancel = vi.fn(async () => { throw new Error('SYNTHETIC_PRIVATE_PROVIDER_ERROR'); });
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      status: 401,
+    }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PRIVATE_PROVIDER_ERROR');
+  });
+
   it('releases a rejected provider response without forwarding upstream error text', async () => {
     const cancel = vi.fn();
     mocks.fetch

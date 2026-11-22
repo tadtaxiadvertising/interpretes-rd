@@ -164,10 +164,13 @@ export async function POST(req: NextRequest) {
     }
 
     const detailResponse = await happyScribeFetch(`/transcriptions/${id}`, config.token, undefined, req.signal);
-    if (!detailResponse.ok) return privateRoleplayResponse(
-      { error: detailResponse.status === 404 ? 'Transcripción no encontrada.' : 'No fue posible verificar la transcripción.' },
-      { status: detailResponse.status === 404 ? 404 : 502 },
-    );
+    if (!detailResponse.ok) {
+      await discardHappyScribeDownload(detailResponse);
+      return privateRoleplayResponse(
+        { error: detailResponse.status === 404 ? 'Transcripción no encontrada.' : 'No fue posible verificar la transcripción.' },
+        { status: detailResponse.status === 404 ? 404 : 502 },
+      );
+    }
     const detail: unknown = await detailResponse.json();
     if (!detail || typeof detail !== 'object' || !('state' in detail) ||
         !['automatic_done', 'done'].includes(String(detail.state))) {
@@ -179,7 +182,10 @@ export async function POST(req: NextRequest) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ export: { format: 'srt', transcription_ids: [id] } }),
     }, req.signal);
-    if (!createResponse.ok) return privateRoleplayResponse({ error: 'HappyScribe no pudo preparar el archivo SRT.' }, { status: 502 });
+    if (!createResponse.ok) {
+      await discardHappyScribeDownload(createResponse);
+      return privateRoleplayResponse({ error: 'HappyScribe no pudo preparar el archivo SRT.' }, { status: 502 });
+    }
     const created: unknown = await createResponse.json();
     const exportId = created && typeof created === 'object' && 'id' in created && typeof created.id === 'string'
       ? created.id : null;
@@ -188,7 +194,10 @@ export async function POST(req: NextRequest) {
     let downloadLink: string | null = null;
     for (let attempt = 0; attempt < 12; attempt++) {
       const statusResponse = await happyScribeFetch(`/exports/${exportId}`, config.token, undefined, req.signal);
-      if (!statusResponse.ok) break;
+      if (!statusResponse.ok) {
+        await discardHappyScribeDownload(statusResponse);
+        break;
+      }
       const status: unknown = await statusResponse.json();
       if (status && typeof status === 'object' && 'state' in status) {
         if (status.state === 'ready' && 'download_link' in status &&
