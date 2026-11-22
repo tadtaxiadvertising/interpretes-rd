@@ -207,6 +207,77 @@ describe('POST /api/admin/roleplays', () => {
     });
   });
 
+  describe('process-local multipart admission', () => {
+    it('rejects a second create before parsing or uploading while a first upload remains active', async () => {
+      let releaseUpload!: (value: { error: null }) => void;
+      let signalStarted!: () => void;
+      const blockedUpload = new Promise<{ error: null }>(resolve => { releaseUpload = resolve; });
+      const started = new Promise<void>(resolve => { signalStarted = resolve; });
+      mockUpload.mockImplementationOnce(() => {
+        signalStarted();
+        return blockedUpload;
+      });
+
+      const first = POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      await started;
+      let second: Response;
+      try {
+        const beforeCreates = (prisma.roleplaySession.create as any).mock.calls.length;
+        second = await POST(buildRequest({
+          participantType: 'interpreter', participantId: '7',
+          scenarios: oneScenario, audios: [audioFile()],
+        }) as any);
+        expect(second.status).toBe(503);
+        expect(second.headers.get('Retry-After')).toBe('5');
+        expect(second.headers.get('Cache-Control')).toBe('private, no-store');
+        expect(second.headers.get('Vary')).toContain('Authorization');
+        expect(await second.json()).toMatchObject({
+          success: false,
+          error: expect.stringContaining('Ya se está creando otro roleplay'),
+        });
+        expect(mockUpload).toHaveBeenCalledOnce();
+        expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(beforeCreates);
+      } finally {
+        releaseUpload({ error: null });
+      }
+      const completed = await first;
+      expect(completed.status).toBe(200);
+
+      // A completed create releases the slot: later requests work normally.
+      const next = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(next.status).toBe(200);
+      expect(mockUpload).toHaveBeenCalledTimes(2);
+    });
+
+    it('releases the admission slot even after a Storage upload failure', async () => {
+      mockUpload.mockRejectedValueOnce(new Error('SYNTHETIC_PRIVATE_STORAGE_FAILURE'));
+      const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const failed = await POST(buildRequest({
+          participantType: 'interpreter', participantId: '7',
+          scenarios: oneScenario, audios: [audioFile()],
+        }) as any);
+        expect(failed.status).toBe(500);
+        expect(JSON.stringify(await failed.json())).not.toContain('SYNTHETIC_PRIVATE_STORAGE_FAILURE');
+
+        const retried = await POST(buildRequest({
+          participantType: 'interpreter', participantId: '7',
+          scenarios: oneScenario, audios: [audioFile()],
+        }) as any);
+        expect(retried.status).toBe(200);
+        expect(mockUpload).toHaveBeenCalledTimes(2);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+  });
+
   describe('input validation', () => {
     it.each([
       ['missing', null],
