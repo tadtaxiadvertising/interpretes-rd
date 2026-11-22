@@ -5,7 +5,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
 import { readBoundedHappyScribeImportBody } from '@/lib/roleplay/happyscribe-import-body';
-import { isValidHappyScribeProbe, readBoundedHappyScribeListing } from '@/lib/roleplay/happyscribe-probe';
 import { isValidHappyScribeProbe, readBoundedHappyScribeListing, readBoundedHappyScribeMetadata } from '@/lib/roleplay/happyscribe-probe';
 import { validateAction } from '@/lib/auth/actions';
 import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
