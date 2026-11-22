@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
+import { classifyRoleplayReservationCatalog, readRoleplayReservationCatalog } from './roleplay-upload-reservation-schema-catalog';
 
 // ONLY a fresh, disposable PostgreSQL database on the isolated CI service.
 // Never run against production, a shared DB or a remote hostname.
@@ -96,6 +97,63 @@ async function main(): Promise<void> {
     ), 'utf8');
     if (!sql.includes('STAGED DESIGN ONLY')) throw new Error('Unexpected staged SQL.');
     await first.query(sql); // Autocommit ONLY inside this newly created database.
+
+    // Execute the EXACT metadata reader used by the optional operator CLI,
+    // not merely an ad-hoc SQL check in this isolated verifier.
+    const preparedCatalog = await readRoleplayReservationCatalog(first);
+    if (classifyRoleplayReservationCatalog(preparedCatalog) !== 'catalog-ready') {
+      throw new Error('Staged Roleplay reservation catalog readiness failed.');
+    }
+
+    // Mutations below are inside a throwaway transaction in the throwaway DB.
+    // An unexpected permissive policy must change the verdict to incomplete.
+    await first.query('BEGIN');
+    try {
+      await first.query('SAVEPOINT simulated_unsafe_policy');
+      await first.query(
+        'CREATE POLICY ci_unapproved_upload_read ON public.roleplay_upload_reservations FOR SELECT USING (true)',
+      );
+      if (classifyRoleplayReservationCatalog(
+        await readRoleplayReservationCatalog(first),
+      ) !== 'incomplete') {
+        throw new Error('Catalog accepted a new public RLS policy.');
+      }
+      await first.query('ROLLBACK TO SAVEPOINT simulated_unsafe_policy');
+      await first.query('RELEASE SAVEPOINT simulated_unsafe_policy');
+
+      await first.query('SAVEPOINT simulated_missing_constraint');
+      await first.query(
+        'ALTER TABLE public.roleplay_upload_reservations DROP CONSTRAINT roleplay_upload_reservations_actor_key',
+      );
+      if (classifyRoleplayReservationCatalog(
+        await readRoleplayReservationCatalog(first),
+      ) !== 'incomplete') {
+        throw new Error('Catalog accepted a missing idempotency UNIQUE constraint.');
+      }
+      await first.query('ROLLBACK TO SAVEPOINT simulated_missing_constraint');
+      await first.query('RELEASE SAVEPOINT simulated_missing_constraint');
+
+      await first.query('SAVEPOINT simulated_missing_default');
+      await first.query(
+        'ALTER TABLE public.roleplay_upload_reservations ALTER COLUMN created_at DROP DEFAULT',
+      );
+      if (classifyRoleplayReservationCatalog(
+        await readRoleplayReservationCatalog(first),
+      ) !== 'incomplete') {
+        throw new Error('Catalog accepted a missing creation timestamp default.');
+      }
+      await first.query('ROLLBACK TO SAVEPOINT simulated_missing_default');
+      await first.query('RELEASE SAVEPOINT simulated_missing_default');
+      await first.query('ROLLBACK');
+    } catch (error) {
+      await first.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    }
+    if (classifyRoleplayReservationCatalog(
+      await readRoleplayReservationCatalog(first),
+    ) !== 'catalog-ready') {
+      throw new Error('Catalog did not recover after rollback.');
+    }
 
     const metadata = await first.query<{
       rls: boolean; policies: number; grants: number; unique_keys: number;
