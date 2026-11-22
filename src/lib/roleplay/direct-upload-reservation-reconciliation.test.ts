@@ -59,7 +59,8 @@ describe('future read-only Roleplay upload reservation reconciliation (unwired)'
   it('uses owner+request key and selects no files, evidence or upload capability', async () => {
     const s = store();
     expect(await reconcile(s.db)).toEqual({ decision: 'INSPECT_STORAGE' });
-    expect(s.findUnique).toHaveBeenCalledExactlyOnceWith({
+    expect(s.findUnique).toHaveBeenCalledOnce();
+    expect(s.findUnique).toHaveBeenCalledWith({
       where: { actorUserId_requestKey: { actorUserId: actor, requestKey } },
       select: {
         actorUserId: true, declarationHash: true, status: true,
