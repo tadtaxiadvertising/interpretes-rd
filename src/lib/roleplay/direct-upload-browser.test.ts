@@ -90,6 +90,17 @@ describe('future browser-to-Storage Roleplay uploader (not wired to production)'
     expect(upload).toHaveBeenCalledOnce();
   });
 
+  it('does not report successful completion when the final progress callback cancels', async () => {
+    const { files, slots } = fixture(1);
+    const controller = new AbortController();
+    const upload = vi.fn().mockResolvedValue({ error: null });
+    await expect(uploadRoleplayBatchSequentially(batchId, files, slots, upload, {
+      signal: controller.signal,
+      onUploaded: () => controller.abort(),
+    })).rejects.toMatchObject({ code: 'CANCELLED', uploadedCount: 1 });
+    expect(upload).toHaveBeenCalledOnce();
+  });
+
   it('sanitizes rejected provider errors and never retries a partially uploaded batch', async () => {
     const { files, slots } = fixture(3);
     const upload = vi.fn()
