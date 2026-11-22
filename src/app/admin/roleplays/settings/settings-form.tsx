@@ -23,16 +23,18 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   const [status, setStatus] = useState(initial);
   const [checking, setChecking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [recheckingEncryption, setRecheckingEncryption] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [pending, start] = useTransition();
   const hasToken = status.hasToken;
-  const editingDisabled = pending || checking || refreshing;
+  const editingDisabled = pending || checking || refreshing || recheckingEncryption;
   const hasUnsavedChanges = enabled !== status.integrationEnabled || org !== status.organizationId || token.length > 0 || remove ||
     media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
     compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
   // Clipboard feedback must not hide a failed or ambiguous settings save.
   const [copyNotice, setCopyNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const [readinessNotice, setReadinessNotice] = useState<{ ok: boolean; message: string } | null>(null);
   // A warning paragraph alone cannot stop an accidental tab close or reload.
   // Register the native browser warning only while there is an unsaved draft.
   useEffect(() => {
@@ -149,6 +151,49 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       setRefreshing(false);
     }
   }
+  async function recheckEncryptionReadiness() {
+    // Rechecking after an Easypanel secret change must NOT discard a pending
+    // HappyScribe API token or accidentally accept another admin's revision.
+    if (editingDisabled || conflict) return;
+    setRecheckingEncryption(true);
+    try {
+      const latest = await inspectAudioStudioSettings();
+      const otherSettingsChanged = latest.revision !== status.revision ||
+        latest.organizationId !== status.organizationId ||
+        latest.integrationEnabled !== status.integrationEnabled ||
+        latest.mediaImportEnabled !== status.mediaImportEnabled ||
+        latest.excludeInterpreterByDefault !== status.excludeInterpreterByDefault ||
+        latest.compactViewDefault !== status.compactViewDefault ||
+        latest.protocolLanguageDefault !== status.protocolLanguageDefault ||
+        latest.tokenSource !== status.tokenSource ||
+        latest.hasToken !== status.hasToken ||
+        latest.environmentFallbackAvailable !== status.environmentFallbackAvailable ||
+        latest.proxyAvailable !== status.proxyAvailable;
+      if (otherSettingsChanged) {
+        setConflict(true);
+        setReadinessNotice({ ok: false, message:
+          'Los ajustes del servidor cambiaron. Se conservó tu borrador, incluida la clave API. Para evitar sobrescribir cambios de otra sesión, revisa y carga los ajustes actuales antes de guardar.' });
+        return;
+      }
+      // Only refresh environmental readiness, not saved settings or form
+      // fields. An existing unsaved token stays in the password input.
+      setStatus(previous => ({
+        ...previous,
+        encryptionReady: latest.encryptionReady,
+        credentialUsable: latest.credentialUsable,
+      }));
+      setCopyNotice(null);
+      setReadinessNotice(latest.encryptionReady
+        ? { ok: true, message: 'El cifrado ya está disponible en Next.js. Tus cambios sin guardar se conservaron. Revisa el estado de la credencial antes de guardar.' }
+        : { ok: false, message: 'Next.js todavía no informa una clave de cifrado válida. Verifica AUDIO_STUDIO_ENCRYPTION_KEY en Easypanel; tu borrador se conservó.' });
+    } catch {
+      setReadinessNotice({ ok: false, message:
+        'No fue posible consultar el estado actualizado del servidor. Se conservaron todos tus cambios locales.' });
+    } finally {
+      setRecheckingEncryption(false);
+    }
+  }
+
   async function copySafeDiagnostic() {
     // Do not share a potentially stale snapshot while a conflict is unresolved.
     if (editingDisabled || conflict) return;
@@ -194,6 +239,13 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
       </button>
       <p className="mt-1 text-xs text-slate-400">Solo copia indicadores de configuración ya cargados; nunca claves, tokens, ID de organización ni cambios sin guardar.</p>
       {copyNotice && <p role="status" className={copyNotice.ok ? 'mt-2 text-sm text-green-300' : 'mt-2 text-sm text-red-300'}>{copyNotice.message}</p>}
+      <button type="button" disabled={editingDisabled || conflict}
+        onClick={() => void recheckEncryptionReadiness()}
+        className="mt-3 ml-3 rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-blue-200 hover:bg-white/5 disabled:opacity-50">
+        {recheckingEncryption ? 'Comprobando cifrado…' : 'Recomprobar cifrado en servidor'}
+      </button>
+      <p className="mt-1 text-xs text-slate-400">Comprueba si Easypanel ya aplicó la clave de cifrado, sin borrar la clave API ni las preferencias escritas aquí. No descarga transcripciones ni audio.</p>
+      {readinessNotice && <p role="status" className={readinessNotice.ok ? 'mt-2 text-sm text-green-300' : 'mt-2 text-sm text-amber-200'}>{readinessNotice.message}</p>}
     </div>
     {!status.encryptionReady && (
       <div role="alert" className="rounded-xl border border-amber-400/35 bg-amber-400/5 p-4 text-sm text-amber-100">
