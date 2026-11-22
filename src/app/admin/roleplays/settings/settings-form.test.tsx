@@ -74,6 +74,69 @@ describe('Audio Studio admin partial settings payload', () => {
   });
 
 
+  it('checks the deployed Next.js SHA without submitting unsaved HappyScribe credentials', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({
+      buildId: 'A'.repeat(40),
+      buildTimestamp: '2026-11-22T06:00:00Z',
+    }));
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+        target: { value: 'SYNTHETIC_UNSAVED_PROVIDER_TOKEN' },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Verificar versión de Next.js (solo lectura)' }));
+      });
+      expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/version', {
+        method: 'GET', credentials: 'same-origin', cache: 'no-store',
+      });
+      expect(screen.getByText('a'.repeat(40))).toBeTruthy();
+      expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value)
+        .toBe('SYNTHETIC_UNSAVED_PROVIDER_TOKEN');
+      expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+      expect(inspectAudioStudioSettings).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not echo malformed release metadata or claim the server runs main', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({
+      buildId: 'SYNTHETIC_PRIVATE_UNVERIFIED_VALUE',
+      buildTimestamp: 'unsafe',
+    }));
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Verificar versión de Next.js (solo lectura)' }));
+      });
+      expect(screen.getByRole('status').textContent).toContain('no informa un SHA verificable');
+      expect(screen.getByRole('status').textContent).not.toContain('SYNTHETIC_PRIVATE_UNVERIFIED_VALUE');
+      expect(screen.getByRole('status').textContent).not.toContain('unsafe');
+      expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports an unreachable version endpoint without modifying saved settings', async () => {
+    const fetcher = vi.fn().mockRejectedValue(new Error('SYNTHETIC_SECRET_SHOULD_NOT_BE_SHOWN'));
+    vi.stubGlobal('fetch', fetcher);
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Verificar versión de Next.js (solo lectura)' }));
+      });
+      expect(screen.getByText(/No se pudo consultar la versión de Next.js/)).toBeTruthy();
+      expect(screen.queryByText(/SYNTHETIC_SECRET_SHOULD_NOT_BE_SHOWN/)).toBeNull();
+      expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('keeps a failed configuration save visible after copying the safe diagnostic', async () => {
     vi.mocked(saveAudioStudioSettings).mockResolvedValueOnce({
       success: false,
