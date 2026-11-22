@@ -13,6 +13,12 @@ export function happyScribeImportFilename(name: string, extension: 'srt' | 'mp3'
     .replace(/\s+/g, ' ')
     .replace(/^[.\s]+|[.\s]+$/g, '');
   const maxBaseChars = 180 - extension.length - 1;
-  const base = Array.from(cleaned).slice(0, maxBaseChars).join('').replace(/[.\s]+$/g, '');
+  // Count UTF-16 code units (File.name.length), without splitting emoji.
+  let base = '';
+  for (const character of cleaned) {
+    if (base.length + character.length > maxBaseChars) break;
+    base += character;
+  }
+  base = base.replace(/[.\s]+$/g, '');
   return (base || 'happyscribe-import') + '.' + extension;
 }
