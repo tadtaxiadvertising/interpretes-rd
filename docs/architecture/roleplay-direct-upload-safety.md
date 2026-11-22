@@ -34,6 +34,14 @@ Una inserción exitosa devuelve `CREATED` con el identificador de lote, **no una
 
 **Bloqueos de activación:** respaldo y aprobación de migración, despliegue y verificación del esquema real, soporte de reconciliación idempotente tras timeout, control de propiedad en todas las operaciones, almacenamiento privado, firmas de alcance mínimo, verificación real de los bytes y publicación transaccional. El código de creación administrativa vigente permanece desconectado de este ledger. Los tests mock no sustituyen ensayos de concurrencia en PostgreSQL descartable ni validación de producción.
 
+## Verificación PostgreSQL descartable de reservas
+
+`scripts/verify-roleplay-upload-reservations-migration.ts` aplica la **propuesta exacta de SQL staged** exclusivamente a una base PostgreSQL nueva, con nombre aleatorio, dentro del contenedor de CI. Se niega a ejecutarse si `CI=true` no está presente, si la URL no apunta a `localhost:5432/interpreters_e2e` con el usuario `postgres`, o si `NODE_ENV=production`. Nunca usa credenciales de Supabase ni comandos de despliegue; elimina la base descartable al terminar.
+
+Las pruebas ejercitan con **dos conexiones reales** el índice único `(actor_user_id, request_key)` (un solo INSERT ganador) y un compare-and-swap `VERIFIED → PUBLISHED` (un solo UPDATE ganador). También comprueban aislamiento RLS sin políticas ni grants de Data API, los límites del esquema, el rechazo de contenido/estados inválidos, vencimiento y `ROLLBACK` de datos sintéticos. Un test de seguridad exige que el script siga confinado a CI. La comprobación se ejecuta en el workflow antes del build principal.
+
+**Alcance:** demuestra restricciones y transacciones de PostgreSQL, pero **no** sustituye la autenticación HTTP, verificación de bytes ni reconciliación de cargas ambiguas. No aplica DDL ni publica sesiones en producción. `prisma db push` del propio CI puede generar el modelo en la base principal de pruebas; por eso el script utiliza una **base temporal independiente** para validar el archivo SQL que se desplegaría posteriormente.
+
 ## Verificación incremental disponible (no conectada a Storage)
 
 `src/lib/roleplay/direct-upload-stream-verifier.ts` puede comprobar un único stream de bytes contra los valores `sizeBytes` y `sha256` esperados, sin guardar el archivo entero en memoria. Si la secuencia excede el tamaño declarado, termina incompleta, cambia su digest, se cancela o falla la fuente, devuelve **solo códigos de error fijos** sin revelar URL firmada, ruta ni mensajes del proveedor. Las pruebas incluyen un archivo sintético de 15 MiB alimentado por fragmentos de 64 KiB.

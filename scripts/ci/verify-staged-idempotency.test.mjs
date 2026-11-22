@@ -108,3 +108,28 @@ test('roleplay upload reservation DDL remains staged and cannot be auto-deployed
   assert.doesNotMatch(deployment,
     /(?:npm run migrate|prisma migrate deploy)[^\n]*roleplay.upload.reservations/i);
 });
+
+test('staged Roleplay verifier targets a new disposable CI database only', () => {
+  const script = readFileSync(
+    resolve(root, 'scripts/verify-roleplay-upload-reservations-migration.ts'),
+    'utf8',
+  );
+  const workflow = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
+
+  assert.ok(script.includes("process.env.CI !== 'true'"));
+  assert.ok(script.includes("url.pathname !== '/interpreters_e2e'"));
+  assert.ok(script.includes("url.username !== 'postgres'"));
+  assert.ok(script.includes("url.port !== '5432'"));
+  assert.ok(script.includes("randomBytes(6)"));
+  assert.ok(script.includes('CREATE DATABASE'));
+  assert.ok(script.includes('DROP DATABASE'));
+  assert.ok(script.includes('Promise.allSettled'));
+  assert.ok(script.includes("['23514']"));
+  assert.ok(script.includes("await first.query('ROLLBACK')"));
+  assert.doesNotMatch(script, /(?:migrate deploy|apply_migration|DIRECT_URL|supabaseAdmin)/i);
+
+  assert.match(workflow, /Verify staged Roleplay upload reservations \(isolated PostgreSQL only\)/);
+  assert.match(workflow, /npx tsx scripts\/verify-roleplay-upload-reservations-migration\.ts/);
+  assert.doesNotMatch(workflow,
+    /(?:npm run migrate|prisma migrate deploy)[^\n]*roleplay-upload-reservations/i);
+});
