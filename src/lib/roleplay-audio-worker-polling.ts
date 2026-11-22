@@ -1,3 +1,5 @@
+import { setTimeout as delay } from 'node:timers/promises';
+
 /**
  * Audio worker queue polling policy.
  *
@@ -23,4 +25,23 @@ export function shouldRunRoleplayWorkerStaleCleanup(
 ): boolean {
   return lastSuccessfulCleanupMs === null ||
     nowMs - lastSuccessfulCleanupMs >= ROLEPLAY_WORKER_STALE_CLEANUP_MS;
+}
+
+/**
+ * Wait for the next poll but wake immediately when the worker receives a stop
+ * signal. The shutdown signal must NOT abort an already-running audio job:
+ * only this idle timer listens for it.
+ */
+export async function waitForRoleplayWorkerPoll(
+  ms: number,
+  shutdownSignal: AbortSignal,
+): Promise<void> {
+  if (!Number.isSafeInteger(ms) || ms < 0) throw new Error('INVALID_WORKER_POLL_DELAY');
+  try {
+    await delay(ms, undefined, { signal: shutdownSignal });
+  } catch (error) {
+    // A normal shutdown cancels only the timer and is not a queue error.
+    if (shutdownSignal.aborted && error instanceof Error && error.name === 'AbortError') return;
+    throw error;
+  }
 }
