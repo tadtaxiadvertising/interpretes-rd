@@ -183,9 +183,14 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
         credentialUsable: latest.credentialUsable,
       }));
       setCopyNotice(null);
-      setReadinessNotice(latest.encryptionReady
-        ? { ok: true, message: 'El cifrado ya está disponible en Next.js. Tus cambios sin guardar se conservaron. Revisa el estado de la credencial antes de guardar.' }
-        : { ok: false, message: 'Next.js todavía no informa una clave de cifrado válida. Verifica AUDIO_STUDIO_ENCRYPTION_KEY en Easypanel; tu borrador se conservó.' });
+      // A syntactically valid key is NOT proof that the stored ciphertext
+      // decrypts. Never report recovery until an existing panel token can be
+      // read; replacing its key blindly would make the original unrecoverable.
+      setReadinessNotice(!latest.encryptionReady
+        ? { ok: false, message: 'Next.js todavía no informa una clave de cifrado válida. Verifica AUDIO_STUDIO_ENCRYPTION_KEY en Easypanel; tu borrador se conservó.' }
+        : latest.tokenSource === 'panel' && !latest.credentialUsable
+          ? { ok: false, message: 'La clave tiene formato válido, pero la credencial guardada todavía no se puede descifrar. Restaura la clave ORIGINAL de Easypanel; no borres ni reemplaces la credencial. Tu borrador se conservó.' }
+          : { ok: true, message: 'El cifrado ya está disponible en Next.js. Tus cambios sin guardar se conservaron. Revisa el estado de la credencial antes de guardar.' });
     } catch {
       setReadinessNotice({ ok: false, message:
         'No fue posible consultar el estado actualizado del servidor. Se conservaron todos tus cambios locales.' });
