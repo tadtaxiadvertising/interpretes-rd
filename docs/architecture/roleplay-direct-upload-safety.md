@@ -20,6 +20,14 @@ El componente no identifica al administrador, no recupera objetos de Storage y n
 
 **Límite de confianza:** la firma de la función no convierte un objeto arbitrario en evidencia real. El servicio futuro deberá cargar tanto la reserva como sus verificaciones desde **almacenamiento confiable del servidor**, nunca desde el JSON del navegador. La comprobación pura no evita carreras de dos administradores: el servicio de publicación tendrá que reclamar `VERIFIED -> PUBLISHED` con actualización condicional/idempotente **dentro de una única transacción**, tras confirmar permisos y antes de dar por completada la asignación. Tampoco valida permisos de lectura del bucket ni genera URLs.
 
+## Huellas SHA-256 locales previas a la reserva (todavía desconectadas)
+
+`src/lib/roleplay/direct-upload-browser-hash.ts` prepara declaraciones `{ order, mime, sizeBytes, sha256 }` sin subir ni persistir audio. Valida **los 25 archivos y sus tipos/tamaños antes de leer bytes**, calcula cada SHA-256 con Web Crypto en el navegador, y detiene el lote cuando hay cancelación o un error. Solo comunica conteos de progreso; ningún mensaje de error contiene nombres de archivo, contenido o información privada.
+
+**Costo acotado, no streaming:** `SubtleCrypto.digest` requiere materializar en memoria el `ArrayBuffer` de un archivo de hasta 15 MiB a la vez. Nunca calcula en paralelo ni mantiene 25 buffers deliberadamente, aunque el navegador puede retener copias temporales. La operación criptográfica individual no puede cancelarse; una señal de aborto impide iniciar el siguiente archivo y rechaza el resultado del lote. Se requiere contexto seguro (HTTPS) con Web Crypto disponible.
+
+Estas huellas declaradas por navegador **no autorizan subida ni demuestran integridad de Storage**. El servicio futuro debe recalcular la huella desde bytes confiables para cada objeto, vincular la reserva con administrador, vencimiento y ruta, y publicar solo después de verificar el lote completo. El formulario existente no consume todavía este helper; los flujos actuales de manifest/ZIP y multipart siguen sin cambios.
+
 ## Transferencia secuencial en navegador (todavía desconectada)
 
 `src/lib/roleplay/direct-upload-browser.ts` incorpora un orquestador de transporte **no activado** para 1–25 archivos. Recibe una reserva creada por el servidor (ID, rutas canónicas, tipos, tamaños, huellas y tokens de subida temporales) y un adaptador de Storage que realiza la operación firmada. Antes de la primera transferencia comprueba el contrato de lote completo y que cada `File.size` y `File.type` coincidan con su posición reservada. No solicita firmas, no construye URLs, no publica sesiones ni descarga el contenido al VPS.

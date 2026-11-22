@@ -48,6 +48,33 @@ describe('future browser-to-Storage Roleplay uploader (not wired to production)'
     expect(onUploaded).toHaveBeenLastCalledWith(25, 25);
   });
 
+  it('uses the validated file and signed-token snapshot after draft changes', async () => {
+    const { files, slots } = fixture(2);
+    const initialSecondFile = files[1];
+    const initialSecondToken = slots[1].token;
+    const replacement = new File(['UNVERIFIED_BYTES'], 'private-draft.mp3', { type: 'audio/mpeg' });
+    const sent: Array<{ file: File; token: string }> = [];
+    const transfer = vi.fn(async (slot: Pick<RoleplayBrowserSignedUploadSlot, 'path' | 'mime' | 'token'>, file: File) => {
+      sent.push({ file, token: slot.token });
+      return { error: null };
+    });
+    const result = await uploadRoleplayBatchSequentially(batchId, files, slots, transfer, {
+      onUploaded: completed => {
+        if (completed === 1) {
+          files[1] = replacement;
+          slots[1].token = 'UNVERIFIED_REPLACEMENT_TOKEN';
+          files.push(replacement);
+          slots.push({ ...slots[1], order: 2 });
+        }
+      },
+    });
+    expect(result).toEqual({ uploadedCount: 2 });
+    expect(transfer).toHaveBeenCalledTimes(2);
+    expect(sent[1].file).toBe(initialSecondFile);
+    expect(sent[1].token).toBe(initialSecondToken);
+    expect(sent[1].file).not.toBe(replacement);
+  });
+
   it('fails closed before any upload for reordered paths, types, sizes or missing tokens', async () => {
     const { files, slots } = fixture(2);
     const send = vi.fn().mockResolvedValue({ error: null });
