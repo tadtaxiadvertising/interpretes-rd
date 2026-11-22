@@ -1,4 +1,5 @@
 import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
+import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import type { RoleplayDirectUploadDeclaration } from '@/lib/roleplay/direct-upload-contract';
 
 type HashFailureCode =
@@ -34,9 +35,15 @@ export async function hashRoleplayFilesSequentially(
   files: readonly File[],
   options: RoleplayBrowserHashOptions = {},
 ): Promise<RoleplayDirectUploadDeclaration[]> {
-  if (!Array.isArray(files) || typeof File === 'undefined' ||
-      files.some(file => !(file instanceof File)) ||
-      inspectRoleplayAdminAudioDraft(files.map(file => ({ baseAudioFile: file }))).invalid) {
+  if (!Array.isArray(files) || files.length < 1 ||
+      files.length > ROLEPLAY_MAX_SCENARIOS || typeof File === 'undefined') {
+    throw new RoleplayBrowserHashError('INVALID_FILES', 0);
+  }
+  // The form may replace or append files during an asynchronous hash. Snapshot
+  // identities and order once, before preflight or any callbacks.
+  const batch = files.slice();
+  if (batch.some(file => !(file instanceof File)) ||
+      inspectRoleplayAdminAudioDraft(batch.map(file => ({ baseAudioFile: file }))).invalid) {
     throw new RoleplayBrowserHashError('INVALID_FILES', 0);
   }
   if (options.signal?.aborted) throw new RoleplayBrowserHashError('CANCELLED', 0);
@@ -46,7 +53,7 @@ export async function hashRoleplayFilesSequentially(
   }
 
   const declarations: RoleplayDirectUploadDeclaration[] = [];
-  for (const [order, file] of files.entries()) {
+  for (const [order, file] of batch.entries()) {
     if (options.signal?.aborted) {
       throw new RoleplayBrowserHashError('CANCELLED', declarations.length);
     }
@@ -71,7 +78,7 @@ export async function hashRoleplayFilesSequentially(
 
     declarations.push({ order, mime: file.type, sizeBytes: file.size, sha256 });
     try {
-      options.onHashed?.(declarations.length, files.length);
+      options.onHashed?.(declarations.length, batch.length);
     } catch {
       throw new RoleplayBrowserHashError('PROGRESS_FAILED', declarations.length);
     }
