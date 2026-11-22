@@ -78,7 +78,7 @@ describe('prepareRoleplayManifestImport', () => {
     });
     const read = vi.spyOn(markdown, 'text');
     await expect(prepareRoleplayManifestImport([markdown]))
-      .rejects.toThrow(/El archivo \\.md de HappyScribe es una transcripción/);
+      .rejects.toThrow(/El archivo \.md de HappyScribe es una transcripción/);
     await expect(prepareRoleplayManifestImport([...createFixture(1).files, markdown]))
       .rejects.toThrow(/no un paquete de roleplay/);
     expect(read).not.toHaveBeenCalled();
