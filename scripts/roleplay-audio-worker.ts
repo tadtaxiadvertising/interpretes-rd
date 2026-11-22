@@ -24,7 +24,7 @@ interface ClaimedAudioJob {
 const workerPrefix = (process.env.ROLEPLAY_AUDIO_WORKER_ID || 'roleplay-audio').slice(0, 60);
 const workerId = `${workerPrefix}-${randomUUID()}`;
 // Initial and steady-state polling intervals are defined in the shared,
- // tested idle policy: frequent after activity, slower while idle.
+// tested idle policy: frequent after activity, slower while idle.
 // A worker that disappears mid-conversion is considered stale after this many
 // minutes. Five minutes is safely above the 300-second conversion ceiling while
 // still recovering a crashed worker within a single deploy window.
