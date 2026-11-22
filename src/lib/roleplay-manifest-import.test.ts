@@ -84,6 +84,20 @@ describe('prepareRoleplayManifestImport', () => {
     expect(read).not.toHaveBeenCalled();
   });
 
+  it('explains Studio project JSON is not manifest.json without reading the private draft', async () => {
+    const project = new File(['{"format":"interpretes-rd-audio-studio-draft","PRIVATE":"synthetic"}'],
+      'roleplay-studio-proyecto.json', { type: 'application/json' });
+    const readProject = vi.spyOn(project, 'text');
+    const files = createFixture(1).files;
+    const readManifest = vi.spyOn(files[0], 'text');
+    await expect(prepareRoleplayManifestImport([project]))
+      .rejects.toThrow(/Un proyecto JSON de Audio Studio no es un paquete/);
+    await expect(prepareRoleplayManifestImport([...files, project]))
+      .rejects.toThrow(/Aquí solo se admite manifest.json/);
+    expect(readProject).not.toHaveBeenCalled();
+    expect(readManifest).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed and noncontiguous manifest indexes', async () => {
     const { files } = createFixture(2);
     const broken = JSON.parse(await files[0].text());
