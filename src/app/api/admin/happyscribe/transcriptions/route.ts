@@ -4,7 +4,7 @@ import { issueHappyScribeImportProof, verifyHappyScribeImportProof } from '@/lib
 import { setTimeout as delay } from 'node:timers/promises';
 import { discardHappyScribeDownload, fetchHappyScribeExport, isAllowedHappyScribeExportUrl } from '@/lib/roleplay/happyscribe-download';
 import { isValidHappyScribeId } from '@/lib/roleplay/happyscribe-id';
-import { isValidHappyScribeProbe, readBoundedHappyScribeListing } from '@/lib/roleplay/happyscribe-probe';
+import { isValidHappyScribeProbe, readBoundedHappyScribeListing, readBoundedHappyScribeMetadata } from '@/lib/roleplay/happyscribe-probe';
 import { validateAction } from '@/lib/auth/actions';
 import { matchesExplicitAdminBearer } from '@/lib/roleplay/happyscribe-admin-identity';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
@@ -171,8 +171,14 @@ export async function POST(req: NextRequest) {
         { status: detailResponse.status === 404 ? 404 : 502 },
       );
     }
-    const detail: unknown = await detailResponse.json();
-    if (!detail || typeof detail !== 'object' || !('state' in detail) ||
+    // The provider detail can include large metadata. Bound the response to
+    // avoid buffering arbitrarily large JSON on a memory-constrained VPS.
+    const detail: unknown = await readBoundedHappyScribeListing(detailResponse);
+    if (!detail) return privateRoleplayResponse(
+      { error: 'HappyScribe devolvió detalles de transcripción no válidos o demasiado grandes.' },
+      { status: 502 },
+    );
+    if (typeof detail !== 'object' || !('state' in detail) ||
         !['automatic_done', 'done'].includes(String(detail.state))) {
       return privateRoleplayResponse({ error: 'La transcripción todavía no está lista para exportarse.' }, { status: 409 });
     }
@@ -186,7 +192,7 @@ export async function POST(req: NextRequest) {
       await discardHappyScribeDownload(createResponse);
       return privateRoleplayResponse({ error: 'HappyScribe no pudo preparar el archivo SRT.' }, { status: 502 });
     }
-    const created: unknown = await createResponse.json();
+    const created: unknown = await readBoundedHappyScribeMetadata(createResponse);
     const exportId = created && typeof created === 'object' && 'id' in created && typeof created.id === 'string'
       ? created.id : null;
     if (!exportId || !isValidHappyScribeId(exportId)) return privateRoleplayResponse({ error: 'Respuesta de exportación no válida.' }, { status: 502 });
@@ -198,8 +204,9 @@ export async function POST(req: NextRequest) {
         await discardHappyScribeDownload(statusResponse);
         break;
       }
-      const status: unknown = await statusResponse.json();
-      if (status && typeof status === 'object' && 'state' in status) {
+      const status: unknown = await readBoundedHappyScribeMetadata(statusResponse);
+      if (!status) break; // Invalid/oversized metadata: no repeated polling.
+      if (typeof status === 'object' && 'state' in status) {
         if (status.state === 'ready' && 'download_link' in status &&
             typeof status.download_link === 'string') {
           downloadLink = status.download_link;
