@@ -1,9 +1,11 @@
-import { createHash } from 'node:crypto';
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { prepareNewRoleplayUploadReservation } from '@/lib/roleplay/direct-upload-reservation';
+import {
+  fingerprintRoleplayDirectUploadDeclarations,
+  isRoleplayDirectUploadRequestKey,
+} from '@/lib/roleplay/direct-upload-reservation-fingerprint';
 
 type LedgerFailureCode = 'INVALID_REQUEST' | 'STORE_UNAVAILABLE';
-const VALID_REQUEST_KEY = /^[a-f0-9]{8}-[a-f0-9]{4}-[47][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 
 export class RoleplayUploadReservationLedgerError extends Error {
   constructor(readonly code: LedgerFailureCode) {
@@ -38,7 +40,7 @@ export async function claimRoleplayDirectUploadReservation(
   declarations: unknown,
   nowMs: number,
 ): Promise<RoleplayUploadReservationClaim> {
-  if (typeof requestKey !== 'string' || !VALID_REQUEST_KEY.test(requestKey)) {
+  if (!isRoleplayDirectUploadRequestKey(requestKey)) {
     throw new RoleplayUploadReservationLedgerError('INVALID_REQUEST');
   }
 
@@ -57,11 +59,7 @@ export async function claimRoleplayDirectUploadReservation(
   // The idempotency fingerprint never contains filenames, roles, signed URLs
   // or patient information. It binds the exact ordered declared SHA values,
   // but remains UNTRUSTED until remote bytes are verified independently.
-  const fingerprint = createHash('sha256').update(JSON.stringify({
-    version: 1,
-    items: reservation.items.map(({ order, mime, sizeBytes, sha256 }) =>
-      ({ order, mime, sizeBytes, sha256 })),
-  })).digest('hex');
+  const fingerprint = fingerprintRoleplayDirectUploadDeclarations(reservation.items);
 
   try {
     await db.roleplayUploadReservation.create({
