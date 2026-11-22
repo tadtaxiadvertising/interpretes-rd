@@ -709,6 +709,9 @@ export default function RoleplayStudioPage() {
     setNotice('');
     try {
       const subtitleMaxBytes = usesLocalLongMode(audio, duration) ? 5_000_000 : 1_000_000;
+      if (/\.md$/i.test(file.name)) {
+        throw new Error('El .md de HappyScribe es una transcripción Markdown, no un archivo SRT/VTT. Usa «Importar transcripción» en la biblioteca de HappyScribe o exporta un SRT con tiempos. Tus cortes no se han modificado.');
+      }
       if (!/\.(srt|vtt)$/i.test(file.name) || file.size < 1 || file.size > subtitleMaxBytes) {
         throw new Error('Selecciona un SRT o VTT dentro del tamaño permitido (1 MB normal, 5 MB local).');
       }
@@ -1149,6 +1152,9 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     try {
+      if (/\.md$/i.test(file.name)) {
+        throw new Error('El .md de HappyScribe no es un proyecto JSON de Audio Studio. Importa primero la transcripción como SRT desde HappyScribe, revisa los cortes y usa «Guardar proyecto JSON». Tus intervenciones actuales se conservaron.');
+      }
       if (!/\.json$/i.test(file.name) || file.size < 1 || file.size > MAX_STUDIO_DRAFT_CHARS) {
         throw new Error('Selecciona un proyecto JSON de Audio Studio de hasta 180 KB.');
       }
@@ -2069,6 +2075,11 @@ export default function RoleplayStudioPage() {
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
               </label>
+              <p className="mt-1 text-xs text-blue-100">
+                ¿HappyScribe descargó un .md? No es un proyecto JSON ni un archivo de subtítulos con tiempos.
+                Usa «Importar transcripción» en la biblioteca HappyScribe de arriba (solicita SRT automáticamente),
+                o exporta un .srt desde HappyScribe. No es necesario convertir archivos manualmente.
+              </p>
               <input id="studio-transcript" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip"
                 className="mt-2 block w-full text-sm text-slate-300"
                 onChange={event => {
@@ -2210,7 +2221,9 @@ export default function RoleplayStudioPage() {
               ? 'Guarda los tiempos y perfiles sin subir el archivo. El proyecto se vincula a la fuente mediante tamaño, duración y SHA-256 de muestras: no es una verificación de todos sus bytes.'
               : 'Guarda los cortes y perfiles. El proyecto se verifica contra el MP3 original mediante SHA-256 completo.'}
             El JSON no contiene audio, video ni transcripción, pero sí títulos e instrucciones:
-            protégelo si contienen información sensible.
+            protégelo si contienen información sensible. Un .md o un JSON exportado por HappyScribe
+            no son proyectos de Audio Studio: importa primero el SRT/VTT, verifica las intervenciones
+            y usa «Guardar proyecto JSON» aquí para crear un proyecto compatible.
           </p>
           {hasUnstoredDraftContext && (
             <p className="text-xs leading-5 text-amber-100" aria-label="Contenido no incluido en el proyecto JSON">
