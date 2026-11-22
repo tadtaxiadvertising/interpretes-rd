@@ -24,7 +24,8 @@ function createFixtures(count = 3, sizeBytes = 12) {
     })),
   );
   const reservation: RoleplayUploadReservationSnapshot = {
-    batchId, ownerUserId: ownerId, status: 'VERIFIED', expiresAtMs: now + 60_000,
+    batchId, ownerUserId: ownerId, status: 'VERIFIED',
+    createdAtMs: now - 10_000, expiresAtMs: now + 60_000,
     items: prepared.items,
   };
   const evidence: TrustedRoleplayUploadEvidence[] = prepared.items.map(item => ({
@@ -75,6 +76,36 @@ describe('future Roleplay direct-upload publication gate (no Storage or DB write
     expect(() => validateRoleplayDirectUploadPublication(
       reservation, evidence, ownerId, Number.NaN,
     )).toThrow('INVALID_RESERVATION');
+  });
+
+  it('rejects stale evidence from before reservation creation', () => {
+    const { reservation, evidence } = createFixtures();
+    for (const invalidTime of [1, reservation.createdAtMs - 1]) {
+      const changed = [{ ...evidence[0], verifiedAtMs: invalidTime }, ...evidence.slice(1)];
+      expect(() => validateRoleplayDirectUploadPublication(
+        reservation, changed, ownerId, now,
+      )).toThrow('EVIDENCE_MISMATCH');
+    }
+    const atCreation = [{ ...evidence[0], verifiedAtMs: reservation.createdAtMs },
+      ...evidence.slice(1)];
+    expect(() => validateRoleplayDirectUploadPublication(
+      reservation, atCreation, ownerId, now,
+    )).not.toThrow();
+  });
+
+  it('rejects missing, future, or inverted server reservation timestamps', () => {
+    const { reservation, evidence } = createFixtures();
+    for (const times of [
+      { createdAtMs: 0 },
+      { createdAtMs: Number.NaN },
+      { createdAtMs: now + 1 },
+      { expiresAtMs: reservation.createdAtMs },
+      { expiresAtMs: reservation.createdAtMs - 1 },
+    ]) {
+      expect(() => validateRoleplayDirectUploadPublication(
+        { ...reservation, ...times }, evidence, ownerId, now,
+      )).toThrow('INVALID_RESERVATION');
+    }
   });
 
   it('rejects reserved, verifying, cancelled or already published batches', () => {
