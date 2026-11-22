@@ -110,6 +110,11 @@ export async function uploadRoleplayBatchSequentially(
     } catch {
       throw new RoleplayBrowserUploadError('PROGRESS_FAILED', uploadedCount);
     }
+    // Cancellation from the final progress callback must not be reported as
+    // a successfully completed batch. The server still reconciles any bytes.
+    if (options.signal?.aborted) {
+      throw new RoleplayBrowserUploadError('CANCELLED', uploadedCount);
+    }
   }
 
   return { uploadedCount };
