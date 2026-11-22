@@ -426,6 +426,54 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(String(mocks.fetch.mock.calls[0][0])).toContain('organization_id=123456');
   });
 
+  it('limits an overlong provider listing to 50 items and 50 signed selections', async () => {
+    const results = Array.from({ length: 75 }, (_, i) => ({
+      id: (i + 1).toString(16).padStart(32, '0'),
+      name: 'Synthetic test transcript',
+      state: 'done',
+    }));
+    mocks.fetch.mockResolvedValueOnce(Response.json({
+      results,
+      _links: { next: '/api/v1/transcriptions?page=1' },
+    }));
+    const response = await GET(new NextRequest('http://localhost/api/admin/happyscribe/transcriptions'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.data).toHaveLength(50);
+    expect(body.data[0].id).toBe(results[0].id);
+    expect(body.data[49].id).toBe(results[49].id);
+    expect(body.data.some((item: { id: string }) => item.id === results[50].id)).toBe(false);
+    expect(body.data.every((item: { importProof: string }) =>
+      /^\\d{13}\\.[a-f0-9]{64}$/.test(item.importProof))).toBe(true);
+    expect(body.hasMore).toBe(true);
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('bounds provider catalog text fields before sending metadata to the browser', async () => {
+    mocks.fetch.mockResolvedValueOnce(Response.json({
+      results: [{
+        id: transcriptionId,
+        name: 'N'.repeat(500),
+        state: 'S'.repeat(600),
+        language: 'L'.repeat(700),
+        createdAt: 'C'.repeat(800),
+        audioLengthInSeconds: -100,
+        folder: { name: 'F'.repeat(900) },
+      }],
+    }));
+    const response = await GET(new NextRequest('http://localhost/api/admin/happyscribe/transcriptions'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    const row = body.data[0];
+    expect(row.name).toHaveLength(240);
+    expect(row.state).toHaveLength(64);
+    expect(row.language).toHaveLength(40);
+    expect(row.createdAt).toHaveLength(64);
+    expect(row.folder).toHaveLength(240);
+    expect(row.durationSeconds).toBeNull();
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
   it('rejects an SRT export without a scoped selection, without contacting the provider', async () => {
     const unverified = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
       method: 'POST',
