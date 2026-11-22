@@ -18,6 +18,10 @@ const API_BASE = 'https://www.happyscribe.com/api/v1';
 // The provider might ignore per_page. Never issue HMACs or return metadata
 // for an unbounded number of catalog rows in a single admin request.
 const MAX_LIBRARY_ITEMS_PER_PAGE = 50;
+// An arrow in arbitrary Markdown/HTML is not evidence of subtitle timing.
+// This deliberately recognizes the same timestamp shape as the browser-side
+// SRT/VTT parser without parsing or logging private transcription dialogue.
+const SRT_TIMING_LINE = /^(?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3}[ \t]*-->[ \t]*(?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3}(?:[ \t]+[^\r\n]*)?\r?$/m;
 
 async function configuration() {
   try {
@@ -271,8 +275,13 @@ export async function POST(req: NextRequest) {
     let offset = 0;
     for (const chunk of chunks) { merged.set(chunk, offset); offset += chunk.byteLength; }
     const text = new TextDecoder('utf-8', { fatal: true }).decode(merged);
-    if (!text.trim() || !text.includes('-->')) {
+    if (!text.trim()) {
       return privateRoleplayResponse({ error: 'El SRT está vacío o supera el tamaño admitido.' }, { status: 502 });
+    }
+    if (!SRT_TIMING_LINE.test(text)) {
+      return privateRoleplayResponse({
+        error: 'HappyScribe devolvió texto sin intervalos SRT válidos. Importa subtítulos SRT, no Markdown (.md), desde HappyScribe.',
+      }, { status: 502 });
     }
     return privateRoleplayResponse(
       { success: true, data: { filename: 'happyscribe-import.srt', content: text } },

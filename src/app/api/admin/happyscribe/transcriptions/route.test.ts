@@ -142,6 +142,24 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch.mock.calls[3][1]).toMatchObject({ redirect: 'manual' });
   });
 
+  it('rejects provider Markdown containing arrows rather than SRT timestamps', async () => {
+    const markdown = '# HappyScribe transcript\n\nSynthetic private notes --> not a timestamp\n';
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://www.happyscribe.com/private/export.srt',
+      }))
+      .mockResolvedValueOnce(new Response(markdown, { status: 200 }));
+
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    const body = await response.json();
+    expect(body.error).toContain('no Markdown (.md)');
+    expect(JSON.stringify(body)).not.toContain('Synthetic private notes');
+    expect(mocks.fetch).toHaveBeenCalledTimes(4);
+  });
+
   it('cancels an oversized SRT response immediately instead of leaving the download open', async () => {
     const cancel = vi.fn();
     const oversized = new Response(new ReadableStream<Uint8Array>({ cancel }), {
