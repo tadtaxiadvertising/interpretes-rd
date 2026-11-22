@@ -233,7 +233,7 @@ describe('Audio Studio clip review player', () => {
       await Promise.resolve();
     });
     expect(screen.getByRole('alert').textContent).toContain('no un archivo SRT/VTT');
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText('Intervenciones (1/25)')).toBeTruthy();
 
     await act(async () => {
       fireEvent.drop(screen.getByRole('group', { name: 'Zona para recuperar proyecto JSON' }), {
@@ -242,7 +242,7 @@ describe('Audio Studio clip review player', () => {
       await Promise.resolve();
     });
     expect(screen.getByRole('alert').textContent).toContain('no es un proyecto JSON');
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText('Intervenciones (1/25)')).toBeTruthy();
     expect(fetcher).not.toHaveBeenCalled();
     expect(screen.queryByText(/Transcript with private dialogue/)).toBeNull();
   });
