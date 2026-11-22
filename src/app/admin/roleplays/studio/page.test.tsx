@@ -1201,6 +1201,10 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByText(/Audio original importado desde HappyScribe/)).toBeTruthy();
     const player = container.querySelector('audio');
     expect(player?.getAttribute('src')).toMatch(/^blob:/);
+    const importedMedia = vi.mocked(URL.createObjectURL).mock.calls
+      .map(([source]) => source)
+      .find((source): source is File => source instanceof File && source.type === 'audio/mpeg');
+    expect(importedMedia?.name).toBe('Practice recording.mp3');
   });
 
 });
