@@ -143,7 +143,7 @@ describe('HappyScribe SRT import download boundary', () => {
   });
 
   it('rejects provider Markdown containing arrows rather than SRT timestamps', async () => {
-    const markdown = '# HappyScribe transcript\\n\\nSynthetic private notes --> not a timestamp\\n';
+    const markdown = '# HappyScribe transcript\n\nSynthetic private notes --> not a timestamp\n';
     mocks.fetch
       .mockResolvedValueOnce(Response.json({ state: 'done' }))
       .mockResolvedValueOnce(Response.json({ id: exportId }))
