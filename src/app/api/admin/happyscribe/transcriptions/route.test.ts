@@ -444,7 +444,7 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(body.data[49].id).toBe(results[49].id);
     expect(body.data.some((item: { id: string }) => item.id === results[50].id)).toBe(false);
     expect(body.data.every((item: { importProof: string }) =>
-      /^\\d{13}\\.[a-f0-9]{64}$/.test(item.importProof))).toBe(true);
+      /^\d{13}\.[a-f0-9]{64}$/.test(item.importProof))).toBe(true);
     expect(body.hasMore).toBe(true);
     expect(mocks.fetch).toHaveBeenCalledOnce();
   });
