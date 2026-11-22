@@ -19,7 +19,7 @@ function safeFrontendCorsOrigin(raw: string | undefined): string {
   if (!raw) return DEFAULT_FRONTEND_ORIGIN;
   // Reject whitespace/control characters BEFORE URL parsing. URL() may strip
   // newlines or tabs, which must never become an accepted security policy.
-  if (/[\\s\\u0000-\\u001f\\u007f]/u.test(raw)) return DEFAULT_FRONTEND_ORIGIN;
+  if (/[\s\u0000-\u001f\u007f]/u.test(raw)) return DEFAULT_FRONTEND_ORIGIN;
   try {
     const url = new URL(raw);
     const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
