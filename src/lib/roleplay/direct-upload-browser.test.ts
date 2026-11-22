@@ -27,7 +27,7 @@ describe('future browser-to-Storage Roleplay uploader (not wired to production)'
     let active = 0;
     let peak = 0;
     const events: string[] = [];
-    const upload = vi.fn(async (slot: RoleplayBrowserSignedUploadSlot, file: File) => {
+    const upload = vi.fn(async (slot: Pick<RoleplayBrowserSignedUploadSlot, 'path' | 'mime' | 'token'>, file: File) => {
       active++;
       peak = Math.max(peak, active);
       events.push('start:' + slot.path);
@@ -53,16 +53,13 @@ describe('future browser-to-Storage Roleplay uploader (not wired to production)'
     const send = vi.fn().mockResolvedValue({ error: null });
     const cases = [
       { files, slots: [{ ...slots[0], path: '../../cross-tenant.mp3' }, slots[1]] },
-      { files: [files[1], files[0]], slots }, // same metadata: ordering alone cannot prove file identity
+      { files, slots: [{ ...slots[0], order: 1 }, slots[1]] },
       { files, slots: [{ ...slots[0], token: '' }, slots[1]] },
       { files: [new File(['changed'], 'private.mp3', { type: 'audio/mpeg' }), files[1]], slots },
       { files: [new File(['ID3' + 0], 'private.wav', { type: 'audio/wav' }), files[1]], slots },
       { files: [...files, files[0]], slots },
     ];
-    for (const [index, candidate] of cases.entries()) {
-      // Different File names containing identical bytes cannot be securely
-      // distinguished here: the server will verify SHA-256 before publication.
-      if (index === 1) continue;
+    for (const candidate of cases) {
       await expect(uploadRoleplayBatchSequentially(batchId, candidate.files, candidate.slots, send))
         .rejects.toMatchObject({ code: 'INVALID_PLAN', uploadedCount: 0 });
     }
