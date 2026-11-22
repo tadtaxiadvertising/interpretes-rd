@@ -7,6 +7,7 @@ import {
   ROLEPLAY_WORKER_STALE_CLEANUP_MS,
   nextRoleplayWorkerIdleDelayMs,
   shouldRunRoleplayWorkerStaleCleanup,
+  waitForRoleplayWorkerPoll,
 } from './roleplay-audio-worker-polling';
 
 describe('Roleplay audio worker low-cost polling policy', () => {
@@ -36,5 +37,25 @@ describe('Roleplay audio worker low-cost polling policy', () => {
     // The caller updates lastSuccessfulCleanupMs only after await completes.
     expect(shouldRunRoleplayWorkerStaleCleanup(1_800_000_000_000, null)).toBe(true);
     expect(shouldRunRoleplayWorkerStaleCleanup(1_800_000_010_000, null)).toBe(true);
+  });  it('interrupts an idle 30-second wait immediately during shutdown', async () => {
+    const shutdown = new AbortController();
+    const wait = waitForRoleplayWorkerPoll(30_000, shutdown.signal);
+    shutdown.abort();
+    await expect(wait).resolves.toBeUndefined();
   });
+
+  it('handles an already-aborted signal without scheduling another poll', async () => {
+    const shutdown = new AbortController();
+    shutdown.abort();
+    await expect(waitForRoleplayWorkerPoll(30_000, shutdown.signal)).resolves.toBeUndefined();
+  });
+
+  it('allows an ordinary short wait and rejects invalid intervals safely', async () => {
+    await expect(waitForRoleplayWorkerPoll(1, new AbortController().signal)).resolves.toBeUndefined();
+    const shutdown = new AbortController();
+    for (const invalid of [-1, NaN, Infinity, 0.5]) {
+      await expect(waitForRoleplayWorkerPoll(invalid, shutdown.signal)).rejects.toThrow('INVALID_WORKER_POLL_DELAY');
+    }
+  });
+
 });
