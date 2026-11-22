@@ -8,8 +8,15 @@ export const dynamic = 'force-dynamic';
  * unchanged container appear to be a different release.
  */
 export async function GET() {
-  const buildTimestamp = process.env.BUILD_TIMESTAMP?.trim() || null;
-  const buildId = process.env.GIT_SHA?.trim() || null;
+  // This endpoint is public. Never reflect arbitrary environment contents:
+  // a misconfigured build argument may accidentally contain private data.
+  // The read-only Easypanel verifier already requires a full 40-hex SHA.
+  const rawSha = process.env.GIT_SHA?.trim() ?? '';
+  const buildId = /^[a-f0-9]{40}$/i.test(rawSha) ? rawSha.toLowerCase() : null;
+  const rawTimestamp = process.env.BUILD_TIMESTAMP?.trim() ?? '';
+  // Only publish an ISO UTC build time, not arbitrary deployment metadata.
+  const buildTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(rawTimestamp)
+    && !Number.isNaN(Date.parse(rawTimestamp)) ? rawTimestamp : null;
 
   return NextResponse.json(
     { buildTimestamp, buildId },
