@@ -1,12 +1,20 @@
 # Intérpretes RD — subida directa de audios de Roleplay (diseño deshabilitado)
 
-**Estado:** únicamente contrato de validación; función no habilitada. La API actual continúa recibiendo multipart autenticado. No se emiten URLs firmadas ni se modifican buckets.
+**Estado:** contratos y preparación de reservas sin efectos secundarios; función no habilitada. La API actual continúa recibiendo multipart autenticado. No se emiten URLs firmadas ni se modifican buckets.
 
 ## Objetivo y límite del cambio
 
 Hasta 25 × 15 MiB pueden representar 375 MiB en la memoria del servicio Next.js, más copias adicionales. El límite de streaming del endpoint heredado protege ante solicitudes excesivas, pero no evita el pico de memoria para un lote legítimo.
 
 El nuevo helper `src/lib/roleplay/direct-upload-contract.ts` solo valida una declaración por posición (1–25, orden 0–24, tipo MIME autorizado, 1–15 MiB por archivo y SHA-256 hexadecimal exacto). Genera rutas temporales como `staging/roleplay/<uuid-servidor>/<posición>.<extensión>`. Rechaza nombres originales, rutas, URLs u otros campos propuestos por el cliente. La UUID debe crearla exclusivamente el servidor. El helper **no permite subir archivos**, no verifica propiedad, no utiliza API keys y no está conectado a la ruta existente.
+
+## Preparación de reserva del servidor (no persistida, todavía inactiva)
+
+`src/lib/roleplay/direct-upload-reservation.ts` crea exclusivamente en código de servidor un **UUID v4 aleatorio** y reconstruye las rutas canónicas de 1–25 audios a partir de `order`, `mime`, `sizeBytes` y `sha256`. Exige un identificador de administrador no vacío (proveniente de autenticación confiable) y un reloj válido; establece `status: RESERVED`, `createdAtMs` y una caducidad de **30 minutos**. No acepta UUID, dueño, rutas, permisos, firma ni tiempo enviados por el navegador. Un UUID nunca será una credencial de acceso.
+
+El componente **no autentica HTTP, no escribe en la base de datos, no bloquea idempotencias y no concede subida**. Una ruta futura deberá validar sesión administrativa y coincidencia con cualquier Bearer explícito, y almacenar la reserva atómicamente con clave idempotente vinculada a su dueño, *antes de emitir* capacidades temporales. Un reintento que encuentre una reserva pendiente debe reconciliarla, no crear otra subida automáticamente.
+
+El preflight de publicación exige además `createdAtMs` confiable y descarta cualquier evidencia `verifiedAtMs` anterior a la creación del lote. La evidencia sigue teniendo que venir de bytes comprobados por un verificador autorizado y almacenarse en servidor; **no** es suficiente que el navegador declare un SHA válido. No existen cambios en las tablas, APIs ni archivos de producción.
 
 ## Verificación incremental disponible (no conectada a Storage)
 
