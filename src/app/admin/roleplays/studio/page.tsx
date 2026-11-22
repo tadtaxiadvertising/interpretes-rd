@@ -15,6 +15,7 @@ import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
 import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
+import { happyScribeImportFilename } from '@/lib/roleplay-studio/happyscribe-filename';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
 } from '@/lib/roleplay-studio/protocols';
@@ -1464,7 +1465,7 @@ export default function RoleplayStudioPage() {
         setNotice('No se aplicó la transcripción remota: la edición cambió durante la descarga.');
         return;
       }
-      const file = new File([body.data.content], item.name.replace(/\\.[^.]+$/, '') + '.srt', {
+      const file = new File([body.data.content], happyScribeImportFilename(item.name, 'srt'), {
         type: 'application/x-subrip',
       });
       await importSubtitles(file, { revision: revisionAtRequest, edits: approvedEdits });
@@ -1523,7 +1524,7 @@ export default function RoleplayStudioPage() {
       if (!blob.size || blob.size > 250 * 1024 * 1024) {
         throw new Error('El audio está vacío o supera el límite de importación directa de 250 MiB.');
       }
-      const filename = item.name.replace(/\\.[^.]+$/, '').slice(0, 180) + '.mp3';
+      const filename = happyScribeImportFilename(item.name, 'mp3');
       const file = new File([blob], filename, { type: 'audio/mpeg' });
       chooseAudio(file, preflight);
       if (activeAudioFile.current !== file) return;
