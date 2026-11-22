@@ -9,7 +9,7 @@ export function happyScribeImportFilename(name: string, extension: 'srt' | 'mp3'
   const cleaned = name
     .trim()
     .replace(/(?:\.(?:mp3|mp4|m4a|wav|aac|flac|ogg|opus|mov|webm|srt|vtt|md|txt|json))+$/i, '')
-    .replace(/[\x00-\x1f\x7f<>:"/\\|?*]/g, ' ')
+    .replace(/[\x00-\x1f\x7f<>:"\/\\|?*]/g, ' ')
     .replace(/\s+/g, ' ')
     .replace(/^[.\s]+|[.\s]+$/g, '');
   const maxBaseChars = 180 - extension.length - 1;
