@@ -160,6 +160,31 @@ describe('HappyScribe SRT import download boundary', () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(4);
   });
 
+  it.each(['text/markdown; charset=utf-8', 'text/html', 'application/json'])(
+    'rejects a provider %s response before reading its body, even with a valid-looking SRT line',
+    async (contentType) => {
+      const cancel = vi.fn();
+      const mislabeled = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 200,
+        headers: { 'Content-Type': contentType },
+      });
+      mocks.fetch
+        .mockResolvedValueOnce(Response.json({ state: 'done' }))
+        .mockResolvedValueOnce(Response.json({ id: exportId }))
+        .mockResolvedValueOnce(Response.json({
+          state: 'ready',
+          download_link: 'https://www.happyscribe.com/private/export.srt',
+        }))
+        .mockResolvedValueOnce(mislabeled);
+
+      const response = await POST(importRequest());
+      expect(response.status).toBe(502);
+      expect((await response.json()).error).toContain('no subtítulos SRT');
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(mocks.fetch).toHaveBeenCalledTimes(4);
+    },
+  );
+
   it('cancels an oversized SRT response immediately instead of leaving the download open', async () => {
     const cancel = vi.fn();
     const oversized = new Response(new ReadableStream<Uint8Array>({ cancel }), {
