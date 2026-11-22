@@ -26,7 +26,8 @@ describe('future roleplay private Storage readiness (not wired to upload)', () =
     const storage = reader(readyBucket);
     await expect(requirePrivateRoleplayAudioBucket(storage))
       .resolves.toBe('roleplay-audio-private');
-    expect(storage.getBucket).toHaveBeenCalledExactlyOnceWith('roleplay-audio-private');
+    expect(storage.getBucket).toHaveBeenCalledOnce();
+    expect(storage.getBucket).toHaveBeenCalledWith('roleplay-audio-private');
   });
 
   it('does not mistake the existing public bucket for private staging', async () => {
