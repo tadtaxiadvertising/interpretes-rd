@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   HAPPY_SCRIBE_PROBE_MAX_BYTES, HAPPY_SCRIBE_LIST_MAX_BYTES,
-  isValidHappyScribeProbe, readBoundedHappyScribeListing,
+  isValidHappyScribeProbe, readBoundedHappyScribeListing, readBoundedHappyScribeMetadata,
 } from './happyscribe-probe';
 
 describe('HappyScribe administrator connectivity probe', () => {
@@ -53,6 +53,20 @@ describe('HappyScribe administrator connectivity probe', () => {
 
   it('rejects corrupt UTF-8 safely', async () => {
     expect(await isValidHappyScribeProbe(new Response(new Uint8Array([0xff, 0xfe])))).toBe(false);
+  });
+
+  it('reads only bounded export metadata and cancels oversized bodies', async () => {
+    expect(await readBoundedHappyScribeMetadata(Response.json({
+      id: 'synthetic-export-id',
+      state: 'ready',
+    }))).toEqual({ id: 'synthetic-export-id', state: 'ready' });
+    const cancel = vi.fn();
+    const excessive = new Response(new ReadableStream<Uint8Array>({
+      start(controller) { controller.enqueue(new Uint8Array(HAPPY_SCRIBE_PROBE_MAX_BYTES + 1)); },
+      cancel,
+    }));
+    expect(await readBoundedHappyScribeMetadata(excessive)).toBeNull();
+    expect(cancel).toHaveBeenCalledOnce();
   });
 
   it('reads a normal organization-scoped catalog through the bounded listing reader', async () => {

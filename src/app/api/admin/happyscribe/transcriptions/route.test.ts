@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { issueHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
+import { HAPPY_SCRIBE_LIST_MAX_BYTES, HAPPY_SCRIBE_PROBE_MAX_BYTES } from '@/lib/roleplay/happyscribe-probe';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
@@ -176,6 +177,56 @@ describe('HappyScribe SRT import download boundary', () => {
     const response = await POST(importRequest());
     expect(response.status).toBe(413);
     expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it('rejects oversized transcription detail metadata without creating an SRT export', async () => {
+    const cancel = vi.fn();
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      headers: { 'Content-Length': String(HAPPY_SCRIBE_LIST_MAX_BYTES + 1) },
+    }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect((await response.json()).error).toContain('demasiado grandes');
+  });
+
+  it('rejects oversized SRT export creation metadata without polling', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        headers: { 'Content-Length': String(HAPPY_SCRIBE_PROBE_MAX_BYTES + 1) },
+      }));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect((await response.json()).error).toContain('exportación no válida');
+  });
+
+  it('does not continue polling after an oversized export status body', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'done' }))
+      .mockResolvedValueOnce(Response.json({ id: exportId }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new Uint8Array(HAPPY_SCRIBE_PROBE_MAX_BYTES + 1)); },
+        cancel,
+      })));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(503);
+    expect(response.headers.get('Retry-After')).toBe('5');
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects malformed detail metadata without starting an export', async () => {
+    mocks.fetch.mockResolvedValueOnce(new Response('<html>synthetic upstream response</html>'));
+    const response = await POST(importRequest());
+    expect(response.status).toBe(502);
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect(JSON.stringify(await response.json())).not.toContain('synthetic upstream response');
   });
 
   it('cancels the provider detail body on a rejected transcription without leaking content', async () => {
