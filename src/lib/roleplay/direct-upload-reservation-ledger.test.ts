@@ -120,8 +120,8 @@ describe('future server-only Roleplay upload reservation idempotency (unwired)',
       const { actorUserId, requestKey: key } = where.actorUserId_requestKey;
       return rows.get(actorUserId + ':' + key) ?? null;
     });
-    const db = { roleplayUploadReservation: { create, findUnique } }
-      as unknown as Pick<PrismaClient, 'roleplayUploadReservation'>;
+    const db = { roleplayUploadReservation: { create, findUnique } } as unknown as
+      Pick<PrismaClient, 'roleplayUploadReservation'>;
 
     const [first, second] = await Promise.all([
       claimRoleplayDirectUploadReservation(db, actor, requestKey, declarations(3), now),
