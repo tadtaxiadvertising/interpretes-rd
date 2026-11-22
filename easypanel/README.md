@@ -11,7 +11,9 @@ This directory contains the necessary configuration details for deploying the **
 
 Easypanel requires these variables to be configured in the **Environment** tab of your application settings.
 
-> **Important**: Sensitive vars (`SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY`) must be set as **runtime env vars** in Easypanel, NOT as build args. The Dockerfile runner stage does not inherit builder build-arg env vars.
+> **Important**: Sensitive vars (`SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `AUTH_SECRET`, `ENCRYPTION_KEY`, `AUDIO_STUDIO_ENCRYPTION_KEY` and the optional HappyScribe API token) must be set as **runtime env vars** in Easypanel, NOT as build args. The Dockerfile runner stage does not inherit builder build-arg env vars.
+
+> **Production freeze (November 2026):** All three deployment jobs in `.github/workflows/deploy.yml` are disabled with `if: ${{ false }}` after an Easypanel incident; validation workflows remain active. Instructions below document the service layout and eventual approved recovery, **not** authorization to trigger deploys, migrations, worker rebuilds or webhooks. Easypanel may also have independent Auto Deploy; verify it is disabled before merging or deploying. See `docs/operations/easypanel-incident-freeze.md`.
 
 ### 1. Supabase Client Configuration
 
@@ -36,6 +38,23 @@ Easypanel requires these variables to be configured in the **Environment** tab o
 | :---------------- | :--------------------------------------------- | :-------- | :-------------------------------------------------- |
 | `AUTH_SECRET`     | NextAuth/Auth.js session encryption key.       | Runtime   | `a1b2c3d4e5f6...`                                   |
 | `ENCRYPTION_KEY`  | 32-byte hex key for data encryption.           | Runtime   | `0123456789abcdef0123456789abcdef...`               |
+| `AUDIO_STUDIO_ENCRYPTION_KEY` | **Separate** 32-byte AES-256-GCM key (exactly 64 hexadecimal characters) for HappyScribe tokens saved in Audio Studio. Only the `interpreters` Next.js service needs it. | Runtime only | Store only in Easypanel secret environment |
+
+### 3a. Audio Studio / HappyScribe (Next.js only)
+
+- `AUDIO_STUDIO_ENCRYPTION_KEY` **is not** the HappyScribe API token, and it is not interchangeable with `ENCRYPTION_KEY`. Configure it only on the Next.js `interpreters` service at runtime (never as `NEXT_PUBLIC_*` and never in build arguments).
+- `HAPPY_SCRIBE_API_TOKEN` is an optional **runtime-only** fallback if no encrypted token is stored in the panel. Prefer setting the API token in **Administración → Roleplays → Configuración Audio Studio**, where it is stored encrypted. Do **not** copy the master encryption key into that field.
+- `HAPPY_SCRIBE_ORGANIZATION_ID` is the numeric organization ID, not a token. It can instead be configured through the administrator panel.
+- `HAPPY_SCRIBE_MEDIA_PROXY_ENABLED` should remain `false` by default. SRT transcript import works without the optional MP3 proxy; enabling MP3 proxy can consume significant VPS bandwidth.
+- **Preserve existing data:** if there is an encrypted token saved, recover the **original** `AUDIO_STUDIO_ENCRYPTION_KEY` from the secret manager or deployment backups. Replacing it with a new value will not decrypt the saved token. Do not delete or overwrite the ciphertext to bypass this check.
+- Only for a fresh installation **without previously encrypted credentials**, generate a cryptographically random 32-byte key. On Windows PowerShell 5.1+, use `$b=New-Object byte[] 32; $r=[System.Security.Cryptography.RandomNumberGenerator]::Create(); try { $r.GetBytes($b); [BitConverter]::ToString($b).Replace('-','').ToLower() } finally { $r.Dispose() }`, then store the output privately in the Easypanel runtime environment. Never paste the key into a chat, issue, log or source file.
+- After a **controlled** application of runtime settings to `interpreters`, verify without printing secrets:
+
+  ```bash
+  node -e 'const v=process.env.AUDIO_STUDIO_ENCRYPTION_KEY||"";console.log(!v?"AUSENTE":v.length!==64?"LONGITUD_INVALIDA":!/^[a-f0-9]{64}$/i.test(v)?"CARACTERES_INVALIDOS":"CIFRADO_OK")'
+  ```
+
+  In Audio Studio use **Recomprobar cifrado en servidor**. A valid 64-character format alone does not prove an existing token can be decrypted. Never restart all three services or rotate a functioning key solely to address an SRT import error. See `docs/operations/happyscribe-encryption-key-recovery.md`.
 
 ### 4. Application Configuration
 
@@ -56,7 +75,7 @@ The project currently documents two public-facing services and adds an optional,
 | `interpreters-api`       | Backend API                                  | `Dockerfile.api`              |
 | `roleplay-audio-worker`  | Private, serial FFmpeg conversion worker     | `Dockerfile.worker`           |
 
-The Roleplay worker is not a public HTTP service and does not need a domain. It uses the existing Supabase Storage bucket and PostgreSQL database; it does not require Redis or a paid queue service. The image is built by CI on every main push, but production deployment is opt-in and only runs when the **repository-scoped** GitHub Actions variable `ENABLE_ROLEPLAY_AUDIO_WORKER` is set to `true` (**Settings → Secrets and variables → Actions → Variables**) and the `EASYPANEL_WEBHOOK_ROLEPLAY_WORKER` secret is configured. The variable must be repository-scoped: environment-scoped variables are not visible to a job-level `if:` expression, so an environment variable alone leaves the job silently skipped. Until enabled, the worker is not automatically deployed.
+The Roleplay worker is not a public HTTP service and does not need a domain. It uses the existing Supabase Storage bucket and PostgreSQL database; it does not require Redis or a paid queue service. The worker image may be validated in CI, but **production deployment is currently disabled in the workflow source with `if: ${{ false }}`**. `ENABLE_ROLEPLAY_AUDIO_WORKER` and the worker webhook cannot override this incident freeze. Any future worker deployment requires a separate, reviewed release plan, verified migration readiness and approval; merely merging to `main` is not authorization.
 
 ### Roleplay worker configuration
 
