@@ -49,6 +49,13 @@ describe('Admin roleplay import concurrency', () => {
     });
   };
 
+  it('provides a direct path to prepare a valid ZIP in Audio Studio', () => {
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
+    const link = screen.getByRole('link', { name: 'Preparar paquete en Audio Studio' });
+    expect(link.getAttribute('href')).toBe('/admin/roleplays/studio');
+    expect(screen.getByText(/JSON de proyecto guardan/)).toBeTruthy();
+  });
+
   it('does not replace an edited draft when an earlier SHA-256 import resolves', async () => {
     let resolve!: (scenarios: Array<{
       title: string;

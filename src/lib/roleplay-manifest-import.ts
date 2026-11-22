@@ -69,6 +69,12 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
   if (files.some(file => /\.md$/i.test(file.name))) {
     throw new Error('El archivo .md de HappyScribe es una transcripción, no un paquete de roleplay. En Audio Studio importa la transcripción como SRT, revisa los cortes y exporta el ZIP con manifest.json y MP3.');
   }
+  // Studio project JSON is a local editing snapshot, not a manifest of MP3
+  // clips. Never attempt to interpret it as a publishable package or read
+  // its potentially sensitive editor notes while determining file type.
+  if (files.some(file => /\.json$/i.test(file.name) && file.name.toLowerCase() !== 'manifest.json')) {
+    throw new Error('Un proyecto JSON de Audio Studio no es un paquete para asignar. Abre ese JSON junto a su grabación original en Audio Studio y genera el ZIP con manifest.json y MP3. Aquí solo se admite manifest.json acompañado de los MP3.');
+  }
   const manifests = files.filter((file) => file.name.toLowerCase() === 'manifest.json');
   if (manifests.length !== 1) {
     throw new Error('Selecciona exactamente un manifest.json junto con todos los archivos MP3.');
