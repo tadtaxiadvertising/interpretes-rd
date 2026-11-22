@@ -15,8 +15,14 @@ export async function GET() {
   const buildId = /^[a-f0-9]{40}$/i.test(rawSha) ? rawSha.toLowerCase() : null;
   const rawTimestamp = process.env.BUILD_TIMESTAMP?.trim() ?? '';
   // Only publish an ISO UTC build time, not arbitrary deployment metadata.
-  const buildTimestamp = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(rawTimestamp)
-    && !Number.isNaN(Date.parse(rawTimestamp)) ? rawTimestamp : null;
+  const isoUtcShape = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(rawTimestamp);
+  const parsedTime = isoUtcShape ? Date.parse(rawTimestamp) : NaN;
+  // Date.parse normalizes impossible calendar dates (e.g. Feb 30 -> Mar 2)
+  // and 24:00:00 instead of rejecting them. Verify the UTC calendar/time
+  // prefix survives parsing unchanged before reporting public provenance.
+  const buildTimestamp = Number.isFinite(parsedTime) &&
+    new Date(parsedTime).toISOString().slice(0, 19) === rawTimestamp.slice(0, 19)
+    ? rawTimestamp : null;
 
   return NextResponse.json(
     { buildTimestamp, buildId },

@@ -53,6 +53,36 @@ describe('GET /api/version', () => {
     });
   });
 
+  it('rejects impossible UTC calendar dates that JavaScript would silently normalize', async () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    const invalid = [
+      '2026-02-30T04:00:00Z',
+      '2026-02-29T04:00:00Z',
+      '2026-04-31T04:00:00Z',
+      '2026-11-21T24:00:00Z',
+      '2026-11-21T23:59:60Z',
+    ];
+    vi.stubEnv('GIT_SHA', sha);
+    for (const timestamp of invalid) {
+      vi.stubEnv('BUILD_TIMESTAMP', timestamp);
+      expect(await (await GET()).json()).toEqual({ buildTimestamp: null, buildId: sha });
+    }
+  });
+
+  it('preserves real leap days and supported fractional UTC timestamps', async () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567';
+    vi.stubEnv('GIT_SHA', sha);
+    for (const timestamp of [
+      '2028-02-29T04:00:00Z',
+      '2028-02-29T04:00:00.1Z',
+      '2028-02-29T04:00:00.12Z',
+      '2028-02-29T04:00:00.123Z',
+    ]) {
+      vi.stubEnv('BUILD_TIMESTAMP', timestamp);
+      expect(await (await GET()).json()).toEqual({ buildTimestamp: timestamp, buildId: sha });
+    }
+  });
+
   it('reports explicitly configured provenance without generating a timestamp', async () => {
     const sha = '0123456789abcdef0123456789abcdef01234567';
     vi.stubEnv('GIT_SHA', sha);
