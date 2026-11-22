@@ -49,6 +49,9 @@ interface NewRoleplayFormProps {
 // The first card is rendered by both Next.js SSR and the browser.
 // A random initial ID makes all htmlFor/id attributes disagree at hydration.
 const INITIAL_SCENARIO_ID = 'new-roleplay-initial-scenario';
+// Warning/consent threshold only; not an upload limit or memory guarantee.
+// A direct-to-Storage route is still needed for large batches (issue #290).
+const LARGE_AUDIO_BATCH_CONFIRM_BYTES = 96 * 1024 * 1024;
 
 function generateId() {
   return Math.random().toString(36).substring(2, 10);
@@ -438,6 +441,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const handleCreate = async () => {
     if (createPending.current || !validateForm()) return;
+    // A large legacy multipart request may exhaust the small Next.js VPS.
+    // Ask before constructing FormData or posting any bytes. Declining must
+    // preserve all edited clips, their order and the selected participant.
+    if (!librarySource && selectedAudioBytes > LARGE_AUDIO_BATCH_CONFIRM_BYTES &&
+        !window.confirm(
+          `Estás a punto de enviar ${(selectedAudioBytes / (1024 * 1024)).toFixed(1)} MiB de audio al servidor. ` +
+          'En un servidor con memoria limitada, una carga tan grande podría interrumpir el servicio. ' +
+          'Puedes cancelar y reutilizar una plantilla de la biblioteca, si ya existe. ' +
+          '¿Confirmas enviar estos archivos ahora?',
+        )) return;
     createPending.current = true;
 
     setIsCreating(true);
@@ -873,11 +886,19 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Audio seleccionado: <span className="font-medium text-white">{(selectedAudioBytes / (1024 * 1024)).toFixed(1)} MiB</span>
           </p>
         )}
-        {!librarySource && selectedAudioBytes > 96 * 1024 * 1024 && (
-          <p className="text-xs text-amber-200">
-            Este lote es voluminoso. La publicación actual envía los audios al servidor.
-            Si se interrumpe, comprueba primero la lista de roleplays antes de repetir la operación.
-          </p>
+        {!librarySource && selectedAudioBytes > LARGE_AUDIO_BATCH_CONFIRM_BYTES && (
+          <div className="space-y-1 text-xs text-amber-200">
+            <p>
+              Este lote es voluminoso. La publicación actual envía los audios al servidor;
+              se solicitará tu confirmación antes de transferirlos. Una carga grande puede
+              agotar la memoria del VPS. Si se interrumpe, comprueba primero la lista de
+              roleplays antes de repetir la operación.
+            </p>
+            <Link href="/admin/roleplays/library"
+              className="inline-block font-semibold underline underline-offset-2">
+              Reutilizar audio desde la biblioteca (sin volver a subirlo)
+            </Link>
+          </div>
         )}
         {(!isBulk && !selectedParticipantId) ? (
           <p className="text-xs text-amber-200">Elige un destinatario antes de crear. El formulario te llevará al primer dato pendiente.</p>
