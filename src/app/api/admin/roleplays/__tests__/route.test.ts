@@ -255,6 +255,62 @@ describe('POST /api/admin/roleplays', () => {
       expect(mockUpload).toHaveBeenCalledTimes(2);
     });
 
+    it('cancels an oversized declared multipart before parsing, Storage or database work', async () => {
+      const cancel = vi.fn();
+      const boundary = 'synthetic-boundary';
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('private synthetic upload bytes'));
+        },
+        cancel,
+      });
+      const oversized = new Request('http://localhost/api/admin/roleplays', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'multipart/form-data; boundary=' + boundary,
+          'Content-Length': String(25 * 15 * 1024 * 1024 + 2 * 1024 * 1024 + 1),
+        },
+        body: source,
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+
+      const response = await POST(oversized as any);
+      expect(response.status).toBe(413);
+      expect(response.headers.get('Cache-Control')).toContain('no-store');
+      expect(JSON.stringify(await response.json())).not.toContain('private synthetic');
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+
+      // Every early exit releases the one-request admission slot.
+      const valid = await POST(buildRequest({
+        participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()],
+      }) as any);
+      expect(valid.status).toBe(200);
+    });
+
+    it('preserves the 413 status if cancelling the upstream body fails', async () => {
+      const cancel = vi.fn(async () => {
+        throw new Error('SYNTHETIC_PRIVATE_TRANSPORT_ERROR');
+      });
+      const oversized = new Request('http://localhost/api/admin/roleplays', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'multipart/form-data; boundary=x',
+          'Content-Length': String(25 * 15 * 1024 * 1024 + 2 * 1024 * 1024 + 10),
+        },
+        body: new ReadableStream<Uint8Array>({ cancel }),
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+
+      const response = await POST(oversized as any);
+      expect(response.status).toBe(413);
+      expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PRIVATE_TRANSPORT_ERROR');
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+
     it('releases the admission slot even after a Storage upload failure', async () => {
       mockUpload.mockRejectedValueOnce(new Error('SYNTHETIC_PRIVATE_STORAGE_FAILURE'));
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
