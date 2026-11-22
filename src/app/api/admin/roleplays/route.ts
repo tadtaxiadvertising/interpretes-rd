@@ -153,6 +153,10 @@ export async function POST(req: NextRequest) {
     // The bounded reader also checks bytes as they arrive, before parsing.
     const declaredBytes = Number(req.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredBytes) && declaredBytes > MAX_ROLEPLAY_MULTIPART_BYTES) {
+      // Do not leave an oversized upload body streaming after an early 413.
+      // Cancellation is best-effort: always preserve the intended rejection
+      // even if an upstream transport refuses to cancel its request stream.
+      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
       return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
     }
     const formData = await readBoundedMultipartFormData(req, MAX_ROLEPLAY_MULTIPART_BYTES);
