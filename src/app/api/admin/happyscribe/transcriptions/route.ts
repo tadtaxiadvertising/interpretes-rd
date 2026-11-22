@@ -15,6 +15,9 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 const API_BASE = 'https://www.happyscribe.com/api/v1';
+// The provider might ignore per_page. Never issue HMACs or return metadata
+// for an unbounded number of catalog rows in a single admin request.
+const MAX_LIBRARY_ITEMS_PER_PAGE = 50;
 
 async function configuration() {
   try {
@@ -109,7 +112,7 @@ export async function GET(req: NextRequest) {
     if (!payload || typeof payload !== 'object' || !('results' in payload) || !Array.isArray(payload.results)) {
       return privateRoleplayResponse({ error: 'HappyScribe devolvió una lista no válida.' }, { status: 502 });
     }
-    const items = payload.results.flatMap((item: unknown) => {
+    const items = payload.results.slice(0, MAX_LIBRARY_ITEMS_PER_PAGE).flatMap((item: unknown) => {
       if (!item || typeof item !== 'object') return [];
       const row = item as Record<string, unknown>;
       if (typeof row.id !== 'string' || !isValidHappyScribeId(row.id)) return [];
@@ -117,12 +120,14 @@ export async function GET(req: NextRequest) {
         id: row.id,
         importProof: issueHappyScribeImportProof({ id: row.id, organizationId: config.organizationId, userId: auth.user.userId, token: config.token }),
         name: typeof row.name === 'string' ? row.name.slice(0, 240) : 'Transcripción sin título',
-        state: typeof row.state === 'string' ? row.state : 'unknown',
-        language: typeof row.language === 'string' ? row.language : null,
-        durationSeconds: typeof row.audioLengthInSeconds === 'number' ? row.audioLengthInSeconds : null,
-        createdAt: typeof row.createdAt === 'string' ? row.createdAt : null,
+        state: typeof row.state === 'string' ? row.state.slice(0, 64) : 'unknown',
+        language: typeof row.language === 'string' ? row.language.slice(0, 40) : null,
+        durationSeconds: typeof row.audioLengthInSeconds === 'number'
+          && Number.isFinite(row.audioLengthInSeconds) && row.audioLengthInSeconds >= 0
+          ? row.audioLengthInSeconds : null,
+        createdAt: typeof row.createdAt === 'string' ? row.createdAt.slice(0, 64) : null,
         folder: row.folder && typeof row.folder === 'object' &&
-          'name' in row.folder && typeof row.folder.name === 'string' ? row.folder.name : null,
+          'name' in row.folder && typeof row.folder.name === 'string' ? row.folder.name.slice(0, 240) : null,
       }];
     });
     return privateRoleplayResponse(
