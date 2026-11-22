@@ -11,6 +11,8 @@ export interface RoleplayUploadReservationSnapshot {
   batchId: string;
   ownerUserId: string;
   status: RoleplayUploadReservationStatus;
+  /** Server-recorded creation time; prevents replay of stale verification. */
+  createdAtMs: number;
   expiresAtMs: number;
   items: readonly PreparedRoleplayUpload[];
 }
@@ -62,8 +64,11 @@ export function validateRoleplayDirectUploadPublication(
   if (reservation.ownerUserId !== actorUserId) {
     throw new RoleplayPublicationBlockedError('NOT_OWNER');
   }
-  if (!Number.isSafeInteger(nowMs) || nowMs < 0 ||
-      !Number.isSafeInteger(reservation.expiresAtMs) || reservation.expiresAtMs <= 0) {
+  if (!Number.isSafeInteger(nowMs) || nowMs <= 0 ||
+      !Number.isSafeInteger(reservation.createdAtMs) ||
+      reservation.createdAtMs <= 0 || reservation.createdAtMs > nowMs ||
+      !Number.isSafeInteger(reservation.expiresAtMs) ||
+      reservation.expiresAtMs <= reservation.createdAtMs) {
     throw new RoleplayPublicationBlockedError('INVALID_RESERVATION');
   }
   if (nowMs >= reservation.expiresAtMs) {
@@ -101,7 +106,8 @@ export function validateRoleplayDirectUploadPublication(
         evidence.sizeBytes !== expected.sizeBytes ||
         evidence.sha256 !== expected.sha256 ||
         !Number.isSafeInteger(evidence.verifiedAtMs) ||
-        evidence.verifiedAtMs <= 0 || evidence.verifiedAtMs > nowMs ||
+        evidence.verifiedAtMs < reservation.createdAtMs ||
+        evidence.verifiedAtMs > nowMs ||
         evidence.verifiedAtMs >= reservation.expiresAtMs) {
       throw new RoleplayPublicationBlockedError('EVIDENCE_MISMATCH');
     }
