@@ -20,7 +20,7 @@ COPY tsconfig.json tsconfig.scripts.json ./
 COPY src/lib/prisma.ts src/lib/database-pool-config.ts ./src/lib/
 COPY src/lib/roleplay-limits.ts src/lib/roleplay-audio-conversion.ts ./src/lib/
 COPY src/lib/roleplay-audio-worker-lease.ts src/lib/roleplay-audio-worker-config.ts ./src/lib/
-COPY src/lib/roleplay-audio-worker-errors.ts ./src/lib/
+COPY src/lib/roleplay-audio-worker-errors.ts src/lib/roleplay-audio-worker-polling.ts ./src/lib/
 COPY scripts/roleplay-audio-worker.ts ./scripts/roleplay-audio-worker.ts
 
 # tsx depends on esbuild; only the builder uses either development tool.
