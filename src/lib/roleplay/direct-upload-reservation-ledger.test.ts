@@ -104,6 +104,35 @@ describe('future server-only Roleplay upload reservation idempotency (unwired)',
     }
   });
 
+  it('admits exactly one claim for two simultaneous identical requests', async () => {
+    const rows = new Map<string, { actorUserId: string; declarationHash: string; status: string }>();
+    const create = vi.fn(async ({ data }: { data: { actorUserId: string; requestKey: string; declarationHash: string } }) => {
+      const scopedKey = data.actorUserId + ':' + data.requestKey;
+      if (rows.has(scopedKey)) throw { code: 'P2002' };
+      rows.set(scopedKey, {
+        actorUserId: data.actorUserId,
+        declarationHash: data.declarationHash,
+        status: 'RESERVED',
+      });
+      return { id: 'synthetic-id' };
+    });
+    const findUnique = vi.fn(async ({ where }: { where: { actorUserId_requestKey: { actorUserId: string; requestKey: string } } }) => {
+      const { actorUserId, requestKey: key } = where.actorUserId_requestKey;
+      return rows.get(actorUserId + ':' + key) ?? null;
+    });
+    const db = { roleplayUploadReservation: { create, findUnique } }
+      as unknown as Pick<PrismaClient, 'roleplayUploadReservation'>;
+
+    const [first, second] = await Promise.all([
+      claimRoleplayDirectUploadReservation(db, actor, requestKey, declarations(3), now),
+      claimRoleplayDirectUploadReservation(db, actor, requestKey, declarations(3), now),
+    ]);
+    expect([first.kind, second.kind].sort()).toEqual(['CREATED', 'RECONCILE']);
+    expect(rows.size).toBe(1);
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(findUnique).toHaveBeenCalledOnce();
+  });
+
   it('never treats another actor as the owner of a colliding row', async () => {
     const existing = store({ actorUserId: 'synthetic-admin-B', declarationHash: sha }, { code: 'P2002' });
     const result = await claimRoleplayDirectUploadReservation(
