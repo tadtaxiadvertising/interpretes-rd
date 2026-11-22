@@ -46,8 +46,8 @@ function store(row: StoredRow | null = record()) {
   const deleteMany = vi.fn();
   return {
     findUnique, create, update, deleteMany,
-    db: { roleplayUploadReservation: { findUnique, create, update, deleteMany } }
-      as unknown as Pick<PrismaClient, 'roleplayUploadReservation'>,
+    db: { roleplayUploadReservation: { findUnique, create, update, deleteMany } } as unknown as
+      Pick<PrismaClient, 'roleplayUploadReservation'>,
   };
 }
 
