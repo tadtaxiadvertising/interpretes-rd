@@ -49,6 +49,12 @@ export async function readBoundedHappyScribeListing(response: Response): Promise
   return readBoundedJson(response, HAPPY_SCRIBE_LIST_MAX_BYTES);
 }
 
+/** Bounded export creation/status metadata. These steps need only IDs,
+ * states and download references, never an unbounded provider payload. */
+export async function readBoundedHappyScribeMetadata(response: Response): Promise<unknown | null> {
+  return readBoundedJson(response, HAPPY_SCRIBE_PROBE_MAX_BYTES);
+}
+
 /** Connection checks must not expose catalog entries or download large bodies. */
 export async function isValidHappyScribeProbe(response: Response): Promise<boolean> {
   const payload = await readBoundedJson(response, HAPPY_SCRIBE_PROBE_MAX_BYTES);
