@@ -747,10 +747,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             pero no se creará ninguna sesión hasta que confirmes la asignación.
           </p>
           <p className="mt-2 text-xs text-blue-100">
-            ¿Tienes un .md de HappyScribe? Es una transcripción, no un paquete.
-            Abre Audio Studio, importa el SRT desde HappyScribe, revisa los turnos
-            y exporta un ZIP con manifest.json y los MP3 antes de asignarlo.
+            Los .md de HappyScribe son transcripciones; los JSON de proyecto guardan
+            cortes de edición. Ninguno se puede asignar directamente. Abre Audio Studio,
+            importa el SRT desde HappyScribe, revisa los turnos y genera un ZIP con
+            manifest.json y los MP3. Si descargaste un proyecto JSON en modo local,
+            ábrelo junto a la grabación original y genera el ZIP con el exportador local.
           </p>
+          <Link href="/admin/roleplays/studio"
+            className="mt-2 inline-block text-xs font-semibold text-blue-200 underline underline-offset-2">
+            Preparar paquete en Audio Studio
+          </Link>
           <details className="mt-2 text-xs text-slate-300">
             <summary className="cursor-pointer text-blue-200">Formatos admitidos y privacidad</summary>
             <p className="mt-2 leading-5">
