@@ -164,7 +164,12 @@ describe('HappyScribe SRT import download boundary', () => {
     'rejects a provider %s response before reading its body, even with a valid-looking SRT line',
     async (contentType) => {
       const cancel = vi.fn();
-      const mislabeled = new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      const mislabeled = new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('1\\n00:00:01,000 --> 00:00:02,000\\nSynthetic dialogue\\n'));
+        },
+        cancel,
+      }), {
         status: 200,
         headers: { 'Content-Type': contentType },
       });
