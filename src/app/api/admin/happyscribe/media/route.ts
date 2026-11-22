@@ -156,6 +156,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Signed CDN links may return a provider error document with HTTP 200.
+    // Never relabel known text/JSON/XML payloads as playable MP3 or forward
+    // their private error contents to the browser. Check headers before bytes.
+    const mediaType = media.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? '';
+    if (mediaType.startsWith('text/') || mediaType === 'application/json' ||
+        mediaType.endsWith('+json') || mediaType === 'application/xml' ||
+        mediaType.endsWith('+xml')) {
+      await discardHappyScribeDownload(media);
+      return privateRoleplayResponse(
+        { success: false, error: 'HappyScribe devolvió un documento en lugar de audio MP3. Descarga la grabación original desde HappyScribe o reintenta la exportación.' },
+        { status: 502 },
+      );
+    }
+
     const declaredLength = Number(media.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredLength) && declaredLength > MAX_MEDIA_BYTES) {
       await discardHappyScribeDownload(media);

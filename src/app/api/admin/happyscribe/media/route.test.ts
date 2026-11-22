@@ -175,6 +175,52 @@ describe('HappyScribe original media import', () => {
     expect(response.headers.get('Content-Disposition')).not.toContain('signature=secret');
   });
 
+  it.each(['text/html; charset=utf-8', 'text/markdown', 'application/json', 'application/problem+json'])(
+    'rejects a provider %s document before streaming private content as audio',
+    async (contentType) => {
+      const cancel = vi.fn();
+      const upstream = new Response(new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('Synthetic private provider error'));
+        },
+        cancel,
+      }), { status: 200, headers: { 'Content-Type': contentType } });
+      mocks.fetch
+        .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+        .mockResolvedValueOnce(Response.json({
+          state: 'ready',
+          download_link: 'https://media.happyscribe.com/private.mp3?token=SYNTHETIC_SIGNED_URL',
+        }))
+        .mockResolvedValueOnce(upstream);
+
+      const response = await POST(request());
+      expect(response.status).toBe(502);
+      const body = await response.json();
+      expect(body).toMatchObject({ success: false });
+      expect(body.error).toContain('en lugar de audio MP3');
+      expect(JSON.stringify(body)).not.toContain('Synthetic private provider error');
+      expect(JSON.stringify(body)).not.toContain('SYNTHETIC_SIGNED_URL');
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(mocks.fetch).toHaveBeenCalledTimes(3);
+    },
+  );
+
+  it('accepts a generic binary CDN type for a provider MP3', async () => {
+    const audio = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00]);
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(Response.json({
+        state: 'ready', download_link: 'https://media.happyscribe.com/export.mp3',
+      }))
+      .mockResolvedValueOnce(new Response(audio, {
+        headers: { 'Content-Type': 'application/octet-stream' },
+      }));
+    const response = await POST(request());
+    expect(response.status).toBe(200);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(audio);
+    expect(response.headers.get('Content-Type')).toBe('audio/mpeg');
+  });
+
   it('propagates a cancelled administrator request to the upstream media transfer', async () => {
     const controller = new AbortController();
     mocks.fetch
