@@ -46,6 +46,11 @@ const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
 // This is a hard upper bound, NOT a safe memory budget for the small VPS:
 // direct uploads to Storage are still required to solve issue #290.
 const MAX_ROLEPLAY_MULTIPART_BYTES = ROLEPLAY_MAX_SCENARIOS * MAX_AUDIO_SIZE + 2 * 1024 * 1024;
+// Memory amplification occurs while formData() buffers audio and during Storage
+// uploads. Admit only one create request per Next.js process at a time.
+// This is not a distributed quota or a substitute for direct-to-Storage upload.
+const MAX_ACTIVE_ROLEPLAY_CREATES = 1;
+let activeRoleplayCreates = 0;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
 const MAX_DURATION_SEC = ROLEPLAY_RESPONSE_MAX_DURATION_SEC;
@@ -126,10 +131,23 @@ export async function POST(req: NextRequest) {
   // A successful upload is safe to delete only before any transaction that
   // might have persisted its URL. A failed/ambiguous commit must preserve it.
   let audioCommitMayHaveStarted = false;
+  let processingSlotAcquired = false;
 
   try {
     const forbidden = await guardRoleplayAdmin(req);
     if (forbidden) return forbidden;
+
+    // Reject additional uploads before reading multipart bytes. A second
+    // request would multiply the temporary memory footprint on a small VPS.
+    if (activeRoleplayCreates >= MAX_ACTIVE_ROLEPLAY_CREATES) {
+      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
+      return privateRoleplayJson(
+        { success: false, error: 'Ya se está creando otro roleplay. Vuelve a intentarlo cuando termine.' },
+        { status: 503, headers: { 'Retry-After': '5' } },
+      );
+    }
+    activeRoleplayCreates++;
+    processingSlotAcquired = true;
 
     // Content-Length is only a cheap preflight; it may be missing or false.
     // The bounded reader also checks bytes as they arrive, before parsing.
@@ -743,6 +761,10 @@ export async function POST(req: NextRequest) {
       },
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } }
     );
+  } finally {
+    // Every exit path, including 413/401, Storage errors and ambiguous
+    // transactions, must free the process-local admission slot.
+    if (processingSlotAcquired) activeRoleplayCreates--;
   }
 }
 
