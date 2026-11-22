@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { issueHappyScribeImportProof } from '@/lib/roleplay/happyscribe-import-proof';
 import { getHappyScribeSettings } from '@/lib/roleplay/happyscribe-settings';
+import { HAPPY_SCRIBE_LIST_MAX_BYTES, HAPPY_SCRIBE_PROBE_MAX_BYTES } from '@/lib/roleplay/happyscribe-probe';
 
 const mocks = vi.hoisted(() => ({
   validateAction: vi.fn(),
@@ -71,6 +72,85 @@ describe('HappyScribe original media import', () => {
     expect(response.status).toBe(503);
     expect(await response.json()).toMatchObject({ success: false });
     expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('rejects an oversized MP3 import request before any provider calls', async () => {
+    const oversized = new NextRequest('http://localhost/api/admin/happyscribe/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: transcriptionId, proof: validProof(), padding: 'x'.repeat(9 * 1024),
+      }),
+    });
+    const response = await POST(oversized);
+    expect(response.status).toBe(413);
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect((await response.json()).error).toContain('demasiado grande');
+  });
+
+  it('returns a safe error for malformed MP3 JSON without contacting the provider', async () => {
+    const invalid = new NextRequest('http://localhost/api/admin/happyscribe/media', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{ "proof": "SYNTHETIC_PRIVATE_DATA"',
+    });
+    const response = await POST(invalid);
+    expect(response.status).toBe(400);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+    expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PRIVATE_DATA');
+  });
+
+  it('rejects oversized MP3 detail JSON and cancels its stream before export', async () => {
+    const cancel = vi.fn();
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      headers: { 'Content-Length': String(HAPPY_SCRIBE_LIST_MAX_BYTES + 1) },
+    }));
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+    expect((await response.json()).error).toContain('demasiado grandes');
+  });
+
+  it('rejects oversized MP3 export JSON without downloading any media', async () => {
+    const cancel = vi.fn();
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new Uint8Array(HAPPY_SCRIBE_PROBE_MAX_BYTES + 1)); },
+        cancel,
+      })));
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect((await response.json()).error).toContain('demasiado grandes');
+  });
+
+  it('cancels rejected MP3 transcription detail responses and preserves 404', async () => {
+    const cancel = vi.fn();
+    mocks.fetch.mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+      status: 404,
+    }));
+    const response = await POST(request());
+    expect(response.status).toBe(404);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledOnce();
+  });
+
+  it('cancels rejected MP3 export-creation responses and preserves 502', async () => {
+    const cancel = vi.fn(async () => { throw new Error('SYNTHETIC_PROVIDER_ERROR'); });
+    mocks.fetch
+      .mockResolvedValueOnce(Response.json({ state: 'automatic_done' }))
+      .mockResolvedValueOnce(new Response(new ReadableStream<Uint8Array>({ cancel }), {
+        status: 503,
+      }));
+    const response = await POST(request());
+    expect(response.status).toBe(502);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PROVIDER_ERROR');
   });
 
   it('streams a completed transcription MP3 without exposing its signed URL', async () => {
