@@ -224,6 +224,15 @@ jobs:
       - name: Verify staged idempotency SQL is not a deployable Prisma migration
         run: node --test scripts/ci/verify-staged-idempotency.test.mjs
 
+      # Exercise the exact staged Roleplay upload reservation SQL in a new
+      # disposable, CI-only PostgreSQL database. Real concurrent sessions must
+      # deduplicate requests and publication. The verifier drops its own DB;
+      # it NEVER touches production or applies the staged SQL during deploy.
+      - name: Verify staged Roleplay upload reservations (isolated PostgreSQL only)
+        env:
+          CI: 'true'
+        run: npx tsx scripts/verify-roleplay-upload-reservations-migration.ts
+
       # Stage the next financial idempotency change safely: only inspect its
       # candidate schema against disposable CI Postgres, always ROLLBACK.
       # This does NOT add the migration to production or change Prisma models.
