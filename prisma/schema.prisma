@@ -1004,6 +1004,24 @@ model RoleplayCreationRequest {
   @@schema("public")
 }
 
+// Future server-only upload reservation ledger. Not wired to any HTTP route.
+// Its staged SQL is OUTSIDE prisma/migrations pending an approved rollout.
+model RoleplayUploadReservation {
+  id               String   @id @db.Uuid
+  actorUserId      String   @map("actor_user_id")
+  requestKey       String   @map("request_key") @db.Uuid
+  declarationHash  String   @map("declaration_hash") @db.VarChar(64)
+  status           String   @default("RESERVED") @db.VarChar(20)
+  items            Json     @db.JsonB
+  verifiedObjects  Json     @default("[]") @map("verified_objects") @db.JsonB
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt        DateTime @map("expires_at") @db.Timestamptz(6)
+
+  @@unique([actorUserId, requestKey], map: "roleplay_upload_reservations_actor_key")
+  @@map("roleplay_upload_reservations")
+  @@schema("public")
+}
+
 model RoleplayAccess {
   id            String   @id @default(cuid())
   sessionId     String   @map("session_id")
