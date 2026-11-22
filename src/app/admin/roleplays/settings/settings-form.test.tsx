@@ -42,6 +42,38 @@ afterEach(() => {
 });
 
 describe('Audio Studio admin partial settings payload', () => {
+  it('copies only safe server status even when an API token is typed but unsaved', async () => {
+    const clipboardPrevious = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText },
+    });
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      fireEvent.change(screen.getByLabelText('Clave API de HappyScribe'), {
+        target: { value: 'SYNTHETIC_UNSAVED_API_SECRET' },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copiar diagnóstico seguro' }));
+      });
+      expect(writeText).toHaveBeenCalledOnce();
+      const copied = vi.mocked(writeText).mock.calls[0][0] as string;
+      expect(copied).toContain('Intérpretes RD');
+      expect(copied).toContain('Cifrado disponible en Next.js: sí');
+      expect(copied).not.toContain('SYNTHETIC_UNSAVED_API_SECRET');
+      expect(copied).not.toContain(initial.organizationId);
+      expect(copied).not.toContain(initial.revision);
+      expect(screen.getByText(/Diagnóstico seguro copiado/)).toBeTruthy();
+      expect((screen.getByLabelText('Clave API de HappyScribe') as HTMLInputElement).value)
+        .toBe('SYNTHETIC_UNSAVED_API_SECRET');
+      expect(saveAudioStudioSettings).not.toHaveBeenCalled();
+    } finally {
+      if (clipboardPrevious) Object.defineProperty(navigator, 'clipboard', clipboardPrevious);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
+
   it('does not save unchanged settings or report false success while HappyScribe is unconfigured', async () => {
     render(<AudioStudioSettingsForm initial={{
       ...initial, tokenSource: 'ninguna', hasToken: false, credentialUsable: false,
