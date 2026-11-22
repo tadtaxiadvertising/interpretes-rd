@@ -1,12 +1,20 @@
 # Intérpretes RD — subida directa de audios de Roleplay (diseño deshabilitado)
 
-**Estado:** contratos y preparación de reservas sin efectos secundarios; función no habilitada. La API actual continúa recibiendo multipart autenticado. No se emiten URLs firmadas ni se modifican buckets.
+**Estado:** contratos y preparación de reservas sin habilitar subida directa. La API actual continúa recibiendo multipart autenticado. No se emiten URLs firmadas ni se cambian objetos ni permisos del bucket histórico. El 22-11-2026 se aprovisionó un bucket privado adicional, todavía vacío y no conectado a la aplicación.
 
 ## Objetivo y límite del cambio
 
 Hasta 25 × 15 MiB pueden representar 375 MiB en la memoria del servicio Next.js, más copias adicionales. El límite de streaming del endpoint heredado protege ante solicitudes excesivas, pero no evita el pico de memoria para un lote legítimo.
 
 El nuevo helper `src/lib/roleplay/direct-upload-contract.ts` solo valida una declaración por posición (1–25, orden 0–24, tipo MIME autorizado, 1–15 MiB por archivo y SHA-256 hexadecimal exacto). Genera rutas temporales como `staging/roleplay/<uuid-servidor>/<posición>.<extensión>`. Rechaza nombres originales, rutas, URLs u otros campos propuestos por el cliente. La UUID debe crearla exclusivamente el servidor. El helper **no permite subir archivos**, no verifica propiedad, no utiliza API keys y no está conectado a la ruta existente.
+
+## Aislamiento de almacenamiento privado (aprovisionado, no activado)
+
+La consulta de producción del **22-11-2026** confirmó que el proyecto Supabase `kzbkygppplknynrwmtmf` contiene el bucket histórico `roleplay-audio` (`public=true`, 2 objetos bajo `base/`) y ahora también el nuevo `roleplay-audio-private` (`public=false`, **0 objetos**). La segunda lectura confirmó que el bucket histórico y sus referencias no se modificaron. Se comprobó `storage.objects.relrowsecurity=true` y que no hay políticas de acceso definidas en `pg_policies` para `storage.objects` en ese proyecto. Estos metadatos no acreditan la naturaleza clínica ni el historial de acceso de objetos existentes.
+
+El bucket aislado permite únicamente `audio/mpeg`, `audio/wav`, `audio/webm` y `audio/mp4`, con tamaño máximo de **15 MiB por objeto**. La configuración se aprovisionó directamente en Supabase como operación aditiva; no se ha vinculado a ningún endpoint o client de navegador. Para futuras instalaciones, debe replicarse mediante un proceso controlado y comprobable que preserve el aislamiento. No se autoriza cambiar `roleplay-audio` a privado hasta completar migración de reproducción, biblioteca y sesiones históricas.
+
+`src/lib/roleplay/private-audio-bucket-readiness.ts` incorpora una **barrera server-side de solo lectura, todavía sin llamadas de producción**. En la futura ruta de firma, el servicio privilegiado deberá consultar `storage.getBucket('roleplay-audio-private')` inmediatamente antes de emitir la capacidad. Rechazará datos inexistentes, errores del proveedor, `public` diferente de `false`, un ID distinto, tamaño máximo diferente de 15 MiB o una lista MIME incompleta, duplicada o ampliada. Nunca devolverá la excepción del proveedor al navegador. Esto no reemplaza autorización admin, control de propietario, políticas de Storage, verificación real de bytes ni publicación transaccional. No debe almacenarse en caché una validación previa si luego se emitirán firmas.
 
 ## Preparación de reserva del servidor (no persistida, todavía inactiva)
 
