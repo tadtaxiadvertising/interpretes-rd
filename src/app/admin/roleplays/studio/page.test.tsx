@@ -211,6 +211,42 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
   });
 
+  it('explains HappyScribe Markdown is a transcript, not an Audio Studio JSON project, without losing edits', async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const markdown = new File(['# Transcript with private dialogue'], 'happyscribe.md', {
+      type: 'text/markdown',
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [markdown] },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('alert').textContent).toContain('no un archivo SRT/VTT');
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.drop(screen.getByRole('group', { name: 'Zona para recuperar proyecto JSON' }), {
+        dataTransfer: { files: [markdown] },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByRole('alert').textContent).toContain('no es un proyecto JSON');
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Transcript with private dialogue/)).toBeNull();
+  });
+
   it('does not misrepresent a pending SRT selection as a recoverable empty project', async () => {
     const fetcher = vi.fn();
     vi.stubGlobal('fetch', fetcher);
