@@ -72,6 +72,18 @@ describe('prepareRoleplayManifestImport', () => {
     await expect(prepareRoleplayManifestImport([...files, manifest])).rejects.toThrow(/exactamente un manifest/);
   });
 
+  it('rejects HappyScribe Markdown as a roleplay package without parsing private text', async () => {
+    const markdown = new File(['# PRIVATE SYNTHETIC TRANSCRIPT'], 'happy-scribe.MD', {
+      type: 'text/markdown',
+    });
+    const read = vi.spyOn(markdown, 'text');
+    await expect(prepareRoleplayManifestImport([markdown]))
+      .rejects.toThrow(/El archivo \.md de HappyScribe es una transcripción/);
+    await expect(prepareRoleplayManifestImport([...createFixture(1).files, markdown]))
+      .rejects.toThrow(/no un paquete de roleplay/);
+    expect(read).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed and noncontiguous manifest indexes', async () => {
     const { files } = createFixture(2);
     const broken = JSON.parse(await files[0].text());

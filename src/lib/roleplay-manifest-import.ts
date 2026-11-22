@@ -64,6 +64,11 @@ function bytesToHex(buffer: ArrayBuffer): string {
  * A checksum mismatch fails closed; publication is never attempted here.
  */
 export async function prepareRoleplayManifestImport(files: File[]): Promise<ImportedRoleplayScenario[]> {
+  // A provider transcript is not a roleplay package. Reject it without reading
+  // private Markdown content or attempting to infer missing audio/timestamps.
+  if (files.some(file => /\.md$/i.test(file.name))) {
+    throw new Error('El archivo .md de HappyScribe es una transcripción, no un paquete de roleplay. En Audio Studio importa la transcripción como SRT, revisa los cortes y exporta el ZIP con manifest.json y MP3.');
+  }
   const manifests = files.filter((file) => file.name.toLowerCase() === 'manifest.json');
   if (manifests.length !== 1) {
     throw new Error('Selecciona exactamente un manifest.json junto con todos los archivos MP3.');
