@@ -7,7 +7,8 @@ export const MAX_HAPPYSCRIBE_IMPORT_BODY_BYTES = 8 * 1024;
 
 export type HappyScribeImportBody =
   | { kind: 'ok'; value: unknown }
-  | { kind: 'invalid' | 'too-large' };
+  | { kind: 'invalid' }
+  | { kind: 'too-large' };
 
 export async function readBoundedHappyScribeImportBody(request: Request): Promise<HappyScribeImportBody> {
   const body = request.body;
