@@ -25,6 +25,10 @@ describe('HappyScribe import filenames', () => {
       const filename = happyScribeImportFilename('A'.repeat(400) + '.md', extension);
       expect(filename.length).toBeLessThanOrEqual(180);
       expect(filename.endsWith('.' + extension)).toBe(true);
+      const unicode = happyScribeImportFilename('🎧'.repeat(300) + '.md', extension);
+      expect(unicode.length).toBeLessThanOrEqual(180);
+      expect(unicode.endsWith('.' + extension)).toBe(true);
+      expect(unicode).not.toContain('\uFFFD');
     }
   });
 });
