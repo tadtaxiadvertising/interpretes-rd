@@ -31,6 +31,8 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     media !== status.mediaImportEnabled || excludeDefault !== status.excludeInterpreterByDefault ||
     compactDefault !== status.compactViewDefault || protocolDefault !== status.protocolLanguageDefault;
   const [notice, setNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  // Clipboard feedback must not hide a failed or ambiguous settings save.
+  const [copyNotice, setCopyNotice] = useState<{ ok: boolean; message: string } | null>(null);
   // A warning paragraph alone cannot stop an accidental tab close or reload.
   // Register the native browser warning only while there is an unsaved draft.
   useEffect(() => {
@@ -148,18 +150,20 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
     }
   }
   async function copySafeDiagnostic() {
+    // Do not share a potentially stale snapshot while a conflict is unresolved.
+    if (editingDisabled || conflict) return;
     // Build the report from the LAST server-provided status, never from
     // entered API tokens, pending form fields, or arbitrary exception text.
     const report = formatAudioStudioSafeDiagnostic(status);
     try {
       if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable');
       await navigator.clipboard.writeText(report);
-      setNotice({
+      setCopyNotice({
         ok: true,
         message: 'Diagnóstico seguro copiado. Solo incluye estados; no contiene claves API, secretos ni identificadores.',
       });
     } catch {
-      setNotice({
+      setCopyNotice({
         ok: false,
         message: 'No se pudo copiar el diagnóstico. Comprueba los permisos del portapapeles del navegador.',
       });
@@ -184,11 +188,12 @@ export default function AudioStudioSettingsForm({ initial }: { initial: Initial 
   return <form onSubmit={submit} className="space-y-6 rounded-3xl border border-white/10 bg-slate-900/70 p-6">
     <div><h2 className="text-xl font-semibold text-white">HappyScribe</h2>
       <p className="mt-1 text-sm text-slate-400">Solo los administradores pueden cambiar estos valores. Las claves nunca se devuelven al navegador.</p>
-      <button type="button" disabled={editingDisabled} onClick={() => void copySafeDiagnostic()}
+      <button type="button" disabled={editingDisabled || conflict} onClick={() => void copySafeDiagnostic()}
         className="mt-3 rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-blue-200 hover:bg-white/5 disabled:opacity-50">
         Copiar diagnóstico seguro
       </button>
       <p className="mt-1 text-xs text-slate-400">Solo copia indicadores de configuración ya cargados; nunca claves, tokens, ID de organización ni cambios sin guardar.</p>
+      {copyNotice && <p role="status" className={copyNotice.ok ? 'mt-2 text-sm text-green-300' : 'mt-2 text-sm text-red-300'}>{copyNotice.message}</p>}
     </div>
     {!status.encryptionReady && (
       <div role="alert" className="rounded-xl border border-amber-400/35 bg-amber-400/5 p-4 text-sm text-amber-100">

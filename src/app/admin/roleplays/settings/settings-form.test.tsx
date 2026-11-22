@@ -74,6 +74,75 @@ describe('Audio Studio admin partial settings payload', () => {
   });
 
 
+  it('keeps a failed configuration save visible after copying the safe diagnostic', async () => {
+    vi.mocked(saveAudioStudioSettings).mockResolvedValueOnce({
+      success: false,
+      message: 'Falta AUDIO_STUDIO_ENCRYPTION_KEY en Next.js.',
+    });
+    const previous = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText },
+    });
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+        target: { value: 'expanded' },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+      });
+      expect(screen.getByText(/Falta AUDIO_STUDIO_ENCRYPTION_KEY/)).toBeTruthy();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Copiar diagnóstico seguro' }));
+      });
+      expect(writeText).toHaveBeenCalledOnce();
+      expect(screen.getByText(/Diagnóstico seguro copiado/)).toBeTruthy();
+      // Copying a health report must not replace the actual failure.
+      expect(screen.getByText(/Falta AUDIO_STUDIO_ENCRYPTION_KEY/)).toBeTruthy();
+      expect(saveAudioStudioSettings).toHaveBeenCalledOnce();
+    } finally {
+      if (previous) Object.defineProperty(navigator, 'clipboard', previous);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
+  it('disables sharing stale status until an administrator resolves a save conflict', async () => {
+    vi.mocked(saveAudioStudioSettings).mockResolvedValueOnce({
+      success: false, conflict: true,
+      message: 'Otro administrador modificó estos ajustes.',
+    });
+    const previous = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true, value: { writeText },
+    });
+    try {
+      render(<AudioStudioSettingsForm initial={initial} />);
+      fireEvent.change(screen.getByLabelText('Vista inicial de intervenciones'), {
+        target: { value: 'expanded' },
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Guardar configuración' }));
+      });
+      const copy = screen.getByRole('button', { name: 'Copiar diagnóstico seguro' }) as HTMLButtonElement;
+      expect(copy.disabled).toBe(true);
+      fireEvent.click(copy);
+      expect(writeText).not.toHaveBeenCalled();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', {
+          name: 'Descartar mis cambios y cargar ajustes actuales',
+        }));
+      });
+      expect(copy.disabled).toBe(false);
+      await act(async () => { fireEvent.click(copy); });
+      expect(writeText).toHaveBeenCalledOnce();
+    } finally {
+      if (previous) Object.defineProperty(navigator, 'clipboard', previous);
+      else Reflect.deleteProperty(navigator, 'clipboard');
+    }
+  });
+
   it('does not save unchanged settings or report false success while HappyScribe is unconfigured', async () => {
     render(<AudioStudioSettingsForm initial={{
       ...initial, tokenSource: 'ninguna', hasToken: false, credentialUsable: false,
