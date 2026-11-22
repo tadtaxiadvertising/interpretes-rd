@@ -57,17 +57,23 @@ export async function uploadRoleplayBatchSequentially(
   options: RoleplayBrowserUploadOptions = {},
 ): Promise<{ uploadedCount: number }> {
   let canonical: ReturnType<typeof prepareRoleplayDirectUploadBatch>;
+  let batchFiles: File[] = [];
+  let batchSlots: RoleplayBrowserSignedUploadSlot[] = [];
   try {
     if (!Array.isArray(files) || !Array.isArray(slots) ||
         files.length !== slots.length || typeof transfer !== 'function') {
       throw new Error('invalid input');
     }
-    canonical = prepareRoleplayDirectUploadBatch(batchId, slots.map(slot => ({
+    // Callbacks may change form state while requests are in flight. Snapshot
+    // file identities and signed slot metadata so preflight cannot be bypassed.
+    batchFiles = files.slice();
+    batchSlots = slots.map(slot => ({ ...slot }));
+    canonical = prepareRoleplayDirectUploadBatch(batchId, batchSlots.map(slot => ({
       order: slot.order, mime: slot.mime, sizeBytes: slot.sizeBytes, sha256: slot.sha256,
     })));
     for (const [index, expected] of canonical.items.entries()) {
-      const slot = slots[index];
-      const file = files[index];
+      const slot = batchSlots[index];
+      const file = batchFiles[index];
       if (slot.path !== expected.path || typeof slot.token !== 'string' ||
           slot.token.length < 1 || slot.token.length > 8192 ||
           !(file instanceof File) ||
@@ -90,8 +96,8 @@ export async function uploadRoleplayBatchSequentially(
       result = await transfer({
         path: expected.path,
         mime: expected.mime,
-        token: slots[index].token,
-      }, files[index], options.signal);
+        token: batchSlots[index].token,
+      }, batchFiles[index], options.signal);
     } catch {
       // Do not reflect Storage errors: they may contain private object keys or
       // signed URLs. The caller can report a fixed user-facing error.
