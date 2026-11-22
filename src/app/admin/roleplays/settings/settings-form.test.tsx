@@ -88,7 +88,8 @@ describe('Audio Studio admin partial settings payload', () => {
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Verificar versión de Next.js (solo lectura)' }));
       });
-      expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/version', {
+      expect(fetcher).toHaveBeenCalledOnce();
+      expect(fetcher).toHaveBeenCalledWith('/api/version', {
         method: 'GET', credentials: 'same-origin', cache: 'no-store',
       });
       expect(screen.getByText('a'.repeat(40))).toBeTruthy();
