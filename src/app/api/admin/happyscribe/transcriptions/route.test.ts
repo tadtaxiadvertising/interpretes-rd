@@ -68,6 +68,35 @@ describe('HappyScribe SRT import download boundary', () => {
     vi.unstubAllEnvs();
   });
 
+  it('rejects an oversized signed import body before contacting HappyScribe', async () => {
+    const request = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: transcriptionId,
+        proof: validProof(),
+        padding: 'x'.repeat(9 * 1024),
+      }),
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(413);
+    expect((await response.json()).error).toContain('demasiado grande');
+    expect(response.headers.get('Cache-Control')).toContain('no-store');
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('returns a sanitized error for malformed import JSON without provider calls', async () => {
+    const request = new NextRequest('http://localhost/api/admin/happyscribe/transcriptions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{ "proof": "SYNTHETIC_PRIVATE_SECRET"',
+    });
+    const response = await POST(request);
+    expect(response.status).toBe(502);
+    expect(JSON.stringify(await response.json())).not.toContain('SYNTHETIC_PRIVATE_SECRET');
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
   it('does not follow a redirect from an allowed download host to an internal URL', async () => {
     mocks.fetch
       .mockResolvedValueOnce(Response.json({ state: 'done' }))
