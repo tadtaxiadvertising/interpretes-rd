@@ -56,6 +56,25 @@ describe('future browser-side Roleplay direct-upload hash declarations (unwired)
     }
   });
 
+  it('uses the original file snapshot even if progress changes the draft', async () => {
+    const first = fixture('abc');
+    const second = fixture('def');
+    const injected = fixture('private-new-draft');
+    const files = [first.file, second.file];
+    const result = await hashRoleplayFilesSequentially(files, {
+      onHashed: completed => {
+        if (completed === 1) {
+          files[1] = injected.file;
+          files.push(injected.file);
+        }
+      },
+    });
+    expect(result).toHaveLength(2);
+    expect(result.map(item => item.sizeBytes)).toEqual([3, 3]);
+    expect(second.read).toHaveBeenCalledOnce();
+    expect(injected.read).not.toHaveBeenCalled();
+  });
+
   it('rejects invalid file batches before reading any private bytes', async () => {
     const valid = fixture('abc');
     const empty = fixture('');
