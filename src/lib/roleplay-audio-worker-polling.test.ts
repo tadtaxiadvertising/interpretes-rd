@@ -37,7 +37,9 @@ describe('Roleplay audio worker low-cost polling policy', () => {
     // The caller updates lastSuccessfulCleanupMs only after await completes.
     expect(shouldRunRoleplayWorkerStaleCleanup(1_800_000_000_000, null)).toBe(true);
     expect(shouldRunRoleplayWorkerStaleCleanup(1_800_000_010_000, null)).toBe(true);
-  });  it('interrupts an idle 30-second wait immediately during shutdown', async () => {
+  });
+
+  it('interrupts an idle 30-second wait immediately during shutdown', async () => {
     const shutdown = new AbortController();
     const wait = waitForRoleplayWorkerPoll(30_000, shutdown.signal);
     shutdown.abort();
@@ -57,5 +59,4 @@ describe('Roleplay audio worker low-cost polling policy', () => {
       await expect(waitForRoleplayWorkerPoll(invalid, shutdown.signal)).rejects.toThrow('INVALID_WORKER_POLL_DELAY');
     }
   });
-
 });
