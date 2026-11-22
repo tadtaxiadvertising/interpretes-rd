@@ -746,6 +746,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Importa un ZIP o manifest.json con sus MP3. Se sustituirá el borrador,
             pero no se creará ninguna sesión hasta que confirmes la asignación.
           </p>
+          <p className="mt-2 text-xs text-blue-100">
+            ¿Tienes un .md de HappyScribe? Es una transcripción, no un paquete.
+            Abre Audio Studio, importa el SRT desde HappyScribe, revisa los turnos
+            y exporta un ZIP con manifest.json y los MP3 antes de asignarlo.
+          </p>
           <details className="mt-2 text-xs text-slate-300">
             <summary className="cursor-pointer text-blue-200">Formatos admitidos y privacidad</summary>
             <p className="mt-2 leading-5">
