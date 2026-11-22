@@ -4,6 +4,11 @@ import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
 import { findMissingWorkerEnvVars } from '@/lib/roleplay-audio-worker-config';
 import { markResponseProcessingIfLeaseOwned } from '@/lib/roleplay-audio-worker-lease';
 import { safeRoleplayAudioJobError } from '@/lib/roleplay-audio-worker-errors';
+import {
+  ROLEPLAY_WORKER_BASE_POLL_MS,
+  nextRoleplayWorkerIdleDelayMs,
+  shouldRunRoleplayWorkerStaleCleanup,
+} from '@/lib/roleplay-audio-worker-polling';
 
 interface ClaimedAudioJob {
   id: string;
@@ -18,8 +23,8 @@ interface ClaimedAudioJob {
 // let two replicas impersonate one another when fencing a reclaimed lease.
 const workerPrefix = (process.env.ROLEPLAY_AUDIO_WORKER_ID || 'roleplay-audio').slice(0, 60);
 const workerId = `${workerPrefix}-${randomUUID()}`;
-// A modest poll interval avoids unnecessary database churn on Supabase Free.
-const POLL_INTERVAL_MS = 10_000;
+// Initial and steady-state polling intervals are defined in the shared,
+ // tested idle policy: frequent after activity, slower while idle.
 // A worker that disappears mid-conversion is considered stale after this many
 // minutes. Five minutes is safely above the 300-second conversion ceiling while
 // still recovering a crashed worker within a single deploy window.
@@ -227,27 +232,37 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
 
 async function run(): Promise<void> {
   console.info('[ROLEPLAY AUDIO WORKER] Started; concurrency=1');
+  let consecutiveEmptyPolls = 0;
+  let lastSuccessfulCleanupMs: number | null = null;
 
   while (!stopping) {
     try {
-      await failExhaustedStaleJobs();
+      // Lease cleanup needs periodic checks, not a DB UPDATE every 10s
+      // while an idle worker waits for a new audio job.
+      if (shouldRunRoleplayWorkerStaleCleanup(Date.now(), lastSuccessfulCleanupMs)) {
+        await failExhaustedStaleJobs();
+        lastSuccessfulCleanupMs = Date.now();
+      }
       const job = await claimNextJob();
       if (!job) {
-        await sleep(POLL_INTERVAL_MS);
+        consecutiveEmptyPolls++;
+        await sleep(nextRoleplayWorkerIdleDelayMs(consecutiveEmptyPolls));
         continue;
       }
 
+      consecutiveEmptyPolls = 0;
       try {
         await processJob(job);
       } catch (error) {
         await recordJobFailure(job, error);
       }
     } catch (error) {
+      consecutiveEmptyPolls = 0;
       console.error(
         '[ROLEPLAY AUDIO WORKER] Queue polling failed:',
         error instanceof Error ? 'Error' : 'UnknownError',
       );
-      await sleep(POLL_INTERVAL_MS);
+      await sleep(ROLEPLAY_WORKER_BASE_POLL_MS);
     }
   }
 }
