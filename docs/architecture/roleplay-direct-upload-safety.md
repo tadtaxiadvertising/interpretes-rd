@@ -20,6 +20,14 @@ El componente no identifica al administrador, no recupera objetos de Storage y n
 
 **Límite de confianza:** la firma de la función no convierte un objeto arbitrario en evidencia real. El servicio futuro deberá cargar tanto la reserva como sus verificaciones desde **almacenamiento confiable del servidor**, nunca desde el JSON del navegador. La comprobación pura no evita carreras de dos administradores: el servicio de publicación tendrá que reclamar `VERIFIED -> PUBLISHED` con actualización condicional/idempotente **dentro de una única transacción**, tras confirmar permisos y antes de dar por completada la asignación. Tampoco valida permisos de lectura del bucket ni genera URLs.
 
+## Transferencia secuencial en navegador (todavía desconectada)
+
+`src/lib/roleplay/direct-upload-browser.ts` incorpora un orquestador de transporte **no activado** para 1–25 archivos. Recibe una reserva creada por el servidor (ID, rutas canónicas, tipos, tamaños, huellas y tokens de subida temporales) y un adaptador de Storage que realiza la operación firmada. Antes de la primera transferencia comprueba el contrato de lote completo y que cada `File.size` y `File.type` coincidan con su posición reservada. No solicita firmas, no construye URLs, no publica sesiones ni descarga el contenido al VPS.
+
+Transfiere **un solo archivo a la vez** y comunica únicamente el número de archivos completados. Un error de Storage, un aborto o un error del callback de progreso detienen el lote; los errores son códigos fijos sin revelar nombres de grabación, rutas de objeto ni tokens. El adaptador de Storage que se conecte posteriormente debe propagar `AbortSignal` para cancelar la petición en curso, cuando su SDK lo soporte. No hay reintentos ni borrados automáticos de objetos parcialmente cargados: la reconciliación debe ejecutarse en el servidor y respetar posibles transacciones confirmadas con respuesta perdida.
+
+**La validación del navegador no prueba integridad del archivo ni autoriza publicar.** Un fichero de igual tamaño y MIME podría tener otro contenido; el servidor deberá validar SHA-256 real, pertenencia a la reserva, estado, caducidad y disponibilidad de **todos** los objetos mediante componentes confiables antes de convertir la reserva en una sesión. La implementación deliberadamente no conecta el módulo al formulario `NewRoleplayForm` ni crea un endpoint para obtener tokens. El flujo heredado sigue operativo hasta completar #287 y #290.
+
 ## Requisitos antes de activar la función
 
 1. **Privacidad y proyecto correcto (#287/#368):** verificar en modo lectura el campo `storage.buckets.public` y políticas de `storage.objects` del proyecto Supabase realmente utilizado. La conexión actual expone otros proyectos, no el que figura en la configuración histórica. No leer grabaciones clínicas. No cambiar las ACL de un bucket cuyos enlaces públicos ya consumen sesiones y biblioteca.
