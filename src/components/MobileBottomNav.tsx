@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Menu, X } from 'lucide-react';
@@ -25,6 +25,8 @@ const INTERPRETER_PRIMARY = ['/dashboard', '/dashboard/roleplays', '/dashboard/c
 export function MobileBottomNav({ role }: MobileBottomNavProps) {
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const firstMoreLinkRef = useRef<HTMLAnchorElement>(null);
   const isAdmin = role === 'admin';
   const items = isAdmin ? adminMenu : interpreterMenu;
   const primaryPaths = isAdmin ? ADMIN_PRIMARY : INTERPRETER_PRIMARY;
@@ -45,9 +47,21 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
   }, [pathname]);
 
   useEffect(() => {
+    if (showMore) firstMoreLinkRef.current?.focus();
+  }, [showMore]);
+
+  const closeMore = () => {
+    setShowMore(false);
+    moreButtonRef.current?.focus();
+  };
+
+  useEffect(() => {
     if (!showMore) return;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setShowMore(false);
+      if (event.key === 'Escape') {
+        setShowMore(false);
+        moreButtonRef.current?.focus();
+      }
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
@@ -66,7 +80,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
             type="button"
             aria-label="Cerrar menú de navegación"
             className="fixed inset-0 z-0 bg-slate-950/55"
-            onClick={() => setShowMore(false)}
+            onClick={closeMore}
           />
           <section
             id="mobile-more-panel"
@@ -78,7 +92,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
               <button
                 type="button"
                 aria-label="Cerrar secciones"
-                onClick={() => setShowMore(false)}
+                onClick={closeMore}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
               >
                 <X size={18} aria-hidden="true" />
@@ -95,6 +109,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
                       <Link
                         key={item.href}
                         href={item.href}
+                        ref={item.href === secondary[0]?.href ? firstMoreLinkRef : undefined}
                         aria-current={active ? 'page' : undefined}
                         onClick={() => setShowMore(false)}
                         className={cn(
@@ -134,6 +149,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
           );
         })}
         <button
+          ref={moreButtonRef}
           type="button"
           aria-label={showMore ? 'Ocultar más secciones' : 'Mostrar más secciones'}
           aria-expanded={showMore}
