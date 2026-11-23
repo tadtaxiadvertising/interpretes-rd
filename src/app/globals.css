@@ -351,3 +351,13 @@ html[data-theme="light"] .theme-candidate .text-blue-300 { color: #1554a8; }
 html[data-theme="light"] .theme-candidate a[class*="bg-[#002d72"] {
   color: #fff;
 }
+
+/* Brand titles are legible against both themes without changing the logo. */
+:root { --brand-heading-blue: #8ab4ff; }
+html[data-theme="light"] { --brand-heading-blue: #002d72; }
+.brand-heading {
+  background-image: linear-gradient(105deg, var(--brand-heading-blue), var(--brand-red));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
