@@ -10,6 +10,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
+import { summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -1605,6 +1606,10 @@ export default function RoleplayStudioPage() {
         ? cause.message : 'Revisa los tiempos y solapamientos de los turnos seleccionados.' };
     }
   }, [reviewCues, chosenCueIndices]);
+  const cueReviewSummary = useMemo(
+    () => summarizeTimedCueReview(reviewCues, chosenCueIndices, duration),
+    [reviewCues, chosenCueIndices, duration],
+  );
   const pageCount = Math.max(1, Math.ceil(filteredCueEntries.length / CUES_PER_PAGE));
   const currentCuePage = Math.min(cuePage, pageCount - 1);
   const visibleCues = filteredCueEntries.slice(
@@ -2244,6 +2249,17 @@ export default function RoleplayStudioPage() {
               ? `Selección no válida: ${cueSelectionStatus.issue}`
               : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)} de 15:00 como máximo. Verifica los roles antes de aplicar.`}
           </p>
+          {chosenCueIndices.length > 0 && (
+            <p role="status" aria-label="Resumen de calidad de selección SRT"
+              className="text-xs leading-5 text-amber-100">
+              Revisión rápida antes de aplicar: {cueReviewSummary.unknownSpeakers} sin hablante identificado
+              {' · '}{cueReviewSummary.originalInterpreters} del intérprete original
+              {' · '}{cueReviewSummary.longCues} cortes de más de 1 minuto
+              {cueReviewSummary.sourceThirds !== null &&
+                <> · {cueReviewSummary.sourceThirds}/3 partes de la grabación representadas</>}.
+              Escucha y confirma cada voz; estos datos se basan solo en etiquetas y tiempos.
+            </p>
+          )}
           <button type="button" onClick={applyCueSelection}
             disabled={cueSelectionStatus.issue !== null}
             className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40">
