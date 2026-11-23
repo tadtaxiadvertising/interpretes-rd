@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { Save, Loader2, User, Mail, Shield, DollarSign, Target, Briefcase, Lock } from 'lucide-react';
 import { createInterpreter, updateInterpreter, resetInterpreterPassword } from '@/app/actions/interpreters';
 
@@ -13,6 +13,7 @@ interface InterpreterFormProps {
 }
 
 export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterId }: InterpreterFormProps) {
+  const formId = useId();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,34 +73,36 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
+        <div role="alert" className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-[var(--theme-danger)] animate-in fade-in slide-in-from-top-2">
           {error}
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Nombre Completo</label>
+          <label htmlFor={`${formId}-name`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Nombre Completo</label>
           <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
               required
+              id={`${formId}-name`}
               name="name"
               defaultValue={initialData?.name}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="Ej: Juan Pérez"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">ID Externo</label>
+          <label htmlFor={`${formId}-externalId`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">ID Externo</label>
           <div className="relative">
-            <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Shield className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
               required
+              id={`${formId}-externalId`}
               name="externalId"
               defaultValue={initialData?.externalId}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="INT-001"
             />
           </div>
@@ -108,29 +111,31 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Email Corporativo</label>
+          <label htmlFor={`${formId}-emailCorporativo`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Email Corporativo</label>
           <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
               required
               type="email"
+              id={`${formId}-emailCorporativo`}
               name="emailCorporativo"
               defaultValue={initialData?.emailCorporativo}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="juan@interpretesrd.com"
             />
           </div>
         </div>
         {!interpreterId && (
           <div className="space-y-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Contraseña de Acceso</label>
+            <label htmlFor={`${formId}-password`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Contraseña de Acceso</label>
             <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
               <input
                 required={!interpreterId}
                 type="password"
+                id={`${formId}-password`}
                 name="password"
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
                 placeholder="••••••••"
               />
             </div>
@@ -138,13 +143,14 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
         )}
         {interpreterId && (
           <div className="space-y-2">
-             <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Cambiar Contraseña (Opcional)</label>
+             <label htmlFor={`${formId}-password`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Cambiar Contraseña (Opcional)</label>
              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
                 <input
                   type="password"
+                  id={`${formId}-password`}
                   name="password"
-                  className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
                   placeholder="Dejar en blanco para no cambiar"
                 />
              </div>
@@ -154,28 +160,30 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Tarifa por Hora (RD$)</label>
+          <label htmlFor={`${formId}-hourlyTariff`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Tarifa por Hora (RD$)</label>
           <div className="relative">
-            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
               required
               type="number"
               step="0.01"
+              id={`${formId}-hourlyTariff`}
               name="hourlyTariff"
               defaultValue={initialData?.tariffPerMinute ? (parseFloat(initialData.tariffPerMinute) * 60).toFixed(2) : ''}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="RD$ 9.00"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Estado Inicial</label>
+          <label htmlFor={`${formId}-status`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Estado Inicial</label>
           <div className="relative">
-            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={18} />
+            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" size={18} />
             <select
+              id={`${formId}-status`}
               name="status"
               defaultValue={initialData?.status || 'Activo'}
-              className="w-full bg-slate-900 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+              className="w-full cursor-pointer appearance-none rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
             >
               <option value="Activo">Activo</option>
               <option value="Training">Training</option>
@@ -188,27 +196,29 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Campaña Asignada</label>
+          <label htmlFor={`${formId}-campaign`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Campaña Asignada</label>
           <div className="relative">
-            <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
+              id={`${formId}-campaign`}
               name="campaign"
               defaultValue={initialData?.campaign}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="Salud / Healthcare"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Meta Mensual (Horas)</label>
+          <label htmlFor={`${formId}-monthlyGoal`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Meta Mensual (Horas)</label>
           <div className="relative">
-            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
               required
               type="number"
+              id={`${formId}-monthlyGoal`}
               name="monthlyGoal"
               defaultValue={initialData?.monthlyGoal ? Math.round(initialData.monthlyGoal / 60) : 33}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="33"
             />
           </div>
@@ -217,13 +227,14 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Frecuencia de Pago</label>
+          <label htmlFor={`${formId}-paymentFrequency`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Frecuencia de Pago</label>
           <div className="relative">
-            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={18} />
+            <Target className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)] pointer-events-none" size={18} />
             <select
+              id={`${formId}-paymentFrequency`}
               name="paymentFrequency"
               defaultValue={initialData?.paymentFrequency || 'Monthly'}
-              className="w-full bg-slate-900 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer"
+              className="w-full cursor-pointer appearance-none rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
             >
               <option value="Weekly">Semanal (Weekly)</option>
               <option value="Biweekly">Quincenal (Biweekly)</option>
@@ -232,31 +243,32 @@ export function InterpreterForm({ onSuccess, onCancel, initialData, interpreterI
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Día de Pago (1-31 o Día de la Semana)</label>
+          <label htmlFor={`${formId}-paymentDay`} className="ml-1 text-xs font-bold uppercase tracking-wide text-[var(--text-secondary)]">Día de Pago (1-31 o Día de la Semana)</label>
           <div className="relative">
-            <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-secondary)]" size={18} />
             <input
+              id={`${formId}-paymentDay`}
               name="paymentDay"
               defaultValue={initialData?.paymentDay || '1'}
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--foreground)] placeholder:text-[var(--text-muted)] transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               placeholder="Ej: 1, 15 o Monday"
             />
           </div>
         </div>
       </div>
 
-      <div className="flex gap-4 pt-4">
+      <div className="flex flex-wrap gap-3 pt-4 sm:flex-nowrap">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-gray-400 rounded-2xl font-bold transition-all border border-white/10 active:scale-95"
+          className="flex-1 rounded-2xl border border-[var(--border)] bg-[var(--theme-hover)] py-4 font-bold text-[var(--foreground)] transition-colors hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold transition-all glow flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95"
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-[#1764bf] py-4 font-bold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] disabled:opacity-50"
         >
           {loading ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
           {interpreterId ? 'Actualizar Interprete' : 'Guardar Interprete'}
