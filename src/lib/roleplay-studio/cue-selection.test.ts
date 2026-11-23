@@ -96,7 +96,7 @@ Doctor: Next line`;
     expect(() => selectTimedCues(cues, [1, 1])).toThrow(/dos veces/);
     expect(() => selectTimedCues(cues, [100])).toThrow(/inexistente/);
     expect(() => selectTimedCues(cues, [-1])).toThrow(/inexistente/);
-    expect(() => parseTimedTranscriptForReview(makeSubtitle(501))).toThrow(/500/);
+    expect(parseTimedTranscriptForReview(makeSubtitle(501))).toHaveLength(501);
   });
 
   it('fails if the chosen source turns exceed the 15-minute exported audio budget', () => {
