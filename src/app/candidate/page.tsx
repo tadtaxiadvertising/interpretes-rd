@@ -7,9 +7,31 @@ import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
 import { CandidatePasswordSetup } from '@/components/recruitment/CandidatePasswordSetup';
 import { ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
+import { candidateStatusDisplay } from '@/lib/recruitment/status-display';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 
 export const dynamic = 'force-dynamic';
+
+const CANDIDATE_STEP_LABELS: Record<string, string> = {
+  APPLICATION: 'Postulación',
+  PROFILE: 'Perfil',
+  DOCUMENTS: 'Documentos',
+  LANGUAGE: 'Evaluación de idioma',
+  TECHNICAL: 'Prueba técnica',
+  INDUCTION: 'Inducción',
+  ROLEPLAY: 'Roleplay',
+  ROLEPLAY_REVIEW: 'Evaluación de Roleplay',
+  INTERVIEW: 'Entrevista',
+  DECISION: 'Decisión',
+  OFFER: 'Oferta',
+  CONTRACT: 'Contrato',
+  BANKING: 'Datos bancarios',
+  TECH_SETUP: 'Preparación técnica',
+  TRAINING: 'Capacitación',
+  READY_FOR_ACTIVATION: 'Activación',
+  HIRING: 'Incorporación',
+};
+
 
 const STATUS_LABELS: Record<string, string> = {
   APPLIED: 'Solicitud recibida',
@@ -78,6 +100,10 @@ export default async function CandidatePortalPage() {
   });
 
   const status = application?.status ?? 'APPLIED';
+  const statusLabel = STATUS_LABELS[status] ?? candidateStatusDisplay(status).label;
+  const currentStepLabel = application?.currentStep
+    ? CANDIDATE_STEP_LABELS[application.currentStep] ?? 'En evaluación'
+    : 'Postulación';
   // The same recruitment status gate enforced by startCandidateRoleplay().
   // A stale active session must not expose "Continuar" after rejection,
   // hiring or while an already-submitted attempt awaits QA review.
@@ -126,18 +152,18 @@ export default async function CandidatePortalPage() {
       } as Record<string, string>)[session.status] ?? session.status;
 
   return (
-    <main className="theme-candidate min-h-screen bg-slate-950 px-4 py-10 text-white">
+    <main className="theme-candidate min-h-screen bg-slate-950 px-4 py-6 sm:py-10 text-[var(--foreground)]">
       <div className="mx-auto max-w-4xl space-y-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <Image src="/interpretes-rd-logo.webp" alt="Intérpretes RD" width={58} height={58} className="mb-4 rounded-xl bg-white p-1" />
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-300">Intérpretes RD · Reclutamiento</p>
             <h1 className="mt-2 text-3xl font-bold">Hola, {candidate.name}</h1>
-            <p className="mt-2 text-slate-400">Este es tu espacio privado para continuar tu postulación.</p>
+            <p className="mt-2 text-[var(--text-secondary)]">Este es tu espacio privado para continuar tu postulación.</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ThemeSwitcher />
-            <Link href="/postular" className="rounded-xl bg-[#002d72] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            <Link href="/postular" className="rounded-xl bg-[#002d72] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
               Continuar mi postulación
             </Link>
           </div>
@@ -146,12 +172,12 @@ export default async function CandidatePortalPage() {
         <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <p className="text-sm text-slate-400">Estado de tu candidatura</p>
-              <h2 className="mt-1 text-2xl font-semibold">{STATUS_LABELS[status] ?? status}</h2>
+              <p className="text-sm text-[var(--text-secondary)]">Estado de tu candidatura</p>
+              <h2 className="mt-1 text-2xl font-semibold">{statusLabel}</h2>
             </div>
-            <span className="rounded-full border border-blue-300/20 bg-blue-300/10 px-3 py-1 text-sm text-blue-200">Candidato</span>
+            <span className="rounded-full border border-blue-300/20 bg-blue-300/10 px-3 py-1 text-sm font-medium text-[var(--theme-active)]">Candidato</span>
           </div>
-          <p className="mt-4 text-sm leading-6 text-slate-300">
+          <p className="mt-4 text-sm leading-6 text-[var(--text-secondary)]">
             Tu información y tus avances se guardan en tu expediente. Puedes cerrar sesión y regresar más tarde desde cualquier dispositivo.
           </p>
         </section>
@@ -160,46 +186,46 @@ export default async function CandidatePortalPage() {
 
         <section className="grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border border-blue-300/20 bg-blue-300/[0.06] p-6">
-            <p className="text-sm font-medium text-blue-200">Evaluación de Roleplay</p>
+            <p className="text-sm font-medium text-[var(--theme-active)]">Evaluación de Roleplay</p>
             <h2 className="mt-2 text-xl font-semibold">{roleplayLabel}</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
+            <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
               El Roleplay es parte de tu postulación. Se realiza y evalúa antes de cualquier activación como intérprete.
             </p>
             {roleplayActive && session ? (
               <div className="mt-5"><CandidateRoleplayAction label="Continuar Roleplay" /></div>
             ) : canRetryRoleplay ? (
               <div className="mt-5 space-y-3">
-                <p className="text-sm text-slate-300">Tu evaluación permite realizar otro intento con los escenarios asignados.</p>
+                <p className="text-sm text-[var(--text-secondary)]">Tu evaluación permite realizar otro intento con los escenarios asignados.</p>
                 <CandidateRoleplayAction label="Reintentar Roleplay" />
               </div>
             ) : canRecoverAssessment ? (
               <div className="mt-5 space-y-3">
-                <p className="text-sm text-slate-300">Tu grabación está enviada, pero falta completar una autoevaluación antes de la revisión de QA.</p>
+                <p className="text-sm text-[var(--text-secondary)]">Tu grabación está enviada, pero falta completar una autoevaluación antes de la revisión de QA.</p>
                 <CandidateRoleplayAction label="Completar autoevaluación" />
               </div>
             ) : !roleplayFinished && canStartAssignedRoleplay ? (
               <div className="mt-5"><CandidateRoleplayAction /></div>
             ) : roleplayFinished ? (
-              <p className="mt-5 text-sm text-slate-300">Tu intento quedó registrado. El equipo de evaluación actualizará aquí el resultado y los próximos pasos.</p>
+              <p className="mt-5 text-sm text-[var(--text-secondary)]">Tu intento quedó registrado. El equipo de evaluación actualizará aquí el resultado y los próximos pasos.</p>
             ) : (
-              <p className="mt-5 text-sm text-slate-400">El Roleplay se habilitará cuando corresponda según tu etapa de selección.</p>
+              <p className="mt-5 text-sm text-[var(--text-secondary)]">El Roleplay se habilitará cuando corresponda según tu etapa de selección.</p>
             )}
           </div>
 
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">
-            <p className="text-sm font-medium text-slate-400">Tu expediente</p>
+            <p className="text-sm font-medium text-[var(--text-secondary)]">Tu expediente</p>
             <h2 className="mt-2 text-xl font-semibold">Información de candidatura</h2>
             <dl className="mt-5 space-y-3 text-sm">
-              <div className="flex justify-between gap-4"><dt className="text-slate-400">Correo</dt><dd className="text-right text-slate-200">{candidate.email}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-400">Solicitud</dt><dd className="text-right text-slate-200">{application?.id ?? 'Registrada'}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-400">Etapa</dt><dd className="text-right text-slate-200">{application?.currentStep ?? 'APPLICATION'}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-slate-400">Última actualización</dt><dd className="text-right text-slate-200">{application?.updatedAt.toLocaleDateString('es-DO') ?? '—'}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Correo</dt><dd className="text-right text-[var(--foreground)]">{candidate.email}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Solicitud</dt><dd className="text-right text-[var(--foreground)]">{application?.id ?? 'Registrada'}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Etapa</dt><dd className="text-right text-[var(--foreground)]">{currentStepLabel}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Última actualización</dt><dd className="text-right text-[var(--foreground)]">{application?.updatedAt.toLocaleDateString('es-DO') ?? '—'}</dd></div>
             </dl>
           </div>
         </section>
 
-        <footer className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.05] p-5 text-sm leading-6 text-slate-300">
-          <strong className="text-emerald-200">Tu cuenta todavía no es una cuenta operativa de intérprete.</strong>
+        <footer className="rounded-2xl border border-emerald-300/15 bg-emerald-300/[0.05] p-5 text-sm leading-6 text-[var(--text-secondary)]">
+          <strong className="text-[var(--candidate-success-text)]">Tu cuenta todavía no es una cuenta operativa de intérprete.</strong>
           {' '}Los datos de intérpretes, operaciones, turnos y pagos permanecen protegidos. El acceso operativo solo se habilita después de completar el proceso y recibir aprobación administrativa.
         </footer>
       </div>
