@@ -58,6 +58,16 @@ El esquema propuesto añade `published_session_ids TEXT[] NOT NULL DEFAULT '{}'`
 
 Una respuesta `PUBLISHED` no demuestra por sí sola que las sesiones realmente existan. No hay **FK de `published_session_ids` a `roleplay_sessions`**, por lo que el futuro servicio de reconciliación tendrá que cargar y comprobar todas las sesiones por ID y propiedad de la publicación antes de responder éxito. La integridad SHA-256 requiere verificar los bytes reales en Storage; ni el digest del navegador ni el comprobante sustituyen esa operación. Para sesiones antiguas no hay backfill ni copia de audios. El ledger de creación separado `roleplay_creation_requests` tampoco debe declararse activo hasta desplegar y validar su propia migración.
 
+## Etapa 1.9 — Inspección estructural de referencias publicadas (todavía desconectada)
+
+`src/lib/roleplay/direct-upload-publication-confirmation.ts` prepara una consulta **únicamente de lectura del lado del servidor**, sin HTTP ni activación. Exige administrador y clave idempotente válidos; busca la reserva solo por `(actor_user_id, request_key)`, verifica la huella de declaraciones y examina el comprobante `published_session_ids` almacenado en PostgreSQL, sin aceptar IDs proporcionados por el navegador.
+
+Para una reserva `PUBLISHED`, reconstruye la ruta canónica desde el UUID de lote de la base de datos y comprueba que el JSON de declaraciones no haya sido manipulado. Después busca solamente los IDs del comprobante y campos mínimos de sesiones: `id`, `status`, `baseAudioPath` y órdenes de escenarios. Exige todas las sesiones, sin duplicados, ninguna en `DRAFT`, ruta principal que coincida con el primer objeto del lote y exactamente una secuencia completa de escenarios. La consulta **no recupera** emails, datos del participante, enlaces privados, tokens ni audio.
+
+Las decisiones posibles son `NOT_FOUND`, `CONFLICT`, `NOT_PUBLISHED`, `REVIEW_REQUIRED` y `REFERENCES_PRESENT_NEEDS_PROVENANCE_CHECK`. La última **no es éxito**, ni equivale a `COMPLETED` o permiso de reintento: las sesiones todavía no almacenan autor administrativo y `RoleplayScenario` no dispone de una ruta estable por escenario, de modo que no es posible demostrar procedencia ni integridad de todos los audios. Futura activación exige modelo de procedencia confiable o tabla relacional con FK y verificación de bytes reales. No declarar publicación final ni regenerar URLs a partir de esta lectura.
+
+El comprobante staged queda limitado a **1,000 sesiones únicas** por reserva, también en la restricción SQL y en el validador transaccional. Si un lote legítimo pudiera superar este umbral, diseñar paginación y revisión de concurrencia **antes** de ampliar el límite. Ninguna tabla nueva se instala por esta etapa.
+
 ## Bloqueos explícitos
 
 - Falta autorización y plan de aplicación del esquema en producción.
