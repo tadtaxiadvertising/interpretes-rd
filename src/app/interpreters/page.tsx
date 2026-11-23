@@ -103,7 +103,7 @@ export default async function InterpretersPage() {
         {interpreters.map((interpreter) => {
           const isActive = interpreter.status === 'Activo';
           return (
-            <div key={interpreter.id} className="group relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] p-5 sm:p-6 transition-colors duration-300 hover:bg-[var(--theme-hover)] hover:border-blue-500/30">
+            <div key={interpreter.id} className="group relative overflow-visible rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] p-5 sm:p-6 transition-colors duration-300 hover:bg-[var(--theme-hover)] hover:border-blue-500/30 focus-within:z-30">
               <div className="absolute top-0 right-0 z-10 p-2 opacity-100 sm:p-4 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 transition-opacity">
                 <InterpreterActions interpreter={interpreter} />
               </div>
