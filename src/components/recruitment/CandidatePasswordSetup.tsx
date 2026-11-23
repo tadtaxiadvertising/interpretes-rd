@@ -29,8 +29,8 @@ export function CandidatePasswordSetup() {
   return (
     <form action={handleSubmit} className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-5">
       <div>
-        <h3 className="font-semibold text-[var(--foreground)]">Configura tu contraseña</h3>
-        <p className="mt-1 text-sm leading-5 text-[var(--text-secondary)]">Hazlo ahora para poder volver a tu candidatura cuando cierres sesión.</p>
+        <h3 className="font-semibold text-[var(--foreground)]">Configurar o cambiar contraseña</h3>
+        <p className="mt-1 text-sm leading-5 text-[var(--text-secondary)]">Si accediste con un enlace, crea una contraseña para tus próximos ingresos. Si ya tienes una, puedes actualizarla aquí.</p>
       </div>
       <label htmlFor="candidate-new-password" className="block text-sm font-medium text-[var(--foreground)]">Nueva contraseña</label>
       <input
