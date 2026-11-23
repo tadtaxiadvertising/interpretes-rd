@@ -479,3 +479,31 @@ html[data-theme="light"] .theme-experience .bg-gradient-to-r.text-white,
 html[data-theme="light"] .theme-experience .bg-gradient-to-r .text-white {
   color: #fff;
 }
+
+
+/* Public conversion CTAs: light/dark accent text has >= WCAG AA contrast.
+   Full buttons keep white text on dark blue, including on hover. */
+:root { --theme-public-accent: #8ab4ff; }
+html[data-theme="light"] { --theme-public-accent: #1554a8; }
+html[data-theme="light"] .theme-public a[class*="bg-[#1764bf"] {
+  color: #ffffff;
+}
+
+
+/* Account entry and recovery links must stay readable in the light palette,
+   including success and error messages on white surfaces. */
+html[data-theme="light"] .theme-login :is(.text-blue-400, .text-blue-300) {
+  color: #1554a8;
+}
+html[data-theme="light"] .theme-login :is(.text-red-300, .text-red-400) {
+  color: #b91c1c;
+}
+html[data-theme="light"] .theme-login :is(.text-green-400, .text-emerald-400) {
+  color: #047857;
+}
+html[data-theme="light"] .theme-login .text-gray-600 {
+  color: #52627a;
+}
+html[data-theme="light"] .theme-public [class*="text-[#8ab4ff]"] {
+  color: #1554a8;
+}

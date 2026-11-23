@@ -84,6 +84,21 @@ describe('ThemeSwitcher', () => {
     expect(screen.getByRole('button', { name: 'Modo oscuro' }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  it('synchronizes two visible selectors without relying on a storage event', () => {
+    render(<><ThemeSwitcher /><ThemeSwitcher /></>);
+    const darkButtons = screen.getAllByRole('button', { name: 'Modo oscuro' });
+    const lightButtons = screen.getAllByRole('button', { name: 'Modo claro' });
+
+    fireEvent.click(darkButtons[0]);
+    expect(darkButtons[0].getAttribute('aria-pressed')).toBe('true');
+    expect(darkButtons[1].getAttribute('aria-pressed')).toBe('true');
+
+    fireEvent.click(lightButtons[1]);
+    expect(lightButtons[0].getAttribute('aria-pressed')).toBe('true');
+    expect(lightButtons[1].getAttribute('aria-pressed')).toBe('true');
+    expect(document.documentElement.dataset.theme).toBe('light');
+  });
+
   it('works when matchMedia is unavailable', () => {
     vi.stubGlobal('matchMedia', undefined);
     render(<ThemeSwitcher />);

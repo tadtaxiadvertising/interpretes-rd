@@ -5,6 +5,7 @@ import { Monitor, Moon, Sun } from 'lucide-react';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
 export const THEME_STORAGE_KEY = 'interpretes-rd-theme';
+export const THEME_CHANGED_EVENT = 'interpretes-rd-theme-changed';
 const SYSTEM_QUERY = '(prefers-color-scheme: dark)';
 
 export function normalizeThemePreference(value: string | null): ThemePreference {
@@ -56,9 +57,21 @@ export function ThemeSwitcher() {
     };
     window.addEventListener('storage', onStorage);
 
+    // Storage events are not fired in the window that made the change.
+    // Keep multiple mounted selectors synchronized within one page.
+    const onLocalChange = (event: Event) => {
+      const next = (event as CustomEvent<ThemePreference>).detail;
+      if (next !== 'light' && next !== 'dark' && next !== 'system') return;
+      preferenceRef.current = next;
+      setPreference(next);
+      applyTheme(next);
+    };
+    window.addEventListener(THEME_CHANGED_EVENT, onLocalChange);
+
     return () => {
       media?.removeEventListener?.('change', onSystemChange);
       window.removeEventListener('storage', onStorage);
+      window.removeEventListener(THEME_CHANGED_EVENT, onLocalChange);
     };
   }, []);
 
@@ -71,6 +84,7 @@ export function ThemeSwitcher() {
     preferenceRef.current = mode;
     setPreference(mode);
     applyTheme(mode);
+    window.dispatchEvent(new CustomEvent(THEME_CHANGED_EVENT, { detail: mode }));
   };
 
   return (
