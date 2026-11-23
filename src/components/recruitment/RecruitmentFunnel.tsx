@@ -144,7 +144,7 @@ export default function RecruitmentFunnel() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-[0_24px_80px_rgba(2,6,23,0.28)] sm:p-7 md:p-8">
+    <div className="recruitment-funnel mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-[0_24px_80px_rgba(2,6,23,0.28)] sm:p-7 md:p-8">
       {terminal ? (
         <div className="py-10 text-center">
           <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
