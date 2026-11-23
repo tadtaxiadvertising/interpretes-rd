@@ -133,6 +133,10 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
     expect(screen.getByText('Mostrando 1–60 de 650 turnos')).toBeTruthy();
     expect(screen.queryByText(/supera 500 intervenciones/)).toBeNull();
+    const quality = screen.getByRole('status', { name: 'Resumen de calidad de selección SRT' });
+    expect(quality.textContent).toMatch(/0 sin hablante identificado/);
+    expect(quality.textContent).toMatch(/0 del intérprete original/);
+    expect(quality.textContent).toMatch(/3\/3 partes de la grabación representadas/);
     // A one-click suggestion must represent the whole source, not just the
     // first 25 subtitles. Filtering the existing selection is read-only.
     fireEvent.click(screen.getByLabelText('Solo seleccionados'));
