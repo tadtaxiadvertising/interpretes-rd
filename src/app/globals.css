@@ -693,7 +693,7 @@ html[data-theme] :is(
 ) :is(
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
   select, textarea
-):not(:disabled) {
+):not(:disabled):not([aria-invalid="true"]):not([class*="border-red"]):not([class*="border-rose"]):not([class*="border-green"]):not([class*="border-emerald"]):not([class*="border-amber"]):not([class*="border-blue"]) {
   border-color: var(--theme-control-border);
 }
 html[data-theme="dark"] .theme-workspace :is(input,textarea)::placeholder {
