@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { useState } from 'react';
 import { Modal } from './Modal';
 
@@ -36,6 +36,61 @@ describe('Shared modal appearance and accessibility', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar ventana' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('traps Tab and Shift+Tab inside the current dialog', () => {
+    render(<TestDialog />);
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir diálogo' }));
+    const close = screen.getByRole('button', { name: 'Cerrar ventana' });
+    const field = screen.getByLabelText('Nombre');
+
+    expect(document.activeElement).toBe(close);
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(field);
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(close);
+    close.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(field);
+  });
+
+  it('does not let closed dialogs unlock scrolling while one remains open', () => {
+    const close = () => {};
+    document.body.style.overflow = 'scroll';
+    const { rerender, unmount } = render(
+      <>
+        <Modal isOpen onClose={close} title="Primer diálogo"><button>Aceptar</button></Modal>
+        <Modal isOpen={false} onClose={close} title="Segundo diálogo"><button>Otro</button></Modal>
+      </>
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+
+    rerender(
+      <>
+        <Modal isOpen onClose={close} title="Primer diálogo"><button>Aceptar</button></Modal>
+        <Modal isOpen onClose={close} title="Segundo diálogo"><button>Otro</button></Modal>
+      </>
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+
+    rerender(
+      <>
+        <Modal isOpen={false} onClose={close} title="Primer diálogo"><button>Aceptar</button></Modal>
+        <Modal isOpen onClose={close} title="Segundo diálogo"><button>Otro</button></Modal>
+      </>
+    );
+    expect(document.body.style.overflow).toBe('hidden');
+
+    unmount();
+    expect(document.body.style.overflow).toBe('scroll');
+    document.body.style.overflow = '';
+  });
+
+  it('does not modify body scrolling when every dialog is closed', () => {
+    document.body.style.overflow = 'auto';
+    render(<Modal isOpen={false} onClose={() => {}} title="Cerrado"><p>Vacío</p></Modal>);
+    expect(document.body.style.overflow).toBe('auto');
+    document.body.style.overflow = '';
   });
 
   it('can close with Escape without interfering with its contents', () => {
