@@ -50,12 +50,18 @@ describe('Audio Studio manual selection from long SRT transcripts', () => {
     expect(screen.getByText(/Hay 30 turnos disponibles y 25 seleccionados/)).toBeTruthy();
     const first = screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }) as HTMLInputElement;
     const last = screen.getByRole('checkbox', { name: 'Seleccionar turno 30' }) as HTMLInputElement;
-    expect(first.checked).toBe(true);
+    // Representative suggestions may include the final cue already.
+    // Clear the proposal to verify that manual choices remain authoritative.
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    expect(first.checked).toBe(false);
     expect(last.checked).toBe(false);
-
     fireEvent.click(first);
     fireEvent.click(last);
+    expect(first.checked).toBe(true);
     expect(last.checked).toBe(true);
+    // Fill only the remaining slots, preserving both manually chosen turns.
+    fireEvent.click(screen.getByRole('button', { name: 'Completar con turnos compatibles de esta página' }));
+    expect(screen.getByText(/30 turnos disponibles y 25 seleccionados/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor/i }));
     expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
     // Twenty-five turns are compacted by default; reveal the selected final
