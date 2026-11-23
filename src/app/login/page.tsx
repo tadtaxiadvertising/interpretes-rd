@@ -63,7 +63,7 @@ export default function LoginPage() {
     <div className="theme-login min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
       <div className="absolute inset-0">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
 
       <div className="relative z-10 w-full max-w-md px-6">
@@ -93,7 +93,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => setRole('admin')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all ${role === 'admin'
-                ? 'bg-purple-500/20 text-purple-400 shadow-sm'
+                ? 'bg-blue-500/20 text-blue-400 shadow-sm'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
                 }`}
             >
