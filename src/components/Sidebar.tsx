@@ -160,7 +160,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
           <div className="animate-in fade-in duration-500 flex items-center gap-3">
             <Image src="/interpretes-rd-logo.webp" alt="Intérpretes RD" width={44} height={44} className="shrink-0 rounded-xl bg-white p-1" />
             <div className="min-w-0">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-[#002d72] to-[#ef1736] bg-clip-text text-transparent truncate">
+            <h1 className="brand-heading text-xl font-bold truncate">
               {appName || 'Intérpretes RD'}
             </h1>
             <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-[0.18em] font-semibold">
