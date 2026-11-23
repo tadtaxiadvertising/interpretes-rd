@@ -183,6 +183,7 @@ export default function RecruitmentFunnel() {
             <div role="status" className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-sm font-medium text-blue-700">
               <CheckCircle2 className="w-4 h-4 shrink-0" /> {infoMsg}
             </div>
+          )}
 
           {accessNextAction && (
             <Link
@@ -191,8 +192,6 @@ export default function RecruitmentFunnel() {
             >
               {accessNextAction === "login" ? "Iniciar sesión para continuar" : "Crear acceso de candidato"}
             </Link>
-          )}
-
           )}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4">
@@ -279,6 +278,7 @@ export default function RecruitmentFunnel() {
             <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-sm font-medium text-blue-700">
               <CheckCircle2 className="w-4 h-4 shrink-0" /> {infoMsg}
             </div>
+          )}
 
           {accessNextAction && (
             <Link
@@ -287,8 +287,6 @@ export default function RecruitmentFunnel() {
             >
               {accessNextAction === "login" ? "Iniciar sesión para continuar" : "Crear acceso de candidato"}
             </Link>
-          )}
-
           )}
 
           {errorMsg && (
