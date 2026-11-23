@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
 import VersionGuard from "@/components/VersionGuard";
+import { themeBootstrapScript } from "@/lib/theme-bootstrap";
 
 export const metadata: Metadata = {
   title: "Intérpretes RD | Plataforma de gestión y oportunidades",
@@ -33,7 +34,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var p=localStorage.getItem("interpretes-rd-theme");var d=p==="dark"||(p!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.dataset.theme=d?"dark":"light";document.documentElement.style.colorScheme=d?"dark":"light";}catch(e){document.documentElement.dataset.theme="dark";}})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
       <body className="antialiased font-sans selection:bg-primary selection:text-white">
         <VersionGuard />
