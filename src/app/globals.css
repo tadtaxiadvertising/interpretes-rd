@@ -361,3 +361,34 @@ html[data-theme="light"] { --brand-heading-blue: #002d72; }
   background-clip: text;
   color: transparent;
 }
+
+
+/* Recruitment funnel is a true dark form, without changing any form logic. */
+html[data-theme="dark"] .theme-postular .recruitment-funnel {
+  background-color: #142238;
+  border-color: rgba(203, 213, 225, .18);
+  color: #f1f5f9;
+}
+html[data-theme="dark"] .theme-postular .recruitment-funnel :is(
+  .text-slate-900, .text-slate-700, .text-slate-600, .text-slate-500
+):not(input):not(select):not(textarea) {
+  color: #cbd5e1;
+}
+html[data-theme="dark"] .theme-postular .recruitment-funnel :is(.bg-slate-50, .bg-slate-100) {
+  background-color: #1c2f4a;
+  border-color: rgba(203, 213, 225, .18);
+}
+html[data-theme="dark"] .theme-postular .recruitment-funnel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+html[data-theme="dark"] .theme-postular .recruitment-funnel textarea,
+html[data-theme="dark"] .theme-postular .recruitment-funnel select {
+  background-color: #0e1a2c;
+  color: #f8fafc;
+  border-color: #415573;
+  color-scheme: dark;
+}
+html[data-theme="dark"] .theme-postular .recruitment-funnel :is(input,textarea)::placeholder {
+  color: #a8b7cc;
+}
+html[data-theme="dark"] .theme-postular .recruitment-funnel .border-slate-200 {
+  border-color: rgba(203, 213, 225, .18);
+}
