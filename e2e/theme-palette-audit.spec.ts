@@ -19,7 +19,7 @@ async function paletteContrast(
     sample.remove();
 
     const luminance = (color: string) => {
-      const values = color.match(/[\\d.]+/g)?.slice(0, 3).map(Number);
+      const values = color.match(/[\d.]+/g)?.slice(0, 3).map(Number);
       if (!values || values.length !== 3) throw new Error(`Invalid computed color: ${color}`);
       const rgb = values.map((channel) => {
         const value = channel / 255;
