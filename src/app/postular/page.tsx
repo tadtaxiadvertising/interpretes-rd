@@ -20,7 +20,7 @@ export default function PostularPage() {
           <h1 className="text-3xl sm:text-4xl font-bold text-white mb-4">Únete a Intérpretes RD</h1>
           <p className="text-base sm:text-lg text-gray-400 max-w-2xl mx-auto">
             Buscamos intérpretes profesionales para interpretación remota (VRI/OPI). 
-            Completa tu postulación en 4 pasos y accede a oportunidades globales.
+            Registra tu perfil, realiza las evaluaciones cuando estén habilitadas y consulta el avance de tu candidatura.
           </p>
         </div>
 
