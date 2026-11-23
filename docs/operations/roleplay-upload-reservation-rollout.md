@@ -50,6 +50,14 @@ En particular, `NOT_FOUND` tras un timeout no demuestra que el intento original 
 
 Este componente **no** crea migraciones, tablas, APIs, registros, objetos de Storage ni capacidades. Las pruebas utilizan filas sintéticas y comprueban aislamiento por administrador, digest estable, expiración, estados terminales, errores y ausencia de escrituras. No supone que el esquema exista en producción.
 
+## Etapa 1.75 — Comprobante transaccional de publicación (STAGED, no activado)
+
+El esquema propuesto añade `published_session_ids TEXT[] NOT NULL DEFAULT '{}'` a `roleplay_upload_reservations`. Solo permite una lista **no vacía** de identificadores de sesión cuando `status='PUBLISHED'`; exige una lista vacía en los demás estados. No guarda URLs de audio, tokens ni credenciales. El catálogo de solo lectura y el ensayo PostgreSQL descartable exigen ahora la columna y la restricción y comprueban que dos publicadores simultáneos no registran dos comprobantes. **Este SQL continúa fuera de `prisma/migrations` y no está instalado en Supabase.**
+
+`src/lib/roleplay/direct-upload-publication-receipt.ts` implementa un paso **todavía desconectado del HTTP**, para ejecutarse únicamente dentro de la **misma transacción Prisma** que haya creado o reutilizado las sesiones de Roleplay. Revalida la reserva completa y su evidencia confiable cargada desde servidor, exige IDs únicos de sesión y efectúa un único `updateMany` condicional que comprueba lote, administrador, clave idempotente, digest, `VERIFIED`, reloj y vencimiento. Solo un publicador puede conseguir `count=1`. Si el resultado no es uno o ocurre cualquier error, el caller **debe dejar escapar la excepción de la transacción**, revirtiendo también las sesiones nuevas. Está prohibido llamar a esta función después de confirmar las sesiones.
+
+Una respuesta `PUBLISHED` no demuestra por sí sola que las sesiones realmente existan. No hay **FK de `published_session_ids` a `roleplay_sessions`**, por lo que el futuro servicio de reconciliación tendrá que cargar y comprobar todas las sesiones por ID y propiedad de la publicación antes de responder éxito. La integridad SHA-256 requiere verificar los bytes reales en Storage; ni el digest del navegador ni el comprobante sustituyen esa operación. Para sesiones antiguas no hay backfill ni copia de audios. El ledger de creación separado `roleplay_creation_requests` tampoco debe declararse activo hasta desplegar y validar su propia migración.
+
 ## Bloqueos explícitos
 
 - Falta autorización y plan de aplicación del esquema en producción.
