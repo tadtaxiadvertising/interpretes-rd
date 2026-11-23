@@ -71,7 +71,7 @@ export default async function RootPage() {
       <header className="relative z-10 border-b border-white/10 bg-[#07111f]/90">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <Link href="/" className="flex items-center gap-3" aria-label="Intérpretes RD, inicio">
-            <Image src="/brand-mark.svg" alt="" width={48} height={48} className="shrink-0" />
+            <Image src="/interpretes-rd-logo.webp" alt="" width={48} height={48} className="shrink-0 rounded-xl bg-white p-1" />
             <span>
               <span className="block text-sm font-bold tracking-wide text-white">INTÉRPRETES RD</span>
               <span className="block text-xs text-slate-400">Plataforma de operaciones</span>
