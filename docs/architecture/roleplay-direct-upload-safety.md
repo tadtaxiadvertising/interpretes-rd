@@ -62,6 +62,12 @@ El modelo `RoleplayUploadReservation` y la propuesta SQL staged incorporan `publ
 
 **Límite esencial:** la columna almacena un comprobante, **no tiene clave foránea por cada ID del arreglo**. Una futura reconciliación de `PUBLISHED` debe consultar los IDs y comprobar la existencia de todas las sesiones bajo el mismo control de autorización antes de devolver un resultado de éxito. La base de producción sigue sin esta tabla; no habilitar el flujo directo solo porque el SQL y las pruebas aprueben.
 
+## Inspección de referencias de sesión del comprobante (sin activación)
+
+El nuevo módulo `direct-upload-publication-confirmation.ts` valida una reserva publicada exclusivamente mediante lecturas de PostgreSQL: ámbito del administrador, huella de declaraciones, IDs del comprobante, JSON canónico del lote y existencia de todas las sesiones con ruta principal y órdenes de escenarios coherentes. Limita los comprobantes a 1,000 IDs para evitar consultas descontroladas. No consulta personas, archivos, URLs, credenciales ni emite acciones de escritura.
+
+Su mejor resultado es `REFERENCES_PRESENT_NEEDS_PROVENANCE_CHECK`, que significa **estructura plausible, no prueba de publicación autorizada**. No hay un campo `createdBy` de administrador en `RoleplaySession`, ni ruta privada inmutable por escenario en `RoleplayScenario`. Sin relación de procedencia y verificación real de los bytes de todos los escenarios, está prohibido responder "completado" o habilitar reintento/reproducción privada. El SQL sigue staged y esta función no se importa en ninguna ruta.
+
 ## Huellas SHA-256 locales previas a la reserva (todavía desconectadas)
 
 `src/lib/roleplay/direct-upload-browser-hash.ts` prepara declaraciones `{ order, mime, sizeBytes, sha256 }` sin subir ni persistir audio. Valida **los 25 archivos y sus tipos/tamaños antes de leer bytes**, calcula cada SHA-256 con Web Crypto en el navegador, y detiene el lote cuando hay cancelación o un error. Solo comunica conteos de progreso; ningún mensaje de error contiene nombres de archivo, contenido o información privada.

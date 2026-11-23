@@ -6,6 +6,17 @@ import {
   type TrustedRoleplayUploadEvidence,
 } from '@/lib/roleplay/direct-upload-publication-gate';
 
+// Conservative cap until very large batches have a paginated receipt verifier.
+export const ROLEPLAY_UPLOAD_MAX_PUBLISHED_SESSIONS = 1000;
+
+export function validRoleplayPublicationSessionIds(value: unknown): value is string[] {
+  return Array.isArray(value) && value.length >= 1 &&
+    value.length <= ROLEPLAY_UPLOAD_MAX_PUBLISHED_SESSIONS &&
+    value.every((id: unknown) => typeof id === 'string' &&
+      /^[a-zA-Z0-9_-]{5,120}$/.test(id)) &&
+    new Set(value).size === value.length;
+}
+
 export class RoleplayPublicationReceiptError extends Error {
   constructor(readonly code: 'INVALID_RECEIPT' | 'NOT_CLAIMED' | 'STORE_UNAVAILABLE') {
     // Do not echo session IDs, paths, identities or provider exceptions.
@@ -42,11 +53,7 @@ export async function completeRoleplayUploadPublicationInTransaction(
   let declarationHash: string;
   try {
     if (!input || !isRoleplayDirectUploadRequestKey(input.requestKey) ||
-        !Array.isArray(input.sessionIds) || input.sessionIds.length < 1 ||
-        input.sessionIds.length > 100000 ||
-        input.sessionIds.some(id => typeof id !== 'string' ||
-          !/^[a-zA-Z0-9_-]{5,120}$/.test(id)) ||
-        new Set(input.sessionIds).size !== input.sessionIds.length) {
+        !validRoleplayPublicationSessionIds(input.sessionIds)) {
       throw new Error('invalid receipt');
     }
     const validated = validateRoleplayDirectUploadPublication(

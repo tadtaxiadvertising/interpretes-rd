@@ -50,7 +50,7 @@ CREATE TABLE "public"."roleplay_upload_reservations" (
   CONSTRAINT "roleplay_upload_reservations_publication_receipt_check"
     CHECK (
       ("status" = 'PUBLISHED' AND
-        cardinality("published_session_ids") BETWEEN 1 AND 100000 AND
+        cardinality("published_session_ids") BETWEEN 1 AND 1000 AND
         array_position("published_session_ids", NULL) IS NULL AND
         NOT ('' = ANY("published_session_ids")))
       OR

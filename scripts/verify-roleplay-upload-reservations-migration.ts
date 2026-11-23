@@ -278,6 +278,8 @@ async function main(): Promise<void> {
         [row({ status: 'RESERVED', publishedSessionIds: ['ci-session-orphan'] }), ['23514']],
         [row({ status: 'PUBLISHED', evidence: verified, publishedSessionIds: [''] }), ['23514']],
         [row({ status: 'PUBLISHED', evidence: verified, publishedSessionIds: [null] }), ['23514']],
+        [row({ status: 'PUBLISHED', evidence: verified,
+          publishedSessionIds: Array.from({ length: 1001 }, (_, i) => 'synthetic-session-' + i) }), ['23514']],
         [row({ created: original.created, expires: original.created }), ['23514']],
         [row({ created: original.created,
           expires: new Date(original.created.getTime() + 31 * 60 * 1000) }), ['23514']],
