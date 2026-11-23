@@ -40,6 +40,16 @@ Una repetición de solicitud debe reconciliar el lote guardado sin crear otra re
 
 Los audios históricos del bucket público `roleplay-audio` requieren un plan separado de migración de lecturas hacia URLs autorizadas. No cambiar el bucket ni borrar audios previos en esta etapa.
 
+## Etapa 1.5 — Reconciliación de reserva (helper preparado; sin HTTP)
+
+`src/lib/roleplay/direct-upload-reservation-reconciliation.ts` es un componente **de lectura servidor, aún desconectado**. Reutiliza exactamente el digest canónico de `direct-upload-reservation-ledger.ts` y solo consulta por la clave compuesta `(actor_user_id, request_key)`; selecciona propietario, huella, estado y fechas, **nunca** los bytes, JSON de evidencias, rutas ni tokens. La identidad administrativa y el Bearer explícito deben verificarse en la futura capa HTTP antes de llamar el helper.
+
+El resultado identifica una **siguiente revisión necesaria**, no una acción automática: `INSPECT_STORAGE` para `RESERVED/VERIFYING`; `VERIFY_SERVER_EVIDENCE` para `VERIFIED`; `PUBLISHED_REQUIRES_CONFIRMATION` para `PUBLISHED` (el estado por sí solo no prueba que la sesión se haya confirmado); `CLOSED` para canceladas; `EXPIRED` para abiertas caducadas; `NOT_FOUND` cuando no hay fila; `CONFLICT` ante propietario/huella incompatibles; y `REVIEW_REQUIRED` para datos incoherentes. Los errores de conexión se reducen a `STORE_UNAVAILABLE`, sin mensajes del proveedor. **Ningún resultado** permite inferir que hay que emitir otra URL, reintentar con otra clave, eliminar archivos, continuar automáticamente una publicación o afirmar al usuario que la sesión está lista.
+
+En particular, `NOT_FOUND` tras un timeout no demuestra que el intento original no haya llegado a otro servicio. La futura recuperación debe respetar una sola clave por operación, consultar el estado de los objetos en Storage desde un actor confiable y verificar referencias de sesión antes de cambios. Para `PUBLISHED`, una reconciliación definitiva necesita un vínculo transaccional explícito con la sesión que se creó, actualmente ausente en el borrador de tabla.
+
+Este componente **no** crea migraciones, tablas, APIs, registros, objetos de Storage ni capacidades. Las pruebas utilizan filas sintéticas y comprueban aislamiento por administrador, digest estable, expiración, estados terminales, errores y ausencia de escrituras. No supone que el esquema exista en producción.
+
 ## Bloqueos explícitos
 
 - Falta autorización y plan de aplicación del esquema en producción.
