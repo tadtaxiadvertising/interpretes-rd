@@ -44,6 +44,7 @@ interface TranscriptParseLimits {
   allowOverlaps?: boolean;
   sortOutOfOrder?: boolean;
   splitLongCues?: boolean;
+  onOriginalCue?: (start: number, end: number) => void;
 }
 
 export function parseTimedTranscript(
@@ -97,6 +98,7 @@ export function parseTimedTranscript(
     const speaker = (voice?.[1] ?? bracket?.[1] ?? prefix?.[1] ?? '').trim().slice(0, 60) || null;
     const text = originalText.replace(/<[^>]*>/g, '').trim();
     if (!text) throw new Error('Hay una intervención sin texto legible.');
+    limits.onOriginalCue?.(start, end);
     // Long SRT cues are reference windows, not automatically published clips.
     // Divide their timing into bounded windows without guessing word alignments.
     // Repeating the original reference text is preferable to inventing dialogue.
@@ -126,9 +128,23 @@ export function parseTimedTranscript(
   return cues;
 }
 
-/** Parse a source transcript for manual selection, never publish all cues automatically. */
-export function parseTimedTranscriptForReview(raw: string, longLocalSource = false): TimedTranscriptCue[] {
-  return parseTimedTranscript(raw, {
+/** Diagnostics are private editor hints; no original dialogue enters publishable metadata. */
+export interface TranscriptReviewDiagnostics {
+  reordered: number;
+  overlapping: number;
+  divided: number;
+}
+
+/**
+ * Keep imperfect provider timestamps visible to the editor, but surface
+ * automatic repairs for explicit human review before any cuts are applied.
+ */
+export function parseTimedTranscriptForReviewWithDiagnostics(
+  raw: string, longLocalSource = false,
+): { cues: TimedTranscriptCue[]; diagnostics: TranscriptReviewDiagnostics } {
+  const diagnostics: TranscriptReviewDiagnostics = { reordered: 0, overlapping: 0, divided: 0 };
+  let lastOriginalStart = -1;
+  const cues = parseTimedTranscript(raw, {
     maxCues: longLocalSource ? MAX_LOCAL_CUES : 500,
     maxTotalSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
     maxSourceSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
@@ -136,7 +152,26 @@ export function parseTimedTranscriptForReview(raw: string, longLocalSource = fal
     allowOverlaps: true,
     sortOutOfOrder: true,
     splitLongCues: true,
+    onOriginalCue: (start, end) => {
+      if (start < lastOriginalStart) diagnostics.reordered += 1;
+      if (end - start > MAX_CLIP_DURATION) diagnostics.divided += 1;
+      lastOriginalStart = start;
+    },
   });
+
+  // Count actual overlaps chronologically, not false overlaps introduced
+  // solely by the provider's original unsorted block order.
+  let latestEnd = 0;
+  for (const cue of cues) {
+    if (cue.start < latestEnd - 0.0005) diagnostics.overlapping += 1;
+    latestEnd = Math.max(latestEnd, cue.end);
+  }
+  return { cues, diagnostics };
+}
+
+/** Parse a source transcript for manual selection, never publish all cues automatically. */
+export function parseTimedTranscriptForReview(raw: string, longLocalSource = false): TimedTranscriptCue[] {
+  return parseTimedTranscriptForReviewWithDiagnostics(raw, longLocalSource).cues;
 }
 
 /** Build publishable metadata without copying personal names or transcript text. */
