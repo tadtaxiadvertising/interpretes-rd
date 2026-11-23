@@ -710,3 +710,15 @@ html[data-theme="light"] .theme-workspace :is(input,textarea)::placeholder {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* Legacy translucent white panels disappear on white in light mode. Use a
+   subtle neutral surface, but only for these known low-opacity utilities. */
+html[data-theme="light"] .theme-workspace :is(
+  [class~="bg-white/5"], [class~="bg-white/10"],
+  [class~="bg-white/[0.01]"], [class~="bg-white/[0.02]"],
+  [class~="bg-white/[0.03]"], [class~="bg-white/[0.04]"],
+  [class~="bg-white/[0.05]"], [class~="bg-white/[0.06]"]
+) {
+  background-color: var(--theme-surface-muted);
+}
