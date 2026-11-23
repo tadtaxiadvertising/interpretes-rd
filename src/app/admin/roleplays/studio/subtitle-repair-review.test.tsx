@@ -200,4 +200,76 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByText(/2 turnos disponibles y 2 seleccionados/)).toBeTruthy();
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
+
+  it('restores a balanced SRT suggestion after manual changes without changing the editor', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 360 });
+    fireEvent.loadedMetadata(player);
+    const toStamp = (seconds: number) => '00:' +
+      String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0') + ',000';
+    const content = Array.from({ length: 60 }, (_, index) => (
+      String(index + 1) + '\n' +
+      toStamp(index * 3) + ' --> ' + toStamp(index * 3 + 2) +
+      '\nDoctor: Original line'
+    )).join('\n\n');
+    const file = new File(['mock'], '60-turns.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => content });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/60 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }));
+    expect(screen.getByText(/60 turnos disponibles y 1 seleccionados/)).toBeTruthy();
+
+    const confirmation = vi.spyOn(window, 'confirm')
+      .mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar propuesta equilibrada' }));
+    expect(confirmation).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/60 turnos disponibles y 1 seleccionados/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar propuesta equilibrada' }));
+    expect(confirmation).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/60 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    expect(screen.getByText(/Mostrando 1–25 de 25 turnos/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.getByText(/el editor no se modificó/)).toBeTruthy();
+  });
+
+  it('restores a cleared selection without a destructive confirmation', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    const file = new File(['mock'], 'four-turns.srt', { type: 'text/plain' });
+    const caption = (seconds: number) => '00:' +
+      String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0') + ',000';
+    const content = Array.from({ length: 26 }, (_, index) => [
+      String(index + 1),
+      caption(index * 2) + ' --> ' + caption(index * 2 + 1),
+      'Doctor: Reference turn',
+    ].join('\n')).join('\n\n');
+    Object.defineProperty(file, 'text', { value: async () => content });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    const confirmation = vi.spyOn(window, 'confirm');
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar propuesta equilibrada' }));
+    expect(confirmation).not.toHaveBeenCalled();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+  });
 });
