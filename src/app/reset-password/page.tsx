@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { Lock, AlertCircle, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { updatePassword } from '@/app/actions/auth';
 
 export default function ResetPasswordPage() {
@@ -29,25 +31,27 @@ export default function ResetPasswordPage() {
         }, 3000);
       }
     } catch {
-      setError('An unexpected error occurred. Please try again.');
+      setError('No pudimos actualizar la contraseña. Inténtalo de nuevo.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
+    <div className="theme-login min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
       <div className="absolute inset-0">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
 
       <div className="relative z-10 w-full max-w-md px-6">
+        <div className="mb-4 flex justify-end"><ThemeSwitcher /></div>
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+          <Image src="/interpretes-rd-logo.webp" alt="Logo Intérpretes RD" width={88} height={88} className="mx-auto mb-4 rounded-2xl bg-white p-2 shadow-sm" />
+          <h1 className="brand-heading text-3xl font-bold">
             Intérpretes RD
           </h1>
-          <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Update Credentials</p>
+          <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Actualización de contraseña</p>
         </div>
 
         <div className="glass rounded-3xl p-8 border border-white/10">
@@ -56,9 +60,9 @@ export default function ResetPasswordPage() {
               <div className="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-green-500/20">
                 <CheckCircle2 size={32} className="text-green-400" />
               </div>
-              <h2 className="text-2xl font-bold text-white mb-4">Password Updated!</h2>
+              <h2 className="text-2xl font-bold text-white mb-4">¡Contraseña actualizada!</h2>
               <p className="text-gray-400 mb-8">
-                Your password has been reset successfully. You will be redirected to the login page in a few seconds.
+                Tu contraseña se actualizó correctamente. Serás redirigido al inicio de sesión.
               </p>
               <div className="flex justify-center">
                 <Loader2 size={24} className="text-blue-500 animate-spin" />
@@ -71,8 +75,8 @@ export default function ResetPasswordPage() {
                   <ShieldCheck size={20} className="text-blue-400" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-white">New Password</h2>
-                  <p className="text-gray-400 text-xs">Set a strong password for your account</p>
+                  <h2 className="text-xl font-bold text-white">Nueva contraseña</h2>
+                  <p className="text-gray-400 text-xs">Establece una contraseña segura para tu cuenta</p>
                 </div>
               </div>
 
@@ -86,7 +90,7 @@ export default function ResetPasswordPage() {
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div>
                   <label htmlFor="password" className="block text-sm font-medium text-gray-400 mb-2">
-                    New Password
+                    Nueva contraseña
                   </label>
                   <div className="relative">
                     <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -103,7 +107,7 @@ export default function ResetPasswordPage() {
 
                 <div>
                   <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-400 mb-2">
-                    Confirm New Password
+                    Confirmar nueva contraseña
                   </label>
                   <div className="relative">
                     <Lock size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" />
@@ -126,10 +130,10 @@ export default function ResetPasswordPage() {
                   {isLoading ? (
                     <>
                       <Loader2 size={18} className="animate-spin" />
-                      Updating Password...
+                      Actualizando contraseña...
                     </>
                   ) : (
-                    'Update Password'
+                    'Actualizar contraseña'
                   )}
                 </button>
               </form>
@@ -138,7 +142,7 @@ export default function ResetPasswordPage() {
         </div>
 
         <p className="text-center text-gray-600 text-xs mt-8">
-          © 2026 Intérpretes RD. Secure Enterprise Access.
+          © 2026 Intérpretes RD. Acceso seguro a tu cuenta.
         </p>
       </div>
     </div>
