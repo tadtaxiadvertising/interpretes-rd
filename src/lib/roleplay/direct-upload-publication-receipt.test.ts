@@ -71,7 +71,8 @@ describe('future Roleplay publication receipt step (transaction caller only, unw
   it('rejects incomplete, duplicate or untrusted session receipts before any update', async () => {
     const variants: Array<readonly string[]> = [
       [], ['session-one', 'session-one'], [''], ['../staging/private'],
-      ['x'.repeat(121)], ['valid-session', 'other\nroleplay'],
+      ['x'.repeat(121)],
+      Array.from({ length: 1001 }, (_, i) => 'synthetic-session-' + i), ['valid-session', 'other\nroleplay'],
     ];
     for (const sessionIds of variants) {
       const s = store();
