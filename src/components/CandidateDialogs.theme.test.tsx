@@ -37,6 +37,10 @@ describe('Candidate management dialogs in both appearances', () => {
     expect(dialog.className).toContain('bg-[var(--theme-panel)]');
     expect(dialog.className).toContain('text-[var(--foreground)]');
     expect(dialog.closest('.theme-workspace')).toBeTruthy();
+    if (action === 'Hire Candidate') {
+      expect(dialog.querySelector('strong')?.className).toContain('text-[var(--foreground)]');
+      expect(screen.getByRole('button', { name: 'Confirm hiring' }).className).toContain('bg-[#047857]');
+    }
   });
 
   it('does not expose hiring for candidates not approved for activation', () => {
