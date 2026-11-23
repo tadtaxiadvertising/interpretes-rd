@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Intérpretes RD">
+  <defs><clipPath id="flag"><circle cx="64" cy="66" r="36"/></clipPath></defs>
+  <path fill="#fff" stroke="#081321" stroke-width="5" d="M64 27a39 39 0 0 1 39 39c0 22-17 39-39 39-6 0-12-1-17-4l-18 10 5-21A39 39 0 0 1 64 27Z"/>
+  <g clip-path="url(#flag)">
+    <rect x="25" y="26" width="78" height="80" fill="#fff"/>
+    <path fill="#002d72" d="M25 26h34v35H25zM69 71h34v35H69z"/>
+    <path fill="#ef1736" d="M69 26h34v35H69zM25 71h34v35H25z"/>
+    <circle cx="64" cy="66" r="8" fill="#fff" stroke="#002d72" stroke-width="1.5"/>
+    <path d="M64 60v12m-5-6h10" stroke="#ef1736" stroke-width="2"/>
+  </g>
+  <path d="M24 53V46C24 24 42 8 64 8s40 16 40 38v7" fill="none" stroke="#0c1017" stroke-width="12" stroke-linecap="round"/>
+  <rect x="14" y="48" width="19" height="42" rx="9" fill="#0c1017"/>
+  <rect x="95" y="48" width="19" height="42" rx="9" fill="#0c1017"/>
+  <path d="M105 89c-3 17-13 23-30 25" fill="none" stroke="#0c1017" stroke-width="6" stroke-linecap="round"/>
+  <rect x="67" y="108" width="20" height="10" rx="5" fill="#0c1017"/>
+</svg>

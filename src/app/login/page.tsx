@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { Lock, Mail, AlertCircle, Loader2, Users, ShieldAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { login } from '@/app/actions/auth';
 import { signIn } from 'next-auth/react';
 import { safeNextPath } from '@/lib/auth/safe-next';
@@ -58,14 +60,16 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
+    <div className="theme-login min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
       <div className="absolute inset-0">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl animate-pulse" />
         <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
 
       <div className="relative z-10 w-full max-w-md px-6">
+        <div className="flex justify-end mb-4"><ThemeSwitcher /></div>
         <div className="text-center mb-10">
+          <Image src="/brand-mark.svg" alt="Logo Intérpretes RD" width={92} height={92} className="mx-auto mb-4" />
           <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
             Intérpretes RD
           </h1>
@@ -159,7 +163,7 @@ export default function LoginPage() {
               type="submit"
               disabled={isLoading}
               className={`w-full py-3 text-white font-semibold rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 ${role === 'admin'
-                ? 'bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-400'
+                ? 'bg-gradient-to-r from-[#002d72] to-[#185ab0] hover:from-[#185ab0] hover:to-[#002d72]'
                 : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400'
                 }`}
             >

@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { LogOut, Settings, ShieldCheck } from 'lucide-react';
 import { logout } from '@/app/actions/auth';
 import { NotificationBell } from './NotificationBell';
+import { ThemeSwitcher } from './ThemeSwitcher';
+import Image from 'next/image';
 
 interface NavbarProps {
   email?: string;
@@ -16,11 +18,12 @@ export function Navbar({ email, notifications = [], onSignOut }: NavbarProps) {
   const initials = email ? email[0].toUpperCase() : 'U';
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-slate-800 bg-[#0a0f1c]/80 backdrop-blur-md px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-[var(--border)] bg-[var(--theme-nav)] backdrop-blur-md px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-        <div className="flex flex-1"></div>
+        <div className="flex flex-1 items-center gap-2"><Image src="/brand-mark.svg" alt="Intérpretes RD" width={32} height={32} className="md:hidden" /><span className="text-xs font-bold text-[var(--foreground)] md:hidden">Intérpretes RD</span></div>
         <div className="flex items-center gap-x-4 lg:gap-x-6">
           
+          <ThemeSwitcher />
           <NotificationBell initialNotifications={notifications as any} />
 
           {/* Separator */}
@@ -33,21 +36,21 @@ export function Navbar({ email, notifications = [], onSignOut }: NavbarProps) {
               className="flex items-center gap-x-3 p-1 rounded-full hover:bg-slate-800/50 transition-colors focus:outline-none"
               onClick={() => setIsOpen(!isOpen)}
             >
-              <div className="h-8 w-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold text-sm shadow-sm ring-2 ring-transparent hover:ring-indigo-500 transition-all">
+              <div className="h-8 w-8 rounded-full bg-[#002d72] flex items-center justify-center text-white font-semibold text-sm shadow-sm ring-2 ring-transparent hover:ring-blue-500 transition-all">
                 {initials}
               </div>
             </button>
             {isOpen && (
-              <div className="absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-2xl bg-slate-900 border border-slate-800 py-2 shadow-2xl ring-1 ring-white/5 focus:outline-none transition-all">
+              <div className="absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-2xl bg-[var(--theme-panel)] border border-[var(--border)] py-2 shadow-2xl ring-1 ring-white/5 focus:outline-none transition-all">
                 <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-semibold shadow-sm">
                     {initials}
                   </div>
                   <div className="flex flex-col overflow-hidden">
-                    <span className="text-sm font-medium text-white truncate">
+                    <span className="text-sm font-medium text-[var(--foreground)] truncate">
                       {email ? email.split('@')[0] : 'User Profile'}
                     </span>
-                    <span className="text-xs text-slate-400 truncate">
+                    <span className="text-xs text-[var(--text-secondary)] truncate">
                       {email}
                     </span>
                   </div>
