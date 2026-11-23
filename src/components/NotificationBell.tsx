@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { markNotificationAsRead } from '@/app/actions/notifications';
@@ -35,6 +35,15 @@ export function NotificationBell({ initialNotifications }: { initialNotification
   const [error, setError] = useState<string | null>(null);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    window.addEventListener('keydown', onEscape);
+    return () => window.removeEventListener('keydown', onEscape);
+  }, [isOpen]);
 
   const handleMarkAsRead = async (id: string) => {
     // A ref guards against rapid double clicks before React can re-render.
@@ -80,9 +89,9 @@ export function NotificationBell({ initialNotifications }: { initialNotification
         aria-label="Notificaciones"
         aria-expanded={isOpen}
         aria-controls="notification-panel"
-        className="relative p-2 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all group"
+        className="group relative rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
       >
-        <Bell size={20} aria-hidden="true" className={cn("text-gray-400 group-hover:text-white transition-colors", unreadCount > 0 && "animate-bounce")} />
+        <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "animate-bounce")} />
         {unreadCount > 0 && (
           <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-500 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[#0a0a0a]">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -93,9 +102,9 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="absolute right-0 mt-4 w-80 glass border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-300">
+          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="absolute right-0 z-50 mt-4 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-              <h4 className="font-bold text-white text-sm">Notificaciones</h4>
+              <h4 className="font-bold text-[var(--foreground)] text-sm">Notificaciones</h4>
               <span className="text-[10px] text-gray-500 uppercase tracking-widest">{unreadCount} sin leer</span>
             </div>
 
@@ -121,9 +130,9 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                   >
                     <div className="mt-1">{getIcon(n.type)}</div>
                     <div className="flex-1 space-y-1">
-                      <p className={cn("text-xs font-bold", !n.isRead ? "text-white" : "text-gray-400")}>{n.title}</p>
-                      <p className="text-[10px] text-gray-500 leading-relaxed">{n.message}</p>
-                      <p className="text-[9px] text-gray-600 uppercase mt-1">
+                      <p className={cn("text-xs font-bold", !n.isRead ? "text-[var(--foreground)]" : "text-[var(--text-secondary)]")}>{n.title}</p>
+                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{n.message}</p>
+                      <p className="text-[10px] text-[var(--text-secondary)] uppercase mt-1">
                         {formatNotificationTime(n.createdAt)}
                       </p>
                     </div>
@@ -134,7 +143,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                         disabled={pendingIds.includes(n.id)}
                         aria-busy={pendingIds.includes(n.id)}
                         aria-label={`Marcar como leída: ${n.title}`}
-                        className="p-1 hover:bg-white/10 rounded-lg text-gray-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        className="p-1 hover:bg-[var(--theme-hover)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-wait"
                       >
                         {pendingIds.includes(n.id)
                           ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
