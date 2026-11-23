@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,8 @@ interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl' }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -34,10 +36,17 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
     };
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    return () => previouslyFocused?.focus();
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6">
+    <div className="theme-workspace fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -47,22 +56,28 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
       {/* Modal Content */}
       <div 
         ref={modalRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={cn(
-          "relative w-full bg-[#0a0a0c] border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300",
+          "relative w-full rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300",
           maxWidth
         )}
       >
-        <div className="px-8 py-6 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
-          <h3 className="text-xl font-bold text-white tracking-tight">{title}</h3>
-          <button 
+        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--theme-panel)] px-5 py-4 sm:px-8 sm:py-6">
+          <h3 id={titleId} className="text-lg sm:text-xl font-bold text-[var(--foreground)] tracking-tight">{title}</h3>
+          <button
+            type="button"
+            ref={closeButtonRef}
+            aria-label="Cerrar ventana"
             onClick={onClose}
-            className="p-2 hover:bg-white/5 rounded-xl text-gray-500 hover:text-white transition-colors"
+            className="rounded-xl p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
             <X size={20} />
           </button>
         </div>
         
-        <div className="p-8 max-h-[80vh] overflow-y-auto custom-scrollbar">
+        <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto p-5 sm:p-8 custom-scrollbar">
           {children}
         </div>
       </div>
