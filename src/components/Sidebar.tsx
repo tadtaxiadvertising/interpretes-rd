@@ -155,6 +155,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
       isCollapsed ? "w-20" : "w-64"
     )}>
       <div className={cn("px-4 py-5 flex items-center border-b border-white/[0.06]", isCollapsed ? "justify-center" : "justify-between")}>
+        {isCollapsed && <Image src="/brand-mark.svg" alt="Intérpretes RD" width={38} height={38} />}
         {!isCollapsed && (
           <div className="animate-in fade-in duration-500 flex items-center gap-3">
             <Image src="/brand-mark.svg" alt="Intérpretes RD" width={44} height={44} className="shrink-0" />
