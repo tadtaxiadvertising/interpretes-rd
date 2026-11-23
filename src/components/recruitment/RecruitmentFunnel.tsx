@@ -158,7 +158,7 @@ export default function RecruitmentFunnel() {
       ) : (
         <>
       {/* Visual Progress */}
-      <div className="flex items-center justify-between mb-8 border-b border-slate-200 pb-5">
+      <div className="flex items-start justify-between gap-1 sm:gap-2 mb-8 border-b border-slate-200 pb-5">
         <StepIndicator icon={User} label="Postulación" active={step >= 1} current={step === 1} />
         <StepIndicator icon={PlaySquare} label="Inducción" active={step >= 2} current={step === 2} />
         <StepIndicator icon={Mic} label="Roleplay" active={step >= 3} current={step === 3} />
@@ -184,26 +184,26 @@ export default function RecruitmentFunnel() {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4">
             <input 
-              type="text" placeholder="Nombre completo" 
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+              type="text" aria-label="Nombre completo" placeholder="Nombre completo" 
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
             />
             <input 
-              type="email" placeholder="Correo electrónico" 
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+              type="email" aria-label="Correo electrónico" placeholder="Correo electrónico" 
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})}
             />
             <input 
-              type="tel" placeholder="Teléfono (Ej: +123456789)" 
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+              type="tel" aria-label="Teléfono" placeholder="Teléfono (Ej: +123456789)" 
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
             />
             <input
-              type="text" required placeholder="País de residencia"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+              type="text" required aria-label="País de residencia" placeholder="País de residencia"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })}
             />
-            <select required aria-label="Nivel de inglés" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+            <select required aria-label="Nivel de inglés" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.englishLevel}
               onChange={(e) => setFormData({ ...formData, englishLevel: e.target.value as ApplicantData["englishLevel"] })}
             >
@@ -215,19 +215,19 @@ export default function RecruitmentFunnel() {
             <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
               Velocidad de descarga (Mbps)
               <input type="number" min={1} max={10000} step={1} required
-                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
                 value={formData.speedtestMbps}
                 onChange={(e) => setFormData({ ...formData, speedtestMbps: Number(e.target.value) })}
               />
             </label>
-            <input type="url" placeholder="Enlace al currículum (opcional, HTTPS)"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+            <input type="url" aria-label="Enlace al currículum" placeholder="Enlace al currículum (opcional, HTTPS)"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.cvUrl ?? ""}
               onChange={(e) => setFormData({ ...formData, cvUrl: e.target.value || undefined })}
             />
             <input 
-              type="url" placeholder="Link de tu certificado EFSET" 
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#2675ff] focus:ring-4 focus:ring-[#2675ff]/15"
+              type="url" aria-label="Enlace del certificado EFSET" placeholder="Link de tu certificado EFSET" 
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.efsetLink} onChange={(e) => setFormData({...formData, efsetLink: e.target.value})}
             />
           </div>
@@ -240,7 +240,7 @@ export default function RecruitmentFunnel() {
           <button 
             onClick={handleApply} 
             disabled={isPending}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#1764bf] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#1764bf]/20 transition hover:bg-[#1554a8] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1764bf]/30 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
           >
             {isPending ? "Procesando..." : "Enviar Postulación"}
           </button>
@@ -268,7 +268,7 @@ export default function RecruitmentFunnel() {
           <button 
             onClick={handleContinueInduction}
             disabled={isPending}
-            className="w-full rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30 disabled:cursor-not-allowed disabled:bg-slate-400"
+            className="w-full rounded-xl bg-[#1764bf] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#1764bf]/20 transition hover:bg-[#1554a8] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1764bf]/30 disabled:cursor-not-allowed disabled:bg-slate-400"
           >
             {isPending ? "Guardando…" : "Continuar al Roleplay"}
           </button>
@@ -278,8 +278,8 @@ export default function RecruitmentFunnel() {
       {/* STEP 3: Assessment (Roleplay) */}
       {step === 3 && (
         <div className="space-y-6 animate-in fade-in text-center">
-          <div className="w-16 h-16 bg-[#2675ff]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Mic className="w-8 h-8 text-[#2675ff]" />
+          <div className="w-16 h-16 bg-[#1764bf]/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Mic className="w-8 h-8 text-[var(--theme-recruitment-accent)]" />
           </div>
           <h2 className="text-xl font-semibold text-slate-900">Evaluación Práctica (Roleplay)</h2>
           <p className="text-slate-600">Nuestro sistema o reclutador evaluará tu nivel de interpretación y protocolo. Basado en esta evaluación se actualizará tu <strong>resultRoleplay</strong> en el sistema.</p>
@@ -302,7 +302,7 @@ export default function RecruitmentFunnel() {
           <button 
             onClick={handleStartRoleplay} 
             disabled={isStartingRoleplay || isPending}
-            className="w-full rounded-xl bg-[#2675ff] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#2675ff]/20 transition hover:bg-[#1765ef] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#2675ff]/30 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
+            className="w-full rounded-xl bg-[#1764bf] px-5 py-3.5 font-bold text-white shadow-lg shadow-[#1764bf]/20 transition hover:bg-[#1554a8] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#1764bf]/30 disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none"
           >
             {isStartingRoleplay || isPending ? "Iniciando…" : "Iniciar Simulador de Roleplay"}
           </button>
@@ -335,11 +335,11 @@ export default function RecruitmentFunnel() {
 // Visual indicator component
 function StepIndicator({ icon: Icon, label, active, current }: { icon: any, label: string, active: boolean, current: boolean }) {
   return (
-    <div className={`flex min-w-0 flex-col items-center gap-2 text-center ${active ? 'text-[#2675ff]' : 'text-slate-500'}`}>
-      <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${current ? 'border-[#2675ff] bg-[#2675ff]/10 text-[#2675ff]' : active ? 'border-[#2675ff] bg-[#2675ff] text-white' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+    <div className={`flex min-w-0 flex-1 flex-col items-center gap-1 sm:gap-2 text-center ${active ? 'text-[var(--theme-recruitment-accent)]' : 'text-slate-500'}`}>
+      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border-2 transition-colors ${current ? 'border-[#1764bf] bg-[#1764bf]/10 text-[var(--theme-recruitment-accent)]' : active ? 'border-[#1764bf] bg-[#1764bf] text-white' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
         <Icon className="w-5 h-5" />
       </div>
-      <span className="text-xs font-semibold">{label}</span>
+      <span className="max-w-full text-[10px] sm:text-xs leading-tight font-semibold break-words">{label}</span>
     </div>
   );
 }

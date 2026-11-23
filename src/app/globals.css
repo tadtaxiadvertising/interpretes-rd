@@ -507,3 +507,8 @@ html[data-theme="light"] .theme-login .text-gray-600 {
 html[data-theme="light"] .theme-public [class*="text-[#8ab4ff]"] {
   color: #1554a8;
 }
+
+
+/* Steps use a legible color on the dark form while retaining flag blue on white. */
+.theme-postular { --theme-recruitment-accent: #8ab4ff; }
+html[data-theme="light"] .theme-postular { --theme-recruitment-accent: #1764bf; }
