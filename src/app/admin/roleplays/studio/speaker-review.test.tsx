@@ -320,9 +320,11 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     const apply = screen.getByRole('button', { name: /Aplicar selección al editor/i }) as HTMLButtonElement;
     expect(status.textContent).toContain('Audio seleccionado:');
     expect(apply.disabled).toBe(false);
-    // The suggested first cue overlaps the second one. Make space in the
-    // 25-turn selection, then deliberately choose that conflicting cue.
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 3' }));
+    // The representative proposal changes which cues start selected.
+    // Explicitly construct two conflicting manual turns to verify that the
+    // same publish-time overlap validation still blocks applying them.
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
     expect(status.textContent).toMatch(/Selección no válida:.*solapadas/);
     expect(apply.disabled).toBe(true);

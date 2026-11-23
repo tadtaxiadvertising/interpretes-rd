@@ -9,7 +9,7 @@ import {
   parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments,
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
-import { fillCompatibleTimedCueSelection, selectTimedCues } from '@/lib/roleplay-studio/cue-selection';
+import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -753,12 +753,12 @@ export default function RoleplayStudioPage() {
         setShowOnlySelectedCues(false);
         setCuePage(0);
         setReviewCues(selected);
-        const compatible = fillCompatibleTimedCueSelection(selected, [], allIndices);
+        const compatible = suggestRepresentativeTimedCueSelection(selected, allIndices);
         setChosenCueIndices(compatible);
         const repairedNotice = timingWasRepaired
           ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras), y ${diagnostics.skipped} intervalos invertidos o inferiores a 0,1 s omitidos. `
           : '';
-        setNotice(`${repairedNotice}${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Se sugirieron ${compatible.length} turnos sin solapamientos ni voz etiquetada del intérprete. Revisa el audio y los límites antes de aplicar; el borrador no se reemplazó.`);
+        setNotice(`${repairedNotice}${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Se sugirieron ${compatible.length} turnos compatibles de distintos momentos de la grabación, sin voz etiquetada del intérprete. Escucha los cortes y confirma hablantes antes de aplicar; el borrador no se reemplazó.`);
       }
     } catch (cause) {
       if (revision !== subtitleImportRevision.current) return;
@@ -2120,9 +2120,9 @@ export default function RoleplayStudioPage() {
           <h2 className="text-lg font-bold text-white">Seleccionar turnos de la transcripción</h2>
           <p className="text-sm text-slate-300">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
-            (máximo {ROLEPLAY_MAX_SCENARIOS}). Solo los turnos marcados se convertirán en
-            escenarios. Revisa cualquier solapamiento o diálogo del intérprete antes de aplicar.
-            Esta acción reemplaza las intervenciones actuales del editor.
+            (máximo {ROLEPLAY_MAX_SCENARIOS}). La propuesta abarca distintos momentos de la grabación.
+            Escucha y ajusta los turnos; después pulsa «Aplicar» para revisar hablantes e idiomas.
+            Tus cortes actuales no se reemplazan sin confirmación.
           </p>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
             <input type="search" aria-label="Buscar turnos en transcripción"

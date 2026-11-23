@@ -87,3 +87,75 @@ export function fillCompatibleTimedCueSelection(
   }
   return [...selection].sort((a, b) => a - b);
 }
+
+
+/**
+ * Suggest representative source turns across an entire long recording instead
+ * of spending all 25 slots on the earliest captions. This is a deterministic
+ * editorial starting point, not automatic speaker identification.
+ *
+ * Time-bucket candidates favor readable, role-labeled turns and avoid very
+ * long background captions where a shorter utterance is available. The
+ * canonical selection validator remains the final authority on overlaps,
+ * 25-turn limits and the 15-minute package budget.
+ */
+export function suggestRepresentativeTimedCueSelection(
+  available: readonly TimedTranscriptCue[],
+  candidateIndices: readonly number[],
+): number[] {
+  const indices = [...new Set(candidateIndices)]
+    .filter(index => Number.isSafeInteger(index) && index >= 0 && index < available.length)
+    .filter(index => classifySpeakerRole(available[index].speaker) !== 'interpreter')
+    .filter(index => {
+      const cue = available[index];
+      return Number.isFinite(cue.start) && Number.isFinite(cue.end) &&
+        cue.start >= 0 && cue.end > cue.start && cue.end - cue.start <= 300;
+    });
+  if (indices.length <= ROLEPLAY_MAX_SCENARIOS) {
+    return fillCompatibleTimedCueSelection(available, [], indices);
+  }
+
+  const sorted = indices.sort((a, b) =>
+    available[a].start - available[b].start || available[a].end - available[b].end || a - b);
+  const first = available[sorted[0]].start;
+  const last = sorted.reduce((end, index) => Math.max(end, available[index].end), first);
+  const numberOfBuckets = ROLEPLAY_MAX_SCENARIOS;
+  const windowSeconds = Math.max((last - first) / numberOfBuckets, 0.001);
+  const buckets: number[][] = Array.from({ length: numberOfBuckets }, () => []);
+
+  for (const index of sorted) {
+    const bucket = Math.min(numberOfBuckets - 1,
+      Math.max(0, Math.floor((available[index].start - first) / windowSeconds)));
+    buckets[bucket].push(index);
+  }
+
+  const chosen: number[] = [];
+  for (let bucket = 0; bucket < numberOfBuckets; bucket++) {
+    if (chosen.length >= ROLEPLAY_MAX_SCENARIOS) break;
+    const targetTime = first + (bucket + 0.5) * windowSeconds;
+    const score = (index: number) => {
+      const cue = available[index];
+      const seconds = cue.end - cue.start;
+      // A caption lasting minutes is a poor representative when a normal
+      // sentence-length subtitle is available at the same source position.
+      const longCaptionPenalty = seconds > 60 ? 4 : 0;
+      const unknownRolePenalty = classifySpeakerRole(cue.speaker) === 'unknown' ? 1 : 0;
+      return longCaptionPenalty + unknownRolePenalty +
+        Math.abs(cue.start - targetTime) / windowSeconds;
+    };
+    const ranked = buckets[bucket].sort((a, b) => score(a) - score(b) ||
+      available[a].end - available[b].end || a - b);
+    for (const index of ranked) {
+      try {
+        selectTimedCues(available, [...chosen, index]);
+        chosen.push(index);
+        break;
+      } catch {
+        // Move on to another valid, compatible candidate in this window.
+      }
+    }
+  }
+  // For sparse timelines, fill remaining slots only with compatible turns.
+  // This is a suggestion for manual review, never an automatic export.
+  return fillCompatibleTimedCueSelection(available, chosen, sorted);
+}
