@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { 
   MoreVertical, 
   Edit, 
@@ -41,6 +41,8 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   const [hireError, setHireError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
+  const [markReadyError, setMarkReadyError] = useState<string | null>(null);
+  const markReadyErrorId = useId();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showHireConfirm, setShowHireConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -158,16 +160,19 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   };
 
   const handleMarkReady = async () => {
+    if (isMarkingReady || !canMarkReady) return;
+    setMarkReadyError(null);
     setIsMarkingReady(true);
     try {
       const result = await markApplicationReadyAction(candidate.id);
-      if (!result.success) throw new Error(result.error);
-
+      if (!result.success) {
+        setMarkReadyError('No se pudo marcar la candidatura como lista. Comprueba su estado antes de reintentar.');
+        return;
+      }
       setIsOpen(false);
       router.refresh();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Error marking application ready: ${message}`);
+    } catch {
+      setMarkReadyError('No se pudo confirmar el cambio. Comprueba el estado antes de reintentar.');
     } finally {
       setIsMarkingReady(false);
     }
@@ -180,7 +185,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
         type="button"
         aria-label="Acciones del candidato"
         aria-expanded={isOpen}
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => { setMarkReadyError(null); setIsOpen(!isOpen); }}
         className={cn(
           "rounded-xl p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
           isOpen ? "bg-[var(--theme-hover)] text-[var(--foreground)]" : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
@@ -215,14 +220,23 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
               Create Roleplay
             </button>
             {canMarkReady && (
-              <button
-                disabled={isMarkingReady}
-                className="w-full px-4 py-2 text-left text-sm text-[var(--theme-warning)] hover:bg-amber-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
-                onClick={handleMarkReady}
-              >
-                {isMarkingReady ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
-                Mark Ready for Hiring
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={isMarkingReady}
+                  aria-describedby={markReadyError ? markReadyErrorId : undefined}
+                  className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-[var(--theme-warning)] transition-colors hover:bg-amber-500/10 disabled:opacity-50"
+                  onClick={handleMarkReady}
+                >
+                  {isMarkingReady ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                  Mark Ready for Hiring
+                </button>
+                {markReadyError && (
+                  <p id={markReadyErrorId} role="alert" className="mx-3 mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-[var(--theme-danger)]">
+                    {markReadyError}
+                  </p>
+                )}
+              </>
             )}
             {canHire && (
               <button 
