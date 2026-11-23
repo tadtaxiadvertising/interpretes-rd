@@ -67,7 +67,7 @@ describe('Roleplay administration in both themes', () => {
     expect(html).toContain('Aprobado');
     expect(html).not.toContain('>PASSED<');
     expect(html).toContain('bg-[var(--theme-track)]');
-    expect(html).toContain('max-width');
+    expect(html).toContain('width:95%');
     expect(html).toContain('Ver evaluación');
     expect(prisma.roleplaySession.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
