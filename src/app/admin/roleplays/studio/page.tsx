@@ -509,7 +509,7 @@ export default function RoleplayStudioPage() {
       setCuePage(0);
       setCueSearch('');
       setShowOnlySelectedCues(false);
-    setShowCueReviewAlertsOnly(false);
+      setShowCueReviewAlertsOnly(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible aplicar la selección.');
     }
@@ -775,14 +775,14 @@ export default function RoleplayStudioPage() {
         if (!loadSelectedCues(selected, excludedCount, Boolean(approval))) return;
         setCueSearch('');
         setShowOnlySelectedCues(false);
-    setShowCueReviewAlertsOnly(false);
+        setShowCueReviewAlertsOnly(false);
         setReviewCues([]);
         setChosenCueIndices([]);
         setCuePage(0);
       } else {
         setCueSearch('');
         setShowOnlySelectedCues(false);
-    setShowCueReviewAlertsOnly(false);
+        setShowCueReviewAlertsOnly(false);
         setCuePage(0);
         setReviewCues(selected);
         const compatible = suggestRepresentativeTimedCueSelection(selected, allIndices);
