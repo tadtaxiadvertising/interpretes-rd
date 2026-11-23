@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimedTranscript, toPublishableStudioSegments } from './transcript';
+import { parseTimedTranscript, parseTimedTranscriptForReview, toPublishableStudioSegments } from './transcript';
 
 describe('Audio Studio offline subtitle import', () => {
   it('imports SRT cues in order and extracts speaker labels', () => {
@@ -113,5 +113,28 @@ Paciente: Me duele la cabeza.
     [Array.from({ length: 26 }, (_, i) => `${i+1}\n00:${String(i).padStart(2, '0')}:00,000 --> 00:${String(i).padStart(2, '0')}:01,000\nLine`).join('\n\n'), 'too many cues'],
   ])('rejects malformed or unsafe subtitles: %s (%s)', (subtitle) => {
     expect(() => parseTimedTranscript(subtitle)).toThrow();
+  });
+});
+
+
+describe('Audio Studio review repairs without weakening strict publishing', () => {
+  it('sorts provider cues out of order and retains overlapping timestamps for safe selection', () => {
+    const raw = '2\\n00:00:02,000 --> 00:00:04,000\\nPatient: Second\\n\\n1\\n00:00:01,000 --> 00:00:03,000\\nDoctor: First';
+    expect(() => parseTimedTranscript(raw)).toThrow(/tiempos/);
+    expect(parseTimedTranscriptForReview(raw).map(cue => [cue.start, cue.end])).toEqual([[1, 3], [2, 4]]);
+  });
+
+  it('splits an oversized reference cue into bounded, contiguous review windows', () => {
+    const raw = '1\\n00:00:00,000 --> 00:10:00,000\\nDoctor: Source reference';
+    expect(() => parseTimedTranscript(raw)).toThrow(/tiempos/);
+    expect(parseTimedTranscriptForReview(raw).map(cue => [cue.start, cue.end])).toEqual([[0, 300], [300, 600]]);
+  });
+
+  it('still rejects reversed, out-of-source and tiny cues in review mode', () => {
+    for (const raw of [
+      '00:00:04,000 --> 00:00:03,000\\nReversed',
+      '02:00:00,000 --> 02:00:01,000\\nOutside',
+      '00:00:01,000 --> 00:00:01,050\\nToo short',
+    ]) expect(() => parseTimedTranscriptForReview(raw)).toThrow(/tiempos/);
   });
 });
