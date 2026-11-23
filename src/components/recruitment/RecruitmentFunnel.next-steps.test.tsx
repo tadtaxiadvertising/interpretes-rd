@@ -72,6 +72,19 @@ describe('Registration completion and next actions', () => {
     expect(m.submitApplicationAction).not.toHaveBeenCalled();
   });
 
+  it('explains that an insecure certificate URL is invalid, not missing', async () => {
+    render(<RecruitmentFunnel />);
+    fillApplication();
+    fireEvent.change(screen.getByLabelText(/Enlace del certificado EFSET/), {
+      target: { value: 'http://www.efset.org/cert/sample' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar Postulación' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(
+      'Introduce un enlace HTTPS válido a tu certificado EFSET.'
+    ));
+    expect(m.submitApplicationAction).not.toHaveBeenCalled();
+  });
+
   it.each([
     ['existing', 'Iniciar sesión para continuar', '/login?next=%2Fcandidate'],
     ['manual', 'Crear acceso de candidato', '/register?next=%2Fcandidate'],
