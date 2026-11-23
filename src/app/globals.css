@@ -471,3 +471,11 @@ html[data-theme="light"] .theme-experience .glass {
 html[data-theme="light"] .theme-experience[class*="bg-slate-950/90"] {
   background-color: rgba(245, 247, 252, .96);
 }
+
+
+/* Keep solid brand-gradient buttons white even when the surrounding light
+   experience converts legacy .text-white headings to dark ink. */
+html[data-theme="light"] .theme-experience .bg-gradient-to-r.text-white,
+html[data-theme="light"] .theme-experience .bg-gradient-to-r .text-white {
+  color: #fff;
+}
