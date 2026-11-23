@@ -259,7 +259,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
           <form onSubmit={handleSaveCandidate} role="dialog" aria-modal="true" aria-label="Editar candidatura" className="relative my-8 max-h-[calc(100dvh-2rem)] w-full max-w-2xl space-y-5 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] p-4 shadow-2xl sm:p-6">
             <div className="flex items-center justify-between">
               <div><h3 className="text-xl font-bold text-[var(--foreground)]">Edit application</h3><p className="text-sm text-[var(--text-secondary)]">Update candidate profile details.</p></div>
-              <button type="button" onClick={() => setShowEdit(false)} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-surface-muted)]"><X size={18}/></button>
+              <button type="button" aria-label="Cerrar edición" onClick={() => setShowEdit(false)} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-surface-muted)]"><X size={18}/></button>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {([
@@ -295,7 +295,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
         <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <button aria-label="Close email dialog" className="absolute inset-0 bg-black/70" onClick={() => setShowEmail(false)} />
           <div role="dialog" aria-modal="true" aria-label="Enviar mensaje al candidato" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] p-4 shadow-2xl sm:p-6">
-            <div className="flex items-center justify-between"><div><h3 className="text-xl font-bold text-[var(--foreground)]">Message candidate</h3><p className="text-sm text-[var(--text-secondary)]">To: {candidate.email}</p></div><button onClick={() => setShowEmail(false)} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-surface-muted)]"><X size={18}/></button></div>
+            <div className="flex items-center justify-between"><div><h3 className="text-xl font-bold text-[var(--foreground)]">Message candidate</h3><p className="text-sm text-[var(--text-secondary)]">To: {candidate.email}</p></div><button type="button" aria-label="Cerrar mensaje" onClick={() => setShowEmail(false)} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-surface-muted)]"><X size={18}/></button></div>
             <label className="block space-y-1 text-sm text-[var(--text-secondary)]">Subject<input value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]"/></label>
             <label className="block space-y-1 text-sm text-[var(--text-secondary)]">Message<textarea rows={6} value={emailMessage} onChange={(event) => setEmailMessage(event.target.value)} placeholder="Write your message..." className="w-full resize-y rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]"/></label>
             <p className="text-xs text-[var(--theme-warning)]">Your configured email application will open with this message ready. Sending is completed from that application.</p>
