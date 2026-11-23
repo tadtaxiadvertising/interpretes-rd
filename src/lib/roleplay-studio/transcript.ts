@@ -146,7 +146,7 @@ export function parseTimedTranscript(
             : !limits.sortOutOfOrder && start < previousStart ? 'intervalo fuera de orden'
               : !limits.allowOverlaps && start < previousEnd ? 'intervalo superpuesto'
                 : 'duración superior a 5 minutos';
-      throw new Error(`El subtítulo ${originalCueCount} contiene ${reason}. Revisa su SRT/VTT y la duración del audio original.`);
+      throw new Error(`Los tiempos del subtítulo ${originalCueCount} contienen ${reason}. Revisa su SRT/VTT y la duración del audio original.`);
     }
     const originalText = lines.slice(timingIndex + 1).join(' ').trim();
     if (!originalText) throw new Error('Hay una intervención sin texto.');
@@ -181,7 +181,7 @@ export function parseTimedTranscript(
     previousEnd = Math.max(previousEnd, end);
   }
 
-  if (!cues.length) throw new Error('No se encontraron subtítulos con intervalos utilizables. Revisa las marcas de inicio y fin del SRT/VTT.');
+  if (!cues.length) throw new Error('No se encontraron tiempos SRT o WebVTT utilizables. Revisa las marcas de inicio y fin del archivo.');
   // The review timeline must be chronological even if the provider exported
   // SRT blocks in speaker order. Stable sorting preserves ties for inspection.
   if (limits.sortOutOfOrder) cues.sort((a, b) => a.start - b.start || a.end - b.end);
