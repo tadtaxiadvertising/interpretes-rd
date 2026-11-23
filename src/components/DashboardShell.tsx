@@ -35,16 +35,22 @@ export function DashboardShell({ children, role, userName, interpreterId, userEm
 
   // Load preference from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem('sidebar-collapsed');
-    if (saved !== null) {
-      setIsCollapsed(saved === 'true');
+    try {
+      const saved = window.localStorage.getItem('sidebar-collapsed');
+      if (saved !== null) setIsCollapsed(saved === 'true');
+    } catch {
+      // Private browsing or storage policies must not block the dashboard.
     }
   }, []);
 
   const handleToggle = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
-    localStorage.setItem('sidebar-collapsed', String(newState));
+    try {
+      window.localStorage.setItem('sidebar-collapsed', String(newState));
+    } catch {
+      // Keep the toggle working even without persistent storage.
+    }
   };
 
   return (
@@ -57,7 +63,7 @@ export function DashboardShell({ children, role, userName, interpreterId, userEm
           ranking={ranking}
         />
 
-        <div className="flex flex-col flex-1 h-screen overflow-hidden">
+        <div className="flex min-w-0 flex-col flex-1 h-screen overflow-hidden">
           <Navbar email={userName} notifications={notifications} role={role} />
 
           <main className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar transition-all duration-500 relative">
