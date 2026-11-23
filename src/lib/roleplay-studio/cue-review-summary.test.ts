@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeTimedCueReview } from './cue-review-summary';
+import { cueRequiresEditorialReview, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -17,6 +17,24 @@ describe('pre-apply SRT quality summary', () => {
       sourceThirds: 3,
     });
     expect(JSON.stringify(data)).not.toContain('Private');
+  });
+
+  it('identifies only flagged selected turns without interpreting private dialogue', () => {
+    expect(cueRequiresEditorialReview({
+      start: 0, end: 2, speaker: 'Doctor', text: 'Confidential clinical phrase',
+    })).toBe(false);
+    expect(cueRequiresEditorialReview({
+      start: 0, end: 2, speaker: null, text: 'Confidential clinical phrase',
+    })).toBe(true);
+    expect(cueRequiresEditorialReview({
+      start: 0, end: 2, speaker: 'Interpreter', text: 'Confidential clinical phrase',
+    })).toBe(true);
+    expect(cueRequiresEditorialReview({
+      start: 0, end: 61, speaker: 'Paciente', text: 'Confidential clinical phrase',
+    })).toBe(true);
+    expect(cueRequiresEditorialReview({
+      start: 0, end: 60, speaker: 'Paciente', text: 'Confidential clinical phrase',
+    })).toBe(false);
   });
 
   it('reports one or two source thirds for nonrepresentative selections', () => {
