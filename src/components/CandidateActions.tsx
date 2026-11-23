@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { 
   MoreVertical, 
   Edit, 
@@ -42,6 +42,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
   const [markReadyError, setMarkReadyError] = useState<string | null>(null);
+  const markReadyErrorId = useId();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showHireConfirm, setShowHireConfirm] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
@@ -223,7 +224,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
                 <button
                   type="button"
                   disabled={isMarkingReady}
-                  aria-describedby={markReadyError ? 'candidate-ready-error' : undefined}
+                  aria-describedby={markReadyError ? markReadyErrorId : undefined}
                   className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-[var(--theme-warning)] transition-colors hover:bg-amber-500/10 disabled:opacity-50"
                   onClick={handleMarkReady}
                 >
@@ -231,7 +232,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
                   Mark Ready for Hiring
                 </button>
                 {markReadyError && (
-                  <p id="candidate-ready-error" role="alert" className="mx-3 mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-[var(--theme-danger)]">
+                  <p id={markReadyErrorId} role="alert" className="mx-3 mb-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs leading-5 text-[var(--theme-danger)]">
                     {markReadyError}
                   </p>
                 )}
