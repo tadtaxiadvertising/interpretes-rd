@@ -61,7 +61,17 @@ export function fillCompatibleTimedCueSelection(
   // thrown away or turned into an apparently valid different selection.
   if (chosenIndices.length) selectTimedCues(available, chosenIndices);
   const selection = new Set(chosenIndices);
-  for (const index of [...new Set(candidateIndices)].sort((a, b) => a - b)) {
+  // SRT exports sometimes contain a long background caption spanning many
+  // separate utterances. Prefer the next cue that finishes first rather than
+  // locking a five-minute region before inspecting its shorter alternatives.
+  // This interval-scheduling heuristic makes room for more playable turns.
+  // Keep existing manual choices fixed and return the final result in
+  // transcript order; the 25-turn / 900-second export checks remain unchanged.
+  const candidates = [...new Set(candidateIndices)]
+    .filter(index => Number.isSafeInteger(index) && index >= 0 && index < available.length)
+    .sort((left, right) => available[left].end - available[right].end ||
+      available[left].start - available[right].start || left - right);
+  for (const index of candidates) {
     if (selection.size >= ROLEPLAY_MAX_SCENARIOS) break;
     if (!Number.isSafeInteger(index) || index < 0 || index >= available.length) continue;
     if (selection.has(index) ||
