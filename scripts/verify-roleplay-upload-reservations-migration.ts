@@ -206,25 +206,58 @@ async function main(): Promise<void> {
       "UPDATE public.roleplay_upload_reservations SET status='VERIFIED', verified_objects=$2::jsonb WHERE id=$1::uuid",
       [winnerId, JSON.stringify(verified)],
     );
+    // A minimal synthetic session table exists ONLY inside this disposable
+    // database; the future runtime transaction must create real Roleplay
+    // sessions and update the reservation in the same unit of work.
+    await first.query(
+      'CREATE TABLE ci_roleplay_publication_sessions (id TEXT PRIMARY KEY)',
+    );
     const publish = [
       "UPDATE public.roleplay_upload_reservations SET status='PUBLISHED',",
-      "published_session_ids=ARRAY['ci-session-a','ci-session-b']::text[]",
+      'published_session_ids=$3::text[]',
       "WHERE id=$1::uuid AND actor_user_id=$2 AND status='VERIFIED'",
       'AND expires_at > CURRENT_TIMESTAMP RETURNING id',
     ].join(' ');
+    const publishWithSession = async (
+      client: Client, sessionId: string,
+    ): Promise<boolean> => {
+      await client.query('BEGIN');
+      try {
+        await client.query(
+          'INSERT INTO ci_roleplay_publication_sessions (id) VALUES ($1)',
+          [sessionId],
+        );
+        const updated = await client.query(publish, [winnerId, a.actor, [sessionId]]);
+        if (updated.rowCount !== 1) {
+          await client.query('ROLLBACK');
+          return false;
+        }
+        await client.query('COMMIT');
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      }
+    };
     const publishRace = await Promise.all([
-      first.query(publish, [winnerId, a.actor]),
-      second.query(publish, [winnerId, a.actor]),
+      publishWithSession(first, 'ci-session-a'),
+      publishWithSession(second, 'ci-session-b'),
     ]);
-    if (publishRace.reduce((n, res) => n + (res.rowCount ?? 0), 0) !== 1) {
+    if (publishRace.filter(Boolean).length !== 1) {
       throw new Error('Double publication passed concurrent compare-and-swap.');
     }
     const receipt = await first.query<{ published_session_ids: string[] }>(
       'SELECT published_session_ids FROM public.roleplay_upload_reservations WHERE id=$1::uuid',
       [winnerId],
     );
-    if (receipt.rows[0]?.published_session_ids.join(',') !== 'ci-session-a,ci-session-b') {
-      throw new Error('Publication receipt was not durably recorded.');
+    const expectedSession = publishRace[0] ? 'ci-session-a' : 'ci-session-b';
+    const survivingSessions = await first.query<{ id: string }>(
+      'SELECT id FROM ci_roleplay_publication_sessions',
+    );
+    if (receipt.rows[0]?.published_session_ids.join(',') !== expectedSession ||
+        survivingSessions.rows.length !== 1 ||
+        survivingSessions.rows[0]?.id !== expectedSession) {
+      throw new Error('Publication receipt and committed sessions disagreed.');
     }
 
     await first.query('BEGIN');
@@ -271,7 +304,7 @@ async function main(): Promise<void> {
       status: 'VERIFIED', evidence: verified,
     });
     await first.query(insertSql, values(expired));
-    const stalePublish = await first.query(publish, [expired.id, expired.actor]);
+    const stalePublish = await first.query(publish, [expired.id, expired.actor, ['ci-expired-session']]);
     if (stalePublish.rowCount !== 0) throw new Error('Expired batch was published.');
   } finally {
     await Promise.allSettled([first?.end(), second?.end()]);
