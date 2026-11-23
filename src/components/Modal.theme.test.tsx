@@ -23,6 +23,7 @@ describe('Shared modal appearance and accessibility', () => {
   it('keeps portal content in the theme workspace and respects the chosen palette', () => {
     render(<TestDialog />);
     const trigger = screen.getByRole('button', { name: 'Abrir diálogo' });
+    trigger.focus(); // jsdom fireEvent.click does not move focus as a real pointer click would.
     fireEvent.click(trigger);
 
     const dialog = screen.getByRole('dialog', { name: 'Editar intérprete' });
