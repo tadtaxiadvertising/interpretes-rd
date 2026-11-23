@@ -392,3 +392,82 @@ html[data-theme="dark"] .theme-postular .recruitment-funnel :is(input,textarea):
 html[data-theme="dark"] .theme-postular .recruitment-funnel .border-slate-200 {
   border-color: rgba(203, 213, 225, .18);
 }
+
+
+/* Standalone onboarding and Roleplay experiences.
+   Keep changes scoped here: public/admin pages and colored status controls
+   must not inherit blanket text/background overrides. */
+html[data-theme="light"] .theme-experience {
+  background-color: var(--background);
+  color: var(--foreground);
+}
+html[data-theme="light"] .theme-experience [class*="bg-slate-950"] {
+  background-color: #f5f7fc;
+}
+html[data-theme="light"] .theme-experience [class*="bg-slate-900"] {
+  background-color: #ffffff;
+}
+html[data-theme="light"] .theme-experience [class*="bg-slate-800"],
+html[data-theme="light"] .theme-experience [class*="bg-slate-700"] {
+  background-color: #e9eff8;
+}
+html[data-theme="light"] .theme-experience [class*="bg-white/5"],
+html[data-theme="light"] .theme-experience [class*="bg-white/[0.0"] {
+  background-color: rgba(0, 45, 114, .05);
+}
+html[data-theme="light"] .theme-experience [class*="border-white"] {
+  border-color: var(--border);
+}
+html[data-theme="light"] .theme-experience :is(
+  .text-white, .text-slate-100, .text-slate-200, .text-gray-100,
+  .text-slate-300, .text-gray-300
+) {
+  color: var(--foreground);
+}
+html[data-theme="light"] .theme-experience :is(
+  .text-slate-400, .text-gray-400, .text-slate-500, .text-gray-500
+) {
+  color: var(--text-secondary);
+}
+html[data-theme="light"] .theme-experience .text-blue-400,
+html[data-theme="light"] .theme-experience .text-blue-300 {
+  color: #1455ae;
+}
+html[data-theme="light"] .theme-experience .text-red-400 {
+  color: #b91c1c;
+}
+html[data-theme="light"] .theme-experience .text-emerald-400,
+html[data-theme="light"] .theme-experience .text-green-400 {
+  color: #047857;
+}
+html[data-theme="light"] .theme-experience .text-amber-400,
+html[data-theme="light"] .theme-experience .text-amber-200 {
+  color: #92400e;
+}
+/* Solid CTA buttons and completed progress markers retain white text. */
+html[data-theme="light"] .theme-experience :is(
+  .bg-blue-600, .bg-blue-500, .bg-emerald-600, .bg-emerald-500,
+  .bg-green-600, .bg-red-600
+).text-white,
+html[data-theme="light"] .theme-experience :is(
+  .bg-blue-600, .bg-blue-500, .bg-emerald-600, .bg-emerald-500,
+  .bg-green-600, .bg-red-600
+) .text-white {
+  color: #ffffff;
+}
+html[data-theme="light"] .theme-experience :is(input, textarea, select) {
+  background-color: #ffffff;
+  color: var(--foreground);
+  border-color: var(--border);
+  color-scheme: light;
+}
+html[data-theme="light"] .theme-experience :is(input, textarea)::placeholder {
+  color: var(--text-muted);
+}
+html[data-theme="light"] .theme-experience .glass {
+  box-shadow: 0 8px 28px rgba(19, 35, 59, .07);
+}
+/* Neutral overlay keeps dialogs readable, without changing their stacking. */
+html[data-theme="light"] .theme-experience[class*="bg-slate-950/90"] {
+  background-color: rgba(245, 247, 252, .96);
+}
