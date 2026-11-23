@@ -444,7 +444,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
   return (
     <div className="min-h-screen bg-slate-950">
-      <div className="fixed top-4 left-4 right-4 z-40 flex justify-between items-center px-4 pointer-events-none">
+      <div className="fixed top-2 left-2 right-2 z-40 flex items-start justify-between gap-2 px-1 pointer-events-none sm:top-4 sm:left-4 sm:right-4 sm:px-4">
         <div className="pointer-events-auto flex flex-col items-start gap-2">
           <button
             onClick={handleExit}
@@ -466,7 +466,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       </div>
 
       <main className="pb-32 px-4">
-        <div className="max-w-3xl mx-auto pt-20">
+        <div className="max-w-3xl mx-auto pt-32 md:pt-20">
           {pageState === 'intro' && (
             <RoleplayIntro
               sessionId={session.id}
