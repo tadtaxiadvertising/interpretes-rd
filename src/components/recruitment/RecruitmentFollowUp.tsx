@@ -36,8 +36,8 @@ export function RecruitmentFollowUp({ terminal = false, applicationStatus }: Rec
       ) : (
         <>
           <p className="mx-auto max-w-xl text-sm leading-6 text-slate-600">
-            Tu evaluación de roleplay ya cuenta con un registro. El estado de revisión y los próximos
-            pasos de tu candidatura se consultan en el portal del candidato.
+            Tu postulación llegó a la etapa de seguimiento. El estado de revisión y los próximos
+            pasos se consultan en el portal del candidato.
           </p>
           <p className="mx-auto max-w-xl text-sm leading-6 text-slate-600">
             No hay un calendario de entrevistas disponible en esta pantalla. Una entrevista o
