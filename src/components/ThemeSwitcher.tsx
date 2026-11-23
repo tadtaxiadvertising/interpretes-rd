@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Monitor, Moon, Sun } from 'lucide-react';
 
 export type ThemePreference = 'light' | 'dark' | 'system';
@@ -33,21 +33,24 @@ export function applyTheme(preference: ThemePreference) {
 
 export function ThemeSwitcher() {
   const [preference, setPreference] = useState<ThemePreference>('system');
+  const preferenceRef = useRef<ThemePreference>('system');
 
   useEffect(() => {
     const current = storedPreference();
+    preferenceRef.current = current;
     setPreference(current);
     applyTheme(current);
 
     const media = typeof window.matchMedia === 'function' ? window.matchMedia(SYSTEM_QUERY) : null;
     const onSystemChange = () => {
-      if (storedPreference() === 'system') applyTheme('system');
+      if (preferenceRef.current === 'system') applyTheme('system');
     };
     media?.addEventListener?.('change', onSystemChange);
 
     const onStorage = (event: StorageEvent) => {
       if (event.key !== THEME_STORAGE_KEY) return;
       const next = normalizeThemePreference(event.newValue);
+      preferenceRef.current = next;
       setPreference(next);
       applyTheme(next);
     };
@@ -65,6 +68,7 @@ export function ThemeSwitcher() {
     } catch {
       // Keep the UI usable without persistence.
     }
+    preferenceRef.current = mode;
     setPreference(mode);
     applyTheme(mode);
   };
