@@ -63,14 +63,14 @@ export default function LoginPage() {
     <div className="theme-login min-h-screen flex items-center justify-center bg-[#0a0a0f] relative overflow-hidden">
       <div className="absolute inset-0">
         <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-red-600/10 rounded-full blur-3xl animate-pulse delay-1000" />
       </div>
 
       <div className="relative z-10 w-full max-w-md px-6">
         <div className="flex justify-end mb-4"><ThemeSwitcher /></div>
         <div className="text-center mb-10">
-          <Image src="/brand-mark.svg" alt="Logo Intérpretes RD" width={92} height={92} className="mx-auto mb-4" />
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+          <Image src="/interpretes-rd-logo.webp" alt="Logo Intérpretes RD" width={92} height={92} className="mx-auto mb-4 rounded-2xl bg-white p-2 shadow-sm" />
+          <h1 className="brand-heading text-3xl font-bold">
             Intérpretes RD
           </h1>
           <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Plataforma de Intérpretes</p>
@@ -93,7 +93,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => setRole('admin')}
               className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium rounded-lg transition-all ${role === 'admin'
-                ? 'bg-purple-500/20 text-purple-400 shadow-sm'
+                ? 'bg-blue-500/20 text-blue-400 shadow-sm'
                 : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
                 }`}
             >

@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     "Intérpretes RD",
   ],
   authors: [{ name: "Intérpretes RD" }],
-  icons: { icon: "/brand-mark.svg" },
+  icons: { icon: "/interpretes-rd-logo.webp", apple: "/interpretes-rd-logo.webp" },
 };
 
 export const viewport: Viewport = {
@@ -42,10 +42,10 @@ export default function RootLayout({
           toastOptions={{
             duration: 4000,
             style: {
-              background: "rgba(15, 23, 42, 0.9)",
-              color: "#fff",
+              background: "var(--theme-panel)",
+              color: "var(--foreground)",
               backdropFilter: "blur(10px)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
+              border: "1px solid var(--border)",
               borderRadius: "12px",
             },
           }}

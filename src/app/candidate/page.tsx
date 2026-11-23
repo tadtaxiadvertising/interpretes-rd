@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
@@ -124,17 +126,21 @@ export default async function CandidatePortalPage() {
       } as Record<string, string>)[session.status] ?? session.status;
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-white">
+    <main className="theme-candidate min-h-screen bg-slate-950 px-4 py-10 text-white">
       <div className="mx-auto max-w-4xl space-y-8">
         <header className="flex flex-wrap items-center justify-between gap-4">
           <div>
+            <Image src="/interpretes-rd-logo.webp" alt="Intérpretes RD" width={58} height={58} className="mb-4 rounded-xl bg-white p-1" />
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-blue-300">Intérpretes RD · Reclutamiento</p>
             <h1 className="mt-2 text-3xl font-bold">Hola, {candidate.name}</h1>
             <p className="mt-2 text-slate-400">Este es tu espacio privado para continuar tu postulación.</p>
           </div>
-          <Link href="/postular" className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400">
-            Continuar mi postulación
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <ThemeSwitcher />
+            <Link href="/postular" className="rounded-xl bg-[#002d72] px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              Continuar mi postulación
+            </Link>
+          </div>
         </header>
 
         <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-6">

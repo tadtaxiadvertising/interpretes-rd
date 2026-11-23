@@ -20,7 +20,7 @@ export function Navbar({ email, notifications = [], onSignOut }: NavbarProps) {
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-[var(--border)] bg-[var(--theme-nav)] backdrop-blur-md px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
       <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-        <div className="flex flex-1 items-center gap-2"><Image src="/brand-mark.svg" alt="Intérpretes RD" width={32} height={32} className="md:hidden" /><span className="text-xs font-bold text-[var(--foreground)] md:hidden">Intérpretes RD</span></div>
+        <div className="flex flex-1 items-center gap-2"><Image src="/interpretes-rd-logo.webp" alt="Intérpretes RD" width={32} height={32} className="md:hidden rounded-lg bg-white p-1" /><span className="hidden text-xs font-bold text-[var(--foreground)] sm:inline md:hidden">Intérpretes RD</span></div>
         <div className="flex items-center gap-x-4 lg:gap-x-6">
           
           <ThemeSwitcher />
