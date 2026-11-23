@@ -722,3 +722,13 @@ html[data-theme="light"] .theme-workspace :is(
 ) {
   background-color: var(--theme-surface-muted);
 }
+
+
+/* Some legacy dialogs intentionally remain white even while the page is
+   dark. Their autofill text must remain dark, not inherit dark-field colors. */
+html[data-theme="dark"] .modal-light input:-webkit-autofill,
+html[data-theme="dark"] .modal-light input:-webkit-autofill:hover,
+html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #13233b;
+  -webkit-box-shadow: 0 0 0 1000px #fff inset;
+}
