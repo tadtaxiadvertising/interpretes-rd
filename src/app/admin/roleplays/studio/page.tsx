@@ -530,6 +530,31 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const restoreBalancedCueSuggestion = () => {
+    if (!reviewCues.length) return;
+    const proposed = suggestRepresentativeTimedCueSelection(
+      reviewCues, reviewCues.map((_, index) => index),
+    );
+    if (!proposed.length) {
+      setError('No se encontraron turnos compatibles para recomendar. Selecciona los cortes manualmente.');
+      return;
+    }
+    if (chosenCueIndices.length > 0 && !window.confirm(
+      'Se reemplazará solo la selección SRT pendiente por una nueva propuesta equilibrada. ' +
+      'Tus intervenciones aplicadas al editor no se modificarán. ¿Continuar?',
+    )) {
+      setNotice('La selección SRT actual se conservó sin cambios.');
+      return;
+    }
+    subtitleImportRevision.current += 1;
+    setChosenCueIndices(proposed);
+    setCuePage(0);
+    setCueSearch('');
+    setShowOnlySelectedCues(true);
+    setError('');
+    setNotice(`Se recomendaron ${proposed.length} turnos distribuidos por la grabación. Escucha y ajusta antes de aplicar; el editor no se modificó.`);
+  };
+
   const clearCueSelection = () => {
     if (!chosenCueIndices.length) return;
     subtitleImportRevision.current += 1;
@@ -2140,6 +2165,11 @@ export default function RoleplayStudioPage() {
               disabled={visibleCues.length === 0 || chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS}
               className="rounded border border-amber-300/30 px-2 py-1 text-xs font-semibold text-amber-100 disabled:opacity-40">
               Completar con turnos compatibles de esta página
+            </button>
+            <button type="button" onClick={restoreBalancedCueSuggestion}
+              disabled={reviewCues.length === 0}
+              className="rounded border border-blue-300/30 px-2 py-1 text-xs font-semibold text-blue-100 disabled:opacity-40">
+              Recuperar propuesta equilibrada
             </button>
             <button type="button" onClick={clearCueSelection}
               disabled={chosenCueIndices.length === 0}
