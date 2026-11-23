@@ -49,7 +49,7 @@ export function DashboardShell({ children, role, userName, interpreterId, userEm
 
   return (
     <PresenceContext.Provider value={presenceState}>
-      <div className="flex min-h-screen w-full bg-[#0a0f1c] overflow-hidden">
+      <div className="flex min-h-screen w-full theme-workspace bg-[var(--background)] text-[var(--foreground)] overflow-hidden">
         <Sidebar
           role={role}
           isCollapsed={isCollapsed}
