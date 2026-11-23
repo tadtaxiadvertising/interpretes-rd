@@ -625,7 +625,7 @@ html[data-theme="light"] .theme-workspace :is(
   background-color: var(--theme-surface-muted);
 }
 html[data-theme="light"] .theme-workspace :is(
-  .h-1, .h-1\\.5, .h-2, .h-3, .h-4
+  .h-1, .h-1\.5, .h-2, .h-3, .h-4
 )[class*="bg-slate-800"] {
   background-color: var(--theme-track);
 }
