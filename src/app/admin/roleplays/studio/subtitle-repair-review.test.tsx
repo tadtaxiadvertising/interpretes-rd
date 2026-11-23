@@ -252,34 +252,15 @@ describe('Audio Studio repaired SRT import safety', () => {
     Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
     fireEvent.loadedMetadata(player);
     const file = new File(['mock'], 'four-turns.srt', { type: 'text/plain' });
-    Object.defineProperty(file, 'text', { value: async () => [
-      '1', '00:00:00,000 --> 00:00:02,000', 'Doctor: First', '',
-      '2', '00:00:02,000 --> 00:00:04,000', 'Patient: Second', '',
-      '3', '00:00:04,000 --> 00:00:06,000', 'Doctor: Third', '',
-      '4', '00:00:06,000 --> 00:00:08,000', 'Patient: Fourth',
-      '', '5', '00:00:08,000 --> 00:00:10,000', 'Doctor: Fifth',
-      '', '6', '00:00:10,000 --> 00:00:12,000', 'Patient: Sixth',
-      '', '7', '00:00:12,000 --> 00:00:14,000', 'Doctor: Seventh',
-      '', '8', '00:00:14,000 --> 00:00:16,000', 'Patient: Eighth',
-      '', '9', '00:00:16,000 --> 00:00:18,000', 'Doctor: Ninth',
-      '', '10', '00:00:18,000 --> 00:00:20,000', 'Patient: Tenth',
-      '', '11', '00:00:20,000 --> 00:00:22,000', 'Doctor: Eleventh',
-      '', '12', '00:00:22,000 --> 00:00:24,000', 'Patient: Twelfth',
-      '', '13', '00:00:24,000 --> 00:00:26,000', 'Doctor: Thirteenth',
-      '', '14', '00:00:26,000 --> 00:00:28,000', 'Patient: Fourteenth',
-      '', '15', '00:00:28,000 --> 00:00:30,000', 'Doctor: Fifteenth',
-      '', '16', '00:00:30,000 --> 00:00:32,000', 'Patient: Sixteenth',
-      '', '17', '00:00:32,000 --> 00:00:34,000', 'Doctor: Seventeenth',
-      '', '18', '00:00:34,000 --> 00:00:36,000', 'Patient: Eighteenth',
-      '', '19', '00:00:36,000 --> 00:00:38,000', 'Doctor: Nineteenth',
-      '', '20', '00:00:38,000 --> 00:00:40,000', 'Patient: Twentieth',
-      '', '21', '00:00:40,000 --> 00:00:42,000', 'Doctor: Twenty-first',
-      '', '22', '00:00:42,000 --> 00:00:44,000', 'Patient: Twenty-second',
-      '', '23', '00:00:44,000 --> 00:00:46,000', 'Doctor: Twenty-third',
-      '', '24', '00:00:46,000 --> 00:00:48,000', 'Patient: Twenty-fourth',
-      '', '25', '00:00:48,000 --> 00:00:50,000', 'Doctor: Twenty-fifth',
-      '', '26', '00:00:50,000 --> 00:00:52,000', 'Patient: Twenty-sixth',
-    ].join('\n') });
+    const caption = (seconds: number) => '00:' +
+      String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0') + ',000';
+    const content = Array.from({ length: 26 }, (_, index) => [
+      String(index + 1),
+      caption(index * 2) + ' --> ' + caption(index * 2 + 1),
+      'Doctor: Reference turn',
+    ].join('\n')).join('\n\n');
+    Object.defineProperty(file, 'text', { value: async () => content });
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
         target: { files: [file] },
