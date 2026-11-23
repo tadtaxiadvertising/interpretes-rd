@@ -200,7 +200,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
               Send Email
             </button>
             <button 
-              className="w-full px-4 py-2 text-left text-sm text-blue-400 hover:bg-blue-500/10 flex items-center gap-3 transition-colors"
+              className="w-full px-4 py-2 text-left text-sm text-[var(--theme-link)] hover:bg-blue-500/10 flex items-center gap-3 transition-colors"
               onClick={handleCreateRoleplay}
             >
               <Mic2 size={16} />
@@ -209,7 +209,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             {canMarkReady && (
               <button
                 disabled={isMarkingReady}
-                className="w-full px-4 py-2 text-left text-sm text-amber-400 hover:bg-amber-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
+                className="w-full px-4 py-2 text-left text-sm text-[var(--theme-warning)] hover:bg-amber-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
                 onClick={handleMarkReady}
               >
                 {isMarkingReady ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
@@ -219,7 +219,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             {canHire && (
               <button 
                 disabled={isHiring}
-                className="w-full px-4 py-2 text-left text-sm text-green-400 hover:bg-green-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
+                className="w-full px-4 py-2 text-left text-sm text-[var(--theme-success)] hover:bg-green-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
                 onClick={() => { setShowHireConfirm(true); setIsOpen(false); }}
               >
                 {isHiring ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
@@ -228,7 +228,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             )}
             <div className="h-px bg-[var(--border)] my-1" />
             <button 
-              className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-colors"
+              className="w-full px-4 py-2 text-left text-sm text-[var(--theme-danger)] hover:bg-red-500/10 flex items-center gap-3 transition-colors"
               onClick={() => {
                 setShowDeleteConfirm(true);
                 setIsOpen(false);
@@ -243,48 +243,48 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
 
 
       {showHireConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowHireConfirm(false)} />
-          <div className="relative w-full max-w-md space-y-5 rounded-3xl border border-white/10 bg-[#1a1a24] p-7 shadow-2xl">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10 text-green-400"><UserPlus size={28}/></div>
-            <div><h3 className="text-xl font-bold text-white">Confirm hiring</h3><p className="mt-2 text-sm leading-relaxed text-gray-400">This will promote <strong className="text-white">{candidate.name}</strong> to an active interpreter, link their account and mark the recruitment application as hired. This action changes operational access.</p></div>
-            <div className="flex justify-end gap-3"><button onClick={() => setShowHireConfirm(false)} className="rounded-xl bg-white/5 px-4 py-2.5 text-gray-300">Cancel</button><button disabled={isHiring} onClick={async () => { await handleHire(); setShowHireConfirm(false); }} className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{isHiring && <Loader2 size={16} className="animate-spin"/>}Confirm hiring</button></div>
+          <div role="dialog" aria-modal="true" aria-label="Confirmar contratación" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-5 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] p-5 shadow-2xl sm:p-7">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10 text-[var(--theme-success)]"><UserPlus size={28}/></div>
+            <div><h3 className="text-xl font-bold text-[var(--foreground)]">Confirm hiring</h3><p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">This will promote <strong className="text-white">{candidate.name}</strong> to an active interpreter, link their account and mark the recruitment application as hired. This action changes operational access.</p></div>
+            <div className="flex justify-end gap-3"><button onClick={() => setShowHireConfirm(false)} className="rounded-xl bg-[var(--theme-hover)] px-4 py-2.5 text-[var(--text-secondary)]">Cancel</button><button disabled={isHiring} onClick={async () => { await handleHire(); setShowHireConfirm(false); }} className="flex items-center gap-2 rounded-xl bg-green-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{isHiring && <Loader2 size={16} className="animate-spin"/>}Confirm hiring</button></div>
           </div>
         </div>
       )}
 
       {showEdit && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4">
+        <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-3 sm:p-4">
           <button aria-label="Close edit dialog" className="absolute inset-0 bg-black/70" onClick={() => setShowEdit(false)} />
-          <form onSubmit={handleSaveCandidate} className="relative my-8 w-full max-w-2xl space-y-5 rounded-3xl border border-white/10 bg-[#1a1a24] p-6 shadow-2xl">
+          <form onSubmit={handleSaveCandidate} role="dialog" aria-modal="true" aria-label="Editar candidatura" className="relative my-8 max-h-[calc(100dvh-2rem)] w-full max-w-2xl space-y-5 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] p-4 shadow-2xl sm:p-6">
             <div className="flex items-center justify-between">
-              <div><h3 className="text-xl font-bold text-white">Edit application</h3><p className="text-sm text-gray-400">Update candidate profile details.</p></div>
-              <button type="button" onClick={() => setShowEdit(false)} className="rounded-lg p-2 text-gray-400 hover:bg-white/10"><X size={18}/></button>
+              <div><h3 className="text-xl font-bold text-[var(--foreground)]">Edit application</h3><p className="text-sm text-[var(--text-secondary)]">Update candidate profile details.</p></div>
+              <button type="button" onClick={() => setShowEdit(false)} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-surface-muted)]"><X size={18}/></button>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {([
                 ['name','Full name'],['email','Email'],['telefono','Phone / WhatsApp'],['pais','Country'],['speedtestMbps','Internet speed (Mbps)'],['efsetLink','EF SET URL'],['cvUrl','CV URL']
               ] as const).map(([key,label]) => (
-                <label key={key} className="space-y-1 text-sm text-gray-300">
+                <label key={key} className="space-y-1 text-sm text-[var(--text-secondary)]">
                   <span>{label}</span>
                   <input type={key === 'email' ? 'email' : key === 'speedtestMbps' ? 'number' : key.endsWith('Url') || key === 'efsetLink' ? 'url' : 'text'}
                     min={key === 'speedtestMbps' ? 1 : undefined}
                     value={editForm[key]}
                     onChange={(event) => setEditForm((prev) => ({...prev,[key]:event.target.value}))}
-                    className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white outline-none focus:border-blue-500"
+                    className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)] outline-none focus:border-blue-500"
                   />
                 </label>
               ))}
-              <label className="space-y-1 text-sm text-gray-300">
+              <label className="space-y-1 text-sm text-[var(--text-secondary)]">
                 <span>English level</span>
-                <select value={editForm.englishLevel} onChange={(event) => setEditForm((prev) => ({...prev,englishLevel:event.target.value}))} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white">
+                <select value={editForm.englishLevel} onChange={(event) => setEditForm((prev) => ({...prev,englishLevel:event.target.value}))} className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]">
                   {['B1','B2','C1','C2'].map((level) => <option key={level} value={level}>{level}</option>)}
                 </select>
               </label>
             </div>
-            {editError && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-red-300">{editError}</p>}
+            {editError && <p role="alert" className="rounded-xl bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{editError}</p>}
             <div className="flex justify-end gap-3">
-              <button type="button" onClick={() => setShowEdit(false)} className="rounded-xl bg-white/5 px-4 py-2.5 text-gray-300">Cancel</button>
+              <button type="button" onClick={() => setShowEdit(false)} className="rounded-xl bg-[var(--theme-hover)] px-4 py-2.5 text-[var(--text-secondary)]">Cancel</button>
               <button disabled={isSaving} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50">{isSaving && <Loader2 size={16} className="animate-spin"/>}Save changes</button>
             </div>
           </form>
@@ -292,34 +292,34 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
       )}
 
       {showEmail && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <button aria-label="Close email dialog" className="absolute inset-0 bg-black/70" onClick={() => setShowEmail(false)} />
-          <div className="relative w-full max-w-lg space-y-4 rounded-3xl border border-white/10 bg-[#1a1a24] p-6 shadow-2xl">
-            <div className="flex items-center justify-between"><div><h3 className="text-xl font-bold text-white">Message candidate</h3><p className="text-sm text-gray-400">To: {candidate.email}</p></div><button onClick={() => setShowEmail(false)} className="rounded-lg p-2 text-gray-400 hover:bg-white/10"><X size={18}/></button></div>
-            <label className="block space-y-1 text-sm text-gray-300">Subject<input value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"/></label>
-            <label className="block space-y-1 text-sm text-gray-300">Message<textarea rows={6} value={emailMessage} onChange={(event) => setEmailMessage(event.target.value)} placeholder="Write your message..." className="w-full resize-y rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-white"/></label>
-            <p className="text-xs text-amber-300">Your configured email application will open with this message ready. Sending is completed from that application.</p>
-            <div className="flex justify-end gap-3"><button onClick={() => setShowEmail(false)} className="rounded-xl bg-white/5 px-4 py-2.5 text-gray-300">Cancel</button><button disabled={!emailSubject.trim() || !emailMessage.trim()} onClick={handleComposeEmail} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50"><Mail size={16}/>Open email app</button></div>
+          <div role="dialog" aria-modal="true" aria-label="Enviar mensaje al candidato" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg space-y-4 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] p-4 shadow-2xl sm:p-6">
+            <div className="flex items-center justify-between"><div><h3 className="text-xl font-bold text-[var(--foreground)]">Message candidate</h3><p className="text-sm text-[var(--text-secondary)]">To: {candidate.email}</p></div><button onClick={() => setShowEmail(false)} className="rounded-lg p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-surface-muted)]"><X size={18}/></button></div>
+            <label className="block space-y-1 text-sm text-[var(--text-secondary)]">Subject<input value={emailSubject} onChange={(event) => setEmailSubject(event.target.value)} className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]"/></label>
+            <label className="block space-y-1 text-sm text-[var(--text-secondary)]">Message<textarea rows={6} value={emailMessage} onChange={(event) => setEmailMessage(event.target.value)} placeholder="Write your message..." className="w-full resize-y rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]"/></label>
+            <p className="text-xs text-[var(--theme-warning)]">Your configured email application will open with this message ready. Sending is completed from that application.</p>
+            <div className="flex justify-end gap-3"><button onClick={() => setShowEmail(false)} className="rounded-xl bg-[var(--theme-hover)] px-4 py-2.5 text-[var(--text-secondary)]">Cancel</button><button disabled={!emailSubject.trim() || !emailMessage.trim()} onClick={handleComposeEmail} className="flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white disabled:opacity-50"><Mail size={16}/>Open email app</button></div>
           </div>
         </div>
       )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)} />
-          <div className="relative bg-[#1a1a24] border border-white/10 rounded-3xl p-8 max-w-sm w-full shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+          <div role="dialog" aria-modal="true" aria-label="Eliminar candidato" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] p-5 text-[var(--foreground)] shadow-2xl sm:p-8 animate-in fade-in zoom-in-95 duration-300">
             <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mb-6">
               <AlertTriangle size={32} />
             </div>
-            <h3 className="text-xl font-bold text-white mb-2">Remove Candidate?</h3>
-            <p className="text-gray-400 text-sm mb-8 leading-relaxed">
-              Are you sure you want to remove <span className="text-white font-bold">{candidate.name}</span>? This action will delete all interview notes and history.
+            <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">Remove Candidate?</h3>
+            <p className="text-[var(--text-secondary)] text-sm mb-8 leading-relaxed">
+              Are you sure you want to remove <span className="text-[var(--foreground)] font-bold">{candidate.name}</span>? This action will delete all interview notes and history.
             </p>
             <div className="flex gap-4">
               <button 
                 onClick={() => setShowDeleteConfirm(false)}
-                className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl font-bold transition-all"
+                className="flex-1 py-3 bg-[var(--theme-hover)] hover:bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] rounded-xl font-bold transition-all"
               >
                 Cancel
               </button>
