@@ -45,3 +45,15 @@ test('theme selection is preserved after navigation reload', async ({ page }) =>
   await expect(page.getByRole('button', { name: 'Modo claro' })).toHaveAttribute('aria-pressed', 'true');
   expect(await page.locator('html').getAttribute('data-theme')).toBe('light');
 });
+
+
+test('light-mode login registration link is readable on its white card', async ({ page }) => {
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'Modo claro' }).click();
+  const link = page.getByRole('link', { name: 'Crear cuenta' });
+  await expect(link).toBeVisible();
+  const foreground = await link.evaluate((node) => getComputedStyle(node).color);
+  const background = await page.locator('.theme-login .glass').evaluate((node) => getComputedStyle(node).backgroundColor);
+  const levels = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+  expect((levels[0] + 0.05) / (levels[1] + 0.05)).toBeGreaterThanOrEqual(4.5);
+});
