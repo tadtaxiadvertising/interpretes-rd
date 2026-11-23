@@ -35,11 +35,11 @@ export function CandidateRoleplayAction({ label = 'Comenzar Roleplay' }: { label
         type="button"
         onClick={handleStart}
         disabled={pending}
-        className="inline-flex items-center justify-center rounded-xl bg-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-60"
+        className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:cursor-not-allowed disabled:opacity-60"
       >
         {pending ? 'Preparando tu Roleplay…' : label}
       </button>
-      {error ? <p role="alert" className="mt-3 text-sm text-red-300">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-sm text-[var(--candidate-error-text)]">{error}</p> : null}
     </div>
   );
 }
