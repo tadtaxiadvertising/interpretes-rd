@@ -2262,9 +2262,9 @@ export default function RoleplayStudioPage() {
               ? `Selección no válida: ${cueSelectionStatus.issue}`
               : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)} de 15:00 como máximo. Verifica los roles antes de aplicar.`}
           </p>
-          {chosenCueIndices.length > 0 && (
+          {(chosenCueIndices.length > 0 || showCueReviewAlertsOnly) && (
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p role="status" aria-label="Resumen de calidad de selección SRT"
+              {chosenCueIndices.length > 0 && <p role="status" aria-label="Resumen de calidad de selección SRT"
                 className="text-xs leading-5 text-amber-100">
                 Revisión rápida antes de aplicar: {cueReviewSummary.unknownSpeakers} sin hablante identificado
                 {' · '}{cueReviewSummary.originalInterpreters} del intérprete original
@@ -2272,19 +2272,20 @@ export default function RoleplayStudioPage() {
                 {cueReviewSummary.sourceThirds !== null &&
                   <> · {cueReviewSummary.sourceThirds}/3 partes de la grabación representadas</>}.
                 Escucha y confirma cada voz; estos datos se basan solo en etiquetas y tiempos.
-              </p>
+              </p>}
               {(selectedCueReviewAlerts > 0 || showCueReviewAlertsOnly) && (
                 <button type="button"
                   onClick={() => {
-                    setShowCueReviewAlertsOnly(!showCueReviewAlertsOnly);
-                    setShowOnlySelectedCues(true);
+                    const nextAlertsOnly = !showCueReviewAlertsOnly;
+                    setShowCueReviewAlertsOnly(nextAlertsOnly);
+                    setShowOnlySelectedCues(nextAlertsOnly || chosenCueIndices.length > 0);
                     setCueSearch('');
                     setCuePage(0);
                   }}
                   aria-pressed={showCueReviewAlertsOnly}
                   className="rounded border border-amber-300/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-300/10">
                   {showCueReviewAlertsOnly
-                    ? 'Volver a turnos seleccionados'
+                    ? chosenCueIndices.length > 0 ? 'Volver a turnos seleccionados' : 'Mostrar todos los turnos'
                     : selectedCueReviewAlerts === 1 ? 'Revisar 1 turno con alerta' : `Revisar ${selectedCueReviewAlerts} turnos con alertas`}
                 </button>
               )}
