@@ -23,7 +23,15 @@ export function RoleplayProgress({
   const overallProgress = ((currentStep) / totalSteps) * 100;
 
   return (
-    <div className="space-y-4">
+    <>
+      <div className="w-[116px] rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] px-2 py-2 text-right shadow-sm md:hidden" aria-label="Progreso del Roleplay">
+        <p className="text-[11px] font-semibold text-[var(--foreground)]">Escenario {currentScenario + 1}/{totalScenarios}</p>
+        <p className="text-[10px] text-[var(--text-secondary)]">{Math.round(overallProgress)}% completado</p>
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[var(--theme-hover)]">
+          <div className="h-full rounded-full bg-[#1764bf] transition-all" style={{ width: `${overallProgress}%` }} />
+        </div>
+      </div>
+    <div className="hidden space-y-4 md:block">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className="text-sm font-bold text-white">Progreso General</span>
@@ -89,5 +97,6 @@ export function RoleplayProgress({
         </div>
       </div>
     </div>
+    </>
   );
 }
