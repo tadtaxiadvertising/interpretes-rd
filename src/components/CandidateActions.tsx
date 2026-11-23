@@ -168,11 +168,14 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
 
   return (
     <div className="relative">
-      <button 
+      <button
+        type="button"
+        aria-label="Acciones del candidato"
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "p-2 hover:bg-white/10 rounded-xl transition-colors",
-          isOpen ? "bg-white/10 text-white" : "text-gray-400 hover:text-white"
+          "rounded-xl p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
+          isOpen ? "bg-[var(--theme-hover)] text-[var(--foreground)]" : "text-[var(--text-secondary)] hover:text-[var(--foreground)]"
         )}
       >
         <MoreVertical size={20} />
@@ -181,16 +184,16 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
       {isOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 mt-2 w-52 bg-[#1a1a24] border border-white/10 rounded-2xl shadow-2xl z-20 py-2 animate-in fade-in zoom-in-95 duration-200">
+          <div className="absolute right-0 mt-2 w-52 bg-[var(--theme-panel)] text-[var(--foreground)] border border-[var(--border)] rounded-2xl shadow-2xl z-20 py-2 animate-in fade-in zoom-in-95 duration-200">
             <button 
-              className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-3 transition-colors"
+              className="w-full px-4 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)] flex items-center gap-3 transition-colors"
               onClick={() => { setIsOpen(false); setEditError(null); setShowEdit(true); }}
             >
               <Edit size={16} />
               Edit Application
             </button>
             <button 
-              className="w-full px-4 py-2 text-left text-sm text-gray-300 hover:bg-white/5 flex items-center gap-3 transition-colors"
+              className="w-full px-4 py-2 text-left text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)] flex items-center gap-3 transition-colors"
               onClick={handleOpenEmail}
             >
               <Mail size={16} />
@@ -223,7 +226,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
                 Hire Candidate
               </button>
             )}
-            <div className="h-px bg-white/5 my-1" />
+            <div className="h-px bg-[var(--border)] my-1" />
             <button 
               className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-colors"
               onClick={() => {

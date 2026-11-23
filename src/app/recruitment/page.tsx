@@ -78,12 +78,12 @@ export default async function RecruitmentPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <header className="flex justify-between items-center">
+      <header className="flex flex-wrap justify-between items-center gap-4">
         <div>
-          <h2 className="text-3xl font-bold text-white">Gestión de postulaciones</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)]">Gestión de postulaciones</h2>
           <p className="text-gray-400">Consulta y administra las postulaciones y sus etapas de selección.</p>
         </div>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-3">
           <ExportCandidatesButton data={candidates as any} />
           <AddCandidateButton />
         </div>
@@ -116,22 +116,24 @@ export default async function RecruitmentPage() {
       <div className="glass rounded-3xl overflow-visible">
         <div className="p-6 border-b border-white/5 flex flex-wrap gap-4 items-center justify-between">
           <h3 className="text-xl font-bold text-white">Candidatos en proceso</h3>
-          <div className="flex gap-2">
-             <div className="relative">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+             <div className="relative min-w-0 flex-1 sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
               <input 
                 type="text" 
+                aria-label="Buscar candidatos"
                 placeholder="Buscar candidatos..." 
-                className="bg-white/5 border border-white/10 rounded-xl py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-blue-500/50 transition-colors"
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] py-2 pl-10 pr-4 text-sm text-[var(--foreground)] placeholder:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-colors"
               />
             </div>
-            <button className="p-2 bg-white/5 border border-white/10 rounded-xl text-gray-400 hover:text-white transition-colors">
+            <button className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-2 text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)] transition-colors">
               <Filter size={18} />
             </button>
           </div>
         </div>
 
-        <table className="w-full text-left">
+        <div className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-[850px] text-left">
           <thead>
             <tr className="text-gray-500 text-xs uppercase tracking-wider border-b border-white/5">
               <th className="py-6 px-8">Candidato</th>
@@ -207,8 +209,9 @@ export default async function RecruitmentPage() {
               );
             })}
           </tbody>
-        </table>
-        
+          </table>
+        </div>
+
         {candidates.length === 0 && (
           <div className="p-20 text-center">
             <Clock size={48} className="mx-auto text-gray-700 mb-4" />
