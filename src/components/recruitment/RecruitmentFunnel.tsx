@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   submitApplicationAction,
   getMyApplicationAction,
@@ -19,6 +20,7 @@ export default function RecruitmentFunnel() {
   const [isStartingRoleplay, setIsStartingRoleplay] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  const [accessNextAction, setAccessNextAction] = useState<"login" | "register" | null>(null);
   const [terminal, setTerminal] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
 
@@ -77,26 +79,36 @@ export default function RecruitmentFunnel() {
   const handleApply = () => {
     setErrorMsg(null);
     setInfoMsg(null);
+    setAccessNextAction(null);
     startTransition(async () => {
       const validation = ApplicantSchema.safeParse(formData);
       
       if (!validation.success) {
-        setErrorMsg(validation.error.issues[0].message);
+        const issue = validation.error.issues[0];
+        setErrorMsg(issue.path[0] === "efsetLink"
+          ? formData.efsetLink.trim().length === 0
+            ? "El enlace HTTPS de tu certificado EFSET es obligatorio para enviar la postulación."
+            : "Introduce un enlace HTTPS válido a tu certificado EFSET."
+          : issue.message);
         return;
       }
 
       const result = await submitApplicationAction(validation.data);
       if (result.success) {
-        // The server recomputes the reachable step from persisted state.
-        await syncFromServer();
+        // The application has already been saved. Restoring the next step is best-effort;
+        // a temporary refresh failure must not hide the access instructions.
+        try { await syncFromServer(); } catch { /* The server will restore the step on reload. */ }
         if ("accountAccess" in result && result.accountAccess === 'invited') {
           setInfoMsg("¡Tu postulación fue guardada! Enviamos a tu correo un enlace seguro para activar tu cuenta de candidato y continuar el proceso. Revisa también la carpeta de spam.");
         } else if ("accountAccess" in result && result.accountAccess === 'existing') {
           setInfoMsg("Tu postulación está vinculada a tu cuenta existente. Inicia sesión con este mismo correo para continuar desde tu portal de candidato.");
+          setAccessNextAction("login");
         } else if ("accountAccess" in result && result.accountAccess === 'manual') {
           setInfoMsg("Tu postulación quedó guardada. No pudimos enviar automáticamente el acceso; utiliza «Crear cuenta» con este mismo correo para continuar como candidato.");
+          setAccessNextAction("register");
         } else if ("alreadyApplied" in result && result.alreadyApplied) {
           setInfoMsg("Ya existe una postulación con este correo. Para continuar con seguridad, inicia sesión con ese correo.");
+          setAccessNextAction("login");
         }
       } else {
         setErrorMsg(result.error || "Ocurrió un error inesperado.");
@@ -175,6 +187,15 @@ export default function RecruitmentFunnel() {
             </div>
           )}
 
+          {accessNextAction && (
+            <Link
+              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : "/register?next=%2Fcandidate"}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]"
+            >
+              {accessNextAction === "login" ? "Iniciar sesión para continuar" : "Crear acceso de candidato"}
+            </Link>
+          )}
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4">
             <input 
               type="text" aria-label="Nombre completo" placeholder="Nombre completo" 
@@ -218,11 +239,25 @@ export default function RecruitmentFunnel() {
               value={formData.cvUrl ?? ""}
               onChange={(e) => setFormData({ ...formData, cvUrl: e.target.value || undefined })}
             />
-            <input 
-              type="url" aria-label="Enlace del certificado EFSET" placeholder="Link de tu certificado EFSET" 
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
-              value={formData.efsetLink} onChange={(e) => setFormData({...formData, efsetLink: e.target.value})}
-            />
+            <div className="space-y-2 sm:col-span-2">
+              <label htmlFor="efset-certificate-url" className="block text-sm font-semibold text-slate-700">
+                Enlace del certificado EFSET <span className="text-[var(--candidate-error-text)]">(obligatorio)</span>
+              </label>
+              <p id="efset-certificate-help" className="text-xs leading-5 text-slate-600">
+                Debe ser un enlace HTTPS a tu certificado EFSET. Se requiere para enviar la postulación.
+              </p>
+              <p className="text-xs leading-5 text-slate-600">
+                <a href="https://www.efset.org/es/english-certificate/" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--theme-recruitment-accent)] underline underline-offset-2 hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]">Obtener certificado gratis</a>
+                {" · "}
+                <a href="https://www.efset.org/es/retrieve-certificate/" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--theme-recruitment-accent)] underline underline-offset-2 hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]">Recuperar certificado</a>
+              </p>
+              <input
+                id="efset-certificate-url"
+                type="url" required aria-describedby="efset-certificate-help" placeholder="https://..."
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
+                value={formData.efsetLink} onChange={(e) => setFormData({...formData, efsetLink: e.target.value})}
+              />
+            </div>
           </div>
 
           <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center text-slate-600">
@@ -250,6 +285,15 @@ export default function RecruitmentFunnel() {
             <div className="flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3.5 text-sm font-medium text-blue-700">
               <CheckCircle2 className="w-4 h-4 shrink-0" /> {infoMsg}
             </div>
+          )}
+
+          {accessNextAction && (
+            <Link
+              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : "/register?next=%2Fcandidate"}
+              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]"
+            >
+              {accessNextAction === "login" ? "Iniciar sesión para continuar" : "Crear acceso de candidato"}
+            </Link>
           )}
 
           {errorMsg && (

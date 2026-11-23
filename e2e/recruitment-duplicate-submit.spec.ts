@@ -19,7 +19,7 @@ async function fillApplication(page: Page, email: string): Promise<void> {
   await page.getByLabel('Nivel de inglés').selectOption('B2');
   await page.getByLabel('Velocidad de descarga (Mbps)').fill('25');
   await page
-    .getByPlaceholder('Link de tu certificado EFSET')
+    .getByRole('textbox', { name: /Enlace del certificado EFSET/ })
     .fill(`https://www.efset.org/cert/${RUN_ID}`);
 
   await page.getByRole('button', { name: 'Enviar Postulación' }).click();
@@ -44,7 +44,7 @@ test.describe('Public recruitment · candidate submission', () => {
         await page.getByPlaceholder('País de residencia').fill('DO');
         await page.getByLabel('Nivel de inglés').selectOption('B2');
         await page.getByLabel('Velocidad de descarga (Mbps)').fill('25');
-        await page.getByPlaceholder('Link de tu certificado EFSET').fill(`https://www.efset.org/cert/${RUN_ID}`);
+        await page.getByRole('textbox', { name: /Enlace del certificado EFSET/ }).fill(`https://www.efset.org/cert/${RUN_ID}`);
       };
       await Promise.all([fill(first), fill(second)]);
       await Promise.all([
