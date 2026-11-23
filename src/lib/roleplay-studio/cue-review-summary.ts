@@ -12,6 +12,14 @@ export type TimedCueReviewSummary = {
   sourceThirds: number | null;
 };
 
+/** Identify candidate turns requiring an operator's attention, without inferring voices. */
+export function cueRequiresEditorialReview(cue: TimedTranscriptCue): boolean {
+  const role = classifySpeakerRole(cue.speaker);
+  return role === 'unknown' || role === 'interpreter' ||
+    (Number.isFinite(cue.start) && Number.isFinite(cue.end) &&
+      cue.end - cue.start > 60);
+}
+
 export function summarizeTimedCueReview(
   cues: readonly TimedTranscriptCue[],
   indices: readonly number[],

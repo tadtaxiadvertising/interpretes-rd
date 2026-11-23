@@ -10,7 +10,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { cueRequiresEditorialReview, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -81,6 +81,7 @@ export default function RoleplayStudioPage() {
   const [cuePage, setCuePage] = useState(0);
   const [cueSearch, setCueSearch] = useState('');
   const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
+  const [showCueReviewAlertsOnly, setShowCueReviewAlertsOnly] = useState(false);
   const [happyScribeItems, setHappyScribeItems] = useState<Array<{
     id: string; importProof: string; name: string; state: string; language: string | null;
     durationSeconds: number | null; createdAt: string | null; folder: string | null;
@@ -436,6 +437,7 @@ export default function RoleplayStudioPage() {
     setCuePage(0);
     setCueSearch('');
     setShowOnlySelectedCues(false);
+    setShowCueReviewAlertsOnly(false);
     // Filters and the expanded editor belong to the previous source.
     // Do not let a replacement recording appear to have missing interventions.
     setSegmentSearch('');
@@ -507,6 +509,7 @@ export default function RoleplayStudioPage() {
       setCuePage(0);
       setCueSearch('');
       setShowOnlySelectedCues(false);
+      setShowCueReviewAlertsOnly(false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No fue posible aplicar la selección.');
     }
@@ -552,6 +555,7 @@ export default function RoleplayStudioPage() {
     setCuePage(0);
     setCueSearch('');
     setShowOnlySelectedCues(true);
+    setShowCueReviewAlertsOnly(false);
     setError('');
     setNotice(`Se recomendaron ${proposed.length} turnos distribuidos por la grabación. Escucha y ajusta antes de aplicar; el editor no se modificó.`);
   };
@@ -771,12 +775,14 @@ export default function RoleplayStudioPage() {
         if (!loadSelectedCues(selected, excludedCount, Boolean(approval))) return;
         setCueSearch('');
         setShowOnlySelectedCues(false);
+        setShowCueReviewAlertsOnly(false);
         setReviewCues([]);
         setChosenCueIndices([]);
         setCuePage(0);
       } else {
         setCueSearch('');
         setShowOnlySelectedCues(false);
+        setShowCueReviewAlertsOnly(false);
         setCuePage(0);
         setReviewCues(selected);
         const compatible = suggestRepresentativeTimedCueSelection(selected, allIndices);
@@ -1586,11 +1592,12 @@ export default function RoleplayStudioPage() {
     const selectedIndices = new Set(chosenCueIndices);
     return reviewCues.flatMap((cue, index) => {
       if (showOnlySelectedCues && !selectedIndices.has(index)) return [];
+      if (showCueReviewAlertsOnly && (!selectedIndices.has(index) || !cueRequiresEditorialReview(cue))) return [];
       if (query && ![cue.text, cue.speaker || '', String(index + 1)]
         .some(value => value.toLocaleLowerCase().includes(query))) return [];
       return [{ cue, index }];
     });
-  }, [reviewCues, cueSearch, showOnlySelectedCues, chosenCueIndices]);
+  }, [reviewCues, cueSearch, showOnlySelectedCues, showCueReviewAlertsOnly, chosenCueIndices]);
   // Reuse the export selection validator before the administrator applies a
   // SRT review. At most 25 cues are inspected, entirely in the browser.
   const cueSelectionStatus = useMemo(() => {
@@ -1609,6 +1616,12 @@ export default function RoleplayStudioPage() {
   const cueReviewSummary = useMemo(
     () => summarizeTimedCueReview(reviewCues, chosenCueIndices, duration),
     [reviewCues, chosenCueIndices, duration],
+  );
+  const selectedCueReviewAlerts = useMemo(
+    () => [...new Set(chosenCueIndices)].filter(
+      index => reviewCues[index] && cueRequiresEditorialReview(reviewCues[index]),
+    ).length,
+    [chosenCueIndices, reviewCues],
   );
   const pageCount = Math.max(1, Math.ceil(filteredCueEntries.length / CUES_PER_PAGE));
   const currentCuePage = Math.min(cuePage, pageCount - 1);
@@ -2161,7 +2174,7 @@ export default function RoleplayStudioPage() {
               className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white placeholder:text-slate-500"/>
             <label className="flex shrink-0 items-center gap-1.5">
               <input type="checkbox" checked={showOnlySelectedCues}
-                onChange={event => { setShowOnlySelectedCues(event.currentTarget.checked); setCuePage(0); }}
+                onChange={event => { setShowOnlySelectedCues(event.currentTarget.checked); setShowCueReviewAlertsOnly(false); setCuePage(0); }}
                 className="h-4 w-4 accent-amber-400"/>
               Solo seleccionados
             </label>
@@ -2249,16 +2262,34 @@ export default function RoleplayStudioPage() {
               ? `Selección no válida: ${cueSelectionStatus.issue}`
               : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)} de 15:00 como máximo. Verifica los roles antes de aplicar.`}
           </p>
-          {chosenCueIndices.length > 0 && (
-            <p role="status" aria-label="Resumen de calidad de selección SRT"
-              className="text-xs leading-5 text-amber-100">
-              Revisión rápida antes de aplicar: {cueReviewSummary.unknownSpeakers} sin hablante identificado
-              {' · '}{cueReviewSummary.originalInterpreters} del intérprete original
-              {' · '}{cueReviewSummary.longCues} cortes de más de 1 minuto
-              {cueReviewSummary.sourceThirds !== null &&
-                <> · {cueReviewSummary.sourceThirds}/3 partes de la grabación representadas</>}.
-              Escucha y confirma cada voz; estos datos se basan solo en etiquetas y tiempos.
-            </p>
+          {(chosenCueIndices.length > 0 || showCueReviewAlertsOnly) && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {chosenCueIndices.length > 0 && <p role="status" aria-label="Resumen de calidad de selección SRT"
+                className="text-xs leading-5 text-amber-100">
+                Revisión rápida antes de aplicar: {cueReviewSummary.unknownSpeakers} sin hablante identificado
+                {' · '}{cueReviewSummary.originalInterpreters} del intérprete original
+                {' · '}{cueReviewSummary.longCues} cortes de más de 1 minuto
+                {cueReviewSummary.sourceThirds !== null &&
+                  <> · {cueReviewSummary.sourceThirds}/3 partes de la grabación representadas</>}.
+                Escucha y confirma cada voz; estos datos se basan solo en etiquetas y tiempos.
+              </p>}
+              {(selectedCueReviewAlerts > 0 || showCueReviewAlertsOnly) && (
+                <button type="button"
+                  onClick={() => {
+                    const nextAlertsOnly = !showCueReviewAlertsOnly;
+                    setShowCueReviewAlertsOnly(nextAlertsOnly);
+                    setShowOnlySelectedCues(nextAlertsOnly || chosenCueIndices.length > 0);
+                    setCueSearch('');
+                    setCuePage(0);
+                  }}
+                  aria-pressed={showCueReviewAlertsOnly}
+                  className="rounded border border-amber-300/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-300/10">
+                  {showCueReviewAlertsOnly
+                    ? chosenCueIndices.length > 0 ? 'Volver a turnos seleccionados' : 'Mostrar todos los turnos'
+                    : selectedCueReviewAlerts === 1 ? 'Revisar 1 turno con alerta' : `Revisar ${selectedCueReviewAlerts} turnos con alertas`}
+                </button>
+              )}
+            </div>
           )}
           <button type="button" onClick={applyCueSelection}
             disabled={cueSelectionStatus.issue !== null}
