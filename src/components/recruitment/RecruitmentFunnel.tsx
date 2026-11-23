@@ -279,7 +279,7 @@ export default function RecruitmentFunnel() {
       {step === 3 && (
         <div className="space-y-6 animate-in fade-in text-center">
           <div className="w-16 h-16 bg-[#1764bf]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Mic className="w-8 h-8 text-[#1764bf]" />
+            <Mic className="w-8 h-8 text-[var(--theme-recruitment-accent)]" />
           </div>
           <h2 className="text-xl font-semibold text-slate-900">Evaluación Práctica (Roleplay)</h2>
           <p className="text-slate-600">Nuestro sistema o reclutador evaluará tu nivel de interpretación y protocolo. Basado en esta evaluación se actualizará tu <strong>resultRoleplay</strong> en el sistema.</p>
@@ -335,8 +335,8 @@ export default function RecruitmentFunnel() {
 // Visual indicator component
 function StepIndicator({ icon: Icon, label, active, current }: { icon: any, label: string, active: boolean, current: boolean }) {
   return (
-    <div className={`flex min-w-0 flex-1 flex-col items-center gap-1 sm:gap-2 text-center ${active ? 'text-[#1764bf]' : 'text-slate-500'}`}>
-      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border-2 transition-colors ${current ? 'border-[#1764bf] bg-[#1764bf]/10 text-[#1764bf]' : active ? 'border-[#1764bf] bg-[#1764bf] text-white' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+    <div className={`flex min-w-0 flex-1 flex-col items-center gap-1 sm:gap-2 text-center ${active ? 'text-[var(--theme-recruitment-accent)]' : 'text-slate-500'}`}>
+      <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center border-2 transition-colors ${current ? 'border-[#1764bf] bg-[#1764bf]/10 text-[var(--theme-recruitment-accent)]' : active ? 'border-[#1764bf] bg-[#1764bf] text-white' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
         <Icon className="w-5 h-5" />
       </div>
       <span className="max-w-full text-[10px] sm:text-xs leading-tight font-semibold break-words">{label}</span>
