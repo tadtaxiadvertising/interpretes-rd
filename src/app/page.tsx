@@ -1,5 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import {
   ArrowRight,
   BarChart3,
@@ -77,6 +78,7 @@ export default async function RootPage() {
             </span>
           </Link>
           <div className="flex items-center gap-3">
+            <ThemeSwitcher />
             <Link href="/login" className="hidden rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/5 sm:inline-flex">
               Iniciar sesión
             </Link>
