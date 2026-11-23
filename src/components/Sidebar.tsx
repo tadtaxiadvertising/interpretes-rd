@@ -2,6 +2,7 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
@@ -150,18 +151,21 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
 
   return (
     <aside className={cn(
-      "sticky top-0 h-screen glass border-r border-white/10 z-50 hidden md:flex flex-col transition-all duration-500 ease-in-out",
+      "sticky top-0 h-screen glass border-r border-[var(--border)] z-50 hidden md:flex flex-col transition-all duration-500 ease-in-out",
       isCollapsed ? "w-20" : "w-64"
     )}>
       <div className={cn("px-4 py-5 flex items-center border-b border-white/[0.06]", isCollapsed ? "justify-center" : "justify-between")}>
         {!isCollapsed && (
-          <div className="animate-in fade-in duration-500">
-            <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent truncate">
+          <div className="animate-in fade-in duration-500 flex items-center gap-3">
+            <Image src="/brand-mark.svg" alt="Intérpretes RD" width={44} height={44} className="shrink-0" />
+            <div className="min-w-0">
+            <h1 className="text-xl font-bold bg-gradient-to-r from-[#002d72] to-[#ef1736] bg-clip-text text-transparent truncate">
               {appName || 'Intérpretes RD'}
             </h1>
             <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-[0.18em] font-semibold">
               {appSubtitle || (role === 'admin' ? 'Administración' : 'Portal Intérpretes')}
             </p>
+            </div>
           </div>
         )}
         <button 
@@ -201,8 +205,8 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
                           className={cn(
                             "flex items-center min-h-11 px-3 rounded-xl transition-all duration-200 group relative",
                             isActive
-                              ? "bg-blue-500/15 text-blue-300 ring-1 ring-inset ring-blue-400/20 shadow-[inset_3px_0_0_0_rgba(96,165,250,0.95)]"
-                              : "text-slate-400 hover:bg-white/[0.06] hover:text-slate-100",
+                              ? "bg-blue-500/15 text-[var(--theme-active)] ring-1 ring-inset ring-blue-400/20 shadow-[inset_3px_0_0_0_rgba(96,165,250,0.95)]"
+                              : "text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)]",
                             isCollapsed ? "justify-center" : "gap-3"
                           )}
                         >
