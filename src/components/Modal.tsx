@@ -13,32 +13,83 @@ interface ModalProps {
   maxWidth?: string;
 }
 
+// An interpreter or candidate view can mount several closed Modal components.
+// Only dialogs that are actually open may lock or restore body scrolling.
+const openDialogIds: symbol[] = [];
+let previousBodyOverflow: string | null = null;
+
+function focusableItems(dialog: HTMLElement): HTMLElement[] {
+  return Array.from(dialog.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+  )).filter((element) => !element.closest('[hidden], [inert]') && element.getAttribute('aria-hidden') !== 'true');
+}
+
 export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl' }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const dialogIdRef = useRef(Symbol('modal'));
+  const onCloseRef = useRef(onClose);
   const titleId = useId();
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      window.addEventListener('keydown', handleEscape);
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-
-    return () => {
-      document.body.style.overflow = 'unset';
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [isOpen, onClose]);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!isOpen) return;
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const dialogId = dialogIdRef.current;
+    if (openDialogIds.length === 0) {
+      previousBodyOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+    }
+    openDialogIds.push(dialogId);
+
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (openDialogIds[openDialogIds.length - 1] !== dialogId) return;
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+
+      if (event.key !== 'Tab') return;
+      const dialog = modalRef.current;
+      if (!dialog) return;
+      const elements = focusableItems(dialog);
+      if (elements.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      const active = document.activeElement;
+      if (!dialog.contains(active) || (event.shiftKey && active === first)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeydown);
+    return () => {
+      window.removeEventListener('keydown', handleKeydown);
+      const index = openDialogIds.lastIndexOf(dialogId);
+      if (index !== -1) openDialogIds.splice(index, 1);
+      if (openDialogIds.length === 0) {
+        document.body.style.overflow = previousBodyOverflow ?? '';
+        previousBodyOverflow = null;
+      }
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     closeButtonRef.current?.focus();
     return () => previouslyFocused?.focus();
   }, [isOpen]);
@@ -47,20 +98,21 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
 
   return createPortal(
     <div className="theme-workspace fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-6">
-      {/* Backdrop */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300"
-        onClick={onClose}
+        aria-hidden="true"
+        onClick={() => {
+          if (openDialogIds[openDialogIds.length - 1] === dialogIdRef.current) onCloseRef.current();
+        }}
       />
-      
-      {/* Modal Content */}
-      <div 
+      <div
         ref={modalRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        tabIndex={-1}
         className={cn(
-          "relative w-full rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300",
+          'relative w-full rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300',
           maxWidth
         )}
       >
@@ -73,10 +125,9 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
             onClick={onClose}
             className="rounded-xl p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
-        
         <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto p-5 sm:p-8 custom-scrollbar">
           {children}
         </div>
