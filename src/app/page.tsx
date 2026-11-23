@@ -66,7 +66,7 @@ export default async function RootPage() {
   const stats = await getLandingStats();
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#07111f] text-slate-100">
+    <div className="theme-public min-h-screen overflow-hidden bg-[#07111f] text-slate-100">
       <header className="relative z-10 border-b border-white/10 bg-[#07111f]/90">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <Link href="/" className="flex items-center gap-3" aria-label="Intérpretes RD, inicio">
