@@ -216,8 +216,8 @@ export default async function CandidatePortalPage() {
             <p className="text-sm font-medium text-[var(--text-secondary)]">Tu expediente</p>
             <h2 className="mt-2 text-xl font-semibold">Información de candidatura</h2>
             <dl className="mt-5 space-y-3 text-sm">
-              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Correo</dt><dd className="text-right text-[var(--foreground)]">{candidate.email}</dd></div>
-              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Solicitud</dt><dd className="text-right text-[var(--foreground)]">{application?.id ?? 'Registrada'}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Correo</dt><dd className="min-w-0 break-all text-right text-[var(--foreground)]">{candidate.email}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Solicitud</dt><dd className="min-w-0 break-all text-right text-[var(--foreground)]">{application?.id ?? 'Registrada'}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Etapa</dt><dd className="text-right text-[var(--foreground)]">{currentStepLabel}</dd></div>
               <div className="flex justify-between gap-4"><dt className="text-[var(--text-secondary)]">Última actualización</dt><dd className="text-right text-[var(--foreground)]">{application?.updatedAt.toLocaleDateString('es-DO') ?? '—'}</dd></div>
             </dl>
