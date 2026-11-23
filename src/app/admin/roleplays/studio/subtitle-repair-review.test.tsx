@@ -238,7 +238,7 @@ describe('Audio Studio repaired SRT import safety', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Recuperar propuesta equilibrada' }));
     expect(confirmation).toHaveBeenCalledTimes(2);
     expect(screen.getByText(/60 turnos disponibles y 25 seleccionados/)).toBeTruthy();
-    expect(screen.getByText('Mostrando 1–25 de 25 turnos')).toBeTruthy();
+    expect(screen.getByText(/Mostrando 1–25 de 25 turnos/)).toBeTruthy();
     expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(screen.getByText(/el editor no se modificó/)).toBeTruthy();
   });
