@@ -43,7 +43,8 @@ describe('Mark candidate ready for hiring', () => {
     expect(error.textContent).not.toContain('private internal message');
     expect(error.className).toContain('text-[var(--theme-danger)]');
     const retry = screen.getByRole('button', { name: 'Mark Ready for Hiring' });
-    expect(retry.getAttribute('aria-describedby')).toBe('candidate-ready-error');
+    expect(retry.getAttribute('aria-describedby')).toBe(error.id);
+    expect(error.id).toBeTruthy();
     expect(retry.hasAttribute('disabled')).toBe(false);
     expect(m.refresh).not.toHaveBeenCalled();
   });
