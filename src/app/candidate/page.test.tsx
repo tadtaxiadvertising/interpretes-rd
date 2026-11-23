@@ -269,4 +269,25 @@ describe('candidate roleplay entry', () => {
     expect(markup).not.toContain('data-testid="candidate-roleplay-action"');
     expect(markup).toContain('Tu intento quedó registrado');
   });
+  it('shows readable Spanish labels instead of internal step/status codes', async () => {
+    m.findCandidate.mockResolvedValue({
+      name: 'Candidate',
+      email: 'candidate@example.test',
+      applications: [{
+        id: 'app-5',
+        status: 'TECH_SETUP_PENDING',
+        currentStep: 'TECH_SETUP',
+        updatedAt: new Date('2026-11-13T12:00:00Z'),
+      }],
+    });
+    m.findSession.mockResolvedValue(null);
+
+    const markup = renderToStaticMarkup(await CandidatePortalPage());
+    expect(markup).toContain('Setup técnico pendiente');
+    expect(markup).toContain('Preparación técnica');
+    expect(markup).toContain('min-w-0 break-all');
+    expect(markup).not.toContain('>TECH_SETUP<');
+    expect(markup).not.toContain('>TECH_SETUP_PENDING<');
+  });
+
 });

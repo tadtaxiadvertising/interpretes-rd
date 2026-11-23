@@ -512,3 +512,26 @@ html[data-theme="light"] .theme-public [class*="text-[#8ab4ff]"] {
 /* Steps use a legible color on the dark form while retaining flag blue on white. */
 .theme-postular { --theme-recruitment-accent: #8ab4ff; }
 html[data-theme="light"] .theme-postular { --theme-recruitment-accent: #1764bf; }
+
+
+/* Candidate portal: clear success/error feedback on dark and light surfaces. */
+:root {
+  --candidate-success-text: #a7f3d0;
+  --candidate-error-text: #fca5a5;
+}
+html[data-theme="light"] {
+  --candidate-success-text: #047857;
+  --candidate-error-text: #b91c1c;
+}
+html[data-theme="light"] .theme-candidate :is(
+  section, footer
+)[class*="border-white"] {
+  border-color: var(--border);
+}
+html[data-theme="light"] .theme-candidate footer[class*="bg-emerald-300"] {
+  background-color: #ecfdf5;
+  border-color: #a7f3d0;
+}
+html[data-theme="light"] .theme-candidate [class*="bg-blue-300/"] {
+  border-color: rgba(21,84,168,.24);
+}

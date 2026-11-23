@@ -27,38 +27,42 @@ export function CandidatePasswordSetup() {
   }
 
   return (
-    <form action={handleSubmit} className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <form action={handleSubmit} className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-5">
       <div>
-        <h3 className="font-semibold text-white">Configura tu contraseña</h3>
-        <p className="mt-1 text-sm leading-5 text-slate-400">Hazlo ahora para poder volver a tu candidatura cuando cierres sesión.</p>
+        <h3 className="font-semibold text-[var(--foreground)]">Configurar o cambiar contraseña</h3>
+        <p className="mt-1 text-sm leading-5 text-[var(--text-secondary)]">Si accediste con un enlace, crea una contraseña para tus próximos ingresos. Si ya tienes una, puedes actualizarla aquí.</p>
       </div>
+      <label htmlFor="candidate-new-password" className="block text-sm font-medium text-[var(--foreground)]">Nueva contraseña</label>
       <input
+        id="candidate-new-password"
         name="password"
         type="password"
         minLength={8}
         required
         autoComplete="new-password"
         placeholder="Nueva contraseña (mínimo 8 caracteres)"
-        className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-400"
+        className="w-full rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--text-muted)] outline-none focus-visible:border-[#1764bf] focus-visible:ring-2 focus-visible:ring-[#1764bf]/25"
       />
+      <label htmlFor="candidate-confirm-password" className="block text-sm font-medium text-[var(--foreground)]">Confirmar contraseña</label>
       <input
+        id="candidate-confirm-password"
         name="confirmPassword"
         type="password"
         minLength={8}
         required
         autoComplete="new-password"
         placeholder="Confirma tu contraseña"
-        className="w-full rounded-xl border border-white/10 bg-slate-900 px-4 py-3 text-sm text-white placeholder:text-slate-500 outline-none focus:border-blue-400"
+        className="w-full rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] px-4 py-3 text-sm text-[var(--foreground)] placeholder:text-[var(--text-muted)] outline-none focus-visible:border-[#1764bf] focus-visible:ring-2 focus-visible:ring-[#1764bf]/25"
       />
       <button
         type="submit"
         disabled={pending}
-        className="rounded-xl border border-blue-300/20 bg-blue-400/10 px-4 py-2.5 text-sm font-semibold text-blue-100 hover:bg-blue-400/20 disabled:opacity-60"
+        className="rounded-xl bg-[#1764bf] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 disabled:opacity-60"
       >
         {pending ? 'Guardando…' : 'Guardar contraseña'}
       </button>
-      {message ? <p role="status" className="text-sm text-emerald-300">{message}</p> : null}
-      {error ? <p role="alert" className="text-sm text-red-300">{error}</p> : null}
+      {message ? <p role="status" className="text-sm text-[var(--candidate-success-text)]">{message}</p> : null}
+      {error ? <p role="alert" className="text-sm text-[var(--candidate-error-text)]">{error}</p> : null}
     </form>
   );
 }
