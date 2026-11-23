@@ -14,7 +14,7 @@ export default async function InterpreterCalendarPage() {
   const profile = userData.profile;
 
   if (!profile || !profile.interpreterId) {
-    return <div className="p-8 text-white">No se encontró el perfil de intérprete.</div>;
+    return <div className="p-4 sm:p-8 text-[var(--foreground)]">No se encontró el perfil de intérprete.</div>;
   }
 
   const todayStr = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santo_Domingo' }).format(new Date());
@@ -31,12 +31,12 @@ export default async function InterpreterCalendarPage() {
   const isOverachieving = commitment.healthScore > 100;
 
   return (
-    <div className="p-8 max-w-5xl mx-auto text-white">
-      <div className="flex items-center gap-3 mb-8">
+    <div className="p-4 sm:p-8 max-w-5xl mx-auto text-[var(--foreground)]">
+      <div className="flex flex-wrap items-center gap-3 mb-6 sm:mb-8">
         <div className="p-3 bg-blue-500/20 rounded-xl">
           <CalendarDays className="w-6 h-6 text-blue-400" />
         </div>
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 bg-clip-text text-transparent">
+        <h1 className="brand-heading text-2xl sm:text-3xl font-bold leading-tight">
           Mi Calendario de Metas
         </h1>
       </div>
@@ -57,8 +57,8 @@ export default async function InterpreterCalendarPage() {
               Progreso Semanal
               <TrendingUp className="w-4 h-4 text-blue-400" />
             </h2>
-            <div className="flex items-end gap-2">
-              <span className="text-5xl font-black text-white tracking-tight">{formatMinutes(commitment.totalMinutesWeek)}</span>
+            <div className="flex flex-wrap items-end gap-2">
+              <span className="text-4xl sm:text-5xl font-black text-[var(--foreground)] tracking-tight break-words">{formatMinutes(commitment.totalMinutesWeek)}</span>
               <span className="text-slate-400 mb-2 font-medium">/ {formatMinutes(commitment.targetMinutesToDate)} min esperados</span>
             </div>
 
