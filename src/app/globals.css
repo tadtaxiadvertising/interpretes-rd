@@ -286,3 +286,40 @@ html[data-theme="light"] .theme-public .text-slate-400,
 html[data-theme="light"] .theme-public .text-slate-500 { color: #53657b; }
 html[data-theme="light"] .theme-public [class*="border-white"] { border-color: var(--border); }
 html[data-theme="light"] .theme-public a[class*="bg-[#1764bf"] { color: #fff; }
+
+
+/* Legacy operational screens: convert common dark-only surfaces into light surfaces.
+   Scoped to workspace to avoid altering roleplay/player status colors. */
+html[data-theme="light"] .theme-workspace :is(
+  .bg-slate-950, .bg-slate-900, .bg-slate-800,
+  .bg-gray-950, .bg-gray-900, .bg-gray-800
+) {
+  background-color: var(--theme-panel);
+}
+html[data-theme="light"] .theme-workspace :is(
+  [class~="bg-slate-900/50"], [class~="bg-slate-800/50"],
+  [class~="bg-slate-900/80"], [class~="bg-gray-900/50"],
+  [class~="bg-white/5"], [class~="bg-white/[0.03]"],
+  [class~="bg-white/[0.04]"]
+) {
+  background-color: rgba(255,255,255,.93);
+}
+html[data-theme="light"] .theme-workspace input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+html[data-theme="light"] .theme-workspace textarea,
+html[data-theme="light"] .theme-workspace select {
+  background-color: #fff;
+  border-color: var(--border);
+}
+html[data-theme="light"] .theme-workspace input:disabled,
+html[data-theme="light"] .theme-workspace textarea:disabled {
+  background-color: #edf1f7;
+  color: #52627a;
+}
+html[data-theme="light"] .theme-workspace button[class*="bg-blue"] .text-white,
+html[data-theme="light"] .theme-workspace button[class*="bg-red"] .text-white,
+html[data-theme="light"] .theme-workspace a[class*="bg-blue"] .text-white {
+  color: #fff;
+}
+html[data-theme="light"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2352627a' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
+}
