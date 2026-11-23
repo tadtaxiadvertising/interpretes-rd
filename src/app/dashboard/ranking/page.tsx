@@ -67,7 +67,7 @@ export default async function RankingPage() {
         <div className="flex items-center gap-3">
           <Trophy size={28} className="text-amber-400" />
           <div>
-            <h1 className="text-2xl font-bold text-white capitalize">Ranking — {monthName}</h1>
+            <h1 className="text-2xl font-bold text-[var(--foreground)] capitalize">Ranking — {monthName}</h1>
             <p className="text-sm text-slate-300">Tu posición y métricas privadas</p>
           </div>
         </div>
@@ -107,7 +107,7 @@ export default async function RankingPage() {
           </h3>
         </div>
         <div className="p-6">
-          <div className="flex justify-center items-end gap-4 md:gap-8">
+          <div className="flex flex-wrap justify-center items-end gap-3 sm:gap-4 md:gap-8">
             {/* 2nd Place */}
             {top3[1] && (
               <div className="flex-1 flex flex-col items-center">
@@ -115,7 +115,7 @@ export default async function RankingPage() {
                   <span className="text-3xl md:text-4xl font-bold text-white">#{top3[1].position}</span>
                 </div>
                 <div className="mt-3 text-center">
-                  <p className="font-bold text-white truncate max-w-[120px]">{top3[1].name}</p>
+                  <p className="font-bold text-[var(--foreground)] truncate max-w-[120px]">{top3[1].name}</p>
                   <p className="text-xs text-slate-400">{(top3[1].minutes / 60).toFixed(1)} hrs</p>
                   {top3[1].qaScore !== null && (
                     <p className="text-xs text-emerald-400">QA: {top3[1].qaScore}%</p>
@@ -131,7 +131,7 @@ export default async function RankingPage() {
                   <span className="text-4xl md:text-5xl font-bold text-white">#{top3[0].position}</span>
                 </div>
                 <div className="mt-3 text-center">
-                  <p className="font-bold text-white truncate max-w-[140px]">{top3[0].name}</p>
+                  <p className="font-bold text-[var(--foreground)] truncate max-w-[140px]">{top3[0].name}</p>
                   <p className="text-xs text-slate-300">{(top3[0].minutes / 60).toFixed(1)} hrs</p>
                   {top3[0].qaScore !== null && (
                     <p className="text-xs text-emerald-400">QA: {top3[0].qaScore}%</p>
