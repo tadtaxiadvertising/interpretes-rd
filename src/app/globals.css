@@ -592,14 +592,27 @@ html[data-theme="light"] .theme-workspace :is(.text-slate-500, .text-gray-500, .
 /* Restore white on solid blue/red/green buttons and badge icons; white-on-
    white must never occur because of the old .text-white text override. */
 html[data-theme="light"] .theme-workspace :is(
-  [class*="bg-blue-"], [class*="bg-red-"], [class*="bg-emerald-"],
-  [class*="bg-green-"], [class*="bg-indigo-"]
+  [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
+  [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"],
+  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
+  [class~="bg-green-500"], [class~="bg-green-600"],
+  [class~="bg-indigo-500"], [class~="bg-indigo-600"]
 ).text-white,
 html[data-theme="light"] .theme-workspace :is(
-  [class*="bg-blue-"], [class*="bg-red-"], [class*="bg-emerald-"],
-  [class*="bg-green-"], [class*="bg-indigo-"]
+  [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
+  [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"],
+  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
+  [class~="bg-green-500"], [class~="bg-green-600"],
+  [class~="bg-indigo-500"], [class~="bg-indigo-600"]
 ) > .text-white {
   color: #fff;
+}
+
+/* On dark cards, tiny legacy gray hints should be readable too. */
+html[data-theme="dark"] .theme-workspace :is(
+  .text-slate-500, .text-gray-500, .text-slate-600, .text-gray-600
+) {
+  color: var(--text-tertiary);
 }
 
 /* Neutral progress tracks should remain distinguishable inside white cards. */
