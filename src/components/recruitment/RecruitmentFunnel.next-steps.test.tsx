@@ -58,6 +58,11 @@ describe('Registration completion and next actions', () => {
     expect(certificate.getAttribute('required')).not.toBeNull();
     expect(certificate.getAttribute('aria-describedby')).toBe('efset-certificate-help');
     expect(screen.getByText(/Debe ser un enlace HTTPS a tu certificado EFSET/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Obtener certificado gratis' }).getAttribute('href'))
+      .toBe('https://www.efset.org/es/english-certificate/');
+    const retrieve = screen.getByRole('link', { name: 'Recuperar certificado' });
+    expect(retrieve.getAttribute('href')).toBe('https://www.efset.org/es/retrieve-certificate/');
+    expect(retrieve.getAttribute('rel')).toContain('noopener');
 
     fillApplication();
     fireEvent.click(screen.getByRole('button', { name: 'Enviar Postulación' }));
