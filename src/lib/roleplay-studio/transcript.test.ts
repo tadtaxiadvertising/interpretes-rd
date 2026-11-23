@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimedTranscript, parseTimedTranscriptForReview, toPublishableStudioSegments } from './transcript';
+import { parseTimedTranscript, parseTimedTranscriptForReview, parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments } from './transcript';
 
 describe('Audio Studio offline subtitle import', () => {
   it('imports SRT cues in order and extracts speaker labels', () => {
@@ -119,22 +119,59 @@ Paciente: Me duele la cabeza.
 
 describe('Audio Studio review repairs without weakening strict publishing', () => {
   it('sorts provider cues out of order and retains overlapping timestamps for safe selection', () => {
-    const raw = '2\\n00:00:02,000 --> 00:00:04,000\\nPatient: Second\\n\\n1\\n00:00:01,000 --> 00:00:03,000\\nDoctor: First';
+    const raw = '2\n00:00:02,000 --> 00:00:04,000\nPatient: Second\n\n1\n00:00:01,000 --> 00:00:03,000\nDoctor: First';
     expect(() => parseTimedTranscript(raw)).toThrow(/tiempos/);
     expect(parseTimedTranscriptForReview(raw).map(cue => [cue.start, cue.end])).toEqual([[1, 3], [2, 4]]);
   });
 
   it('splits an oversized reference cue into bounded, contiguous review windows', () => {
-    const raw = '1\\n00:00:00,000 --> 00:10:00,000\\nDoctor: Source reference';
+    const raw = '1\n00:00:00,000 --> 00:10:00,000\nDoctor: Source reference';
     expect(() => parseTimedTranscript(raw)).toThrow(/tiempos/);
     expect(parseTimedTranscriptForReview(raw).map(cue => [cue.start, cue.end])).toEqual([[0, 300], [300, 600]]);
   });
 
   it('still rejects reversed, out-of-source and tiny cues in review mode', () => {
     for (const raw of [
-      '00:00:04,000 --> 00:00:03,000\\nReversed',
-      '02:00:00,000 --> 02:00:01,000\\nOutside',
-      '00:00:01,000 --> 00:00:01,050\\nToo short',
+      '00:00:04,000 --> 00:00:03,000\nReversed',
+      '02:00:00,000 --> 02:00:01,000\nOutside',
+      '00:00:01,000 --> 00:00:01,050\nToo short',
     ]) expect(() => parseTimedTranscriptForReview(raw)).toThrow(/tiempos/);
+  });
+});
+
+
+describe('Audio Studio review diagnostic report', () => {
+  it('flags repaired input so it cannot silently become a finished roleplay', () => {
+    const raw = `WEBVTT
+
+00:05:00.000 --> 00:10:00.001
+<v Doctor>Long original reference</v>
+
+00:00:01.000 --> 00:00:04.000
+<v Patient>First voice</v>
+
+00:00:02.000 --> 00:00:05.000
+<v Doctor>Overlap</v>`;
+    const { cues, diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(raw);
+    expect(diagnostics).toEqual({ reordered: 1, overlapping: 1, divided: 1 });
+    expect(cues.map(cue => cue.start)).toEqual([1, 2, 300, 450.001]);
+    expect(cues.every(cue => cue.end - cue.start <= 300)).toBe(true);
+  });
+
+  it('does not flag a clean subtitle file as repaired', () => {
+    const { diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(
+      '1\\n00:00:01,000 --> 00:00:02,000\\nDoctor: Hello'
+    );
+    expect(diagnostics).toEqual({ reordered: 0, overlapping: 0, divided: 0 });
+  });
+
+  it('prevents tiny leftover windows when source duration is barely longer than 300 s', () => {
+    const { cues, diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(
+      '00:00:00,000 --> 00:05:00,001\\nDoctor: Long cue'
+    );
+    expect(diagnostics.divided).toBe(1);
+    expect(cues).toHaveLength(2);
+    expect(cues[0].end).toBe(cues[1].start);
+    expect(cues.every(cue => cue.end - cue.start >= 0.1)).toBe(true);
   });
 });
