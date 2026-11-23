@@ -154,7 +154,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
       "sticky top-0 h-screen glass border-r border-[var(--border)] z-50 hidden md:flex flex-col transition-all duration-500 ease-in-out",
       isCollapsed ? "w-20" : "w-64"
     )}>
-      <div className={cn("px-4 py-5 flex items-center border-b border-white/[0.06]", isCollapsed ? "justify-center" : "justify-between")}>
+      <div className={cn("px-4 py-5 flex items-center border-b border-[var(--border)]", isCollapsed ? "justify-center" : "justify-between")}>
         {isCollapsed && <Image src="/interpretes-rd-logo.webp" alt="Intérpretes RD" width={38} height={38} className="rounded-lg bg-white p-1" />}
         {!isCollapsed && (
           <div className="animate-in fade-in duration-500 flex items-center gap-3">
@@ -163,7 +163,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
             <h1 className="brand-heading text-xl font-bold truncate">
               {appName || 'Intérpretes RD'}
             </h1>
-            <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-[0.18em] font-semibold">
+            <p className="text-[10px] text-[var(--text-secondary)] mt-1 uppercase tracking-[0.18em] font-semibold">
               {appSubtitle || (role === 'admin' ? 'Administración' : 'Portal Intérpretes')}
             </p>
             </div>
@@ -171,8 +171,10 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
         )}
         <button 
           onClick={onToggle}
+          aria-label={isCollapsed ? "Expandir menú lateral" : "Contraer menú lateral"}
+          aria-expanded={!isCollapsed}
           className={cn(
-            "p-2 hover:bg-white/5 rounded-xl text-slate-400 hover:text-white transition-all",
+            "p-2 hover:bg-[var(--theme-hover)] rounded-xl text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
             isCollapsed && "hover:scale-110"
           )}
         >
@@ -189,7 +191,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
               return (
                 <div key={section} className="mb-5 last:mb-0">
                   {!isCollapsed && (
-                    <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+                    <p className="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--text-secondary)]">
                       {section}
                     </p>
                   )}
@@ -235,7 +237,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
                   aria-current={isActive ? 'page' : undefined}
                   className={cn(
                     "flex items-center min-h-11 px-3 rounded-xl transition-all duration-200 group relative",
-                    isActive ? "bg-blue-600/20 text-blue-300 ring-1 ring-inset ring-blue-400/20" : "text-slate-400 hover:bg-white/[0.06] hover:text-white",
+                    isActive ? "bg-blue-500/15 text-[var(--theme-active)] ring-1 ring-inset ring-blue-400/20" : "text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)]",
                     isCollapsed ? "justify-center" : "gap-3"
                   )}
                 >
@@ -288,7 +290,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
           "rounded-2xl bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/10 transition-all duration-500",
           isCollapsed ? "p-2 flex flex-col items-center" : "p-4"
         )}>
-          {!isCollapsed && <p className="text-xs text-slate-500 animate-in fade-in duration-500">Estado del sistema</p>}
+          {!isCollapsed && <p className="text-xs text-[var(--text-secondary)] animate-in fade-in duration-500">Estado del sistema</p>}
           <div className={cn("flex items-center gap-2", !isCollapsed && "mt-2")}>
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
             {!isCollapsed && (
