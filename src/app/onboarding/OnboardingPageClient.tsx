@@ -23,7 +23,7 @@ export function OnboardingPageClient({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950">
+    <div className="theme-experience min-h-screen flex items-center justify-center bg-[var(--background)]">
       <OnboardingWizard
         onComplete={handleComplete}
         interpreterName={interpreterName}
