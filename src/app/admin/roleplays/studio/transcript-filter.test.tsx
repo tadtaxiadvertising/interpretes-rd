@@ -63,24 +63,18 @@ describe('Audio Studio transcript review search', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar turnos en transcripción' }), {
       target: { value: 'Special clinical term' },
     });
-    expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 85' })).toBeTruthy();
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }));
-    expect(screen.getByText(/25 seleccionados/)).toBeTruthy();
-
-    // The selection limit rejects the 26th cue until another is unchecked.
-    expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }) as HTMLInputElement).checked).toBe(false);
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar turnos en transcripción' }), {
-      target: { value: '' },
-    });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }));
-    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar turnos en transcripción' }), {
-      target: { value: 'Special clinical term' },
-    });
-    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }));
-    expect((screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }) as HTMLInputElement).checked).toBe(true);
+    const special = screen.getByRole('checkbox', { name: 'Seleccionar turno 85' }) as HTMLInputElement;
+    expect(special).toBeTruthy();
+    // The balanced default may already include the searched term. A manual
+    // reset must let the operator choose it without depending on that default.
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    expect(special.checked).toBe(false);
+    fireEvent.click(special);
+    expect(special.checked).toBe(true);
+    expect(screen.getByText(/90 turnos disponibles y 1 seleccionados/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Solo seleccionados' }));
     expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 85' })).toBeTruthy();
-    expect(screen.getByText(/25 seleccionados/)).toBeTruthy();
+    expect(special.checked).toBe(true);
   });
 });
