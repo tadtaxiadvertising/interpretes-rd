@@ -285,6 +285,7 @@ describe('candidate roleplay entry', () => {
     const markup = renderToStaticMarkup(await CandidatePortalPage());
     expect(markup).toContain('Setup técnico pendiente');
     expect(markup).toContain('Preparación técnica');
+    expect(markup).toContain('min-w-0 break-all');
     expect(markup).not.toContain('>TECH_SETUP<');
     expect(markup).not.toContain('>TECH_SETUP_PENDING<');
   });
