@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import {
   ArrowRight,
   BarChart3,
@@ -69,7 +70,7 @@ export default async function RootPage() {
       <header className="relative z-10 border-b border-white/10 bg-[#07111f]/90">
         <nav className="mx-auto flex max-w-7xl items-center justify-between px-5 py-5 sm:px-8">
           <Link href="/" className="flex items-center gap-3" aria-label="Intérpretes RD, inicio">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2675ff] text-lg font-black text-slate-950">I</span>
+            <Image src="/brand-mark.svg" alt="" width={48} height={48} className="shrink-0" />
             <span>
               <span className="block text-sm font-bold tracking-wide text-white">INTÉRPRETES RD</span>
               <span className="block text-xs text-slate-400">Plataforma de operaciones</span>
@@ -79,7 +80,7 @@ export default async function RootPage() {
             <Link href="/login" className="hidden rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/5 sm:inline-flex">
               Iniciar sesión
             </Link>
-            <Link href="/postular" className="inline-flex items-center gap-2 rounded-xl bg-[#2675ff] px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-[#8ab4ff]">
+            <Link href="/postular" className="inline-flex items-center gap-2 rounded-xl bg-[#1764bf] px-4 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-[#8ab4ff]">
               Postularme <ArrowRight size={16} />
             </Link>
           </div>
@@ -95,13 +96,13 @@ export default async function RootPage() {
                 <Globe2 size={15} /> PERSONAS · PROCESOS · OPERACIONES
               </div>
               <h1 className="max-w-3xl text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-6xl lg:text-7xl">
-                Conectamos idiomas con <span className="text-[#2675ff]">oportunidades reales.</span>
+                Conectamos idiomas con <span className="text-[#1764bf]">oportunidades reales.</span>
               </h1>
               <p className="mt-7 max-w-2xl text-base leading-8 text-slate-300 sm:text-lg">
                 Intérpretes RD centraliza la postulación, el seguimiento profesional y la operación diaria de los intérpretes en una plataforma organizada, transparente y segura.
               </p>
               <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-                <Link href="/postular" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2675ff] px-6 py-3.5 font-bold text-slate-950 transition hover:bg-[#8ab4ff]">
+                <Link href="/postular" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1764bf] px-6 py-3.5 font-bold text-slate-950 transition hover:bg-[#8ab4ff]">
                   Comenzar mi postulación <ArrowRight size={18} />
                 </Link>
                 <Link href="/login" className="inline-flex items-center justify-center rounded-xl border border-white/15 px-6 py-3.5 font-semibold text-white transition hover:bg-white/5">
@@ -109,14 +110,14 @@ export default async function RootPage() {
                 </Link>
               </div>
               <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-400">
-                <span className="inline-flex items-center gap-2"><CheckCircle2 size={16} className="text-[#2675ff]" /> Progreso organizado</span>
-                <span className="inline-flex items-center gap-2"><ShieldCheck size={16} className="text-[#2675ff]" /> Accesos por rol</span>
-                <span className="inline-flex items-center gap-2"><Workflow size={16} className="text-[#2675ff]" /> Procesos conectados</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle2 size={16} className="text-[#1764bf]" /> Progreso organizado</span>
+                <span className="inline-flex items-center gap-2"><ShieldCheck size={16} className="text-[#1764bf]" /> Accesos por rol</span>
+                <span className="inline-flex items-center gap-2"><Workflow size={16} className="text-[#1764bf]" /> Procesos conectados</span>
               </div>
             </div>
 
             <div className="relative mx-auto w-full max-w-xl">
-              <div className="absolute -inset-5 rounded-[2rem] bg-[#2675ff]/10 blur-3xl" />
+              <div className="absolute -inset-5 rounded-[2rem] bg-[#1764bf]/10 blur-3xl" />
               <div className="relative rounded-[2rem] border border-white/10 bg-[#0d1b2b]/95 p-5 shadow-2xl shadow-black/30 sm:p-7">
                 <div className="flex items-start justify-between gap-4 border-b border-white/10 pb-5">
                   <div>
@@ -155,14 +156,14 @@ export default async function RootPage() {
           <section id="impacto" aria-label="Métricas de la plataforma" className="border-y border-white/8 bg-white/[0.025]">
             <div className="mx-auto grid max-w-7xl gap-10 px-5 py-16 sm:px-8 md:grid-cols-2">
               <div className="text-center md:text-left">
-                <p className="text-5xl font-black tracking-tight text-[#2675ff] sm:text-6xl">
+                <p className="text-5xl font-black tracking-tight text-[#1764bf] sm:text-6xl">
                   {numberFormatter.format(stats.interpreters)}
                 </p>
                 <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-200">Intérpretes</p>
                 <p className="mt-1 text-sm leading-6 text-slate-400">Profesionales registrados en la plataforma.</p>
               </div>
               <div className="text-center md:text-left">
-                <p className="text-5xl font-black tracking-tight text-[#2675ff] sm:text-6xl">
+                <p className="text-5xl font-black tracking-tight text-[#1764bf] sm:text-6xl">
                   {numberFormatter.format(stats.accountsWorked)}
                 </p>
                 <p className="mt-3 text-sm font-bold uppercase tracking-[0.18em] text-slate-200">Cuentas trabajadas</p>
@@ -175,7 +176,7 @@ export default async function RootPage() {
         <section id="plataforma" className="border-y border-white/8 bg-white/[0.025]">
           <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
             <div className="max-w-2xl">
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#2675ff]">Una plataforma, tres pilares</p>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#1764bf]">Una plataforma, tres pilares</p>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Diseñada para acompañar todo el ciclo profesional.</h2>
               <p className="mt-5 leading-7 text-slate-300">Cada área tiene una responsabilidad clara y comparte la información necesaria sin duplicar procesos ni exponer datos a personas no autorizadas.</p>
             </div>
@@ -185,7 +186,7 @@ export default async function RootPage() {
                 return (
                   <article key={pillar.number} className="rounded-2xl border border-white/10 bg-[#0b1928] p-6 sm:p-7">
                     <div className="flex items-center justify-between">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#2675ff]/10 text-[#8ab4ff]"><Icon size={23} /></span>
+                      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#1764bf]/10 text-[#8ab4ff]"><Icon size={23} /></span>
                       <span className="text-sm font-semibold text-slate-600">{pillar.number}</span>
                     </div>
                     <h3 className="mt-6 text-xl font-semibold text-white">{pillar.title}</h3>
@@ -200,7 +201,7 @@ export default async function RootPage() {
         <section id="postulacion" className="mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-24">
           <div className="grid gap-12 lg:grid-cols-[0.8fr_1.2fr]">
             <div>
-              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#2675ff]">Tu camino empieza aquí</p>
+              <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#1764bf]">Tu camino empieza aquí</p>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">Un proceso paso a paso, sin perder de vista lo que sigue.</h2>
               <p className="mt-5 leading-7 text-slate-300">La postulación debe ayudarte a saber qué información necesitas, qué etapas has completado y cuándo debes realizar una nueva acción.</p>
               <Link href="/postular" className="mt-7 inline-flex items-center gap-2 font-bold text-[#8ab4ff] hover:text-[#a9c9ff]">
@@ -223,9 +224,9 @@ export default async function RootPage() {
 
         <section id="confianza" className="border-y border-white/8 bg-[#0b1928]">
           <div className="mx-auto grid max-w-7xl gap-8 px-5 py-16 sm:px-8 md:grid-cols-3">
-            <div><ShieldCheck size={24} className="text-[#2675ff]" /><h3 className="mt-4 font-semibold text-white">Acceso responsable</h3><p className="mt-2 text-sm leading-6 text-slate-300">Cada persona debe acceder únicamente a la información y acciones que le corresponden.</p></div>
-            <div><Workflow size={24} className="text-[#2675ff]" /><h3 className="mt-4 font-semibold text-white">Estados trazables</h3><p className="mt-2 text-sm leading-6 text-slate-300">Los procesos deben conservar su progreso y registrar los cambios importantes.</p></div>
-            <div><BarChart3 size={24} className="text-[#2675ff]" /><h3 className="mt-4 font-semibold text-white">Datos útiles</h3><p className="mt-2 text-sm leading-6 text-slate-300">La producción y los reportes ayudan a organizar la operación con información verificable.</p></div>
+            <div><ShieldCheck size={24} className="text-[#1764bf]" /><h3 className="mt-4 font-semibold text-white">Acceso responsable</h3><p className="mt-2 text-sm leading-6 text-slate-300">Cada persona debe acceder únicamente a la información y acciones que le corresponden.</p></div>
+            <div><Workflow size={24} className="text-[#1764bf]" /><h3 className="mt-4 font-semibold text-white">Estados trazables</h3><p className="mt-2 text-sm leading-6 text-slate-300">Los procesos deben conservar su progreso y registrar los cambios importantes.</p></div>
+            <div><BarChart3 size={24} className="text-[#1764bf]" /><h3 className="mt-4 font-semibold text-white">Datos útiles</h3><p className="mt-2 text-sm leading-6 text-slate-300">La producción y los reportes ayudan a organizar la operación con información verificable.</p></div>
           </div>
         </section>
 
@@ -233,7 +234,7 @@ export default async function RootPage() {
           <h2 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">¿Listo para dar el siguiente paso?</h2>
           <p className="mx-auto mt-4 max-w-2xl leading-7 text-slate-300">Crea tu cuenta para comenzar o entra al portal si ya formas parte del equipo.</p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
-            <Link href="/postular" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#2675ff] px-6 py-3.5 font-bold text-slate-950 hover:bg-[#8ab4ff]">Quiero postularme <ArrowRight size={18} /></Link>
+            <Link href="/postular" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#1764bf] px-6 py-3.5 font-bold text-slate-950 hover:bg-[#8ab4ff]">Quiero postularme <ArrowRight size={18} /></Link>
             <Link href="/login" className="inline-flex items-center justify-center rounded-xl border border-white/15 px-6 py-3.5 font-semibold text-white hover:bg-white/5">Iniciar sesión</Link>
           </div>
         </section>
