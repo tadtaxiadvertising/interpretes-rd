@@ -551,7 +551,7 @@ html[data-theme="light"] .theme-candidate [class*="bg-blue-300/"] {
   --theme-purple: #c4b5fd;
   --theme-control-bg: #101d30;
   --theme-control-text: #f1f5f9;
-  --theme-control-border: #50627e;
+  --theme-control-border: #7185a2;
 }
 html[data-theme="light"] {
   --theme-surface-muted: #edf3fa;
@@ -564,7 +564,7 @@ html[data-theme="light"] {
   --theme-purple: #6d28d9;
   --theme-control-bg: #fff;
   --theme-control-text: #13233b;
-  --theme-control-border: #8c9bb1;
+  --theme-control-border: #6d809c;
 }
 
 /* In the light workspace, legacy status classes need contrast on white.
@@ -682,5 +682,31 @@ html[data-theme="light"] ::selection { background: #bed9ff; color: #13233b; }
 @media (forced-colors: active) {
   :where(a,button,input,select,textarea,[role="button"]):focus-visible {
     outline: 2px solid Highlight;
+  }
+}
+
+
+/* Visible form boundaries need >=3:1 contrast as a non-text UI component.
+   The labels and values remain unchanged; no validation is affected. */
+html[data-theme] :is(
+  .theme-workspace, .theme-candidate, .theme-login, .theme-postular, .theme-experience
+) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select, textarea
+):not(:disabled) {
+  border-color: var(--theme-control-border);
+}
+html[data-theme="dark"] .theme-workspace :is(input,textarea)::placeholder {
+  color: #a8b7cc;
+}
+html[data-theme="light"] .theme-workspace :is(input,textarea)::placeholder {
+  color: #52627a;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *,
+  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::before,
+  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
   }
 }
