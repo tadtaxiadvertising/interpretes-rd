@@ -44,6 +44,7 @@ interface TranscriptParseLimits {
   allowOverlaps?: boolean;
   sortOutOfOrder?: boolean;
   splitLongCues?: boolean;
+  useSourceTimelineBudget?: boolean;
   onOriginalCue?: (start: number, end: number) => void;
 }
 
@@ -116,7 +117,9 @@ export function parseTimedTranscript(
       throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
     }
     sum += end - start;
-    if (sum > maxTotalSeconds) throw new Error('La duración acumulada de los subtítulos supera el límite permitido.');
+    if (!limits.useSourceTimelineBudget && sum > maxTotalSeconds) {
+      throw new Error('La duración acumulada de los subtítulos supera el límite permitido.');
+    }
     previousStart = start;
     previousEnd = Math.max(previousEnd, end);
   }
@@ -125,6 +128,20 @@ export function parseTimedTranscript(
   // The review timeline must be chronological even if the provider exported
   // SRT blocks in speaker order. Stable sorting preserves ties for inspection.
   if (limits.sortOutOfOrder) cues.sort((a, b) => a.start - b.start || a.end - b.end);
+  if (limits.useSourceTimelineBudget) {
+    // Caption streams can overlap (e.g. simultaneous bilingual speakers).
+    // For review, count seconds of source media covered, not repeated speech
+    // streams. The final selected roleplay still has its own 900 s cap.
+    let covered = 0;
+    let latestEnd = 0;
+    for (const cue of cues) {
+      covered += Math.max(0, cue.end - Math.max(cue.start, latestEnd));
+      latestEnd = Math.max(latestEnd, cue.end);
+      if (covered > maxTotalSeconds + 0.0005) {
+        throw new Error('La duración acumulada de los subtítulos supera el límite permitido.');
+      }
+    }
+  }
   return cues;
 }
 
@@ -152,6 +169,7 @@ export function parseTimedTranscriptForReviewWithDiagnostics(
     allowOverlaps: true,
     sortOutOfOrder: true,
     splitLongCues: true,
+    useSourceTimelineBudget: true,
     onOriginalCue: (start, end) => {
       if (start < lastOriginalStart) diagnostics.reordered += 1;
       if (end - start > MAX_CLIP_DURATION) diagnostics.divided += 1;
