@@ -2285,7 +2285,7 @@ export default function RoleplayStudioPage() {
                   className="rounded border border-amber-300/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-300/10">
                   {showCueReviewAlertsOnly
                     ? 'Volver a turnos seleccionados'
-                    : `Revisar ${selectedCueReviewAlerts} turnos con alertas`}
+                    : selectedCueReviewAlerts === 1 ? 'Revisar 1 turno con alerta' : `Revisar ${selectedCueReviewAlerts} turnos con alertas`}
                 </button>
               )}
             </div>
