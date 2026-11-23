@@ -105,8 +105,9 @@ export function parseTimedTranscript(
       throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
     }
     for (let part = 0; part < parts; part++) {
-      const partStart = Math.round((start + part * MAX_CLIP_DURATION) * 1000) / 1000;
-      const partEnd = part === parts - 1 ? end : Math.min(end, partStart + MAX_CLIP_DURATION);
+      // Even partitions avoid a trailing fragment shorter than 100 ms.
+      const partStart = part === 0 ? start : Math.round((start + (end - start) * part / parts) * 1000) / 1000;
+      const partEnd = part === parts - 1 ? end : Math.round((start + (end - start) * (part + 1) / parts) * 1000) / 1000;
       cues.push({ start: partStart, end: partEnd, speaker, text });
     }
     if (cues.length > maxCues) {
