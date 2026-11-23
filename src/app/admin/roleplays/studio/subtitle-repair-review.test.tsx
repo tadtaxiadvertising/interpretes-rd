@@ -100,6 +100,6 @@ describe('Audio Studio repaired SRT import safety', () => {
 
     expect(screen.getByText(/4 turnos disponibles y 3 seleccionados/)).toBeTruthy();
     expect(screen.getByText(/Correcciones de tiempos para revisión/)).toBeTruthy();
-    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
 });
