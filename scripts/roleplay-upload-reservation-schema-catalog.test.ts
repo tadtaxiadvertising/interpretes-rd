@@ -19,6 +19,7 @@ function fixture(): RoleplayReservationCatalog {
       ['status', 'character varying', 20, "'RESERVED'::character varying"],
       ['items', 'jsonb', null, null],
       ['verified_objects', 'jsonb', null, "'[]'::jsonb"],
+      ['published_session_ids', 'ARRAY', null, 'ARRAY[]::text[]'],
       ['created_at', 'timestamp with time zone', null, 'CURRENT_TIMESTAMP'],
       ['expires_at', 'timestamp with time zone', null, null],
     ].map(([name, type, maxLength, defaultValue]) => ({
@@ -34,6 +35,7 @@ function fixture(): RoleplayReservationCatalog {
       ['roleplay_upload_reservations_expiry_check', 'c', [], 'CHECK ((expires_at > created_at))'],
       ['roleplay_upload_reservations_items_check', 'c', [], 'CHECK ((jsonb_array_length(items) > 0))'],
       ['roleplay_upload_reservations_evidence_check', 'c', [], 'CHECK ((jsonb_array_length(verified_objects) >= 0))'],
+      ['roleplay_upload_reservations_publication_receipt_check', 'c', [], "CHECK ((status <> 'PUBLISHED' OR cardinality(published_session_ids) > 0))"],
     ].map(([name, kind, cols, definition]) => ({
       name: name as string, kind: kind as string, columns: cols as string[],
       definition: definition as string, validated: true,
@@ -63,6 +65,8 @@ describe('future Roleplay reservation schema catalog gate (no SQL changes)', () 
         ? { ...c, defaultValue: null } : c) },
       { ...ready, columns: ready.columns.map(c => c.name === 'expires_at'
         ? { ...c, nullable: true } : c) },
+      { ...ready, columns: ready.columns.map(c => c.name === 'published_session_ids'
+        ? { ...c, defaultValue: null } : c) },
       { ...ready, constraints: ready.constraints.slice(1) },
       { ...ready, constraints: ready.constraints.map(c => c.kind === 'u'
         ? { ...c, columns: ['request_key'] } : c) },

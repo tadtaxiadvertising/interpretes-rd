@@ -1014,6 +1014,9 @@ model RoleplayUploadReservation {
   status           String   @default("RESERVED") @db.VarChar(20)
   items            Json     @db.JsonB
   verifiedObjects  Json     @default("[]") @map("verified_objects") @db.JsonB
+  // Publication receipt for ALL assigned sessions; written in the SAME
+  // transaction that creates sessions and transitions VERIFIED -> PUBLISHED.
+  publishedSessionIds String[] @default([]) @map("published_session_ids")
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   expiresAt        DateTime @map("expires_at") @db.Timestamptz(6)
 

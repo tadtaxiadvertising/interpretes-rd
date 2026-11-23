@@ -25,6 +25,7 @@ const columns: Array<[string, string, number | null]> = [
   ['status', 'character varying', 20],
   ['items', 'jsonb', null],
   ['verified_objects', 'jsonb', null],
+  ['published_session_ids', 'ARRAY', null],
   ['created_at', 'timestamp with time zone', null],
   ['expires_at', 'timestamp with time zone', null],
 ];
@@ -38,6 +39,7 @@ const constraints: Array<[string, string, string[]]> = [
   ['roleplay_upload_reservations_expiry_check', 'c', []],
   ['roleplay_upload_reservations_items_check', 'c', []],
   ['roleplay_upload_reservations_evidence_check', 'c', []],
+  ['roleplay_upload_reservations_publication_receipt_check', 'c', []],
 ];
 
 function same(actual: readonly string[], expected: readonly string[]): boolean {
@@ -79,6 +81,9 @@ export function classifyRoleplayReservationCatalog(
       defaults.get('expires_at') !== null ||
       !/^(?:'RESERVED'(?:::(?:character varying|text))?)$/.test(defaults.get('status')?.trim() ?? '') ||
       !/^\[\]$/.test((defaults.get('verified_objects') ?? '').replace(/^'|'::jsonb$/g, '')) ||
+      !/^(?:ARRAY\[\]::text\[\]|'\{\}'::text\[\])$/i.test(
+        (defaults.get('published_session_ids') ?? '').replace(/\s/g, ''),
+      ) ||
       !/^(?:CURRENT_TIMESTAMP|now\(\))$/i.test(defaults.get('created_at')?.trim() ?? '')) {
     return 'incomplete';
   }

@@ -54,6 +54,14 @@ El componente no identifica al administrador, no recupera objetos de Storage y n
 
 **Límite de confianza:** la firma de la función no convierte un objeto arbitrario en evidencia real. El servicio futuro deberá cargar tanto la reserva como sus verificaciones desde **almacenamiento confiable del servidor**, nunca desde el JSON del navegador. La comprobación pura no evita carreras de dos administradores: el servicio de publicación tendrá que reclamar `VERIFIED -> PUBLISHED` con actualización condicional/idempotente **dentro de una única transacción**, tras confirmar permisos y antes de dar por completada la asignación. Tampoco valida permisos de lectura del bucket ni genera URLs.
 
+## Comprobante de publicación con sesiones (STAGED; no conectado)
+
+El modelo `RoleplayUploadReservation` y la propuesta SQL staged incorporan `published_session_ids`, inicialmente vacío. Una restricción PostgreSQL obliga a que el estado `PUBLISHED` contenga al menos un identificador de sesión y que los estados anteriores no contengan ninguno. El ensayo aislado utiliza **dos transacciones PostgreSQL competidoras**, cada una con una sesión sintética y una transición condicional; valida que solamente sobreviven la sesión ganadora y su comprobante, y que el otro intento se revierte por completo.
+
+`src/lib/roleplay/direct-upload-publication-receipt.ts` prepara la última operación **del lado del servidor dentro de la transacción que creó las sesiones**. Revalida identidad de administrador, declaración, evidencia de bytes ya verificada, vencimiento e IDs de sesión, y reclama `VERIFIED → PUBLISHED` mediante `updateMany` condicional. `count !== 1` es un error que el servicio futuro debe propagar para revertir la transacción completa. Nunca debe ejecutarse después de confirmarla. Este helper **no** crea sesiones, ni firma URLs, ni lee Storage, ni reemplaza la autentificación del endpoint.
+
+**Límite esencial:** la columna almacena un comprobante, **no tiene clave foránea por cada ID del arreglo**. Una futura reconciliación de `PUBLISHED` debe consultar los IDs y comprobar la existencia de todas las sesiones bajo el mismo control de autorización antes de devolver un resultado de éxito. La base de producción sigue sin esta tabla; no habilitar el flujo directo solo porque el SQL y las pruebas aprueben.
+
 ## Huellas SHA-256 locales previas a la reserva (todavía desconectadas)
 
 `src/lib/roleplay/direct-upload-browser-hash.ts` prepara declaraciones `{ order, mime, sizeBytes, sha256 }` sin subir ni persistir audio. Valida **los 25 archivos y sus tipos/tamaños antes de leer bytes**, calcula cada SHA-256 con Web Crypto en el navegador, y detiene el lote cuando hay cancelación o un error. Solo comunica conteos de progreso; ningún mensaje de error contiene nombres de archivo, contenido o información privada.
