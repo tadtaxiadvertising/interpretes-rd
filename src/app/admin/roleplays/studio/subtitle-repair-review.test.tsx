@@ -133,6 +133,17 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
     expect(screen.getByText('Mostrando 1–60 de 650 turnos')).toBeTruthy();
     expect(screen.queryByText(/supera 500 intervenciones/)).toBeNull();
+    // A one-click suggestion must represent the whole source, not just the
+    // first 25 subtitles. Filtering the existing selection is read-only.
+    fireEvent.click(screen.getByLabelText('Solo seleccionados'));
+    expect(screen.getByText(/Mostrando 1–25 de 25 turnos/)).toBeTruthy();
+    const selectedNumbers = screen.getAllByRole('checkbox', { name: /^Seleccionar turno \d+$/ })
+      .map(node => Number((node.getAttribute('aria-label') ?? '').replace('Seleccionar turno ', '')));
+    expect(selectedNumbers[0]).toBeLessThan(40);
+    expect(selectedNumbers.some(value => value > 260 && value < 390)).toBe(true);
+    expect(selectedNumbers.at(-1)).toBeGreaterThan(610);
+    expect(selectedNumbers).toHaveLength(25);
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
 
   it('imports consecutive numbered subtitles as distinct roleplay turns', async () => {
