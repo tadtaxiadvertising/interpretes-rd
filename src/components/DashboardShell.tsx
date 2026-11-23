@@ -58,7 +58,7 @@ export function DashboardShell({ children, role, userName, interpreterId, userEm
         />
 
         <div className="flex flex-col flex-1 h-screen overflow-hidden">
-          <Navbar email={userName} notifications={notifications} />
+          <Navbar email={userName} notifications={notifications} role={role} />
 
           <main className="flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar transition-all duration-500 relative">
             <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 pb-24 md:pb-20">
