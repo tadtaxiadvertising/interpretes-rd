@@ -67,7 +67,7 @@ export default async function RankingPage() {
         <div className="flex items-center gap-3">
           <Trophy size={28} className="text-amber-400" />
           <div>
-            <h1 className="text-2xl font-bold text-white capitalize">Ranking — {monthName}</h1>
+            <h1 className="text-2xl font-bold text-[var(--foreground)] capitalize">Ranking — {monthName}</h1>
             <p className="text-sm text-slate-300">Tu posición y métricas privadas</p>
           </div>
         </div>
@@ -107,15 +107,15 @@ export default async function RankingPage() {
           </h3>
         </div>
         <div className="p-6">
-          <div className="flex justify-center items-end gap-4 md:gap-8">
+          <div className="flex flex-wrap justify-center items-end gap-3 sm:gap-4 md:gap-8">
             {/* 2nd Place */}
             {top3[1] && (
               <div className="flex-1 flex flex-col items-center">
-                <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full bg-gradient-to-br from-slate-400 to-slate-600 flex items-center justify-center shadow-xl">
-                  <span className="text-3xl md:text-4xl font-bold text-white">#{top3[1].position}</span>
+                <div className="relative w-24 h-24 md:w-28 md:h-28 rounded-full bg-gradient-to-br from-slate-600 to-slate-800 flex items-center justify-center shadow-xl">
+                  <span className="text-3xl md:text-4xl font-bold text-[#ffffff]">#{top3[1].position}</span>
                 </div>
                 <div className="mt-3 text-center">
-                  <p className="font-bold text-white truncate max-w-[120px]">{top3[1].name}</p>
+                  <p className="font-bold text-[var(--foreground)] truncate max-w-[120px]">{top3[1].name}</p>
                   <p className="text-xs text-slate-400">{(top3[1].minutes / 60).toFixed(1)} hrs</p>
                   {top3[1].qaScore !== null && (
                     <p className="text-xs text-emerald-400">QA: {top3[1].qaScore}%</p>
@@ -128,10 +128,10 @@ export default async function RankingPage() {
             {top3[0] && (
               <div className="flex-1 flex flex-col items-center">
                 <div className="relative w-32 h-32 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_30px_rgba(251,191,36,0.4)]">
-                  <span className="text-4xl md:text-5xl font-bold text-white">#{top3[0].position}</span>
+                  <span className="text-4xl md:text-5xl font-bold text-[#13233b]">#{top3[0].position}</span>
                 </div>
                 <div className="mt-3 text-center">
-                  <p className="font-bold text-white truncate max-w-[140px]">{top3[0].name}</p>
+                  <p className="font-bold text-[var(--foreground)] truncate max-w-[140px]">{top3[0].name}</p>
                   <p className="text-xs text-slate-300">{(top3[0].minutes / 60).toFixed(1)} hrs</p>
                   {top3[0].qaScore !== null && (
                     <p className="text-xs text-emerald-400">QA: {top3[0].qaScore}%</p>
@@ -144,10 +144,10 @@ export default async function RankingPage() {
             {top3[2] && (
               <div className="flex-1 flex flex-col items-center">
                 <div className="relative w-20 h-20 md:w-24 md:h-24 rounded-full bg-gradient-to-br from-amber-700 to-amber-900 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl md:text-3xl font-bold text-white">#{top3[2].position}</span>
+                  <span className="text-2xl md:text-3xl font-bold text-[#ffffff]">#{top3[2].position}</span>
                 </div>
                 <div className="mt-3 text-center">
-                  <p className="font-bold text-white truncate max-w-[120px]">{top3[2].name}</p>
+                  <p className="font-bold text-[var(--foreground)] truncate max-w-[120px]">{top3[2].name}</p>
                   <p className="text-xs text-slate-400">{(top3[2].minutes / 60).toFixed(1)} hrs</p>
                   {top3[2].qaScore !== null && (
                     <p className="text-xs text-emerald-400">QA: {top3[2].qaScore}%</p>

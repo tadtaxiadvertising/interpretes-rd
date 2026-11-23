@@ -93,7 +93,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       >
         <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "animate-bounce")} />
         {unreadCount > 0 && (
-          <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-500 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[#0a0a0a]">
+          <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-500 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[var(--theme-nav)]">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}

@@ -535,3 +535,200 @@ html[data-theme="light"] .theme-candidate footer[class*="bg-emerald-300"] {
 html[data-theme="light"] .theme-candidate [class*="bg-blue-300/"] {
   border-color: rgba(21,84,168,.24);
 }
+
+
+/* Shared accessible theme tokens. Legacy layouts keep their structure, while
+   every surface is read from the same dark/light palette. */
+:root {
+  color-scheme: dark;
+  --theme-surface-muted: #19283d;
+  --theme-track: #334761;
+  --theme-link: #9dc3ff;
+  --theme-focus: #93c5fd;
+  --theme-success: #6ee7b7;
+  --theme-warning: #fcd34d;
+  --theme-danger: #fda4af;
+  --theme-purple: #c4b5fd;
+  --theme-control-bg: #101d30;
+  --theme-control-text: #f1f5f9;
+  --theme-control-border: #7185a2;
+}
+html[data-theme="light"] {
+  --theme-surface-muted: #edf3fa;
+  --theme-track: #d6e1f0;
+  --theme-link: #1554a8;
+  --theme-focus: #1554a8;
+  --theme-success: #047857;
+  --theme-warning: #92400e;
+  --theme-danger: #b91c1c;
+  --theme-purple: #6d28d9;
+  --theme-control-bg: #fff;
+  --theme-control-text: #13233b;
+  --theme-control-border: #6d809c;
+}
+
+/* In the light workspace, legacy status classes need contrast on white.
+   Scope these to the workspace: do not change status colors in the player,
+   public marketing site or candidate flow. */
+html[data-theme="light"] .theme-workspace :is(.text-blue-300, .text-blue-400, .text-blue-500, .text-indigo-400) {
+  color: var(--theme-link);
+}
+html[data-theme="light"] .theme-workspace :is(.text-emerald-300, .text-emerald-400, .text-green-400, .text-green-500) {
+  color: var(--theme-success);
+}
+html[data-theme="light"] .theme-workspace :is(.text-amber-200, .text-amber-300, .text-amber-400, .text-yellow-400, .text-yellow-500) {
+  color: var(--theme-warning);
+}
+html[data-theme="light"] .theme-workspace :is(.text-rose-300, .text-rose-400, .text-red-300, .text-red-400, .text-red-500) {
+  color: var(--theme-danger);
+}
+html[data-theme="light"] .theme-workspace :is(.text-purple-400, .text-violet-400, .text-indigo-300) {
+  color: var(--theme-purple);
+}
+html[data-theme="light"] .theme-workspace :is(.text-slate-500, .text-gray-500, .text-slate-600, .text-gray-600) {
+  color: var(--text-secondary);
+}
+
+/* Restore white on solid blue/red/green buttons and badge icons; white-on-
+   white must never occur because of the old .text-white text override. */
+html[data-theme="light"] .theme-workspace :is(
+  [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
+  [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"],
+  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
+  [class~="bg-green-500"], [class~="bg-green-600"],
+  [class~="bg-indigo-500"], [class~="bg-indigo-600"]
+).text-white,
+html[data-theme="light"] .theme-workspace :is(
+  [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
+  [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"],
+  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
+  [class~="bg-green-500"], [class~="bg-green-600"],
+  [class~="bg-indigo-500"], [class~="bg-indigo-600"]
+) > .text-white {
+  color: #fff;
+}
+
+/* On dark cards, tiny legacy gray hints should be readable too. */
+html[data-theme="dark"] .theme-workspace :is(
+  .text-slate-500, .text-gray-500, .text-slate-600, .text-gray-600
+) {
+  color: var(--text-tertiary);
+}
+
+/* Neutral progress tracks should remain distinguishable inside white cards. */
+html[data-theme="light"] .theme-workspace :is(
+  [class~="bg-slate-800"], [class~="bg-slate-700"],
+  [class~="bg-slate-800/10"], [class~="bg-slate-800/20"],
+  [class~="bg-slate-800/30"], [class~="bg-slate-800/40"],
+  [class~="bg-slate-800/50"]
+) {
+  background-color: var(--theme-surface-muted);
+}
+html[data-theme="light"] .theme-workspace :is(
+  .h-1, .h-1\.5, .h-2, .h-3, .h-4
+)[class*="bg-slate-800"] {
+  background-color: var(--theme-track);
+}
+
+/* Dark gradient hero cards must not retain midnight backgrounds after
+   their child text has been changed to dark for light mode. */
+html[data-theme="light"] .theme-workspace [class*="from-indigo-900"] {
+  background-image: linear-gradient(135deg, #e5effe 0%, #ffffff 100%);
+}
+html[data-theme="light"] .theme-workspace [class*="from-slate-900"][class*="to-rose-950"] {
+  background-image: linear-gradient(135deg, #fff 0%, #fff0f2 100%);
+}
+html[data-theme="light"] .theme-workspace [class*="from-emerald-900"][class*="to-slate-900"] {
+  background-image: linear-gradient(135deg, #e9f9f3 0%, #fff 100%);
+}
+
+/* Theme-aware forms and OS autofill: preserve legible input text, including
+   in dark mode after Chrome replaces the browser's field background. */
+html[data-theme] :is(input,textarea,select) {
+  accent-color: var(--brand-blue);
+}
+html[data-theme="dark"] :is(input,textarea,select) {
+  color-scheme: dark;
+}
+html[data-theme] :is(input:not([type="checkbox"]):not([type="radio"]),textarea,select):focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}
+html[data-theme="dark"] :is(input,textarea):-webkit-autofill,
+html[data-theme="dark"] :is(input,textarea):-webkit-autofill:hover,
+html[data-theme="dark"] :is(input,textarea):-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--theme-control-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--theme-control-bg) inset;
+}
+html[data-theme="light"] :is(input,textarea):-webkit-autofill,
+html[data-theme="light"] :is(input,textarea):-webkit-autofill:hover,
+html[data-theme="light"] :is(input,textarea):-webkit-autofill:focus {
+  -webkit-text-fill-color: #13233b;
+  -webkit-box-shadow: 0 0 0 1000px #fff inset;
+}
+/* Native controls, dropdown options, and scrollbars reflect selected theme. */
+html[data-theme="dark"] option { background: #101d30; color: #f1f5f9; }
+html[data-theme="light"] option { background: #fff; color: #13233b; }
+html[data-theme="dark"] ::-webkit-scrollbar-thumb { background: rgba(167, 190, 220, .36); }
+html[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(21, 84, 168, .30); }
+
+/* High-contrast selected text and focus for keyboard users. */
+html[data-theme="dark"] ::selection { background: #3361a3; color: #fff; }
+html[data-theme="light"] ::selection { background: #bed9ff; color: #13233b; }
+:where(a,button,input,select,textarea,[role="button"]):focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}
+@media (forced-colors: active) {
+  :where(a,button,input,select,textarea,[role="button"]):focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+
+/* Visible form boundaries need >=3:1 contrast as a non-text UI component.
+   The labels and values remain unchanged; no validation is affected. */
+html[data-theme] :is(
+  .theme-workspace, .theme-candidate, .theme-login, .theme-postular, .theme-experience
+) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]),
+  select, textarea
+):not(:disabled):not([aria-invalid="true"]):not([class*="border-red"]):not([class*="border-rose"]):not([class*="border-green"]):not([class*="border-emerald"]):not([class*="border-amber"]):not([class*="border-blue"]) {
+  border-color: var(--theme-control-border);
+}
+html[data-theme="dark"] .theme-workspace :is(input,textarea)::placeholder {
+  color: #a8b7cc;
+}
+html[data-theme="light"] .theme-workspace :is(input,textarea)::placeholder {
+  color: #52627a;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *,
+  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::before,
+  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+
+/* Legacy translucent white panels disappear on white in light mode. Use a
+   subtle neutral surface, but only for these known low-opacity utilities. */
+html[data-theme="light"] .theme-workspace :is(
+  [class~="bg-white/5"], [class~="bg-white/10"],
+  [class~="bg-white/[0.01]"], [class~="bg-white/[0.02]"],
+  [class~="bg-white/[0.03]"], [class~="bg-white/[0.04]"],
+  [class~="bg-white/[0.05]"], [class~="bg-white/[0.06]"]
+) {
+  background-color: var(--theme-surface-muted);
+}
+
+
+/* Some legacy dialogs intentionally remain white even while the page is
+   dark. Their autofill text must remain dark, not inherit dark-field colors. */
+html[data-theme="dark"] .modal-light input:-webkit-autofill,
+html[data-theme="dark"] .modal-light input:-webkit-autofill:hover,
+html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #13233b;
+  -webkit-box-shadow: 0 0 0 1000px #fff inset;
+}

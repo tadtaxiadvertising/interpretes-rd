@@ -45,14 +45,14 @@ export default async function EarningsPage() {
     return (
       <div className="p-12 glass rounded-3xl border border-white/5 text-center">
         <AlertCircle size={48} className="mx-auto text-yellow-500 mb-4" />
-        <h3 className="text-xl font-bold text-white">Perfil no vinculado</h3>
+        <h3 className="text-xl font-bold text-[var(--foreground)]">Perfil no vinculado</h3>
         <p className="text-gray-400 mt-2">Tu cuenta todavía no está vinculada a un perfil de intérprete. Contacta con soporte para recibir ayuda.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <div className="min-w-0 space-y-8 animate-in fade-in duration-700">
       <header>
         <h2 className="text-3xl font-bold text-white flex items-center gap-3">
           <DollarSign className="text-green-400" />
@@ -65,8 +65,8 @@ export default async function EarningsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="glass p-6 rounded-3xl border border-white/5 bg-gradient-to-br from-green-500/5 to-transparent">
           <p className="text-sm text-gray-500 font-medium">Tu tarifa base</p>
-          <div className="flex items-center gap-3 mt-2">
-            <h3 className="text-3xl font-bold text-white">RD${(Number(interpreter.tariffPerMinute) * 60).toFixed(2)}</h3>
+          <div className="flex flex-wrap items-center gap-3 mt-2">
+            <h3 className="break-all text-2xl sm:text-3xl font-bold text-[var(--foreground)]">RD${(Number(interpreter.tariffPerMinute) * 60).toFixed(2)}</h3>
             <span className="text-xs text-gray-400">por hora de interpretación</span>
           </div>
           <TrendingUp size={24} className="mt-4 text-green-500" />
