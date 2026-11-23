@@ -3,6 +3,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { FileText, CreditCard, Compass, ChevronRight, ChevronLeft, Check, Loader2, Sparkles, ChevronDown, AlertCircle, ShieldCheck, PartyPopper } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { acceptTerms, saveBankingDetails, completeOnboarding } from '@/app/actions/onboarding';
 import { getPublishedLegalAgreement } from '@/app/actions/legal-agreements';
 import { BankFormRD, type BankFormData, isBankFormValid } from './BankFormRD';
@@ -184,7 +186,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
   // ── Success overlay ──
   if (showSuccess) {
     return (
-      <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+      <div className="theme-experience fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-slate-950/90 backdrop-blur-md">
         <div className="relative w-full max-w-md animate-in fade-in zoom-in-95 duration-700">
           <div className="absolute -top-20 -left-20 w-64 h-64 bg-emerald-500/30 rounded-full blur-[100px] pointer-events-none" />
           <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-blue-500/30 rounded-full blur-[100px] pointer-events-none" />
@@ -209,24 +211,31 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
+    <div className="theme-experience fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-4 bg-slate-950/90 backdrop-blur-md">
       <div className="relative w-full max-w-2xl animate-in fade-in zoom-in-95 duration-500">
         <div className="absolute -top-20 -left-20 w-64 h-64 bg-blue-500/20 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute -bottom-20 -right-20 w-64 h-64 bg-indigo-500/20 rounded-full blur-[100px] pointer-events-none" />
 
-        <div className="relative bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="relative bg-slate-900 border border-white/10 rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1.5rem)]">
 
           <div className="absolute top-0 left-0 w-full h-1 bg-slate-800 z-10">
             <div
-              className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-700 ease-out"
+              className="h-full bg-gradient-to-r from-blue-500 to-red-500 transition-all duration-700 ease-out"
               style={{ width: `${progress}%` }}
             />
           </div>
 
-          <div className="px-10 pt-10 pb-6 border-b border-white/5">
-            <div className="flex justify-between items-start mb-6">
+          <div className="px-5 sm:px-10 pt-6 sm:pt-10 pb-5 border-b border-white/5">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2">
+                <Image src="/interpretes-rd-logo.webp" alt="Logo de Intérpretes RD" width={40} height={40} className="rounded-lg bg-white p-1" />
+                <span className="text-xs font-bold text-white">Intérpretes RD</span>
+              </div>
+              <ThemeSwitcher />
+            </div>
+            <div className="flex flex-wrap justify-between items-start gap-3 mb-6">
               <div>
-                <h2 className="text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
                   ¡Hola{interpreterName ? `, ${interpreterName}` : ''}! <Sparkles className="text-amber-400" size={24} />
                 </h2>
                 <p className="text-slate-400 mt-1">Configura tu portal en unos segundos.</p>
@@ -274,7 +283,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
             </div>
           </div>
 
-          <div className="px-10 py-8 overflow-y-auto flex-1 custom-scrollbar">
+          <div className="px-5 sm:px-10 py-5 sm:py-8 overflow-y-auto flex-1 custom-scrollbar">
             {currentStep === 0 && (
               <div className="flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="mb-6">
@@ -295,7 +304,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                 )}
                 <div
                   ref={scrollBoxRef}
-                  className="bg-slate-950/80 border border-white/5 rounded-3xl p-8 text-slate-300 leading-relaxed text-sm prose prose-invert max-w-none h-[280px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800"
+                  className="bg-slate-950/80 border border-white/5 rounded-3xl p-4 sm:p-8 text-slate-300 leading-relaxed text-sm prose prose-invert max-w-none h-[280px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-800"
                 >
                   {agreement ? agreement.content.split('\n').map((line, i) => {
                     if (line.startsWith('# ')) return <h1 key={i} className="text-2xl font-black text-white mb-6">{line.replace('# ', '')}</h1>;
@@ -414,7 +423,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
             )}
           </div>
 
-          <div className="px-10 py-6 border-t border-white/5 bg-slate-900/50 backdrop-blur-sm flex items-center justify-between">
+          <div className="px-5 sm:px-10 py-4 sm:py-6 border-t border-white/5 bg-slate-900/50 backdrop-blur-sm flex flex-wrap items-center justify-between gap-3">
             {currentStep > 0 ? (
               <button
                 onClick={() => { setCurrentStep(currentStep - 1); setError(null); }}
@@ -424,7 +433,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
               </button>
             ) : <div />}
 
-            <div className="flex gap-4">
+            <div className="flex min-w-0 flex-wrap gap-3">
               {currentStep === 0 && (
                 <button
                   onClick={handleNextLegal}
@@ -436,7 +445,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                       : "bg-slate-800 text-slate-500 cursor-not-allowed"
                   )}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <span className="relative z-10 flex items-center gap-2">
                     {isLoading ? <Loader2 size={20} className="animate-spin" /> : <>Entendido y Acepto <ChevronRight size={20} /></>}
                   </span>
@@ -454,7 +463,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                       : "bg-slate-800 text-slate-500 cursor-not-allowed"
                   )}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <span className="relative z-10 flex items-center gap-2">
                     {isLoading ? <Loader2 size={20} className="animate-spin" /> : <>Confirmar Datos <ChevronRight size={20} /></>}
                   </span>
@@ -466,7 +475,7 @@ export function OnboardingWizard({ onComplete, interpreterName, initialStep = 0 
                   onClick={() => setTutorialStep(prev => prev + 1)}
                   className="group relative flex items-center gap-2 px-8 py-4 rounded-2xl font-bold transition-all duration-500 overflow-hidden bg-blue-600 text-white shadow-xl shadow-blue-600/30 hover:scale-[1.02] active:scale-95"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                  <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
                   <span className="relative z-10 flex items-center gap-2">
                     Siguiente Tip <ChevronRight size={20} />
                   </span>
