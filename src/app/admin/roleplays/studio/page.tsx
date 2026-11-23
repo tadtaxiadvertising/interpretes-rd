@@ -2120,11 +2120,9 @@ export default function RoleplayStudioPage() {
           <h2 className="text-lg font-bold text-white">Seleccionar turnos de la transcripción</h2>
           <p className="text-sm text-slate-300">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
-            (máximo {ROLEPLAY_MAX_SCENARIOS}). Solo los turnos marcados se convertirán en
-            escenarios. Revisa cualquier solapamiento o diálogo del intérprete antes de aplicar.
-            La propuesta inicial cubre distintos momentos de la grabación, no solo el principio.
-            Paso 1: escucha y ajusta la selección. Paso 2: aplica los cortes para editar hablantes e idiomas.
-            Los cortes actuales no se reemplazan hasta que confirmes.
+            (máximo {ROLEPLAY_MAX_SCENARIOS}). La propuesta abarca distintos momentos de la grabación.
+            Escucha y ajusta los turnos; después pulsa «Aplicar» para revisar hablantes e idiomas.
+            Tus cortes actuales no se reemplazan sin confirmación.
           </p>
           <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
             <input type="search" aria-label="Buscar turnos en transcripción"
