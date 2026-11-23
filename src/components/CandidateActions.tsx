@@ -38,6 +38,8 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isHiring, setIsHiring] = useState(false);
+  const [hireError, setHireError] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isMarkingReady, setIsMarkingReady] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showHireConfirm, setShowHireConfirm] = useState(false);
@@ -116,34 +118,40 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
   };
 
   const handleDelete = async () => {
+    if (isDeleting) return;
     setIsDeleting(true);
+    setDeleteError(null);
     try {
       const result = await deleteCandidate(candidate.id);
-      if (!result.success) throw new Error(result.error);
-      
+      if (!result.success) {
+        setDeleteError('No se pudo eliminar al candidato. Verifica su estado antes de reintentar.');
+        return;
+      }
+      setShowDeleteConfirm(false);
       setIsOpen(false);
       router.refresh();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      console.error(error);
-      alert(`Error deleting candidate: ${message}`);
+    } catch {
+      setDeleteError('No se pudo confirmar la eliminación. Comprueba el estado antes de reintentar.');
     } finally {
       setIsDeleting(false);
     }
   };
 
   const handleHire = async () => {
+    if (isHiring) return;
     setIsHiring(true);
+    setHireError(null);
     try {
       const result = await hireCandidate(candidate.id);
-      if (!result.success) throw new Error(result.error);
-      
-      alert(`Candidate ${candidate.name} marked as hired!`);
+      if (!result.success) {
+        setHireError('La contratación no se completó. Revisa el estado de la candidatura antes de reintentar.');
+        return;
+      }
+      setShowHireConfirm(false);
       setIsOpen(false);
       router.refresh();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Unknown error';
-      alert(`Error hiring candidate: ${message}`);
+    } catch {
+      setHireError('No se pudo confirmar la contratación. Revisa el estado antes de reintentar.');
     } finally {
       setIsHiring(false);
     }
@@ -220,7 +228,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
               <button 
                 disabled={isHiring}
                 className="w-full px-4 py-2 text-left text-sm text-[var(--theme-success)] hover:bg-green-500/10 flex items-center gap-3 transition-colors disabled:opacity-50"
-                onClick={() => { setShowHireConfirm(true); setIsOpen(false); }}
+                onClick={() => { setHireError(null); setShowHireConfirm(true); setIsOpen(false); }}
               >
                 {isHiring ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />}
                 Hire Candidate
@@ -230,6 +238,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             <button 
               className="w-full px-4 py-2 text-left text-sm text-[var(--theme-danger)] hover:bg-red-500/10 flex items-center gap-3 transition-colors"
               onClick={() => {
+                setDeleteError(null);
                 setShowDeleteConfirm(true);
                 setIsOpen(false);
               }}
@@ -244,11 +253,15 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
 
       {showHireConfirm && (
         <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="absolute inset-0 bg-black/70" onClick={() => setShowHireConfirm(false)} />
+          <div className="absolute inset-0 bg-black/70" onClick={() => { if (!isHiring) setShowHireConfirm(false); }} />
           <div role="dialog" aria-modal="true" aria-label="Confirmar contratación" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md space-y-5 overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] p-5 shadow-2xl sm:p-7">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-500/10 text-[var(--theme-success)]"><UserPlus size={28}/></div>
             <div><h3 className="text-xl font-bold text-[var(--foreground)]">Confirm hiring</h3><p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">This will promote <strong className="text-[var(--foreground)]">{candidate.name}</strong> to an active interpreter, link their account and mark the recruitment application as hired. This action changes operational access.</p></div>
-            <div className="flex justify-end gap-3"><button onClick={() => setShowHireConfirm(false)} className="rounded-xl bg-[var(--theme-hover)] px-4 py-2.5 text-[var(--text-secondary)]">Cancel</button><button disabled={isHiring} onClick={async () => { await handleHire(); setShowHireConfirm(false); }} className="flex items-center gap-2 rounded-xl bg-[#047857] px-5 py-2.5 font-semibold text-white transition-colors hover:bg-[#065f46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] disabled:opacity-50">{isHiring && <Loader2 size={16} className="animate-spin"/>}Confirm hiring</button></div>
+            {hireError && <p role="alert" className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{hireError}</p>}
+            <div className="flex flex-wrap justify-end gap-3">
+              <button type="button" disabled={isHiring} onClick={() => setShowHireConfirm(false)} className="min-h-11 rounded-xl bg-[var(--theme-hover)] px-4 py-2.5 text-[var(--text-secondary)] disabled:opacity-60">Cancelar</button>
+              <button type="button" disabled={isHiring} onClick={handleHire} className="flex min-h-11 items-center gap-2 rounded-xl bg-[#047857] px-5 py-2.5 font-semibold text-white transition-colors hover:bg-[#065f46] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] disabled:opacity-50">{isHiring && <Loader2 size={16} className="animate-spin"/>}Confirm hiring</button>
+            </div>
           </div>
         </div>
       )}
@@ -307,7 +320,7 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="theme-workspace fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!isDeleting) setShowDeleteConfirm(false); }} />
           <div role="dialog" aria-modal="true" aria-label="Eliminar candidato" className="relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] p-5 text-[var(--foreground)] shadow-2xl sm:p-8 animate-in fade-in zoom-in-95 duration-300">
             <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mb-6">
               <AlertTriangle size={32} />
@@ -316,14 +329,18 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             <p className="text-[var(--text-secondary)] text-sm mb-8 leading-relaxed">
               Are you sure you want to remove <span className="text-[var(--foreground)] font-bold">{candidate.name}</span>? This action will delete all interview notes and history.
             </p>
+            {deleteError && <p role="alert" className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{deleteError}</p>}
             <div className="flex gap-4">
-              <button 
+              <button
+                type="button"
+                disabled={isDeleting}
                 onClick={() => setShowDeleteConfirm(false)}
                 className="flex-1 py-3 bg-[var(--theme-hover)] hover:bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] rounded-xl font-bold transition-all"
               >
                 Cancel
               </button>
               <button 
+                type="button"
                 onClick={handleDelete}
                 disabled={isDeleting}
                 className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
