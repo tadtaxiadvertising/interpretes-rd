@@ -44,7 +44,9 @@ describe('MobileBottomNav', () => {
   it('closes all-sections panel with Escape or a selected link', () => {
     render(<MobileBottomNav role="admin" />);
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar más secciones' }));
+    expect((document.activeElement as HTMLAnchorElement).getAttribute('href')).toBe('/admin/roleplays/studio');
     fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mostrar más secciones' }));
     expect(screen.queryByRole('region', { name: 'Más secciones' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar más secciones' }));
