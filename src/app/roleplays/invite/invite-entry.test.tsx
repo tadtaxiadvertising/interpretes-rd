@@ -11,6 +11,13 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: m.push }),
 }));
 
+vi.mock('next/image', () => ({
+  default: (props: { alt: string }) => <span role="img" aria-label={props.alt} />,
+}));
+vi.mock('@/components/ThemeSwitcher', () => ({
+  ThemeSwitcher: () => <button type="button" aria-label="Cambiar apariencia">Tema</button>,
+}));
+
 const pages = [
   ['token link', InvitePage, '/api/roleplay/validate-invite'],
   ['invitation code', InviteByCodePage, '/api/roleplay/validate-invite-by-code'],
@@ -38,7 +45,9 @@ describe.each(pages)('%s participant entry', (_label, Page, apiPath) => {
 
     render(<Page />);
 
+    expect(screen.getByRole('button', { name: 'Cambiar apariencia' })).toBeTruthy();
     expect(await screen.findByRole('heading', { name: 'Inicia sesión para continuar' })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Intérpretes RD' })).toBeTruthy();
     const login = screen.getByRole('link', { name: 'Iniciar sesión' });
     expect(login.getAttribute('href')).toBe('/login');
     expect(login.getAttribute('referrerpolicy')).toBe('no-referrer');
