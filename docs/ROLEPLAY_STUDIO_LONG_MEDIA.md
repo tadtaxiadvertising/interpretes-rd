@@ -31,7 +31,9 @@ temporal ligera.
 1. Abrir **Administración → Roleplays → Audio Studio** y seleccionar el
    video o audio **desde el propio equipo**.
 2. Revisar sus subtítulos SRT/VTT (hasta 5 MB y 10.000 turnos de referencia
-   en el modo local). La selección para el roleplay permanece en **25
+   en el modo local; para MP3 estándar, hasta 1 MB y 10.000 turnos, dentro
+   de las primeras 2 horas). La revisión se pagina para no mostrar todo el
+   archivo de una vez. La selección para el roleplay permanece en **25
    intervenciones máximo** y **15 minutos de audio acumulado**.
 3. Marcar inicio y final, asignar roles e idiomas, excluir al intérprete
    original y revisar cualquier solapamiento.

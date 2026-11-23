@@ -102,4 +102,36 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByText(/Correcciones de tiempos para revisión/)).toBeTruthy();
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
+
+  it('opens 650 cues from a normal MP3 as paged candidates without replacing cuts', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 1800 });
+    fireEvent.loadedMetadata(player);
+
+    const timestamp = (seconds: number) =>
+      '00:' + String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0') + ',000';
+    const transcript = Array.from({ length: 650 }, (_unused, index) => {
+      const start = index * 2;
+      return String(index + 1) + '\n' + timestamp(start) + ' --> ' +
+        timestamp(start + 1) + '\nDoctor: Source turn';
+    }).join('\n\n');
+    const file = new File(['srt'], 'many-valid-cues.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => transcript });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/650 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+    expect(screen.getByText('Mostrando 1–60 de 650 turnos')).toBeTruthy();
+    expect(screen.queryByText(/supera 500 intervenciones/)).toBeNull();
+  });
 });

@@ -162,7 +162,10 @@ export function parseTimedTranscriptForReviewWithDiagnostics(
   const diagnostics: TranscriptReviewDiagnostics = { reordered: 0, overlapping: 0, divided: 0 };
   let lastOriginalStart = -1;
   const cues = parseTimedTranscript(raw, {
-    maxCues: longLocalSource ? MAX_LOCAL_CUES : 500,
+    // Long MP3 recordings can have thousands of short SRT cues. Both modes
+    // are bounded to 10k reference cues; the standard MP3 mode remains
+    // capped to 1 MB / 2 hours and only 25 selected cues may be exported.
+    maxCues: MAX_LOCAL_CUES,
     maxTotalSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
     maxSourceSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
     maxChars: longLocalSource ? MAX_LOCAL_TRANSCRIPT_CHARS : MAX_TRANSCRIPT_CHARS,
