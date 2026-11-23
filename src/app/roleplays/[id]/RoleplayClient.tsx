@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { confirmRoleplayResponse, createRoleplayResponseUpload, saveSelfAssessment, submitRoleplaySession } from '@/app/actions/roleplay';
 import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { RoleplayIntro } from '@/components/roleplay/RoleplayIntro';
@@ -444,7 +445,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
   return (
     <div className="min-h-screen bg-slate-950">
       <div className="fixed top-4 left-4 right-4 z-40 flex justify-between items-center px-4 pointer-events-none">
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto flex flex-col items-start gap-2">
           <button
             onClick={handleExit}
             aria-label="Salir del Roleplay"
@@ -452,6 +453,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
           >
             <X size={20} />
           </button>
+          <ThemeSwitcher />
         </div>
         <RoleplayProgress
           currentStep={currentStep}
