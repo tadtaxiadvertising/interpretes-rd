@@ -276,4 +276,52 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(confirmation).not.toHaveBeenCalled();
     expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
   });
+
+  it('jumps directly to flagged selected SRT cues and restores the original selection view', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(player);
+
+    const stamp = (seconds: number) => '00:' +
+      String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0') + ',000';
+    const captions = Array.from({ length: 30 }, (_, index) => [
+      String(index + 1),
+      stamp(index * 3) + ' --> ' + stamp(index * 3 + 2),
+      index === 1 ? 'Speaker without label' : 'Doctor: Verified role',
+    ].join('\n')).join('\n\n');
+    const file = new File(['srt'], 'review.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => captions });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/30 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(screen.getByRole('status', { name: 'Resumen de calidad de selección SRT' })
+      .textContent).toContain('1 sin hablante identificado');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar 1 turno con alerta' }));
+    expect((screen.getByRole('checkbox', { name: 'Solo seleccionados' }) as HTMLInputElement).checked)
+      .toBe(true);
+    expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: 'Seleccionar turno 1' })).toBeNull();
+    expect(screen.getByText(/30 turnos disponibles y 2 seleccionados/)).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a turnos seleccionados' }));
+    expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Volver a turnos seleccionados' })).toBeNull();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+  });
 });
