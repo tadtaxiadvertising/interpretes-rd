@@ -160,14 +160,14 @@ describe('Audio Studio review diagnostic report', () => {
 
   it('does not flag a clean subtitle file as repaired', () => {
     const { diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(
-      '1\\n00:00:01,000 --> 00:00:02,000\\nDoctor: Hello'
+      '1\n00:00:01,000 --> 00:00:02,000\nDoctor: Hello'
     );
     expect(diagnostics).toEqual({ reordered: 0, overlapping: 0, divided: 0 });
   });
 
   it('prevents tiny leftover windows when source duration is barely longer than 300 s', () => {
     const { cues, diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(
-      '00:00:00,000 --> 00:05:00,001\\nDoctor: Long cue'
+      '00:00:00,000 --> 00:05:00,001\nDoctor: Long cue'
     );
     expect(diagnostics.divided).toBe(1);
     expect(cues).toHaveLength(2);
