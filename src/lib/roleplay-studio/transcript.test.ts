@@ -153,7 +153,7 @@ describe('Audio Studio review diagnostic report', () => {
 00:00:02.000 --> 00:00:05.000
 <v Doctor>Overlap</v>`;
     const { cues, diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(raw);
-    expect(diagnostics).toEqual({ reordered: 1, overlapping: 1, divided: 1 });
+    expect(diagnostics).toEqual({ reordered: 1, overlapping: 1, divided: 1, skipped: 0 });
     expect(cues.map(cue => cue.start)).toEqual([1, 2, 300, 450.001]);
     expect(cues.every(cue => cue.end - cue.start <= 300)).toBe(true);
   });
@@ -162,7 +162,7 @@ describe('Audio Studio review diagnostic report', () => {
     const { diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(
       '1\n00:00:01,000 --> 00:00:02,000\nDoctor: Hello'
     );
-    expect(diagnostics).toEqual({ reordered: 0, overlapping: 0, divided: 0 });
+    expect(diagnostics).toEqual({ reordered: 0, overlapping: 0, divided: 0, skipped: 0 });
   });
 
   it('prevents tiny leftover windows when source duration is barely longer than 300 s', () => {
@@ -173,5 +173,44 @@ describe('Audio Studio review diagnostic report', () => {
     expect(cues).toHaveLength(2);
     expect(cues[0].end).toBe(cues[1].start);
     expect(cues.every(cue => cue.end - cue.start >= 0.1)).toBe(true);
+  });
+});
+
+
+describe('Provider zero-length and inverted subtitles', () => {
+  it('retains valid neighbors for manual review while counting unusable captions', () => {
+    const input = [
+      '1', '00:00:00,000 --> 00:00:00,050', 'Doctor: Too brief',
+      '', '2', '00:00:00,050 --> 00:00:00,200', 'Doctor: Usable',
+      '', '3', '00:00:04,000 --> 00:00:03,000', 'Paciente: Inverted',
+      '', '4', '00:00:05,000 --> 00:00:06,000', 'Doctor: Usable again',
+    ].join('\n');
+    expect(() => parseTimedTranscript(input)).toThrow(/subtítulo 1/);
+    const result = parseTimedTranscriptForReviewWithDiagnostics(input);
+    expect(result.cues.map(cue => [cue.start, cue.end])).toEqual([[0.05, 0.2], [5, 6]]);
+    expect(result.diagnostics.skipped).toBe(2);
+    expect(result.diagnostics.reordered).toBe(0);
+  });
+
+  it('reports out-of-source timestamps with the specific offending cue number', () => {
+    const input = [
+      '1', '00:00:00,000 --> 00:00:02,000', 'Doctor: Valid',
+      '', '2', '02:00:00,000 --> 02:00:01,000', 'Doctor: Invalid',
+    ].join('\n');
+    expect(() => parseTimedTranscriptForReviewWithDiagnostics(input))
+      .toThrow(/subtítulo 2.*posterior al límite/);
+  });
+
+  it('does not silently accept an entirely unusable transcript', () => {
+    expect(() => parseTimedTranscriptForReviewWithDiagnostics(
+      '00:00:01,000 --> 00:00:01,000\nDoctor: Zero duration',
+    )).toThrow(/No se encontraron tiempos/);
+  });
+
+  it('enforces original cue count even if most captions are skipped', () => {
+    const raw = Array.from({ length: 10001 }, () =>
+      '00:00:01,000 --> 00:00:01,000\nDoctor: Invalid cue',
+    ).join('\n\n');
+    expect(() => parseTimedTranscriptForReviewWithDiagnostics(raw)).toThrow(/10000/);
   });
 });

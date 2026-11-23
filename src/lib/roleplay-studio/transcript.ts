@@ -81,6 +81,7 @@ interface TranscriptParseLimits {
   sortOutOfOrder?: boolean;
   splitLongCues?: boolean;
   useSourceTimelineBudget?: boolean;
+  skipUnusableTiming?: (kind: 'reversed' | 'tiny') => void;
   onOriginalCue?: (start: number, end: number) => void;
 }
 
@@ -107,6 +108,7 @@ export function parseTimedTranscript(
   let sum = 0;
   let previousEnd = 0;
   let previousStart = 0;
+  let originalCueCount = 0;
 
   for (const block of blocks) {
     const lines = block.split('\n').map(line => line.trim()).filter(Boolean);
@@ -118,15 +120,33 @@ export function parseTimedTranscript(
     if (!lines.length) continue;
     const timingIndex = lines.findIndex(line => line.includes('-->'));
     if (timingIndex < 0) continue;
+    originalCueCount += 1;
+    if (originalCueCount > maxCues) {
+      throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
+    }
     const timing = CUE_TIMING.exec(lines[timingIndex]);
-    if (!timing) throw new Error('Los subtítulos contienen un intervalo de tiempo no válido.');
+    if (!timing) throw new Error(`El subtítulo ${originalCueCount} tiene un intervalo de tiempo no válido.`);
     const start = decodeTimestamp(timing[1]);
     const end = decodeTimestamp(timing[2]);
+    // HappyScribe sometimes emits a zero-length or reversed caption. Keep
+    // valid neighbors available for manual review without fabricating timing.
+    // In strict/publish mode, the existing rejection behavior remains intact.
+    if (limits.skipUnusableTiming && start !== null && end !== null &&
+        end - start < 0.1) {
+      limits.skipUnusableTiming(end <= start ? 'reversed' : 'tiny');
+      continue;
+    }
     if (start === null || end === null || end - start < 0.1 ||
         (!limits.sortOutOfOrder && start < previousStart) ||
         (!limits.allowOverlaps && start < previousEnd) ||
         (!limits.splitLongCues && end - start > MAX_CLIP_DURATION) || end > maxSourceSeconds) {
-      throw new Error('Los subtítulos contienen tiempos superpuestos, fuera de orden o demasiado largos.');
+      const reason = start === null || end === null ? 'marca de tiempo inválida'
+        : end > maxSourceSeconds ? 'tiempo posterior al límite de la grabación'
+          : end - start < 0.1 ? 'duración inferior a 0,1 segundos o intervalo invertido'
+            : !limits.sortOutOfOrder && start < previousStart ? 'intervalo fuera de orden'
+              : !limits.allowOverlaps && start < previousEnd ? 'intervalo superpuesto'
+                : 'duración superior a 5 minutos';
+      throw new Error(`Los tiempos del subtítulo ${originalCueCount} contienen ${reason}. Revisa su SRT/VTT y la duración del audio original.`);
     }
     const originalText = lines.slice(timingIndex + 1).join(' ').trim();
     if (!originalText) throw new Error('Hay una intervención sin texto.');
@@ -161,7 +181,7 @@ export function parseTimedTranscript(
     previousEnd = Math.max(previousEnd, end);
   }
 
-  if (!cues.length) throw new Error('No se encontraron tiempos SRT o WebVTT válidos.');
+  if (!cues.length) throw new Error('No se encontraron tiempos SRT o WebVTT utilizables. Revisa las marcas de inicio y fin del archivo.');
   // The review timeline must be chronological even if the provider exported
   // SRT blocks in speaker order. Stable sorting preserves ties for inspection.
   if (limits.sortOutOfOrder) cues.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -187,6 +207,7 @@ export interface TranscriptReviewDiagnostics {
   reordered: number;
   overlapping: number;
   divided: number;
+  skipped: number;
 }
 
 /**
@@ -196,7 +217,7 @@ export interface TranscriptReviewDiagnostics {
 export function parseTimedTranscriptForReviewWithDiagnostics(
   raw: string, longLocalSource = false,
 ): { cues: TimedTranscriptCue[]; diagnostics: TranscriptReviewDiagnostics } {
-  const diagnostics: TranscriptReviewDiagnostics = { reordered: 0, overlapping: 0, divided: 0 };
+  const diagnostics: TranscriptReviewDiagnostics = { reordered: 0, overlapping: 0, divided: 0, skipped: 0 };
   let lastOriginalStart = -1;
   const cues = parseTimedTranscript(raw, {
     // Long MP3 recordings can have thousands of short SRT cues. Both modes
@@ -210,6 +231,7 @@ export function parseTimedTranscriptForReviewWithDiagnostics(
     sortOutOfOrder: true,
     splitLongCues: true,
     useSourceTimelineBudget: true,
+    skipUnusableTiming: () => { diagnostics.skipped += 1; },
     onOriginalCue: (start, end) => {
       if (start < lastOriginalStart) diagnostics.reordered += 1;
       if (end - start > MAX_CLIP_DURATION) diagnostics.divided += 1;

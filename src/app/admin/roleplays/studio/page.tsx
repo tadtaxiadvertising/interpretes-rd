@@ -734,7 +734,7 @@ export default function RoleplayStudioPage() {
       // Never silently convert repaired provider timings into a published
       // roleplay. Show them as candidate turns for explicit approval instead.
       const timingWasRepaired = diagnostics.reordered > 0 ||
-        diagnostics.overlapping > 0 || diagnostics.divided > 0;
+        diagnostics.overlapping > 0 || diagnostics.divided > 0 || diagnostics.skipped > 0;
       let canApplyAll = !timingWasRepaired && selected.length <= ROLEPLAY_MAX_SCENARIOS;
       if (canApplyAll) {
         try { selectTimedCues(selected, allIndices); }
@@ -756,7 +756,7 @@ export default function RoleplayStudioPage() {
         const compatible = fillCompatibleTimedCueSelection(selected, [], allIndices);
         setChosenCueIndices(compatible);
         const repairedNotice = timingWasRepaired
-          ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras). `
+          ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras), y ${diagnostics.skipped} intervalos invertidos o inferiores a 0,1 s omitidos. `
           : '';
         setNotice(`${repairedNotice}${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Se sugirieron ${compatible.length} turnos sin solapamientos ni voz etiquetada del intérprete. Revisa el audio y los límites antes de aplicar; el borrador no se reemplazó.`);
       }
