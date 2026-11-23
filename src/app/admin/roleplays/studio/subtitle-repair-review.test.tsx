@@ -134,4 +134,33 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByText('Mostrando 1–60 de 650 turnos')).toBeTruthy();
     expect(screen.queryByText(/supera 500 intervenciones/)).toBeNull();
   });
+
+  it('imports consecutive numbered subtitles as distinct roleplay turns', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+
+    const file = new File(['srt'], 'packed-captions.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      value: async () => [
+        '1', '00:00:00,000 --> 00:00:01,000', 'Doctor: First',
+        '2', '00:00:01,000 --> 00:00:02,000', 'Paciente: Second',
+        '3', '00:00:02,000 --> 00:00:03,000', 'Doctor: Third',
+      ].join('\n'),
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText('Intervenciones (3/25)')).toBeTruthy();
+    expect(screen.getByText('Doctor: First')).toBeTruthy();
+    expect(screen.getByText('Paciente: Second')).toBeTruthy();
+    expect(screen.getByText('Doctor: Third')).toBeTruthy();
+  });
 });

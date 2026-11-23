@@ -31,6 +31,42 @@ function decodeTimestamp(value: string): number | null {
 const CUE_TIMING = /^((?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3})\s*-->\s*((?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3})(?:\s+.*)?$/;
 
 /**
+ * Some providers omit the blank line between adjacent SRT/WebVTT cues.
+ * Split only at complete timing lines, leaving caption text and original
+ * timestamps intact. A cue identifier is removed from the previous cue only
+ * when the first cue in the block also uses an identifier.
+ */
+function unpackAdjacentTimedCues(block: string): string[] {
+  const lines = block.split('\n');
+  if (/^(?:NOTE|STYLE|REGION)(?:\s|$)/i.test(lines[0]?.trim() ?? '')) return [block];
+
+  const timingLines: number[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    if (CUE_TIMING.test(lines[index].trim())) timingLines.push(index);
+  }
+  if (timingLines.length <= 1) return [block];
+
+  const isCueId = (value: string) => /^(?:\d{1,7}|cue[\w:-]{0,60})$/i.test(value.trim());
+  const hasCueIds = timingLines[0] > 0 && isCueId(lines[timingLines[0] - 1]);
+  const blocks: string[] = [];
+  let start = 0;
+
+  for (let index = 1; index < timingLines.length; index++) {
+    const currentTimeLine = timingLines[index];
+    const priorLine = currentTimeLine - 1;
+    // Never delete a line if doing so would leave the previous cue textless.
+    const boundary = hasCueIds &&
+      priorLine > timingLines[index - 1] + 1 &&
+      isCueId(lines[priorLine])
+      ? priorLine : currentTimeLine;
+    blocks.push(lines.slice(start, boundary).join('\n'));
+    start = boundary;
+  }
+  blocks.push(lines.slice(start).join('\n'));
+  return blocks;
+}
+
+/**
  * Strict, offline SRT/WebVTT cue import.
  * Transcript text stays in the admin browser; only timestamps and a speaker
  * label may become scenario titles. The transcript is NOT copied into
@@ -65,7 +101,8 @@ export function parseTimedTranscript(
   if (!raw.trim() || raw.length > maxChars) {
     throw new Error('El archivo de subtítulos está vacío o supera el límite de tamaño permitido.');
   }
-  const blocks = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim().split(/\n\s*\n/);
+  const blocks = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
+    .split(/\n\s*\n/).flatMap(unpackAdjacentTimedCues);
   const cues: TimedTranscriptCue[] = [];
   let sum = 0;
   let previousEnd = 0;
