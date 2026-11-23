@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     "Intérpretes RD",
   ],
   authors: [{ name: "Intérpretes RD" }],
-  icons: { icon: "/brand-mark.svg" },
+  icons: { icon: "/interpretes-rd-logo.webp", apple: "/interpretes-rd-logo.webp" },
 };
 
 export const viewport: Viewport = {
