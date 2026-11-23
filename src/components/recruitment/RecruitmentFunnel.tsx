@@ -86,7 +86,9 @@ export default function RecruitmentFunnel() {
       if (!validation.success) {
         const issue = validation.error.issues[0];
         setErrorMsg(issue.path[0] === "efsetLink"
-          ? "El enlace HTTPS de tu certificado EFSET es obligatorio para enviar la postulación."
+          ? formData.efsetLink.trim().length === 0
+            ? "El enlace HTTPS de tu certificado EFSET es obligatorio para enviar la postulación."
+            : "Introduce un enlace HTTPS válido a tu certificado EFSET."
           : issue.message);
         return;
       }
@@ -250,11 +252,11 @@ export default function RecruitmentFunnel() {
                 <a href="https://www.efset.org/es/retrieve-certificate/" target="_blank" rel="noopener noreferrer" className="font-semibold text-[var(--theme-recruitment-accent)] underline underline-offset-2 hover:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]">Recuperar certificado</a>
               </p>
               <input
-              id="efset-certificate-url"
-              type="url" required aria-describedby="efset-certificate-help" placeholder="https://..." 
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
-              value={formData.efsetLink} onChange={(e) => setFormData({...formData, efsetLink: e.target.value})}
-            />
+                id="efset-certificate-url"
+                type="url" required aria-describedby="efset-certificate-help" placeholder="https://..."
+                className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
+                value={formData.efsetLink} onChange={(e) => setFormData({...formData, efsetLink: e.target.value})}
+              />
             </div>
           </div>
 
