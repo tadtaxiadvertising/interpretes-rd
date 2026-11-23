@@ -70,7 +70,7 @@ export default function LoginPage() {
         <div className="flex justify-end mb-4"><ThemeSwitcher /></div>
         <div className="text-center mb-10">
           <Image src="/interpretes-rd-logo.webp" alt="Logo Intérpretes RD" width={92} height={92} className="mx-auto mb-4 rounded-2xl bg-white p-2 shadow-sm" />
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+          <h1 className="brand-heading text-3xl font-bold">
             Intérpretes RD
           </h1>
           <p className="text-gray-500 text-sm mt-2 uppercase tracking-widest">Plataforma de Intérpretes</p>
