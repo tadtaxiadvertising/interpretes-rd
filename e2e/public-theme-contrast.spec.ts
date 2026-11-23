@@ -57,3 +57,30 @@ test('light-mode login registration link is readable on its white card', async (
   const levels = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
   expect((levels[0] + 0.05) / (levels[1] + 0.05)).toBeGreaterThanOrEqual(4.5);
 });
+
+
+test('mobile recruitment application stays readable in both modes, without submitting data', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto('/postular');
+  const submit = page.getByRole('button', { name: 'Enviar Postulación' });
+  await expect(submit).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Nombre completo' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Correo electrónico' })).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'País de residencia' })).toBeVisible();
+
+  for (const appearance of ['Modo claro', 'Modo oscuro']) {
+    await page.getByRole('button', { name: appearance }).click();
+    expect(await contrastRatio(submit), `Recruitment button contrast (${appearance})`)
+      .toBeGreaterThanOrEqual(4.5);
+    await submit.hover();
+    await expect.poll(() => submit.evaluate((node) => getComputedStyle(node).backgroundColor))
+      .toBe('rgb(21, 84, 168)');
+    expect(await contrastRatio(submit), `Recruitment hover contrast (${appearance})`)
+      .toBeGreaterThanOrEqual(4.5);
+  }
+
+  const overflow = await page.evaluate(() =>
+    document.documentElement.scrollWidth > window.innerWidth + 1
+  );
+  expect(overflow, 'Application page should not overflow horizontally on mobile').toBe(false);
+});
