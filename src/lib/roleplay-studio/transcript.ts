@@ -42,6 +42,8 @@ interface TranscriptParseLimits {
   maxSourceSeconds?: number;
   maxChars?: number;
   allowOverlaps?: boolean;
+  sortOutOfOrder?: boolean;
+  splitLongCues?: boolean;
 }
 
 export function parseTimedTranscript(
@@ -82,8 +84,9 @@ export function parseTimedTranscript(
     const start = decodeTimestamp(timing[1]);
     const end = decodeTimestamp(timing[2]);
     if (start === null || end === null || end - start < 0.1 ||
-        start < previousStart || (!limits.allowOverlaps && start < previousEnd) ||
-        end - start > MAX_CLIP_DURATION || end > maxSourceSeconds) {
+        (!limits.sortOutOfOrder && start < previousStart) ||
+        (!limits.allowOverlaps && start < previousEnd) ||
+        (!limits.splitLongCues && end - start > MAX_CLIP_DURATION) || end > maxSourceSeconds) {
       throw new Error('Los subtítulos contienen tiempos superpuestos, fuera de orden o demasiado largos.');
     }
     const originalText = lines.slice(timingIndex + 1).join(' ').trim();
@@ -94,7 +97,18 @@ export function parseTimedTranscript(
     const speaker = (voice?.[1] ?? bracket?.[1] ?? prefix?.[1] ?? '').trim().slice(0, 60) || null;
     const text = originalText.replace(/<[^>]*>/g, '').trim();
     if (!text) throw new Error('Hay una intervención sin texto legible.');
-    cues.push({ start, end, speaker, text });
+    // Long SRT cues are reference windows, not automatically published clips.
+    // Divide their timing into bounded windows without guessing word alignments.
+    // Repeating the original reference text is preferable to inventing dialogue.
+    const parts = limits.splitLongCues ? Math.ceil((end - start) / MAX_CLIP_DURATION) : 1;
+    if (cues.length + parts > maxCues) {
+      throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
+    }
+    for (let part = 0; part < parts; part++) {
+      const partStart = Math.round((start + part * MAX_CLIP_DURATION) * 1000) / 1000;
+      const partEnd = part === parts - 1 ? end : Math.min(end, partStart + MAX_CLIP_DURATION);
+      cues.push({ start: partStart, end: partEnd, speaker, text });
+    }
     if (cues.length > maxCues) {
       throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
     }
@@ -105,6 +119,9 @@ export function parseTimedTranscript(
   }
 
   if (!cues.length) throw new Error('No se encontraron tiempos SRT o WebVTT válidos.');
+  // The review timeline must be chronological even if the provider exported
+  // SRT blocks in speaker order. Stable sorting preserves ties for inspection.
+  if (limits.sortOutOfOrder) cues.sort((a, b) => a.start - b.start || a.end - b.end);
   return cues;
 }
 
@@ -116,6 +133,8 @@ export function parseTimedTranscriptForReview(raw: string, longLocalSource = fal
     maxSourceSeconds: longLocalSource ? MAX_LOCAL_SOURCE_DURATION : MAX_SOURCE_DURATION,
     maxChars: longLocalSource ? MAX_LOCAL_TRANSCRIPT_CHARS : MAX_TRANSCRIPT_CHARS,
     allowOverlaps: true,
+    sortOutOfOrder: true,
+    splitLongCues: true,
   });
 }
 
