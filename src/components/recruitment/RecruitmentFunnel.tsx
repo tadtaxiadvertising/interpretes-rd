@@ -9,7 +9,8 @@ import {
 } from "@/app/actions/recruitment";
 import { startCandidateRoleplay } from "@/app/actions/roleplay";
 import { ApplicantSchema, ApplicantData } from "@/lib/validators/recruitment";
-import { User, PlaySquare, Mic, Calendar, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
+import { RecruitmentFollowUp } from "./RecruitmentFollowUp";
+import { User, PlaySquare, Mic, ClipboardCheck, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
 
 export default function RecruitmentFunnel() {
   const router = useRouter();
@@ -146,15 +147,7 @@ export default function RecruitmentFunnel() {
   return (
     <div className="recruitment-funnel mx-auto w-full max-w-4xl rounded-2xl border border-slate-200 bg-white p-5 text-slate-900 shadow-[0_24px_80px_rgba(2,6,23,0.28)] sm:p-7 md:p-8">
       {terminal ? (
-        <div className="py-10 text-center">
-          <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <AlertCircle className="w-8 h-8 text-slate-500" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900">Tu proceso de postulación ha finalizado</h2>
-          <p className="text-slate-600 mt-2">
-            Estado actual: <strong>{applicationStatus}</strong>. Si tienes dudas, contacta a nuestro equipo.
-          </p>
-        </div>
+        <RecruitmentFollowUp terminal applicationStatus={applicationStatus} />
       ) : (
         <>
       {/* Visual Progress */}
@@ -162,7 +155,7 @@ export default function RecruitmentFunnel() {
         <StepIndicator icon={User} label="Postulación" active={step >= 1} current={step === 1} />
         <StepIndicator icon={PlaySquare} label="Inducción" active={step >= 2} current={step === 2} />
         <StepIndicator icon={Mic} label="Roleplay" active={step >= 3} current={step === 3} />
-        <StepIndicator icon={Calendar} label="Setup" active={step >= 4} current={step === 4} />
+        <StepIndicator icon={ClipboardCheck} label="Seguimiento" active={step >= 4} current={step === 4} />
       </div>
 
       {/* STEP 1: Application Form */}
@@ -171,7 +164,7 @@ export default function RecruitmentFunnel() {
           <h2 className="text-xl font-bold tracking-tight text-slate-900">Inicia tu proceso de postulación</h2>
           
           {errorMsg && (
-            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
+            <div role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
               <AlertCircle className="w-4 h-4" /> {errorMsg}
             </div>
           )}
@@ -260,7 +253,7 @@ export default function RecruitmentFunnel() {
           )}
 
           {errorMsg && (
-            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
+            <div role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
               <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
             </div>
           )}
@@ -282,7 +275,7 @@ export default function RecruitmentFunnel() {
             <Mic className="w-8 h-8 text-[var(--theme-recruitment-accent)]" />
           </div>
           <h2 className="text-xl font-semibold text-slate-900">Evaluación Práctica (Roleplay)</h2>
-          <p className="text-slate-600">Nuestro sistema o reclutador evaluará tu nivel de interpretación y protocolo. Basado en esta evaluación se actualizará tu <strong>resultRoleplay</strong> en el sistema.</p>
+          <p className="text-slate-600">Nuestro sistema o reclutador evaluará tu nivel de interpretación y protocolo. Basado en esta evaluación se actualizará el estado de tu candidatura en el sistema.</p>
           
           <div className="p-6 bg-slate-50 border border-slate-200 rounded-lg text-left">
             <h3 className="font-medium text-slate-900 mb-2">Instrucciones:</h3>
@@ -294,7 +287,7 @@ export default function RecruitmentFunnel() {
           </div>
 
           {errorMsg && (
-            <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-left text-sm font-medium text-red-700">
+            <div role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-left text-sm font-medium text-red-700">
               <AlertCircle className="w-4 h-4 shrink-0" /> {errorMsg}
             </div>
           )}
@@ -309,23 +302,8 @@ export default function RecruitmentFunnel() {
         </div>
       )}
 
-      {/* STEP 4: Setup Meeting */}
-      {step === 4 && (
-        <div className="space-y-6 animate-in fade-in text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <CheckCircle2 className="w-8 h-8 text-green-600" />
-          </div>
-          <h2 className="text-xl font-semibold text-slate-900">Agenda tu entrevista de Onboarding</h2>
-          <p className="text-slate-600 mb-6">Una vez completado y revisado tu roleplay, agenda tu reunión de Onboarding para configurar tus credenciales en el <strong>Portal Vault (RBAC)</strong>.</p>
-          
-          {/* Placeholder for Calendly/Cal.com Embed */}
-          <div className="h-64 border border-slate-200 bg-slate-50 rounded-lg flex flex-col items-center justify-center">
-             <Calendar className="w-10 h-10 text-slate-500 mb-2" />
-             <span className="text-slate-600 font-medium">Embed de Calendly / Cal.com</span>
-             <span className="text-sm text-slate-500">Selecciona tu horario para la entrevista.</span>
-          </div>
-        </div>
-      )}
+      {/* STEP 4: Candidate tracking — no fabricated booking widget. */}
+      {step === 4 && <RecruitmentFollowUp applicationStatus={applicationStatus} />}
         </>
       )}
     </div>
