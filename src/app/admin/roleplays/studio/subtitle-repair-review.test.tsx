@@ -163,4 +163,30 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByText('Paciente: Second')).toBeTruthy();
     expect(screen.getByText('Doctor: Third')).toBeTruthy();
   });
+
+  it('reviews recoverable malformed HappyScribe cues without applying clips automatically', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+    const file = new File(['srt'], 'happyscribe-unusable-cues.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => [
+      '1', '00:00:01,000 --> 00:00:01,000', 'Doctor: Inverted or empty',
+      '', '2', '00:00:01,000 --> 00:00:03,000', 'Doctor: Valid first',
+      '', '3', '00:00:04,000 --> 00:00:03,000', 'Patient: Reversed',
+      '', '4', '00:00:05,000 --> 00:00:07,000', 'Patient: Valid second',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+      await Promise.resolve();
+    });
+    expect(screen.getByText(/2 intervalos invertidos o inferiores a 0,1 s omitidos/)).toBeTruthy();
+    expect(screen.getByText(/2 turnos disponibles y 2 seleccionados/)).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+  });
 });
