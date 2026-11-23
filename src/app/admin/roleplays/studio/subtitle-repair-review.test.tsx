@@ -323,5 +323,17 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Volver a turnos seleccionados' })).toBeNull();
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+
+    // Emptying the last flagged selection cannot trap the operator behind
+    // an empty quality filter with no way to show all source cues again.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar 1 turno con alerta' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(screen.getByRole('button', { name: 'Mostrar todos los turnos' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar todos los turnos' }));
+    expect((screen.getByRole('checkbox', { name: 'Solo seleccionados' }) as HTMLInputElement).checked)
+      .toBe(false);
+    expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' })).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
 });
