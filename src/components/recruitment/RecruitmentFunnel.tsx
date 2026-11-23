@@ -244,6 +244,11 @@ export default function RecruitmentFunnel() {
               <p id="efset-certificate-help" className="text-xs leading-5 text-slate-600">
                 Debe ser un enlace HTTPS a tu certificado EFSET. Se requiere para enviar la postulación.
               </p>
+              <p className="text-xs leading-5 text-slate-600">
+                <a href="https://www.efset.org/es/english-certificate/" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#1764bf] underline underline-offset-2 hover:text-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]">Obtener certificado gratis</a>
+                {" · "}
+                <a href="https://www.efset.org/es/retrieve-certificate/" target="_blank" rel="noopener noreferrer" className="font-semibold text-[#1764bf] underline underline-offset-2 hover:text-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]">Recuperar certificado</a>
+              </p>
               <input
               id="efset-certificate-url"
               type="url" required aria-describedby="efset-certificate-help" placeholder="https://..." 
