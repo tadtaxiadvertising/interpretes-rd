@@ -38,5 +38,9 @@ export default async function RoleplayPage({ params }: { params: Promise<{ id: s
   const identity = await getResolvedIdentity();
   const serializedIdentity = serializeIdentity(identity);
   
-  return <RoleplayClient sessionId={sessionId} initialIdentity={serializedIdentity} />;
+  return (
+    <div className="theme-experience min-h-screen bg-[var(--background)] text-[var(--foreground)]">
+      <RoleplayClient sessionId={sessionId} initialIdentity={serializedIdentity} />
+    </div>
+  );
 }
