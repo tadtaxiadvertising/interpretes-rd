@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
 import SystemReadinessCheck from './SystemReadinessCheck';
+import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 
 export const dynamic = 'force-dynamic';
 
@@ -68,6 +69,7 @@ export default function SettingsPage() {
             <p className="text-xs text-[var(--foreground)]">
               Esta sección no envía mensajes ni comprueba la conexión SMTP. Las notificaciones de postulaciones y entrevistas requieren una integración independiente.
             </p>
+            <RecruitmentEmailPreview />
           </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
             <div className="flex items-center gap-3">
