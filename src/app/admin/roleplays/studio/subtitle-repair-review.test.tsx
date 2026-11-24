@@ -364,6 +364,9 @@ describe('Audio Studio repaired SRT import safety', () => {
       await Promise.resolve();
     });
 
+    // Ignore media resets performed while replacing the original recording.
+    pause.mockClear();
+    play.mockClear();
     fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 2' }));
     expect(player.currentTime).toBe(3);
     expect(play).toHaveBeenCalledTimes(1);
