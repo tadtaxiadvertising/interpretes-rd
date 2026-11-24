@@ -135,4 +135,36 @@ describe('Audio Studio stale subtitle playback requests', () => {
     fireEvent.ended(player);
     expect(screen.getByRole('button', { name: 'Escuchar solo turno 2' })).toBeTruthy();
   });
+  it('ignores an old media error event when a newer SRT turn is healthy', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const player = await importReview();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 2' }));
+    Object.defineProperty(player, 'error', { configurable: true, value: null });
+    fireEvent.error(player);
+
+    expect(screen.getByRole('button', { name: 'Detener escucha de turno 2' })).toBeTruthy();
+    expect(screen.queryByText(/El navegador no puede decodificar esta grabación/)).toBeNull();
+    player.currentTime = 5;
+    fireEvent.timeUpdate(player);
+    expect(screen.getByRole('button', { name: 'Escuchar solo turno 2' })).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+  });
+
+  it('stops bounded SRT preview and reports a genuine media decoding error', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const player = await importReview();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 1' }));
+    Object.defineProperty(player, 'error', {
+      configurable: true, value: { code: 3 },
+    });
+    fireEvent.error(player);
+
+    expect(screen.getByText(/El navegador no puede decodificar esta grabación/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Detener escucha de turno 1' })).toBeNull();
+    expect(screen.queryByText('Intervenciones (0/25)')).toBeNull();
+  });
+
 });
