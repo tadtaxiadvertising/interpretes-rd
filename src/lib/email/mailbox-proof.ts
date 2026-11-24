@@ -26,6 +26,24 @@ export async function readMailboxState(db: Pick<Client, '$queryRaw'>, accountId:
   return row?.verified ? 'verified' : row?.pending ? 'pending' : 'unverified';
 }
 
+/** Recover an existing active binding on a new device; never creates one. */
+export async function readExistingProofBinding(db: Pick<Client, '$queryRaw'>, accountId: string, email: string): Promise<Binding | null> {
+  const rows = await db.$queryRaw<Array<{ candidateId: number }>>`
+    SELECT b.candidate_id AS "candidateId" FROM private_email.candidate_account_binding b
+    JOIN public.recruitment_candidates c ON c.id = b.candidate_id
+    JOIN public.user_profiles p ON p.id = b.account_id
+    JOIN public.recruitment_applications a ON a.candidate_id = b.candidate_id
+    WHERE b.account_id = ${accountId}::uuid AND b.revoked_at IS NULL
+      AND p.role = 'candidate' AND p.interpreter_id IS NULL
+      AND lower(trim(c.email)) = ${email} AND lower(trim(p.email)) = ${email}
+      AND a.status::text NOT IN ('HIRED','HIRING','REJECTED','WITHDRAWN','EXPIRED')
+    LIMIT 2
+  `;
+  const candidateId = rows[0]?.candidateId;
+  return rows.length === 1 && Number.isSafeInteger(candidateId) && candidateId > 0
+    ? { candidateId, accountId, email } : null;
+}
+
 const digest = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
 /** Caller must establish authenticated session and matching signed reference first.
