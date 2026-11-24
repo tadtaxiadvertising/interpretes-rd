@@ -6,6 +6,44 @@ type Binding = { candidateId: number; accountId: string; email: string };
 export type MailboxChallengeResult = 'sent' | 'unconfirmed' | 'not_available' | 'already_verified' | 'code_pending';
 export type MailboxProofResult = 'verified' | 'invalid' | 'unavailable';
 
+export type MailboxState = 'verified' | 'pending' | 'unverified' | 'unavailable';
+
+/** Read only a binding belonging to the authenticated account UUID. Never
+ * return identifiers, challenge hashes, addresses or other account details.
+ * The optional candidate ID narrows the challenge-issuance fallback. */
+export async function readMailboxState(db: Pick<Client, '$queryRaw'>, accountId: string, email: string, candidateId: number | null = null): Promise<MailboxState> {
+  const [row] = await db.$queryRaw<Array<{ verified: boolean; pending: boolean }>>`
+    SELECT COALESCE(b.verified_email = ${email} AND b.mailbox_verified_at <= now(), false) AS verified,
+      COALESCE(b.challenge_email = ${email} AND b.challenge_hash IS NOT NULL AND b.challenge_expires_at > now(), false) AS pending
+    FROM private_email.candidate_account_binding b
+    JOIN public.recruitment_candidates c ON c.id = b.candidate_id
+    JOIN public.user_profiles p ON p.id = b.account_id
+    WHERE b.account_id = ${accountId}::uuid AND (${candidateId}::integer IS NULL OR b.candidate_id = ${candidateId})
+      AND b.revoked_at IS NULL AND p.role = 'candidate' AND p.interpreter_id IS NULL
+      AND lower(trim(c.email)) = ${email} AND lower(trim(p.email)) = ${email}
+    LIMIT 1
+  `;
+  return row?.verified ? 'verified' : row?.pending ? 'pending' : 'unverified';
+}
+
+/** Recover an existing active binding on a new device; never creates one. */
+export async function readExistingProofBinding(db: Pick<Client, '$queryRaw'>, accountId: string, email: string): Promise<Binding | null> {
+  const rows = await db.$queryRaw<Array<{ candidateId: number }>>`
+    SELECT b.candidate_id AS "candidateId" FROM private_email.candidate_account_binding b
+    JOIN public.recruitment_candidates c ON c.id = b.candidate_id
+    JOIN public.user_profiles p ON p.id = b.account_id
+    JOIN public.recruitment_applications a ON a.candidate_id = b.candidate_id
+    WHERE b.account_id = ${accountId}::uuid AND b.revoked_at IS NULL
+      AND p.role = 'candidate' AND p.interpreter_id IS NULL
+      AND lower(trim(c.email)) = ${email} AND lower(trim(p.email)) = ${email}
+      AND a.status::text NOT IN ('HIRED','HIRING','REJECTED','WITHDRAWN','EXPIRED')
+    LIMIT 2
+  `;
+  const candidateId = rows[0]?.candidateId;
+  return rows.length === 1 && typeof candidateId === 'number' && Number.isSafeInteger(candidateId) && candidateId > 0
+    ? { candidateId, accountId, email } : null;
+}
+
 const digest = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
 
 /** Caller must establish authenticated session and matching signed reference first.
@@ -31,20 +69,8 @@ export async function issueMailboxChallenge(db: Client, binding: Binding, send: 
         AND (b.verified_email IS DISTINCT FROM ${binding.email} OR b.mailbox_verified_at IS NULL)
     `;
     if (changed !== 1) {
-      // Resolve only this authenticated binding; never return the stored hash
-      // or disclose whether another account owns the address.
-      const [row] = await db.$queryRaw<Array<{ verified: boolean; pending: boolean }>>`
-        SELECT COALESCE(b.verified_email = ${binding.email} AND b.mailbox_verified_at <= now(), false) AS verified,
-          COALESCE(b.challenge_email = ${binding.email} AND b.challenge_hash IS NOT NULL AND b.challenge_expires_at > now(), false) AS pending
-        FROM private_email.candidate_account_binding b
-        JOIN public.recruitment_candidates c ON c.id = b.candidate_id
-        JOIN public.user_profiles p ON p.id = b.account_id
-        WHERE b.candidate_id = ${binding.candidateId} AND b.account_id = ${binding.accountId}::uuid
-          AND b.revoked_at IS NULL AND p.role = 'candidate' AND p.interpreter_id IS NULL
-          AND lower(trim(c.email)) = ${binding.email} AND lower(trim(p.email)) = ${binding.email}
-        LIMIT 1
-      `;
-      return row?.verified ? 'already_verified' : row?.pending ? 'code_pending' : 'not_available';
+      const state = await readMailboxState(db, binding.accountId, binding.email, binding.candidateId);
+      return state === 'verified' ? 'already_verified' : state === 'pending' ? 'code_pending' : 'not_available';
     }
     return await send(binding.email, token) === 'accepted' ? 'sent' : 'unconfirmed';
   } catch {

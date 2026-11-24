@@ -7,6 +7,7 @@ import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
 import { CandidatePasswordSetup } from '@/components/recruitment/CandidatePasswordSetup';
 import CandidateEmailBinding from '@/components/recruitment/CandidateEmailBinding';
+import { getCandidateMailboxState } from '@/app/actions/candidate-email-binding';
 import { ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 import { candidateStatusDisplay } from '@/lib/recruitment/status-display';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
@@ -152,6 +153,9 @@ export default async function CandidatePortalPage() {
         FAILED: 'Requiere revisión o nuevo intento',
       } as Record<string, string>)[session.status] ?? session.status;
 
+  const showEmailBinding = identity.provider === 'supabase' && process.env.OPERATIONAL_EMAIL_BINDING_ENABLED === 'true';
+  const mailboxState = showEmailBinding ? await getCandidateMailboxState() : 'unavailable';
+
   return (
     <main className="theme-candidate min-h-screen bg-slate-950 px-4 py-6 sm:py-10 text-[var(--foreground)]">
       <div className="mx-auto max-w-4xl space-y-8">
@@ -184,7 +188,7 @@ export default async function CandidatePortalPage() {
         </section>
 
         {identity.provider === 'supabase' ? <CandidatePasswordSetup /> : null}
-        {identity.provider === 'supabase' && process.env.OPERATIONAL_EMAIL_BINDING_ENABLED === 'true' ? <CandidateEmailBinding /> : null}
+        {showEmailBinding ? <CandidateEmailBinding initialState={mailboxState} /> : null}
 
         <section className="grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border border-blue-300/20 bg-blue-300/[0.06] p-6">
