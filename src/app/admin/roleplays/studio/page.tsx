@@ -100,10 +100,15 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación SRT';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
+    previousSuggestions?: {
+      silences: StudioSilence[];
+      clips: StudioSuggestedClip[];
+      omittedCount: number;
+    };
   } | null>(null);
   // Source identity prevents a delayed decode from updating a replacement MP3.
   const activeAudioFile = useRef<File | null>(null);
@@ -379,6 +384,11 @@ export default function RoleplayStudioPage() {
     setSegments(lastStructuralEdit.segments);
     setCaptionTexts(lastStructuralEdit.captions);
     setExpandedSegmentId(lastStructuralEdit.expandedId);
+    if (lastStructuralEdit.previousSuggestions) {
+      setDetectedSilences(lastStructuralEdit.previousSuggestions.silences);
+      setSuggestedClips(lastStructuralEdit.previousSuggestions.clips);
+      setOmittedSuggestions(lastStructuralEdit.previousSuggestions.omittedCount);
+    }
     setNotice(lastStructuralEdit.kind === 'idiomas'
       ? 'Asignación masiva de idiomas deshecha. Revisa los idiomas pendientes.'
       : lastStructuralEdit.kind === 'hablantes'
@@ -387,6 +397,8 @@ export default function RoleplayStudioPage() {
         ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
         : lastStructuralEdit.kind === 'adición VAD'
           ? 'Cortes VAD retirados. Las intervenciones y referencias anteriores se conservaron.'
+        : lastStructuralEdit.kind === 'importación SRT'
+          ? 'Importación SRT deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
         : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
@@ -523,7 +535,17 @@ export default function RoleplayStudioPage() {
     // Stop it only after accepting the replacement, not when it is declined.
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit(null);
+    // One accepted SRT/VTT import is a reversible editorial operation.
+    // Keep private reference text in memory only; no source audio is copied.
+    setLastStructuralEdit({
+      kind: 'importación SRT', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: expandedSegmentId,
+      previousSuggestions: {
+        silences: [...detectedSilences],
+        clips: [...suggestedClips],
+        omittedCount: omittedSuggestions,
+      },
+    });
     setTurnActionFeedback(null);
     // A filter for the old cuts must not hide the newly imported ones.
     setSegmentSearch('');
@@ -535,7 +557,7 @@ export default function RoleplayStudioPage() {
     setDetectedSilences([]);
     setSuggestedClips([]);
     setOmittedSuggestions(0);
-    setNotice(`${prepared.length} intervenciones cargadas. ${excludedCount} del intérprete original omitidas; revisa idiomas, hablantes y límites antes de exportar.`);
+    setNotice(`${prepared.length} intervenciones cargadas. Puedes deshacer esta importación; ${excludedCount} del intérprete original omitidas. Revisa idiomas, hablantes y límites antes de exportar.`);
     return true;
   };
 
@@ -2489,7 +2511,9 @@ export default function RoleplayStudioPage() {
                         ? 'Deshacer eliminación de intervención'
                         : lastStructuralEdit.kind === 'adición VAD'
                           ? 'Deshacer adición de cortes VAD'
-                          : 'Deshacer última división o unión'}
+                          : lastStructuralEdit.kind === 'importación SRT'
+                            ? 'Deshacer importación SRT'
+                            : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
