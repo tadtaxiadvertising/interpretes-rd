@@ -389,6 +389,18 @@ describe('Audio Studio clip review player', () => {
     expect(pause).toHaveBeenCalledOnce();
     expect(fetcher).not.toHaveBeenCalled();
     expect(decode).toHaveBeenCalledOnce();
+
+    // A local VAD batch is now undoable like a manual split or deletion.
+    // Undo restores the exact editor snapshot without re-decoding or upload.
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir 1 corte revisable' }));
+    expect(screen.getByText('Intervenciones (1/25)')).toBeTruthy();
+    const undo = screen.getByRole('button', { name: 'Deshacer adición de cortes VAD' });
+    fireEvent.click(undo);
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+    expect(screen.getByText(/Cortes VAD retirados/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Deshacer adición de cortes VAD' })).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(decode).toHaveBeenCalledOnce();
   });
 
   it('prepares a short MP3 locally by default without posting media to the server', async () => {
