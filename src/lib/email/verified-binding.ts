@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import type { DispatchSnapshot } from './dispatch-eligibility';
 import { isProtectedAdminEmail } from '@/lib/admin-identity';
 
-type BindingRow = { candidateId: number; accountId: string; profileEmail: string; role: string | null; interpreterId: number | null };
+type BindingRow = { candidateId: number; accountId: string; profileEmail: string; verifiedEmail: string | null; mailboxVerifiedAt: Date | null; role: string | null; interpreterId: number | null };
 type AuthIdentity = { id: string; email?: string; email_confirmed_at?: string; banned_until?: string; is_anonymous?: boolean };
 type IdentityLookup = (id: string) => Promise<AuthIdentity | null>;
 type Reader = Pick<Prisma.TransactionClient, 'recruitmentEvent' | '$queryRaw'>;
@@ -25,7 +25,7 @@ export async function loadDispatchSnapshot(db: Reader, eventId: string, getAuthI
     eventType: event.eventType, toStatus: event.toStatus, createdAt: event.createdAt }, application, identity: null };
   const bindings = await db.$queryRaw<BindingRow[]>`
     SELECT b.candidate_id AS "candidateId", b.account_id::text AS "accountId",
-      p.email AS "profileEmail", p.role, p.interpreter_id AS "interpreterId"
+      p.email AS "profileEmail", b.verified_email AS "verifiedEmail", b.mailbox_verified_at AS "mailboxVerifiedAt", p.role, p.interpreter_id AS "interpreterId"
     FROM private_email.candidate_account_binding b
     JOIN public.user_profiles p ON p.id = b.account_id
     WHERE b.candidate_id = ${application.candidateId} AND b.revoked_at IS NULL
@@ -34,6 +34,8 @@ export async function loadDispatchSnapshot(db: Reader, eventId: string, getAuthI
   if (bindings.length !== 1) return snapshot;
   const b = bindings[0];
   if (b.candidateId !== application.candidateId || b.role !== 'candidate' || b.interpreterId !== null
+    || !b.mailboxVerifiedAt || !Number.isFinite(b.mailboxVerifiedAt.getTime()) || b.mailboxVerifiedAt > now
+    || b.verifiedEmail !== normalize(b.profileEmail)
     || isProtectedAdminEmail(b.profileEmail) || !normalize(b.profileEmail)
     || normalize(b.profileEmail) !== normalize(application.email)) return snapshot;
   const user = await getAuthIdentity(b.accountId);
