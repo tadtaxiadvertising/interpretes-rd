@@ -7,7 +7,7 @@ const RESUME_EMAIL = `e2e-dupesubmit-${RUN_ID}-resume@example.com`;
 
 const SUCCESS_HEADING = 'Conoce más sobre Intérpretes RD';
 const ERROR_TEXT = 'No pudimos procesar tu postulación';
-const RESUME_INFO_TEXT = 'Ya existe una postulación con este correo. Para continuar con seguridad, inicia sesión con ese correo.';
+const RESUME_INFO_TEXT = 'Ya existe una postulación con este correo. Si nunca configuraste una contraseña, recupérala mediante un enlace seguro enviado a tu correo.';
 
 async function fillApplication(page: Page, email: string): Promise<void> {
   await page.goto('/postular');
@@ -15,7 +15,7 @@ async function fillApplication(page: Page, email: string): Promise<void> {
   await page.getByPlaceholder('Nombre completo').fill('E2E Duplicate Submit');
   await page.getByPlaceholder('Correo electrónico').fill(email);
   await page.getByPlaceholder('Teléfono (Ej: +123456789)').fill('+18095550000');
-  await page.getByPlaceholder('País de residencia').fill('DO');
+  await page.getByRole('combobox', { name: 'Provincia de residencia' }).selectOption('Santiago');
   await page.getByLabel('Nivel de inglés').selectOption('B2');
   await page.getByLabel('Velocidad de descarga (Mbps)').fill('25');
   await page
@@ -41,7 +41,7 @@ test.describe('Public recruitment · candidate submission', () => {
         await page.getByPlaceholder('Nombre completo').fill('E2E Concurrent Submit');
         await page.getByPlaceholder('Correo electrónico').fill(CONCURRENT_EMAIL);
         await page.getByPlaceholder('Teléfono (Ej: +123456789)').fill('+18095550000');
-        await page.getByPlaceholder('País de residencia').fill('DO');
+        await page.getByRole('combobox', { name: 'Provincia de residencia' }).selectOption('Santiago');
         await page.getByLabel('Nivel de inglés').selectOption('B2');
         await page.getByLabel('Velocidad de descarga (Mbps)').fill('25');
         await page.getByRole('textbox', { name: /Enlace del certificado EFSET/ }).fill(`https://www.efset.org/cert/${RUN_ID}`);
@@ -105,6 +105,8 @@ test.describe('Public recruitment · candidate submission', () => {
       // over the application; it should receive the safe sign-in message.
       await fillApplication(second, RESUME_EMAIL);
       await expect(second.getByRole('status').getByText(RESUME_INFO_TEXT, { exact: true })).toBeVisible();
+      await expect(second.getByRole('link', { name: 'Iniciar sesión para continuar' })).toHaveAttribute('href', '/login?next=%2Fcandidate');
+      await expect(second.getByRole('link', { name: 'Recuperar o activar acceso' })).toHaveAttribute('href', '/forgot-password');
       await expect(second.getByText(ERROR_TEXT)).toHaveCount(0);
 
       const databaseUrl = process.env.E2E_DATABASE_URL;
