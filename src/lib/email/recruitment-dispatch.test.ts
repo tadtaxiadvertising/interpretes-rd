@@ -58,6 +58,14 @@ describe('single-event dispatch', () => {
     expect(deps.send).not.toHaveBeenCalled();
     expect(deps.finish).toHaveBeenCalledWith('event-1', 'cancelled');
   });
+  it('rejects replacement of the bound account after claiming', async () => {
+    const deps = fixtures();
+    const changed = snapshot();
+    changed.identity = { ...changed.identity!, accountId: 'different-account' };
+    deps.load.mockResolvedValueOnce(snapshot()).mockResolvedValueOnce(changed);
+    expect(await dispatchRecruitmentEmail('event-1', true, deps)).toBe('cancelled');
+    expect(deps.send).not.toHaveBeenCalled();
+  });
   it('sends approved content to the verified recipient exactly once', async () => {
     const deps = fixtures();
     expect(await dispatchRecruitmentEmail('event-1', true, deps)).toBe('accepted');
