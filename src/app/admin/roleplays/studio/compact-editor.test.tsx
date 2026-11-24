@@ -257,11 +257,11 @@ describe('Audio Studio compact editing', () => {
     });
     expect(screen.getByText('Doctor: Reference to clear')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer importación de subtítulos' }));
-    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
     expect(screen.queryByText('Doctor: Reference to clear')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
     expect(screen.queryByText('Doctor: Reference to clear')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Deshacer importación de subtítulos' })).toBeNull();
   });
