@@ -24,13 +24,19 @@ export async function dispatchRecruitmentEmail(
 ): Promise<DispatchResult> {
   if (!enabled) return 'disabled';
   let initialIdentity: string | undefined;
+  let initialRecipient: string;
+  let initialCandidate: number;
   let claim: Awaited<ReturnType<DispatchDependencies['claim']>>;
   try {
     const initial = await deps.load(eventId);
-    if (!initial || initial.event.id !== eventId || evaluateDispatch(initial, deps.now()).status !== 'eligible') {
+    if (!initial || initial.event.id !== eventId) return 'deferred';
+    const initialEligibility = evaluateDispatch(initial, deps.now());
+    if (initialEligibility.status !== 'eligible') {
       return 'deferred';
     }
     initialIdentity = initial.identity?.accountId;
+    initialRecipient = initialEligibility.recipient;
+    initialCandidate = initial.application.candidateId;
     claim = await deps.claim(eventId);
   } catch {
     // A claim may have committed before a connection failure. Do not retry here.
@@ -44,7 +50,7 @@ export async function dispatchRecruitmentEmail(
     const snapshot = await deps.load(eventId);
     if (snapshot?.event.id === eventId && snapshot.identity?.accountId === initialIdentity) {
       const eligibility = evaluateDispatch(snapshot, deps.now());
-      if (eligibility.status === 'eligible' && eligibility.kind === claim.kind) {
+      if (eligibility.status === 'eligible' && eligibility.kind === claim.kind && eligibility.recipient === initialRecipient && snapshot.application.candidateId === initialCandidate) {
         const message = renderRecruitmentEmail(eligibility.kind);
         // Any error after attempting SMTP is ambiguous, not grounds for retry.
         result = 'unconfirmed';
