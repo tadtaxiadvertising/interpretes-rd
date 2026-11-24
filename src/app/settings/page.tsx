@@ -2,10 +2,18 @@ import Link from 'next/link';
 import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
 import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
+import { operationalMailStatus } from '@/lib/email/operational-config';
 
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
+  const operationalStatus = operationalMailStatus(process.env);
+  const operationalMessages = {
+    disabled: 'Desactivado. No se realizan envíos operativos.',
+    incomplete: 'Configuración incompleta. Revisa las variables privadas del servidor.',
+    invalid: 'Configuración no válida. Revisa el remitente, servidor y puerto TLS.',
+    configured: 'Variables válidas. Conexión y entrega aún no verificadas.',
+  } as const;
   return (
     <main className="max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="space-y-3">
@@ -69,6 +77,11 @@ export default function SettingsPage() {
             <p className="text-xs text-[var(--foreground)]">
               Esta sección no envía mensajes ni comprueba la conexión SMTP. Las notificaciones de postulaciones y entrevistas requieren una integración independiente.
             </p>
+            <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
+              <h3 className="font-semibold">Configuración de correos operativos</h3>
+              <p>{operationalMessages[operationalStatus]}</p>
+              <p className="text-xs">Diagnóstico de variables privadas de Next.js. El transporte todavía no está conectado. No se muestran credenciales ni se realizan pruebas de red.</p>
+            </div>
             <RecruitmentEmailPreview />
           </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
