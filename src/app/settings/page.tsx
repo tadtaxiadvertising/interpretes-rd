@@ -4,6 +4,8 @@ import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
+import CorporateEmailBatch from './CorporateEmailBatch';
+import { recruitmentDispatchCutover } from '@/lib/email/dispatch-config';
 import { operationalMailStatus } from '@/lib/email/operational-config';
 
 export const dynamic = 'force-dynamic';
@@ -86,6 +88,7 @@ export default function SettingsPage() {
             </div>
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
+            <CorporateEmailBatch enabled={recruitmentDispatchCutover(process.env, new Date()) !== null} />
             <CorporateEmailHistory />
           </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
