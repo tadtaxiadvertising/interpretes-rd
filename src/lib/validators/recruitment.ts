@@ -49,7 +49,7 @@ export const ApplicantSchema = z.object({
   phone: z.string().trim().min(10, "El número de teléfono debe incluir al menos 10 caracteres.").max(25, "El número de teléfono es demasiado largo.").regex(/^[+0-9().\s-]+$/, "El teléfono contiene caracteres no válidos."),
   country: z.string().refine((value) => DOMINICAN_PROVINCES.some((province) => province === value), "Selecciona tu provincia o el Distrito Nacional."),
   englishLevel: z.enum(["B1", "B2", "C1", "C2"]),
-  speedtestMbps: z.number().int().min(1).max(10000),
+  speedtestMbps: z.number({ error: "Introduce tu velocidad de descarga en Mbps." }).int("Introduce un número entero de Mbps.").min(1, "La velocidad debe ser de al menos 1 Mbps.").max(10000, "La velocidad no puede superar 10000 Mbps."),
   efsetLink: httpsUrl,
   cvUrl: httpsUrl.optional(),
 });

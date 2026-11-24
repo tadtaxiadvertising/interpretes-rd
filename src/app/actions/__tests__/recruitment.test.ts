@@ -62,7 +62,7 @@ const validApplicant: ApplicantData = {
   name: 'Ana Perez',
   email: 'ANA@Example.com ',
   phone: '+18095551234',
-  country: 'República Dominicana',
+  country: 'Santiago',
   englishLevel: 'C1',
   speedtestMbps: 50,
   efsetLink: 'https://www.efset.org/cert/abc123',
@@ -152,6 +152,7 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           email: 'ana@example.com',
+          pais: 'Santiago',
           fuente: 'Web Portal',
         }),
       })
@@ -260,7 +261,7 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect(updateData.name).toBeUndefined();
     expect(updateData.telefono).toBeUndefined();
     expect(updateData.englishLevel).toBeUndefined();
-    expect(updateData.pais).toBe('República Dominicana');
+    expect(updateData.pais).toBe('Santiago');
     expect(updateData.speedtestMbps).toBe(50);
     expect(updateData.notas).toContain('efsetLink');
     // No duplicate candidate/application is created.

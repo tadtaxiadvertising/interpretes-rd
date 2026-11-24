@@ -34,7 +34,7 @@ function fillApplication() {
   fireEvent.change(screen.getByRole('combobox', { name: 'Provincia de residencia' }), {
     target: { value: 'Santiago' },
   });
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Velocidad de descarga (Mbps)' }), {
+  fireEvent.change(screen.getByLabelText(/Velocidad de descarga/), {
     target: { value: '100' },
   });
 }
@@ -55,10 +55,29 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('Registration completion and next actions', () => {
+  it('keeps the speed field empty when cleared and removes leading zeroes before submitting', async () => {
+    m.submitApplicationAction.mockResolvedValue({ success: true, accountAccess: 'existing' });
+    render(<RecruitmentFunnel />);
+    const speed = screen.getByLabelText(/Velocidad de descarga/) as HTMLInputElement;
+    expect(speed.value).toBe('');
+    fillApplication();
+    fireEvent.change(speed, { target: { value: '' } });
+    expect(speed.value).toBe('');
+    fireEvent.change(speed, { target: { value: '0100' } });
+    expect(speed.value).toBe('100');
+    fireEvent.change(screen.getByLabelText(/Enlace del certificado EFSET/), {
+      target: { value: 'https://www.efset.org/cert/sample' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar Postulación' }));
+    await waitFor(() => expect(m.submitApplicationAction).toHaveBeenCalledWith(
+      expect.objectContaining({ country: 'Santiago', speedtestMbps: 100 })
+    ));
+  });
+
   it('lists Dominican provinces and allows entering internet speed without a leading zero', () => {
     render(<RecruitmentFunnel />);
     const province = screen.getByRole('combobox', { name: 'Provincia de residencia' }) as HTMLSelectElement;
-    const speed = screen.getByRole('spinbutton', { name: 'Velocidad de descarga (Mbps)' }) as HTMLInputElement;
+    const speed = screen.getByRole('textbox', { name: 'Velocidad de descarga (Mbps)' }) as HTMLInputElement;
     expect(province.value).toBe('');
     expect(Array.from(province.options).some((option) => option.value === 'Distrito Nacional')).toBe(true);
     expect(Array.from(province.options).some((option) => option.value === 'Santiago')).toBe(true);

@@ -37,13 +37,13 @@ export default function RecruitmentFunnel() {
   };
 
   // Form state
-  const [formData, setFormData] = useState<ApplicantData>({
+  const [formData, setFormData] = useState<Omit<ApplicantData, "speedtestMbps"> & { speedtestMbps: string }>({
     name: "",
     email: "",
     phone: "",
     country: "",
     englishLevel: "B2",
-    speedtestMbps: 0,
+    speedtestMbps: "",
     efsetLink: "",
     cvUrl: undefined,
   });
@@ -81,7 +81,10 @@ export default function RecruitmentFunnel() {
     setInfoMsg(null);
     setAccessNextAction(null);
     startTransition(async () => {
-      const validation = ApplicantSchema.safeParse(formData);
+      const validation = ApplicantSchema.safeParse({
+        ...formData,
+        speedtestMbps: formData.speedtestMbps === "" ? undefined : Number(formData.speedtestMbps),
+      });
       
       if (!validation.success) {
         const issue = validation.error.issues[0];
@@ -215,7 +218,7 @@ export default function RecruitmentFunnel() {
             <select
               required aria-label="Provincia de residencia"
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
-              value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value as ApplicantData["country"] })}
+              value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })}
             >
               <option value="" disabled>Selecciona tu provincia</option>
               {DOMINICAN_PROVINCES.map((province) => <option key={province} value={province}>{province}</option>)}
@@ -231,13 +234,15 @@ export default function RecruitmentFunnel() {
             </select>
             <label className="flex flex-col gap-2 text-sm font-semibold text-slate-700">
               Velocidad de descarga (Mbps)
-              <input type="number" min={1} max={10000} step={1} required
+              <input type="text" inputMode="numeric" pattern="[0-9]+" required
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
-                value={formData.speedtestMbps || ""}
+                value={formData.speedtestMbps}
                 placeholder="Ej. 100"
                 onChange={(e) => {
                   const value = e.target.value;
-                  setFormData((previous) => ({ ...previous, speedtestMbps: value === "" ? 0 : Number(value) }));
+                  if (/^\d*$/.test(value)) {
+                    setFormData((previous) => ({ ...previous, speedtestMbps: value.replace(/^0+(?=\d)/, "") }));
+                  }
                 }}
               />
             </label>
