@@ -1,4 +1,5 @@
 import { readOperationalMailConfig } from './operational-config';
+import { emailDeliveryMode } from './pilot-recipient';
 import { validEmailSchedulerSecret } from './scheduler-auth';
 
 export function emailAutomationStatus(env: Readonly<Record<string, string | undefined>>, now = new Date()) {
@@ -15,4 +16,23 @@ export function emailAutomationStatus(env: Readonly<Record<string, string | unde
     schedulerCredentialConfigured: validEmailSchedulerSecret(env.OPERATIONAL_EMAIL_SCHEDULER_SECRET),
     cutoverValid,
   };
+}
+
+/** Mode-aware UI diagnosis. Configuration readiness is not delivery proof. */
+export function emailRolloutReadiness(env: Readonly<Record<string, string | undefined>>, now = new Date()) {
+  const mode = emailDeliveryMode(env);
+  const flags = emailAutomationStatus(env, now);
+  const common: [string, boolean][] = [
+    ['SMTP configurado', flags.smtpConfigured],
+    ['Vinculación habilitada', flags.bindingEnabled],
+    ['Despacho habilitado', flags.dispatchEnabled],
+    ['Lotes habilitados', flags.batchEnabled],
+    ['Fecha de inicio válida', flags.cutoverValid],
+  ];
+  const checks: [string, boolean][] = mode === 'pilot'
+    ? [...common, ['Programador desactivado para el piloto', !flags.schedulerEnabled]]
+    : mode === 'general'
+      ? [...common, ['Programador habilitado', flags.schedulerEnabled], ['Credencial del programador válida', flags.schedulerCredentialConfigured]]
+      : [...common, ['Modo de entrega válido y exclusivo', false]];
+  return { mode, checks, ready: checks.every(([, ok]) => ok) };
 }
