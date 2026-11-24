@@ -105,3 +105,47 @@ assert_equal "$(db -c "SELECT status FROM private_email.recruitment_delivery WHE
 assert_equal "$(db -c "SELECT count(*) FROM private_email.recruitment_delivery WHERE event_id='cascade'")" 0 event-delete-cascade
 assert_equal "$(db -c "SELECT status FROM private_email.recruitment_delivery WHERE event_id='race'")" accepted final-acceptance
 echo 'Isolated PostgreSQL ledger checks passed.'
+
+# Explicit candidate/account binding fixture. No production account data.
+db <<'SQL'
+CREATE TABLE public.recruitment_candidates (id integer PRIMARY KEY);
+CREATE TABLE public.user_profiles (id uuid PRIMARY KEY);
+INSERT INTO public.recruitment_candidates VALUES (1), (2), (3);
+INSERT INTO public.user_profiles VALUES ('123e4567-e89b-42d3-a456-426614174000'), ('123e4567-e89b-42d3-a456-426614174001');
+SQL
+db < "$root/docs/operations/proposed-candidate-account-binding.sql"
+db <<'SQL'
+DO $check$
+DECLARE role_name text;
+BEGIN
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'private_email.candidate_account_binding'::regclass) THEN
+    RAISE EXCEPTION 'Binding RLS missing';
+  END IF;
+  FOREACH role_name IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+    IF has_table_privilege(role_name, 'private_email.candidate_account_binding', 'SELECT,INSERT,UPDATE,DELETE') THEN
+      RAISE EXCEPTION 'Unexpected binding privilege: %', role_name;
+    END IF;
+  END LOOP;
+END
+$check$;
+INSERT INTO private_email.candidate_account_binding(candidate_id,account_id) VALUES (1,'123e4567-e89b-42d3-a456-426614174000');
+DO $check$
+BEGIN
+  BEGIN
+    INSERT INTO private_email.candidate_account_binding(candidate_id,account_id) VALUES (2,'123e4567-e89b-42d3-a456-426614174000');
+    RAISE EXCEPTION 'Same account assigned twice';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO private_email.candidate_account_binding(candidate_id,account_id) VALUES (1,'123e4567-e89b-42d3-a456-426614174001');
+    RAISE EXCEPTION 'Same candidate assigned twice';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+END
+$check$;
+UPDATE private_email.candidate_account_binding SET revoked_at=now() WHERE candidate_id=1;
+SQL
+assert_equal "$(db -c 'SELECT count(*) FROM private_email.candidate_account_binding WHERE revoked_at IS NULL')" 0 revoked-binding
+db -c "DELETE FROM public.user_profiles WHERE id='123e4567-e89b-42d3-a456-426614174000'"
+assert_equal "$(db -c 'SELECT count(*) FROM private_email.candidate_account_binding')" 0 removed-account-binding
+echo 'Isolated candidate account binding checks passed.'
