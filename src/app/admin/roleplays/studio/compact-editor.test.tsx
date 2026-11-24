@@ -309,6 +309,15 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
     expect(window.confirm).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /Aplicar selección al editor/ })).toBeNull();
+
+    // Undo must recover the pending SRT review, not just the previous editor.
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer importación de subtítulos' }));
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar selección al editor (25)' }));
+    expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
   it('preserves long SRT review after declined replacement and closes it after acceptance', async () => {
@@ -322,6 +331,9 @@ describe('Audio Studio compact editing', () => {
         target: { files: [longTranscript()] },
       });
     });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar turnos en transcripción' }), {
+      target: { value: 'Source turn 2' },
+    });
     vi.mocked(window.confirm).mockReturnValueOnce(false);
     fireEvent.click(screen.getByRole('button', { name: /Aplicar selección al editor \(25\)/ }));
     expect(window.confirm).toHaveBeenCalledOnce();
@@ -334,6 +346,16 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByText('Seleccionar turnos de la transcripción')).toBeNull();
     expect(screen.getByText(/Intervenciones \(25\/25\)/)).toBeTruthy();
     expect(screen.queryByDisplayValue('Edición pendiente')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer importación de subtítulos' }));
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición pendiente');
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    expect((screen.getByRole('searchbox', {
+      name: 'Buscar turnos en transcripción',
+    }) as HTMLInputElement).value).toBe('Source turn 2');
+    expect(screen.queryByRole('button', { name: 'Deshacer importación de subtítulos' })).toBeNull();
   });
 
   it('keeps playback when SRT replacement is declined but stops it on acceptance', async () => {
