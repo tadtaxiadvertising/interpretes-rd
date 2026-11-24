@@ -66,6 +66,15 @@ describe('single-event dispatch', () => {
     expect(await dispatchRecruitmentEmail('event-1', true, deps)).toBe('cancelled');
     expect(deps.send).not.toHaveBeenCalled();
   });
+  it('cancels when the same account changes email after claiming', async () => {
+    const deps = fixtures();
+    const changed = snapshot();
+    changed.application.email = 'new@example.test';
+    changed.identity = { ...changed.identity!, email: 'new@example.test' };
+    deps.load.mockResolvedValueOnce(snapshot()).mockResolvedValueOnce(changed);
+    expect(await dispatchRecruitmentEmail('event-1', true, deps)).toBe('cancelled');
+    expect(deps.send).not.toHaveBeenCalled();
+  });
   it('sends approved content to the verified recipient exactly once', async () => {
     const deps = fixtures();
     expect(await dispatchRecruitmentEmail('event-1', true, deps)).toBe('accepted');
