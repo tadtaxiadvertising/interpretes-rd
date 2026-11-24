@@ -1,9 +1,9 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 
-type Client = Pick<Prisma.TransactionClient, '$executeRaw'>;
+type Client = Pick<Prisma.TransactionClient, '$executeRaw' | '$queryRaw'>;
 type Binding = { candidateId: number; accountId: string; email: string };
-export type MailboxChallengeResult = 'sent' | 'unconfirmed' | 'not_available';
+export type MailboxChallengeResult = 'sent' | 'unconfirmed' | 'not_available' | 'already_verified' | 'code_pending';
 export type MailboxProofResult = 'verified' | 'invalid' | 'unavailable';
 
 const digest = (token: string) => createHash('sha256').update(token, 'utf8').digest('hex');
@@ -26,7 +26,22 @@ export async function issueMailboxChallenge(db: Client, binding: Binding, send: 
         AND (b.challenge_issued_at IS NULL OR b.challenge_issued_at <= now() - interval '5 minutes')
         AND (b.verified_email IS DISTINCT FROM ${binding.email} OR b.mailbox_verified_at IS NULL)
     `;
-    if (changed !== 1) return 'not_available';
+    if (changed !== 1) {
+      // Resolve only this authenticated binding; never return the stored hash
+      // or disclose whether another account owns the address.
+      const [row] = await db.$queryRaw<Array<{ verified: boolean; pending: boolean }>>`
+        SELECT COALESCE(b.verified_email = ${binding.email} AND b.mailbox_verified_at <= now(), false) AS verified,
+          COALESCE(b.challenge_email = ${binding.email} AND b.challenge_hash IS NOT NULL AND b.challenge_expires_at > now(), false) AS pending
+        FROM private_email.candidate_account_binding b
+        JOIN public.recruitment_candidates c ON c.id = b.candidate_id
+        JOIN public.user_profiles p ON p.id = b.account_id
+        WHERE b.candidate_id = ${binding.candidateId} AND b.account_id = ${binding.accountId}::uuid
+          AND b.revoked_at IS NULL AND p.role = 'candidate' AND p.interpreter_id IS NULL
+          AND lower(trim(c.email)) = ${binding.email} AND lower(trim(p.email)) = ${binding.email}
+        LIMIT 1
+      `;
+      return row?.verified ? 'already_verified' : row?.pending ? 'code_pending' : 'not_available';
+    }
     return await send(binding.email, token) === 'accepted' ? 'sent' : 'unconfirmed';
   } catch {
     return 'unconfirmed';
