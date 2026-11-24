@@ -40,7 +40,7 @@ export async function readExistingProofBinding(db: Pick<Client, '$queryRaw'>, ac
     LIMIT 2
   `;
   const candidateId = rows[0]?.candidateId;
-  return rows.length === 1 && Number.isSafeInteger(candidateId) && candidateId > 0
+  return rows.length === 1 && typeof candidateId === 'number' && Number.isSafeInteger(candidateId) && candidateId > 0
     ? { candidateId, accountId, email } : null;
 }
 
