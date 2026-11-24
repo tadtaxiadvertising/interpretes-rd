@@ -4,12 +4,12 @@ import { useState, useRef } from 'react';
 import { testCorporateSmtp } from '@/app/actions/operational-email';
 
 const messages = {
-  accepted: 'El servidor SMTP aceptó el mensaje. Comprueba el buzón corporativo y la carpeta de spam; la entrega aún no está confirmada.',
+  accepted: 'El proveedor de correo aceptó el mensaje. Comprueba el buzón corporativo y la carpeta de spam; la entrega aún no está confirmada.',
   unconfirmed: 'No se pudo confirmar la aceptación. Revisa el proveedor y el buzón antes de repetir la prueba.',
   unauthorized: 'Se requiere una sesión administrativa.',
   disabled: 'Los correos operativos están desactivados.',
-  incomplete: 'Faltan parámetros SMTP.',
-  invalid: 'La configuración SMTP no es válida.',
+  incomplete: 'Faltan parámetros del proveedor.',
+  invalid: 'La configuración del proveedor no es válida.',
   rate_limited: 'Ya hay una prueba en curso o reciente. Intenta más tarde.',
 } as const;
 

@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readOperationalMailConfig, type OperationalMailConfig } from './operational-config';
 
+import { sendBrevoEmail } from './brevo-transport';
+
 export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited';
 
 function quote(value: string): string {
@@ -121,6 +123,7 @@ export async function sendRecruitmentSmtp(message: RecruitmentMessage): Promise<
   const result = readOperationalMailConfig(process.env);
   if (result.status !== 'configured') return 'unconfirmed';
   try {
+    if (result.provider === 'brevo') return await sendBrevoEmail(result.config, message);
     return await sendMime(result.config, message.recipient, recruitmentSmtpMessage(result.config, message));
   } catch {
     return 'unconfirmed';
@@ -140,6 +143,12 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
   busy = true;
   nextTestAt = Date.now() + 60000;
   try {
+    if (result.provider === 'brevo') return await sendBrevoEmail(result.config, {
+      recipient: result.config.from,
+      subject: 'Prueba de correo | Intérpretes RD',
+      text: 'Este es un correo de prueba de Intérpretes RD. No contiene datos de postulantes.',
+      html: '<p>Este es un correo de prueba de Intérpretes RD.</p><p>No contiene datos de postulantes.</p>',
+    });
     return await sendMime(result.config, result.config.from, smtpTestMessage(result.config));
   } catch {
     return 'unconfirmed';
