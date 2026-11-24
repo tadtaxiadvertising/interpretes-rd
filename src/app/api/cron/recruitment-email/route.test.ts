@@ -13,6 +13,8 @@ describe('recruitment email scheduler route', () => {
     vi.resetAllMocks();
     vi.stubEnv('OPERATIONAL_EMAIL_SCHEDULER_SECRET', secret);
     vi.stubEnv('OPERATIONAL_EMAIL_SCHEDULER_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', '');
     mocks.process.mockResolvedValue({ status: 'completed', examined: 0, accepted: 0, deferred: 0, cancelled: 0, uncertain: 0 });
   });
   afterEach(() => vi.unstubAllEnvs());
@@ -29,6 +31,15 @@ describe('recruitment email scheduler route', () => {
   });
   it('requires independent scheduler activation', async () => {
     vi.stubEnv('OPERATIONAL_EMAIL_SCHEDULER_ENABLED', 'false');
+    expect((await POST(request('Bearer '+secret))).status).toBe(503);
+    expect(mocks.process).not.toHaveBeenCalled();
+  });
+  it('refuses scheduling in pilot mode or without general opt-in', async () => {
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'false');
+    expect((await POST(request('Bearer '+secret))).status).toBe(503);
+    vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', 'test@example.test');
+    expect((await POST(request('Bearer '+secret))).status).toBe(503);
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'true');
     expect((await POST(request('Bearer '+secret))).status).toBe(503);
     expect(mocks.process).not.toHaveBeenCalled();
   });

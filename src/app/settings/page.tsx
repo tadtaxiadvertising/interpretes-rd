@@ -5,7 +5,7 @@ import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
 import CorporateEmailPilot from './CorporateEmailPilot';
-import { pilotRecipient } from '@/lib/email/pilot-recipient';
+import { emailDeliveryMode } from '@/lib/email/pilot-recipient';
 import EmailDatabaseReadiness from './EmailDatabaseReadiness';
 import { operationalMailDiagnostic } from '@/lib/email/operational-config';
 import { emailAutomationStatus } from '@/lib/email/automation-status';
@@ -116,7 +116,7 @@ export default function SettingsPage() {
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
-            <CorporateEmailPilot configured={Boolean(pilotRecipient(process.env)) && !automation.schedulerEnabled && automation.smtpConfigured && automation.bindingEnabled && automation.dispatchEnabled && automation.batchEnabled && automation.cutoverValid} />
+            <CorporateEmailPilot configured={emailDeliveryMode(process.env) === 'pilot' && !automation.schedulerEnabled && automation.smtpConfigured && automation.bindingEnabled && automation.dispatchEnabled && automation.batchEnabled && automation.cutoverValid} />
             <EmailDatabaseReadiness />
             <section aria-labelledby="email-automation" className="space-y-3 rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--foreground)]">
               <h3 id="email-automation" className="font-semibold">Automatización de comunicaciones</h3>

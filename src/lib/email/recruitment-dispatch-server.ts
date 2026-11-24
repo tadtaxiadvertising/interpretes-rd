@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { pilotRecipient } from './pilot-recipient';
+import { emailDeliveryMode, pilotRecipient } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
 import { dispatchRecruitmentEmail, type DispatchResult } from './recruitment-dispatch';
 import { claimRecruitmentEmail, finishRecruitmentEmail } from './recruitment-delivery-ledger';
@@ -15,7 +15,7 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
     || readOperationalMailConfig(process.env).status !== 'configured') return 'disabled';
 
   const pilot = pilotRecipient(process.env);
-  if (pilot === false) return 'disabled';
+  if (pilot === false || emailDeliveryMode(process.env) === 'disabled') return 'disabled';
 
   // Require an explicit deployment cutover to avoid sending older events.
   const cutover = process.env.OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE;

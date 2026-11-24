@@ -17,6 +17,8 @@ describe('recruitment SMTP adapter rollout gates', () => {
     vi.setSystemTime(new Date('2026-11-24T06:00:00Z'));
     vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_ENABLED', 'true');
     vi.stubEnv('OPERATIONAL_EMAIL_BINDING_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', '');
     vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE', '2026-11-24T05:00:00Z');
     mocks.config.mockReturnValue({ status: 'configured' });
     mocks.dispatch.mockResolvedValue('accepted');
@@ -38,6 +40,11 @@ describe('recruitment SMTP adapter rollout gates', () => {
       vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE', value);
       expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
     }
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
+  it('rejects a missing pilot and missing general authorization', async () => {
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'false');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
     expect(mocks.dispatch).not.toHaveBeenCalled();
   });
   it('filters older events and wires the committed ledger and SMTP adapters', async () => {
