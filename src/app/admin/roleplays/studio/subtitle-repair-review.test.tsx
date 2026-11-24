@@ -347,10 +347,12 @@ describe('Audio Studio repaired SRT import safety', () => {
     const player = container.querySelector('audio')!;
     Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
     fireEvent.loadedMetadata(player);
+    const stamp = (seconds: number) => '00:' +
+      String(Math.floor(seconds / 60)).padStart(2, '0') + ':' +
+      String(seconds % 60).padStart(2, '0') + ',000';
     const cues = Array.from({ length: 30 }, (_, index) => [
       String(index + 1),
-      '00:00:' + String(index * 3).padStart(2, '0') + ',000 --> ' +
-        '00:00:' + String(index * 3 + 2).padStart(2, '0') + ',000',
+      stamp(index * 3) + ' --> ' + stamp(index * 3 + 2),
       'Doctor: Reference',
     ].join('\n')).join('\n\n');
     const file = new File(['srt'], 'source.srt', { type: 'text/plain' });
