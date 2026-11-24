@@ -399,7 +399,7 @@ describe('Audio Studio repaired SRT import safety', () => {
       '1', '00:00:00,000 --> 00:00:10,000', 'Doctor: Source turn A', '',
       '2', '00:00:04,000 --> 00:00:06,000', 'Patient: Source turn B', '',
       '3', '00:00:12,000 --> 00:00:14,000', 'Doctor: Source turn C',
-    ].join('\\n') });
+    ].join('\n') });
     await act(async () => {
       fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
         target: { files: [file] },
