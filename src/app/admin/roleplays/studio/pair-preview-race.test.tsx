@@ -37,9 +37,13 @@ describe('Audio Studio auxiliary gapless pair preview races', () => {
     Object.defineProperty(primary, 'duration', { configurable: true, value: 120 });
     fireEvent.loadedMetadata(primary);
 
-    const transcript = [0, 10, 20].map((start, index) => [
+    // Importing 25 or fewer clean cues applies them directly to the editor.
+    // Use 30 valid cues to exercise the explicit SRT review workflow, then
+    // manually choose the three separated turns needed by these player tests.
+    const starts = [0, 10, 20, ...Array.from({ length: 27 }, (_, index) => 30 + index * 3)];
+    const transcript = starts.map((start, index) => [
       String(index + 1),
-      `00:00:${String(start).padStart(2, '0')},000 --> 00:00:${String(start + 2).padStart(2, '0')},000`,
+      `00:${String(Math.floor(start / 60)).padStart(2, '0')}:${String(start % 60).padStart(2, '0')},000 --> 00:${String(Math.floor((start + 2) / 60)).padStart(2, '0')}:${String((start + 2) % 60).padStart(2, '0')},000`,
       'Doctor: Synthetic reference text',
     ].join('\n')).join('\n\n');
     const file = new File(['fixture'], 'transcript.srt', { type: 'text/plain' });
@@ -50,7 +54,11 @@ describe('Audio Studio auxiliary gapless pair preview races', () => {
       });
       await Promise.resolve();
     });
-    expect(screen.getByText(/3 turnos disponibles y 3 seleccionados/)).toBeTruthy();
+    expect(screen.getByText(/30 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    for (const index of [1, 2, 3]) {
+      fireEvent.click(screen.getByRole('checkbox', { name: `Seleccionar turno ${index}` }));
+    }
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar selección al editor (3)' }));
     expect(screen.getByText('Intervenciones (3/25)')).toBeTruthy();
 
