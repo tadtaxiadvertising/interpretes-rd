@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
-import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState } from './mailbox-proof';
+import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, readExistingProofBinding } from './mailbox-proof';
 
 const binding = { candidateId: 1, accountId: '123e4567-e89b-42d3-a456-426614174000', email: 'candidate@example.test' };
 function fixture() {
@@ -86,4 +86,15 @@ describe('read-only mailbox state', () => {
     expect(sql).toContain('lower(trim(c.email)) = ? AND lower(trim(p.email)) = ?');
     expect(f.query.mock.calls[0]).toContain(binding.accountId);
   });
+});
+
+
+it('recovers an existing active binding only by UUID and exact current email', async () => {
+  const f = fixture();
+  f.query.mockResolvedValueOnce([{ candidateId: 1 }]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ candidateId: 1 }, { candidateId: 2 }]);
+  expect(await readExistingProofBinding(f.db, binding.accountId, binding.email)).toEqual(binding);
+  expect(await readExistingProofBinding(f.db, binding.accountId, binding.email)).toBeNull();
+  expect(await readExistingProofBinding(f.db, binding.accountId, binding.email)).toBeNull();
+  expect(f.execute).not.toHaveBeenCalled();
+  expect(f.query.mock.calls[0][0].join('?')).toContain("a.status::text NOT IN ('HIRED','HIRING','REJECTED','WITHDRAWN','EXPIRED')");
 });
