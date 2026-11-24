@@ -31,8 +31,11 @@ function fillApplication() {
   fireEvent.change(screen.getByRole('textbox', { name: 'Teléfono' }), {
     target: { value: '8095550199' },
   });
-  fireEvent.change(screen.getByRole('textbox', { name: 'País de residencia' }), {
-    target: { value: 'República Dominicana' },
+  fireEvent.change(screen.getByRole('combobox', { name: 'Provincia de residencia' }), {
+    target: { value: 'Santiago' },
+  });
+  fireEvent.change(screen.getByRole('spinbutton', { name: 'Velocidad de descarga (Mbps)' }), {
+    target: { value: '100' },
   });
 }
 
@@ -52,6 +55,22 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('Registration completion and next actions', () => {
+  it('lists Dominican provinces and allows entering internet speed without a leading zero', () => {
+    render(<RecruitmentFunnel />);
+    const province = screen.getByRole('combobox', { name: 'Provincia de residencia' }) as HTMLSelectElement;
+    const speed = screen.getByRole('spinbutton', { name: 'Velocidad de descarga (Mbps)' }) as HTMLInputElement;
+    expect(province.value).toBe('');
+    expect(Array.from(province.options).some((option) => option.value === 'Distrito Nacional')).toBe(true);
+    expect(Array.from(province.options).some((option) => option.value === 'Santiago')).toBe(true);
+    expect(speed.value).toBe('');
+    fireEvent.change(speed, { target: { value: '75' } });
+    expect(speed.value).toBe('75');
+    fireEvent.change(speed, { target: { value: '' } });
+    expect(speed.value).toBe('');
+    fireEvent.change(speed, { target: { value: '120' } });
+    expect(speed.value).toBe('120');
+  });
+
   it('marks the EFSET certificate link as required without changing validation rules', async () => {
     render(<RecruitmentFunnel />);
     const certificate = screen.getByLabelText(/Enlace del certificado EFSET/);
