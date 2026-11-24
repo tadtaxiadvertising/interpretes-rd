@@ -6,6 +6,7 @@ import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { CandidateRoleplayAction } from '@/components/recruitment/CandidateRoleplayAction';
 import { CandidatePasswordSetup } from '@/components/recruitment/CandidatePasswordSetup';
+import CandidateEmailBinding from '@/components/recruitment/CandidateEmailBinding';
 import { ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 import { candidateStatusDisplay } from '@/lib/recruitment/status-display';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
@@ -183,6 +184,7 @@ export default async function CandidatePortalPage() {
         </section>
 
         {identity.provider === 'supabase' ? <CandidatePasswordSetup /> : null}
+        {identity.provider === 'supabase' && process.env.OPERATIONAL_EMAIL_BINDING_ENABLED === 'true' ? <CandidateEmailBinding /> : null}
 
         <section className="grid gap-5 md:grid-cols-2">
           <div className="rounded-3xl border border-blue-300/20 bg-blue-300/[0.06] p-6">
