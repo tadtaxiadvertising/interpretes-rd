@@ -570,6 +570,14 @@ export default function RoleplayStudioPage() {
         clips: [...suggestedClips],
         omittedCount: omittedSuggestions,
       },
+      // A selected SRT review is work in progress, not disposable import UI.
+      // Undo restores its exact candidates, selection and filters locally.
+      previousReview: {
+        cues: [...reviewCues], selected: [...chosenCueIndices],
+        page: cuePage, search: cueSearch,
+        selectedOnly: showOnlySelectedCues, alertsOnly: showCueReviewAlertsOnly,
+        segmentSearch, pendingOnly: showPendingReview,
+      },
     });
     setTurnActionFeedback(null);
     // A filter for the old cuts must not hide the newly imported ones.
