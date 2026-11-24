@@ -100,7 +100,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición manual' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -439,6 +439,8 @@ export default function RoleplayStudioPage() {
         ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
         : lastStructuralEdit.kind === 'adición VAD'
           ? 'Cortes VAD retirados. Las intervenciones y referencias anteriores se conservaron.'
+        : lastStructuralEdit.kind === 'adición manual'
+          ? 'Último fragmento añadido deshecho. Se recuperaron los cortes y referencias anteriores.'
         : lastStructuralEdit.kind === 'importación de subtítulos'
           ? 'Importación de subtítulos deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
         : lastStructuralEdit.kind === 'aplicación de pausas'
@@ -1206,7 +1208,12 @@ export default function RoleplayStudioPage() {
     }
     subtitleImportRevision.current += 1;
     stopPairPreview();
-    setLastStructuralEdit(null);
+    // Creating a cut manually should be as reversible as adding a VAD batch.
+    // Preserve the previous private editor metadata, never the source media.
+    setLastStructuralEdit({
+      kind: 'adición manual',
+      segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
     setTurnActionFeedback(null);
     const id = crypto.randomUUID();
     setSegments(prev => [...prev, {
@@ -1218,7 +1225,7 @@ export default function RoleplayStudioPage() {
     }]);
     setExpandedSegmentId(id);
     setError('');
-    setNotice('Intervención creada cerca del cursor sin solaparse con otros turnos. Revisa hablante, idioma y límites.');
+    setNotice('Intervención creada cerca del cursor sin solaparse con otros turnos. Puedes deshacerla; revisa hablante, idioma y límites.');
   };
 
   const update = (id: string, patch: Partial<Segment>) => {
@@ -2603,7 +2610,9 @@ export default function RoleplayStudioPage() {
                         ? 'Deshacer eliminación de intervención'
                         : lastStructuralEdit.kind === 'adición VAD'
                           ? 'Deshacer adición de cortes VAD'
-                          : lastStructuralEdit.kind === 'importación de subtítulos'
+                          : lastStructuralEdit.kind === 'adición manual'
+                            ? 'Deshacer adición manual'
+                            : lastStructuralEdit.kind === 'importación de subtítulos'
                             ? 'Deshacer importación de subtítulos'
                             : lastStructuralEdit.kind === 'aplicación de pausas'
                               ? 'Deshacer aplicación de pausas'
