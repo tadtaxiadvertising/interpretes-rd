@@ -204,3 +204,64 @@ db -c "UPDATE private_email.candidate_account_binding SET challenge_issued_at=no
 db -c "$issue_sql"
 assert_equal "$(db -c "SELECT challenge_hash=repeat('c',64) AND challenge_expires_at>now() FROM private_email.candidate_account_binding WHERE candidate_id=2")" t expired-code-replaced
 echo 'Isolated mailbox code lifetime checks passed.'
+
+# Exercise the actual pilot preflight and discovery queries on disposable data.
+# The fixtures contain synthetic addresses only; no SMTP or external requests.
+db <<'SQL'
+CREATE TABLE public.recruitment_applications (
+  id text PRIMARY KEY, candidate_id integer NOT NULL REFERENCES public.recruitment_candidates(id),
+  status text NOT NULL
+);
+ALTER TABLE public.recruitment_events ADD COLUMN application_id text REFERENCES public.recruitment_applications(id),
+  ADD COLUMN event_type text, ADD COLUMN to_status text, ADD COLUMN created_at timestamptz;
+INSERT INTO public.recruitment_applications VALUES ('pilot-app',2,'APPLIED'), ('other-app',3,'APPLIED');
+UPDATE public.recruitment_candidates SET email='other@example.test' WHERE id=3;
+INSERT INTO public.user_profiles(id,email,role) VALUES ('123e4567-e89b-42d3-a456-426614174002','other@example.test','candidate');
+INSERT INTO private_email.candidate_account_binding(candidate_id,account_id,verified_email,mailbox_verified_at)
+VALUES (3,'123e4567-e89b-42d3-a456-426614174002','other@example.test',now());
+INSERT INTO public.recruitment_events(id,application_id,event_type,to_status,created_at) VALUES
+  ('pilot-fresh','pilot-app','APPLICATION_CREATED','APPLIED',now()-interval '1 hour'),
+  ('pilot-old','pilot-app','APPLICATION_CREATED','APPLIED',now()-interval '25 hours'),
+  ('pilot-before-cutover','pilot-app','APPLICATION_CREATED','APPLIED',now()-interval '3 hours'),
+  ('pilot-future','pilot-app','APPLICATION_CREATED','APPLIED',now()+interval '1 hour'),
+  ('pilot-wrong-state','pilot-app','INDUCTION_COMPLETED','ROLEPLAY_PENDING',now()-interval '30 minutes'),
+  ('pilot-unknown-kind','pilot-app','REJECTED','APPLIED',now()-interval '30 minutes'),
+  ('pilot-accepted','pilot-app','APPLICATION_CREATED','APPLIED',now()-interval '30 minutes'),
+  ('other-fresh','other-app','APPLICATION_CREATED','APPLIED',now()-interval '30 minutes');
+INSERT INTO private_email.recruitment_delivery(event_id,template_kind,status,claimed_at,completed_at)
+VALUES ('pilot-accepted','application_received','accepted',now(),now());
+SQL
+# Extract one tagged query from each actual implementation. Fixture substitution
+# is deterministic; any unexpected template parameter fails the test.
+read_fixture_query() {
+  python3 - "$root/src/lib/email/$1" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('[]>\x60', 1)[1].split('\x60;', 1)[0]
+for parameter, value in {
+    '${pilot}': "'candidate@example.test'",
+    '${now}': 'now()',
+    '${earliest}': "(now()-interval '2 hours')",
+}.items():
+    sql = sql.replace(parameter, value)
+assert '${' not in sql, 'Unexpected pilot parameter'
+print(sql + ';')
+PY
+}
+preflight_sql="$(read_fixture_query pilot-preflight.ts)"
+discovery_sql="$(read_fixture_query recruitment-batch-discovery.ts)"
+discovered_ids() {
+  db -c "$discovery_sql" | cut -d '|' -f 1
+}
+assert_equal "$(db -c "$preflight_sql")" 't|f|t|f' pilot-code-pending
+assert_equal "$(discovered_ids)" "" unverified-pilot-excluded
+db -c "UPDATE private_email.candidate_account_binding SET verified_email=challenge_email, mailbox_verified_at=now(), challenge_email=NULL, challenge_hash=NULL, challenge_expires_at=NULL WHERE candidate_id=2"
+assert_equal "$(db -c "$preflight_sql")" 't|t|f|f' pilot-verified
+assert_equal "$(discovered_ids)" pilot-fresh pilot-only-fresh-current-unsent-event
+db -c "INSERT INTO private_email.recruitment_delivery(event_id,template_kind,status,claimed_at,completed_at) VALUES ('pilot-fresh','application_received','unconfirmed',now(),now())"
+assert_equal "$(db -c "$preflight_sql")" 't|t|f|t' pilot-uncertain-requires-review
+assert_equal "$(discovered_ids)" "" uncertain-event-not-retried
+db -c "UPDATE private_email.candidate_account_binding SET revoked_at=now() WHERE candidate_id=2"
+assert_equal "$(db -c "$preflight_sql")" 'f|f|f|t' revoked-binding-not-verified
+assert_equal "$(discovered_ids)" "" revoked-pilot-excluded
+echo 'Isolated pilot preflight and discovery checks passed.'
