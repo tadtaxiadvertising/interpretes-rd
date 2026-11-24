@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readEmailDatabaseReadiness } from './database-readiness';
 
-const valid = { delivery: true, binding: true, runtimeAccess: true, privateAccess: true, rls: true };
+const valid = { delivery: true, binding: true, runtimeAccess: true, privateAccess: true, rls: true, policiesAvailable: true };
 function fixture() {
   const query = vi.fn().mockResolvedValue([valid]);
   const db = { $queryRaw: query } as unknown as Parameters<typeof readEmailDatabaseReadiness>[0];
@@ -13,7 +13,7 @@ describe('email database metadata readiness', () => {
     const f = fixture();
     f.query.mockResolvedValueOnce([{ ...valid, binding: false }]);
     expect(await readEmailDatabaseReadiness(f.db)).toEqual({ status: 'not_installed' });
-    for (const key of ['runtimeAccess', 'privateAccess', 'rls']) {
+    for (const key of ['runtimeAccess', 'privateAccess', 'rls', 'policiesAvailable']) {
       f.query.mockResolvedValueOnce([{ ...valid, [key]: false }]);
       expect(await readEmailDatabaseReadiness(f.db)).toEqual({ status: 'permission_mismatch' });
     }
@@ -25,6 +25,8 @@ describe('email database metadata readiness', () => {
     expect(sql).toContain('has_table_privilege(current_user');
     expect(sql).toContain("'anon','authenticated','service_role'");
     expect(sql).toContain('relrowsecurity');
+    expect(sql).toContain('row_security_active');
+    expect(sql).toContain('p.polpermissive');
     expect(sql).not.toMatch(/\b(INSERT INTO|UPDATE private_email|DELETE FROM)\b/i);
   });
   it('sanitizes database errors and missing metadata', async () => {
