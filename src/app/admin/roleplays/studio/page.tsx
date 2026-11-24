@@ -100,7 +100,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -424,6 +424,8 @@ export default function RoleplayStudioPage() {
           ? 'Importación de subtítulos deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
         : lastStructuralEdit.kind === 'aplicación de pausas'
           ? 'Cortes sugeridos deshechos. Recuperaste las intervenciones, referencias y selección de subtítulos anteriores.'
+        : lastStructuralEdit.kind === 'apertura de proyecto'
+          ? 'Apertura del proyecto deshecha. Se restauraron las intervenciones, referencias privadas y revisión anteriores.'
         : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
@@ -1351,7 +1353,22 @@ export default function RoleplayStudioPage() {
       if (containsCompound) setAllowServerZipExport(false);
       stopPreview();
       stopPairPreview();
-      setLastStructuralEdit(null);
+      // Confirmed, source-verified JSON recovery can still be mistaken.
+      // Make it a single reversible local edit without embedding audio in undo.
+      setLastStructuralEdit({
+        kind: 'apertura de proyecto',
+        segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
+        previousSuggestions: {
+          silences: [...detectedSilences], clips: [...suggestedClips],
+          omittedCount: omittedSuggestions,
+        },
+        previousReview: {
+          cues: [...reviewCues], selected: [...chosenCueIndices],
+          page: cuePage, search: cueSearch,
+          selectedOnly: showOnlySelectedCues, alertsOnly: showCueReviewAlertsOnly,
+          segmentSearch, pendingOnly: showPendingReview,
+        },
+      });
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
@@ -2570,7 +2587,9 @@ export default function RoleplayStudioPage() {
                             ? 'Deshacer importación de subtítulos'
                             : lastStructuralEdit.kind === 'aplicación de pausas'
                               ? 'Deshacer aplicación de pausas'
-                              : 'Deshacer última división o unión'}
+                              : lastStructuralEdit.kind === 'apertura de proyecto'
+                                ? 'Deshacer apertura de proyecto JSON'
+                                : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>

@@ -249,6 +249,72 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(window.confirm).toHaveBeenCalledOnce();
     expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Borrador aprobado');
     expect(screen.queryByDisplayValue('Edición anterior')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer apertura de proyecto JSON' }));
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Edición anterior');
+    expect(screen.queryByDisplayValue('Borrador aprobado')).toBeNull();
+    expect(screen.getByText(/Apertura del proyecto deshecha/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Deshacer apertura de proyecto JSON' })).toBeNull();
+    // Undo is a local snapshot restore; it never needs another media hash.
+    expect(sha256StudioAudio).toHaveBeenCalledOnce();
+  });
+
+  it('restores the SRT candidate review and private references after undoing a verified JSON project', async () => {
+    selectSource();
+    const first = new File(['source'], 'private.srt', { type: 'text/plain' });
+    Object.defineProperty(first, 'text', { configurable: true, value: async () =>
+      '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Private reference to preserve',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [first] },
+      });
+    });
+    fireEvent.change(screen.getByLabelText('Título'), {
+      target: { value: 'Corte editado antes del JSON' },
+    });
+    const stamp = (seconds: number) =>
+      '00:' + String(Math.floor(seconds / 60)).padStart(2, '0') +
+      ':' + String(seconds % 60).padStart(2, '0') + ',000';
+    const longSrt = Array.from({ length: 26 }, (_, index) =>
+      String(index + 1) + '\n' + stamp(index * 3) + ' --> ' +
+      stamp(index * 3 + 1) + '\nDoctor: Candidate ' + (index + 1)).join('\n\n');
+    const pending = new File(['srt'], 'pending.srt', { type: 'text/plain' });
+    Object.defineProperty(pending, 'text', {
+      configurable: true, value: async () => longSrt,
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [pending] },
+      });
+    });
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar turnos en transcripción' }), {
+      target: { value: 'Candidate 2' },
+    });
+
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [project('Proyecto externo validado')] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.queryByText('Seleccionar turnos de la transcripción')).toBeNull();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value)
+      .toBe('Proyecto externo validado');
+    expect(screen.queryByText('Doctor: Private reference to preserve')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer apertura de proyecto JSON' }));
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value)
+      .toBe('Corte editado antes del JSON');
+    expect(screen.getByText('Doctor: Private reference to preserve')).toBeTruthy();
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    expect((screen.getByRole('searchbox', {
+      name: 'Buscar turnos en transcripción',
+    }) as HTMLInputElement).value).toBe('Candidate 2');
+    expect(sha256StudioAudio).toHaveBeenCalledOnce();
   });
 
   it('never changes a prior server choice when rejecting a verified compound v2 draft', async () => {
