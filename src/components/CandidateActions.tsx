@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { DOMINICAN_PROVINCES } from '@/lib/validators/recruitment';
 import { deleteCandidate, hireCandidate, markApplicationReadyAction, updateRecruitmentCandidateAction } from '@/app/actions/recruitment';
 
 interface CandidateActionsProps {
@@ -290,18 +291,30 @@ export function CandidateActions({ candidate }: CandidateActionsProps) {
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {([
-                ['name','Full name'],['email','Email'],['telefono','Phone / WhatsApp'],['pais','Country'],['speedtestMbps','Internet speed (Mbps)'],['efsetLink','EF SET URL'],['cvUrl','CV URL']
+                ['name','Full name'],['email','Email'],['telefono','Phone / WhatsApp'],['speedtestMbps','Internet speed (Mbps)'],['efsetLink','EF SET URL'],['cvUrl','CV URL']
               ] as const).map(([key,label]) => (
                 <label key={key} className="space-y-1 text-sm text-[var(--text-secondary)]">
                   <span>{label}</span>
                   <input type={key === 'email' ? 'email' : key === 'speedtestMbps' ? 'number' : key.endsWith('Url') || key === 'efsetLink' ? 'url' : 'text'}
                     min={key === 'speedtestMbps' ? 1 : undefined}
+                    max={key === 'speedtestMbps' ? 10000 : undefined}
+                    step={key === 'speedtestMbps' ? 1 : undefined}
                     value={editForm[key]}
                     onChange={(event) => setEditForm((prev) => ({...prev,[key]:event.target.value}))}
                     className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)] outline-none focus:border-blue-500"
                   />
                 </label>
               ))}
+              <label className="space-y-1 text-sm text-[var(--text-secondary)]">
+                <span>Provincia de residencia</span>
+                <select value={editForm.pais} onChange={(event) => setEditForm((prev) => ({...prev,pais:event.target.value}))} className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]">
+                  <option value="">Sin especificar</option>
+                  {editForm.pais && !DOMINICAN_PROVINCES.some((province) => province === editForm.pais) && (
+                    <option value={editForm.pais}>{editForm.pais} (ubicación anterior)</option>
+                  )}
+                  {DOMINICAN_PROVINCES.map((province) => <option key={province} value={province}>{province}</option>)}
+                </select>
+              </label>
               <label className="space-y-1 text-sm text-[var(--text-secondary)]">
                 <span>English level</span>
                 <select value={editForm.englishLevel} onChange={(event) => setEditForm((prev) => ({...prev,englishLevel:event.target.value}))} className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2.5 text-[var(--foreground)]">
