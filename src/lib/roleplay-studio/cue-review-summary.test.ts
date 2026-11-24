@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cueRequiresEditorialReview, summarizeTimedCueReview } from './cue-review-summary';
+import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -59,4 +59,42 @@ describe('pre-apply SRT quality summary', () => {
     expect(summarizeTimedCueReview(cues, [0], Number.NaN).sourceThirds).toBeNull();
     expect(summarizeTimedCueReview(cues, [], 1000).sourceThirds).toBe(0);
   });
+  it('flags every selected cue overlapping a longer selected caption, including nested turns', () => {
+    const cues = [
+      { start: 0, end: 10, speaker: 'Doctor', text: 'Private conversation A' },
+      { start: 1, end: 2, speaker: 'Paciente', text: 'Private conversation B' },
+      { start: 5, end: 7, speaker: 'Doctor', text: 'Private conversation C' },
+      { start: 10, end: 12, speaker: 'Paciente', text: 'Adjacent, not overlapping' },
+      { start: 13, end: 14, speaker: 'Doctor', text: 'Another valid interval' },
+    ];
+    const selected = [3, 1, 0, 2, 4, 0, -1, 10];
+    const result = overlappingSelectedTimedCueIndices(cues, selected);
+    expect(result).toEqual([0, 1, 2]);
+    expect(selected).toEqual([3, 1, 0, 2, 4, 0, -1, 10]);
+    expect(JSON.stringify(result)).not.toContain('Private conversation');
+  });
+
+  it('does not flag overlaps with unselected cues or equal boundaries', () => {
+    const cues = [
+      { start: 0, end: 3, speaker: 'Doctor', text: 'A' },
+      { start: 1, end: 2, speaker: 'Paciente', text: 'B' },
+      { start: 3, end: 5, speaker: 'Doctor', text: 'C' },
+      { start: 5, end: 6, speaker: 'Paciente', text: 'D' },
+    ];
+    expect(overlappingSelectedTimedCueIndices(cues, [0, 2, 3])).toEqual([]);
+    expect(overlappingSelectedTimedCueIndices(cues, [0, 1])).toEqual([0, 1]);
+  });
+
+  it('ignores invalid source times and indexes while providing review hints', () => {
+    const cues = [
+      { start: 0, end: 6, speaker: null, text: 'valid' },
+      { start: Number.NaN, end: 5, speaker: null, text: 'invalid' },
+      { start: -1, end: 3, speaker: null, text: 'invalid' },
+      { start: 4, end: 3, speaker: null, text: 'invalid' },
+      { start: 2, end: 4, speaker: null, text: 'valid' },
+    ];
+    expect(overlappingSelectedTimedCueIndices(cues, [0, 1, 2, 3, 4, 4, 1.5]))
+      .toEqual([0, 4]);
+  });
+
 });
