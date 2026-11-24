@@ -21,6 +21,9 @@ describe('independent mailbox proof', () => {
     expect(f.execute.mock.calls[0]).not.toContain(token);
     expect(f.execute.mock.calls[0][0].join('?')).toContain("interval '5 minutes'");
     expect(f.send).toHaveBeenCalledExactlyOnceWith(binding.email, token);
+    const sql = f.execute.mock.calls[0][0].join('?');
+    expect(sql).toContain('b.challenge_email IS DISTINCT FROM ?');
+    expect(sql).toContain('b.challenge_expires_at <= now()');
   });
   it('does not send if the binding is ineligible or cooldown is active', async () => {
     const f = fixture();
@@ -37,7 +40,7 @@ describe('independent mailbox proof', () => {
     expect(f.query.mock.calls[0][0].join('?')).toContain('b.revoked_at IS NULL');
     expect(f.query.mock.calls[0]).toContain(binding.accountId);
   });
-  it('recognizes a live challenge during cooldown without exposing its hash', async () => {
+  it('recognizes a live challenge without sending or exposing its hash', async () => {
     const f = fixture();
     f.execute.mockResolvedValue(0);
     f.query.mockResolvedValue([{ verified: false, pending: true }]);
