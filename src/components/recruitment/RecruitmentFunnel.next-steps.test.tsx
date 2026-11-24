@@ -31,8 +31,11 @@ function fillApplication() {
   fireEvent.change(screen.getByRole('textbox', { name: 'Teléfono' }), {
     target: { value: '8095550199' },
   });
-  fireEvent.change(screen.getByRole('textbox', { name: 'País de residencia' }), {
-    target: { value: 'República Dominicana' },
+  fireEvent.change(screen.getByRole('combobox', { name: 'Provincia de residencia' }), {
+    target: { value: 'Santiago' },
+  });
+  fireEvent.change(screen.getByLabelText(/Velocidad de descarga/), {
+    target: { value: '100' },
   });
 }
 
@@ -52,6 +55,25 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('Registration completion and next actions', () => {
+  it('keeps the speed field empty when cleared and removes leading zeroes before submitting', async () => {
+    m.submitApplicationAction.mockResolvedValue({ success: true, accountAccess: 'existing' });
+    render(<RecruitmentFunnel />);
+    const speed = screen.getByLabelText(/Velocidad de descarga/) as HTMLInputElement;
+    expect(speed.value).toBe('');
+    fillApplication();
+    fireEvent.change(speed, { target: { value: '' } });
+    expect(speed.value).toBe('');
+    fireEvent.change(speed, { target: { value: '0100' } });
+    expect(speed.value).toBe('100');
+    fireEvent.change(screen.getByLabelText(/Enlace del certificado EFSET/), {
+      target: { value: 'https://www.efset.org/cert/sample' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar Postulación' }));
+    await waitFor(() => expect(m.submitApplicationAction).toHaveBeenCalledWith(
+      expect.objectContaining({ country: 'Santiago', speedtestMbps: 100 })
+    ));
+  });
+
   it('marks the EFSET certificate link as required without changing validation rules', async () => {
     render(<RecruitmentFunnel />);
     const certificate = screen.getByLabelText(/Enlace del certificado EFSET/);
