@@ -17,7 +17,7 @@ export type Eligibility =
   | { status: 'ineligible' | 'expired' | 'identity_unverified' };
 
 const normalize = (email: string) => email.trim().toLowerCase();
-const validAddress = (email: string) => email.length <= 254 && /^[a-zA-Z0-9.!#$%&'*+/=?^_~|-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(email);
+const validAddress = (email: string) => email === email.trim() && email.length <= 254 && /^[a-zA-Z0-9.!#$%&'*+/=?^_~|-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(email);
 
 export function evaluateDispatch(snapshot: DispatchSnapshot, now: Date): Eligibility {
   const { event, application, identity } = snapshot;
