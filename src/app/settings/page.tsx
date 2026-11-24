@@ -5,13 +5,14 @@ import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
 import EmailDatabaseReadiness from './EmailDatabaseReadiness';
-import { operationalMailStatus } from '@/lib/email/operational-config';
+import { operationalMailDiagnostic } from '@/lib/email/operational-config';
 import { emailAutomationStatus } from '@/lib/email/automation-status';
 
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
-  const operationalStatus = operationalMailStatus(process.env);
+  const mailDiagnostic = operationalMailDiagnostic(process.env);
+  const operationalStatus = mailDiagnostic.status;
   const automation = emailAutomationStatus(process.env);
   const automationChecks: [string, boolean][] = [
     ['SMTP configurado', automation.smtpConfigured],
@@ -94,6 +95,20 @@ export default function SettingsPage() {
             <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
               <h3 className="font-semibold">Configuración de correos operativos</h3>
               <p>{operationalMessages[operationalStatus]}</p>
+              {mailDiagnostic.sender && (
+                <dl className="space-y-1 break-all">
+                  <div><dt className="font-medium">Remitente operativo y destino de prueba</dt><dd>Intérpretes RD &lt;{mailDiagnostic.sender}&gt;</dd></div>
+                  <div><dt className="font-medium">Responder a</dt><dd>{mailDiagnostic.replyTo ?? mailDiagnostic.sender}</dd></div>
+                  <div><dt className="font-medium">Cifrado de transporte</dt><dd>{mailDiagnostic.tls}</dd></div>
+                </dl>
+              )}
+              {mailDiagnostic.missing.length > 0 && (
+                <div>
+                  <p className="font-medium">Variables pendientes en el servidor:</p>
+                  <ul className="list-disc pl-5 break-all">{mailDiagnostic.missing.map(key => <li key={key}><code>{key}</code></li>)}</ul>
+                </div>
+              )}
+              <p className="text-xs">Este remitente pertenece a los correos operativos de Next.js, no certifica el remitente de autenticación configurado en Supabase.</p>
               <p className="text-xs">Diagnóstico de variables privadas de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
