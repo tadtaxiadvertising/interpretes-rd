@@ -15,8 +15,13 @@ export type OperationalMailConfig = Readonly<{
 }>;
 
 export type BrevoMailConfig = Readonly<{ apiKey: string; from: string; replyTo?: string }>;
+export type MailConfigurationIssue =
+  | 'activation' | 'provider' | 'brevo_smtp_key' | 'brevo_mcp_token' | 'brevo_key_format'
+  | 'sender' | 'reply_to' | 'smtp_host' | 'smtp_port' | 'smtp_user' | 'smtp_password';
+
 type ConfigurationResult =
-  | { status: Exclude<OperationalMailConfigStatus, 'configured'> }
+  | { status: 'disabled' | 'incomplete' }
+  | { status: 'invalid'; issues: MailConfigurationIssue[] }
   | { status: 'configured'; provider: 'smtp'; config: OperationalMailConfig }
   | { status: 'configured'; provider: 'brevo'; config: BrevoMailConfig };
 
@@ -30,18 +35,22 @@ const hasControl = (value: string) => Array.from(value).some((character) => {
 export function readOperationalMailConfig(env: Readonly<Record<string, string | undefined>>): ConfigurationResult {
   const enabled = env.OPERATIONAL_EMAIL_ENABLED;
   if (enabled === undefined || enabled === '' || enabled === 'false') return { status: 'disabled' };
-  if (enabled !== 'true') return { status: 'invalid' };
+  if (enabled !== 'true') return { status: 'invalid', issues: ['activation'] };
 
   const provider = env.OPERATIONAL_EMAIL_PROVIDER || 'smtp';
-  if (provider !== 'smtp' && provider !== 'brevo') return { status: 'invalid' };
+  if (provider !== 'smtp' && provider !== 'brevo') return { status: 'invalid', issues: ['provider'] };
   if (provider === 'brevo') {
     const apiKey = env.BREVO_API_KEY;
     const from = env.OPERATIONAL_EMAIL_FROM?.trim();
     const replyTo = env.OPERATIONAL_EMAIL_REPLY_TO?.trim();
-    if (!apiKey || !from) return { status: 'incomplete' };
-    if (!/^[!-~]{16,512}$/.test(apiKey) || apiKey.startsWith('xsmtpsib-')
-      || !singleAddress.test(from) || from.length > 254
-      || (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254))) return { status: 'invalid' };
+    if (!apiKey?.trim() || !from) return { status: 'incomplete' };
+    const issues: MailConfigurationIssue[] = [];
+    if (apiKey.startsWith('xsmtpsib-')) issues.push('brevo_smtp_key');
+    else if (apiKey.startsWith('eyJhcGlfa2V5')) issues.push('brevo_mcp_token');
+    else if (!/^[!-~]{16,512}$/.test(apiKey) || /["'{}]/.test(apiKey)) issues.push('brevo_key_format');
+    if (!singleAddress.test(from) || from.length > 254) issues.push('sender');
+    if (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254)) issues.push('reply_to');
+    if (issues.length) return { status: 'invalid', issues };
     return { status: 'configured', provider: 'brevo', config: { apiKey, from, ...(replyTo ? { replyTo } : {}) } };
   }
 
@@ -52,12 +61,14 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
   const from = env.OPERATIONAL_EMAIL_FROM?.trim();
   const replyTo = env.OPERATIONAL_EMAIL_REPLY_TO?.trim();
   if (!host || !port || !user || !password || !from) return { status: 'incomplete' };
-  if (
-    !hostname.test(host) || (port !== '465' && port !== '587')
-    || user.includes(':') || hasControl(user) || hasControl(password)
-    || !singleAddress.test(from) || from.length > 254
-    || (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254))
-  ) return { status: 'invalid' };
+  const issues: MailConfigurationIssue[] = [];
+  if (!hostname.test(host)) issues.push('smtp_host');
+  if (port !== '465' && port !== '587') issues.push('smtp_port');
+  if (user.includes(':') || hasControl(user)) issues.push('smtp_user');
+  if (hasControl(password)) issues.push('smtp_password');
+  if (!singleAddress.test(from) || from.length > 254) issues.push('sender');
+  if (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254)) issues.push('reply_to');
+  if (issues.length) return { status: 'invalid', issues };
 
   return {
     status: 'configured', provider: 'smtp',
@@ -78,6 +89,7 @@ export function operationalMailDiagnostic(env: Readonly<Record<string, string | 
   const result = readOperationalMailConfig(env);
   return {
     status: result.status,
+    issues: result.status === 'invalid' ? result.issues : [],
     provider: env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? 'brevo' : env.OPERATIONAL_EMAIL_PROVIDER && env.OPERATIONAL_EMAIL_PROVIDER !== 'smtp' ? 'invalid' : 'smtp',
     missing: (env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? ['BREVO_API_KEY', 'OPERATIONAL_EMAIL_FROM'] : requiredMailKeys).filter(key => !env[key]?.trim()),
     sender: result.status === 'configured' ? result.config.from : null,
