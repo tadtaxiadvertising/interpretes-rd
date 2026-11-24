@@ -20,7 +20,10 @@ type ConfigurationResult =
 
 const singleAddress = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,63}$/;
 const hostname = /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
-const unsafeControl = /[\x00-\x1f\x7f]/;
+const hasControl = (value: string) => Array.from(value).some((character) => {
+  const code = character.charCodeAt(0);
+  return code < 32 || code === 127;
+});
 
 export function readOperationalMailConfig(env: Readonly<Record<string, string | undefined>>): ConfigurationResult {
   const enabled = env.OPERATIONAL_EMAIL_ENABLED;
@@ -36,7 +39,7 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
   if (!host || !port || !user || !password || !from) return { status: 'incomplete' };
   if (
     !hostname.test(host) || (port !== '465' && port !== '587')
-    || unsafeControl.test(user) || unsafeControl.test(password)
+    || hasControl(user) || hasControl(password)
     || !singleAddress.test(from) || from.length > 254
     || (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254))
   ) return { status: 'invalid' };
