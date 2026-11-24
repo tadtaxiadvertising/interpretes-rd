@@ -100,7 +100,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -385,6 +385,8 @@ export default function RoleplayStudioPage() {
         ? 'Asignación masiva de hablantes deshecha. Revisa los perfiles pendientes.'
       : lastStructuralEdit.kind === 'eliminación'
         ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
+        : lastStructuralEdit.kind === 'adición VAD'
+          ? 'Cortes VAD retirados. Las intervenciones y referencias anteriores se conservaron.'
         : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
@@ -2106,7 +2108,11 @@ export default function RoleplayStudioPage() {
                   if (!detected.length) return;
                   subtitleImportRevision.current += 1;
                   stopPairPreview();
-                  setLastStructuralEdit(null);
+                  // One batch is a single reversible edit; no audio is persisted.
+                  setLastStructuralEdit({
+                    kind: 'adición VAD', segments: [...segments],
+                    captions: { ...captionTexts }, expandedId: expandedSegmentId,
+                  });
                   setSegments(prev => [...prev, ...detected.map((item, index) => ({
                     id: crypto.randomUUID(),
                     title: 'Intervención ' + (prev.length + index + 1),
@@ -2117,7 +2123,7 @@ export default function RoleplayStudioPage() {
                     speakerRole: 'unknown' as const,
                     language: 'unknown' as const,
                   }))]);
-                  setNotice('Cortes VAD añadidos sin solaparse con los anteriores. Revisa hablantes, idioma y límites antes de exportar.');
+                  setNotice('Cortes VAD añadidos sin solaparse con los anteriores. Puedes deshacer esta adición; revisa hablantes, idioma y límites antes de exportar.');
                 }}
               />
             )}
@@ -2481,7 +2487,9 @@ export default function RoleplayStudioPage() {
                         ? 'Deshacer asignación de hablantes'
                       : lastStructuralEdit.kind === 'eliminación'
                         ? 'Deshacer eliminación de intervención'
-                        : 'Deshacer última división o unión'}
+                        : lastStructuralEdit.kind === 'adición VAD'
+                          ? 'Deshacer adición de cortes VAD'
+                          : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
