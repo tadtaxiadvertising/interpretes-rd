@@ -394,7 +394,9 @@ export default function RoleplayStudioPage() {
     setSegments(lastStructuralEdit.segments);
     setCaptionTexts(lastStructuralEdit.captions);
     setExpandedSegmentId(lastStructuralEdit.expandedId);
-    if (lastStructuralEdit.previousSuggestions) {
+    // Revoking consent clears server-derived pause metadata; undo must not
+    // silently restore those suggestions after the administrator opted out.
+    if (lastStructuralEdit.previousSuggestions && serverConsent) {
       setDetectedSilences(lastStructuralEdit.previousSuggestions.silences);
       setSuggestedClips(lastStructuralEdit.previousSuggestions.clips);
       setOmittedSuggestions(lastStructuralEdit.previousSuggestions.omittedCount);
