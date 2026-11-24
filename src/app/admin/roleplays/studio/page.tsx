@@ -1760,7 +1760,14 @@ export default function RoleplayStudioPage() {
       previewEnd.current = null;
       setPreviewingId(null);
     },
-    onError: () => {
+    onError: (event: SyntheticEvent<HTMLMediaElement>) => {
+      // MediaError may have been cleared by a newer source or playback
+      // request before an old queued error event reaches this handler.
+      // Never invalidate a healthy recording or its SRT review in that case.
+      if (!event.currentTarget.error) return;
+      primaryPlaybackRevision.current += 1;
+      previewEnd.current = null;
+      setPreviewingId(null);
       setDuration(0);
       setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');
     },
