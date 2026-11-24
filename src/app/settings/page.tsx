@@ -3,6 +3,7 @@ import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-r
 import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
+import CorporateEmailHistory from './CorporateEmailHistory';
 import { operationalMailStatus } from '@/lib/email/operational-config';
 
 export const dynamic = 'force-dynamic';
@@ -85,6 +86,7 @@ export default function SettingsPage() {
             </div>
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
+            <CorporateEmailHistory />
           </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
             <div className="flex items-center gap-3">
