@@ -2207,6 +2207,11 @@ export default function RoleplayStudioPage() {
                     const allowed = event.currentTarget.checked;
                     setServerConsent(allowed);
                     if (!allowed) {
+                      // Revocation also releases server-derived pause metadata
+                      // held in a one-step undo snapshot; keep the older cuts.
+                      setLastStructuralEdit(previous => previous?.previousSuggestions
+                        ? { ...previous, previousSuggestions: undefined }
+                        : previous);
                       silenceRevision.current += 1;
                       silenceAbort.current?.abort();
                       silenceAbort.current = null;
