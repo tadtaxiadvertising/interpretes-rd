@@ -10,7 +10,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { cueRequiresEditorialReview, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -1626,18 +1626,23 @@ export default function RoleplayStudioPage() {
   const hasCompound = segments.some(segment => segment.ranges !== undefined);
   const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
   const videoSource = audio !== null && mediaKind(audio) === 'video';
+  const overlappingSelectedCues = useMemo(
+    () => overlappingSelectedTimedCueIndices(reviewCues, chosenCueIndices),
+    [reviewCues, chosenCueIndices],
+  );
   // Retain the unfiltered SRT/VTT index for selections across pages.
   const filteredCueEntries = useMemo(() => {
     const query = cueSearch.trim().toLocaleLowerCase();
     const selectedIndices = new Set(chosenCueIndices);
     return reviewCues.flatMap((cue, index) => {
       if (showOnlySelectedCues && !selectedIndices.has(index)) return [];
-      if (showCueReviewAlertsOnly && (!selectedIndices.has(index) || !cueRequiresEditorialReview(cue))) return [];
+      if (showCueReviewAlertsOnly && (!selectedIndices.has(index) ||
+          (!cueRequiresEditorialReview(cue) && !overlappingSelectedCues.includes(index)))) return [];
       if (query && ![cue.text, cue.speaker || '', String(index + 1)]
         .some(value => value.toLocaleLowerCase().includes(query))) return [];
       return [{ cue, index }];
     });
-  }, [reviewCues, cueSearch, showOnlySelectedCues, showCueReviewAlertsOnly, chosenCueIndices]);
+  }, [reviewCues, cueSearch, showOnlySelectedCues, showCueReviewAlertsOnly, chosenCueIndices, overlappingSelectedCues]);
   // Reuse the export selection validator before the administrator applies a
   // SRT review. At most 25 cues are inspected, entirely in the browser.
   const cueSelectionStatus = useMemo(() => {
@@ -1659,9 +1664,10 @@ export default function RoleplayStudioPage() {
   );
   const selectedCueReviewAlerts = useMemo(
     () => [...new Set(chosenCueIndices)].filter(
-      index => reviewCues[index] && cueRequiresEditorialReview(reviewCues[index]),
+      index => reviewCues[index] &&
+        (cueRequiresEditorialReview(reviewCues[index]) || overlappingSelectedCues.includes(index)),
     ).length,
-    [chosenCueIndices, reviewCues],
+    [chosenCueIndices, reviewCues, overlappingSelectedCues],
   );
   const pageCount = Math.max(1, Math.ceil(filteredCueEntries.length / CUES_PER_PAGE));
   const currentCuePage = Math.min(cuePage, pageCount - 1);
@@ -2304,6 +2310,9 @@ export default function RoleplayStudioPage() {
                     {classifySpeakerRole(cue.speaker) === 'unknown'
                       ? ' Hablante por revisar'
                       : ` ${cue.speaker}`}
+                    {overlappingSelectedCues.includes(index) && (
+                      <span className="font-semibold text-rose-200"> · Solapa otro turno seleccionado</span>
+                    )}
                   </p>
                   <p className="mt-1 break-words text-xs text-slate-300">
                     {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
@@ -2333,6 +2342,7 @@ export default function RoleplayStudioPage() {
                 Revisión rápida antes de aplicar: {cueReviewSummary.unknownSpeakers} sin hablante identificado
                 {' · '}{cueReviewSummary.originalInterpreters} del intérprete original
                 {' · '}{cueReviewSummary.longCues} cortes de más de 1 minuto
+                {' · '}{overlappingSelectedCues.length} turnos solapados
                 {cueReviewSummary.sourceThirds !== null &&
                   <> · {cueReviewSummary.sourceThirds}/3 partes de la grabación representadas</>}.
                 Escucha y confirma cada voz; estos datos se basan solo en etiquetas y tiempos.
