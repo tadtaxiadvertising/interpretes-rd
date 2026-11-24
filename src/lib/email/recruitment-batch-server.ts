@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { pilotRecipient } from './pilot-recipient';
+import { emailDeliveryMode, pilotRecipient } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
 import { readEmailDatabaseReadiness } from './database-readiness';
 import { discoverEmailEvents } from './recruitment-batch-discovery';
@@ -20,7 +20,7 @@ export async function processRecruitmentEmailBatch(): Promise<BatchReport> {
     || process.env.OPERATIONAL_EMAIL_BINDING_ENABLED !== 'true'
     || readOperationalMailConfig(process.env).status !== 'configured') return emptyBatch('disabled');
   const pilot = pilotRecipient(process.env);
-  if (pilot === false) return emptyBatch('disabled');
+  if (pilot === false || emailDeliveryMode(process.env) === 'disabled') return emptyBatch('disabled');
   const cutover = process.env.OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE;
   if (!cutover || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(cutover)) return emptyBatch('disabled');
   const date = new Date(cutover);
