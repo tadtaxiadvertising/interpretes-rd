@@ -417,7 +417,7 @@ describe('Audio Studio repaired SRT import safety', () => {
       .toContain('2 turnos solapados');
 
     fireEvent.click(screen.getByRole('button', { name: 'Revisar 2 turnos con alertas' }));
-    expect(screen.getAllByRole('checkbox', { name: /^Seleccionar turno \\d+$/ })).toHaveLength(2);
+    expect(screen.getAllByRole('checkbox', { name: /^Seleccionar turno \d+$/ })).toHaveLength(2);
     expect(screen.getAllByText(/Solapa otro turno seleccionado/)).toHaveLength(2);
     const apply = screen.getByRole('button', { name: 'Aplicar selección al editor (2)' }) as HTMLButtonElement;
     expect(apply.disabled).toBe(true);
