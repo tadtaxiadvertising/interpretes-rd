@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { emailDeliveryMode } from '@/lib/email/pilot-recipient';
 import { authorizeEmailScheduler } from '@/lib/email/scheduler-auth';
 import { processRecruitmentEmailBatch } from '@/lib/email/recruitment-batch-server';
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   if (!authorizeEmailScheduler(request.headers.get('authorization'), process.env.OPERATIONAL_EMAIL_SCHEDULER_SECRET)) {
     return response({ status: 'unauthorized' }, 401);
   }
-  if (process.env.OPERATIONAL_EMAIL_SCHEDULER_ENABLED !== 'true') return response({ status: 'disabled' }, 503);
+  if (process.env.OPERATIONAL_EMAIL_SCHEDULER_ENABLED !== 'true' || emailDeliveryMode(process.env) !== 'general') return response({ status: 'disabled' }, 503);
   try {
     const report = await processRecruitmentEmailBatch();
     const status = report.status === 'completed' ? 200 : report.status === 'busy' ? 429 : 503;
