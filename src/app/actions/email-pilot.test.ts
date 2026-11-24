@@ -1,9 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { emailDeliveryMode, pilotRecipient } from '@/lib/email/pilot-recipient';
-const mocks = vi.hoisted(() => ({ auth: vi.fn(), batch: vi.fn() }));
+const mocks = vi.hoisted(() => ({ auth: vi.fn(), batch: vi.fn(), preflight: vi.fn() }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: mocks.auth }));
 vi.mock('@/lib/email/recruitment-batch-server', () => ({ processRecruitmentEmailBatch: mocks.batch }));
+vi.mock('./email-pilot-preflight', () => ({ checkCorporateEmailPilot: mocks.preflight }));
 import { runCorporateEmailPilot } from './email-pilot';
 
 describe('controlled pilot', () => {
@@ -13,6 +14,7 @@ describe('controlled pilot', () => {
     vi.stubEnv('OPERATIONAL_EMAIL_SCHEDULER_ENABLED', 'false');
     vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'false');
     mocks.auth.mockResolvedValue({ user: { role: 'admin' } });
+    mocks.preflight.mockResolvedValue({ status: 'ready' });
     mocks.batch.mockResolvedValue({ status: 'completed', examined: 1, accepted: 1 });
   });
   afterEach(() => vi.unstubAllEnvs());
@@ -45,5 +47,16 @@ describe('controlled pilot', () => {
   it('invokes the bounded batch only after authorization and configuration checks', async () => {
     expect(await runCorporateEmailPilot()).toMatchObject({ status: 'completed', examined: 1 });
     expect(mocks.batch).toHaveBeenCalledTimes(1);
+    expect(mocks.preflight).toHaveBeenCalledTimes(1);
+  });
+  it('does not dispatch when a previous ambiguous pilot requires review', async () => {
+    mocks.preflight.mockResolvedValue({ status: 'review_required' });
+    expect((await runCorporateEmailPilot()).status).toBe('review_required');
+    expect(mocks.batch).not.toHaveBeenCalled();
+  });
+  it('reports an empty pilot without touching the dispatcher', async () => {
+    mocks.preflight.mockResolvedValue({ status: 'no_event' });
+    expect(await runCorporateEmailPilot()).toMatchObject({ status: 'completed', examined: 0, accepted: 0 });
+    expect(mocks.batch).not.toHaveBeenCalled();
   });
 });
