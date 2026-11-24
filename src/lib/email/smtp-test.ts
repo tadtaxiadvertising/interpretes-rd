@@ -13,15 +13,19 @@ function quote(value: string): string {
 }
 
 /** Credentials are supplied exclusively via stdin, never argv or a file. */
-export function smtpTestCurlConfig(config: OperationalMailConfig): string {
+function smtpCurlConfig(config: OperationalMailConfig, recipient: string): string {
   if (config.user.includes(':')) throw new Error('Invalid SMTP username');
   return [
     'url = ' + quote((config.secure ? 'smtps://' : 'smtp://') + config.host + ':' + config.port),
     'user = ' + quote(config.user + ':' + config.password),
     'mail-from = ' + quote(config.from),
-    'mail-rcpt = ' + quote(config.from),
+    'mail-rcpt = ' + quote(recipient),
     '',
   ].join('\n');
+}
+
+export function smtpTestCurlConfig(config: OperationalMailConfig): string {
+  return smtpCurlConfig(config, config.from);
 }
 
 function encodedHeader(value: string): string {
@@ -60,6 +64,69 @@ function runCurl(file: string, privateConfig: string): Promise<boolean> {
   });
 }
 
+type RecruitmentMessage = { recipient: string; subject: string; text: string; html: string };
+
+function singleMailbox(value: string): boolean {
+  return value === value.trim() && value.length <= 254
+    && /^[a-zA-Z0-9.!#$%&'*+/=?^_~|-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(value);
+}
+
+function encodedBody(value: string): string {
+  return Buffer.from(value, 'utf8').toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? '';
+}
+
+/** Multipart alternative contains only the approved template and one recipient. */
+export function recruitmentSmtpMessage(config: OperationalMailConfig, message: RecruitmentMessage, now = new Date()): string {
+  if (!singleMailbox(message.recipient) || Buffer.byteLength(message.subject, 'utf8') > 120
+    || Buffer.byteLength(message.text, 'utf8') + Buffer.byteLength(message.html, 'utf8') > 65536
+    || /[\r\n]/.test(message.subject)) throw new Error('Invalid recruitment message');
+  const id = randomUUID();
+  const boundary = 'ird-' + id;
+  return [
+    'From: ' + encodedHeader('Intérpretes RD') + ' <' + config.from + '>',
+    'To: ' + message.recipient,
+    ...(config.replyTo ? ['Reply-To: ' + config.replyTo] : []),
+    'Subject: ' + encodedHeader(message.subject),
+    'Date: ' + now.toUTCString(),
+    'Message-ID: <' + id + '@' + config.from.split('@')[1] + '>',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/alternative; boundary="' + boundary + '"',
+    '',
+    '--' + boundary, 'Content-Type: text/plain; charset=UTF-8', 'Content-Transfer-Encoding: base64',
+    '', encodedBody(message.text), '',
+    '--' + boundary, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64',
+    '', encodedBody(message.html), '',
+    '--' + boundary + '--', '',
+  ].join('\r\n');
+}
+
+async function sendMime(config: OperationalMailConfig, recipient: string, mime: string): Promise<'accepted' | 'unconfirmed'> {
+  let directory: string | undefined;
+  try {
+    const privateConfig = smtpCurlConfig(config, recipient);
+    directory = await mkdtemp(join(tmpdir(), 'ird-mail-test-'));
+    const file = join(directory, 'message.eml');
+    await writeFile(file, mime, { mode: 0o600, flag: 'wx' });
+    return await runCurl(file, privateConfig) ? 'accepted' : 'unconfirmed';
+  } catch {
+    return 'unconfirmed';
+  } finally {
+    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** Internal transport. No client action, no retries, no scheduling. */
+export async function sendRecruitmentSmtp(message: RecruitmentMessage): Promise<'accepted' | 'unconfirmed'> {
+  if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true') return 'unconfirmed';
+  const result = readOperationalMailConfig(process.env);
+  if (result.status !== 'configured') return 'unconfirmed';
+  try {
+    return await sendMime(result.config, message.recipient, recruitmentSmtpMessage(result.config, message));
+  } catch {
+    return 'unconfirmed';
+  }
+}
+
 let nextTestAt = 0;
 let busy = false;
 
@@ -72,17 +139,11 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
   if (busy || Date.now() < nextTestAt) return 'rate_limited';
   busy = true;
   nextTestAt = Date.now() + 60000;
-  let directory: string | undefined;
   try {
-    const config = smtpTestCurlConfig(result.config);
-    directory = await mkdtemp(join(tmpdir(), 'ird-mail-test-'));
-    const file = join(directory, 'message.eml');
-    await writeFile(file, smtpTestMessage(result.config), { mode: 0o600, flag: 'wx' });
-    return await runCurl(file, config) ? 'accepted' : 'unconfirmed';
+    return await sendMime(result.config, result.config.from, smtpTestMessage(result.config));
   } catch {
     return 'unconfirmed';
   } finally {
-    if (directory) await rm(directory, { recursive: true, force: true }).catch(() => {});
     busy = false;
   }
 }
