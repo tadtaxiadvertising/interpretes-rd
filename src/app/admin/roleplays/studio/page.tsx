@@ -267,6 +267,30 @@ export default function RoleplayStudioPage() {
     });
   };
 
+  /** Listen to precisely one SRT candidate without modifying its selection or cuts. */
+  const previewSubtitleCue = (cue: TimedTranscriptCue, index: number) => {
+    const audioPlayer = player.current;
+    if (!audioPlayer || !Number.isFinite(cue.start) || !Number.isFinite(cue.end) ||
+        cue.start < 0 || cue.end <= cue.start || cue.end > duration) return;
+    const previewId = `subtitle-${index}`;
+    if (previewingId === previewId) {
+      stopPreview();
+      return;
+    }
+    // Reuse the existing timeupdate cutoff and player. Never upload or
+    // transcode private subtitle audio just to audition an intervention.
+    stopPairPreview();
+    audioPlayer.currentTime = cue.start;
+    setPlayhead(cue.start);
+    previewEnd.current = cue.end;
+    setPreviewingId(previewId);
+    void audioPlayer.play().catch(() => {
+      previewEnd.current = null;
+      setPreviewingId(null);
+      setError('No fue posible escuchar este turno de la transcripción.');
+    });
+  };
+
   /** Preview a suggested local VAD region in the existing player, without exporting or uploading audio. */
   const previewVadRegion = ({ start, end }: StudioSuggestedClip) => {
     const audioPlayer = player.current;
@@ -2248,10 +2272,13 @@ export default function RoleplayStudioPage() {
                     {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
                   </p>
                 </div>
-                <button type="button" onClick={() => seekAudio(cue.start)}
-                  aria-label={`Escuchar desde turno ${index + 1}`}
+                <button type="button" onClick={() => previewSubtitleCue(cue, index)}
+                  aria-label={previewingId === `subtitle-${index}`
+                    ? `Detener escucha de turno ${index + 1}`
+                    : `Escuchar solo turno ${index + 1}`}
+                  aria-pressed={previewingId === `subtitle-${index}`}
                   className="shrink-0 text-xs text-blue-300 hover:underline">
-                  Escuchar
+                  {previewingId === `subtitle-${index}` ? 'Detener' : 'Escuchar turno'}
                 </button>
               </div>
             ); })}
