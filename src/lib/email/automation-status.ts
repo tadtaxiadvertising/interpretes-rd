@@ -23,7 +23,7 @@ export function emailRolloutReadiness(env: Readonly<Record<string, string | unde
   const mode = emailDeliveryMode(env);
   const flags = emailAutomationStatus(env, now);
   const common: [string, boolean][] = [
-    ['SMTP configurado', flags.smtpConfigured],
+    ['Proveedor de correo configurado', flags.smtpConfigured],
     ['Vinculación habilitada', flags.bindingEnabled],
     ['Despacho habilitado', flags.dispatchEnabled],
     ['Lotes habilitados', flags.batchEnabled],
