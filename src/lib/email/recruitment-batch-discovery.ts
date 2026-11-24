@@ -6,17 +6,20 @@ type EventRow = { id: string; applicationId: string; eventType: RecruitmentEvent
 export const EMAIL_BATCH_LIMIT = 3;
 
 /** Bounded discovery, separate from recruitment transactions. No historical backfill. */
-export async function discoverEmailEvents(db: Pick<Prisma.TransactionClient, '$queryRaw'>, cutover: Date, now: Date): Promise<string[]> {
+export async function discoverEmailEvents(db: Pick<Prisma.TransactionClient, '$queryRaw'>, cutover: Date, now: Date, pilot: string | null = null): Promise<string[]> {
   if (!Number.isFinite(cutover.getTime()) || !Number.isFinite(now.getTime()) || cutover > now) return [];
   const earliest = new Date(Math.max(cutover.getTime(), now.getTime() - 86400000));
   const rows = await db.$queryRaw<EventRow[]>`
     SELECT e.id, e.application_id AS "applicationId", e.event_type::text AS "eventType", e.to_status::text AS "toStatus"
     FROM public.recruitment_events e
     JOIN public.recruitment_applications a ON a.id = e.application_id
+    JOIN public.recruitment_candidates c ON c.id = a.candidate_id
     JOIN private_email.candidate_account_binding b ON b.candidate_id = a.candidate_id AND b.revoked_at IS NULL
     JOIN public.user_profiles p ON p.id = b.account_id AND p.role = 'candidate' AND p.interpreter_id IS NULL
     LEFT JOIN private_email.recruitment_delivery d ON d.event_id = e.id
     WHERE e.created_at >= ${earliest} AND e.created_at <= ${now}
+      AND lower(trim(c.email)) = lower(trim(p.email))
+      AND (${pilot}::text IS NULL OR lower(trim(c.email)) = ${pilot})
       AND a.status = e.to_status AND (d.event_id IS NULL OR d.status = 'pending')
       AND ((e.event_type::text = 'APPLICATION_CREATED' AND e.to_status::text = 'APPLIED')
         OR (e.event_type::text = 'INDUCTION_COMPLETED' AND e.to_status::text = 'ROLEPLAY_PENDING')
