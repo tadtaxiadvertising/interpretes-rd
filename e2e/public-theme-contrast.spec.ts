@@ -66,7 +66,11 @@ test('mobile recruitment application stays readable in both modes, without submi
   await expect(submit).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Nombre completo' })).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Correo electrónico' })).toBeVisible();
-  await expect(page.getByRole('textbox', { name: 'País de residencia' })).toBeVisible();
+  const province = page.getByRole('combobox', { name: 'Provincia de residencia' });
+  await expect(province).toBeVisible();
+  await expect(province).toHaveValue('');
+  await province.selectOption('Santiago');
+  await expect(province).toHaveValue('Santiago');
 
   for (const appearance of ['Modo claro', 'Modo oscuro']) {
     await page.getByRole('button', { name: appearance }).click();
