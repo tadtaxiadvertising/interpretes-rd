@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole } from 'lucide-react';
+import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
 import SystemReadinessCheck from './SystemReadinessCheck';
 
 export const dynamic = 'force-dynamic';
@@ -39,6 +39,36 @@ export default function SettingsPage() {
 
         <div className="lg:col-span-2 space-y-5">
           <SystemReadinessCheck />
+          <section aria-labelledby="email-settings-heading" className="glass rounded-3xl border border-[var(--border)] p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <Mail className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
+              <h2 id="email-settings-heading" className="font-semibold text-[var(--foreground)]">Correos corporativos</h2>
+            </div>
+            <p className="text-sm text-[var(--foreground)]">
+              Usa el nombre Intérpretes RD y una dirección autorizada por el proveedor de correo para los mensajes de autenticación.
+            </p>
+            <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
+              <p><strong>Estado SMTP:</strong> no verificado desde esta pantalla.</p>
+              <p>Configura el remitente y las plantillas en el panel de Supabase del proyecto correspondiente. Las credenciales permanecen en ese servicio.</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+                Abrir Supabase (nueva pestaña)
+              </a>
+              <a href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/docs/AUTH_CORPORATE_EMAIL_TEMPLATES.md" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+                Plantillas y guía (nueva pestaña)
+              </a>
+            </div>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--foreground)]">
+              <li>Selecciona el proyecto correcto y abre Authentication → Emails.</li>
+              <li>Comprueba el SMTP personalizado, el remitente y las plantillas en español.</li>
+              <li>Prueba el registro y la recuperación de contraseña con una cuenta controlada.</li>
+              <li>Revisa la bandeja de entrada, el remitente y los registros de entrega.</li>
+            </ol>
+            <p className="text-xs text-[var(--foreground)]">
+              Esta sección no envía mensajes ni comprueba la conexión SMTP. Las notificaciones de postulaciones y entrevistas requieren una integración independiente.
+            </p>
+          </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
             <div className="flex items-center gap-3">
               <HardDrive className="text-amber-400" aria-hidden="true" />
