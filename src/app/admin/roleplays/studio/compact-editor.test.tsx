@@ -793,6 +793,9 @@ describe('Audio Studio compact editing', () => {
     expect(screen.queryByText(/El navegador no pudo reproducir la preescucha/)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: /Preescuchar intervenciones/ }));
+    // A real decoding failure sets HTMLMediaElement.error. An old queued
+    // error event with a cleared error must not interrupt another preview.
+    Object.defineProperty(secondary, 'error', { configurable: true, value: { code: 3 } });
     fireEvent.error(secondary);
     expect(screen.getByText(/El navegador no pudo reproducir la preescucha/)).toBeTruthy();
   });
