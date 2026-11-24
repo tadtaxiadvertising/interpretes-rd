@@ -100,7 +100,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación de subtítulos';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -108,6 +108,16 @@ export default function RoleplayStudioPage() {
       silences: StudioSilence[];
       clips: StudioSuggestedClip[];
       omittedCount: number;
+    };
+    previousReview?: {
+      cues: TimedTranscriptCue[];
+      selected: number[];
+      page: number;
+      search: string;
+      selectedOnly: boolean;
+      alertsOnly: boolean;
+      segmentSearch: string;
+      pendingOnly: boolean;
     };
   } | null>(null);
   // Source identity prevents a delayed decode from updating a replacement MP3.
@@ -389,6 +399,17 @@ export default function RoleplayStudioPage() {
       setSuggestedClips(lastStructuralEdit.previousSuggestions.clips);
       setOmittedSuggestions(lastStructuralEdit.previousSuggestions.omittedCount);
     }
+    if (lastStructuralEdit.previousReview) {
+      const review = lastStructuralEdit.previousReview;
+      setReviewCues(review.cues);
+      setChosenCueIndices(review.selected);
+      setCuePage(review.page);
+      setCueSearch(review.search);
+      setShowOnlySelectedCues(review.selectedOnly);
+      setShowCueReviewAlertsOnly(review.alertsOnly);
+      setSegmentSearch(review.segmentSearch);
+      setShowPendingReview(review.pendingOnly);
+    }
     setNotice(lastStructuralEdit.kind === 'idiomas'
       ? 'Asignación masiva de idiomas deshecha. Revisa los idiomas pendientes.'
       : lastStructuralEdit.kind === 'hablantes'
@@ -399,6 +420,8 @@ export default function RoleplayStudioPage() {
           ? 'Cortes VAD retirados. Las intervenciones y referencias anteriores se conservaron.'
         : lastStructuralEdit.kind === 'importación de subtítulos'
           ? 'Importación de subtítulos deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
+        : lastStructuralEdit.kind === 'aplicación de pausas'
+          ? 'Cortes sugeridos deshechos. Recuperaste las intervenciones, referencias y selección de subtítulos anteriores.'
         : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
@@ -730,7 +753,24 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit(null);
+    // A confirmed replacement from server-derived pauses must be just as
+    // reversible as an SRT import. Keep only editorial metadata in memory.
+    setLastStructuralEdit({
+      kind: 'aplicación de pausas',
+      segments: [...segments],
+      captions: { ...captionTexts },
+      expandedId: expandedSegmentId,
+      previousSuggestions: {
+        silences: [...detectedSilences], clips: [...suggestedClips],
+        omittedCount: omittedSuggestions,
+      },
+      previousReview: {
+        cues: [...reviewCues], selected: [...chosenCueIndices],
+        page: cuePage, search: cueSearch,
+        selectedOnly: showOnlySelectedCues, alertsOnly: showCueReviewAlertsOnly,
+        segmentSearch, pendingOnly: showPendingReview,
+      },
+    });
     // Old filters and expanded rows must not hide the new suggestion draft.
     setSegmentSearch('');
     setShowPendingReview(false);
@@ -751,7 +791,7 @@ export default function RoleplayStudioPage() {
     setSuggestedClips([]);
     setOmittedSuggestions(0);
     setError('');
-    setNotice('Cortes sugeridos aplicados. Son aproximaciones basadas en pausas, no separación de voces. Revisa cada inicio, fin, rol e idioma antes de exportar.');
+    setNotice('Cortes sugeridos aplicados. Puedes deshacer esta sustitución. Son aproximaciones basadas en pausas, no separación de voces; revisa cada inicio, fin, rol e idioma antes de exportar.');
   };
 
   const confirmPendingSrtReviewReplacement = (
@@ -2513,7 +2553,9 @@ export default function RoleplayStudioPage() {
                           ? 'Deshacer adición de cortes VAD'
                           : lastStructuralEdit.kind === 'importación de subtítulos'
                             ? 'Deshacer importación de subtítulos'
-                            : 'Deshacer última división o unión'}
+                            : lastStructuralEdit.kind === 'aplicación de pausas'
+                              ? 'Deshacer aplicación de pausas'
+                              : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
