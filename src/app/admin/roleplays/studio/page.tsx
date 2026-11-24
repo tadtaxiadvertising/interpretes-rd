@@ -113,6 +113,8 @@ export default function RoleplayStudioPage() {
   // Ignore rejections from an old play() request after the user previews a
   // different turn, seeks elsewhere, stops, or replaces the recording.
   const primaryPlaybackRevision = useRef(0);
+  // A retired auxiliary play() promise must never cancel a newer gapless pair.
+  const pairPlaybackRevision = useRef(0);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
   const savingDraft = useRef(false);
@@ -214,6 +216,7 @@ export default function RoleplayStudioPage() {
   };
 
   const stopPairPreview = () => {
+    pairPlaybackRevision.current += 1;
     const wasActive = pairPlayback.current !== null;
     pairPlayback.current = null;
     setPairPreviewId(null);
@@ -353,6 +356,7 @@ export default function RoleplayStudioPage() {
     }
     stopPreview();
     stopPairPreview();
+    const request = ++pairPlaybackRevision.current;
     pairPlayback.current = { plan, stage: 1 };
     setPairPreviewId(id);
     element.currentTime = plan.first.start;
@@ -361,6 +365,7 @@ export default function RoleplayStudioPage() {
       ? `Preescucha de intervención compuesta: ${formatTime(plan.selectedSeconds)} de audio sin la pausa de ${formatTime(plan.skippedSeconds)}.`
       : `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
     void element.play().catch(() => {
+      if (request !== pairPlaybackRevision.current || pairPlayer.current !== element) return;
       stopPairPreview();
       reportTurnAction(id, 'El navegador no pudo iniciar la preescucha sin pausa.', true);
     });
@@ -1924,15 +1929,16 @@ export default function RoleplayStudioPage() {
               stopPairPreview();
             }
           }}
-          onEnded={() => stopPairPreview()}
-          onPause={() => {
-            if (pairPlayer.current?.paused) {
-              pairPlayback.current = null;
-              setPairPreviewId(null);
-            }
+          // Media events from the previous pair can be queued after seeking
+          // and resuming a newer pair on this same auxiliary element.
+          onEnded={event => {
+            if (event.currentTarget.ended) stopPairPreview();
           }}
-          onError={() => {
-            if (!pairPlayback.current) return;
+          onPause={event => {
+            if (event.currentTarget.paused && pairPlayback.current) stopPairPreview();
+          }}
+          onError={event => {
+            if (!pairPlayback.current || !event.currentTarget.error) return;
             stopPairPreview();
             setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
           }}
