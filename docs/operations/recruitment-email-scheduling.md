@@ -1,0 +1,15 @@
+# Programación de correos operativos
+
+La ruta POST /api/cron/recruitment-email acepta exclusivamente Authorization: Bearer con la credencial privada OPERATIONAL_EMAIL_SCHEDULER_SECRET (32 bytes aleatorios representados por 64 caracteres hexadecimales). No acepta destinatarios ni eventos desde el cliente. No utiliza cookies administrativas ni una clave de Supabase. Nunca registrar la cabecera, ponerla en una URL o reutilizar una credencial existente.
+
+Antes de activar:
+1. Aplicar las propuestas privadas de registro y vinculación mediante el procedimiento revisado de migraciones; comprobar permisos del rol real, RLS y no exposición en Data API.
+2. Confirmar la recepción de una prueba SMTP en el buzón corporativo. Validar SPF, DKIM y DMARC.
+3. Habilitar las opciones independientes de vinculación, despacho y lotes; fijar una fecha UTC de inicio válida para no recuperar eventos históricos. Comprobar el panel de Configuración.
+4. Generar la credencial en un gestor seguro de secretos; configurarla en el servidor y en un programador confiable. Habilitar OPERATIONAL_EMAIL_SCHEDULER_ENABLED solo después de las comprobaciones.
+5. Configurar el programador existente para una invocación HTTPS POST cada cinco minutos, sin solapamiento, con un timeout compatible con tres envíos secuenciales y sin reintentos inmediatos. No instalar un nuevo contenedor. El programador no se crea con este cambio.
+6. Verificar una ejecución controlada y revisar el historial. HTTP 200 significa lote completado; 401 credencial no válida; 429 lote ocupado o en enfriamiento; 503 configuración desactivada, indisponibilidad o revisión necesaria. Ante review_required o unavailable, detener la programación e investigar antes de reanudar. No reencolar automáticamente una aceptación incierta.
+
+El panel solo diagnostica variables de entorno, no confirma la migración, la existencia del programador ni la entrega. El límite de ejecución es local al proceso; las reclamaciones atómicas de eventos son persistentes. No activar múltiples programadores concurrentes. La ruta /api/health permanece independiente.
+
+Para detener el despacho, desactivar primero OPERATIONAL_EMAIL_SCHEDULER_ENABLED y OPERATIONAL_EMAIL_DISPATCH_ENABLED y detener la tarea externa; revisar cualquier envío en curso. No borrar el historial ni restablecer registros inciertos a pendiente.
