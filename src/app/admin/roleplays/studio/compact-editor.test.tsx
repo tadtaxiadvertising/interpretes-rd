@@ -204,6 +204,68 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByRole('button', { name: 'Ir al inicio de intervención 1' })).toBeTruthy();
   });
 
+  it('undoes an accepted subtitle replacement and restores edited private reference text', async () => {
+    loadAudio(90);
+    const first = new File(['srt'], 'first.srt', { type: 'text/plain' });
+    Object.defineProperty(first, 'text', {
+      configurable: true, value: async () =>
+        '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Private first reference',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [first] },
+      });
+    });
+    fireEvent.change(screen.getByLabelText('Título'), {
+      target: { value: 'Mi intervención revisada' },
+    });
+
+    const replacement = new File(['srt'], 'second.srt', { type: 'text/plain' });
+    Object.defineProperty(replacement, 'text', {
+      configurable: true, value: async () =>
+        '1\n00:00:20,000 --> 00:00:30,000\nPatient: New replacement text',
+    });
+    vi.mocked(window.confirm).mockReturnValueOnce(true);
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [replacement] },
+      });
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText('Patient: New replacement text')).toBeTruthy();
+    expect(screen.queryByText('Doctor: Private first reference')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer importación de subtítulos' }));
+    expect(screen.getByText('Doctor: Private first reference')).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Mi intervención revisada');
+    expect(screen.queryByText('Patient: New replacement text')).toBeNull();
+    expect(screen.getByText(/Importación de subtítulos deshecha/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Deshacer importación de subtítulos' })).toBeNull();
+  });
+
+  it('can undo the first imported SRT without retaining private captions', async () => {
+    loadAudio(90);
+    const file = new File(['srt'], 'fresh.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () =>
+        '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Reference to clear',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText('Doctor: Reference to clear')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer importación de subtítulos' }));
+    expect(screen.getByText(/Intervenciones \\(0\\/25\\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: Reference to clear')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    expect(screen.getByText(/Intervenciones \\(1\\/25\\)/)).toBeTruthy();
+    expect(screen.queryByText('Doctor: Reference to clear')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Deshacer importación de subtítulos' })).toBeNull();
+  });
+
   it('does not prompt or erase existing cuts for invalid subtitle files', async () => {
     loadAudio(90);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
