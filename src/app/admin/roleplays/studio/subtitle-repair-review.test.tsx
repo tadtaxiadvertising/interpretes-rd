@@ -385,4 +385,49 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(pause).toHaveBeenCalledTimes(2);
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
+  it('shows overlapping selected turns in SRT quality alerts without changing the editor', async () => {
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 60 });
+    fireEvent.loadedMetadata(player);
+
+    const file = new File(['srt'], 'overlapping-selection.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => [
+      '1', '00:00:00,000 --> 00:00:10,000', 'Doctor: Source turn A', '',
+      '2', '00:00:04,000 --> 00:00:06,000', 'Patient: Source turn B', '',
+      '3', '00:00:12,000 --> 00:00:14,000', 'Doctor: Source turn C',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/Seleccionar turnos de la transcripción/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar selección SRT' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(screen.getByRole('status', { name: 'Estado de selección SRT' }).textContent)
+      .toMatch(/Selección no válida.*solapadas/);
+    expect(screen.getByRole('status', { name: 'Resumen de calidad de selección SRT' }).textContent)
+      .toContain('2 turnos solapados');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar 2 turnos con alertas' }));
+    expect(screen.getAllByRole('checkbox', { name: /^Seleccionar turno \d+$/ })).toHaveLength(2);
+    expect(screen.getAllByText(/Solapa otro turno seleccionado/)).toHaveLength(2);
+    const apply = screen.getByRole('button', { name: 'Aplicar selección al editor (2)' }) as HTMLButtonElement;
+    expect(apply.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Seleccionar turno 2' }));
+    expect(screen.getByRole('status', { name: 'Resumen de calidad de selección SRT' }).textContent)
+      .toContain('0 turnos solapados');
+    expect(screen.getByRole('status', { name: 'Estado de selección SRT' }).textContent)
+      .toMatch(/Audio seleccionado/);
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+  });
+
 });
