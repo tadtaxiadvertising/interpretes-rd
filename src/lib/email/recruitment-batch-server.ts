@@ -1,5 +1,6 @@
 import prisma from '@/lib/prisma';
 import { readOperationalMailConfig } from './operational-config';
+import { readEmailDatabaseReadiness } from './database-readiness';
 import { discoverEmailEvents } from './recruitment-batch-discovery';
 import { runEmailBatch, emptyBatch, type BatchReport } from './recruitment-batch';
 import { enqueueRecruitmentEmail } from './recruitment-delivery-ledger';
@@ -26,6 +27,7 @@ export async function processRecruitmentEmailBatch(): Promise<BatchReport> {
   running = true;
   nextRunAt = Date.now() + 60000;
   try {
+    if ((await readEmailDatabaseReadiness(prisma)).status !== 'ready') return emptyBatch('unavailable');
     return await runEmailBatch(true, {
       discover: () => discoverEmailEvents(prisma, date, now),
       enqueue: id => enqueueRecruitmentEmail(prisma, id),
