@@ -9,7 +9,7 @@ import {
   acknowledgeInductionAction,
 } from "@/app/actions/recruitment";
 import { startCandidateRoleplay } from "@/app/actions/roleplay";
-import { ApplicantSchema, ApplicantData } from "@/lib/validators/recruitment";
+import { ApplicantSchema, ApplicantData, DOMINICAN_PROVINCES } from "@/lib/validators/recruitment";
 import { RecruitmentFollowUp } from "./RecruitmentFollowUp";
 import { User, PlaySquare, Mic, ClipboardCheck, UploadCloud, CheckCircle2, AlertCircle } from "lucide-react";
 
@@ -43,7 +43,7 @@ export default function RecruitmentFunnel() {
     phone: "",
     country: "",
     englishLevel: "B2",
-    speedtestMbps: 25,
+    speedtestMbps: 0,
     efsetLink: "",
     cvUrl: undefined,
   });
@@ -212,11 +212,14 @@ export default function RecruitmentFunnel() {
               className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
             />
-            <input
-              type="text" required aria-label="País de residencia" placeholder="País de residencia"
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
-              value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-            />
+            <select
+              required aria-label="Provincia de residencia"
+              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
+              value={formData.country} onChange={(e) => setFormData({ ...formData, country: e.target.value as ApplicantData["country"] })}
+            >
+              <option value="" disabled>Selecciona tu provincia</option>
+              {DOMINICAN_PROVINCES.map((province) => <option key={province} value={province}>{province}</option>)}
+            </select>
             <select required aria-label="Nivel de inglés" className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 shadow-sm outline-none transition hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
               value={formData.englishLevel}
               onChange={(e) => setFormData({ ...formData, englishLevel: e.target.value as ApplicantData["englishLevel"] })}
@@ -230,8 +233,12 @@ export default function RecruitmentFunnel() {
               Velocidad de descarga (Mbps)
               <input type="number" min={1} max={10000} step={1} required
                 className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3.5 text-sm font-medium text-slate-900 placeholder:text-slate-500 shadow-sm outline-none transition duration-200 hover:border-slate-400 focus:border-[#1764bf] focus:ring-4 focus:ring-[#1764bf]/15"
-                value={formData.speedtestMbps}
-                onChange={(e) => setFormData({ ...formData, speedtestMbps: Number(e.target.value) })}
+                value={formData.speedtestMbps || ""}
+                placeholder="Ej. 100"
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData((previous) => ({ ...previous, speedtestMbps: value === "" ? 0 : Number(value) }));
+                }}
               />
             </label>
             <input type="url" aria-label="Enlace al currículum" placeholder="Enlace al currículum (opcional, HTTPS)"
