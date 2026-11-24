@@ -21,17 +21,26 @@ export default function LocalVadAssistant({
   // Keep review tied to the exact decoded snapshot. An effect that resets
   // `reviewed` after each snapshot update can race against a user's click
   // and unexpectedly hide the preview controls while they are reviewing.
-  const [reviewedSnapshot, setReviewedSnapshot] = useState<LocalVadSnapshot | null>(null);
+  const [reviewedPlan, setReviewedPlan] = useState<{
+    snapshot: LocalVadSnapshot | null; contextKey: string;
+  } | null>(null);
   const [excludedCuts, setExcludedCuts] = useState<Set<string>>(() => new Set());
   const proposal = useMemo(
     () => proposeLocalVadCuts(snapshot?.segments ?? [], duration, existing),
     [snapshot, duration, existing],
   );
   const selectedClips = proposal.clips.filter(clip => !excludedCuts.has(clipKey(clip)));
-
+  // A reviewed batch is only approved against the existing editorial cuts
+  // and media duration at that moment. New proposals must never inherit
+  // the old review when the editor changes its intervals.
+  const contextKey = `${duration}|${existing.map(cut =>
+    `${cut.start}:${cut.end}`).sort().join('|')}`;
   const status = snapshot?.status ?? 'loading';
   const ready = status === 'ready';
-  const reviewed = ready && reviewedSnapshot === snapshot;
+  const reviewed = ready && reviewedPlan !== null &&
+    reviewedPlan.snapshot === snapshot && reviewedPlan.contextKey === contextKey;
+  const changedSinceReview = ready && reviewedPlan !== null &&
+    reviewedPlan.snapshot === snapshot && reviewedPlan.contextKey !== contextKey;
   const availableSlots = Math.max(0, 25 - existing.length);
 
   return (
@@ -45,7 +54,7 @@ export default function LocalVadAssistant({
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => {
           setExcludedCuts(new Set());
-          setReviewedSnapshot(snapshot);
+          setReviewedPlan({ snapshot, contextKey });
         }}
           disabled={!ready || availableSlots === 0}
           className="rounded-lg border border-cyan-300/30 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50">
@@ -55,6 +64,11 @@ export default function LocalVadAssistant({
           {snapshot?.segments.length ?? 0} regiones con actividad detectadas
         </span>}
       </div>
+      {changedSinceReview && (
+        <p role="status" className="mt-2 text-xs text-amber-200">
+          La duración o los cortes existentes cambiaron. Revisa de nuevo la propuesta local antes de añadir regiones.
+        </p>
+      )}
       {status === 'limited' && (
         <p role="status" className="mt-2 text-xs text-amber-200">
           Para cuidar la memoria, el análisis local requiere MP3 de hasta 4 minutos y 8 MiB,
@@ -83,7 +97,7 @@ export default function LocalVadAssistant({
                 hablantes e idioma antes de guardar.
               </p>
               <button type="button"
-                onClick={() => { onApply(selectedClips); setReviewedSnapshot(null); }}
+                onClick={() => { onApply(selectedClips); setReviewedPlan(null); }}
                 disabled={selectedClips.length === 0}
                 className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Añadir {selectedClips.length} {selectedClips.length === 1 ? 'corte revisable' : 'cortes revisables'}

@@ -152,4 +152,66 @@ describe('reuse VAD results without re-decoding or uploading the MP3', () => {
     expect(screen.queryByText(/Añadir \d+ cortes revisables/)).toBeNull();
     expect(apply).not.toHaveBeenCalled();
   });
+  it('requires a fresh review when existing cuts change and reveal new candidate regions', () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const apply = vi.fn();
+    const snapshot = { status: 'ready' as const, segments: [
+      { start: 1, end: 4, signalLevel: 0.7 },
+      { start: 8, end: 12, signalLevel: 0.8 },
+    ] };
+    const { rerender } = render(<LocalVadAssistant
+      snapshot={snapshot} duration={20} existing={[{ start: 8, end: 12 }]}
+      onApply={apply}
+    />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    expect(screen.getByRole('button', { name: 'Añadir 1 corte revisable' })).toBeTruthy();
+    expect(screen.queryByRole('checkbox', { name: 'Incluir región 2' })).toBeNull();
+
+    // Another edit frees an interval. It must not silently become
+    // pre-selected as part of the previous operator approval.
+    rerender(<LocalVadAssistant snapshot={snapshot} duration={20}
+      existing={[]} onApply={apply} />);
+    expect(screen.queryByRole('button', { name: /Añadir \d+ cortes? revisables?/ })).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('cortes existentes cambiaron');
+    expect(apply).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    expect(screen.getByRole('button', { name: 'Añadir 2 cortes revisables' })).toBeTruthy();
+    expect(screen.getAllByRole('checkbox', { name: /Incluir región/ })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Añadir 2 cortes revisables' }));
+    expect(apply).toHaveBeenCalledExactlyOnceWith([
+      { start: 1, end: 4 }, { start: 8, end: 12 },
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('retains reviewed choices across an unchanged cut set and resets when duration changes', () => {
+    const snapshot = { status: 'ready' as const, segments: [
+      { start: 1, end: 4, signalLevel: 0.7 },
+      { start: 8, end: 12, signalLevel: 0.8 },
+    ] };
+    const apply = vi.fn();
+    const { rerender } = render(<LocalVadAssistant snapshot={snapshot}
+      duration={20} existing={[{ start: 15, end: 18 }, { start: 19, end: 20 }]}
+      onApply={apply} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar actividad local' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Incluir región 2' }));
+
+    // A mere reordered prop/React rerender is not a new editorial decision.
+    rerender(<LocalVadAssistant snapshot={snapshot}
+      duration={20} existing={[{ start: 19, end: 20 }, { start: 15, end: 18 }]}
+      onApply={apply} />);
+    expect((screen.getByRole('checkbox', { name: 'Incluir región 2' }) as HTMLInputElement).checked)
+      .toBe(false);
+
+    rerender(<LocalVadAssistant snapshot={snapshot}
+      duration={21} existing={[{ start: 19, end: 20 }, { start: 15, end: 18 }]}
+      onApply={apply} />);
+    expect(screen.queryByRole('button', { name: 'Añadir 1 corte revisable' })).toBeNull();
+    expect(screen.getByRole('status').textContent).toContain('cortes existentes cambiaron');
+    expect(apply).not.toHaveBeenCalled();
+  });
+
 });
