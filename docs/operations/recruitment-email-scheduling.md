@@ -27,3 +27,7 @@ Mantener OPERATIONAL_EMAIL_SCHEDULER_ENABLED=false. Configurar OPERATIONAL_EMAIL
 ### Separación del piloto y el despacho general
 
 Durante el piloto, mantener OPERATIONAL_EMAIL_GENERAL_ENABLED=false y OPERATIONAL_EMAIL_SCHEDULER_ENABLED=false. La eliminación accidental del destinatario piloto no permite envíos generales. Solo después de confirmar una notificación real de reclutamiento, detener el despacho, retirar el filtro, establecer un nuevo corte UTC y habilitar explícitamente OPERATIONAL_EMAIL_GENERAL_ENABLED=true. Si coexisten un destinatario piloto y la habilitación general, ambos modos quedan bloqueados.
+
+### Prueba independiente del buzón
+
+Antes de activar el piloto, aplicar la propuesta `proposed-candidate-mailbox-proof.sql` tras CI y revisión. La confirmación administrativa de Auth y la referencia de postulación por sí solas no prueban control del buzón. El postulante vincula su cuenta, solicita un código por correo y lo confirma en el portal. El código aleatorio de 128 bits caduca a los 15 minutos, se almacena como hash y se consume atómicamente. Hay un intervalo persistente de cinco minutos por vinculación y un límite local de solicitudes. El despacho exige coincidencia del correo verificado con la identidad y el perfil actuales. No se certifican cuentas antiguas automáticamente. Mantener los envíos generales desactivados hasta verificar el piloto completo.

@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { readEmailDatabaseReadiness } from './database-readiness';
 
-const valid = { delivery: true, binding: true, runtimeAccess: true, privateAccess: true, rls: true, policiesAvailable: true };
+const valid = { delivery: true, binding: true, runtimeAccess: true, privateAccess: true, rls: true, policiesAvailable: true, mailboxProof: true };
 function fixture() {
   const query = vi.fn().mockResolvedValue([valid]);
   const db = { $queryRaw: query } as unknown as Parameters<typeof readEmailDatabaseReadiness>[0];
@@ -12,6 +12,8 @@ describe('email database metadata readiness', () => {
   it('distinguishes missing tables from permission errors', async () => {
     const f = fixture();
     f.query.mockResolvedValueOnce([{ ...valid, binding: false }]);
+    expect(await readEmailDatabaseReadiness(f.db)).toEqual({ status: 'not_installed' });
+    f.query.mockResolvedValueOnce([{ ...valid, mailboxProof: false }]);
     expect(await readEmailDatabaseReadiness(f.db)).toEqual({ status: 'not_installed' });
     for (const key of ['runtimeAccess', 'privateAccess', 'rls', 'policiesAvailable']) {
       f.query.mockResolvedValueOnce([{ ...valid, [key]: false }]);

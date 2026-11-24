@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { checkCorporateEmailDatabase } from '@/app/actions/email-database-readiness';
 
 const messages = {
-  not_installed: 'Falta instalar el registro privado de correos o la tabla de vinculaciones.',
+  not_installed: 'Falta instalar el registro privado, las vinculaciones o la migración de verificación del buzón.',
   permission_mismatch: 'Las tablas existen, pero los permisos o las protecciones RLS requieren revisión.',
   ready: 'Tablas, permisos declarados y RLS detectados. Falta comprobar políticas efectivas y entrega real.',
   unavailable: 'No se pudo consultar la base de datos.',

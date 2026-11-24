@@ -149,3 +149,22 @@ assert_equal "$(db -c 'SELECT count(*) FROM private_email.candidate_account_bind
 db -c "DELETE FROM public.user_profiles WHERE id='123e4567-e89b-42d3-a456-426614174000'"
 assert_equal "$(db -c 'SELECT count(*) FROM private_email.candidate_account_binding')" 0 removed-account-binding
 echo 'Isolated candidate account binding checks passed.'
+
+# Additive mailbox proof proposal; existing bindings never become verified automatically.
+db < "$root/docs/operations/proposed-candidate-mailbox-proof.sql"
+db <<'SQL'
+INSERT INTO private_email.candidate_account_binding(candidate_id,account_id) VALUES (2,'123e4567-e89b-42d3-a456-426614174001');
+UPDATE private_email.candidate_account_binding SET challenge_email='candidate@example.test', challenge_hash=repeat('a',64), challenge_issued_at=now(), challenge_expires_at=now()+interval '15 minutes' WHERE candidate_id=2;
+DO $check$
+BEGIN
+  IF EXISTS (SELECT 1 FROM private_email.candidate_account_binding WHERE mailbox_verified_at IS NOT NULL) THEN RAISE EXCEPTION 'Unexpected automatic verification'; END IF;
+  BEGIN
+    UPDATE private_email.candidate_account_binding SET challenge_hash='bad' WHERE candidate_id=2;
+    RAISE EXCEPTION 'Invalid challenge allowed';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END
+$check$;
+UPDATE private_email.candidate_account_binding SET verified_email=challenge_email, mailbox_verified_at=now(), challenge_email=NULL, challenge_hash=NULL, challenge_expires_at=NULL WHERE candidate_id=2 AND challenge_hash=repeat('a',64) AND challenge_expires_at>now();
+SQL
+assert_equal "$(db -c "SELECT count(*) FROM private_email.candidate_account_binding WHERE candidate_id=2 AND verified_email='candidate@example.test' AND mailbox_verified_at IS NOT NULL AND challenge_hash IS NULL")" 1 verified-once

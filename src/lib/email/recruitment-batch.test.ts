@@ -54,7 +54,7 @@ describe('event discovery query', () => {
     const db = { $queryRaw: query } as unknown as Parameters<typeof discoverEmailEvents>[0];
     const now = new Date('2026-11-24T06:00:00Z');
     expect(await discoverEmailEvents(db, new Date('2026-11-22T00:00:00Z'), now)).toEqual(['a']);
-    expect(query.mock.calls[0].slice(1)).toEqual([new Date('2026-11-23T06:00:00Z'), now, null, null]);
+    expect(query.mock.calls[0].slice(1)).toEqual([new Date('2026-11-23T06:00:00Z'), now, now, null, null]);
     const sql = query.mock.calls[0][0].join('?');
     expect(sql).toContain('b.revoked_at IS NULL');
     expect(sql).toContain("d.status = 'pending'");

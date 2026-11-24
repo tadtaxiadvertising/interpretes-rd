@@ -10,7 +10,7 @@ function fixture() {
     id: 'event-1', applicationId: 'app-1', eventType: 'APPLICATION_CREATED', toStatus: 'APPLIED', createdAt: now,
     application: { id: 'app-1', status: 'APPLIED', candidateId: 1, candidate: { email } },
   });
-  const binding = { candidateId: 1, accountId, profileEmail: email, role: 'candidate', interpreterId: null };
+  const binding = { candidateId: 1, accountId, profileEmail: email, verifiedEmail: email, mailboxVerifiedAt: new Date('2026-11-24T04:00:00Z'), role: 'candidate', interpreterId: null };
   const query = vi.fn().mockResolvedValue([binding]);
   const user = { id: accountId, email, email_confirmed_at: '2026-11-23T05:00:00Z', is_anonymous: false };
   const lookup = vi.fn().mockResolvedValue(user);
@@ -34,7 +34,7 @@ describe('verified recruitment account binding', () => {
   });
   it('rejects a noncandidate profile or an email mismatch before the auth request', async () => {
     const f = fixture();
-    for (const binding of [{ ...f.binding, role: 'admin' }, { ...f.binding, interpreterId: 3 }, { ...f.binding, profileEmail: 'other@example.test' }]) {
+    for (const binding of [{ ...f.binding, role: 'admin' }, { ...f.binding, interpreterId: 3 }, { ...f.binding, profileEmail: 'other@example.test' }, { ...f.binding, verifiedEmail: null }, { ...f.binding, verifiedEmail: 'old@example.test' }, { ...f.binding, mailboxVerifiedAt: null }]) {
       f.query.mockResolvedValue([binding]);
       expect((await loadDispatchSnapshot(f.db, 'event-1', f.lookup, now))?.identity).toBeNull();
     }

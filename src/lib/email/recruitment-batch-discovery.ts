@@ -19,6 +19,7 @@ export async function discoverEmailEvents(db: Pick<Prisma.TransactionClient, '$q
     LEFT JOIN private_email.recruitment_delivery d ON d.event_id = e.id
     WHERE e.created_at >= ${earliest} AND e.created_at <= ${now}
       AND lower(trim(c.email)) = lower(trim(p.email))
+      AND b.verified_email = lower(trim(c.email)) AND b.mailbox_verified_at IS NOT NULL AND b.mailbox_verified_at <= ${now}
       AND (${pilot}::text IS NULL OR lower(trim(c.email)) = ${pilot})
       AND a.status = e.to_status AND (d.event_id IS NULL OR d.status = 'pending')
       AND ((e.event_type::text = 'APPLICATION_CREATED' AND e.to_status::text = 'APPLIED')
