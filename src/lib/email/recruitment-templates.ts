@@ -58,9 +58,10 @@ export function recruitmentEmailTemplate(kind: RecruitmentEmailKind): Recruitmen
 }
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
+  const entities: Record<string, string> = {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[character] ?? character);
+  };
+  return value.replace(/[&<>"']/g, (character) => entities[character] ?? character);
 }
 
 /** Output for a future authenticated mail transport; deliberately no dynamic URLs or PII. */
