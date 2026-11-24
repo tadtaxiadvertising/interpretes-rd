@@ -336,4 +336,48 @@ describe('Audio Studio repaired SRT import safety', () => {
     expect(screen.getByRole('checkbox', { name: 'Seleccionar turno 1' })).toBeTruthy();
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
+
+  it('plays one SRT subtitle only until its end and can stop early without editing any clips', async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const pause = vi.spyOn(HTMLMediaElement.prototype, 'pause');
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'original.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(player);
+    const cues = Array.from({ length: 30 }, (_, index) => [
+      String(index + 1),
+      '00:00:' + String(index * 3).padStart(2, '0') + ',000 --> ' +
+        '00:00:' + String(index * 3 + 2).padStart(2, '0') + ',000',
+      'Doctor: Reference',
+    ].join('\n')).join('\n\n');
+    const file = new File(['srt'], 'source.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => cues });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+      await Promise.resolve();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 2' }));
+    expect(player.currentTime).toBe(3);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Detener escucha de turno 2' })).toBeTruthy();
+    player.currentTime = 4.9;
+    fireEvent.timeUpdate(player);
+    expect(pause).not.toHaveBeenCalled();
+    player.currentTime = 5;
+    fireEvent.timeUpdate(player);
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Escuchar solo turno 2' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 1' }));
+    expect(player.currentTime).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Detener escucha de turno 1' }));
+    expect(pause).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+  });
 });
