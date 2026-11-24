@@ -4,6 +4,7 @@ import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
+import EmailDatabaseReadiness from './EmailDatabaseReadiness';
 import { operationalMailStatus } from '@/lib/email/operational-config';
 import { emailAutomationStatus } from '@/lib/email/automation-status';
 
@@ -98,6 +99,7 @@ export default function SettingsPage() {
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
+            <EmailDatabaseReadiness />
             <section aria-labelledby="email-automation" className="space-y-3 rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--foreground)]">
               <h3 id="email-automation" className="font-semibold">Automatización de comunicaciones</h3>
               <p>{automationChecks.every(([, ready]) => ready) ? 'Configuración completa. Ejecución externa y entrega todavía no verificadas.' : 'Automatización no lista: revisa los controles pendientes.'}</p>
