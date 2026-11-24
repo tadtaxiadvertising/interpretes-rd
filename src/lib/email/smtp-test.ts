@@ -51,7 +51,7 @@ function runCurl(file: string, privateConfig: string): Promise<boolean> {
       '-q', '--config', '-', '--proto', '=smtp,smtps', '--noproxy', '*',
       '--ssl-reqd', '--connect-timeout', '8', '--max-time', '20',
       '--silent', '--upload-file', file,
-    ], { shell: false, stdio: ['pipe', 'ignore', 'ignore'], env: { PATH: '/usr/local/bin:/usr/bin:/bin' } });
+    ], { shell: false, stdio: ['pipe', 'ignore', 'ignore'], env: { PATH: '/usr/local/bin:/usr/bin:/bin', NODE_ENV: 'production' } });
     const timer = setTimeout(() => child.kill('SIGKILL'), 25000);
     child.once('error', () => { clearTimeout(timer); resolve(false); });
     child.once('close', code => { clearTimeout(timer); resolve(code === 0); });
