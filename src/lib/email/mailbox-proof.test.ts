@@ -6,9 +6,10 @@ import { issueMailboxChallenge, consumeMailboxChallenge } from './mailbox-proof'
 const binding = { candidateId: 1, accountId: '123e4567-e89b-42d3-a456-426614174000', email: 'candidate@example.test' };
 function fixture() {
   const execute = vi.fn().mockResolvedValue(1);
-  const db = { $executeRaw: execute } as unknown as Parameters<typeof issueMailboxChallenge>[0];
+  const query = vi.fn().mockResolvedValue([]);
+  const db = { $executeRaw: execute, $queryRaw: query } as unknown as Parameters<typeof issueMailboxChallenge>[0];
   const send = vi.fn<(email: string, token: string) => Promise<'accepted' | 'unconfirmed'>>().mockResolvedValue('accepted');
-  return { execute, db, send };
+  return { execute, query, db, send };
 }
 describe('independent mailbox proof', () => {
   it('stores only a hash and sends one unpredictable token after reserving the challenge', async () => {
@@ -26,6 +27,23 @@ describe('independent mailbox proof', () => {
     f.execute.mockResolvedValue(0);
     expect(await issueMailboxChallenge(f.db, binding, f.send)).toBe('not_available');
     expect(f.send).not.toHaveBeenCalled();
+  });
+  it('recognizes an already verified mailbox without sending again', async () => {
+    const f = fixture();
+    f.execute.mockResolvedValue(0);
+    f.query.mockResolvedValue([{ verified: true, pending: false }]);
+    expect(await issueMailboxChallenge(f.db, binding, f.send)).toBe('already_verified');
+    expect(f.send).not.toHaveBeenCalled();
+    expect(f.query.mock.calls[0][0].join('?')).toContain('b.revoked_at IS NULL');
+    expect(f.query.mock.calls[0]).toContain(binding.accountId);
+  });
+  it('recognizes a live challenge during cooldown without exposing its hash', async () => {
+    const f = fixture();
+    f.execute.mockResolvedValue(0);
+    f.query.mockResolvedValue([{ verified: false, pending: true }]);
+    expect(await issueMailboxChallenge(f.db, binding, f.send)).toBe('code_pending');
+    expect(f.send).not.toHaveBeenCalled();
+    expect(f.query.mock.calls[0][0].join('?')).toContain('b.challenge_expires_at > now()');
   });
   it('does not retry ambiguous SMTP acceptance', async () => {
     const f = fixture();
