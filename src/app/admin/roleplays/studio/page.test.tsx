@@ -657,6 +657,113 @@ describe('Audio Studio clip review player', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it('undoes accepted pause proposals and recovers edited turns plus pending SRT review', async () => {
+    const request = vi.fn(async () => ({
+      ok: true, json: async () => ({
+        durationSeconds: 90, silences: [{ start: 30, end: 31 }],
+      }),
+    }));
+    vi.stubGlobal('fetch', request);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'undo-pauses.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+
+    const first = new File(['srt'], 'first.srt', { type: 'text/plain' });
+    Object.defineProperty(first, 'text', { value: async () =>
+      '1\n00:00:00,000 --> 00:00:10,000\nDoctor: Private editorial reference',
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [first] },
+      });
+    });
+    fireEvent.change(screen.getByLabelText('Título'), {
+      target: { value: 'Corte revisado y privado' },
+    });
+
+    const stamp = (seconds: number) =>
+      '00:' + String(Math.floor(seconds / 60)).padStart(2, '0') +
+      ':' + String(seconds % 60).padStart(2, '0') + ',000';
+    const longText = Array.from({ length: 26 }, (_, i) =>
+      String(i + 1) + '\n' + stamp(i * 3) + ' --> ' +
+      stamp(i * 3 + 2) + '\nDoctor: Next candidate ' + (i + 1)).join('\n\n');
+    const long = new File(['srt'], 'pending-review.srt', { type: 'text/plain' });
+    Object.defineProperty(long, 'text', { value: async () => longText });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [long] },
+      });
+    });
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('checkbox', {
+      name: 'Autorizo subir este MP3 al servidor para detectar pausas',
+    }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Detectar pausas en servidor' }));
+    });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Reemplazar con 2 cortes sugeridos' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reemplazar con 2 cortes sugeridos' }));
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.queryByText('Seleccionar turnos de la transcripción')).toBeNull();
+    expect(screen.queryByText('Doctor: Private editorial reference')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer aplicación de pausas' }));
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value)
+      .toBe('Corte revisado y privado');
+    expect(screen.getByText('Doctor: Private editorial reference')).toBeTruthy();
+    expect(screen.getByText('Seleccionar turnos de la transcripción')).toBeTruthy();
+    expect(screen.getByText(/26 turnos disponibles y 25 seleccionados/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reemplazar con 2 cortes sugeridos' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Deshacer aplicación de pausas' })).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('revoking server consent does not reintroduce pause metadata through undo', async () => {
+    const request = vi.fn(async () => ({
+      ok: true, json: async () => ({
+        durationSeconds: 90, silences: [{ start: 30, end: 31 }],
+      }),
+    }));
+    vi.stubGlobal('fetch', request);
+    const { container } = render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'consent-undo.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.change(screen.getByLabelText('Título'), {
+      target: { value: 'Trabajo previo' },
+    });
+    const consent = screen.getByRole('checkbox', {
+      name: 'Autorizo subir este MP3 al servidor para detectar pausas',
+    });
+    fireEvent.click(consent);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Detectar pausas en servidor' }));
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Reemplazar con 2 cortes sugeridos' }));
+    expect(screen.getByRole('button', { name: 'Deshacer aplicación de pausas' })).toBeTruthy();
+
+    fireEvent.click(consent);
+    expect(screen.queryByRole('button', { name: 'Reemplazar con 2 cortes sugeridos' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer aplicación de pausas' }));
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value).toBe('Trabajo previo');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Reemplazar con 2 cortes sugeridos' })).toBeNull();
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps consent attached to the original recording when replacement is declined', () => {
     const { container } = render(<RoleplayStudioPage />);
     const input = screen.getByLabelText(/Grabación original MP3/i);
