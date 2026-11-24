@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
 import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
+import CorporateSmtpTest from './CorporateSmtpTest';
 import { operationalMailStatus } from '@/lib/email/operational-config';
 
 export const dynamic = 'force-dynamic';
@@ -75,13 +76,14 @@ export default function SettingsPage() {
               <li>Revisa la bandeja de entrada, el remitente y los registros de entrega.</li>
             </ol>
             <p className="text-xs text-[var(--foreground)]">
-              Esta sección no envía mensajes ni comprueba la conexión SMTP. Las notificaciones de postulaciones y entrevistas requieren una integración independiente.
+              El SMTP de autenticación se comprueba en Supabase. La prueba operativa de abajo es independiente y no activa notificaciones automáticas.
             </p>
             <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
               <h3 className="font-semibold">Configuración de correos operativos</h3>
               <p>{operationalMessages[operationalStatus]}</p>
-              <p className="text-xs">Diagnóstico de variables privadas de Next.js. El transporte todavía no está conectado. No se muestran credenciales ni se realizan pruebas de red.</p>
+              <p className="text-xs">Diagnóstico de variables privadas de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
+            <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
           </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
