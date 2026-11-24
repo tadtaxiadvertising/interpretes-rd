@@ -5,7 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { cookies } from 'next/headers';
 import { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
-import { ApplicantSchema, ApplicantData } from '@/lib/validators/recruitment';
+import { ApplicantSchema, ApplicantData, DOMINICAN_PROVINCES } from '@/lib/validators/recruitment';
 import type { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import {
@@ -780,6 +780,13 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
         select: { id: true, status: true },
       });
 
+      // The recruitment location field retains its legacy name, but new
+      // applications store a Dominican province there. Do not copy a province
+      // into the operational Interpreter country column.
+      const province = DOMINICAN_PROVINCES.find((value) => value === candidate.pais);
+      const interpreterCountry = province ? 'República Dominicana' : candidate.pais;
+      const provinceMetadata = province ? { province } : {};
+
       let interpreterId: number;
       if (existing) {
         await tx.interpreter.update({
@@ -788,11 +795,12 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
             name: candidate.name,
             status: 'Activo',
             telefono: candidate.telefono,
-            pais: candidate.pais,
+            pais: interpreterCountry,
             tariffPerMinute: tariff,
             documentosCompleto: true,
             notas: JSON.stringify({
               recruitmentCandidateId: candidate.id,
+              ...provinceMetadata,
               englishLevel: candidate.englishLevel,
               speedtestMbps: candidate.speedtestMbps,
               source: 'recruitment',
@@ -809,11 +817,12 @@ export async function hireCandidate(id: number): Promise<ActionResult> {
             status: 'Activo',
             emailCorporativo: candidate.email,
             telefono: candidate.telefono,
-            pais: candidate.pais,
+            pais: interpreterCountry,
             tariffPerMinute: tariff,
             documentosCompleto: true,
             notas: JSON.stringify({
               recruitmentCandidateId: candidate.id,
+              ...provinceMetadata,
               englishLevel: candidate.englishLevel,
               speedtestMbps: candidate.speedtestMbps,
               source: 'recruitment',
