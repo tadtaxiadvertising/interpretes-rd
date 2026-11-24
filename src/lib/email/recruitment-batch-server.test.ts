@@ -15,6 +15,8 @@ describe('batch database preflight', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-11-24T08:00:00Z'));
     for (const flag of ['OPERATIONAL_EMAIL_BATCH_ENABLED', 'OPERATIONAL_EMAIL_DISPATCH_ENABLED', 'OPERATIONAL_EMAIL_BINDING_ENABLED']) vi.stubEnv(flag, 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', '');
     vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE', '2026-11-24T07:00:00Z');
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
