@@ -662,6 +662,39 @@ describe('admin activation actions (transactional state machine)', () => {
     );
   });
 
+  it.each(['Santiago', 'Distrito Nacional', 'República Dominicana', 'Haití', null])('maps the candidate location %s without corrupting the interpreter country', async (location) => {
+    const tx = activationTx({ id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5, hiredInterpreterId: null });
+    const candidate = await tx.recruitmentCandidate.findUnique();
+    tx.recruitmentCandidate.findUnique.mockResolvedValue({ ...candidate, pais: location });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    expect(await hireCandidate(7)).toEqual({ success: true });
+    const profile = tx.interpreter.create.mock.calls[0][0].data;
+    const isProvince = location === 'Santiago' || location === 'Distrito Nacional';
+    expect(profile.pais).toBe(isProvince ? 'República Dominicana' : location);
+    const metadata = JSON.parse(profile.notas);
+    expect(metadata.province).toBe(isProvince ? location : undefined);
+    expect(metadata.recruitmentCandidateId).toBe(7);
+  });
+
+  it('preserves the province when reusing an existing interpreter', async () => {
+    const tx = activationTx(
+      { id: 'app-1', status: 'READY_FOR_ACTIVATION', version: 5, hiredInterpreterId: null },
+      { interpreter: { findFirst: vi.fn().mockResolvedValue({ id: 42, status: 'Inactivo' }), create: vi.fn(), update: vi.fn().mockResolvedValue({ id: 42 }) } }
+    );
+    const candidate = await tx.recruitmentCandidate.findUnique();
+    tx.recruitmentCandidate.findUnique.mockResolvedValue({ ...candidate, pais: 'La Vega' });
+    mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
+
+    expect(await hireCandidate(7)).toEqual({ success: true });
+    expect(tx.interpreter.create).not.toHaveBeenCalled();
+    expect(tx.interpreter.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 42 },
+      data: expect.objectContaining({ pais: 'República Dominicana' }),
+    }));
+    expect(JSON.parse(tx.interpreter.update.mock.calls[0][0].data.notas).province).toBe('La Vega');
+  });
+
   it('hireCandidate refuses an application that is not ready for activation', async () => {
     const tx = activationTx({ id: 'app-1', status: 'INTERVIEW_REVIEW', version: 3, hiredInterpreterId: null });
     mockPrisma.$transaction.mockImplementation(async (cb: any) => cb(tx));
