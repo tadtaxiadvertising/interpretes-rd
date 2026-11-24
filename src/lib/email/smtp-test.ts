@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readOperationalMailConfig, type OperationalMailConfig } from './operational-config';
 
-import { sendBrevoEmail } from './brevo-transport';
+import { sendBrevoEmail, sendBrevoEmailDetailed, type BrevoFailure } from './brevo-transport';
 
-export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited';
+export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited' | BrevoFailure;
 
 function quote(value: string): string {
   if (Array.from(value).some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) throw new Error('Invalid SMTP configuration');
@@ -143,7 +143,7 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
   busy = true;
   nextTestAt = Date.now() + 60000;
   try {
-    if (result.provider === 'brevo') return await sendBrevoEmail(result.config, {
+    if (result.provider === 'brevo') return await sendBrevoEmailDetailed(result.config, {
       recipient: result.config.from,
       subject: 'Prueba de correo | Intérpretes RD',
       text: 'Este es un correo de prueba de Intérpretes RD. No contiene datos de postulantes.',

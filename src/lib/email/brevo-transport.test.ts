@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { sendBrevoEmail } from './brevo-transport';
+import { sendBrevoEmail, sendBrevoEmailDetailed, checkBrevoConnection } from './brevo-transport';
 
 const config = { apiKey: 'fake-fixture-key-only', from: 'office@example.test', replyTo: 'support@example.test' };
 const message = { recipient: 'candidate@example.test', subject: 'Intérpretes RD', text: 'Test', html: '<p>Test</p>' };
@@ -64,5 +64,44 @@ describe('Brevo transactional transport', () => {
     expect(JSON.parse(request.mock.calls[0][1].body).to).toEqual([{ email: config.from }]);
     expect(await sendOperationalMailTest()).toBe('rate_limited');
     expect(request).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('safe runtime diagnostics', () => {
+  it.each([
+    [401, 'brevo_auth'], [403, 'brevo_forbidden'], [400, 'brevo_rejected'],
+    [429, 'brevo_rate_limited'], [503, 'brevo_unavailable'],
+  ] as const)('classifies HTTP %s without leaking provider details', async (status, expected) => {
+    const request = vi.fn().mockResolvedValue(new Response('private detail', { status }));
+    vi.stubGlobal('fetch', request);
+    expect(await sendBrevoEmailDetailed(config, message)).toBe(expected);
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+  it('checks the active sender over GET, without sending any email', async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ senders: [
+      { email: 'other@example.test', active: true },
+      { email: 'OFFICE@example.test', active: true },
+    ] }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    expect(await checkBrevoConnection(config)).toBe('brevo_ready');
+    expect(request).toHaveBeenCalledExactlyOnceWith('https://api.brevo.com/v3/senders', expect.objectContaining({
+      method: 'GET', redirect: 'error', cache: 'no-store', headers: { 'api-key': config.apiKey, accept: 'application/json' },
+    }));
+    expect(request.mock.calls[0][1].body).toBeUndefined();
+  });
+  it('rejects inactive or absent senders', async () => {
+    const request = vi.fn().mockResolvedValue(new Response(JSON.stringify({ senders: [
+      { email: config.from, active: false }, { email: 'other@example.test', active: true },
+    ] }), { status: 200 }));
+    vi.stubGlobal('fetch', request);
+    expect(await checkBrevoConnection(config)).toBe('brevo_sender_missing');
+  });
+  it('does not confuse a malformed response with a verified connection', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })));
+    expect(await checkBrevoConnection(config)).toBe('brevo_response');
+  });
+  it('reports network failures conservatively', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('private details')));
+    expect(await checkBrevoConnection(config)).toBe('brevo_network');
   });
 });
