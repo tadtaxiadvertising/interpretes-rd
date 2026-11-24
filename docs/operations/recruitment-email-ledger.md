@@ -53,3 +53,8 @@ Mantener `OPERATIONAL_EMAIL_GENERAL_ENABLED=false` y `OPERATIONAL_EMAIL_SCHEDULE
 Registrar fuera del código, sin secretos ni datos personales, el commit realmente desplegado, fecha de prueba, aceptación SMTP, recepción observada, identidad de marca correcta y resultado del historial. No activar el despacho general si falta alguna evidencia o si hay envíos ambiguos sin resolver. La activación general y del programador es una operación separada, no una consecuencia automática de fusionar un PR.
 
 Si hay que detener envíos, desactivar el programador, el procesamiento por lotes y el despacho. Mantener los registros existentes para conciliación; no borrar el esquema ni hacer backfill automático. Los correos de autenticación de Supabase conservan su configuración independiente.
+
+
+### Alternativa: Brevo API (HTTPS)
+
+En el servicio Next.js, puedes seleccionar Brevo en vez de SMTP mediante `OPERATIONAL_EMAIL_PROVIDER=brevo`, `BREVO_API_KEY`, `OPERATIONAL_EMAIL_FROM` y `OPERATIONAL_EMAIL_ENABLED=true`. `OPERATIONAL_EMAIL_REPLY_TO` es opcional. La clave se guarda únicamente en variables privadas del runtime, nunca en el repositorio ni en el chat. Genera una clave API con los permisos mínimos necesarios para correo transaccional; una clave SMTP no funciona como clave API. El remitente debe estar autorizado en Brevo. Mantén las cinco banderas de vinculación, despacho, lotes, modo general y programador en false durante la primera prueba. La aceptación HTTP 201 con messageId no certifica entrega; no se hace fallback ni reintento automático ante errores. Supabase Auth conserva su configuración SMTP independiente.
