@@ -100,7 +100,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación SRT';
+    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición VAD' | 'importación de subtítulos';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -397,8 +397,8 @@ export default function RoleplayStudioPage() {
         ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
         : lastStructuralEdit.kind === 'adición VAD'
           ? 'Cortes VAD retirados. Las intervenciones y referencias anteriores se conservaron.'
-        : lastStructuralEdit.kind === 'importación SRT'
-          ? 'Importación SRT deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
+        : lastStructuralEdit.kind === 'importación de subtítulos'
+          ? 'Importación de subtítulos deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
         : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
@@ -538,7 +538,7 @@ export default function RoleplayStudioPage() {
     // One accepted SRT/VTT import is a reversible editorial operation.
     // Keep private reference text in memory only; no source audio is copied.
     setLastStructuralEdit({
-      kind: 'importación SRT', segments: [...segments],
+      kind: 'importación de subtítulos', segments: [...segments],
       captions: { ...captionTexts }, expandedId: expandedSegmentId,
       previousSuggestions: {
         silences: [...detectedSilences],
@@ -2511,8 +2511,8 @@ export default function RoleplayStudioPage() {
                         ? 'Deshacer eliminación de intervención'
                         : lastStructuralEdit.kind === 'adición VAD'
                           ? 'Deshacer adición de cortes VAD'
-                          : lastStructuralEdit.kind === 'importación SRT'
-                            ? 'Deshacer importación SRT'
+                          : lastStructuralEdit.kind === 'importación de subtítulos'
+                            ? 'Deshacer importación de subtítulos'
                             : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
