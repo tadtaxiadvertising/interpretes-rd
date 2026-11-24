@@ -28,7 +28,7 @@ export async function enableCandidateEmailBinding(): Promise<BindingResult | 'di
   }
 }
 
-async function resolveProofBinding() {
+async function resolveProofBinding(operation: 'request' | 'confirm') {
   if (process.env.OPERATIONAL_EMAIL_BINDING_ENABLED !== 'true'
     || emailDeliveryMode(process.env) === 'disabled') return null;
   const ref = verifyApplicationRef((await cookies()).get(APPLICATION_REF_COOKIE)?.value ?? null);
@@ -39,6 +39,9 @@ async function resolveProofBinding() {
   const pilot = pilotRecipient(process.env);
   if (pilot === false || (pilot && email !== pilot)) return null;
   if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_~|-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(email) || email.length > 254) return null;
+  // Limit authenticated requests before touching the binding table. Database
+  // cooldown remains authoritative for sends across instances.
+  if (!rateLimit(data.user.id, { maxRequests: operation === 'request' ? 3 : 10, windowMs: 60000, keyPrefix: 'email-proof-' + operation }).success) return null;
   const linked = await linkCandidateAccount(prisma, ref, data.user);
   return linked === 'linked' || linked === 'already_linked'
     ? { candidateId: ref.candidateId, accountId: data.user.id, email } : null;
@@ -49,8 +52,9 @@ export async function requestCandidateMailboxProof(): Promise<MailboxChallengeRe
   try {
     if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true'
       || readOperationalMailConfig(process.env).status !== 'configured') return 'not_available';
-    const binding = await resolveProofBinding();
-    if (!binding || !rateLimit('mailbox-proof', { maxRequests: 10, windowMs: 60000, keyPrefix: 'email-proof' }).success) return 'not_available';
+    if (!rateLimit('global', { maxRequests: 30, windowMs: 60000, keyPrefix: 'email-proof-request-global' }).success) return 'not_available';
+    const binding = await resolveProofBinding('request');
+    if (!binding) return 'not_available';
     return await issueMailboxChallenge(prisma, binding, (recipient, token) => sendRecruitmentSmtp({
       recipient, subject: 'Verifica tu correo | Intérpretes RD',
       text: 'Copia este código en tu portal de postulante: ' + token + '. Vence en 15 minutos. No lo compartas.',
@@ -62,7 +66,8 @@ export async function requestCandidateMailboxProof(): Promise<MailboxChallengeRe
 export async function confirmCandidateMailboxProof(token: string): Promise<MailboxProofResult> {
   if (typeof token !== 'string' || !/^[0-9a-f]{32}$/.test(token)) return 'invalid';
   try {
-    const binding = await resolveProofBinding();
+    if (!rateLimit('global', { maxRequests: 120, windowMs: 60000, keyPrefix: 'email-proof-confirm-global' }).success) return 'invalid';
+    const binding = await resolveProofBinding('confirm');
     if (!binding) return 'invalid';
     return await consumeMailboxChallenge(prisma, binding, token);
   } catch { return 'unavailable'; }
