@@ -20,7 +20,7 @@ export default function RecruitmentFunnel() {
   const [isStartingRoleplay, setIsStartingRoleplay] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
-  const [accessNextAction, setAccessNextAction] = useState<"login" | "register" | null>(null);
+  const [accessNextAction, setAccessNextAction] = useState<"login" | "register" | "recover" | null>(null);
   const [terminal, setTerminal] = useState(false);
   const [applicationStatus, setApplicationStatus] = useState<string | null>(null);
 
@@ -104,13 +104,13 @@ export default function RecruitmentFunnel() {
         if ("accountAccess" in result && result.accountAccess === 'invited') {
           setInfoMsg("¡Tu postulación fue guardada! Enviamos a tu correo un enlace seguro para activar tu cuenta de candidato y continuar el proceso. Revisa también la carpeta de spam.");
         } else if ("accountAccess" in result && result.accountAccess === 'existing') {
-          setInfoMsg("Tu postulación está vinculada a tu cuenta existente. Inicia sesión con este mismo correo para continuar desde tu portal de candidato.");
-          setAccessNextAction("login");
+          setInfoMsg("Tu postulación está guardada. Si ya configuraste una contraseña, inicia sesión. Si nunca creaste una o no puedes entrar, utiliza «Recuperar o activar acceso» para recibir un enlace seguro en tu correo.");
+          setAccessNextAction("recover");
         } else if ("accountAccess" in result && result.accountAccess === 'manual') {
           setInfoMsg("Tu postulación quedó guardada. No pudimos enviar automáticamente el acceso; utiliza «Crear cuenta» con este mismo correo para continuar como candidato.");
           setAccessNextAction("register");
         } else if ("alreadyApplied" in result && result.alreadyApplied) {
-          setInfoMsg("Ya existe una postulación con este correo. Para continuar con seguridad, inicia sesión con ese correo.");
+          setInfoMsg("Ya existe una postulación con este correo. Si nunca configuraste una contraseña, recupérala mediante un enlace seguro enviado a tu correo.");
           setAccessNextAction("login");
         }
       } else {
@@ -192,10 +192,10 @@ export default function RecruitmentFunnel() {
 
           {accessNextAction && (
             <Link
-              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : "/register?next=%2Fcandidate"}
+              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : accessNextAction === "recover" ? "/forgot-password" : "/register?next=%2Fcandidate"}
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]"
             >
-              {accessNextAction === "login" ? "Iniciar sesión para continuar" : "Crear acceso de candidato"}
+              {accessNextAction === "login" ? "Iniciar sesión para continuar" : accessNextAction === "recover" ? "Recuperar o activar acceso" : "Crear acceso de candidato"}
             </Link>
           )}
 
@@ -301,10 +301,10 @@ export default function RecruitmentFunnel() {
 
           {accessNextAction && (
             <Link
-              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : "/register?next=%2Fcandidate"}
+              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : accessNextAction === "recover" ? "/forgot-password" : "/register?next=%2Fcandidate"}
               className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]"
             >
-              {accessNextAction === "login" ? "Iniciar sesión para continuar" : "Crear acceso de candidato"}
+              {accessNextAction === "login" ? "Iniciar sesión para continuar" : accessNextAction === "recover" ? "Recuperar o activar acceso" : "Crear acceso de candidato"}
             </Link>
           )}
 

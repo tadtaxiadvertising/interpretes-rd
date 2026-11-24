@@ -124,7 +124,7 @@ describe('Registration completion and next actions', () => {
   });
 
   it.each([
-    ['existing', 'Iniciar sesión para continuar', '/login?next=%2Fcandidate'],
+    ['existing', 'Recuperar o activar acceso', '/forgot-password'],
     ['manual', 'Crear acceso de candidato', '/register?next=%2Fcandidate'],
   ] as const)('provides an actionable route for %s candidate access', async (accountAccess, label, href) => {
     m.submitApplicationAction.mockResolvedValue({ success: true, accountAccess, alreadyApplied: false });

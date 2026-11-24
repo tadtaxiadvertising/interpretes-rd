@@ -65,7 +65,7 @@ export default function RegisterPage() {
           {error && (
             <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-500/10 border border-red-500/20 mb-6">
               <AlertCircle size={18} className="text-red-400 shrink-0" />
-              <p className="text-sm text-red-300">{error}</p>
+              <div className="space-y-2"><p className="text-sm text-red-300">{error}</p><Link href="/forgot-password" className="inline-block text-sm font-semibold text-blue-300 underline underline-offset-2">Recuperar o activar mi acceso</Link></div>
             </div>
           )}
 

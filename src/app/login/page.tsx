@@ -107,7 +107,7 @@ export default function LoginPage() {
           </h2>
           {role !== 'admin' && (
             <p className="mb-6 text-sm leading-6 text-gray-400">
-              Si ya enviaste una postulación, utiliza el mismo correo. El sistema te llevará automáticamente a tu portal privado de candidato, sin habilitar acceso operativo de intérprete.
+              Si ya enviaste una postulación, utiliza el mismo correo. Si aún no has configurado una contraseña, selecciona «¿Olvidaste tu contraseña?» para activar el acceso mediante un enlace seguro.
             </p>
           )}
 
