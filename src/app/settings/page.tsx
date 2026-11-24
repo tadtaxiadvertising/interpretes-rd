@@ -142,7 +142,7 @@ export default function SettingsPage() {
               <p className="text-xs">Este remitente pertenece a los correos operativos de Next.js, no certifica el remitente de autenticación configurado en Supabase.</p>
               <p className="text-xs">Diagnóstico local de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
-            <CorporateSmtpTest configured={operationalStatus === 'configured'} />
+            <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
             <CorporateEmailPilot configured={automation.mode === 'pilot' && automation.ready} />
