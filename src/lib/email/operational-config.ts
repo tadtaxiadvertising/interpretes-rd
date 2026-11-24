@@ -14,9 +14,11 @@ export type OperationalMailConfig = Readonly<{
   replyTo?: string;
 }>;
 
+export type BrevoMailConfig = Readonly<{ apiKey: string; from: string; replyTo?: string }>;
 type ConfigurationResult =
   | { status: Exclude<OperationalMailConfigStatus, 'configured'> }
-  | { status: 'configured'; config: OperationalMailConfig };
+  | { status: 'configured'; provider: 'smtp'; config: OperationalMailConfig }
+  | { status: 'configured'; provider: 'brevo'; config: BrevoMailConfig };
 
 const singleAddress = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,63}$/;
 const hostname = /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
@@ -29,6 +31,19 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
   const enabled = env.OPERATIONAL_EMAIL_ENABLED;
   if (enabled === undefined || enabled === '' || enabled === 'false') return { status: 'disabled' };
   if (enabled !== 'true') return { status: 'invalid' };
+
+  const provider = env.OPERATIONAL_EMAIL_PROVIDER || 'smtp';
+  if (provider !== 'smtp' && provider !== 'brevo') return { status: 'invalid' };
+  if (provider === 'brevo') {
+    const apiKey = env.BREVO_API_KEY;
+    const from = env.OPERATIONAL_EMAIL_FROM?.trim();
+    const replyTo = env.OPERATIONAL_EMAIL_REPLY_TO?.trim();
+    if (!apiKey || !from) return { status: 'incomplete' };
+    if (!/^[!-~]{16,512}$/.test(apiKey) || apiKey.startsWith('xsmtpsib-')
+      || !singleAddress.test(from) || from.length > 254
+      || (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254))) return { status: 'invalid' };
+    return { status: 'configured', provider: 'brevo', config: { apiKey, from, ...(replyTo ? { replyTo } : {}) } };
+  }
 
   const host = env.OPERATIONAL_SMTP_HOST?.trim();
   const port = env.OPERATIONAL_SMTP_PORT?.trim();
@@ -45,7 +60,7 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
   ) return { status: 'invalid' };
 
   return {
-    status: 'configured',
+    status: 'configured', provider: 'smtp',
     config: { host, port: port === '465' ? 465 : 587, secure: port === '465',
       requireTLS: port === '587', user, password, from, ...(replyTo ? { replyTo } : {}) },
   };
@@ -63,9 +78,10 @@ export function operationalMailDiagnostic(env: Readonly<Record<string, string | 
   const result = readOperationalMailConfig(env);
   return {
     status: result.status,
-    missing: requiredMailKeys.filter(key => !env[key]?.trim()),
+    provider: env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? 'brevo' : env.OPERATIONAL_EMAIL_PROVIDER && env.OPERATIONAL_EMAIL_PROVIDER !== 'smtp' ? 'invalid' : 'smtp',
+    missing: (env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? ['BREVO_API_KEY', 'OPERATIONAL_EMAIL_FROM'] : requiredMailKeys).filter(key => !env[key]?.trim()),
     sender: result.status === 'configured' ? result.config.from : null,
     replyTo: result.status === 'configured' ? result.config.replyTo ?? null : null,
-    tls: result.status === 'configured' ? (result.config.secure ? 'TLS 465' : 'STARTTLS 587') : null,
+    tls: result.status === 'configured' ? (result.provider === 'brevo' ? 'HTTPS (Brevo)' : result.config.secure ? 'TLS 465' : 'STARTTLS 587') : null,
   };
 }
