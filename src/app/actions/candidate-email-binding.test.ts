@@ -1,13 +1,13 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ cookies: vi.fn(), verify: vi.fn(), createClient: vi.fn(), getUser: vi.fn(), link: vi.fn(), rate: vi.fn(), issue: vi.fn(), consume: vi.fn(), state: vi.fn(), prisma: {} }));
+const mocks = vi.hoisted(() => ({ cookies: vi.fn(), verify: vi.fn(), createClient: vi.fn(), getUser: vi.fn(), link: vi.fn(), rate: vi.fn(), issue: vi.fn(), consume: vi.fn(), state: vi.fn(), existing: vi.fn(), prisma: {} }));
 vi.mock('next/headers', () => ({ cookies: mocks.cookies }));
 vi.mock('@/lib/prisma', () => ({ default: mocks.prisma }));
 vi.mock('@/lib/recruitment/application-ref', () => ({ APPLICATION_REF_COOKIE: 'rd_app_ref', verifyApplicationRef: mocks.verify }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: mocks.createClient }));
 vi.mock('@/lib/email/link-candidate-account', () => ({ linkCandidateAccount: mocks.link }));
 vi.mock('@/lib/security/rate-limit', () => ({ rateLimit: mocks.rate }));
-vi.mock('@/lib/email/mailbox-proof', () => ({ issueMailboxChallenge: mocks.issue, consumeMailboxChallenge: mocks.consume, readMailboxState: mocks.state }));
+vi.mock('@/lib/email/mailbox-proof', () => ({ issueMailboxChallenge: mocks.issue, consumeMailboxChallenge: mocks.consume, readMailboxState: mocks.state, readExistingProofBinding: mocks.existing }));
 vi.mock('@/lib/email/operational-config', () => ({ readOperationalMailConfig: () => ({ status: 'configured' }) }));
 vi.mock('@/lib/email/smtp-test', () => ({ sendRecruitmentSmtp: vi.fn() }));
 import { enableCandidateEmailBinding, requestCandidateMailboxProof, confirmCandidateMailboxProof, getCandidateMailboxState } from './candidate-email-binding';
@@ -119,6 +119,23 @@ describe('read-only mailbox state', () => {
     expect(mocks.cookies).not.toHaveBeenCalled();
     expect(mocks.link).not.toHaveBeenCalled();
     expect(mocks.issue).not.toHaveBeenCalled();
+  });
+  it('continues proof on a new device without creating a new binding', async () => {
+    mocks.cookies.mockResolvedValue({ get: () => undefined });
+    mocks.verify.mockReturnValue(null);
+    mocks.existing.mockResolvedValue({ candidateId: 1, accountId: id, email: 'candidate@example.test' });
+    mocks.consume.mockResolvedValue('verified');
+    expect(await confirmCandidateMailboxProof('a'.repeat(32))).toBe('verified');
+    expect(mocks.existing).toHaveBeenCalledWith(mocks.prisma, id, 'candidate@example.test');
+    expect(mocks.link).not.toHaveBeenCalled();
+  });
+  it('cannot create a binding on a new device without a signed reference', async () => {
+    mocks.cookies.mockResolvedValue({ get: () => undefined });
+    mocks.verify.mockReturnValue(null);
+    mocks.existing.mockResolvedValue(null);
+    expect(await confirmCandidateMailboxProof('a'.repeat(32))).toBe('invalid');
+    expect(mocks.link).not.toHaveBeenCalled();
+    expect(mocks.consume).not.toHaveBeenCalled();
   });
   it('does not expose state for an unauthorized pilot recipient', async () => {
     vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', 'other@example.test');
