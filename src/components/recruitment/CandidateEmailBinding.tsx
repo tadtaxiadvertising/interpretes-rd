@@ -25,8 +25,14 @@ export default function CandidateEmailBinding() {
         }
       } else {
         const result = await requestCandidateMailboxProof();
+        if (result === 'already_verified') {
+          setVerified(true);
+          setCode('');
+          setMessage('Tu correo ya está verificado. No necesitas solicitar otro código.');
+          return;
+        }
         setShowCode(true);
-        setMessage(result === 'sent' ? 'Revisa tu buzón y la carpeta de spam. Copia el código recibido; vence en 15 minutos.' : result === 'unconfirmed' ? 'No pudimos confirmar el envío. Revisa tu buzón antes de solicitar otro código.' : 'No hay un código nuevo disponible. Si ya recibiste uno, puedes confirmarlo; si no, intenta más tarde.');
+        setMessage(result === 'code_pending' ? 'Ya tienes un código vigente. Revisa tu buzón antes de solicitar otro.' : result === 'sent' ? 'Revisa tu buzón y la carpeta de spam. Copia el código recibido; vence en 15 minutos.' : result === 'unconfirmed' ? 'No pudimos confirmar el envío. Revisa tu buzón antes de solicitar otro código.' : 'No hay un código nuevo disponible. Si ya recibiste uno, puedes confirmarlo; si no, intenta más tarde.');
       }
     } catch { setMessage('La verificación no está disponible ahora. Tu acceso a la postulación no cambia.'); }
     finally { busy.current = false; setPending(false); }
