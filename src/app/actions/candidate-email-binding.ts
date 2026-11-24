@@ -5,9 +5,10 @@ import prisma from '@/lib/prisma';
 import { createClient } from '@/lib/supabase/server';
 import { APPLICATION_REF_COOKIE, verifyApplicationRef } from '@/lib/recruitment/application-ref';
 import { emailDeliveryMode, pilotRecipient } from '@/lib/email/pilot-recipient';
-import { issueMailboxChallenge, consumeMailboxChallenge, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
+import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, type MailboxState, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
 import { readOperationalMailConfig } from '@/lib/email/operational-config';
 import { sendRecruitmentSmtp } from '@/lib/email/smtp-test';
+import { isProtectedAdminEmail } from '@/lib/admin-identity';
 import { rateLimit } from '@/lib/security/rate-limit';
 import { linkCandidateAccount, type BindingResult } from '@/lib/email/link-candidate-account';
 
@@ -70,5 +71,31 @@ export async function confirmCandidateMailboxProof(token: string): Promise<Mailb
     const binding = await resolveProofBinding('confirm');
     if (!binding) return 'invalid';
     return await consumeMailboxChallenge(prisma, binding, token);
+  } catch { return 'unavailable'; }
+}
+
+
+/** Restore the display state after reload or sign-in on another device.
+ * An existing explicit binding is required; no signed reference is needed
+ * for this read, and no association is created from an email address. */
+export async function getCandidateMailboxState(): Promise<MailboxState> {
+  if (process.env.OPERATIONAL_EMAIL_BINDING_ENABLED !== 'true'
+    || emailDeliveryMode(process.env) === 'disabled') return 'unavailable';
+  try {
+    const { data, error } = await (await createClient()).auth.getUser();
+    const user = data.user;
+    if (error || !user?.email || user.is_anonymous || isProtectedAdminEmail(user.email)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) return 'unavailable';
+    const now = Date.now();
+    const confirmed = Date.parse(user.email_confirmed_at ?? '');
+    const banned = user.banned_until ? Date.parse(user.banned_until) : null;
+    if (!Number.isFinite(confirmed) || confirmed > now
+      || (banned !== null && (!Number.isFinite(banned) || banned > now))) return 'unavailable';
+    const email = user.email.trim().toLowerCase();
+    const pilot = pilotRecipient(process.env);
+    if (pilot === false || (pilot && pilot !== email)) return 'unavailable';
+    if (!/^[a-zA-Z0-9.!#$%&'*+/=?^_~|-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$/.test(email) || email.length > 254) return 'unavailable';
+    if (!rateLimit(user.id, { maxRequests: 15, windowMs: 60000, keyPrefix: 'email-proof-status' }).success) return 'unavailable';
+    return await readMailboxState(prisma, user.id, email);
   } catch { return 'unavailable'; }
 }
