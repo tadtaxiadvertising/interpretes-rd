@@ -23,3 +23,7 @@ El SQL propuesto permanece en docs/operations/proposed-recruitment-email-ledger.
 6. Probar recepción en un buzón controlado y documentar cómo conciliar estados ambiguos antes de habilitar notificaciones reales.
 
 El módulo de persistencia todavía no se invoca desde ninguna acción o tarea. La prueba SMTP existente sigue independiente.
+
+## Validación aislada en CI
+
+El workflow `email-ledger-postgres.yml` ejecuta la propuesta en un contenedor PostgreSQL desechable con una tabla de eventos mínima y roles de prueba. Comprueba RLS, revocación de acceso a roles públicos, restricciones, FK, borrado en cascada y carreras entre dos conexiones para insertar/reclamar el mismo evento. Los grants y la política de runtime del script son exclusivos de la prueba; no autorizan acceso en producción. No utiliza credenciales ni URLs de la base real. Los tests unitarios verifican por separado las consultas emitidas por el código; falta validar la integración con el rol real de Prisma y la entrega SMTP antes de activar el módulo.
