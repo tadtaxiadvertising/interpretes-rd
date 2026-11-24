@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { pilotRecipient } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
 import { readEmailDatabaseReadiness } from './database-readiness';
 import { discoverEmailEvents } from './recruitment-batch-discovery';
@@ -18,6 +19,8 @@ export async function processRecruitmentEmailBatch(): Promise<BatchReport> {
     || process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true'
     || process.env.OPERATIONAL_EMAIL_BINDING_ENABLED !== 'true'
     || readOperationalMailConfig(process.env).status !== 'configured') return emptyBatch('disabled');
+  const pilot = pilotRecipient(process.env);
+  if (pilot === false) return emptyBatch('disabled');
   const cutover = process.env.OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE;
   if (!cutover || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(cutover)) return emptyBatch('disabled');
   const date = new Date(cutover);
@@ -29,7 +32,7 @@ export async function processRecruitmentEmailBatch(): Promise<BatchReport> {
   try {
     if ((await readEmailDatabaseReadiness(prisma)).status !== 'ready') return emptyBatch('unavailable');
     return await runEmailBatch(true, {
-      discover: () => discoverEmailEvents(prisma, date, now),
+      discover: async () => (await discoverEmailEvents(prisma, date, now, pilot)).slice(0, pilot ? 1 : 3),
       enqueue: id => enqueueRecruitmentEmail(prisma, id),
       process: processQueuedRecruitmentEmail,
     });
