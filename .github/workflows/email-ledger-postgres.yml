@@ -1,0 +1,38 @@
+name: Isolated email ledger PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - 'docs/operations/proposed-recruitment-email-ledger.sql'
+      - 'src/lib/email/**'
+      - 'scripts/ci/verify-email-ledger-postgres.sh'
+      - '.github/workflows/email-ledger-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: email_ledger_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-fixture-only
+        options: >-
+          --health-cmd "pg_isready -U postgres -d email_ledger_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify proposed ledger on disposable PostgreSQL
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash scripts/ci/verify-email-ledger-postgres.sh
