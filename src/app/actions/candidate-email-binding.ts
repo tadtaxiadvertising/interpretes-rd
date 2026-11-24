@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 import { createClient } from '@/lib/supabase/server';
 import { APPLICATION_REF_COOKIE, verifyApplicationRef } from '@/lib/recruitment/application-ref';
 import { emailDeliveryMode, pilotRecipient } from '@/lib/email/pilot-recipient';
-import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, type MailboxState, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
+import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, readExistingProofBinding, type MailboxState, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
 import { readOperationalMailConfig } from '@/lib/email/operational-config';
 import { sendRecruitmentSmtp } from '@/lib/email/smtp-test';
 import { isProtectedAdminEmail } from '@/lib/admin-identity';
@@ -33,7 +33,6 @@ async function resolveProofBinding(operation: 'request' | 'confirm') {
   if (process.env.OPERATIONAL_EMAIL_BINDING_ENABLED !== 'true'
     || emailDeliveryMode(process.env) === 'disabled') return null;
   const ref = verifyApplicationRef((await cookies()).get(APPLICATION_REF_COOKIE)?.value ?? null);
-  if (!ref) return null;
   const { data, error } = await (await createClient()).auth.getUser();
   if (error || !data.user?.email) return null;
   const email = data.user.email.trim().toLowerCase();
@@ -43,6 +42,12 @@ async function resolveProofBinding(operation: 'request' | 'confirm') {
   // Limit authenticated requests before touching the binding table. Database
   // cooldown remains authoritative for sends across instances.
   if (!rateLimit(data.user.id, { maxRequests: operation === 'request' ? 3 : 10, windowMs: 60000, keyPrefix: 'email-proof-' + operation }).success) return null;
+  if (!ref) {
+    // Without the original signed reference, only a pre-existing explicit
+    // UUID binding can be used; never create a binding from an email match.
+    if (!isActiveProofSession(data.user)) return null;
+    return await readExistingProofBinding(prisma, data.user.id, email);
+  }
   const linked = await linkCandidateAccount(prisma, ref, data.user);
   return linked === 'linked' || linked === 'already_linked'
     ? { candidateId: ref.candidateId, accountId: data.user.id, email } : null;
@@ -78,19 +83,23 @@ export async function confirmCandidateMailboxProof(token: string): Promise<Mailb
 /** Restore the display state after reload or sign-in on another device.
  * An existing explicit binding is required; no signed reference is needed
  * for this read, and no association is created from an email address. */
+function isActiveProofSession(user: { id: string; email?: string; is_anonymous?: boolean; email_confirmed_at?: string; banned_until?: string }) {
+  if (!user.email || user.is_anonymous || isProtectedAdminEmail(user.email)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) return false;
+  const now = Date.now();
+  const confirmed = Date.parse(user.email_confirmed_at ?? '');
+  const banned = user.banned_until ? Date.parse(user.banned_until) : null;
+  return Number.isFinite(confirmed) && confirmed <= now
+    && (banned === null || (Number.isFinite(banned) && banned <= now));
+}
+
 export async function getCandidateMailboxState(): Promise<MailboxState> {
   if (process.env.OPERATIONAL_EMAIL_BINDING_ENABLED !== 'true'
     || emailDeliveryMode(process.env) === 'disabled') return 'unavailable';
   try {
     const { data, error } = await (await createClient()).auth.getUser();
     const user = data.user;
-    if (error || !user?.email || user.is_anonymous || isProtectedAdminEmail(user.email)
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(user.id)) return 'unavailable';
-    const now = Date.now();
-    const confirmed = Date.parse(user.email_confirmed_at ?? '');
-    const banned = user.banned_until ? Date.parse(user.banned_until) : null;
-    if (!Number.isFinite(confirmed) || confirmed > now
-      || (banned !== null && (!Number.isFinite(banned) || banned > now))) return 'unavailable';
+    if (error || !user?.email || !isActiveProofSession(user)) return 'unavailable';
     const email = user.email.trim().toLowerCase();
     const pilot = pilotRecipient(process.env);
     if (pilot === false || (pilot && pilot !== email)) return 'unavailable';
