@@ -110,6 +110,9 @@ export default function RoleplayStudioPage() {
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
   const pauseEditorialAudio = useCallback(() => { player.current?.pause(); pairPlayer.current?.pause(); }, []);
   const previewEnd = useRef<number | null>(null);
+  // Ignore rejections from an old play() request after the user previews a
+  // different turn, seeks elsewhere, stops, or replaces the recording.
+  const primaryPlaybackRevision = useRef(0);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
   const savingDraft = useRef(false);
@@ -220,6 +223,7 @@ export default function RoleplayStudioPage() {
   };
 
   const stopPreview = () => {
+    primaryPlaybackRevision.current += 1;
     previewEnd.current = null;
     setPreviewingId(null);
     player.current?.pause();
@@ -231,6 +235,7 @@ export default function RoleplayStudioPage() {
     const timestamp = Math.min(duration, Math.max(0, seconds));
     // Seeking manually exits a clip preview; its previous end must not stop
     // the administrator when inspecting another timestamp.
+    primaryPlaybackRevision.current += 1;
     previewEnd.current = null;
     setPreviewingId(null);
     stopPairPreview();
@@ -257,10 +262,12 @@ export default function RoleplayStudioPage() {
     // Seek directly even if audio is already playing. Calling pause() here
     // schedules an onPause event which can clear the new segment's end marker.
     stopPairPreview();
+    const request = ++primaryPlaybackRevision.current;
     audioPlayer.currentTime = segment.start;
     previewEnd.current = segment.end;
     setPreviewingId(segment.id);
     void audioPlayer.play().catch(() => {
+      if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
       previewEnd.current = null;
       setPreviewingId(null);
       setError('No fue posible reproducir el fragmento.');
@@ -280,11 +287,13 @@ export default function RoleplayStudioPage() {
     // Reuse the existing timeupdate cutoff and player. Never upload or
     // transcode private subtitle audio just to audition an intervention.
     stopPairPreview();
+    const request = ++primaryPlaybackRevision.current;
     audioPlayer.currentTime = cue.start;
     setPlayhead(cue.start);
     previewEnd.current = cue.end;
     setPreviewingId(previewId);
     void audioPlayer.play().catch(() => {
+      if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
       previewEnd.current = null;
       setPreviewingId(null);
       setError('No fue posible escuchar este turno de la transcripción.');
@@ -299,11 +308,13 @@ export default function RoleplayStudioPage() {
     // Reuse the same bounded playback marker as editorial cuts. Seeking does
     // not pause the player, avoiding an old onPause clearing the new marker.
     stopPairPreview();
+    const request = ++primaryPlaybackRevision.current;
     audioPlayer.currentTime = start;
     setPlayhead(start);
     previewEnd.current = end;
     setPreviewingId(null);
     void audioPlayer.play().catch(() => {
+      if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
       previewEnd.current = null;
       setError('No fue posible escuchar la región sugerida.');
     });
@@ -1729,8 +1740,8 @@ export default function RoleplayStudioPage() {
       if (previewEnd.current !== null &&
           event.currentTarget.currentTime >= previewEnd.current) stopPreview();
     },
-    onPause: () => { previewEnd.current = null; setPreviewingId(null); },
-    onEnded: () => { previewEnd.current = null; setPreviewingId(null); },
+    onPause: () => { primaryPlaybackRevision.current += 1; previewEnd.current = null; setPreviewingId(null); },
+    onEnded: () => { primaryPlaybackRevision.current += 1; previewEnd.current = null; setPreviewingId(null); },
     onError: () => {
       setDuration(0);
       setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');
