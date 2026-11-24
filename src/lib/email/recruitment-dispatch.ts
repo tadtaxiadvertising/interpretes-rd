@@ -23,12 +23,14 @@ export async function dispatchRecruitmentEmail(
   deps: DispatchDependencies,
 ): Promise<DispatchResult> {
   if (!enabled) return 'disabled';
+  let initialIdentity: string | undefined;
   let claim: Awaited<ReturnType<DispatchDependencies['claim']>>;
   try {
     const initial = await deps.load(eventId);
     if (!initial || initial.event.id !== eventId || evaluateDispatch(initial, deps.now()).status !== 'eligible') {
       return 'deferred';
     }
+    initialIdentity = initial.identity?.accountId;
     claim = await deps.claim(eventId);
   } catch {
     // A claim may have committed before a connection failure. Do not retry here.
@@ -40,7 +42,7 @@ export async function dispatchRecruitmentEmail(
   let result: FinalStatus = 'cancelled';
   try {
     const snapshot = await deps.load(eventId);
-    if (snapshot?.event.id === eventId) {
+    if (snapshot?.event.id === eventId && snapshot.identity?.accountId === initialIdentity) {
       const eligibility = evaluateDispatch(snapshot, deps.now());
       if (eligibility.status === 'eligible' && eligibility.kind === claim.kind) {
         const message = renderRecruitmentEmail(eligibility.kind);
