@@ -1740,8 +1740,21 @@ export default function RoleplayStudioPage() {
       if (previewEnd.current !== null &&
           event.currentTarget.currentTime >= previewEnd.current) stopPreview();
     },
-    onPause: () => { primaryPlaybackRevision.current += 1; previewEnd.current = null; setPreviewingId(null); },
-    onEnded: () => { primaryPlaybackRevision.current += 1; previewEnd.current = null; setPreviewingId(null); },
+    // A queued pause/ended event can arrive after another cue has started.
+    // Read the element's *current* state so an obsolete event cannot cancel
+    // the new bounded preview (or invalidate its play() rejection guard).
+    onPause: (event: SyntheticEvent<HTMLMediaElement>) => {
+      if (!event.currentTarget.paused) return;
+      primaryPlaybackRevision.current += 1;
+      previewEnd.current = null;
+      setPreviewingId(null);
+    },
+    onEnded: (event: SyntheticEvent<HTMLMediaElement>) => {
+      if (!event.currentTarget.ended) return;
+      primaryPlaybackRevision.current += 1;
+      previewEnd.current = null;
+      setPreviewingId(null);
+    },
     onError: () => {
       setDuration(0);
       setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');

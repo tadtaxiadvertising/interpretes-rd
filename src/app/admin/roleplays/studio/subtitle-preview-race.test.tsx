@@ -98,4 +98,41 @@ describe('Audio Studio stale subtitle playback requests', () => {
     expect(screen.queryByText('No fue posible escuchar este turno de la transcripción.')).toBeNull();
     expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
   });
+
+  it('ignores queued pause and ended events when a newer subtitle is already playing', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const player = await importReview();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 2' }));
+    expect(player.currentTime).toBe(3);
+    expect(screen.getByRole('button', { name: 'Detener escucha de turno 2' })).toBeTruthy();
+
+    // A previous pause/ended event may be delivered after the second
+    // play() has resumed the same HTMLAudioElement.
+    Object.defineProperty(player, 'paused', { configurable: true, value: false });
+    Object.defineProperty(player, 'ended', { configurable: true, value: false });
+    fireEvent.pause(player);
+    fireEvent.ended(player);
+    expect(screen.getByRole('button', { name: 'Detener escucha de turno 2' })).toBeTruthy();
+    player.currentTime = 5;
+    fireEvent.timeUpdate(player);
+    expect(screen.getByRole('button', { name: 'Escuchar solo turno 2' })).toBeTruthy();
+    expect(screen.getByText('Intervenciones (0/25)')).toBeTruthy();
+  });
+
+  it('still stops a preview on a real media pause or ended event', async () => {
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const player = await importReview();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 1' }));
+    Object.defineProperty(player, 'paused', { configurable: true, value: true });
+    fireEvent.pause(player);
+    expect(screen.getByRole('button', { name: 'Escuchar solo turno 1' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar solo turno 2' }));
+    Object.defineProperty(player, 'ended', { configurable: true, value: true });
+    fireEvent.ended(player);
+    expect(screen.getByRole('button', { name: 'Escuchar solo turno 2' })).toBeTruthy();
+  });
 });
