@@ -35,7 +35,6 @@ function fillApplication() {
     target: { value: 'Santiago' },
   });
   fireEvent.change(screen.getByLabelText(/Velocidad de descarga/), {
-  fireEvent.change(screen.getByRole('spinbutton', { name: 'Velocidad de descarga (Mbps)' }), {
     target: { value: '100' },
   });
 }
@@ -73,10 +72,12 @@ describe('Registration completion and next actions', () => {
     await waitFor(() => expect(m.submitApplicationAction).toHaveBeenCalledWith(
       expect.objectContaining({ country: 'Santiago', speedtestMbps: 100 })
     ));
+  });
+
   it('lists Dominican provinces and allows entering internet speed without a leading zero', () => {
     render(<RecruitmentFunnel />);
     const province = screen.getByRole('combobox', { name: 'Provincia de residencia' }) as HTMLSelectElement;
-    const speed = screen.getByRole('spinbutton', { name: 'Velocidad de descarga (Mbps)' }) as HTMLInputElement;
+    const speed = screen.getByRole('textbox', { name: 'Velocidad de descarga (Mbps)' }) as HTMLInputElement;
     expect(province.value).toBe('');
     expect(Array.from(province.options).some((option) => option.value === 'Distrito Nacional')).toBe(true);
     expect(Array.from(province.options).some((option) => option.value === 'Santiago')).toBe(true);
