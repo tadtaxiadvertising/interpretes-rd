@@ -22,6 +22,19 @@ export default function SettingsPage() {
     invalid: 'Configuración no válida. Revisa el remitente y las credenciales del proveedor.',
     configured: 'Variables válidas. Conexión y entrega aún no verificadas.',
   } as const;
+  const issueMessages = {
+    activation: 'OPERATIONAL_EMAIL_ENABLED: utiliza exactamente true o false.',
+    provider: 'OPERATIONAL_EMAIL_PROVIDER: selecciona brevo o smtp.',
+    brevo_smtp_key: 'BREVO_API_KEY: se detectó una clave SMTP. Genera una clave API en Brevo.',
+    brevo_mcp_token: 'BREVO_API_KEY: se detectó un token MCP codificado. Utiliza la clave API original, no el token de conexión MCP.',
+    brevo_key_format: 'BREVO_API_KEY: revisa el formato. Copia únicamente la clave API original, sin espacios, comillas ni JSON.',
+    sender: 'OPERATIONAL_EMAIL_FROM: introduce solo una dirección de correo autorizada, sin nombre ni signos adicionales.',
+    reply_to: 'OPERATIONAL_EMAIL_REPLY_TO: introduce una dirección de correo válida o deja el campo vacío.',
+    smtp_host: 'OPERATIONAL_SMTP_HOST: introduce solo el nombre del servidor, sin protocolo ni ruta.',
+    smtp_port: 'OPERATIONAL_SMTP_PORT: utiliza 465 o 587.',
+    smtp_user: 'OPERATIONAL_SMTP_USER: revisa el formato del usuario SMTP.',
+    smtp_password: 'OPERATIONAL_SMTP_PASSWORD: revisa si la contraseña contiene caracteres de control.',
+  } as const;
   return (
     <main className="max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header className="space-y-3">
@@ -102,13 +115,22 @@ export default function SettingsPage() {
                   <ul className="list-disc pl-5 break-all">{mailDiagnostic.missing.map(key => <li key={key}><code>{key}</code></li>)}</ul>
                 </div>
               )}
+              {mailDiagnostic.issues.length > 0 && (
+                <div role="alert" className="rounded-xl border border-[var(--border)] p-3 space-y-2">
+                  <p className="font-semibold">Parámetros que debes corregir</p>
+                  <ul className="list-disc pl-5 space-y-1 break-words">
+                    {mailDiagnostic.issues.map(issue => <li key={issue}>{issueMessages[issue]}</li>)}
+                  </ul>
+                  <p className="text-xs">El diagnóstico solo muestra nombres de variables y tipos de error; no lee ni muestra el valor de una clave en el navegador.</p>
+                </div>
+              )}
               {operationalStatus !== 'configured' && (
                 <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
                   <h4 className="font-semibold">Configurar y probar el remitente</h4>
                   <p>El SMTP personalizado de Supabase no configura automáticamente Next.js. Puedes usar SMTP o Brevo API con un remitente autorizado.</p>
                   <ol className="list-decimal space-y-1 pl-5">
                     <li>Abre las variables de entorno privadas del servicio frontend <strong>interpreters</strong> en Easypanel. Conserva las variables existentes.</li>
-                    <li>Para Brevo API, configura <code>OPERATIONAL_EMAIL_PROVIDER=brevo</code>, <code>BREVO_API_KEY</code> y <code>OPERATIONAL_EMAIL_FROM</code>. La clave SMTP no es una clave API. Para SMTP, conserva el proveedor predeterminado y completa host, puerto 465 o 587, usuario, contraseña y remitente.</li>
+                    <li>Para Brevo API, configura <code>OPERATIONAL_EMAIL_PROVIDER=brevo</code>, <code>BREVO_API_KEY</code> y <code>OPERATIONAL_EMAIL_FROM</code>. La clave SMTP y el token MCP no son claves API. Para SMTP, conserva el proveedor predeterminado y completa host, puerto 465 o 587, usuario, contraseña y remitente.</li>
                     <li>Establece los siguientes controles para permitir solamente la prueba manual, sin activar el despacho de reclutamiento:</li>
                   </ol>
                   <pre className="overflow-x-auto rounded-lg border border-[var(--border)] p-3 text-xs">{'OPERATIONAL_EMAIL_ENABLED=true\nOPERATIONAL_EMAIL_DISPATCH_ENABLED=false\nOPERATIONAL_EMAIL_BATCH_ENABLED=false\nOPERATIONAL_EMAIL_BINDING_ENABLED=false\nOPERATIONAL_EMAIL_GENERAL_ENABLED=false\nOPERATIONAL_EMAIL_SCHEDULER_ENABLED=false'}</pre>
@@ -118,7 +140,7 @@ export default function SettingsPage() {
                 </div>
               )}
               <p className="text-xs">Este remitente pertenece a los correos operativos de Next.js, no certifica el remitente de autenticación configurado en Supabase.</p>
-              <p className="text-xs">Diagnóstico de variables privadas de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
+              <p className="text-xs">Diagnóstico local de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
