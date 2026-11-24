@@ -317,6 +317,48 @@ describe('Roleplay Studio editable project recovery', () => {
     expect(sha256StudioAudio).toHaveBeenCalledOnce();
   });
 
+  it('asks before replacing an empty JSON editor that still has recoverable undo work', async () => {
+    const { upload } = selectSource();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.change(screen.getByLabelText('Título'), {
+      target: { value: 'Edición privada recuperable' },
+    });
+    // An empty but valid project is a realistic reset. The visible editor is
+    // empty afterwards, but undo still owns the previous unsaved work.
+    const empty = createStudioDraft(3, hash, [], 90);
+    const file = new File(['empty'], 'empty.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', {
+      configurable: true, value: async () => JSON.stringify(empty),
+    });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Abrir proyecto JSON de la grabación seleccionada/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Deshacer apertura de proyecto JSON' })).toBeTruthy();
+    expect(screen.getByLabelText('Contenido no incluido en el proyecto JSON').textContent)
+      .toContain('historial de «Deshacer»');
+
+    const unload = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+
+    vi.mocked(window.confirm).mockClear();
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    fireEvent.change(upload, {
+      target: { files: [new File(['ID4'], 'different.mp3', { type: 'audio/mpeg' })] },
+    });
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByRole('button', { name: 'Deshacer apertura de proyecto JSON' })).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer apertura de proyecto JSON' }));
+    expect((screen.getByLabelText('Título') as HTMLInputElement).value)
+      .toBe('Edición privada recuperable');
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+  });
+
   it('never changes a prior server choice when rejecting a verified compound v2 draft', async () => {
     selectSource();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));

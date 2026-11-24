@@ -142,15 +142,33 @@ export default function RoleplayStudioPage() {
   const happyScribeListAbort = useRef<AbortController | null>(null);
   // Keep an up-to-date snapshot for transfers that may resolve after edits.
   // A preflight approval only covers the source and work that existed then.
-  const audioReplacementEdits = useRef({ segments, reviewCues, suggestedClips, captionTexts });
-  audioReplacementEdits.current = { segments, reviewCues, suggestedClips, captionTexts };
-  const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales. Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
+  // A restored empty JSON or a deletion can leave no visible cuts while the
+  // previous edits still exist in the one-step undo snapshot. Protect that
+  // recoverable work before switching audio, navigating away or transferring
+  // a HappyScribe source.
+  const hasRecoverableUndo = (edit: typeof lastStructuralEdit) =>
+    Boolean(edit && (edit.segments.length > 0 ||
+      Object.keys(edit.captions).length > 0 ||
+      (edit.previousReview?.cues.length ?? 0) > 0 ||
+      (edit.previousSuggestions?.clips.length ?? 0) > 0 ||
+      (edit.previousSuggestions?.silences.length ?? 0) > 0));
+  const audioReplacementEdits = useRef({
+    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit,
+  });
+  audioReplacementEdits.current = {
+    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit,
+  };
+  const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales, incluidas las ediciones recuperables con «Deshacer». Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
   const hasReplacementWork = (edits: typeof audioReplacementEdits.current) =>
-    edits.segments.length > 0 || edits.reviewCues.length > 0 || edits.suggestedClips.length > 0;
+    edits.segments.length > 0 || edits.reviewCues.length > 0 ||
+    edits.suggestedClips.length > 0 || Object.keys(edits.captionTexts).length > 0 ||
+    hasRecoverableUndo(edits.lastStructuralEdit);
   const sameEditorEdits = (snapshot: typeof audioReplacementEdits.current) => {
     const live = audioReplacementEdits.current;
     return live.segments === snapshot.segments && live.reviewCues === snapshot.reviewCues &&
-      live.suggestedClips === snapshot.suggestedClips && live.captionTexts === snapshot.captionTexts;
+      live.suggestedClips === snapshot.suggestedClips &&
+      live.captionTexts === snapshot.captionTexts &&
+      live.lastStructuralEdit === snapshot.lastStructuralEdit;
   };
   // The JSON project omits the original audio and private transcript context.
   // Guard the in-memory editor even after an export: leaving can discard
@@ -160,7 +178,8 @@ export default function RoleplayStudioPage() {
   // Neither private transcript references, pending SRT choices, nor
   // unapplied silence suggestions are part of the portable JSON schema.
   const hasUnstoredDraftContext = reviewCues.length > 0 ||
-    suggestedClips.length > 0 || Object.keys(captionTexts).length > 0;
+    suggestedClips.length > 0 || Object.keys(captionTexts).length > 0 ||
+    hasRecoverableUndo(lastStructuralEdit);
   const leaveEditorPrompt = 'Salir de Audio Studio descartará los cortes y las selecciones de esta pestaña. Comprueba que guardaste tu proyecto y conservas el audio original. ¿Continuar?';
   useEffect(() => {
     if (!hasActiveEditorWork) return;
@@ -476,7 +495,8 @@ export default function RoleplayStudioPage() {
       approved?.edits.segments === editsNow.segments &&
       approved?.edits.reviewCues === editsNow.reviewCues &&
       approved?.edits.suggestedClips === editsNow.suggestedClips &&
-      approved?.edits.captionTexts === editsNow.captionTexts;
+      approved?.edits.captionTexts === editsNow.captionTexts &&
+      approved?.edits.lastStructuralEdit === editsNow.lastStructuralEdit;
     if (activeAudioFile.current && hasReplacementWork(editsNow) &&
         !approvedStillValid && !window.confirm(replacementPrompt)) {
       return;
@@ -2487,8 +2507,8 @@ export default function RoleplayStudioPage() {
           {hasUnstoredDraftContext && (
             <p className="text-xs leading-5 text-amber-100" aria-label="Contenido no incluido en el proyecto JSON">
               Atención: el JSON no guarda referencias privadas de transcripción, turnos SRT
-              todavía sin aplicar ni sugerencias sin confirmar. Aplica los cortes que necesites
-              y conserva los SRT/VTT originales antes de abandonar el editor.
+              todavía sin aplicar, sugerencias sin confirmar ni el historial de «Deshacer».
+              Aplica los cortes que necesites y conserva los SRT/VTT originales antes de abandonar el editor.
             </p>
           )}
           <div className="flex flex-wrap items-end gap-4">
