@@ -3,13 +3,18 @@
 import { useRef, useState } from 'react';
 import { requestCandidateMailboxProof, confirmCandidateMailboxProof } from '@/app/actions/candidate-email-binding';
 
-export default function CandidateEmailBinding() {
+import type { MailboxState } from '@/lib/email/mailbox-proof';
+
+export default function CandidateEmailBinding({ initialState = 'unverified' }: { initialState?: MailboxState }) {
   const busy = useRef(false);
   const [pending, setPending] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState(initialState === 'verified'
+    ? 'Tu correo ya está verificado. No necesitas solicitar otro código.'
+    : initialState === 'pending' ? 'Tienes un código vigente. Revisa tu buzón y la carpeta de spam.'
+    : '');
   const [code, setCode] = useState('');
-  const [verified, setVerified] = useState(false);
-  const [showCode, setShowCode] = useState(false);
+  const [verified, setVerified] = useState(initialState === 'verified');
+  const [showCode, setShowCode] = useState(initialState === 'pending');
 
   async function verifyMailbox(confirm: boolean) {
     if (busy.current || verified) return;
