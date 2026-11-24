@@ -30,7 +30,7 @@ export function ExportCandidatesButton({ data }: ExportCandidatesButtonProps) {
       'Name',
       'Email',
       'Phone',
-      'Country',
+      'Province / legacy location',
       'Source',
       'English Level',
       'Internet Speed',
