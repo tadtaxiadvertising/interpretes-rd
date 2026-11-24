@@ -5,26 +5,17 @@ import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
 import CorporateEmailPilot from './CorporateEmailPilot';
-import { emailDeliveryMode } from '@/lib/email/pilot-recipient';
 import EmailDatabaseReadiness from './EmailDatabaseReadiness';
 import { operationalMailDiagnostic } from '@/lib/email/operational-config';
-import { emailAutomationStatus } from '@/lib/email/automation-status';
+import { emailRolloutReadiness } from '@/lib/email/automation-status';
 
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
   const mailDiagnostic = operationalMailDiagnostic(process.env);
   const operationalStatus = mailDiagnostic.status;
-  const automation = emailAutomationStatus(process.env);
-  const automationChecks: [string, boolean][] = [
-    ['SMTP configurado', automation.smtpConfigured],
-    ['Vinculación habilitada', automation.bindingEnabled],
-    ['Despacho habilitado', automation.dispatchEnabled],
-    ['Lotes habilitados', automation.batchEnabled],
-    ['Entrada programable habilitada', automation.schedulerEnabled],
-    ['Credencial del programador válida', automation.schedulerCredentialConfigured],
-    ['Fecha de inicio válida', automation.cutoverValid],
-  ];
+  const automation = emailRolloutReadiness(process.env);
+  const automationChecks = automation.checks;
   const operationalMessages = {
     disabled: 'Desactivado. No se realizan envíos operativos.',
     incomplete: 'Configuración incompleta. Revisa las variables privadas del servidor.',
@@ -116,11 +107,12 @@ export default function SettingsPage() {
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
-            <CorporateEmailPilot configured={emailDeliveryMode(process.env) === 'pilot' && !automation.schedulerEnabled && automation.smtpConfigured && automation.bindingEnabled && automation.dispatchEnabled && automation.batchEnabled && automation.cutoverValid} />
+            <CorporateEmailPilot configured={automation.mode === 'pilot' && automation.ready} />
             <EmailDatabaseReadiness />
             <section aria-labelledby="email-automation" className="space-y-3 rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--foreground)]">
               <h3 id="email-automation" className="font-semibold">Automatización de comunicaciones</h3>
-              <p>{automationChecks.every(([, ready]) => ready) ? 'Configuración completa. Ejecución externa y entrega todavía no verificadas.' : 'Automatización no lista: revisa los controles pendientes.'}</p>
+              <p><strong>Modo:</strong> {automation.mode === 'pilot' ? 'Piloto controlado' : automation.mode === 'general' ? 'Despacho general' : 'Desactivado o configuración incompatible'}</p>
+              <p>{automation.ready ? (automation.mode === 'pilot' ? 'Configuración del piloto lista. Aún debes vincular la cuenta de prueba y comprobar la recepción.' : 'Configuración general lista. Ejecución externa y entrega todavía no verificadas.') : 'Revisa los controles pendientes para el modo seleccionado.'}</p>
               <dl className="space-y-2">
                 {automationChecks.map(([label, ready]) => (
                   <div key={label} className="flex flex-wrap justify-between gap-2">
