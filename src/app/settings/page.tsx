@@ -19,7 +19,7 @@ export default function SettingsPage() {
   const operationalMessages = {
     disabled: 'Desactivado. No se realizan envíos operativos.',
     incomplete: 'Configuración incompleta. Revisa las variables privadas del servidor.',
-    invalid: 'Configuración no válida. Revisa el remitente, servidor y puerto TLS.',
+    invalid: 'Configuración no válida. Revisa el remitente y las credenciales del proveedor.',
     configured: 'Variables válidas. Conexión y entrega aún no verificadas.',
   } as const;
   return (
@@ -88,6 +88,7 @@ export default function SettingsPage() {
             <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
               <h3 className="font-semibold">Configuración de correos operativos</h3>
               <p>{operationalMessages[operationalStatus]}</p>
+              <p><strong>Proveedor:</strong> {mailDiagnostic.provider === 'brevo' ? 'Brevo API (HTTPS)' : mailDiagnostic.provider === 'smtp' ? 'SMTP' : 'No válido'}</p>
               {mailDiagnostic.sender && (
                 <dl className="space-y-1 break-all">
                   <div><dt className="font-medium">Remitente operativo y destino de prueba</dt><dd>Intérpretes RD &lt;{mailDiagnostic.sender}&gt;</dd></div>
@@ -104,10 +105,10 @@ export default function SettingsPage() {
               {operationalStatus !== 'configured' && (
                 <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
                   <h4 className="font-semibold">Configurar y probar el remitente</h4>
-                  <p>El SMTP personalizado de Supabase no configura automáticamente Next.js. Puedes utilizar el mismo proveedor y remitente autorizado, con credenciales SMTP válidas para este servicio.</p>
+                  <p>El SMTP personalizado de Supabase no configura automáticamente Next.js. Puedes usar SMTP o Brevo API con un remitente autorizado.</p>
                   <ol className="list-decimal space-y-1 pl-5">
                     <li>Abre las variables de entorno privadas del servicio frontend <strong>interpreters</strong> en Easypanel. Conserva las variables existentes.</li>
-                    <li>Completa los cinco parámetros del proveedor: host, puerto 465 (TLS) o 587 (STARTTLS), usuario, contraseña SMTP y dirección remitente. No uses la contraseña de inicio de sesión de la plataforma.</li>
+                    <li>Para Brevo API, configura <code>OPERATIONAL_EMAIL_PROVIDER=brevo</code>, <code>BREVO_API_KEY</code> y <code>OPERATIONAL_EMAIL_FROM</code>. La clave SMTP no es una clave API. Para SMTP, conserva el proveedor predeterminado y completa host, puerto 465 o 587, usuario, contraseña y remitente.</li>
                     <li>Establece los siguientes controles para permitir solamente la prueba manual, sin activar el despacho de reclutamiento:</li>
                   </ol>
                   <pre className="overflow-x-auto rounded-lg border border-[var(--border)] p-3 text-xs">{'OPERATIONAL_EMAIL_ENABLED=true\nOPERATIONAL_EMAIL_DISPATCH_ENABLED=false\nOPERATIONAL_EMAIL_BATCH_ENABLED=false\nOPERATIONAL_EMAIL_BINDING_ENABLED=false\nOPERATIONAL_EMAIL_GENERAL_ENABLED=false\nOPERATIONAL_EMAIL_SCHEDULER_ENABLED=false'}</pre>
