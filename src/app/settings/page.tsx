@@ -101,6 +101,21 @@ export default function SettingsPage() {
                   <ul className="list-disc pl-5 break-all">{mailDiagnostic.missing.map(key => <li key={key}><code>{key}</code></li>)}</ul>
                 </div>
               )}
+              {operationalStatus !== 'configured' && (
+                <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+                  <h4 className="font-semibold">Configurar y probar el remitente</h4>
+                  <p>El SMTP personalizado de Supabase no configura automáticamente Next.js. Puedes utilizar el mismo proveedor y remitente autorizado, con credenciales SMTP válidas para este servicio.</p>
+                  <ol className="list-decimal space-y-1 pl-5">
+                    <li>Abre las variables de entorno privadas del servicio frontend <strong>interpreters</strong> en Easypanel. Conserva las variables existentes.</li>
+                    <li>Completa los cinco parámetros del proveedor: host, puerto 465 (TLS) o 587 (STARTTLS), usuario, contraseña SMTP y dirección remitente. No uses la contraseña de inicio de sesión de la plataforma.</li>
+                    <li>Establece los siguientes controles para permitir solamente la prueba manual, sin activar el despacho de reclutamiento:</li>
+                  </ol>
+                  <pre className="overflow-x-auto rounded-lg border border-[var(--border)] p-3 text-xs">{'OPERATIONAL_EMAIL_ENABLED=true\nOPERATIONAL_EMAIL_DISPATCH_ENABLED=false\nOPERATIONAL_EMAIL_BATCH_ENABLED=false\nOPERATIONAL_EMAIL_BINDING_ENABLED=false\nOPERATIONAL_EMAIL_GENERAL_ENABLED=false\nOPERATIONAL_EMAIL_SCHEDULER_ENABLED=false'}</pre>
+                  <p>Aplica los cambios en el servicio correcto según el procedimiento de despliegue. Vuelve a esta pantalla y envía la prueba al remitente configurado; comprueba su recepción antes de preparar el piloto.</p>
+                  <a href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/docs/operations/recruitment-email-ledger.md#procedimiento-de-puesta-en-servicio" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">Guía de configuración operativa (nueva pestaña)</a>
+                  <p className="text-xs">No introduzcas contraseñas en esta pantalla, en GitHub ni en el chat. No es necesario modificar Supabase, migrar la base de datos o cambiar AUTH_SECRET para esta prueba.</p>
+                </div>
+              )}
               <p className="text-xs">Este remitente pertenece a los correos operativos de Next.js, no certifica el remitente de autenticación configurado en Supabase.</p>
               <p className="text-xs">Diagnóstico de variables privadas de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
