@@ -32,7 +32,7 @@ export default function CandidateEmailBinding() {
           return;
         }
         setShowCode(true);
-        setMessage(result === 'code_pending' ? 'Ya tienes un código vigente. Revisa tu buzón antes de solicitar otro.' : result === 'sent' ? 'Revisa tu buzón y la carpeta de spam. Copia el código recibido; vence en 15 minutos.' : result === 'unconfirmed' ? 'No pudimos confirmar el envío. Revisa tu buzón antes de solicitar otro código.' : 'No hay un código nuevo disponible. Si ya recibiste uno, puedes confirmarlo; si no, intenta más tarde.');
+        setMessage(result === 'code_pending' ? 'Ya tienes un código vigente. Revisa tu buzón y la carpeta de spam. Puedes usarlo hasta que venza; después podrás solicitar otro.' : result === 'sent' ? 'Revisa tu buzón y la carpeta de spam. Copia el código recibido; vence en 15 minutos.' : result === 'unconfirmed' ? 'No pudimos confirmar el envío. Revisa tu buzón antes de solicitar otro código.' : 'No hay un código nuevo disponible. Si ya recibiste uno, puedes confirmarlo; si no, intenta más tarde.');
       }
     } catch { setMessage('La verificación no está disponible ahora. Tu acceso a la postulación no cambia.'); }
     finally { busy.current = false; setPending(false); }
@@ -43,7 +43,7 @@ export default function CandidateEmailBinding() {
       <p className="text-sm text-[var(--text-secondary)]">Verifica tu correo para recibir actualizaciones. Este paso es opcional y no modifica tu acceso ni tu contraseña.</p>
       {!verified && (
         <>
-          <button type="button" disabled={pending} onClick={() => verifyMailbox(false)} className="rounded-xl bg-[#1764bf] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60">{pending ? 'Procesando…' : showCode ? 'Solicitar otro código' : 'Verificar mi correo'}</button>
+          <button type="button" disabled={pending} onClick={() => verifyMailbox(false)} className="rounded-xl bg-[#1764bf] px-4 py-3 text-sm font-semibold text-white hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60">{pending ? 'Procesando…' : showCode ? 'Comprobar o solicitar código' : 'Verificar mi correo'}</button>
           {!showCode && <button type="button" disabled={pending} onClick={() => setShowCode(true)} className="block text-sm font-medium text-[var(--theme-link)] underline">Ya tengo un código</button>}
           {showCode && (
             <>

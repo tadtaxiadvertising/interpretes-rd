@@ -24,6 +24,10 @@ export async function issueMailboxChallenge(db: Client, binding: Binding, send: 
         AND p.role = 'candidate' AND p.interpreter_id IS NULL
         AND lower(trim(c.email)) = ${binding.email} AND lower(trim(p.email)) = ${binding.email}
         AND (b.challenge_issued_at IS NULL OR b.challenge_issued_at <= now() - interval '5 minutes')
+        -- A code already sent for this mailbox remains usable for its entire
+        -- advertised lifetime, even after the shorter abuse cooldown ends.
+        AND (b.challenge_email IS DISTINCT FROM ${binding.email} OR b.challenge_hash IS NULL
+          OR b.challenge_expires_at IS NULL OR b.challenge_expires_at <= now())
         AND (b.verified_email IS DISTINCT FROM ${binding.email} OR b.mailbox_verified_at IS NULL)
     `;
     if (changed !== 1) {

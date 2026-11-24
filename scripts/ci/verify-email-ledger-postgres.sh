@@ -168,3 +168,39 @@ $check$;
 UPDATE private_email.candidate_account_binding SET verified_email=challenge_email, mailbox_verified_at=now(), challenge_email=NULL, challenge_hash=NULL, challenge_expires_at=NULL WHERE candidate_id=2 AND challenge_hash=repeat('a',64) AND challenge_expires_at>now();
 SQL
 assert_equal "$(db -c "SELECT count(*) FROM private_email.candidate_account_binding WHERE candidate_id=2 AND verified_email='candidate@example.test' AND mailbox_verified_at IS NOT NULL AND challenge_hash IS NULL")" 1 verified-once
+
+# A same-mailbox challenge stays valid for all 15 minutes, even after the
+# five-minute abuse cooldown. Exercise the actual UPDATE from the TypeScript
+# implementation against isolated fixtures, not a separately maintained query.
+db <<'SQL'
+ALTER TABLE public.recruitment_candidates ADD COLUMN email text;
+ALTER TABLE public.user_profiles ADD COLUMN email text, ADD COLUMN role text, ADD COLUMN interpreter_id integer;
+UPDATE public.recruitment_candidates SET email='candidate@example.test' WHERE id=2;
+UPDATE public.user_profiles SET email='candidate@example.test', role='candidate' WHERE id='123e4567-e89b-42d3-a456-426614174001';
+UPDATE private_email.candidate_account_binding SET verified_email=NULL, mailbox_verified_at=NULL,
+  challenge_email='candidate@example.test', challenge_hash=repeat('b',64),
+  challenge_issued_at=now()-interval '6 minutes', challenge_expires_at=now()+interval '9 minutes' WHERE candidate_id=2;
+SQL
+# Substitute only the known parameter expressions with deterministic test data.
+# No application or production data is read.
+issue_sql="$(python3 - "$root/src/lib/email/mailbox-proof.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const changed = await db.$executeRaw`', 1)[1].split('`;', 1)[0]
+for parameter, value in {
+    '${binding.email}': "'candidate@example.test'",
+    '${digest(token)}': "repeat('c',64)",
+    '${binding.candidateId}': '2',
+    '${binding.accountId}': "'123e4567-e89b-42d3-a456-426614174001'",
+}.items():
+    sql = sql.replace(parameter, value)
+assert '${' not in sql, 'Unexpected challenge parameter'
+print(sql + ';')
+PY
+)"
+db -c "$issue_sql"
+assert_equal "$(db -c "SELECT challenge_hash=repeat('b',64) FROM private_email.candidate_account_binding WHERE candidate_id=2")" t live-code-preserved
+db -c "UPDATE private_email.candidate_account_binding SET challenge_issued_at=now()-interval '16 minutes', challenge_expires_at=now()-interval '1 minute' WHERE candidate_id=2"
+db -c "$issue_sql"
+assert_equal "$(db -c "SELECT challenge_hash=repeat('c',64) AND challenge_expires_at>now() FROM private_email.candidate_account_binding WHERE candidate_id=2")" t expired-code-replaced
+echo 'Isolated mailbox code lifetime checks passed.'
