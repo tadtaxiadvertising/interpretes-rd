@@ -133,6 +133,13 @@ describe('Registration completion and next actions', () => {
     const link = await screen.findByRole('link', { name: label });
     expect(link.getAttribute('href')).toBe(href);
     expect(link.getAttribute('href')).not.toContain('candidate@example.test');
+    if (accountAccess === 'existing') {
+      expect(screen.getByRole('link', { name: 'Iniciar sesión para continuar' }).getAttribute('href'))
+        .toBe('/login?next=%2Fcandidate');
+    } else {
+      expect(screen.queryByRole('link', { name: 'Iniciar sesión para continuar' })).toBeNull();
+      expect(screen.queryByRole('link', { name: 'Recuperar o activar acceso' })).toBeNull();
+    }
     expect(m.startCandidateRoleplay).not.toHaveBeenCalled();
   });
 
@@ -151,6 +158,7 @@ describe('Registration completion and next actions', () => {
     await submitFilledApplication();
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('enlace seguro'));
     expect(screen.queryByRole('link', { name: 'Iniciar sesión para continuar' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Recuperar o activar acceso' })).toBeNull();
   });
 
   it('keeps account guidance visible after a transient step-restoration failure', async () => {
@@ -159,6 +167,7 @@ describe('Registration completion and next actions', () => {
     render(<RecruitmentFunnel />);
     await submitFilledApplication();
     expect(await screen.findByRole('link', { name: 'Iniciar sesión para continuar' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Recuperar o activar acceso' }).getAttribute('href')).toBe('/forgot-password');
   });
 
   it('keeps direct next-action access when the server advances to induction', async () => {
@@ -174,5 +183,6 @@ describe('Registration completion and next actions', () => {
     expect(await screen.findByRole('heading', { name: 'Conoce más sobre Intérpretes RD' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Iniciar sesión para continuar' }).getAttribute('href'))
       .toBe('/login?next=%2Fcandidate');
+    expect(screen.getByRole('link', { name: 'Recuperar o activar acceso' }).getAttribute('href')).toBe('/forgot-password');
   });
 });

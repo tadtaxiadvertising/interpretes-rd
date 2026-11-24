@@ -190,14 +190,7 @@ export default function RecruitmentFunnel() {
             </div>
           )}
 
-          {accessNextAction && (
-            <Link
-              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : accessNextAction === "recover" ? "/forgot-password" : "/register?next=%2Fcandidate"}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]"
-            >
-              {accessNextAction === "login" ? "Iniciar sesión para continuar" : accessNextAction === "recover" ? "Recuperar o activar acceso" : "Crear acceso de candidato"}
-            </Link>
-          )}
+          {accessNextAction && <CandidateAccessLinks action={accessNextAction} />}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-4">
             <input 
@@ -299,14 +292,7 @@ export default function RecruitmentFunnel() {
             </div>
           )}
 
-          {accessNextAction && (
-            <Link
-              href={accessNextAction === "login" ? "/login?next=%2Fcandidate" : accessNextAction === "recover" ? "/forgot-password" : "/register?next=%2Fcandidate"}
-              className="inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]"
-            >
-              {accessNextAction === "login" ? "Iniciar sesión para continuar" : accessNextAction === "recover" ? "Recuperar o activar acceso" : "Crear acceso de candidato"}
-            </Link>
-          )}
+          {accessNextAction && <CandidateAccessLinks action={accessNextAction} />}
 
           {errorMsg && (
             <div role="alert" className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm font-medium text-red-700">
@@ -374,6 +360,21 @@ function StepIndicator({ icon: Icon, label, active, current }: { icon: any, labe
         <Icon className="w-5 h-5" />
       </div>
       <span className="max-w-full text-[10px] sm:text-xs leading-tight font-semibold break-words">{label}</span>
+    </div>
+  );
+}
+
+/** Existing candidates may either sign in or activate/reset their password. */
+function CandidateAccessLinks({ action }: { action: "login" | "register" | "recover" }) {
+  const primary = "inline-flex min-h-11 items-center justify-center rounded-xl bg-[#1764bf] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]";
+  const secondary = "inline-flex min-h-11 items-center justify-center rounded-xl border border-[#1764bf] px-5 py-3 text-sm font-semibold text-[var(--theme-recruitment-accent)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1764bf]";
+  if (action === "register") {
+    return <Link href="/register?next=%2Fcandidate" className={primary}>Crear acceso de candidato</Link>;
+  }
+  return (
+    <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <Link href="/login?next=%2Fcandidate" className={primary}>Iniciar sesión para continuar</Link>
+      <Link href="/forgot-password" className={secondary}>Recuperar o activar acceso</Link>
     </div>
   );
 }
