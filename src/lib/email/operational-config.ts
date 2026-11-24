@@ -39,7 +39,7 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
   if (!host || !port || !user || !password || !from) return { status: 'incomplete' };
   if (
     !hostname.test(host) || (port !== '465' && port !== '587')
-    || hasControl(user) || hasControl(password)
+    || user.includes(':') || hasControl(user) || hasControl(password)
     || !singleAddress.test(from) || from.length > 254
     || (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254))
   ) return { status: 'invalid' };
@@ -54,4 +54,18 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
 /** Safe projection for admin UI. Configured does not mean verified or delivered. */
 export function operationalMailStatus(env: Readonly<Record<string, string | undefined>>): OperationalMailConfigStatus {
   return readOperationalMailConfig(env).status;
+}
+
+const requiredMailKeys = ['OPERATIONAL_SMTP_HOST', 'OPERATIONAL_SMTP_PORT', 'OPERATIONAL_SMTP_USER', 'OPERATIONAL_SMTP_PASSWORD', 'OPERATIONAL_EMAIL_FROM'] as const;
+
+/** Administrator-only projection; do not expose SMTP login, host or secrets. */
+export function operationalMailDiagnostic(env: Readonly<Record<string, string | undefined>>) {
+  const result = readOperationalMailConfig(env);
+  return {
+    status: result.status,
+    missing: requiredMailKeys.filter(key => !env[key]?.trim()),
+    sender: result.status === 'configured' ? result.config.from : null,
+    replyTo: result.status === 'configured' ? result.config.replyTo ?? null : null,
+    tls: result.status === 'configured' ? (result.config.secure ? 'TLS 465' : 'STARTTLS 587') : null,
+  };
 }
