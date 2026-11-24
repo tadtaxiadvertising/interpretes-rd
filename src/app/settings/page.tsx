@@ -5,11 +5,22 @@ import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
 import { operationalMailStatus } from '@/lib/email/operational-config';
+import { emailAutomationStatus } from '@/lib/email/automation-status';
 
 export const dynamic = 'force-dynamic';
 
 export default function SettingsPage() {
   const operationalStatus = operationalMailStatus(process.env);
+  const automation = emailAutomationStatus(process.env);
+  const automationChecks: [string, boolean][] = [
+    ['SMTP configurado', automation.smtpConfigured],
+    ['Vinculación habilitada', automation.bindingEnabled],
+    ['Despacho habilitado', automation.dispatchEnabled],
+    ['Lotes habilitados', automation.batchEnabled],
+    ['Entrada programable habilitada', automation.schedulerEnabled],
+    ['Credencial del programador válida', automation.schedulerCredentialConfigured],
+    ['Fecha de inicio válida', automation.cutoverValid],
+  ];
   const operationalMessages = {
     disabled: 'Desactivado. No se realizan envíos operativos.',
     incomplete: 'Configuración incompleta. Revisa las variables privadas del servidor.',
@@ -87,6 +98,18 @@ export default function SettingsPage() {
             <CorporateSmtpTest configured={operationalStatus === 'configured'} />
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
+            <section aria-labelledby="email-automation" className="space-y-3 rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--foreground)]">
+              <h3 id="email-automation" className="font-semibold">Automatización de comunicaciones</h3>
+              <p>{automationChecks.every(([, ready]) => ready) ? 'Configuración completa. Ejecución externa y entrega todavía no verificadas.' : 'Automatización no lista: revisa los controles pendientes.'}</p>
+              <dl className="space-y-2">
+                {automationChecks.map(([label, ready]) => (
+                  <div key={label} className="flex flex-wrap justify-between gap-2">
+                    <dt>{label}</dt><dd className="font-medium">{ready ? 'Correcto' : 'Pendiente'}</dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-xs">Diagnóstico de configuración solamente. No confirma permisos de base de datos, recepción real ni la existencia de una tarea programada. No muestra secretos ni inicia envíos.</p>
+            </section>
           </section>
           <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
             <div className="flex items-center gap-3">
