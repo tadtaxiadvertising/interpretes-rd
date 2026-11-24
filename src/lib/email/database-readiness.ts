@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 
 export type EmailDatabaseReadiness = { status: 'not_installed' | 'permission_mismatch' | 'ready' | 'unavailable' };
-type Row = { delivery: boolean; binding: boolean; runtimeAccess: boolean; privateAccess: boolean; rls: boolean };
+type Row = { delivery: boolean; binding: boolean; runtimeAccess: boolean; privateAccess: boolean; rls: boolean; policiesAvailable: boolean };
 
 /** Metadata only, using the actual Next.js database connection. No rows or secrets. */
 export async function readEmailDatabaseReadiness(db: Pick<Prisma.TransactionClient, '$queryRaw'>): Promise<EmailDatabaseReadiness> {
@@ -24,11 +24,23 @@ export async function readEmailDatabaseReadiness(db: Pick<Prisma.TransactionClie
             OR has_table_privilege(r.oid, b, 'SELECT,INSERT,UPDATE,DELETE'))) AS "privateAccess",
         COALESCE((SELECT relrowsecurity FROM pg_class WHERE oid = d), false)
           AND COALESCE((SELECT relrowsecurity FROM pg_class WHERE oid = b), false) AS rls
+        , NOT EXISTS (
+          SELECT 1 FROM (VALUES (d, 'r'), (d, 'a'), (d, 'w'), (b, 'r'), (b, 'a')) AS required(table_oid, command)
+          WHERE row_security_active(required.table_oid)
+            AND NOT EXISTS (
+              SELECT 1 FROM pg_policy p
+              WHERE p.polrelid = required.table_oid AND p.polpermissive
+                AND (p.polcmd::text = required.command OR p.polcmd = '*')
+                AND EXISTS (SELECT 1 FROM unnest(p.polroles) AS permitted(role_oid)
+                  WHERE CASE WHEN permitted.role_oid = 0 THEN true
+                    ELSE pg_has_role(current_user, permitted.role_oid, 'USAGE') END)
+            )
+        ) AS "policiesAvailable"
       FROM objects
     `;
     if (!row) return { status: 'unavailable' };
     if (!row.delivery || !row.binding) return { status: 'not_installed' };
-    if (!row.runtimeAccess || !row.privateAccess || !row.rls) return { status: 'permission_mismatch' };
+    if (!row.runtimeAccess || !row.privateAccess || !row.rls || !row.policiesAvailable) return { status: 'permission_mismatch' };
     return { status: 'ready' };
   } catch {
     return { status: 'unavailable' };
