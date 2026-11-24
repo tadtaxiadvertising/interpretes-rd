@@ -66,7 +66,7 @@ export default function LocalVadAssistant({
       </div>
       {changedSinceReview && (
         <p role="status" className="mt-2 text-xs text-amber-200">
-          Los cortes existentes cambiaron. Revisa de nuevo la propuesta local antes de añadir regiones.
+          La duración o los cortes existentes cambiaron. Revisa de nuevo la propuesta local antes de añadir regiones.
         </p>
       )}
       {status === 'limited' && (
