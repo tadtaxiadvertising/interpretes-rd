@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { pilotRecipient } from '@/lib/email/pilot-recipient';
+import { emailDeliveryMode, pilotRecipient } from '@/lib/email/pilot-recipient';
 const mocks = vi.hoisted(() => ({ auth: vi.fn(), batch: vi.fn() }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: mocks.auth }));
 vi.mock('@/lib/email/recruitment-batch-server', () => ({ processRecruitmentEmailBatch: mocks.batch }));
@@ -11,6 +11,7 @@ describe('controlled pilot', () => {
     vi.resetAllMocks();
     vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', 'test@example.test');
     vi.stubEnv('OPERATIONAL_EMAIL_SCHEDULER_ENABLED', 'false');
+    vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'false');
     mocks.auth.mockResolvedValue({ user: { role: 'admin' } });
     mocks.batch.mockResolvedValue({ status: 'completed', examined: 1, accepted: 1 });
   });
@@ -21,6 +22,12 @@ describe('controlled pilot', () => {
     for (const value of ['a@example.test,b@example.test','a@example.test\nBcc: other@example.test',' ']) {
       expect(pilotRecipient({ OPERATIONAL_EMAIL_PILOT_RECIPIENT: value })).toBe(false);
     }
+  });
+  it('requires explicit mutually exclusive delivery modes', () => {
+    expect(emailDeliveryMode({})).toBe('disabled');
+    expect(emailDeliveryMode({ OPERATIONAL_EMAIL_PILOT_RECIPIENT: 'test@example.test' })).toBe('pilot');
+    expect(emailDeliveryMode({ OPERATIONAL_EMAIL_GENERAL_ENABLED: 'true' })).toBe('general');
+    expect(emailDeliveryMode({ OPERATIONAL_EMAIL_GENERAL_ENABLED: 'true', OPERATIONAL_EMAIL_PILOT_RECIPIENT: 'test@example.test' })).toBe('disabled');
   });
   it('denies non-admin access before processing', async () => {
     mocks.auth.mockResolvedValue({ error: 'denied' });
