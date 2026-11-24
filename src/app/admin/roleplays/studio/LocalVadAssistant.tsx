@@ -37,10 +37,10 @@ export default function LocalVadAssistant({
     `${cut.start}:${cut.end}`).sort().join('|')}`;
   const status = snapshot?.status ?? 'loading';
   const ready = status === 'ready';
-  const reviewed = ready && reviewedPlan?.snapshot === snapshot &&
-    reviewedPlan?.contextKey === contextKey;
-  const changedSinceReview = ready && reviewedPlan?.snapshot === snapshot &&
-    reviewedPlan.contextKey !== contextKey;
+  const reviewed = ready && reviewedPlan !== null &&
+    reviewedPlan.snapshot === snapshot && reviewedPlan.contextKey === contextKey;
+  const changedSinceReview = ready && reviewedPlan !== null &&
+    reviewedPlan.snapshot === snapshot && reviewedPlan.contextKey !== contextKey;
   const availableSlots = Math.max(0, 25 - existing.length);
 
   return (
