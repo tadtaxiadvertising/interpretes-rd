@@ -135,7 +135,8 @@ describe('Audio Studio semantic theme', () => {
     expect(studio).toContain('text-[var(--theme-control-text)]');
     expect(studio).toContain('border-[var(--theme-control-border)]');
     expect(studio).toContain('rounded-lg bg-black');
-    expect(studio).toContain('bg-blue-600 px-4 py-3 font-semibold text-white');
+    expect(studio).toContain('theme-action-primary px-4 py-3 font-semibold');
+    expect(studio).toContain('theme-action-success px-5 py-3 font-bold');
   });
 
   it('uses theme colors for the waveform, selection and playhead', () => {
@@ -164,7 +165,8 @@ describe('semantic administration forms', () => {
 
   it('keeps the roleplay assignment form actions and file control readable', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/new/NewRoleplayForm.tsx'), 'utf8');
-    expect(source).toContain('bg-red-600 hover:bg-red-500 text-white');
+    expect(source).toContain('theme-action-danger shadow-lg shadow-red-600/20');
+    expect(source).toContain('theme-action-primary rounded-xl');
     expect(source).toContain('file:bg-blue-600');
     expect(source).toContain('file:text-white');
     expect(source).toContain('bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed');
@@ -269,5 +271,22 @@ describe('shared solid actions', () => {
       const source = readFileSync(resolve(process.cwd(), 'src/components/admin/' + name + '.tsx'), 'utf8');
       expect(source).toContain('theme-action-primary');
     }
+  });
+});
+
+describe('shared Audio Studio actions', () => {
+  it.each([
+    'src/app/admin/roleplays/studio/LocalVadAssistant.tsx',
+    'src/app/admin/roleplays/studio/StudioConsecutivePreview.tsx',
+  ])('uses accessible primary actions in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toContain('theme-action-primary');
+  });
+
+  it('preserves native disabled conditions on studio actions', () => {
+    const studio = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/page.tsx'), 'utf8');
+    expect(studio).toContain('disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}');
+    expect(studio).toContain('disabled={busy || draftBusy || analyzingSilences || !segments.length}');
+    expect(studio).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
   });
 });

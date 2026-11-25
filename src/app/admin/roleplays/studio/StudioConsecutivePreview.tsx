@@ -283,7 +283,7 @@ export default function StudioConsecutivePreview({
                 if (busy) { stopAudio(); setPhase('ready'); setRemaining(0); }
                 else playTurn(phase === 'complete' ? 0 : phase === 'ready' && index < turns.length - 1 ? index + 1 : index);
               }} disabled={!canPlay}
-                className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                className="rounded-lg theme-action-primary px-4 py-2 text-sm font-semibold">
                 {busy ? 'Detener simulación' : phase === 'ready' ? 'Continuar' : 'Reproducir turno'}
               </button>
               <button type="button" onClick={() => advance(-1)} disabled={!canPlay || index === 0}
