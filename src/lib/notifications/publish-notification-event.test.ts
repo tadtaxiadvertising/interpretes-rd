@@ -21,7 +21,7 @@ describe('notification event publication', () => {
     expect(first.created).toBe(true);
     expect(second).toEqual({ id: first.id, created: false });
     expect(m.createMany).toHaveBeenCalledWith({
-      data: [{ ...event, eventKey: undefined, id: first.id, link: '/dashboard' }].map(({ eventKey, ...row }) => { void eventKey; return row; }),
+      data: [{ id: first.id, userId: event.userId, title: event.title, message: event.message, category: event.category, type: event.type, link: '/dashboard' }],
       skipDuplicates: true,
     });
   });
