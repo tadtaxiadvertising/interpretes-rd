@@ -479,3 +479,36 @@ ROLLBACK;
 SQL
 assert_equal "$(db -c "SELECT challenge_hash IS NULL FROM private_email.candidate_account_binding WHERE candidate_id=2")" t challenge-quota-rollback
 echo 'Isolated mailbox challenge rollback check passed.'
+
+# Emergency pause: use actual state mutation and reservation guard SQL.
+db < "$root/docs/operations/proposed-email-vault-pause.sql"
+assert_equal "$(db -c "SELECT dispatch_paused FROM private_email.provider_selection WHERE singleton")" t vault-default-paused
+pause_sql="$(python3 - "$root/src/lib/email/vault-pause.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('export async function setVaultPause',1)[1].split('`',2)[1]
+sql = sql.replace('${actor}', "'fixture'").replace('${paused}', 'false')
+assert '${' not in sql
+print(sql+';')
+PY
+)"
+assert_equal "$(db -c "$pause_sql")" "" vault-no-selection-no-resume
+db -c "UPDATE private_email.provider_profile SET test_accepted_at=now(),receipt_confirmed_at=now(),receipt_confirmed_by='fixture' WHERE name='Replacement'"
+db -c "UPDATE private_email.provider_quota SET daily_used=3 WHERE provider='brevo'"
+db -c "UPDATE private_email.provider_selection SET profile_id='123e4567-e89b-42d3-a456-426614174001' WHERE singleton"
+reservation_guard="$(python3 - "$root/src/lib/email/preferred-provider-runtime.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('export async function reserveSelectedProvider',1)[1].split('`',2)[1]
+sql = sql.replace('${profile.id}', "'123e4567-e89b-42d3-a456-426614174001'")
+assert '${' not in sql
+print(sql+';')
+PY
+)"
+assert_equal "$(db -c "$reservation_guard")" "" vault-paused-no-reservation
+assert_equal "$(db -c "$pause_sql")" f vault-confirmed-resume
+assert_equal "$(db -c "$reservation_guard")" '123e4567-e89b-42d3-a456-426614174001' vault-unpaused-reservation-guard
+db -c "UPDATE private_email.provider_selection SET dispatch_paused=true WHERE singleton"
+assert_equal "$(db -c "$reservation_guard")" "" vault-repaused-no-reservation
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '3:7' vault-pause-preserves-usage
+echo 'Isolated vault emergency pause checks passed.'

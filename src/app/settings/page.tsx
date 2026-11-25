@@ -3,6 +3,7 @@ import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-r
 import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import EmailProviderVault from './EmailProviderVault';
+import EmailVaultPause from './EmailVaultPause';
 import EmailProviderReadiness from './EmailProviderReadiness';
 import EmailProviderSetup from './EmailProviderSetup';
 import CorporateSmtpTest from './CorporateSmtpTest';
@@ -153,6 +154,7 @@ export default async function SettingsPage() {
             </div>
             <EmailProviderSetup activeProvider={mailDiagnostic.provider} />
             <EmailProviderReadiness />
+            <EmailVaultPause />
             <EmailProviderVault />
             {vault ? <p className="text-sm">Usa la prueba de perfiles guardados con el despacho pausado. El transporte de entorno no se utiliza en este modo.</p> : <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />}
             <RecruitmentEmailPreview />
