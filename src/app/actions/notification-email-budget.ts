@@ -24,7 +24,7 @@ export async function readNotificationEmailBudget() {
     const vaultEnabled = process.env.EMAIL_PROVIDER_VAULT_ENABLED === 'true';
     const storage = await inspectQuotaStorage(prisma);
     const configured = process.env.OPERATIONAL_EMAIL_PROVIDER;
-    const activeApiProvider = source === 'environment' && (configured === 'brevo' || configured === 'resend') ? configured : null;
+    const activeApiProvider: 'brevo' | 'resend' | null = source === 'environment' && (configured === 'brevo' || configured === 'resend') ? configured : null;
     const base = { source, mode, dispatchEnabled, emailEnabled, vaultEnabled, storage, activeApiProvider };
     if (storage !== 'ready') return { status: 'quota_unavailable' as const, ...base };
     try {
