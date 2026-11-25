@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   identity: vi.fn(), bearer: vi.fn(), application: vi.fn(), ip: vi.fn(), quota: vi.fn(),
-  authorize: vi.fn(), confirm: vi.fn(), recover: vi.fn(),
+  authorize: vi.fn(), confirm: vi.fn(), recover: vi.fn(), discard: vi.fn(),
 }));
 vi.mock('server-only', () => ({}));
 vi.mock('@/lib/prisma', () => ({ default: { recruitmentApplication: { findUnique: m.application } } }));
@@ -13,7 +13,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
   applyRateLimit: m.ip, rateLimit: m.quota, createRateLimitHeaders: () => ({ 'Retry-After': '60' }),
 }));
 vi.mock('@/lib/roleplay/bilingual-opening-service', () => ({
-  authorizeOpeningUpload: m.authorize, confirmOpeningUpload: m.confirm, recoverOpeningDetails: m.recover,
+  authorizeOpeningUpload: m.authorize, confirmOpeningUpload: m.confirm, recoverOpeningDetails: m.recover, discardOpeningUpload: m.discard,
 }));
 
 import { GET, POST } from './route';
@@ -40,6 +40,7 @@ beforeEach(() => {
   m.recover.mockResolvedValue({ state: 'pending' });
   m.authorize.mockResolvedValue({ path, token: 'test-token' });
   m.confirm.mockResolvedValue('created');
+  m.discard.mockResolvedValue('pending');
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -96,4 +97,15 @@ describe('private bilingual opening API', () => {
     expect(response.status).toBe(503);
     expect(await response.text()).not.toContain('private storage token');
   });
+});
+
+it('discards only through the authorized command without confirming audio', async () => {
+  const response = await POST(request({ action: 'discard', path }), params);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toEqual({ success: true, data: { state: 'pending' } });
+  expect(m.discard).toHaveBeenCalledWith(expect.anything(), 'session-1',
+    { role: 'candidate', candidateId: 7, sessionCookie: 'session-1' }, path);
+  expect(m.confirm).not.toHaveBeenCalled();
+  expect((await POST(request({ action: 'discard', path }, { cookie: 'roleplay_session=other' }), params)).status).toBe(403);
+  expect(m.discard).toHaveBeenCalledTimes(1);
 });
