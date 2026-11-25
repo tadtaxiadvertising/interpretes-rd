@@ -146,3 +146,27 @@ describe('Audio Studio semantic theme', () => {
     expect(waveform).toContain('bg-[var(--theme-surface-muted)]');
   });
 });
+
+describe('semantic administration forms', () => {
+  it.each([
+    'src/app/admin/roleplays/new/NewRoleplayForm.tsx',
+    'src/components/admin/CreateAccountForm.tsx',
+    'src/components/admin/EditOperationalAccountForm.tsx',
+    'src/components/admin/AccountAssignmentManager.tsx',
+  ])('uses shared field colors in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toContain('bg-[var(--theme-control-bg)]');
+    expect(source).toContain('border-[var(--theme-control-border)]');
+    expect(source).toContain('text-[var(--theme-control-text)]');
+    expect(source).not.toContain('bg-slate-900 ');
+    expect(source).not.toContain('bg-slate-950 ');
+  });
+
+  it('keeps the roleplay assignment form actions and file control readable', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/new/NewRoleplayForm.tsx'), 'utf8');
+    expect(source).toContain('bg-red-600 hover:bg-red-500 text-white');
+    expect(source).toContain('file:bg-blue-600');
+    expect(source).toContain('file:text-white');
+    expect(source).toContain('bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed');
+  });
+});
