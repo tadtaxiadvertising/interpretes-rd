@@ -40,7 +40,7 @@ export default function NotificationEmailBudget() {
         <dl className="space-y-2 text-sm">
           <div><dt className="font-medium">Origen del transporte</dt><dd>{report.source === 'vault' ? 'Almacén de proveedores' : report.source === 'environment' ? 'Variables de entorno' : 'Configuración no válida'}</dd></div>
           <div><dt className="font-medium">Controles de correo</dt><dd>Correo {report.emailEnabled ? 'habilitado' : 'desactivado'} · despacho {report.dispatchEnabled ? 'habilitado' : 'desactivado'} · modo {report.mode === 'pilot' ? 'piloto' : report.mode === 'general' ? 'general' : 'desactivado'}</dd></div>
-          <div><dt className="font-medium">Cobertura de presupuesto</dt><dd>{report.source === 'vault' && report.vaultEnabled ? 'El despacho mediante el perfil del almacén reserva intentos locales; actualmente limitado al piloto.' : report.source === 'environment' ? 'Los envíos por variables de entorno no están protegidos por estas reservas del almacén. No uses estos saldos como garantía de disponibilidad.' : 'El origen del transporte no está disponible o el almacén está desactivado. Estos saldos no confirman que se pueda enviar correo.'}</dd></div>
+          <div><dt className="font-medium">Cobertura de presupuesto</dt><dd>{report.source === 'vault' && report.vaultEnabled ? 'El despacho mediante el perfil del almacén reserva intentos locales; actualmente limitado al piloto.' : report.source === 'environment' ? 'El despacho de reclutamiento y las pruebas de Brevo y Resend por variables de entorno requieren reservar un intento local. SMTP genérico no está cubierto por estos contadores.' : 'El origen del transporte no está disponible o el almacén está desactivado. Estos saldos no confirman que se pueda enviar correo.'}</dd></div>
         </dl>
       )}
       {report?.status === 'ready' && (
@@ -57,7 +57,7 @@ export default function NotificationEmailBudget() {
           </dl>
         </>
       )}
-      <p className="text-xs leading-relaxed text-[var(--text-secondary)]">El saldo local no confirma la cuota gratuita del proveedor, el plan contratado ni la entrega al buzón. No incluye envíos externos o de autenticación. Los intentos inciertos no se reembolsan automáticamente.</p>
+      <p className="text-xs leading-relaxed text-[var(--text-secondary)]">El saldo local no confirma la cuota gratuita del proveedor, el plan contratado ni la entrega al buzón. No incluye envíos externos, históricos anteriores a la protección, SMTP genérico ni de autenticación. Los intentos inciertos no se reembolsan automáticamente.</p>
       <a href="#email-settings-heading" className="inline-block min-h-11 py-2 text-sm font-medium text-[var(--theme-link)] underline">Ir a configuración de proveedores de correo</a>
     </section>
   );

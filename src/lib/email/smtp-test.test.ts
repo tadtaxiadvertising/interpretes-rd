@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { smtpTestCurlConfig, smtpTestMessage, sendOperationalMailTest, sendRecruitmentSmtp } from './smtp-test';
 import { sendBrevoEmail, sendBrevoEmailDetailed } from './brevo-transport';
 vi.mock('./brevo-transport', () => ({ sendBrevoEmail: vi.fn(), sendBrevoEmailDetailed: vi.fn() }));
+const quota = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/prisma', () => ({ default: {} }));
+vi.mock('./provider-quota', () => ({ reserveProviderQuota: quota }));
 import type { OperationalMailConfig } from './operational-config';
 
 const config: OperationalMailConfig = {
@@ -51,5 +54,32 @@ describe('environment transport source guard', () => {
     expect(await sendOperationalMailTest()).toBe('disabled');
     expect(sendBrevoEmail).not.toHaveBeenCalled();
     expect(sendBrevoEmailDetailed).not.toHaveBeenCalled();
+  });
+});
+
+describe('environment test budget protection', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); vi.resetAllMocks(); });
+  it('blocks exhausted or unavailable budgets and consumes one attempt before an authorized test', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-25T21:00:00Z'));
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'environment');
+    vi.stubEnv('OPERATIONAL_EMAIL_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'brevo');
+    vi.stubEnv('BREVO_API_KEY', 'fixture-key-123456789');
+    vi.stubEnv('OPERATIONAL_EMAIL_FROM', 'fixture@example.test');
+    quota.mockResolvedValueOnce('quota_reached').mockRejectedValueOnce(new Error('unavailable')).mockResolvedValueOnce('reserved');
+    expect(await sendOperationalMailTest()).toBe('local_quota_reached');
+    expect(sendBrevoEmailDetailed).not.toHaveBeenCalled();
+    expect(await sendOperationalMailTest()).toBe('rate_limited');
+    expect(quota).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(new Date('2026-11-25T21:01:00Z'));
+    expect(await sendOperationalMailTest()).toBe('local_quota_unavailable');
+    expect(sendBrevoEmailDetailed).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-11-25T21:02:00Z'));
+    vi.mocked(sendBrevoEmailDetailed).mockResolvedValueOnce('accepted');
+    expect(await sendOperationalMailTest()).toBe('accepted');
+    expect(quota).toHaveBeenLastCalledWith({}, 'brevo');
+    expect(quota.mock.invocationCallOrder[2]).toBeLessThan(vi.mocked(sendBrevoEmailDetailed).mock.invocationCallOrder[0]);
+    expect(sendBrevoEmailDetailed).toHaveBeenCalledTimes(1);
   });
 });
