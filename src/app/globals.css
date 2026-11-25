@@ -793,3 +793,18 @@ html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] 
 html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] [class~="fill-blue-400/80"] { fill: #1554a8; }
 html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] [class~="fill-emerald-400/25"] { fill: rgba(4,120,87,.22); }
 html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] .stroke-amber-300 { stroke: #92400e; }
+
+/* Remaining shared dashboard actions: preserve white text on solid brand
+   backgrounds, including gradient call controls, and keep overlays dim. */
+html[data-theme="light"] .theme-workspace [class~="bg-[#2675ff]"].text-white { background-color: #1554a8; color: #fff; }
+html[data-theme="light"] .theme-workspace [class~="bg-[#1764bf]"].text-white:hover { background-color: #1554a8; color: #fff; }
+html[data-theme="light"] .theme-workspace .bg-gradient-to-r.from-green-600.to-green-500.text-white { background-image: linear-gradient(90deg, #065f46, #047857); color: #fff; }
+html[data-theme="light"] .theme-workspace .bg-gradient-to-r.from-green-600.to-green-500.text-white:hover { background-image: linear-gradient(90deg, #064e3b, #065f46); }
+html[data-theme="light"] .theme-workspace .bg-gradient-to-r.from-red-600.to-red-500.text-white { background-image: linear-gradient(90deg, #991b1b, #b91c1c); color: #fff; }
+html[data-theme="light"] .theme-workspace .bg-gradient-to-r.from-red-600.to-red-500.text-white:hover { background-image: linear-gradient(90deg, #7f1d1d, #991b1b); }
+html[data-theme="light"] .theme-workspace :is(.text-orange-500, [class~="text-amber-100/80"]) { color: var(--theme-warning); }
+html[data-theme="light"] .theme-workspace [class~="hover:bg-white/20"]:hover { background-color: var(--theme-hover); }
+html[data-theme="light"] .theme-workspace [class~="hover:border-white/20"]:hover { border-color: var(--theme-control-border); }
+html[data-theme="light"] .theme-workspace input[type="file"][class~="file:bg-blue-600"]::file-selector-button { background-color: #1554a8; color: #fff; }
+html[data-theme="light"] .theme-workspace input[type="file"][class~="file:bg-blue-600"]:not(:disabled)::file-selector-button:hover { background-color: #002d72; }
+html[data-theme="light"] .theme-workspace [class~="bg-slate-950/55"].fixed.inset-0 { background-color: rgba(15, 23, 42, .55); }
