@@ -67,6 +67,13 @@ describe('recruitment SMTP adapter rollout gates', () => {
     expect(deps.send).toBe(mocks.send);
     expect(mocks.send).not.toHaveBeenCalled();
   });
+  it('never falls back to environment transport for an invalid source', async () => {
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'vualt');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
+    expect(mocks.config).not.toHaveBeenCalled();
+    expect(mocks.preferred).not.toHaveBeenCalled();
+    expect(mocks.dispatch).not.toHaveBeenCalled();
+  });
   it('never uses a vault profile for general dispatch', async () => {
     vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'vault');
     expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
