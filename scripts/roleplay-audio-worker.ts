@@ -3,7 +3,7 @@ import prisma from '@/lib/prisma';
 import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
 import { findMissingWorkerEnvVars } from '@/lib/roleplay-audio-worker-config';
 import { markResponseProcessingIfLeaseOwned } from '@/lib/roleplay-audio-worker-lease';
-import { notifyAudioJobFailures } from '@/lib/notifications/notify-audio-job-failures';
+import { notifyAudioJobFailures, reconcileAudioJobNotifications, AUDIO_NOTIFICATION_RECONCILIATION_MS } from '@/lib/notifications/notify-audio-job-failures';
 import { safeRoleplayAudioJobError } from '@/lib/roleplay-audio-worker-errors';
 import {
   ROLEPLAY_WORKER_BASE_POLL_MS,
@@ -241,6 +241,8 @@ async function run(): Promise<void> {
   console.info('[ROLEPLAY AUDIO WORKER] Started; concurrency=1');
   let consecutiveEmptyPolls = 0;
   let lastSuccessfulCleanupMs: number | null = null;
+  let lastNotificationScanMs: number | null = null;
+  let notificationCursor: string | null = null;
 
   while (!stopping) {
     try {
@@ -249,6 +251,13 @@ async function run(): Promise<void> {
       if (shouldRunRoleplayWorkerStaleCleanup(Date.now(), lastSuccessfulCleanupMs)) {
         await failExhaustedStaleJobs();
         lastSuccessfulCleanupMs = Date.now();
+      }
+      // Reuse the existing worker loop, throttling even failed scans to avoid
+      // increasing database pressure during an outage. No new timer or cron.
+      const nowMs = Date.now();
+      if (lastNotificationScanMs === null || nowMs - lastNotificationScanMs >= AUDIO_NOTIFICATION_RECONCILIATION_MS) {
+        lastNotificationScanMs = nowMs;
+        notificationCursor = await reconcileAudioJobNotifications(notificationCursor, nowMs);
       }
       const job = await claimNextJob();
       if (!job) {
