@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
-const m = vi.hoisted(() => ({ markNotificationAsRead: vi.fn() }));
-vi.mock('@/app/actions/notifications', () => ({ markNotificationAsRead: m.markNotificationAsRead }));
+const m = vi.hoisted(() => ({ markNotificationAsRead: vi.fn(), getMyNotifications: vi.fn(), markAllNotificationsAsRead: vi.fn() }));
+vi.mock('@/app/actions/notifications', () => m);
 
 import { NotificationBell } from './NotificationBell';
 
@@ -16,7 +16,9 @@ afterEach(() => cleanup());
 
 describe('NotificationBell interactions', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    m.getMyNotifications.mockResolvedValue({ success: false });
+    m.markAllNotificationsAsRead.mockResolvedValue({ success: true });
     m.markNotificationAsRead.mockResolvedValue({ success: true });
   });
 
@@ -136,5 +138,45 @@ describe('NotificationBell interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cerrar', exact: true }));
     expect(screen.queryByText('No hay notificaciones.')).toBeNull();
     expect(m.markNotificationAsRead).not.toHaveBeenCalled();
+  });
+  it('uses the server unread total beyond the recent list', async () => {
+    m.getMyNotifications.mockResolvedValue({ success: true, data: notifications, unreadCount: 24 });
+    render(<NotificationBell initialNotifications={notifications} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    await waitFor(() => expect(screen.getByText('24 sin leer')).toBeTruthy());
+  });
+
+  it('filters unread items and marks all through one authorized action', async () => {
+    m.getMyNotifications.mockResolvedValue({ success: true, data: notifications, unreadCount: 24 });
+    m.markAllNotificationsAsRead.mockImplementation(async () => {
+      m.getMyNotifications.mockResolvedValue({ success: true, data: notifications.map(n => ({ ...n, isRead: true })), unreadCount: 0 });
+      return { success: true };
+    });
+    render(<NotificationBell initialNotifications={notifications} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    await waitFor(() => expect(screen.getByText('24 sin leer')).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Sin leer', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Marcar todas como leídas' }));
+    await waitFor(() => expect(screen.getByText('0 sin leer')).toBeTruthy());
+    expect(screen.getByText('No hay notificaciones recientes sin leer.')).toBeTruthy();
+    expect(m.markAllNotificationsAsRead).toHaveBeenCalledTimes(1);
+    expect(m.markAllNotificationsAsRead).toHaveBeenCalledWith();
+    fireEvent.click(screen.getByRole('button', { name: 'Todas', exact: true }));
+    expect(screen.getByText('Auditoría QA')).toBeTruthy();
+  });
+
+  it('keeps the last snapshot when refresh fails and supports retry', async () => {
+    m.getMyNotifications.mockResolvedValue({ success: true, data: notifications, unreadCount: 24 });
+    render(<NotificationBell initialNotifications={notifications} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    await waitFor(() => expect(screen.getByText('24 sin leer')).toBeTruthy());
+    m.getMyNotifications.mockResolvedValue({ success: false });
+    fireEvent(window, new Event('focus'));
+    await waitFor(() => expect(screen.getByText(/No se pudo actualizar/)).toBeTruthy());
+    expect(screen.getByText('24 sin leer')).toBeTruthy();
+    m.getMyNotifications.mockResolvedValue({ success: true, data: notifications, unreadCount: 25 });
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    await waitFor(() => expect(screen.getByText('25 sin leer')).toBeTruthy());
+    expect(screen.queryByText(/No se pudo actualizar/)).toBeNull();
   });
 });
