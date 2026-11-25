@@ -7,6 +7,7 @@ import { openProfileKey, sealProfileKey, validateProfile, vaultKeyAvailable, typ
 import { sendBrevoEmailDetailed } from '@/lib/email/brevo-transport';
 import { sendResendEmail } from '@/lib/email/resend-transport';
 
+import { validateBudget, updateProviderBudget } from '@/lib/email/provider-budget';
 import { reserveProviderQuota, listProviderQuotas, type ProviderQuota } from '@/lib/email/provider-quota';
 
 import { providerSelectionPaused, validProfileId, recordProfileAcceptance, confirmProfileReceipt, selectPreferredProfile, clearPreferredProfile } from '@/lib/email/provider-selection';
@@ -126,5 +127,17 @@ export async function setPreferredEmailProvider(id: string | null) {
     if (id === null) return await clearPreferredProfile(prisma, auth.user.userId) ? 'preference_cleared' as const : 'unavailable' as const;
     if (!validProfileId(id)) return 'invalid' as const;
     return await selectPreferredProfile(prisma, id, auth.user.userId) ? 'preferred_saved' as const : 'selection_blocked' as const;
+  } catch { return 'unavailable' as const; }
+}
+
+/** Changes only local budget ceilings, never billing, credentials or counters. */
+export async function saveEmailProviderBudget(input: unknown) {
+  try {
+    const auth = await validateAction('admin');
+    if ('error' in auth) return 'unauthorized' as const;
+    if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
+    const budget = validateBudget(input);
+    if (!budget) return 'budget_invalid' as const;
+    return await updateProviderBudget(prisma, budget, auth.user.userId) ? 'budget_saved' as const : 'unavailable' as const;
   } catch { return 'unavailable' as const; }
 }
