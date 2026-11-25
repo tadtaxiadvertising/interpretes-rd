@@ -4,6 +4,8 @@ import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { publishNotificationEvent } from '@/lib/notifications/publish-notification-event';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { canAccessChat } from '@/lib/messaging-access';
 
 const db = prisma;
@@ -49,11 +51,31 @@ export async function sendMessage(receiverId: string, content: string) {
       select: { id: true, senderId: true, receiverId: true, content: true, isRead: true, createdAt: true },
     });
 
-    revalidatePath('/dashboard/messages');
-    revalidatePath('/admin/messages');
+    // Message is already committed. Notification/cache failures must not
+    // trigger a retry of the message itself.
+    try {
+      await publishNotificationEvent({
+        userId: receiver.id,
+        eventKey: 'messaging.message:' + message.id,
+        category: 'messaging',
+        type: 'info',
+        title: 'Nuevo mensaje',
+        message: 'Tienes un nuevo mensaje en tu bandeja de entrada.',
+        link: receiver.role?.toLowerCase() === 'admin' ? '/admin/messages' : '/dashboard/messages',
+      });
+    } catch (error) {
+      console.warn('Message saved but notification failed:', safeServerErrorCategory(error));
+    }
+    for (const path of ['/dashboard/messages', '/admin/messages']) {
+      try {
+        revalidatePath(path);
+      } catch (error) {
+        console.warn('Message saved but cache refresh failed:', safeServerErrorCategory(error));
+      }
+    }
     return { success: true, data: message };
   } catch (error) {
-    console.error('sendMessage failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('sendMessage failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Unable to send message', code: 'INTERNAL_ERROR' };
   }
 }
