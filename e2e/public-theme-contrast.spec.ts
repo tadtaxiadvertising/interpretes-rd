@@ -77,8 +77,9 @@ test('mobile recruitment application stays readable in both modes, without submi
     expect(await contrastRatio(submit), `Recruitment button contrast (${appearance})`)
       .toBeGreaterThanOrEqual(4.5);
     await submit.hover();
+    // The light recruitment override deliberately uses the darker institutional blue.
     await expect.poll(() => submit.evaluate((node) => getComputedStyle(node).backgroundColor))
-      .toBe('rgb(21, 84, 168)');
+      .toBe(appearance === 'Modo claro' ? 'rgb(0, 45, 114)' : 'rgb(21, 84, 168)');
     expect(await contrastRatio(submit), `Recruitment hover contrast (${appearance})`)
       .toBeGreaterThanOrEqual(4.5);
   }
