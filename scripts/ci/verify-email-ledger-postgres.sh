@@ -479,6 +479,20 @@ assert_equal "$(db -c "${duplicate_sql//'NEW@example.test'/'absent@example.test'
 assert_equal "$(db -c "${duplicate_sql//'brevo'/'resend'}")" f manual-profile-other-provider
 
 
+# Replacement can keep its own sender, but not another active profile's sender.
+replacement_duplicate_sql="$(python3 - "$root/src/lib/email/provider-lifecycle.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const duplicates = await db.$queryRaw', 1)[1].split('`', 2)[1]
+sql = sql.replace('${profile.provider}', "'brevo'").replace('${profile.from}', "'NEW@example.test'")
+sql = sql.replace('${id}', "'123e4567-e89b-42d3-a456-426614174001'")
+assert '${' not in sql
+print(sql.strip())
+PY
+)"
+assert_equal "$(db -c "$replacement_duplicate_sql")" f replacement-own-sender-allowed
+assert_equal "$(db -c "${replacement_duplicate_sql//123e4567-e89b-42d3-a456-426614174001/123e4567-e89b-42d3-a456-426614174000}")" t replacement-other-active-sender-blocked
+
 # Read-only vault metadata probe must work through the actual SQL.
 readiness_sql="$(python3 - "$root/src/lib/email/provider-readiness.ts" <<'PY'
 import pathlib, sys
