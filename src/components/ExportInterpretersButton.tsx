@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Download } from 'lucide-react';
+import { downloadCsv } from '@/lib/download-csv';
 
 interface Interpreter {
   id: number;
@@ -47,25 +48,17 @@ export function ExportInterpretersButton({ data }: ExportInterpretersButtonProps
     ].join(','));
 
     const csvContent = [headers.join(','), ...csvRows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `interpreters_export_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(csvContent, `interpreters_export_${new Date().toISOString().split('T')[0]}.csv`);
   };
 
   return (
-    <button 
+    <button
+      type="button"
       onClick={exportToCSV}
       disabled={!data.length}
-      className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-gray-300 hover:bg-white/10 transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed active:scale-95"
+      className="theme-action-secondary flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold transition-colors"
     >
-      <Download size={20} />
+      <Download size={20} aria-hidden="true" />
       Export CSV
     </button>
   );
