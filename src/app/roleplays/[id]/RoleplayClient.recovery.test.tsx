@@ -39,6 +39,37 @@ function mockSessionResponse(status: number, body: Record<string, unknown>) {
 }
 
 describe('roleplay access recovery', () => {
+  function activeSession() {
+    return { success: true, data: { id: 'sess-1', status: 'IN_PROGRESS',
+      currentScenarioIndex: 0, baseAudioUrl: 'https://example.test/audio',
+      scenarios: [{ id: 'scenario-1', order: 0, title: 'Scenario', baseAudioUrl: 'https://example.test/audio', responses: [] }] } };
+  }
+
+  it('holds the clinical turn until an enabled opening is confirmed', async () => {
+    const fetchMock = vi.fn().mockImplementation(async (url: string) =>
+      Response.json(url.endsWith('/opening') ? { success: true, data: { state: 'pending' } } : activeSession()));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RoleplayClient sessionId="sess-1" initialIdentity={candidate} openingEnabled />);
+    expect(await screen.findByRole('heading', { name: 'Protocolo de apertura bilingüe' })).toBeTruthy();
+    expect(screen.queryByText('Scenario')).toBeNull();
+  });
+
+  it.each(['confirmed', 'not-required'])('resumes a %s opening without another recording', async state => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) =>
+      Response.json(url.endsWith('/opening') ? { success: true, data: { state } } : activeSession())));
+    render(<RoleplayClient sessionId="sess-1" initialIdentity={candidate} openingEnabled />);
+    expect(await screen.findByText('Scenario')).toBeTruthy();
+    expect(screen.queryByRole('heading', { name: 'Protocolo de apertura bilingüe' })).toBeNull();
+  });
+
+  it('does not bypass a failed opening state check', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) =>
+      url.endsWith('/opening') ? Response.json({ success: false }, { status: 503 }) : Response.json(activeSession())));
+    render(<RoleplayClient sessionId="sess-1" initialIdentity={candidate} openingEnabled />);
+    expect(await screen.findByText(/No se pudo consultar la apertura/)).toBeTruthy();
+    expect(screen.queryByText('Scenario')).toBeNull();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
   });

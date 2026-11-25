@@ -13,7 +13,7 @@ vi.mock('@/lib/security/rate-limit', () => ({
   applyRateLimit: m.ip, rateLimit: m.quota, createRateLimitHeaders: () => ({ 'Retry-After': '60' }),
 }));
 vi.mock('@/lib/roleplay/bilingual-opening-service', () => ({
-  authorizeOpeningUpload: m.authorize, confirmOpeningUpload: m.confirm, recoverOpeningState: m.recover,
+  authorizeOpeningUpload: m.authorize, confirmOpeningUpload: m.confirm, recoverOpeningDetails: m.recover,
 }));
 
 import { GET, POST } from './route';
@@ -37,7 +37,7 @@ beforeEach(() => {
   m.ip.mockReturnValue({ success: true });
   m.quota.mockReturnValue({ success: true });
   m.application.mockResolvedValue({ status: 'ROLEPLAY_IN_PROGRESS' });
-  m.recover.mockResolvedValue('pending');
+  m.recover.mockResolvedValue({ state: 'pending' });
   m.authorize.mockResolvedValue({ path, token: 'test-token' });
   m.confirm.mockResolvedValue('created');
 });

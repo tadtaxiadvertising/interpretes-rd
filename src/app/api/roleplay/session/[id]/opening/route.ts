@@ -6,7 +6,7 @@ import { actorFromBearer } from '@/lib/api-auth';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, rateLimit, createRateLimitHeaders } from '@/lib/security/rate-limit';
 import { validateAudioMetadata } from '@/lib/roleplay';
-import { authorizeOpeningUpload, confirmOpeningUpload, recoverOpeningState } from '@/lib/roleplay/bilingual-opening-service';
+import { authorizeOpeningUpload, confirmOpeningUpload, recoverOpeningDetails } from '@/lib/roleplay/bilingual-opening-service';
 import { BilingualOpeningStoreError, type BilingualOpeningActor } from '@/lib/roleplay/bilingual-opening-store';
 
 export const runtime = 'nodejs';
@@ -96,8 +96,8 @@ async function handle(req: NextRequest, params: Promise<{ id: string }>, write: 
     }
 
     if (!write) {
-      const state = await recoverOpeningState(prisma, id, actor);
-      return privateRoleplayResponse({ success: true, data: { state } });
+      const data = await recoverOpeningDetails(prisma, id, actor);
+      return privateRoleplayResponse({ success: true, data });
     }
     const command = await readCommand(req);
     if (!command) return failure(400, 'Solicitud inválida.');

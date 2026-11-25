@@ -40,7 +40,10 @@ export default async function RoleplayPage({ params }: { params: Promise<{ id: s
   
   return (
     <div className="theme-experience min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <RoleplayClient sessionId={sessionId} initialIdentity={serializedIdentity} />
+      <RoleplayClient sessionId={sessionId} initialIdentity={serializedIdentity}
+        openingEnabled={process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true' &&
+          process.env.ROLEPLAY_BILINGUAL_OPENING_UI_ENABLED === 'true' &&
+          (identity?.role === 'candidate' || identity?.role === 'interpreter')} />
     </div>
   );
 }
