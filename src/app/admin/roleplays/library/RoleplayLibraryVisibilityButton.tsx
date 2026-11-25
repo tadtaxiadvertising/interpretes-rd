@@ -49,11 +49,11 @@ export function RoleplayLibraryVisibilityButton({
   return (
     <div className="flex flex-col items-start gap-2">
       <button type="button" disabled={working} onClick={submit}
-        className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:opacity-50">
+        className="inline-flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-semibold text-[var(--theme-warning)] transition-colors hover:bg-amber-500/20 disabled:opacity-50">
         {working ? <Loader2 size={16} className="animate-spin" /> : archived ? <RotateCcw size={16} /> : <Archive size={16} />}
         {working ? 'Procesando…' : archived ? 'Restaurar' : 'Borrar de la biblioteca'}
       </button>
-      {message && <p role="status" className="max-w-xs text-xs text-amber-100">{message}</p>}
+      {message && <p role="status" className="max-w-xs text-xs text-[var(--theme-warning)]">{message}</p>}
     </div>
   );
 }
