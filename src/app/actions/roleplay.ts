@@ -1213,7 +1213,7 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
       success: true, 
       data: { 
         sessionId: access.session.id,
-        baseAudioUrl: access.session.baseAudioUrl,
+        baseAudioUrl: await canProgressPastBilingualOpening(db, access.session.id) ? access.session.baseAudioUrl : null,
         candidateName: access.session.recruitmentCandidateId ? 'Candidate' : undefined,
       } 
     };
