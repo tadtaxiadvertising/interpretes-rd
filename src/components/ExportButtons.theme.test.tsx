@@ -41,4 +41,39 @@ describe('shared CSV export controls', () => {
       expect.stringMatching(/^interpreters_export_\d{4}-\d{2}-\d{2}\.csv$/),
     );
   });
+
+  it('escapes interpreter text without changing signed numeric columns', () => {
+    render(<ExportInterpretersButton data={[{
+      id: 1, externalId: '=1+1', name: 'Ana, "María"', emailCorporativo: null,
+      status: 'Activo', campaign: '  @SUM(1,2)', tariffPerMinute: -2, createdAt: '2026-01-01T12:00:00Z',
+    }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    const csv = vi.mocked(downloadCsv).mock.calls[0][0];
+    expect(csv).toContain("1,\"'=1+1\",\"Ana, \"\"María\"\"\",N/A,Activo,\"'@SUM(1,2)\",-2,-120.00,");
+  });
+
+  it('keeps payroll deductions and negative totals numeric', () => {
+    render(<ExportPayrollButton data={[{
+      id: 'test', periodStart: '2026-01-01T12:00:00Z', periodEnd: '2026-01-15T12:00:00Z',
+      totalMinutes: 100, grossTotal: 200, qualityBonus: 0, penalidades: -25,
+      transferDeduction: 10, netTotal: -5, status: 'Pending',
+      interpreter: { name: '=1+1', emailCorporativo: null, metodoPago: 'Transferencia, local' },
+    }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    const csv = vi.mocked(downloadCsv).mock.calls[0][0];
+    expect(csv).toContain("\"'=1+1\",N/A,");
+    expect(csv).toContain(',100,200,0,-25,10,-5,Pending,"Transferencia, local"');
+  });
+
+  it('protects candidate phone and location while keeping existing units', () => {
+    render(<ExportCandidatesButton data={[{
+      id: 1, name: 'Ejemplo', email: 'example@example.invalid', telefono: '+18095550123',
+      pais: 'Santiago, RD', fuente: '=1+1', englishLevel: 'C1', speedtestMbps: 50,
+      applicationStatus: null, resultRoleplay: 90, fechaPostulacion: '2026-01-01T12:00:00Z',
+    }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    const csv = vi.mocked(downloadCsv).mock.calls[0][0];
+    expect(csv).toContain("\"'+18095550123\",\"Santiago, RD\",\"'=1+1\",C1,50 Mbps,");
+    expect(csv).toContain(',90%,');
+  });
 });
