@@ -25,7 +25,7 @@ describe('recruitment SMTP adapter rollout gates', () => {
     vi.stubEnv('OPERATIONAL_EMAIL_GENERAL_ENABLED', 'true');
     vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', '');
     vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_NOT_BEFORE', '2026-11-24T05:00:00Z');
-    mocks.config.mockReturnValue({ status: 'configured' });
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'smtp' });
     mocks.dispatch.mockResolvedValue('accepted');
   });
   afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
@@ -62,7 +62,7 @@ describe('recruitment SMTP adapter rollout gates', () => {
     expect(await deps.load('event-1')).toEqual(recent);
     await deps.claim('event-1');
     await deps.finish('event-1', 'accepted');
-    expect(mocks.claim).toHaveBeenCalledWith(mocks.prisma, 'event-1');
+    expect(mocks.claim).toHaveBeenCalledWith(mocks.prisma, 'event-1', 'smtp');
     expect(mocks.finish).toHaveBeenCalledWith(mocks.prisma, 'event-1', 'accepted');
     expect(deps.send).toBe(mocks.send);
     expect(mocks.send).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ describe('recruitment SMTP adapter rollout gates', () => {
     mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
       await deps.claim('event-1') ? 'accepted' : 'not_claimed');
     expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
-    expect(mocks.claim).toHaveBeenCalledWith(tx, 'event-1');
+    expect(mocks.claim).toHaveBeenCalledWith(tx, 'event-1', 'brevo');
     expect(mocks.reserve).toHaveBeenCalledWith(tx, profile);
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.sendProfile).not.toHaveBeenCalled();
