@@ -10,10 +10,10 @@ export function PresenceBadge() {
     return (
       <div className={cn(
         'flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium',
-        'bg-slate-800/50 border-slate-700/50 text-slate-500',
-        'animate-pulse'
+        'bg-[var(--theme-surface-muted)] border-[var(--border)] text-[var(--text-secondary)]',
+        'transition-colors'
       )}>
-        <div className="w-2 h-2 rounded-full bg-slate-500" />
+        <span aria-hidden="true" className="w-2 h-2 shrink-0 rounded-full bg-current" />
         Detectando…
       </div>
     );
@@ -23,14 +23,14 @@ export function PresenceBadge() {
     return (
       <div className={cn(
         'flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium',
-        'bg-green-500/10 border-green-500/30 text-green-400',
+        'bg-[var(--theme-surface-muted)] border-[var(--border)] text-[var(--theme-success)]',
         'transition-all'
       )}>
-        <span className="relative flex h-2 w-2">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-          <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400" />
+        <span aria-hidden="true" className="relative flex h-2 w-2 shrink-0">
+          <span className="motion-safe:animate-ping absolute inline-flex h-full w-full rounded-full bg-current opacity-75" />
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-current" />
         </span>
-        • Online
+        Online
       </div>
     );
   }
@@ -38,11 +38,11 @@ export function PresenceBadge() {
   return (
     <div className={cn(
       'flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-medium',
-      'bg-slate-800/50 border-slate-700/50 text-slate-400',
+      'bg-[var(--theme-surface-muted)] border-[var(--border)] text-[var(--text-secondary)]',
       'transition-all'
     )}>
-      <div className="w-2 h-2 rounded-full bg-slate-500" />
-      • Offline
+      <span aria-hidden="true" className="w-2 h-2 shrink-0 rounded-full bg-current" />
+      Offline
     </div>
   );
 }
