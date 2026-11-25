@@ -2,6 +2,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const storage = vi.hoisted(() => ({
   info: vi.fn(),
+  bucket: vi.fn(),
+  from: vi.fn(),
   remove: vi.fn(),
   signed: vi.fn(),
   signedUpload: vi.fn(),
@@ -10,7 +12,8 @@ const storage = vi.hoisted(() => ({
 vi.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     storage: {
-      from: () => ({
+      getBucket: storage.bucket,
+      from: (bucket: string) => (storage.from(bucket), {
         info: storage.info,
         remove: storage.remove,
         createSignedUrl: storage.signed,
@@ -25,6 +28,7 @@ import {
   createSignedBilingualOpeningUploadUrl,
   createSignedUploadUrl,
   getAdminReviewUrl,
+  getSignedBilingualOpeningAudioUrl,
   getPlaybackUrl,
   getSignedAudioUrl,
   getValidationUrl,
@@ -45,6 +49,8 @@ afterAll(() => {
 describe('Roleplay Storage errors never expose provider error messages', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    storage.bucket.mockResolvedValue({ data: { id: 'roleplay-opening-private', name: 'roleplay-opening-private', public: false,
+      file_size_limit: 15 * 1024 * 1024, allowed_mime_types: ['audio/webm', 'audio/mp4', 'audio/ogg', 'audio/mpeg'] }, error: null });
     storage.info.mockResolvedValue({ data: { metadata: { size: 5 } }, error: null });
     storage.remove.mockResolvedValue({ error: null });
   });
@@ -56,10 +62,21 @@ describe('Roleplay Storage errors never expose provider error messages', () => {
     const result = await createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 100);
     expect(result.path).toMatch(/^openings\/session-1\/[a-f0-9-]+\.webm$/);
     expect(storage.signedUpload).toHaveBeenCalledWith(result.path, { upsert: false });
+    expect(storage.from).toHaveBeenCalledWith('roleplay-opening-private');
     await expect(createSignedBilingualOpeningUploadUrl('../foreign', 'audio/webm', 100)).rejects.toThrow();
     await expect(createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 0)).rejects.toThrow();
     await expect(createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 16 * 1024 * 1024)).rejects.toThrow();
     expect(storage.signedUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses opening upload and playback when the dedicated bucket is public', async () => {
+    storage.bucket.mockResolvedValue({ data: { id: 'roleplay-opening-private', public: true }, error: null });
+    const reserve = vi.fn();
+    await expect(createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 100, reserve)).rejects.toThrow();
+    await expect(getSignedBilingualOpeningAudioUrl('openings/session-1/123e4567-e89b-42d3-a456-426614174000.webm')).rejects.toThrow();
+    expect(reserve).not.toHaveBeenCalled();
+    expect(storage.signedUpload).not.toHaveBeenCalled();
+    expect(storage.signed).not.toHaveBeenCalled();
   });
 
   it('rejects mismatched opening upload paths without exposing provider data', async () => {
