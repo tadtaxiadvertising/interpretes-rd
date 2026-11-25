@@ -85,7 +85,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
           <section
             id="mobile-more-panel"
             aria-label="Más secciones"
-            className="absolute bottom-full left-3 right-3 z-10 mb-2 max-h-[70vh] overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 shadow-2xl"
+            className="absolute bottom-full left-3 right-3 z-10 mb-2 max-h-[min(70dvh,calc(100dvh-6rem-env(safe-area-inset-bottom)))] overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 shadow-2xl"
           >
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-sm font-bold text-[var(--foreground)]">Todas las secciones</h2>
@@ -93,7 +93,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
                 type="button"
                 aria-label="Cerrar secciones"
                 onClick={closeMore}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+                className="flex h-9 w-9 items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               >
                 <X size={18} aria-hidden="true" />
               </button>
@@ -139,7 +139,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
               href={item.href}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-[10px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600',
+                'flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-center text-[10px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--theme-focus)]',
                 active ? 'bg-blue-500/10 text-[var(--theme-active)]' : 'text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)]'
               )}
             >
@@ -156,7 +156,7 @@ export function MobileBottomNav({ role }: MobileBottomNavProps) {
           aria-controls="mobile-more-panel"
           onClick={() => setShowMore((open) => !open)}
           className={cn(
-            'flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-blue-600',
+            'flex min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--theme-focus)]',
             showMore || secondaryActive ? 'bg-blue-500/10 text-[var(--theme-active)]' : 'text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)]'
           )}
         >

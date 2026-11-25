@@ -34,7 +34,7 @@ export function Navbar({ email, notifications = [], onSignOut, role }: NavbarPro
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-2 border-b border-[var(--border)] bg-[var(--theme-nav)] px-3 shadow-sm backdrop-blur-md sm:gap-x-4 sm:px-6 lg:px-8">
       <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
-        <Link href={homePath} className="flex min-w-0 items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 md:hidden" aria-label="Ir al inicio del portal">
+        <Link href={homePath} className="flex min-w-0 items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] md:hidden" aria-label="Ir al inicio del portal">
           <Image src="/interpretes-rd-logo.webp" alt="" width={32} height={32} className="shrink-0 rounded-lg bg-white p-1" />
           <span className="hidden truncate text-xs font-bold text-[var(--foreground)] sm:inline">Intérpretes RD</span>
         </Link>
@@ -50,7 +50,7 @@ export function Navbar({ email, notifications = [], onSignOut, role }: NavbarPro
               aria-label="Menú de usuario"
               aria-expanded={isOpen}
               aria-controls="user-account-menu"
-              className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
               onClick={() => setIsOpen((open) => !open)}
             >
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#002d72] text-sm font-semibold text-white shadow-sm">
@@ -65,7 +65,7 @@ export function Navbar({ email, notifications = [], onSignOut, role }: NavbarPro
                   onClick={() => setIsOpen(false)}
                   className="fixed inset-0 z-0 cursor-default"
                 />
-                <div id="user-account-menu" className="absolute right-0 z-10 mt-2 w-64 origin-top-right rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] py-2 text-[var(--foreground)] shadow-2xl">
+                <div id="user-account-menu" className="absolute right-0 z-10 mt-2 w-[min(16rem,calc(100vw-1.5rem))] origin-top-right rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] py-2 text-[var(--foreground)] shadow-2xl">
                   <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#002d72] font-semibold text-white">{initials}</span>
                     <div className="flex min-w-0 flex-col">
@@ -90,7 +90,7 @@ export function Navbar({ email, notifications = [], onSignOut, role }: NavbarPro
                         if (onSignOut) onSignOut();
                         else await logout();
                       }}
-                      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm text-red-500 transition-colors hover:bg-red-500/10"
+                      className="flex min-h-11 w-full items-center gap-3 rounded-xl px-3 text-left text-sm text-[var(--theme-danger)] transition-colors hover:bg-red-500/10"
                     >
                       <LogOut size={16} aria-hidden="true" /> Cerrar sesión
                     </button>

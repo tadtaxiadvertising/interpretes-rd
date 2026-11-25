@@ -151,7 +151,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
 
   return (
     <aside className={cn(
-      "sticky top-0 h-screen glass border-r border-[var(--border)] z-50 hidden md:flex flex-col transition-all duration-500 ease-in-out",
+      "sticky top-0 h-dvh glass border-r border-[var(--border)] z-50 hidden md:flex flex-col transition-all duration-500 ease-in-out",
       isCollapsed ? "w-20" : "w-64"
     )}>
       <div className={cn("px-4 py-5 flex items-center border-b border-[var(--border)]", isCollapsed ? "justify-center" : "justify-between")}>
@@ -174,7 +174,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
           aria-label={isCollapsed ? "Expandir menú lateral" : "Contraer menú lateral"}
           aria-expanded={!isCollapsed}
           className={cn(
-            "p-2 hover:bg-[var(--theme-hover)] rounded-xl text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600",
+            "p-2 hover:bg-[var(--theme-hover)] rounded-xl text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-all focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]",
             isCollapsed && "hover:scale-110"
           )}
         >
@@ -215,7 +215,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
                         >
                           <Icon size={18} strokeWidth={isActive ? 2.3 : 1.8} className="shrink-0" />
                           {!isCollapsed && <span className="text-[13px] font-medium truncate">{item.label}</span>}
-                          {!isCollapsed && isActive && <ChevronRight size={15} className="ml-auto shrink-0 text-blue-300" />}
+                          {!isCollapsed && isActive && <ChevronRight size={15} className="ml-auto shrink-0 text-[var(--theme-active)]" />}
                         </Link>
                       );
                     })}
@@ -256,26 +256,26 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
         <div className="px-4 mb-4 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="rounded-2xl bg-gradient-to-br from-amber-500/10 to-transparent border border-amber-500/10 p-4">
             <div className="flex items-center gap-2 mb-3">
-              <Award size={16} className="text-amber-400" />
-              <span className="text-xs font-bold text-amber-400 uppercase tracking-wide">Mi Ranking</span>
+              <Award size={16} className="text-[var(--theme-warning)]" />
+              <span className="text-xs font-bold text-[var(--theme-warning)] uppercase tracking-wide">Mi Ranking</span>
             </div>
             <div className="flex items-baseline gap-1 mb-2">
-              <span className="text-2xl font-bold text-white">#{ranking.position}</span>
-              <span className="text-xs text-slate-400">de {ranking.totalInterpreters}</span>
+              <span className="text-2xl font-bold text-[var(--foreground)]">#{ranking.position}</span>
+              <span className="text-xs text-[var(--text-secondary)]">de {ranking.totalInterpreters}</span>
             </div>
             <div className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-400">Tú</span>
-                <span className="text-emerald-400 font-medium">{ranking.myMinutes} min</span>
+                <span className="text-[var(--text-secondary)]">Tú</span>
+                <span className="text-[var(--theme-success)] font-medium">{ranking.myMinutes} min</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-slate-400">Promedio</span>
-                <span className="text-slate-300 font-medium">{ranking.avgMinutes} min</span>
+                <span className="text-[var(--text-secondary)]">Promedio</span>
+                <span className="text-[var(--text-secondary)] font-medium">{ranking.avgMinutes} min</span>
               </div>
               {/* Visual bar */}
-              <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div className="mt-2 h-1.5 bg-[var(--theme-track)] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full"
+                  className="h-full bg-[var(--theme-warning)] rounded-full"
                   style={{ width: `${Math.round(Math.min((ranking.myMinutes / Math.max(ranking.avgMinutes, 1)) * 50, 100))}%` }}
                 />
               </div>
@@ -294,7 +294,7 @@ export function Sidebar({ role, isCollapsed, onToggle, ranking, customMenu, appN
           <div className={cn("flex items-center gap-2", !isCollapsed && "mt-2")}>
             <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.5)]" />
             {!isCollapsed && (
-              <span className="text-sm font-medium text-slate-300 animate-in fade-in duration-500 truncate">
+              <span className="text-sm font-medium text-[var(--text-secondary)] animate-in fade-in duration-500 truncate">
                 Edge API Online
               </span>
             )}
