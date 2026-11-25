@@ -167,6 +167,58 @@ describe('EmailProviderVault refresh failures', () => {
     await screen.findByText('El perfil preferido no figura en la consulta. No se puede comprobar su disponibilidad local.');
   });
 
+  it('invalidates a snapshot after an uncertain replacement and prevents stale resubmission', async () => {
+    await loadProfiles();
+    actions.replaceSavedEmailProvider.mockResolvedValueOnce('unavailable');
+    fireEvent.click(screen.getByRole('button', { name: 'Editar configuración / clave' }));
+    fireEvent.change(screen.getByLabelText('Clave API (nueva o vigente)'), { target: { value: 'fixture-key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar reemplazo' }));
+    await screen.findByText('No se pudo confirmar el reemplazo. Consulta los perfiles antes de repetir la operación.');
+    expect(screen.queryByRole('button', { name: 'Guardar reemplazo' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Editar configuración / clave' })).toBeNull();
+    expect(actions.replaceSavedEmailProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates a snapshot after an uncertain retirement', async () => {
+    await loadProfiles();
+    actions.retireSavedEmailProvider.mockResolvedValueOnce('unavailable');
+    fireEvent.click(screen.getByRole('button', { name: 'Desactivar perfil' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar desactivación' }));
+    await screen.findByText('No se pudo confirmar la desactivación. Consulta los perfiles antes de repetir la operación.');
+    expect(screen.queryByRole('button', { name: 'Confirmar desactivación' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Desactivar perfil' })).toBeNull();
+    expect(actions.retireSavedEmailProvider).toHaveBeenCalledTimes(1);
+  });
+
+  it('refreshes a duplicate replacement conflict without preserving a submitted secret', async () => {
+    await loadProfiles();
+    actions.replaceSavedEmailProvider.mockResolvedValueOnce('already_saved');
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(ready);
+    fireEvent.click(screen.getByRole('button', { name: 'Editar configuración / clave' }));
+    const key = screen.getByLabelText('Clave API (nueva o vigente)') as HTMLInputElement;
+    fireEvent.change(key, { target: { value: 'fixture-key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar reemplazo' }));
+    await screen.findByText(/Ya existe un perfil activo de este proveedor y remitente/);
+    expect(actions.listEmailProviderProfiles).toHaveBeenCalledTimes(2);
+    expect(key.value).toBe('');
+    expect(screen.getByRole('button', { name: 'Guardar reemplazo' })).toBeTruthy();
+  });
+
+  it('closes editing when a fresh consultation reports the profile retired', async () => {
+    await loadProfiles();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar configuración / clave' }));
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({
+      ...ready, profiles: [{ ...ready.profiles[0], retiredAt: '2026-11-25T01:00:00Z' }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByText('Desactivado (histórico)');
+    expect(screen.queryByRole('button', { name: 'Guardar reemplazo' })).toBeNull();
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(ready);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByRole('button', { name: 'Editar configuración / clave' });
+    expect(screen.queryByRole('button', { name: 'Guardar reemplazo' })).toBeNull();
+  });
+
   it('recovers after a later successful consultation', async () => {
     await loadProfiles();
     actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
