@@ -4,6 +4,18 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 type TerminalFailure = { id: string; failedAt: Date };
 
+export function audioFailureEventRow(userId: string, failure: TerminalFailure) {
+  return notificationEventRow({
+    userId,
+    eventKey: 'roleplay.audio.failed:' + failure.id + ':' + failure.failedAt.toISOString(),
+    category: 'roleplay',
+    type: 'error',
+    title: 'Procesamiento de audio fallido',
+    message: 'Una conversión agotó sus intentos. Revisa los trabajos fallidos en la cola de audio.',
+    link: '/admin/roleplay-audio-jobs',
+  });
+}
+
 /** Only call after a terminal failure transition has committed. */
 export async function notifyAudioJobFailures(failures: readonly TerminalFailure[]): Promise<boolean> {
   if (!failures.length) return true;
@@ -17,15 +29,7 @@ export async function notifyAudioJobFailures(failures: readonly TerminalFailure[
     let batch: ReturnType<typeof notificationEventRow>[] = [];
     for (const failure of failures) {
       for (const admin of admins) {
-        batch.push(notificationEventRow({
-          userId: admin.id,
-          eventKey: 'roleplay.audio.failed:' + failure.id + ':' + failure.failedAt.toISOString(),
-          category: 'roleplay',
-          type: 'error',
-          title: 'Procesamiento de audio fallido',
-          message: 'Una conversión agotó sus intentos. Revisa los trabajos fallidos en la cola de audio.',
-          link: '/admin/roleplay-audio-jobs',
-        }));
+        batch.push(audioFailureEventRow(admin.id, failure));
         if (batch.length >= 100) {
           await prisma.notification.createMany({ data: batch, skipDuplicates: true });
           batch = [];
