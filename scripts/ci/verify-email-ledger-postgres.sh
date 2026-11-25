@@ -450,9 +450,9 @@ assert '${' not in sql
 print(sql+';')
 PY
 )"
-assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' provider-readiness-owner
+assert_equal "$(db -c "$readiness_sql")" 't|f|t|t|t' provider-readiness-before-pause
 # A non-owner with incomplete grants must not be diagnosed as ready.
-assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $readiness_sql")" 't|t|t|f|t' provider-readiness-incomplete-runtime
+assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $readiness_sql")" 't|f|t|f|t' provider-readiness-incomplete-runtime
 echo 'Isolated provider readiness checks passed.'
 
 # Add three providers without resetting existing quota rows or history.
@@ -465,7 +465,7 @@ if db -c "UPDATE private_email.provider_quota SET monthly_limit=501 WHERE provid
 fi
 db -c "INSERT INTO private_email.provider_profile(id,name,provider,sender,sealed_key,updated_by) VALUES ('123e4567-e89b-42d3-a456-426614174002','Mailjet fixture','mailjet','office@example.test','v1:'||repeat('a',90),'fixture')"
 assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE provider='mailjet'")" 1 expanded-profile
-assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' expanded-readiness
+assert_equal "$(db -c "$readiness_sql")" 't|f|t|t|t' expanded-readiness-before-pause
 echo 'Isolated five-provider expansion checks passed.'
 
 # When a challenge write cannot reserve quota, the challenge must roll back.
@@ -483,6 +483,8 @@ echo 'Isolated mailbox challenge rollback check passed.'
 # Emergency pause: use actual state mutation and reservation guard SQL.
 db < "$root/docs/operations/proposed-email-vault-pause.sql"
 assert_equal "$(db -c "SELECT dispatch_paused FROM private_email.provider_selection WHERE singleton")" t vault-default-paused
+assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' provider-readiness-after-pause
+assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $readiness_sql")" 't|t|t|f|t' provider-readiness-after-pause-incomplete-runtime
 pause_sql="$(python3 - "$root/src/lib/email/vault-pause.ts" <<'PY'
 import pathlib, sys
 source = pathlib.Path(sys.argv[1]).read_text()
