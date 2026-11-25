@@ -3,6 +3,7 @@
 import React from 'react';
 import { Download } from 'lucide-react';
 import { downloadCsv } from '@/lib/download-csv';
+import { csvTextCell, csvNumberCell } from '@/lib/legacy-csv-cells';
 
 interface PayrollRecord {
   id: string;
@@ -46,18 +47,18 @@ export function ExportPayrollButton({ data }: ExportPayrollButtonProps) {
     ];
 
     const csvRows = data.map(record => [
-      `"${record.interpreter.name}"`,
-      record.interpreter.emailCorporativo || 'N/A',
-      new Date(record.periodStart).toLocaleDateString(),
-      new Date(record.periodEnd).toLocaleDateString(),
-      record.totalMinutes,
-      record.grossTotal,
-      record.qualityBonus,
-      record.penalidades,
-      record.transferDeduction,
-      record.netTotal,
-      record.status,
-      record.interpreter.metodoPago || 'N/A'
+      csvTextCell(record.interpreter.name, true),
+      csvTextCell(record.interpreter.emailCorporativo || 'N/A'),
+      csvTextCell(new Date(record.periodStart).toLocaleDateString()),
+      csvTextCell(new Date(record.periodEnd).toLocaleDateString()),
+      csvNumberCell(record.totalMinutes),
+      csvNumberCell(record.grossTotal),
+      csvNumberCell(record.qualityBonus),
+      csvNumberCell(record.penalidades),
+      csvNumberCell(record.transferDeduction),
+      csvNumberCell(record.netTotal),
+      csvTextCell(record.status),
+      csvTextCell(record.interpreter.metodoPago || 'N/A')
     ].join(','));
 
     const csvContent = [headers.join(','), ...csvRows].join('\n');
