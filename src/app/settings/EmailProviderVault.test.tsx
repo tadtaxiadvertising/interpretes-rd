@@ -219,6 +219,52 @@ describe('EmailProviderVault refresh failures', () => {
     expect(screen.queryByRole('button', { name: 'Guardar reemplazo' })).toBeNull();
   });
 
+  it('sends the original budget limits and refreshes a concurrent change', async () => {
+    await loadProfiles();
+    actions.saveEmailProviderBudget.mockResolvedValueOnce('budget_conflict');
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({
+      ...ready, quotas: [{ ...ready.quotas[0], dailyLimit: 80, monthlyLimit: 400 }],
+    });
+    fireEvent.change(screen.getByLabelText('Máximo diario'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar presupuesto' }));
+    await screen.findByText(/El presupuesto cambió o ya no está disponible/);
+    expect(actions.saveEmailProviderBudget).toHaveBeenCalledExactlyOnceWith({
+      provider: 'brevo', dailyLimit: 60, monthlyLimit: 500, expectedDailyLimit: 100, expectedMonthlyLimit: 500,
+    });
+    expect((screen.getByLabelText('Máximo diario') as HTMLInputElement).value).toBe('80');
+    expect((screen.getByLabelText('Máximo mensual') as HTMLInputElement).value).toBe('400');
+    expect((screen.getByRole('button', { name: 'Guardar presupuesto' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('requires explicit consultation after an uncertain budget save', async () => {
+    await loadProfiles();
+    actions.saveEmailProviderBudget.mockResolvedValueOnce('unavailable');
+    fireEvent.change(screen.getByLabelText('Máximo diario'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar presupuesto' }));
+    await screen.findByText('No se pudo confirmar el cambio de presupuesto. Consulta los perfiles antes de repetir la operación.');
+    expect(screen.queryByRole('button', { name: 'Guardar presupuesto' })).toBeNull();
+    expect(actions.listEmailProviderProfiles).toHaveBeenCalledTimes(1);
+    expect(actions.saveEmailProviderBudget).toHaveBeenCalledTimes(1);
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({
+      ...ready, quotas: [{ ...ready.quotas[0], dailyLimit: 60 }],
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByRole('button', { name: 'Guardar presupuesto' });
+    expect((screen.getByLabelText('Máximo diario') as HTMLInputElement).value).toBe('60');
+    expect((screen.getByRole('button', { name: 'Guardar presupuesto' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('shows the confirmed budget save separately from a failed refresh', async () => {
+    await loadProfiles();
+    actions.saveEmailProviderBudget.mockResolvedValueOnce('budget_saved');
+    actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
+    fireEvent.change(screen.getByLabelText('Máximo diario'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar presupuesto' }));
+    await screen.findByText('Presupuesto guardado. El consumo acumulado no ha cambiado.');
+    expect(screen.getByText(/No se pudieron actualizar los perfiles/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Guardar presupuesto' })).toBeNull();
+  });
+
   it('recovers after a later successful consultation', async () => {
     await loadProfiles();
     actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
