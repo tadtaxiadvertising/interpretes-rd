@@ -1,6 +1,9 @@
 import React from 'react';
 import { Metadata } from 'next';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
+import { loadBilingualOpeningReview } from '@/lib/roleplay/bilingual-opening-review';
+import { RoleplayOpeningReview } from '@/components/roleplay/RoleplayOpeningReview';
 import prisma from '@/lib/prisma';
 import { getAdminReviewUrl } from '@/lib/roleplay';
 import { resolveResponseAudioUrl } from '@/lib/roleplay-review';
@@ -20,6 +23,9 @@ interface PageProps {
 }
 
 export default async function RoleplayEvaluationPage({ params }: PageProps) {
+  const identity = await resolveCurrentIdentity();
+  if (!identity) redirect('/login');
+  if (identity.role !== 'admin') redirect('/dashboard');
   const { id } = await params;
 
   const session = await prisma.roleplaySession.findUnique({
@@ -38,6 +44,8 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
   if (!session) {
     notFound();
   }
+
+  const opening = await loadBilingualOpeningReview(prisma, session.id, getAdminReviewUrl);
 
   // Sign first-party base clips as well as participant responses. The
   // originally stored public URL is not a reliable playback URL for private
@@ -116,6 +124,8 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
             </div>
           </div>
         </div>
+
+        <RoleplayOpeningReview opening={opening} />
 
         {/* Escenarios Evaluation */}
         {scenarios.length > 0 && (
