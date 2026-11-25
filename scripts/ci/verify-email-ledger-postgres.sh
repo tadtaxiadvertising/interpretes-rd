@@ -454,3 +454,16 @@ assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' provider-readiness-owner
 # A non-owner with incomplete grants must not be diagnosed as ready.
 assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $readiness_sql")" 't|t|t|f|t' provider-readiness-incomplete-runtime
 echo 'Isolated provider readiness checks passed.'
+
+# Add three providers without resetting existing quota rows or history.
+db < "$root/docs/operations/proposed-email-provider-expansion.sql"
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_quota")" 5 expanded-quota-count
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '3:7' expanded-preserves-brevo-usage
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_quota WHERE provider IN ('mailjet','smtp2go','mailersend') AND daily_used=0 AND monthly_used=0")" 3 expanded-initial-usage
+if db -c "UPDATE private_email.provider_quota SET monthly_limit=501 WHERE provider='mailersend'" >/dev/null 2>&1; then
+  echo "MailerSend cap was not enforced" >&2; exit 1
+fi
+db -c "INSERT INTO private_email.provider_profile(id,name,provider,sender,sealed_key,updated_by) VALUES ('123e4567-e89b-42d3-a456-426614174002','Mailjet fixture','mailjet','office@example.test','v1:'||repeat('a',90),'fixture')"
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE provider='mailjet'")" 1 expanded-profile
+assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' expanded-readiness
+echo 'Isolated five-provider expansion checks passed.'
