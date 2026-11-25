@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { repairMissingMessageNotices } from '@/app/actions/notification-repair';
 import { Bell, RefreshCw } from 'lucide-react';
 
 const METRICS = [
@@ -73,11 +74,16 @@ export default function NotificationDiagnostics() {
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState('Sin comprobar.');
   const [busy, setBusy] = useState(false);
+  const [confirmRepair, setConfirmRepair] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [repairStatus, setRepairStatus] = useState('');
+  const repairLock = useRef(false);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
 
   async function check() {
-    if (pending.current) return;
+    if (pending.current || repairLock.current) return;
+    setConfirmRepair(false);
     const controller = new AbortController();
     pending.current = controller;
     setBusy(true);
@@ -109,6 +115,31 @@ export default function NotificationDiagnostics() {
     }
   }
 
+  async function repair() {
+    if (!confirmRepair || busy || repairLock.current) return;
+    repairLock.current = true;
+    setRepairing(true);
+    setConfirmRepair(false);
+    setRepairStatus('Recalculando y reparando avisos elegibles…');
+    try {
+      const result = await repairMissingMessageNotices(true);
+      if (result.success) {
+        const { created, conflicts, deferred, skipped } = result.report;
+        setRepairStatus(`Avisos creados: ${created}. Conflictos no modificados: ${conflicts}. Pendientes para otro lote: ${deferred}. Omitidos por concurrencia: ${skipped}. Vuelve a comprobar el diagnóstico para actualizar los resultados.`);
+        setReport(null);
+        setOperational(null);
+        setStatus('Diagnóstico anterior invalidado tras la reparación.');
+      } else {
+        setRepairStatus(result.code === 'RATE_LIMITED' ? 'Espera al menos un minuto antes de otra reparación.' : result.code === 'UNAUTHORIZED' ? 'No autorizado. Inicia sesión como administrador.' : 'No se pudo confirmar la reparación. Vuelve a comprobar el diagnóstico.');
+      }
+    } catch {
+      setRepairStatus('No se pudo confirmar la reparación. Vuelve a comprobar el diagnóstico.');
+    } finally {
+      repairLock.current = false;
+      setRepairing(false);
+    }
+  }
+
   return (
     <section aria-labelledby="notification-diagnostics-heading" className="glass rounded-3xl border border-[var(--border)] p-6 space-y-4">
       <div className="flex items-center gap-3">
@@ -116,11 +147,12 @@ export default function NotificationDiagnostics() {
         <h2 id="notification-diagnostics-heading" className="text-lg font-semibold text-[var(--foreground)]">Diagnóstico de notificaciones</h2>
       </div>
       <p className="text-sm text-[var(--text-secondary)]">Consulta una muestra de los registros más recientes sin modificar datos ni leer conversaciones privadas.</p>
-      <button type="button" onClick={check} disabled={busy} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
+      <button type="button" onClick={check} disabled={busy || repairing} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
         <RefreshCw size={16} aria-hidden="true" className={busy ? 'animate-spin' : ''} />
         {busy ? 'Comprobando…' : 'Comprobar notificaciones'}
       </button>
       <p role="status" aria-live="polite" className="text-sm text-[var(--foreground)]">{status}</p>
+      {repairStatus && <p role="status" aria-live="polite" className="text-sm text-[var(--foreground)]">{repairStatus}</p>}
       {report && (
         <>
           <p className="text-xs text-[var(--text-secondary)]">Consulta: {new Date(report.checkedAt).toLocaleString('es-DO')}. Hasta {report.sampleLimit} registros de cada tipo.</p>
@@ -133,6 +165,19 @@ export default function NotificationDiagnostics() {
               </div>
             ))}
           </dl>
+          {report.missingMessageNotices > 0 && (
+            <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+              <h3 className="font-semibold text-[var(--foreground)]">Reparar avisos de mensajería</h3>
+              <p className="text-sm text-[var(--text-secondary)]">Se recalculará la muestra y se crearán hasta 50 avisos internos faltantes de mensajes elegibles de las últimas 24 horas. No se enviarán correos, modificarán conversaciones ni sobrescribirán avisos existentes.</p>
+              <label className="flex min-h-11 items-start gap-2 text-sm text-[var(--foreground)]">
+                <input type="checkbox" checked={confirmRepair} disabled={repairing || busy} onChange={event => setConfirmRepair(event.target.checked)} className="mt-1" />
+                Confirmo la creación de los avisos internos faltantes.
+              </label>
+              <button type="button" onClick={repair} disabled={!confirmRepair || repairing || busy} className="min-h-11 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
+                {repairing ? 'Reparando…' : 'Reparar avisos de mensajes'}
+              </button>
+            </div>
+          )}
           <h3 className="font-semibold text-[var(--foreground)]">Entregas internas por módulo</h3>
           {operational ? (
             <>
