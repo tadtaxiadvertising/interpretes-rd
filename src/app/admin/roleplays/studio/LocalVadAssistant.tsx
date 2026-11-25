@@ -99,7 +99,7 @@ export default function LocalVadAssistant({
               <button type="button"
                 onClick={() => { onApply(selectedClips); setReviewedPlan(null); }}
                 disabled={selectedClips.length === 0}
-                className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                className="rounded-lg theme-action-primary px-4 py-2 text-sm font-semibold">
                 Añadir {selectedClips.length} {selectedClips.length === 1 ? 'corte revisable' : 'cortes revisables'}
               </button>
               <ol className="grid gap-1 text-xs text-[var(--text-secondary)] sm:grid-cols-2">
