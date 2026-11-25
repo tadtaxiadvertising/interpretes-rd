@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { AlertTriangle, AudioLines, Copy, Layers3, Library, Plus } from 'lucide-react';
 import prisma from '@/lib/prisma';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
-import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
 
 export const dynamic = 'force-dynamic';
@@ -42,13 +42,13 @@ async function getLibrary() {
       audioCount: number;
       assignmentsInWindow: number;
       archivedAt: Date | null;
+      audioKind: 'private' | 'legacy';
     }>();
 
     for (const session of sessions) {
       const scenarios = session.scenarios;
-      if (scenarios.length === 0 || scenarios.some((scenario) =>
-        !getReusableBaseAudioPath(scenario.baseAudioUrl, storageUrl)
-      )) continue;
+      const reusable = getReusableRoleplayAudio(scenarios, storageUrl);
+      if (!reusable) continue;
 
       const fingerprint = getRoleplaySnapshotHash(scenarios);
       const existing = versions.get(fingerprint);
@@ -64,6 +64,7 @@ async function getLibrary() {
         audioCount: scenarios.length,
         assignmentsInWindow: 1,
         archivedAt: null,
+        audioKind: reusable.kind,
       });
     }
     const items = [...versions.values()];
@@ -182,6 +183,7 @@ export default async function RoleplayLibraryPage({
                   {item.audioCount} {item.audioCount === 1 ? 'escenario' : 'escenarios'} ·
                   {' '}{item.assignmentsInWindow} {item.assignmentsInWindow === 1 ? 'sesión coincidente' : 'sesiones coincidentes'} en la muestra
                 </p>
+                <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">{item.audioKind === 'private' ? 'Audio privado · Apertura bilingüe obligatoria' : 'Audio histórico público · Sin apertura obligatoria'}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.titles.slice(0, 5).map((title, index) => (
                     <span key={index} className="rounded-full border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-1 text-xs text-[var(--text-secondary)]">
