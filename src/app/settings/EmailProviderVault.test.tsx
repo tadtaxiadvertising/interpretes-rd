@@ -100,6 +100,41 @@ describe('EmailProviderVault refresh failures', () => {
     expect(actions.addEmailProviderProfile).toHaveBeenCalledTimes(1);
   });
 
+  it.each([
+    { dailyUsed: 100, monthlyUsed: 0, periodValid: true },
+    { dailyUsed: 0, monthlyUsed: 500, periodValid: true },
+    { dailyUsed: 0, monthlyUsed: 0, periodValid: false },
+  ])('blocks a test when quota is unavailable: %j', async usage => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({
+      ...ready, quotas: [{ ...ready.quotas[0], ...usage }],
+    });
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    const button = await screen.findByRole('button', { name: 'Enviar prueba a este remitente' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(actions.testSavedEmailProvider).not.toHaveBeenCalled();
+  });
+
+  it('blocks a test with no matching provider quota', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...ready, quotas: [] });
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    const button = await screen.findByRole('button', { name: 'Enviar prueba a este remitente' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(screen.getByText('No hay presupuesto local consultado para realizar una prueba.')).toBeTruthy();
+    fireEvent.click(button);
+    expect(actions.testSavedEmailProvider).not.toHaveBeenCalled();
+  });
+
+  it('explains that an available test consumes a shared local attempt', async () => {
+    await loadProfiles();
+    const button = screen.getByRole('button', { name: 'Enviar prueba a este remitente' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    const hint = document.getElementById(button.getAttribute('aria-describedby') ?? '');
+    expect(hint?.textContent).toContain('reserva un intento del presupuesto local compartido');
+  });
+
   it('recovers after a later successful consultation', async () => {
     await loadProfiles();
     actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
