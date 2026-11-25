@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getMyNotifications, markNotificationAsRead } from '@/app/actions/notifications';
+import { getMyNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/app/actions/notifications';
 
 interface Notification {
   id: string;
@@ -27,7 +27,16 @@ export function NotificationBell({ initialNotifications }: { initialNotification
   // Keep local read acknowledgments, not a frozen copy of server props.
   // New notifications supplied by a refreshed layout must appear immediately.
   const [locallyReadIds, setLocallyReadIds] = useState<string[]>([]);
-  const [feed, setFeed] = useState<Notification[] | null>(null);
+  const [feed, setFeed] = useState<{ data: Notification[]; unreadCount: number; source: Notification[] } | null>(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const [refreshFailed, setRefreshFailed] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
+  const bulkRef = useRef(false);
+  const generation = useRef(0);
+  const requestRefresh = () => {
+    generation.current += 1;
+    setRefreshVersion(version => version + 1);
+  };
   const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     let active = true;
@@ -35,11 +44,17 @@ export function NotificationBell({ initialNotifications }: { initialNotification
     const refresh = async () => {
       if (busy || document.visibilityState === 'hidden') return;
       busy = true;
+      const currentGeneration = generation.current;
       try {
         const result = await getMyNotifications();
-        if (active && result.success) setFeed(result.data);
+        if (!active || currentGeneration !== generation.current) return;
+        if (result.success) {
+          setFeed({ data: result.data, unreadCount: result.unreadCount, source: initialNotifications });
+          setRefreshFailed(false);
+        } else setRefreshFailed(true);
       } catch {
         // Keep the last successful snapshot during transient failures.
+        if (active && currentGeneration === generation.current) setRefreshFailed(true);
       } finally { busy = false; }
     };
     void refresh();
@@ -50,15 +65,20 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       window.clearInterval(timer);
       window.removeEventListener('focus', refresh);
     };
-  }, [isOpen, initialNotifications]);
-  const notifications = (feed ?? initialNotifications).map(n =>
+  }, [isOpen, initialNotifications, refreshVersion]);
+  const snapshot = feed?.source === initialNotifications ? feed : null;
+  const rawNotifications = snapshot?.data ?? initialNotifications;
+  const notifications = rawNotifications.map(n =>
     locallyReadIds.includes(n.id) ? { ...n, isRead: true } : n
   );
   const [pendingIds, setPendingIds] = useState<string[]>([]);
   const pendingRef = useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const acknowledged = rawNotifications.filter(n => !n.isRead && locallyReadIds.includes(n.id)).length;
+  const unreadCount = Math.max(0, (snapshot?.unreadCount ?? rawNotifications.filter(n => !n.isRead).length) - acknowledged);
+  const [onlyUnread, setOnlyUnread] = useState(false);
+  const visibleNotifications = onlyUnread ? notifications.filter(n => !n.isRead) : notifications;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -71,7 +91,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
 
   const handleMarkAsRead = async (id: string) => {
     // A ref guards against rapid double clicks before React can re-render.
-    if (pendingRef.current.has(id)) return;
+    if (bulkRef.current || pendingRef.current.has(id)) return;
     pendingRef.current.add(id);
     setPendingIds([...pendingRef.current]);
     setError(null);
@@ -84,6 +104,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
         setLocallyReadIds(current =>
           current.includes(id) ? current : [...current, id]
         );
+        requestRefresh();
       } else {
         setError('No se pudo marcar la notificación como leída. Inténtalo de nuevo.');
       }
@@ -93,6 +114,28 @@ export function NotificationBell({ initialNotifications }: { initialNotification
     } finally {
       pendingRef.current.delete(id);
       setPendingIds([...pendingRef.current]);
+    }
+  };
+
+  const handleMarkAll = async () => {
+    if (bulkRef.current || pendingRef.current.size || unreadCount === 0) return;
+    bulkRef.current = true;
+    setBulkPending(true);
+    setError(null);
+    try {
+      const result = await markAllNotificationsAsRead();
+      if (!result.success) {
+        setError('No se pudieron marcar todas las notificaciones. Inténtalo de nuevo.');
+        return;
+      }
+      setLocallyReadIds(current => [...new Set([...current, ...rawNotifications.map(n => n.id)])]);
+      setFeed(current => current ? { ...current, unreadCount: 0, data: current.data.map(n => ({ ...n, isRead: true })) } : current);
+      requestRefresh();
+    } catch {
+      setError('No se pudieron marcar todas las notificaciones. Inténtalo de nuevo.');
+    } finally {
+      bulkRef.current = false;
+      setBulkPending(false);
     }
   };
 
@@ -133,6 +176,19 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
             </div>
 
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+              <div className="flex gap-1" role="group" aria-label="Filtrar notificaciones">
+                <button type="button" aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)} className={cn("min-h-9 rounded-lg px-2 text-xs", !onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Todas</button>
+                <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)} className={cn("min-h-9 rounded-lg px-2 text-xs", onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Sin leer</button>
+              </div>
+              <button type="button" disabled={!unreadCount || bulkPending || pendingIds.length > 0} aria-busy={bulkPending} onClick={() => void handleMarkAll()} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">{bulkPending ? 'Marcando…' : 'Marcar todas como leídas'}</button>
+            </div>
+            {refreshFailed && (
+              <div role="status" className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--theme-warning)]">
+                <span>No se pudo actualizar. Se muestran los últimos datos disponibles.</span>
+                <button type="button" onClick={requestRefresh} className="min-h-9 font-semibold underline">Reintentar</button>
+              </div>
+            )}
             {error && (
               <p role="alert" className="px-4 py-3 border-b border-red-500/20 bg-red-500/10 text-xs text-[var(--theme-danger)]">
                 {error}
@@ -140,12 +196,12 @@ export function NotificationBell({ initialNotifications }: { initialNotification
             )}
 
             <div className="max-h-[min(400px,calc(100dvh-15rem))] overflow-y-auto overscroll-contain">
-              {notifications.length === 0 ? (
+              {visibleNotifications.length === 0 ? (
                 <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
-                  No hay notificaciones.
+                  {onlyUnread ? 'No hay notificaciones recientes sin leer.' : 'No hay notificaciones.'}
                 </div>
               ) : (
-                notifications.map(n => (
+                visibleNotifications.map(n => (
                   <div
                     key={n.id}
                     className={cn(
@@ -154,7 +210,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                     )}
                   >
                     <div className="mt-1">{getIcon(n.type)}</div>
-                    <div className="flex-1 space-y-1">
+                    <div className="min-w-0 flex-1 space-y-1 break-words">
                       <p className={cn("text-xs font-bold", !n.isRead ? "text-[var(--foreground)]" : "text-[var(--text-secondary)]")}>{n.title}</p>
                       <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{n.message}</p>
                       <p className="text-[10px] text-[var(--text-secondary)] uppercase mt-1">
@@ -165,7 +221,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                       <button
                         type="button"
                         onClick={() => void handleMarkAsRead(n.id)}
-                        disabled={pendingIds.includes(n.id)}
+                        disabled={bulkPending || pendingIds.includes(n.id)}
                         aria-busy={pendingIds.includes(n.id)}
                         aria-label={`Marcar como leída: ${n.title}`}
                         className="min-h-11 min-w-11 self-start flex items-center justify-center p-1 hover:bg-[var(--theme-hover)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-wait"
@@ -181,6 +237,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
             </div>
 
             <div className="p-3 bg-[var(--theme-surface-muted)] text-center border-t border-[var(--border)]">
+              <p className="mb-2 text-xs text-[var(--text-secondary)]">Últimas 10 notificaciones</p>
               <button
                 type="button"
                 onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }}
