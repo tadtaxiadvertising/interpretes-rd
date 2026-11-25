@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Landmark, Hash, IdCard, CreditCard, AlertCircle, Check, ChevronDown } from 'lucide-react';
+import { Landmark, Hash, IdCard, CreditCard, AlertCircle, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // ── RD Bank Enum ──────────────────────────────────────────────────
@@ -122,7 +122,7 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
     <Wrapper {...(wrapperProps as any)} className="space-y-5">
       {/* Banco */}
       <div className="group">
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
+        <label htmlFor="bank-name-select" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
           Banco *
         </label>
         <div className="relative">
@@ -136,13 +136,13 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
             onChange={(e) => setBankName(e.target.value)}
             onBlur={() => markTouched('bankName')}
             id="bank-name-select"
+            aria-invalid={Boolean(touched.bankName && errors.bankName)}
+            aria-describedby={touched.bankName && errors.bankName ? "bank-name-select-error" : undefined}
             className={cn(
-              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-10 text-[var(--theme-control-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all appearance-none cursor-pointer hover:bg-[var(--theme-hover)]",
+              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-10 text-[var(--theme-control-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-colors appearance-none cursor-pointer",
               touched.bankName && errors.bankName
-                ? "border-red-500/50 bg-red-500/5"
-                : bankName 
-                  ? "border-blue-500/30" 
-                  : "border-[var(--theme-control-border)]"
+                ? "border-[var(--theme-danger)]"
+                : "border-[var(--theme-control-border)]"
             )}
           >
             <option value="">Selecciona tu banco</option>
@@ -150,18 +150,17 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
               <option key={bank.value} value={bank.value}>{bank.label}</option>
             ))}
           </select>
-          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none group-hover:text-[var(--text-secondary)] transition-colors" size={18} />
         </div>
         {touched.bankName && errors.bankName && (
-          <p className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
-            <AlertCircle size={12} /> {errors.bankName}
+          <p id="bank-name-select-error" className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
+            <AlertCircle size={12} aria-hidden="true" /> {errors.bankName}
           </p>
         )}
       </div>
 
       {/* Tipo de Cuenta */}
       <div className="group">
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
+        <label htmlFor="bank-account-type-select" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
           Tipo de Cuenta *
         </label>
         <div className="relative">
@@ -174,13 +173,13 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
             onChange={(e) => setBankAccountType(e.target.value)}
             onBlur={() => markTouched('bankAccountType')}
             id="bank-account-type-select"
+            aria-invalid={Boolean(touched.bankAccountType && errors.bankAccountType)}
+            aria-describedby={touched.bankAccountType && errors.bankAccountType ? "bank-account-type-select-error" : undefined}
             className={cn(
-              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-10 text-[var(--theme-control-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all appearance-none cursor-pointer hover:bg-[var(--theme-hover)]",
+              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-10 text-[var(--theme-control-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-colors appearance-none cursor-pointer",
               touched.bankAccountType && errors.bankAccountType
-                ? "border-red-500/50 bg-red-500/5"
-                : bankAccountType
-                  ? "border-blue-500/30"
-                  : "border-[var(--theme-control-border)]"
+                ? "border-[var(--theme-danger)]"
+                : "border-[var(--theme-control-border)]"
             )}
           >
             <option value="">Selecciona tipo de cuenta</option>
@@ -188,18 +187,17 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
               <option key={type.value} value={type.value}>{type.label}</option>
             ))}
           </select>
-          <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none group-hover:text-[var(--text-secondary)] transition-colors" size={18} />
         </div>
         {touched.bankAccountType && errors.bankAccountType && (
-          <p className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
-            <AlertCircle size={12} /> {errors.bankAccountType}
+          <p id="bank-account-type-select-error" className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
+            <AlertCircle size={12} aria-hidden="true" /> {errors.bankAccountType}
           </p>
         )}
       </div>
 
       {/* No. de Cuenta */}
       <div className="group">
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
+        <label htmlFor="bank-account-input" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
           No. de Cuenta *
         </label>
         <div className="relative">
@@ -215,29 +213,29 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
             onBlur={() => markTouched('bankAccount')}
             placeholder="Ej: 0123456789"
             id="bank-account-input"
+            aria-invalid={Boolean(touched.bankAccount && errors.bankAccount)}
+            aria-describedby={touched.bankAccount && errors.bankAccount ? "bank-account-input-error" : undefined}
             className={cn(
-              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-4 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all hover:bg-[var(--theme-hover)]",
+              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-12 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-colors",
               touched.bankAccount && errors.bankAccount
-                ? "border-red-500/50 bg-red-500/5"
-                : bankAccount && !errors.bankAccount
-                  ? "border-blue-500/30"
-                  : "border-[var(--theme-control-border)]"
+                ? "border-[var(--theme-danger)]"
+                : "border-[var(--theme-control-border)]"
             )}
           />
           {bankAccount && !errors.bankAccount && (
-            <Check className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--theme-success)] animate-in fade-in zoom-in duration-300" size={18} />
+            <Check className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--theme-success)] animate-in fade-in zoom-in duration-300 pointer-events-none" aria-hidden="true" size={18} />
           )}
         </div>
         {touched.bankAccount && errors.bankAccount && (
-          <p className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
-            <AlertCircle size={12} /> {errors.bankAccount}
+          <p id="bank-account-input-error" className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
+            <AlertCircle size={12} aria-hidden="true" /> {errors.bankAccount}
           </p>
         )}
       </div>
 
       {/* Cédula / RNC */}
       <div className="group">
-        <label className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
+        <label htmlFor="bank-cedula-input" className="block text-sm font-medium text-[var(--text-secondary)] mb-1.5 transition-colors group-focus-within:text-[var(--theme-link)]">
           Cédula / RNC *
         </label>
         <div className="relative">
@@ -247,36 +245,37 @@ export function BankFormRD({ initialData, onSubmit, onChange, standalone = false
           )} size={18} />
           <input
             type="text"
+            inputMode="numeric"
             value={bankCedula}
             onChange={(e) => handleCedulaChange(e.target.value)}
             onBlur={() => markTouched('bankCedula')}
             placeholder="001-1234567-8"
             id="bank-cedula-input"
+            aria-invalid={Boolean(touched.bankCedula && errors.bankCedula)}
+            aria-describedby={touched.bankCedula && errors.bankCedula ? "bank-cedula-input-error bank-cedula-format" : "bank-cedula-format"}
             maxLength={13}
             className={cn(
-              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-4 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all hover:bg-[var(--theme-hover)]",
+              "w-full bg-[var(--theme-control-bg)] border rounded-2xl py-3.5 pl-12 pr-12 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-colors",
               touched.bankCedula && errors.bankCedula
-                ? "border-red-500/50 bg-red-500/5"
-                : bankCedula && !errors.bankCedula
-                  ? "border-blue-500/30"
-                  : "border-[var(--theme-control-border)]"
+                ? "border-[var(--theme-danger)]"
+                : "border-[var(--theme-control-border)]"
             )}
           />
           {bankCedula && !errors.bankCedula && (
-            <Check className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--theme-success)] animate-in fade-in zoom-in duration-300" size={18} />
+            <Check className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--theme-success)] animate-in fade-in zoom-in duration-300 pointer-events-none" aria-hidden="true" size={18} />
           )}
         </div>
         {touched.bankCedula && errors.bankCedula && (
-          <p className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
-            <AlertCircle size={12} /> {errors.bankCedula}
+          <p id="bank-cedula-input-error" className="mt-1.5 text-xs text-[var(--theme-danger)] flex items-center gap-1 animate-in slide-in-from-top-1 duration-200">
+            <AlertCircle size={12} aria-hidden="true" /> {errors.bankCedula}
           </p>
         )}
-        <p className="mt-1.5 text-[11px] text-[var(--text-tertiary)] ml-1">Formato dominicano: XXX-XXXXXXX-X</p>
+        <p id="bank-cedula-format" className="mt-1.5 text-[11px] text-[var(--text-tertiary)] ml-1">Formato dominicano: XXX-XXXXXXX-X</p>
       </div>
 
       {/* Validity indicator */}
       {isValid && (
-        <div className="flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-[var(--theme-success)] animate-in fade-in zoom-in duration-500">
+        <div role="status" className="flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-[var(--theme-success)] animate-in fade-in zoom-in duration-500">
           <div className="w-5 h-5 rounded-full bg-emerald-500/20 flex items-center justify-center">
             <Check size={12} />
           </div>
