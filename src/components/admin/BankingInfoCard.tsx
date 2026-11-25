@@ -249,7 +249,7 @@ export function BankingInfoCard({
                   onBlur={() => markTouched('bankName')}
                   className={cn(
                     'w-full bg-[var(--theme-control-bg)] border rounded-xl py-2.5 pl-10 pr-8 text-sm text-[var(--theme-control-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all appearance-none cursor-pointer',
-                    touched.bankName && errors.bankName ? 'border-[var(--theme-danger)]' : editBankName ? 'border-[var(--theme-control-border)]' : 'border-[var(--theme-control-border)]'
+                    touched.bankName && errors.bankName ? 'border-[var(--theme-danger)]' : 'border-[var(--theme-control-border)]'
                   )}
                 >
                   <option value="">Selecciona banco</option>
@@ -280,7 +280,7 @@ export function BankingInfoCard({
                   onBlur={() => markTouched('bankAccountType')}
                   className={cn(
                     'w-full bg-[var(--theme-control-bg)] border rounded-xl py-2.5 pl-10 pr-8 text-sm text-[var(--theme-control-text)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all appearance-none cursor-pointer',
-                    touched.bankAccountType && errors.bankAccountType ? 'border-[var(--theme-danger)]' : editBankAccountType ? 'border-[var(--theme-control-border)]' : 'border-[var(--theme-control-border)]'
+                    touched.bankAccountType && errors.bankAccountType ? 'border-[var(--theme-danger)]' : 'border-[var(--theme-control-border)]'
                   )}
                 >
                   <option value="">Selecciona tipo</option>
@@ -314,7 +314,7 @@ export function BankingInfoCard({
                   placeholder="Ej: 0123456789"
                   className={cn(
                     'w-full bg-[var(--theme-control-bg)] border rounded-xl py-2.5 pl-10 pr-9 text-sm text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all',
-                    touched.bankAccount && errors.bankAccount ? 'border-[var(--theme-danger)]' : editBankAccount && !errors.bankAccount ? 'border-[var(--theme-control-border)]' : 'border-[var(--theme-control-border)]'
+                    touched.bankAccount && errors.bankAccount ? 'border-[var(--theme-danger)]' : 'border-[var(--theme-control-border)]'
                   )}
                 />
                 {editBankAccount && !errors.bankAccount && (
@@ -346,7 +346,7 @@ export function BankingInfoCard({
                   maxLength={13}
                   className={cn(
                     'w-full bg-[var(--theme-control-bg)] border rounded-xl py-2.5 pl-10 pr-9 text-sm text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all',
-                    touched.bankCedula && errors.bankCedula ? 'border-[var(--theme-danger)]' : editBankCedula && !errors.bankCedula ? 'border-[var(--theme-control-border)]' : 'border-[var(--theme-control-border)]'
+                    touched.bankCedula && errors.bankCedula ? 'border-[var(--theme-danger)]' : 'border-[var(--theme-control-border)]'
                   )}
                 />
                 {editBankCedula && !errors.bankCedula && (
