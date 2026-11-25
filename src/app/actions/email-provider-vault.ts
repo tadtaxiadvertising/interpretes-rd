@@ -1,6 +1,7 @@
 'use server';
 
 import { randomUUID } from 'node:crypto';
+import { existingEnvironmentProfile, importEnvironmentProvider } from '@/lib/email/import-environment-provider';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { openProfileCredentials, sealProfileCredentials, profileSmtpConfig, validateProfile, vaultKeyAvailable, type ProfileMetadata } from '@/lib/email/provider-vault';
@@ -18,7 +19,7 @@ import { retireProviderProfile, replaceProviderProfile, validateReplacement } fr
 
 type ListedProfile = ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null; retiredAt: string | null };
 type Status = 'ready' | 'disabled' | 'key_missing' | 'unauthorized' | 'unavailable';
-type ListResult = { status: Status; profiles: ListedProfile[]; quotas?: ProviderQuota[]; preferredId?: string | null; selectionPaused?: boolean; preferenceEditable?: boolean };
+type ListResult = { status: Status; profiles: ListedProfile[]; quotas?: ProviderQuota[]; preferredId?: string | null; selectionPaused?: boolean; preferenceEditable?: boolean; environmentImport?: { provider: 'brevo' | 'resend'; from: string } };
 type ProfileRow = Omit<ProfileMetadata, 'updatedAt'> & { updatedAt: Date; testAcceptedAt: Date | null; receiptConfirmedAt: Date | null; retiredAt: Date | null };
 const key = () => process.env.EMAIL_PROVIDER_ENCRYPTION_KEY;
 function availability(): Status {
@@ -43,7 +44,9 @@ export async function listEmailProviderProfiles(): Promise<ListResult> {
       SELECT profile_id::text AS id FROM private_email.provider_selection WHERE singleton
     `;
     if (!selection) return { status: 'unavailable', profiles: [] };
-    return { status: 'ready', profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString(),
+    const existing = existingEnvironmentProfile(process.env);
+    const environmentImport = existing && (existing.provider === 'brevo' || existing.provider === 'resend') && !rows.some(row => row.retiredAt === null && row.provider === existing.provider && row.from.toLowerCase() === existing.from.toLowerCase()) ? { provider: existing.provider, from: existing.from } : undefined;
+    return { status: 'ready', environmentImport, profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString(),
       testAcceptedAt: row.testAcceptedAt?.toISOString() ?? null, receiptConfirmedAt: row.receiptConfirmedAt?.toISOString() ?? null, retiredAt: row.retiredAt?.toISOString() ?? null })),
       quotas, preferredId: selection.id, selectionPaused: providerSelectionPaused(process.env), preferenceEditable: await canEditProviderPreference(prisma, process.env) };
   } catch {
@@ -176,4 +179,14 @@ export async function replaceSavedEmailProvider(input: unknown) {
     if (!replacement) return 'invalid' as const;
     return await prisma.$transaction(tx => replaceProviderProfile(tx, replacement, auth.user.userId, key())) ? 'profile_replaced' as const : 'invalid' as const;
   } catch { return 'unavailable' as const; }
+}
+
+/** Copy only the current server-configured API provider, with no client secrets. */
+export async function importConfiguredEmailProvider(): Promise<'imported' | 'already_saved' | 'blocked' | 'unauthorized' | 'unavailable'> {
+  try {
+    const auth = await validateAction('admin');
+    if ('error' in auth) return 'unauthorized';
+    if (availability() !== 'ready') return 'blocked';
+    return await prisma.$transaction(tx => importEnvironmentProvider(tx, process.env, auth.user.userId));
+  } catch { return 'unavailable'; }
 }
