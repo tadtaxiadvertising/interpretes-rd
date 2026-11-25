@@ -542,6 +542,8 @@ html[data-theme="light"] .theme-candidate [class*="bg-blue-300/"] {
   --theme-focus: #93c5fd;
   --theme-success: #6ee7b7;
   --theme-warning: #fcd34d;
+  --theme-away: #fdba74;
+  --theme-info: #67e8f9;
   --theme-danger: #fda4af;
   --theme-purple: #c4b5fd;
   --theme-control-bg: #101d30;
@@ -555,6 +557,8 @@ html[data-theme="light"] {
   --theme-focus: #1554a8;
   --theme-success: #047857;
   --theme-warning: #92400e;
+  --theme-away: #9a3412;
+  --theme-info: #155e75;
   --theme-danger: #b91c1c;
   --theme-purple: #6d28d9;
   --theme-control-bg: #fff;
