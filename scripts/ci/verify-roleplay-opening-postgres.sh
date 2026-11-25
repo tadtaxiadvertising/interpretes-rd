@@ -226,7 +226,7 @@ DELETE FROM public.roleplay_bilingual_opening_reservations WHERE session_id='dis
 DO $test$
 BEGIN
   IF (SELECT count(*) FROM public.roleplay_bilingual_opening_retired_paths
-      WHERE session_id='discard-fixture' AND cleanup_after > now()) <> 2 THEN
+      WHERE session_id='discard-fixture' AND cleanup_permitted AND cleanup_after >= retired_at + interval '24 hours') <> 2 THEN
     RAISE EXCEPTION 'Abandoned keys not retained';
   END IF;
   BEGIN
@@ -242,6 +242,16 @@ DO $test$
 BEGIN
   IF (SELECT count(*) FROM public.roleplay_bilingual_opening_retired_paths WHERE session_id='discard-fixture') <> 2 THEN
     RAISE EXCEPTION 'Cleanup ledger lost on session deletion';
+  END IF;
+END
+$test$;
+SQL
+db <<'SQL'
+DO $test$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM public.roleplay_bilingual_opening_retired_paths
+      WHERE session_id='required' AND NOT cleanup_permitted) THEN
+    RAISE EXCEPTION 'Historical evidence not protected from cleanup';
   END IF;
 END
 $test$;

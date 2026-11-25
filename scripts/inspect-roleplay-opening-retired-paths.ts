@@ -23,7 +23,7 @@ async function main() {
     await client.query('BEGIN READ ONLY');
     const result = await client.query(`
       SELECT count(*)::text AS total,
-        count(*) FILTER (WHERE r.cleanup_after <= CURRENT_TIMESTAMP
+        count(*) FILTER (WHERE r.cleanup_permitted AND r.cleanup_after <= CURRENT_TIMESTAMP
           AND NOT EXISTS (SELECT 1 FROM public.roleplay_bilingual_openings o WHERE o.source_audio_path = r.source_audio_path)
           AND NOT EXISTS (SELECT 1 FROM public.roleplay_bilingual_opening_reservations p WHERE p.source_audio_path = r.source_audio_path)
         )::text AS eligible

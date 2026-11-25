@@ -57,12 +57,14 @@ CREATE TABLE public.roleplay_bilingual_opening_retired_paths (
   session_id TEXT NOT NULL,
   retired_at TIMESTAMPTZ(6) NOT NULL DEFAULT clock_timestamp(),
   cleanup_after TIMESTAMPTZ(6) NOT NULL DEFAULT (clock_timestamp() + interval '24 hours'),
-  CHECK (cleanup_after >= retired_at + interval '23 hours'),
+  cleanup_permitted BOOLEAN NOT NULL DEFAULT FALSE,
+  CHECK (cleanup_after >= retired_at + interval '24 hours'),
   CHECK (
     split_part(source_audio_path, '/', 2) = session_id
     AND source_audio_path ~ '^openings/[a-zA-Z0-9_-]{1,100}/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(webm|mp4|ogg|mp3)$'
   )
 );
+CREATE INDEX roleplay_opening_retired_cleanup_idx ON public.roleplay_bilingual_opening_retired_paths (cleanup_after, source_audio_path) WHERE cleanup_permitted;
 ALTER TABLE public.roleplay_bilingual_opening_retired_paths ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.roleplay_bilingual_opening_retired_paths FROM PUBLIC;
 
@@ -72,8 +74,12 @@ BEGIN
   IF TG_OP = 'UPDATE' AND NEW.source_audio_path = OLD.source_audio_path THEN
     RETURN NEW;
   END IF;
-  INSERT INTO public.roleplay_bilingual_opening_retired_paths (source_audio_path, session_id)
-    VALUES (OLD.source_audio_path, OLD.session_id)
+  -- Cascaded session deletion is not permission to erase QA evidence.
+  -- Only an explicitly retired, never-confirmed reservation is eligible.
+  INSERT INTO public.roleplay_bilingual_opening_retired_paths (source_audio_path, session_id, cleanup_permitted)
+    VALUES (OLD.source_audio_path, OLD.session_id,
+      EXISTS (SELECT 1 FROM public.roleplay_sessions WHERE id = OLD.session_id)
+      AND NOT EXISTS (SELECT 1 FROM public.roleplay_bilingual_openings WHERE source_audio_path = OLD.source_audio_path))
     ON CONFLICT (source_audio_path) DO NOTHING;
   IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
   RETURN NEW;
