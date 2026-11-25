@@ -7,6 +7,7 @@ import { APPLICATION_REF_COOKIE, verifyApplicationRef } from '@/lib/recruitment/
 import { emailDeliveryMode, pilotRecipient } from '@/lib/email/pilot-recipient';
 import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, readExistingProofBinding, type MailboxState, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
 import { readOperationalMailConfig } from '@/lib/email/operational-config';
+import { usesProviderVault, readPreferredProvider, reserveSelectedProvider, sendReservedProfile } from '@/lib/email/preferred-provider-runtime';
 import { sendRecruitmentSmtp } from '@/lib/email/smtp-test';
 import { isProtectedAdminEmail } from '@/lib/admin-identity';
 import { rateLimit } from '@/lib/security/rate-limit';
@@ -56,12 +57,19 @@ async function resolveProofBinding(operation: 'request' | 'confirm') {
 /** Explicit proof request; no client-provided recipient. */
 export async function requestCandidateMailboxProof(): Promise<MailboxChallengeResult> {
   try {
-    if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true'
-      || readOperationalMailConfig(process.env).status !== 'configured') return 'not_available';
+    if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true') return 'not_available';
+    const vault = usesProviderVault(process.env);
+    if (vault && emailDeliveryMode(process.env) !== 'pilot') return 'not_available';
+    if (!vault && readOperationalMailConfig(process.env).status !== 'configured') return 'not_available';
     if (!rateLimit('global', { maxRequests: 30, windowMs: 60000, keyPrefix: 'email-proof-request-global' }).success) return 'not_available';
     const binding = await resolveProofBinding('request');
     if (!binding) return 'not_available';
-    return await issueMailboxChallenge(prisma, binding, (recipient, token) => sendRecruitmentSmtp({
+    const profile = vault ? await readPreferredProvider(prisma, process.env) : null;
+    if (vault && !profile) return 'not_available';
+    // Reserve before creating a challenge: exhausted quota must not leave an unsent code pending.
+    if (profile && !await prisma.$transaction(tx => reserveSelectedProvider(tx, profile))) return 'not_available';
+    const send = profile ? (message: { recipient: string; subject: string; text: string; html: string }) => sendReservedProfile(profile, message) : sendRecruitmentSmtp;
+    return await issueMailboxChallenge(prisma, binding, (recipient, token) => send({
       recipient, subject: 'Verifica tu correo | Intérpretes RD',
       text: 'Copia este código en tu portal de postulante: ' + token + '. Vence en 15 minutos. No lo compartas.',
       html: '<p>Copia este código en tu portal de postulante:</p><p><strong>' + token + '</strong></p><p>Vence en 15 minutos. No lo compartas.</p>',

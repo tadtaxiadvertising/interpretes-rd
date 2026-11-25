@@ -23,6 +23,7 @@ export async function checkCorporateBrevo(): Promise<BrevoConnectionOutcome | 'u
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return 'unauthorized';
+    if (process.env.EMAIL_PROVIDER_SOURCE === 'vault') return 'brevo_not_selected';
     const result = readOperationalMailConfig(process.env);
     if (result.status !== 'configured') return result.status;
     if (result.provider !== 'brevo') return 'brevo_not_selected';

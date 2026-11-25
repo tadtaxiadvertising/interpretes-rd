@@ -355,3 +355,16 @@ db -c "UPDATE private_email.provider_quota SET daily_used=0 WHERE provider='brev
 assert_equal "$(db -c "$selection_sql")" "123e4567-e89b-42d3-a456-426614174000" selection-verified
 assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_selection WHERE profile_id IS NOT NULL")" 1 singleton-selected
 echo 'Isolated provider selection checks passed.'
+
+# Verify actual claim and quota SQL rollback together, with the selected profile.
+db -c "INSERT INTO public.recruitment_events(id) VALUES ('vault-rollback')"
+db -c "INSERT INTO private_email.recruitment_delivery(event_id,template_kind) VALUES ('vault-rollback','application_received')"
+db -c "UPDATE private_email.provider_quota SET daily_used=daily_limit WHERE provider='brevo'"
+db <<SQL
+BEGIN;
+UPDATE private_email.recruitment_delivery SET status='sending',claimed_at=now() WHERE event_id='vault-rollback' AND status='pending';
+$quota_sql
+ROLLBACK;
+SQL
+assert_equal "$(db -c "SELECT status FROM private_email.recruitment_delivery WHERE event_id='vault-rollback'")" pending quota-rollback-pending
+echo 'Isolated quota rollback check passed.'
