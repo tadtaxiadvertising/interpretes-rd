@@ -61,7 +61,7 @@ export function SessionActions({ sessionId, status }: { sessionId: string; statu
             type="button"
             onClick={handleCancel}
             disabled={isPending}
-            className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
+            className="px-3 py-2 theme-action-danger rounded-xl text-sm font-medium transition-colors flex items-center gap-2 disabled:opacity-50"
           >
             {isPending ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
             Confirm cancel

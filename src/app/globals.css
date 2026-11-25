@@ -747,6 +747,17 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   background-color: var(--theme-action-danger-hover);
 }
 
+.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger):disabled {
+  background-color: var(--theme-surface-muted);
+  color: var(--text-secondary);
+  opacity: 1;
+  cursor: not-allowed;
+}
+.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger):focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}
+
 /* Light workspace: exact legacy utilities used by roleplay library, audio
    studio and live monitoring. Keep media canvases (bg-black), gradients and
    dark mode unchanged. */

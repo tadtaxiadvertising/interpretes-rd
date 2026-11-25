@@ -153,7 +153,7 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
             <textarea value={content} onChange={e => setContent(e.target.value)} rows={18} spellCheck className="mt-2 w-full resize-y rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-3 font-mono text-sm leading-6 text-[var(--theme-control-text)] outline-none focus:border-[var(--theme-focus)]" placeholder="Escribe el contenido completo del acuerdo…" />
           </label>
           <div className="flex flex-wrap gap-3">
-            <button type="button" disabled={busy} onClick={save} className="rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-50">{busy ? 'Procesando…' : 'Guardar borrador'}</button>
+            <button type="button" disabled={busy} onClick={save} className="rounded-xl theme-action-primary px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{busy ? 'Procesando…' : 'Guardar borrador'}</button>
             <button type="button" disabled={busy} onClick={newDraft} className="rounded-xl border border-[var(--border)] px-5 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-50">Nuevo borrador</button>
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
               : <p className="text-xs text-[var(--theme-warning)]">Pendiente de revisión jurídica</p>}
             <button type="button" disabled={busy} onClick={() => editDraft(draft)} className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--theme-hover)] disabled:opacity-50">Editar borrador</button>
             <button type="button" disabled={busy} onClick={() => approve(draft.id)} className="w-full rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-semibold text-[var(--theme-link)] hover:bg-blue-500/10 disabled:opacity-50">Registrar revisión jurídica</button>
-            <button type="button" disabled={busy || !draft.legalReviewedAt || !draft.legalReviewedBy} onClick={() => publish(draft.id)} className="w-full rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-50">Publicar versión</button>
+            <button type="button" disabled={busy || !draft.legalReviewedAt || !draft.legalReviewedBy} onClick={() => publish(draft.id)} className="w-full rounded-lg theme-action-success px-3 py-2 text-sm font-semibold disabled:opacity-50">Publicar versión</button>
           </div>)}
           <p className="pt-2 text-xs leading-5 text-[var(--text-tertiary)]">Un solo administrador puede revisar y publicar el acuerdo. La publicación exige una revisión registrada y un contenido íntegro sin cambios posteriores. Cualquier edición invalida la revisión previa. Las versiones publicadas y sus aceptaciones permanecen inmutables.</p>
         </aside>
