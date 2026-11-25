@@ -13,10 +13,12 @@ export async function readEmailHistory(db: Pick<Prisma.TransactionClient, '$quer
     `;
     if (readiness[0]?.installed === false) return { status: 'not_installed' };
     if (readiness[0]?.installed !== true) return { status: 'unavailable' };
+    // Older installations have the ledger but not the optional attribution column.
+    // JSON field access returns NULL for an absent key; no migration or retry is needed.
     const rows = await db.$queryRaw<RawRow[]>`
-      SELECT template_kind AS kind, status, provider, created_at AS "createdAt",
+      SELECT template_kind AS kind, status, to_jsonb(d)->>'provider' AS provider, created_at AS "createdAt",
         claimed_at AS "claimedAt", completed_at AS "completedAt"
-      FROM private_email.recruitment_delivery
+      FROM private_email.recruitment_delivery d
       ORDER BY created_at DESC, event_id DESC LIMIT 30
     `;
     if (rows.some(row => !(RECRUITMENT_EMAIL_KINDS as readonly string[]).includes(row.kind)
