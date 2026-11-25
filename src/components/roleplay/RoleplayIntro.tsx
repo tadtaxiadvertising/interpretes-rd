@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 interface RoleplayIntroProps {
   sessionId: string;
   baseAudioUrl: string;
+  openingPlaybackLocked?: boolean;
   scenarioCount: number;
   onStart: () => void;
   onBack: () => void;
@@ -15,7 +16,8 @@ interface RoleplayIntroProps {
 
 export function RoleplayIntro({ 
   sessionId, 
-  baseAudioUrl, 
+  baseAudioUrl,
+  openingPlaybackLocked = false,
   scenarioCount, 
   onStart, 
   onBack,
@@ -68,7 +70,7 @@ export function RoleplayIntro({
   const steps = [
     { id: 'microphone', label: 'Micrófono', icon: Mic2, description: 'Permite acceso al micrófono para grabar tus respuestas' },
     { id: 'headphones', label: 'Auriculares', icon: Headphones, description: 'Usa auriculares para mejor calidad y evitar eco' },
-    { id: 'audioPlayback', label: 'Reproducción', icon: ShieldCheck, description: 'Verifica que puedes escuchar el audio base claramente' },
+    { id: 'audioPlayback', label: 'Reproducción', icon: ShieldCheck, description: openingPlaybackLocked ? 'La conversación se habilita después de grabar tu apertura' : 'Verifica que puedes escuchar el audio base claramente' },
   ];
 
   return (
@@ -90,6 +92,7 @@ export function RoleplayIntro({
                 Cómo funciona
               </h3>
               <div className="space-y-3 text-sm text-slate-300">
+                {openingPlaybackLocked && <p>• Primero grabarás tu <strong>protocolo de apertura bilingüe</strong></p>}
                 <p>• Escucharás <strong>{scenarioCount} escenarios</strong> de audio base</p>
                 <p>• Después de cada uno, <strong>grabarás tu interpretación</strong></p>
                 <p>• Podrás <strong>revisar y regrabar</strong> antes de continuar</p>
@@ -160,7 +163,7 @@ export function RoleplayIntro({
             </div>
           </div>
 
-          <audio ref={baseAudioRef} src={baseAudioUrl} preload="metadata" />
+          {!openingPlaybackLocked && baseAudioUrl && <audio ref={baseAudioRef} src={baseAudioUrl} preload="metadata" />}
 
           <p className="text-xs text-slate-400 mb-4">La comprobación del micrófono se realizará al comenzar la grabación. Si el navegador solicita permiso, selecciona «Permitir».</p>
 
