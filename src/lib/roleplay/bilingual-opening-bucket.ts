@@ -1,4 +1,4 @@
-import 'server-only';
+// Metadata-only helper; the caller supplies the server-side Storage client.
 import { BILINGUAL_OPENING_BUCKET, BILINGUAL_OPENING_MAX_BYTES, BILINGUAL_OPENING_MIME_TYPES } from './bilingual-opening';
 
 type BucketReader = { getBucket(id: string): Promise<{ data: unknown; error: unknown }> };
