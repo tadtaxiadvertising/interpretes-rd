@@ -447,6 +447,9 @@ describe('shared production edit and delete dialogs', () => {
     expect(source).toContain('handleSubmit(onEditSubmit)');
     expect(source).toContain('onClick={onDelete}');
     expect(source).toContain('triggerRef.current?.focus()');
+  });
+});
+
 describe('calendar layout and semantic report controls', () => {
   it('keeps only the interpreter column sticky on wide screens', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/app/admin/calendar/page.tsx'), 'utf8');
