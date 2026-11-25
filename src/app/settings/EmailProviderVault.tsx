@@ -86,6 +86,9 @@ export default function EmailProviderVault() {
         return;
       }
       setProfiles(result.profiles);
+      const stillActive = (id: string | null) => id && result.profiles.some(profile => profile.id === id && !profile.retiredAt) ? id : null;
+      setEditingId(stillActive);
+      setRetiringId(stillActive);
       setEnvironmentImport(result.environmentImport);
       setConfirmImport(false);
       setPreferredId(result.preferredId ?? null);
@@ -266,7 +269,13 @@ export default function EmailProviderVault() {
               if (second) second.value = '';
               void run(async () => {
                 const status = await replaceSavedEmailProvider(input);
-                if (status === 'profile_replaced') { setEditingId(null); await load(); }
+                if (status === 'unavailable') {
+                  invalidateSnapshot(messageFor(status));
+                  setMessage('No se pudo confirmar el reemplazo. Consulta los perfiles antes de repetir la operación.');
+                  return;
+                }
+                if (status === 'profile_replaced') setEditingId(null);
+                if (status !== 'invalid') await load();
                 setMessage(messageFor(status));
               });
             }}>
@@ -288,7 +297,13 @@ export default function EmailProviderVault() {
               <p>¿Desactivar este perfil? Si era el preferido, se quitará la selección. No se borrará el historial ni se revocará la clave en el proveedor externo.</p>
               <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => {
                 const status = await retireSavedEmailProvider(profile.id);
-                if (status === 'profile_retired') { setRetiringId(null); await load(); }
+                if (status === 'unavailable') {
+                  invalidateSnapshot(messageFor(status));
+                  setMessage('No se pudo confirmar la desactivación. Consulta los perfiles antes de repetir la operación.');
+                  return;
+                }
+                setRetiringId(null);
+                await load();
                 setMessage(messageFor(status));
               })} className="rounded-lg border border-[var(--border)] px-3 py-2">Confirmar desactivación</button>
               <button type="button" disabled={pending} onClick={() => setRetiringId(null)} className="ml-2 rounded-lg border border-[var(--border)] px-3 py-2">Cancelar</button>
