@@ -601,7 +601,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         <div className="flex gap-4 justify-center">
           <button 
             onClick={() => navigator.clipboard.writeText(success.link)}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors flex items-center gap-2"
+            className="px-6 py-3 theme-action-primary rounded-xl font-bold transition-colors flex items-center gap-2"
           >
             Copiar enlace
           </button>
@@ -797,7 +797,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <button
             onClick={addScenario}
             disabled={scenarios.length >= ROLEPLAY_MAX_SCENARIOS}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 theme-action-primary rounded-xl font-bold transition-colors flex items-center gap-2"
           >
             <Plus size={18} />
             Añadir escenario
@@ -933,7 +933,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
           isCreating || isImporting
             ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed"
-            : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
+            : "theme-action-danger shadow-lg shadow-red-600/20"
         )}
       >
         {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creando...</> : <><Mic2 size={24} /> {librarySource ? 'Asignar plantilla' : isBulk ? 'Crear para todos los intérpretes activos' : 'Crear roleplay'}</>}
