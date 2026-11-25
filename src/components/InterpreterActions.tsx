@@ -132,7 +132,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
             </button>
             <div className="h-px bg-[var(--border)] my-1" />
             <button 
-              className="w-full px-4 py-2 text-left text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-3 transition-colors"
+              className="w-full px-4 py-2 text-left text-sm text-[var(--theme-danger)] hover:bg-red-500/10 flex items-center gap-3 transition-colors"
               onClick={() => {
                 setDeleteError(null);
                 setShowDeleteConfirm(true);
@@ -172,21 +172,21 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
       >
         <form onSubmit={handleResetPassword} className="space-y-6">
           {resetError && (
-            <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-xs">
+            <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-[var(--theme-danger)] text-xs">
               {resetError}
               {resetNeedsReview && <p className="mt-2 font-semibold">No vuelvas a enviar esta contraseña. Revisa la identidad y el acceso en Auth.</p>}
             </div>
           )}
           <div className="space-y-2">
-            <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">New Password</label>
+            <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">New Password</label>
             <div className="relative">
-              <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+              <Key className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
               <input
                 required
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+                className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
                 placeholder="Min 6 characters"
                 minLength={6}
               />
@@ -195,7 +195,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
           <button
             type="submit"
             disabled={isResetting || resetNeedsReview}
-            className="w-full py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            className="w-full py-4 theme-action-primary rounded-2xl font-bold transition-all flex items-center justify-center gap-2"
           >
             {isResetting ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
             {resetNeedsReview ? 'Revisión de Auth necesaria' : 'Actualizar contraseña'}
@@ -211,16 +211,16 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
         maxWidth="max-w-sm"
       >
         <div className="text-center">
-          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mx-auto mb-6">
+          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-[var(--theme-danger)] mx-auto mb-6">
             <AlertTriangle size={32} />
           </div>
-          <p className="text-gray-400 text-sm mb-5 leading-relaxed">
-            ¿Eliminar a <span className="text-white font-bold">{interpreter.name}</span>?
+          <p className="text-[var(--text-secondary)] text-sm mb-5 leading-relaxed">
+            ¿Eliminar a <span className="text-[var(--foreground)] font-bold">{interpreter.name}</span>?
             Se eliminarán sus registros locales permitidos y se intentará revocar su acceso.
             Si la revocación no se confirma, será necesaria una revisión administrativa.
           </p>
           {deleteError && (
-            <div role="alert" className="text-left text-red-300 text-sm bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-5">
+            <div role="alert" className="text-left text-[var(--theme-danger)] text-sm bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-5">
               {deleteError}
               {deleteNeedsReview && (
                 <p className="mt-2 font-semibold">No vuelvas a ejecutar esta baja. Verifica la cuenta en Auth con un administrador.</p>
@@ -230,14 +230,14 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
           <div className="flex gap-4">
             <button 
               onClick={() => setShowDeleteConfirm(false)}
-              className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-gray-400 rounded-xl font-bold transition-all border border-white/10"
+              className="flex-1 py-3 theme-action-secondary rounded-xl font-bold transition-all"
             >
               Cancel
             </button>
             <button 
               onClick={handleDelete}
               disabled={isDeleting || deleteNeedsReview}
-              className="flex-1 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+              className="flex-1 py-3 theme-action-danger rounded-xl font-bold transition-all flex items-center justify-center gap-2"
             >
               {isDeleting ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
               {deleteNeedsReview ? 'Revisión necesaria' : 'Eliminar'}
