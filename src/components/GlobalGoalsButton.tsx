@@ -36,54 +36,55 @@ export function GlobalGoalsButton({ initialGoal }: Props) {
     <>
       <button 
         onClick={() => setIsOpen(true)}
-        className="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+        className="theme-action-primary px-4 py-2 rounded-xl text-sm font-semibold transition-colors flex items-center gap-2"
       >
         <Target size={16} />
-        Set Global Goals
+        Configurar metas
       </button>
 
-      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Configure Global Goals">
+      <Modal isOpen={isOpen} onClose={() => setIsOpen(false)} title="Configurar metas globales">
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-400 mb-2">
-              Standard Monthly Goal (Hours)
+            <label htmlFor="global-monthly-goal" className="block text-sm font-medium text-[var(--text-secondary)] mb-2">
+              Meta mensual estándar (horas)
             </label>
             <div className="relative">
               <input
                 type="number"
+                id="global-monthly-goal"
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500/50 transition-all"
-                placeholder="e.g. 120"
+                className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl pl-4 pr-20 py-3 text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)] transition-all"
+                placeholder="Ej. 120"
                 autoFocus
               />
-              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 text-sm">
-                hrs/mo
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm">
+                h/mes
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              This will be used as the default goal for all interpreters who don&apos;t have a specific goal set.
+            <p className="text-xs text-[var(--text-tertiary)] mt-2">
+              Se utilizará como meta predeterminada para los intérpretes sin una meta específica.
             </p>
           </div>
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+          <div className="flex justify-end gap-3 pt-4 border-t border-[var(--border)]">
             <button
               onClick={() => setIsOpen(false)}
-              className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors"
+              className="theme-action-secondary rounded-xl px-4 py-2 text-sm font-medium transition-colors"
             >
-              Cancel
+              Cancelar
             </button>
             <button
               onClick={handleSave}
               disabled={isPending || isSuccess}
-              className="px-6 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-600/50 text-white rounded-xl text-sm font-bold transition-all flex items-center gap-2"
+              className="theme-action-primary px-6 py-2 rounded-xl text-sm font-bold transition-all flex items-center gap-2"
             >
               {isPending ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : isSuccess ? (
                 <Check size={16} />
               ) : (
-                'Save Changes'
+                'Guardar cambios'
               )}
             </button>
           </div>
