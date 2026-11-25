@@ -1,7 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ prisma: { $transaction: vi.fn() }, preferred: vi.fn(), reserve: vi.fn(), sendProfile: vi.fn(), config: vi.fn(), dispatch: vi.fn(), claim: vi.fn(), finish: vi.fn(), load: vi.fn(), send: vi.fn() }));
+const mocks = vi.hoisted(() => ({ prisma: { $transaction: vi.fn() }, preferred: vi.fn(), reserve: vi.fn(), reserveQuota: vi.fn(), sendProfile: vi.fn(), config: vi.fn(), dispatch: vi.fn(), claim: vi.fn(), finish: vi.fn(), load: vi.fn(), send: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({ default: mocks.prisma }));
+vi.mock('./provider-quota', () => ({ reserveProviderQuota: mocks.reserveQuota }));
 vi.mock('./operational-config', () => ({ readOperationalMailConfig: mocks.config }));
 vi.mock('./recruitment-dispatch', () => ({ dispatchRecruitmentEmail: mocks.dispatch }));
 vi.mock('./recruitment-delivery-ledger', () => ({ claimRecruitmentEmail: mocks.claim, finishRecruitmentEmail: mocks.finish }));
@@ -123,4 +124,56 @@ describe('recruitment SMTP adapter rollout gates', () => {
     expect(mocks.reserve).not.toHaveBeenCalled();
   });
 
+  it.each(['brevo', 'resend'] as const)('reserves shared %s quota in the same transaction as the environment claim', async provider => {
+    mocks.config.mockReturnValue({ status: 'configured', provider });
+    const tx = {};
+    mocks.prisma.$transaction.mockImplementation(async callback => callback(tx));
+    mocks.claim.mockResolvedValue({ eventId: 'event-1', kind: 'application_received' });
+    mocks.reserveQuota.mockResolvedValue('reserved');
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
+      await deps.claim('event-1') ? 'accepted' : 'not_claimed');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('accepted');
+    expect(mocks.claim).toHaveBeenCalledExactlyOnceWith(tx, 'event-1', provider);
+    expect(mocks.reserveQuota).toHaveBeenCalledExactlyOnceWith(tx, provider);
+    expect(mocks.claim.mock.invocationCallOrder[0]).toBeLessThan(mocks.reserveQuota.mock.invocationCallOrder[0]);
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+
+  it('rolls back the environment claim when the local budget is exhausted', async () => {
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'brevo' });
+    mocks.prisma.$transaction.mockImplementation(async callback => callback({}));
+    mocks.claim.mockResolvedValue({ eventId: 'event-1', kind: 'application_received' });
+    mocks.reserveQuota.mockResolvedValue('quota_reached');
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
+      await deps.claim('event-1') ? 'accepted' : 'not_claimed');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
+    await expect(mocks.prisma.$transaction.mock.results[0].value).rejects.toThrow('Provider budget unavailable');
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.finish).not.toHaveBeenCalled();
+  });
+
+  it('does not reserve an environment attempt for an event already claimed', async () => {
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'resend' });
+    mocks.prisma.$transaction.mockImplementation(async callback => callback({}));
+    mocks.claim.mockResolvedValue(null);
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
+      await deps.claim('event-1') ? 'accepted' : 'not_claimed');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('not_claimed');
+    expect(mocks.reserveQuota).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('never sends when the budget storage is unavailable', async () => {
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'brevo' });
+    mocks.prisma.$transaction.mockImplementation(async callback => callback({}));
+    mocks.claim.mockResolvedValue({ eventId: 'event-1', kind: 'application_received' });
+    mocks.reserveQuota.mockRejectedValue(new Error('quota table unavailable'));
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) => {
+      try { await deps.claim('event-1'); } catch { return 'reconciliation_required'; }
+      return 'accepted';
+    });
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('reconciliation_required');
+    expect(mocks.send).not.toHaveBeenCalled();
+    expect(mocks.finish).not.toHaveBeenCalled();
+  });
 });
