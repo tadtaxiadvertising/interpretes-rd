@@ -49,6 +49,174 @@ CREATE TABLE public.roleplay_bilingual_opening_reviews (
 ALTER TABLE public.roleplay_bilingual_opening_reviews ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.roleplay_bilingual_opening_reviews FROM PUBLIC;
 
+-- Keep retired object keys even when a reservation/session is deleted.
+-- A separate bounded cleanup operation can inspect these after a grace
+-- period; never delete a Storage object inside a database transaction.
+CREATE TABLE public.roleplay_bilingual_opening_retired_paths (
+  source_audio_path TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL,
+  retired_at TIMESTAMPTZ(6) NOT NULL DEFAULT clock_timestamp(),
+  cleanup_after TIMESTAMPTZ(6) NOT NULL DEFAULT (clock_timestamp() + interval '24 hours'),
+  CHECK (cleanup_after >= retired_at + interval '23 hours'),
+  CHECK (
+    split_part(source_audio_path, '/', 2) = session_id
+    AND source_audio_path ~ '^openings/[a-zA-Z0-9_-]{1,100}/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(webm|mp4|ogg|mp3)
+ALTER TABLE public.roleplay_bilingual_opening_reservations ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations FROM PUBLIC;
+
+-- These functions are invoker-security triggers, not public RPCs.
+CREATE FUNCTION public.enforce_roleplay_opening_session() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $guard$
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    IF NEW.requires_bilingual_opening IS DISTINCT FROM OLD.requires_bilingual_opening THEN
+      RAISE EXCEPTION 'Opening requirement is immutable' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  IF NEW.requires_bilingual_opening AND (
+    NEW.current_scenario_index > 0 OR NEW.status::text IN ('SUBMITTED','UNDER_REVIEW','EVALUATED','PASSED','FAILED')
+  ) AND NOT EXISTS (
+    SELECT 1 FROM public.roleplay_bilingual_openings WHERE session_id = NEW.id
+  ) THEN
+    RAISE EXCEPTION 'Opening confirmation required' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$guard$;
+CREATE TRIGGER roleplay_opening_session_guard
+BEFORE INSERT OR UPDATE OF requires_bilingual_opening, current_scenario_index, status
+ON public.roleplay_sessions FOR EACH ROW EXECUTE FUNCTION public.enforce_roleplay_opening_session();
+
+CREATE FUNCTION public.enforce_roleplay_opening_response() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $guard$
+DECLARE owner_id text; required boolean;
+BEGIN
+  SELECT s.session_id INTO owner_id FROM public.roleplay_scenarios s WHERE s.id = NEW.scenario_id;
+  SELECT rs.requires_bilingual_opening INTO required
+    FROM public.roleplay_sessions rs WHERE rs.id = owner_id FOR UPDATE;
+  IF required AND NOT EXISTS (
+    SELECT 1 FROM public.roleplay_bilingual_openings WHERE session_id = owner_id
+  ) THEN
+    RAISE EXCEPTION 'Opening confirmation required' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$guard$;
+CREATE TRIGGER roleplay_opening_response_guard
+BEFORE INSERT OR UPDATE ON public.roleplay_responses
+FOR EACH ROW EXECUTE FUNCTION public.enforce_roleplay_opening_response();
+
+-- Prevent moving existing responses into a required session via a scenario
+-- reassignment. Existing legacy-to-legacy moves remain unaffected.
+CREATE FUNCTION public.enforce_roleplay_opening_scenario_owner() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $guard$
+BEGIN
+  IF NEW.session_id IS DISTINCT FROM OLD.session_id AND EXISTS (
+    SELECT 1 FROM public.roleplay_sessions
+    WHERE id IN (OLD.session_id, NEW.session_id) AND requires_bilingual_opening
+  ) THEN
+    RAISE EXCEPTION 'Required opening scenario ownership is immutable' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$guard$;
+CREATE TRIGGER roleplay_opening_scenario_owner_guard
+BEFORE UPDATE OF session_id ON public.roleplay_scenarios
+FOR EACH ROW EXECUTE FUNCTION public.enforce_roleplay_opening_scenario_owner();
+
+CREATE FUNCTION public.enforce_roleplay_opening_record() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $guard$
+DECLARE owner_id text; session_row public.roleplay_sessions%ROWTYPE;
+BEGIN
+  IF TG_OP = 'INSERT' THEN owner_id := NEW.session_id;
+  ELSE owner_id := OLD.session_id;
+  END IF;
+  SELECT * INTO session_row FROM public.roleplay_sessions WHERE id = owner_id FOR UPDATE;
+  IF TG_OP = 'DELETE' THEN
+    -- Parent deletion cascades normally; standalone evidence deletion cannot
+    -- reopen a session or invalidate its recorded assessments.
+    IF NOT FOUND THEN RETURN OLD; END IF;
+    RAISE EXCEPTION 'Confirmed opening is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF TG_OP = 'UPDATE' THEN
+    RAISE EXCEPTION 'Confirmed opening is immutable' USING ERRCODE = '23514';
+  END IF;
+  IF NOT FOUND OR NOT session_row.requires_bilingual_opening
+    OR session_row.current_scenario_index <> 0
+    OR session_row.status::text NOT IN ('STARTED','IN_PROGRESS')
+    OR NOT EXISTS (
+      SELECT 1 FROM public.roleplay_bilingual_opening_reservations r
+      WHERE r.session_id = owner_id AND r.source_audio_path = NEW.source_audio_path
+        AND r.verification_id IS NOT NULL
+        AND r.verification_until > clock_timestamp() AND r.expires_at > clock_timestamp()
+    ) THEN
+    RAISE EXCEPTION 'Active opening verification required' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$guard$;
+CREATE TRIGGER roleplay_opening_record_guard
+BEFORE INSERT OR UPDATE OR DELETE ON public.roleplay_bilingual_openings
+FOR EACH ROW EXECUTE FUNCTION public.enforce_roleplay_opening_record();
+
+REVOKE ALL ON FUNCTION public.enforce_roleplay_opening_session(), public.enforce_roleplay_opening_response(),
+  public.enforce_roleplay_opening_scenario_owner(), public.enforce_roleplay_opening_record() FROM PUBLIC;
+DO $opening_roles$
+DECLARE role_name text;
+BEGIN
+  FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
+      EXECUTE format('REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations, public.roleplay_bilingual_opening_reviews, public.roleplay_bilingual_opening_retired_paths FROM %I', role_name);
+      EXECUTE format('REVOKE ALL ON FUNCTION public.enforce_roleplay_opening_session(), public.enforce_roleplay_opening_response(), public.enforce_roleplay_opening_scenario_owner(), public.enforce_roleplay_opening_record(), public.retire_roleplay_opening_reservation(), public.reject_retired_roleplay_opening_path() FROM %I', role_name);
+    END IF;
+  END LOOP;
+END
+$opening_roles$;
+
+COMMIT;
+
+  )
+);
+ALTER TABLE public.roleplay_bilingual_opening_retired_paths ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.roleplay_bilingual_opening_retired_paths FROM PUBLIC;
+
+CREATE FUNCTION public.retire_roleplay_opening_reservation() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $retire$
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.source_audio_path = OLD.source_audio_path THEN
+    RETURN NEW;
+  END IF;
+  INSERT INTO public.roleplay_bilingual_opening_retired_paths (source_audio_path, session_id)
+    VALUES (OLD.source_audio_path, OLD.session_id)
+    ON CONFLICT (source_audio_path) DO NOTHING;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END
+$retire$;
+CREATE TRIGGER roleplay_opening_retire_reservation
+AFTER UPDATE OF source_audio_path OR DELETE ON public.roleplay_bilingual_opening_reservations
+FOR EACH ROW EXECUTE FUNCTION public.retire_roleplay_opening_reservation();
+
+CREATE FUNCTION public.reject_retired_roleplay_opening_path() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $retire$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.roleplay_bilingual_opening_retired_paths
+    WHERE source_audio_path = NEW.source_audio_path) THEN
+    RAISE EXCEPTION 'Retired opening path cannot be reused' USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$retire$;
+CREATE TRIGGER roleplay_opening_no_retired_reservation
+BEFORE INSERT OR UPDATE OF source_audio_path ON public.roleplay_bilingual_opening_reservations
+FOR EACH ROW EXECUTE FUNCTION public.reject_retired_roleplay_opening_path();
+CREATE TRIGGER roleplay_opening_no_retired_evidence
+BEFORE INSERT ON public.roleplay_bilingual_openings
+FOR EACH ROW EXECUTE FUNCTION public.reject_retired_roleplay_opening_path();
+
+REVOKE ALL ON FUNCTION public.retire_roleplay_opening_reservation(),
+  public.reject_retired_roleplay_opening_path() FROM PUBLIC;
+
 ALTER TABLE public.roleplay_bilingual_openings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roleplay_bilingual_opening_reservations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations FROM PUBLIC;
