@@ -1,9 +1,11 @@
 import type { Prisma } from '@prisma/client';
-import { openProfileKey, validateProfile, vaultKeyAvailable, type ProfileInput } from './provider-vault';
+import { openProfileCredentials, profileSmtpConfig, validateProfile, vaultKeyAvailable, type ProfileInput } from './provider-vault';
 import { emailDeliveryMode } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
 import { sendBrevoEmail } from './brevo-transport';
 import { sendResendEmail } from './resend-transport';
+import { isProviderId } from './provider-catalog';
+import { sendReservedSmtpProfile } from './smtp-test';
 import { reserveProviderQuota } from './provider-quota';
 
 type Env = Readonly<Record<string, string | undefined>>;
@@ -20,7 +22,7 @@ export async function readPreferredProvider(db: Reader, env: Env): Promise<Selec
   if (!usesProviderVault(env) || env.EMAIL_PROVIDER_VAULT_ENABLED !== 'true'
     || env.OPERATIONAL_EMAIL_ENABLED !== 'true' || !vaultKeyAvailable(env.EMAIL_PROVIDER_ENCRYPTION_KEY)) return null;
   try {
-    const rows = await db.$queryRaw<(Omit<ProfileInput, 'apiKey'> & { id: string; sealed: string })[]>`
+    const rows = await db.$queryRaw<(Omit<ProfileInput, 'apiKey' | 'secretKey'> & { id: string; sealed: string })[]>`
       SELECT p.id::text, p.name, p.provider, p.sender AS "from", p.reply_to AS "replyTo", p.sealed_key AS sealed
       FROM private_email.provider_selection s
       JOIN private_email.provider_profile p ON p.id = s.profile_id
@@ -33,9 +35,9 @@ export async function readPreferredProvider(db: Reader, env: Env): Promise<Selec
     `;
     if (rows.length !== 1) return null;
     const row = rows[0];
-    if (row.provider !== 'brevo' && row.provider !== 'resend') return null;
-    const apiKey = openProfileKey(row.id, row.provider, row.sealed, env.EMAIL_PROVIDER_ENCRYPTION_KEY);
-    const profile = validateProfile({ ...row, apiKey });
+    if (!isProviderId(row.provider)) return null;
+    const credentials = openProfileCredentials(row.id, row.provider, row.sealed, env.EMAIL_PROVIDER_ENCRYPTION_KEY);
+    const profile = credentials && validateProfile({ ...row, ...credentials });
     return profile ? { ...profile, id: row.id } : null;
   } catch { return null; }
 }
@@ -46,6 +48,12 @@ export async function resolveOperationalMailEnv(db: Reader, env: Env): Promise<E
   const profile = await readPreferredProvider(db, env);
   const pilot = emailDeliveryMode(env) === 'pilot';
   if (!profile || (!pilot && env.OPERATIONAL_EMAIL_DISPATCH_ENABLED === 'true')) return { ...env, OPERATIONAL_EMAIL_PROVIDER: 'vault_unavailable' };
+  const smtp = profileSmtpConfig(profile);
+  if (smtp) return { ...env, OPERATIONAL_EMAIL_PROVIDER: 'smtp',
+    OPERATIONAL_SMTP_HOST: smtp.host, OPERATIONAL_SMTP_PORT: '587',
+    OPERATIONAL_SMTP_USER: smtp.user, OPERATIONAL_SMTP_PASSWORD: smtp.password,
+    OPERATIONAL_EMAIL_FROM: smtp.from, OPERATIONAL_EMAIL_REPLY_TO: smtp.replyTo,
+    BREVO_API_KEY: undefined, RESEND_API_KEY: undefined };
   return { ...env, OPERATIONAL_EMAIL_PROVIDER: profile.provider, OPERATIONAL_EMAIL_FROM: profile.from,
     OPERATIONAL_EMAIL_REPLY_TO: profile.replyTo, BREVO_API_KEY: profile.provider === 'brevo' ? profile.apiKey : undefined,
     RESEND_API_KEY: profile.provider === 'resend' ? profile.apiKey : undefined };
@@ -69,6 +77,8 @@ export async function reserveSelectedProvider(db: Reader, profile: SelectedProfi
 /** Caller must already have committed a reservation. Never retry or fail over. */
 export async function sendReservedProfile(profile: SelectedProfile, message: Message): Promise<'accepted' | 'unconfirmed'> {
   const config = { apiKey: profile.apiKey, from: profile.from, replyTo: profile.replyTo || undefined };
-  return profile.provider === 'brevo' ? sendBrevoEmail(config, message)
-    : await sendResendEmail(config, message) === 'accepted' ? 'accepted' : 'unconfirmed';
+  if (profile.provider === 'brevo') return sendBrevoEmail(config, message);
+  if (profile.provider === 'resend') return await sendResendEmail(config, message) === 'accepted' ? 'accepted' : 'unconfirmed';
+  const smtp = profileSmtpConfig(profile);
+  return smtp ? sendReservedSmtpProfile(smtp, message) : 'unconfirmed';
 }

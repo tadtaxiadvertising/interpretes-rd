@@ -166,3 +166,9 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
     busy = false;
   }
 }
+
+/** Internal only: caller supplies a validated fixed-host SMTP profile and committed quota. */
+export async function sendReservedSmtpProfile(config: OperationalMailConfig, message: RecruitmentMessage): Promise<'accepted' | 'unconfirmed'> {
+  try { return await sendMime(config, message.recipient, recruitmentSmtpMessage(config, message)); }
+  catch { return 'unconfirmed'; }
+}

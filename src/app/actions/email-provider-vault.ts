@@ -3,8 +3,10 @@
 import { randomUUID } from 'node:crypto';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
-import { openProfileKey, sealProfileKey, validateProfile, vaultKeyAvailable, type ProfileMetadata } from '@/lib/email/provider-vault';
+import { openProfileCredentials, sealProfileCredentials, profileSmtpConfig, validateProfile, vaultKeyAvailable, type ProfileMetadata } from '@/lib/email/provider-vault';
 import { sendBrevoEmailDetailed } from '@/lib/email/brevo-transport';
+import { isProviderId } from '@/lib/email/provider-catalog';
+import { sendReservedSmtpProfile } from '@/lib/email/smtp-test';
 import { sendResendEmail } from '@/lib/email/resend-transport';
 
 import { validateBudget, updateProviderBudget } from '@/lib/email/provider-budget';
@@ -36,7 +38,7 @@ export async function listEmailProviderProfiles(): Promise<ListResult> {
       FROM private_email.provider_profile ORDER BY (retired_at IS NOT NULL), updated_at DESC LIMIT 50
     `;
     const quotas = await listProviderQuotas(prisma);
-    if (quotas.length !== 2) return { status: 'unavailable', profiles: [] };
+    if (!quotas.some(q => q.provider === 'brevo') || !quotas.some(q => q.provider === 'resend')) return { status: 'unavailable', profiles: [] };
     const [selection] = await prisma.$queryRaw<{ id: string | null }[]>`
       SELECT profile_id::text AS id FROM private_email.provider_selection WHERE singleton
     `;
@@ -58,7 +60,7 @@ export async function addEmailProviderProfile(input: unknown): Promise<'saved' |
     const profile = validateProfile(input);
     if (!profile) return 'invalid';
     const id = randomUUID();
-    const sealed = sealProfileKey(id, profile.provider, profile.apiKey, key());
+    const sealed = sealProfileCredentials(id, profile, key());
     await prisma.$executeRaw`
       INSERT INTO private_email.provider_profile (id, name, provider, sender, reply_to, sealed_key, updated_by)
       VALUES (${id}::uuid, ${profile.name}, ${profile.provider}, ${profile.from}, ${profile.replyTo}, ${sealed}, ${auth.user.userId})
@@ -87,9 +89,9 @@ export async function testSavedEmailProvider(id: string) {
         SELECT id::text, name, provider, sender AS "from", reply_to AS "replyTo", updated_at AS "updatedAt", sealed_key AS sealed
         FROM private_email.provider_profile WHERE id = ${id}::uuid AND retired_at IS NULL
       `;
-      if (!row || (row.provider !== 'brevo' && row.provider !== 'resend')) return 'invalid' as const;
-      const apiKey = openProfileKey(row.id, row.provider, row.sealed, key());
-      const profile = validateProfile({ ...row, apiKey });
+      if (!row || !isProviderId(row.provider)) return 'invalid' as const;
+      const credentials = openProfileCredentials(row.id, row.provider, row.sealed, key());
+      const profile = credentials && validateProfile({ ...row, ...credentials });
       if (!profile) return 'invalid' as const;
       const message = { recipient: profile.from, subject: 'Prueba de perfil | Intérpretes RD', text: 'Prueba de configuración. No contiene datos de postulantes.', html: '<p>Prueba de configuración. No contiene datos de postulantes.</p>' };
       const config = { apiKey: profile.apiKey, from: profile.from, replyTo: profile.replyTo || undefined };
@@ -100,7 +102,10 @@ export async function testSavedEmailProvider(id: string) {
         return active.length === 1 && await reserveProviderQuota(tx, profile.provider) === 'reserved';
       });
       if (!reserved) return 'profile_test_blocked' as const;
-      const outcome = profile.provider === 'brevo' ? await sendBrevoEmailDetailed(config, message) : await sendResendEmail(config, message);
+      const smtp = profileSmtpConfig(profile);
+      const outcome = profile.provider === 'brevo' ? await sendBrevoEmailDetailed(config, message)
+        : profile.provider === 'resend' ? await sendResendEmail(config, message)
+        : smtp ? await sendReservedSmtpProfile(smtp, message) : 'unconfirmed';
       if (outcome === 'accepted') {
         try {
           if (!await recordProfileAcceptance(prisma, id)) return 'accepted_evidence_missing' as const;

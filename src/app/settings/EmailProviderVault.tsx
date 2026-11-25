@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget, retireSavedEmailProvider, replaceSavedEmailProvider } from '@/app/actions/email-provider-vault';
+import { providerCatalog, type ProviderId } from '@/lib/email/provider-catalog';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
@@ -30,6 +31,7 @@ const statusText: Record<string, string> = {
 const messageFor = (status: string) => statusText[status] ?? 'Aceptación no confirmada. Revisa el proveedor y el buzón antes de repetir.';
 
 export default function EmailProviderVault() {
+  const [choice, setChoice] = useState<ProviderId>('brevo');
   const [profiles, setProfiles] = useState<(ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null; retiredAt: string | null })[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [retiringId, setRetiringId] = useState<string | null>(null);
@@ -57,14 +59,14 @@ export default function EmailProviderVault() {
   return (
     <section className="rounded-xl border border-[var(--border)] p-4 space-y-3 text-sm text-[var(--foreground)]" aria-labelledby="provider-vault-title">
       <h3 id="provider-vault-title" className="font-semibold">Perfiles de proveedores guardados</h3>
-      <p>Guarda claves de Brevo y Resend cifradas. Puedes guardar una preferencia verificada. Con el origen vault, la preferencia se utiliza en el piloto controlado. No se muestran claves guardadas.</p>
+      <p>Guarda las credenciales cifradas de tus proveedores. Puedes guardar una preferencia verificada. Con el origen vault, la preferencia se utiliza en el piloto controlado. No se muestran claves guardadas.</p>
       <button type="button" disabled={pending} onClick={() => run(load)} className="rounded-lg border border-[var(--border)] px-3 py-2">Consultar perfiles</button>
       {ready && (
         <form className="space-y-2" autoComplete="off" onSubmit={event => {
           event.preventDefault();
           const form = event.currentTarget;
           const data = new FormData(form);
-          const input = { name: data.get('name'), provider: data.get('provider'), from: data.get('from'), replyTo: data.get('replyTo'), apiKey: data.get('apiKey') };
+          const input = { name: data.get('name'), provider: data.get('provider'), from: data.get('from'), replyTo: data.get('replyTo'), apiKey: data.get('apiKey'), secretKey: data.get('secretKey') };
           form.reset();
           void run(async () => {
             const status = await addEmailProviderProfile(input);
@@ -74,17 +76,19 @@ export default function EmailProviderVault() {
         }}>
           <fieldset disabled={pending} className="space-y-2">
             <label className="block">Nombre<input name="name" required maxLength={80} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
-            <label className="block">Proveedor<select name="provider" className="block w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-2"><option value="brevo">Brevo</option><option value="resend">Resend</option></select></label>
+            <label className="block">Proveedor<select name="provider" value={choice} onChange={event => setChoice(event.target.value as ProviderId)} className="block w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">{quotas.map(q => <option key={q.provider} value={q.provider}>{providerCatalog[q.provider].label}</option>)}</select></label>
             <label className="block">Remitente autorizado<input name="from" type="email" required maxLength={254} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
             <label className="block">Responder a (opcional)<input name="replyTo" type="email" maxLength={254} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
-            <label className="block">Clave API<input name="apiKey" type="password" autoComplete="new-password" required maxLength={512} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+            <div className="flex flex-wrap gap-3"><a href={providerCatalog[choice].registration} target="_blank" rel="noopener noreferrer" className="underline">Abrir cuenta</a><a href={providerCatalog[choice].credentials} target="_blank" rel="noopener noreferrer" className="underline">Obtener credenciales</a><a href={providerCatalog[choice].sender} target="_blank" rel="noopener noreferrer" className="underline">Autorizar remitente</a></div>
+            <label className="block">{providerCatalog[choice].primaryLabel}<input key={choice + '-primary'} name="apiKey" type="password" autoComplete="new-password" required maxLength={providerCatalog[choice].mode === 'smtp' ? 200 : 512} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+            {providerCatalog[choice].mode === 'smtp' && <label className="block">{providerCatalog[choice].secondaryLabel}<input key={choice + '-secondary'} name="secretKey" type="password" autoComplete="new-password" required maxLength={200} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>}
             <button type="submit" className="rounded-lg bg-blue-700 text-white px-3 py-2 font-semibold">Guardar perfil</button>
           </fieldset>
         </form>
       )}
       {quotas.map(quota => (
         <div key={quota.provider} className="rounded-lg border border-[var(--border)] p-3 space-y-1">
-          <p className="font-semibold">{quota.provider === 'brevo' ? 'Brevo' : 'Resend'} · presupuesto local (UTC)</p>
+          <p className="font-semibold">{providerCatalog[quota.provider].label} · presupuesto local (UTC)</p>
           <p>Hoy: {quota.dailyUsed} de {quota.dailyLimit} intentos</p>
           <progress aria-label={'Consumo diario ' + quota.provider} value={Math.min(quota.dailyUsed, quota.dailyLimit)} max={quota.dailyLimit} className="w-full" />
           <p>Mes: {quota.monthlyUsed} de {quota.monthlyLimit} intentos</p>
@@ -101,8 +105,8 @@ export default function EmailProviderVault() {
           }}>
             <fieldset disabled={pending || !selectionPaused} className="space-y-2">
               <legend className="font-medium">Ajustar presupuesto local</legend>
-              <label className="block">Máximo diario<input name="daily" type="number" min={1} max={quota.provider === 'brevo' ? 300 : 100} step={1} required defaultValue={quota.dailyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
-              <label className="block">Máximo mensual<input name="monthly" type="number" min={1} max={quota.provider === 'brevo' ? 9300 : 3000} step={1} required defaultValue={quota.monthlyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+              <label className="block">Máximo diario<input name="daily" type="number" min={1} max={providerCatalog[quota.provider].daily} step={1} required defaultValue={quota.dailyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+              <label className="block">Máximo mensual<input name="monthly" type="number" min={1} max={providerCatalog[quota.provider].monthly} step={1} required defaultValue={quota.monthlyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
               <button type="submit" className="rounded-lg border border-[var(--border)] px-3 py-2">Guardar presupuesto</button>
             </fieldset>
             <p className="text-xs">Pausa el despacho para editar. El cambio no reinicia el consumo, no cambia tu plan ni garantiza envíos gratuitos. Configura un límite inferior al saldo de tu cuenta real.</p>
@@ -134,9 +138,11 @@ export default function EmailProviderVault() {
               event.preventDefault();
               const form = event.currentTarget;
               const data = new FormData(form);
-              const input = { id: profile.id, profile: { name: data.get('name'), provider: profile.provider, from: data.get('from'), replyTo: data.get('replyTo'), apiKey: data.get('apiKey') } };
+              const input = { id: profile.id, profile: { name: data.get('name'), provider: profile.provider, from: data.get('from'), replyTo: data.get('replyTo'), apiKey: data.get('apiKey'), secretKey: data.get('secretKey') } };
               const secret = form.elements.namedItem('apiKey') as HTMLInputElement;
               secret.value = '';
+              const second = form.elements.namedItem('secretKey') as HTMLInputElement | null;
+              if (second) second.value = '';
               void run(async () => {
                 const status = await replaceSavedEmailProvider(input);
                 if (status === 'profile_replaced') { setEditingId(null); await load(); }
@@ -149,7 +155,8 @@ export default function EmailProviderVault() {
                 <label className="block">Nombre<input name="name" defaultValue={profile.name} required maxLength={80} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
                 <label className="block">Remitente autorizado<input name="from" defaultValue={profile.from} type="email" required maxLength={254} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
                 <label className="block">Responder a<input name="replyTo" defaultValue={profile.replyTo} type="email" maxLength={254} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
-                <label className="block">Clave API (nueva o vigente)<input name="apiKey" type="password" autoComplete="new-password" required maxLength={512} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+                <label className="block">{providerCatalog[profile.provider].primaryLabel} (nueva o vigente)<input name="apiKey" type="password" autoComplete="new-password" required maxLength={providerCatalog[profile.provider].mode === 'smtp' ? 200 : 512} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+                {providerCatalog[profile.provider].mode === 'smtp' && <label className="block">{providerCatalog[profile.provider].secondaryLabel}<input name="secretKey" type="password" autoComplete="new-password" required maxLength={200} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>}
                 <button type="submit" className="rounded-lg bg-blue-700 text-white px-3 py-2">Guardar reemplazo</button>
                 <button type="button" onClick={() => setEditingId(null)} className="ml-2 rounded-lg border border-[var(--border)] px-3 py-2">Cancelar</button>
               </fieldset>

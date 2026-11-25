@@ -1,13 +1,14 @@
 import type { Prisma } from '@prisma/client';
 
-export const budgetCeilings = { brevo: { daily: 300, monthly: 9300 }, resend: { daily: 100, monthly: 3000 } } as const;
+import { providerCatalog, isProviderId } from './provider-catalog';
+export const budgetCeilings = providerCatalog;
 export type BudgetProvider = keyof typeof budgetCeilings;
 export type BudgetInput = { provider: BudgetProvider; dailyLimit: number; monthlyLimit: number };
 
 export function validateBudget(input: unknown): BudgetInput | null {
   if (!input || typeof input !== 'object') return null;
   const { provider, dailyLimit, monthlyLimit } = input as Record<string, unknown>;
-  if (provider !== 'brevo' && provider !== 'resend') return null;
+  if (!isProviderId(provider)) return null;
   if (typeof dailyLimit !== 'number' || typeof monthlyLimit !== 'number'
     || !Number.isSafeInteger(dailyLimit) || !Number.isSafeInteger(monthlyLimit)
     || dailyLimit < 1 || monthlyLimit < 1 || dailyLimit > budgetCeilings[provider].daily

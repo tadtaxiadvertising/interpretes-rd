@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 
-type Provider = 'brevo' | 'resend';
+import type { ProviderId as Provider } from './provider-catalog';
 type QuotaDb = Pick<Prisma.TransactionClient, '$queryRaw'>;
 export type ProviderQuota = { provider: Provider; dailyLimit: number; monthlyLimit: number; dailyUsed: number; monthlyUsed: number };
 
