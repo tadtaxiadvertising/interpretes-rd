@@ -44,6 +44,7 @@ interface NewRoleplayFormProps {
     id: string;
     fingerprint: string;
     requiresOpening?: boolean;
+    audioKind?: 'private' | 'legacy';
     scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null; studioTurn?: number | null; studioSpeaker?: string | null; studioLanguage?: string | null; sourceStartSec?: number | null; sourceEndSec?: number | null }>;
   };
 }
@@ -69,7 +70,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
-  const [requiresOpening, setRequiresOpening] = useState(openingAssignmentEnabled);
+  const [requiresOpening, setRequiresOpening] = useState(openingAssignmentEnabled && !librarySource);
   const [scenarios, setScenarios] = useState<Scenario[]>([
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
@@ -735,11 +736,12 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         <section className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4">
           <label className="flex items-start gap-3 font-semibold text-[var(--foreground)]">
             <input type="checkbox" checked={requiresOpening || librarySource?.requiresOpening === true}
-              disabled={isCreating || librarySource?.requiresOpening === true}
+              disabled={isCreating || librarySource?.requiresOpening === true || librarySource?.audioKind === 'legacy'}
               onChange={event => setRequiresOpening(event.target.checked)} />
             <span>Requerir protocolo de apertura bilingüe</span>
           </label>
           <p className="text-sm text-[var(--text-secondary)]">El participante se presenta en inglés y español antes de interpretar. Desactívalo únicamente para ejercicios que no requieran apertura.</p>
+          {librarySource?.audioKind === 'legacy' && <p className="text-xs text-[var(--text-secondary)]">Esta plantilla histórica utiliza audio público y no admite apertura obligatoria.</p>}
           {librarySource?.requiresOpening && <p className="text-xs text-[var(--text-secondary)]">Esta plantilla conserva su requisito de apertura.</p>}
         </section>
       )}
