@@ -11,6 +11,8 @@ interface ModalProps {
   title: string;
   children: React.ReactNode;
   maxWidth?: string;
+  closeDisabled?: boolean;
+  closeLabel?: string;
 }
 
 // An interpreter or candidate view can mount several closed Modal components.
@@ -24,13 +26,13 @@ function focusableItems(dialog: HTMLElement): HTMLElement[] {
   )).filter((element) => !element.closest('[hidden], [inert]') && element.getAttribute('aria-hidden') !== 'true');
 }
 
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl', closeDisabled = false, closeLabel = 'Cerrar ventana' }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogIdRef = useRef(Symbol('modal'));
   const onCloseRef = useRef(onClose);
   const titleId = useId();
-  onCloseRef.current = onClose;
+  onCloseRef.current = () => { if (!closeDisabled) onClose(); };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -90,7 +92,8 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
     const previouslyFocused = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null;
-    closeButtonRef.current?.focus();
+    if (closeButtonRef.current?.disabled) modalRef.current?.focus();
+    else closeButtonRef.current?.focus();
     return () => previouslyFocused?.focus();
   }, [isOpen]);
 
@@ -121,8 +124,9 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
           <button
             type="button"
             ref={closeButtonRef}
-            aria-label="Cerrar ventana"
-            onClick={onClose}
+            aria-label={closeLabel}
+            disabled={closeDisabled}
+            onClick={() => onCloseRef.current()}
             className="theme-action-secondary shrink-0 rounded-xl p-2 transition-colors"
           >
             <X size={20} aria-hidden="true" />
