@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { canUnpauseVault, readVaultPause } from './vault-pause';
 
 type Db = Pick<Prisma.TransactionClient, '$queryRaw' | '$executeRaw'>;
 export const validProfileId = (id: unknown): id is string =>
@@ -54,4 +55,34 @@ export async function clearPreferredProfile(db: Db, actor: string): Promise<bool
     SET profile_id = NULL, changed_at = statement_timestamp(), changed_by = ${actor}
     WHERE singleton
   ` === 1;
+}
+
+type Env = Readonly<Record<string, string | undefined>>;
+
+/** Only preference switching can use the database pause. Other maintenance
+ * operations still require the deployment-level controls to be disabled. */
+export async function canEditProviderPreference(db: Db, env: Env): Promise<boolean> {
+  if (env.EMAIL_PROVIDER_SOURCE !== 'vault') return providerSelectionPaused(env);
+  return (providerSelectionPaused(env) || canUnpauseVault(env)) && await readVaultPause(db) === 'paused';
+}
+
+/** Caller must execute within a transaction. Use the same row lock as resume
+ * and reservations so a stale UI cannot switch a running transport. */
+export async function changeProviderPreference(db: Db, id: string | null, actor: string, env: Env): Promise<'saved' | 'cleared' | 'disabled' | 'blocked'> {
+  if ((id !== null && !validProfileId(id)) || !actor || actor.length > 255) return 'blocked';
+  if (env.EMAIL_PROVIDER_SOURCE === 'vault') {
+    if (!providerSelectionPaused(env) && !canUnpauseVault(env)) return 'disabled';
+    const rows = await db.$queryRaw<{ paused: boolean }[]>`
+      SELECT dispatch_paused AS paused FROM private_email.provider_selection WHERE singleton FOR UPDATE
+    `;
+    if (rows.length !== 1 || rows[0].paused !== true) return 'disabled';
+  } else {
+    if (!providerSelectionPaused(env)) return 'disabled';
+    const rows = await db.$queryRaw<{ singleton: boolean }[]>`
+      SELECT singleton FROM private_email.provider_selection WHERE singleton FOR UPDATE
+    `;
+    if (rows.length !== 1) return 'blocked';
+  }
+  if (id === null) return await clearPreferredProfile(db, actor) ? 'cleared' : 'blocked';
+  return await selectPreferredProfile(db, id, actor) ? 'saved' : 'blocked';
 }
