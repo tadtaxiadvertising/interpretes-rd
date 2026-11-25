@@ -8,6 +8,7 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
 import { publishNotificationEvent } from '@/lib/notifications/publish-notification-event';
+import { notificationCategories, publicNotificationCategory } from '@/lib/notifications/notification-display';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 
@@ -35,7 +36,7 @@ const CreateNotificationSchema = z.object({
   title: z.string().trim().min(1).max(160),
   message: z.string().trim().min(1).max(4000),
   type: z.enum(['info', 'success', 'warning', 'error']).optional(),
-  category: z.enum(['system', 'qa', 'messaging', 'roleplay', 'recruitment', 'operations', 'finance']).optional(),
+  category: z.enum(notificationCategories).optional(),
   eventKey: z.string().trim().min(1).max(200).optional(),
   // Notifications may navigate only to known internal modules.
   link: z.string().trim().max(500).refine(value => safeNotificationLink(value) !== null).optional(),
@@ -169,6 +170,8 @@ export async function markAllNotificationsAsRead() {
 const HistoryQuerySchema = z.object({
   page: z.number().int().min(0).max(100000),
   unreadOnly: z.boolean(),
+  category: z.enum(notificationCategories).optional(),
+  importantOnly: z.boolean().optional(),
 });
 
 const HISTORY_PAGE_SIZE = 20;
@@ -182,20 +185,22 @@ export async function getMyNotificationHistory(input: unknown) {
   if (!parsed.success || !ids.length) return { success: false as const };
 
   try {
-    const { page, unreadOnly } = parsed.data;
+    const { page, unreadOnly, category, importantOnly } = parsed.data;
     const rows = await db.notification.findMany({
       where: {
         userId: { in: ids },
         ...(unreadOnly ? { OR: [{ isRead: false }, { isRead: null }] } : {}),
+        ...(category === 'system' ? { AND: [{ OR: [{ category: 'system' }, { category: null }, { category: { notIn: [...notificationCategories] } }] }] } : category ? { category } : {}),
+        ...(importantOnly ? { type: { in: ['warning', 'error'] } } : {}),
       },
-      select: { id: true, title: true, message: true, type: true, isRead: true, createdAt: true, link: true },
+      select: { id: true, title: true, message: true, type: true, isRead: true, createdAt: true, link: true, category: true },
       orderBy: [{ createdAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       skip: page * HISTORY_PAGE_SIZE,
       take: HISTORY_PAGE_SIZE + 1,
     });
     return {
       success: true as const,
-      data: rows.slice(0, HISTORY_PAGE_SIZE).map(row => ({ ...row, link: safeNotificationLink(row.link) })),
+      data: rows.slice(0, HISTORY_PAGE_SIZE).map(row => ({ ...row, category: publicNotificationCategory(row.category), link: safeNotificationLink(row.link) })),
       hasMore: rows.length > HISTORY_PAGE_SIZE,
     };
   } catch (error) {
