@@ -1,0 +1,18 @@
+# Bilingual medical opening — staged contract
+
+The interpreter addresses both parties in English and Spanish before the first clinical clip. This is a separate participant recording, not a translation of the first doctor's audio, not a source clip, and not an extra item in the 25-scenario limit.
+
+This change is intentionally inactive. The staged SQL is outside Prisma migrations. No current session query, creation route or recording action reads its fields. The new component and pure validation contract are available for later integration, with no live migration required for this PR.
+
+## Required integration before enabling
+
+1. Validate the staged schema against a disposable database, reconcile Prisma, and deploy the additive schema before runtime queries. Existing sessions remain exempt.
+2. Snapshot the opening requirement when creating a new medical session, including library assignments. Do not infer it on an existing session from title, role or language metadata.
+3. Issue private, scoped signed uploads only for the authorized session owner with a valid invitation, active status, required opening and no confirmed recording. Use a server-generated opening path; never reuse a clinical scenario ID or its response path.
+4. Confirm the actual uploaded object and duration; use a unique session record and transactional state checks to handle concurrent or retried confirmations. Do not trust a browser URL or metadata as proof of audio. Refresh playback URLs on authorized reads only.
+5. Restore the opening state from the database on reload. Mount RoleplayOpening before the first clinical clip when pending. The UI must not advance after a failed confirmation.
+6. Enforce the opening requirement at server-side clinical recording authorization, confirmation, assessment and final submission gates. No client-only gate or bypass through a direct API call. Do not change legacy session order or assessment progress.
+7. Give QA access to the separate recording, with its own opening evaluation criteria. A confirmed object proves a persisted recording, not that both languages were spoken correctly.
+8. Cover legacy sessions, candidate/interpreter ownership, invite expiry, cross-session paths, retry/concurrency, reload, QA playback, cleanup and both themes in automated tests.
+
+Do not enable the feature or apply the staged SQL to production until schema and runtime verification are complete.
