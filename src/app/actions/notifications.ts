@@ -7,6 +7,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
+import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 
 const db = prisma;
@@ -147,6 +148,44 @@ export async function markAllNotificationsAsRead() {
     return { success: true as const };
   } catch (error) {
     console.error('Failed to mark notifications as read:', safeServerErrorCategory(error));
+    return { success: false as const };
+  }
+}
+
+const HistoryQuerySchema = z.object({
+  page: z.number().int().min(0).max(100000),
+  unreadOnly: z.boolean(),
+});
+
+const HISTORY_PAGE_SIZE = 20;
+
+/** History is loaded on demand, never from caller-supplied recipient IDs. */
+export async function getMyNotificationHistory(input: unknown) {
+  const auth = await validateAction();
+  if ('error' in auth) return { success: false as const };
+  const parsed = HistoryQuerySchema.safeParse(input);
+  const ids = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
+  if (!parsed.success || !ids.length) return { success: false as const };
+
+  try {
+    const { page, unreadOnly } = parsed.data;
+    const rows = await db.notification.findMany({
+      where: {
+        userId: { in: ids },
+        ...(unreadOnly ? { OR: [{ isRead: false }, { isRead: null }] } : {}),
+      },
+      select: { id: true, title: true, message: true, type: true, isRead: true, createdAt: true, link: true },
+      orderBy: [{ createdAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+      skip: page * HISTORY_PAGE_SIZE,
+      take: HISTORY_PAGE_SIZE + 1,
+    });
+    return {
+      success: true as const,
+      data: rows.slice(0, HISTORY_PAGE_SIZE).map(row => ({ ...row, link: safeNotificationLink(row.link) })),
+      hasMore: rows.length > HISTORY_PAGE_SIZE,
+    };
+  } catch (error) {
+    console.error('Notification history lookup failed:', safeServerErrorCategory(error));
     return { success: false as const };
   }
 }
