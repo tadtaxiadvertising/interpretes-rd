@@ -39,13 +39,17 @@ export default function RootLayout({
       <body className="antialiased font-sans selection:bg-primary selection:text-white">
         <VersionGuard />
         <Toaster
-          position="top-right"
+          position="bottom-right"
+          containerStyle={{ bottom: "calc(5rem + env(safe-area-inset-bottom))", left: 12, right: 12 }}
           toastOptions={{
-            duration: 4000,
+            duration: 5000,
+            success: { duration: 3500 },
+            error: { duration: 8000 },
             style: {
               background: "var(--theme-panel)",
               color: "var(--foreground)",
-              backdropFilter: "blur(10px)",
+              maxWidth: "min(420px, calc(100vw - 24px))",
+              overflowWrap: "anywhere",
               border: "1px solid var(--border)",
               borderRadius: "12px",
             },

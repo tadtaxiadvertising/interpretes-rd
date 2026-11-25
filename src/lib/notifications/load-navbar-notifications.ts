@@ -5,7 +5,7 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
  * The navbar only needs presentation fields. Do not serialize recipient IDs,
  * internal categories, destination links or future notification metadata.
  */
-export async function loadNavbarNotifications(userIds: readonly string[]) {
+export async function loadNavbarNotifications(userIds: readonly string[], options: { throwOnError?: boolean } = {}) {
   if (userIds.length === 0) return [];
 
   try {
@@ -26,6 +26,7 @@ export async function loadNavbarNotifications(userIds: readonly string[]) {
     // Database errors may contain private recipients, credentials or DSNs.
     // The notification bell is optional; do not interrupt dashboard loading.
     console.error('Dashboard notification lookup failed:', safeServerErrorCategory(error));
+    if (options.throwOnError) throw error;
     return [];
   }
 }

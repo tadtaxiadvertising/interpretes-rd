@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { markNotificationAsRead } from '@/app/actions/notifications';
+import { getMyNotifications, markNotificationAsRead } from '@/app/actions/notifications';
 
 interface Notification {
   id: string;
@@ -18,7 +18,7 @@ function formatNotificationTime(value: Date | string | null): string {
   if (value === null) return 'Fecha no disponible';
   const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   return Number.isFinite(date.getTime())
-    ? date.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })
+    ? date.toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
     : 'Fecha no disponible';
 }
 
@@ -27,7 +27,31 @@ export function NotificationBell({ initialNotifications }: { initialNotification
   // Keep local read acknowledgments, not a frozen copy of server props.
   // New notifications supplied by a refreshed layout must appear immediately.
   const [locallyReadIds, setLocallyReadIds] = useState<string[]>([]);
-  const notifications = initialNotifications.map(n =>
+  const [feed, setFeed] = useState<Notification[] | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    let active = true;
+    let busy = false;
+    const refresh = async () => {
+      if (busy || document.visibilityState === 'hidden') return;
+      busy = true;
+      try {
+        const result = await getMyNotifications();
+        if (active && result.success) setFeed(result.data);
+      } catch {
+        // Keep the last successful snapshot during transient failures.
+      } finally { busy = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 60000);
+    window.addEventListener('focus', refresh);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refresh);
+    };
+  }, [isOpen, initialNotifications]);
+  const notifications = (feed ?? initialNotifications).map(n =>
     locallyReadIds.includes(n.id) ? { ...n, isRead: true } : n
   );
   const [pendingIds, setPendingIds] = useState<string[]>([]);
@@ -39,7 +63,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
   useEffect(() => {
     if (!isOpen) return;
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsOpen(false);
+      if (event.key === 'Escape') { setIsOpen(false); triggerRef.current?.focus(); }
     };
     window.addEventListener('keydown', onEscape);
     return () => window.removeEventListener('keydown', onEscape);
@@ -86,12 +110,13 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       <button
         type="button"
         onClick={() => { setIsOpen(open => !open); setError(null); }}
-        aria-label="Notificaciones"
+        ref={triggerRef}
+        aria-label={`Notificaciones (${unreadCount} sin leer)`}
         aria-expanded={isOpen}
         aria-controls="notification-panel"
         className="group relative rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
       >
-        <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "animate-bounce")} />
+        <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "text-[var(--theme-link)]")} />
         {unreadCount > 0 && (
           <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-700 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[var(--theme-nav)]">
             {unreadCount > 99 ? '99+' : unreadCount}
@@ -102,7 +127,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="absolute right-0 z-50 mt-4 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">Notificaciones</h4>
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
@@ -114,7 +139,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               </p>
             )}
 
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="max-h-[min(400px,calc(100dvh-15rem))] overflow-y-auto overscroll-contain">
               {notifications.length === 0 ? (
                 <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
                   No hay notificaciones.
@@ -143,7 +168,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                         disabled={pendingIds.includes(n.id)}
                         aria-busy={pendingIds.includes(n.id)}
                         aria-label={`Marcar como leída: ${n.title}`}
-                        className="p-1 hover:bg-[var(--theme-hover)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-wait"
+                        className="min-h-11 min-w-11 self-start flex items-center justify-center p-1 hover:bg-[var(--theme-hover)] rounded-lg text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50 disabled:cursor-wait"
                       >
                         {pendingIds.includes(n.id)
                           ? <Loader2 size={14} className="animate-spin" aria-hidden="true" />
@@ -158,7 +183,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
             <div className="p-3 bg-[var(--theme-surface-muted)] text-center border-t border-[var(--border)]">
               <button
                 type="button"
-                onClick={() => setIsOpen(false)}
+                onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }}
                 className="text-[10px] font-bold text-[var(--theme-link)] hover:text-[var(--foreground)] transition-colors uppercase tracking-widest"
               >
                 Cerrar
