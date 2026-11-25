@@ -25,7 +25,7 @@ export async function readPreferredProvider(db: Reader, env: Env): Promise<Selec
       FROM private_email.provider_selection s
       JOIN private_email.provider_profile p ON p.id = s.profile_id
       JOIN private_email.provider_quota q ON q.provider = p.provider
-      WHERE s.singleton AND p.test_accepted_at IS NOT NULL AND p.receipt_confirmed_at IS NOT NULL
+      WHERE s.singleton AND p.retired_at IS NULL AND p.test_accepted_at IS NOT NULL AND p.receipt_confirmed_at IS NOT NULL
         AND q.day_start <= (statement_timestamp() AT TIME ZONE 'UTC')::date
         AND q.month_start <= date_trunc('month', statement_timestamp() AT TIME ZONE 'UTC')::date
         AND (CASE WHEN q.day_start = (statement_timestamp() AT TIME ZONE 'UTC')::date THEN q.daily_used ELSE 0 END) < q.daily_limit
@@ -59,8 +59,9 @@ export async function runtimeMailConfigured(db: Reader, env: Env): Promise<boole
 /** Hold the selection row until reservation/claim commit. No network I/O here. */
 export async function reserveSelectedProvider(db: Reader, profile: SelectedProfile): Promise<boolean> {
   const rows = await db.$queryRaw<{ id: string }[]>`
-    SELECT profile_id::text AS id FROM private_email.provider_selection
-    WHERE singleton AND profile_id = ${profile.id}::uuid FOR SHARE
+    SELECT s.profile_id::text AS id FROM private_email.provider_selection s
+    JOIN private_email.provider_profile p ON p.id = s.profile_id
+    WHERE s.singleton AND s.profile_id = ${profile.id}::uuid AND p.retired_at IS NULL FOR SHARE OF s
   `;
   return rows.length === 1 && await reserveProviderQuota(db, profile.provider) === 'reserved';
 }

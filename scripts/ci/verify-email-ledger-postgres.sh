@@ -322,6 +322,8 @@ echo 'Isolated provider quota and vault isolation checks passed.'
 
 # Preferred profile selection and receipt proof (no provider calls).
 db < "$root/docs/operations/proposed-email-provider-selection.sql"
+db < "$root/docs/operations/proposed-email-provider-budget-audit.sql"
+db < "$root/docs/operations/proposed-email-provider-lifecycle.sql"
 db <<'SQL'
 DO $check$
 DECLARE role_name text;
@@ -370,7 +372,6 @@ assert_equal "$(db -c "SELECT status FROM private_email.recruitment_delivery WHE
 echo 'Isolated quota rollback check passed.'
 
 # Local budget editor: use the actual statement, preserve consumption, audit old/new limits.
-db < "$root/docs/operations/proposed-email-provider-budget-audit.sql"
 db <<'SQL'
 DO $check$
 DECLARE role_name text;
@@ -408,3 +409,30 @@ for role in anon authenticated service_role; do
   fi
 done
 echo 'Isolated provider budget update and audit checks passed.'
+
+# Retirement and replacement: actual retirement SQL, selection cleared atomically.
+db -c "UPDATE private_email.provider_quota SET daily_limit=50,monthly_limit=1000 WHERE provider='brevo'"
+assert_equal "$(db -c "$selection_sql")" "123e4567-e89b-42d3-a456-426614174000" profile-selected-before-retirement
+retire_sql="$(python3 - "$root/src/lib/email/provider-lifecycle.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+body = source.split('export async function retireProviderProfile', 1)[1].split('export async function replaceProviderProfile', 1)[0]
+parts = body.split('`')
+queries = [parts[1], parts[3], parts[5]]
+for sql in queries:
+    sql = sql.replace('${id}', "'123e4567-e89b-42d3-a456-426614174000'").replace('${actor}', "'fixture'")
+    assert '${' not in sql
+    print(sql+';')
+PY
+)"
+db -c "BEGIN; $retire_sql COMMIT;"
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_selection WHERE profile_id IS NULL")" 1 retired-selection-cleared
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE retired_at IS NOT NULL AND retired_by='fixture' AND receipt_confirmed_at IS NOT NULL")" 1 historical-proof-retained
+assert_equal "$(db -c "$selection_sql")" "" retired-selection-blocked
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '3:7' retirement-preserves-usage
+db <<'SQL'
+INSERT INTO private_email.provider_profile(id,name,provider,sender,sealed_key,updated_by,replaces_id)
+VALUES ('123e4567-e89b-42d3-a456-426614174001','Replacement','brevo','new@example.test','v1:'||repeat('b',90),'fixture','123e4567-e89b-42d3-a456-426614174000');
+SQL
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE name='Replacement' AND retired_at IS NULL AND test_accepted_at IS NULL AND receipt_confirmed_at IS NULL")" 1 replacement-requires-fresh-proof
+echo 'Isolated provider lifecycle checks passed.'
