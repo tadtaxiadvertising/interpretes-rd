@@ -1915,7 +1915,7 @@ export default function RoleplayStudioPage() {
         <div className="flex flex-wrap gap-2">
           <Link href="/admin/roleplays/settings" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
-          }} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)]">Configurar Audio Studio</Link>
+          }} className="theme-action-secondary rounded-xl px-4 py-3 text-sm font-semibold">Configurar Audio Studio</Link>
           <Link href="/admin/roleplays/new" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
           }} className="rounded-xl theme-action-primary px-4 py-3 font-semibold">Importar y asignar</Link>
