@@ -747,13 +747,21 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   background-color: var(--theme-action-danger-hover);
 }
 
-.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger):disabled {
+.theme-workspace .theme-action-secondary {
+  background-color: var(--theme-panel);
+  border: 1px solid var(--theme-control-border);
+  color: var(--foreground);
+}
+.theme-workspace .theme-action-secondary:not(:disabled):hover {
+  background-color: var(--theme-hover);
+}
+.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):disabled {
   background-color: var(--theme-surface-muted);
   color: var(--text-secondary);
   opacity: 1;
   cursor: not-allowed;
 }
-.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger):focus-visible {
+.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):focus-visible {
   outline: 2px solid var(--theme-focus);
   outline-offset: 2px;
 }
