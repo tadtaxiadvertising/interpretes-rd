@@ -368,3 +368,43 @@ ROLLBACK;
 SQL
 assert_equal "$(db -c "SELECT status FROM private_email.recruitment_delivery WHERE event_id='vault-rollback'")" pending quota-rollback-pending
 echo 'Isolated quota rollback check passed.'
+
+# Local budget editor: use the actual statement, preserve consumption, audit old/new limits.
+db < "$root/docs/operations/proposed-email-provider-budget-audit.sql"
+db <<'SQL'
+DO $check$
+DECLARE role_name text;
+BEGIN
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='private_email.provider_budget_audit'::regclass) THEN RAISE EXCEPTION 'Budget audit RLS missing'; END IF;
+  FOREACH role_name IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+    IF has_table_privilege(role_name,'private_email.provider_budget_audit','SELECT,INSERT,UPDATE,DELETE') THEN RAISE EXCEPTION 'Unexpected budget audit privilege'; END IF;
+  END LOOP;
+END
+$check$;
+UPDATE private_email.provider_quota SET daily_limit=50,monthly_limit=1000,daily_used=3,monthly_used=7 WHERE provider='brevo';
+SQL
+budget_sql="$(python3 - "$root/src/lib/email/provider-budget.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const rows = await db.$queryRaw', 1)[1].split('`', 2)[1]
+for parameter, value in {
+    '${provider}': "'brevo'",
+    '${dailyLimit}': '2',
+    '${monthlyLimit}': '5',
+    '${actor}': "'fixture'",
+}.items():
+    sql = sql.replace(parameter, value)
+assert '${' not in sql
+print(sql+';')
+PY
+)"
+assert_equal "$(db -c "$budget_sql")" brevo budget-update
+assert_equal "$(db -c "SELECT daily_limit||':'||monthly_limit||':'||daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '2:5:3:7' budget-preserves-usage
+assert_equal "$(db -c "SELECT old_daily_limit||':'||old_monthly_limit||':'||new_daily_limit||':'||new_monthly_limit||':'||changed_by FROM private_email.provider_budget_audit WHERE provider='brevo'")" '50:1000:2:5:fixture' budget-audit
+assert_equal "$(db -c "$quota_sql")" "" reduced-budget-blocks-reservation
+for role in anon authenticated service_role; do
+  if db -c "SET ROLE $role; SELECT count(*) FROM private_email.provider_budget_audit" >/dev/null 2>&1; then
+    echo "Unexpected budget audit read as $role" >&2; exit 1
+  fi
+done
+echo 'Isolated provider budget update and audit checks passed.'
