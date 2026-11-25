@@ -8,6 +8,7 @@ import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/secur
 import { BUCKET, getSupabaseAdmin } from '@/lib/roleplay-audio-conversion';
 import { confirmRoleplayResponse } from '@/app/actions/roleplay';
 import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
+import { canProgressPastBilingualOpening, OPENING_REQUIRED_MESSAGE } from '@/lib/roleplay/bilingual-opening-guard';
 
 const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
 const ALLOWED_MIME_TYPES = [
@@ -63,6 +64,9 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
     if (!candidateCanUploadRoleplayAudio(session)) {
       return { hasAccess: false, error: 'Invitation not validated for recording' };
     }
+    if (!(await canProgressPastBilingualOpening(prisma, session.id))) {
+      return { hasAccess: false, error: OPENING_REQUIRED_MESSAGE };
+    }
     return { hasAccess: true };
   }
 
@@ -73,6 +77,9 @@ async function checkUploadAccess(identity: Awaited<ReturnType<typeof resolveCurr
   ) {
     if (!['STARTED', 'IN_PROGRESS'].includes(session.status)) {
       return { hasAccess: false, error: 'Session not in a valid state for recording' };
+    }
+    if (!(await canProgressPastBilingualOpening(prisma, session.id))) {
+      return { hasAccess: false, error: OPENING_REQUIRED_MESSAGE };
     }
     return { hasAccess: true };
   }
