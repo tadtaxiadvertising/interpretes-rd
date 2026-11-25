@@ -17,6 +17,7 @@ afterEach(() => cleanup());
 describe('NotificationBell interactions', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    window.localStorage.clear();
     m.getMyNotifications.mockResolvedValue({ success: false });
     m.markAllNotificationsAsRead.mockResolvedValue({ success: true });
     m.markNotificationAsRead.mockResolvedValue({ success: true });
@@ -191,5 +192,51 @@ describe('NotificationBell interactions', () => {
     expect(screen.queryByText('private-category')).toBeNull();
     expect(screen.getByRole('link', { name: 'Ir al módulo: Auditoría QA' }).getAttribute('href')).toBe('/dashboard');
     expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
+  it('saves a default unread view for this browser and account without altering the total', async () => {
+    const items = [notifications[0], { ...notifications[1], isRead: true }];
+    const { unmount } = render(<NotificationBell initialNotifications={items} preferenceScope="account-a" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preferencias de visualización' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Abrir en «Sin leer»' }));
+    expect(screen.queryByText('Turno nuevo')).toBeNull();
+    expect(screen.getByText('1 sin leer')).toBeTruthy();
+    expect(m.markNotificationAsRead).not.toHaveBeenCalled();
+    expect(m.markAllNotificationsAsRead).not.toHaveBeenCalled();
+    unmount();
+    const second = render(<NotificationBell initialNotifications={items} preferenceScope="account-a" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    expect(screen.queryByText('Turno nuevo')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Todas', exact: true }));
+    expect(screen.getByText('Turno nuevo')).toBeTruthy();
+    second.unmount();
+    render(<NotificationBell initialNotifications={items} preferenceScope="account-b" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    expect(screen.getByText('Turno nuevo')).toBeTruthy();
+  });
+
+  it('prioritizes important recent notices without hiding others and can reset', () => {
+    const items = [notifications[0], { ...notifications[1], type: 'error' }];
+    render(<NotificationBell initialNotifications={items} preferenceScope="account-a" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Preferencias de visualización' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Priorizar importantes en avisos recientes' }));
+    expect(screen.getByText('Turno nuevo').compareDocumentPosition(screen.getByText('Auditoría QA')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText('2 sin leer')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restablecer preferencias' }));
+    expect(screen.getByText('Auditoría QA').compareDocumentPosition(screen.getByText('Turno nuevo')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('keeps preferences functional when browser storage is unavailable', () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+    try {
+      render(<NotificationBell initialNotifications={notifications} preferenceScope="account-a" />);
+      fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Preferencias de visualización' }));
+      const checkbox = screen.getByRole('checkbox', { name: 'Abrir en «Sin leer»' }) as HTMLInputElement;
+      fireEvent.click(checkbox);
+      expect(checkbox.checked).toBe(true);
+      expect(screen.getByText(/Preferencias temporales/)).toBeTruthy();
+    } finally { spy.mockRestore(); }
   });
 });
