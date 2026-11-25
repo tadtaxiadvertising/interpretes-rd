@@ -97,8 +97,8 @@ export default async function EarningsPage() {
           <h3 className="text-xl font-bold text-[var(--foreground)]">Historial de pagos</h3>
         </div>
         
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
+        <div role="region" aria-label="Historial de pagos" tabIndex={0} className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-[850px] text-left">
             <thead>
               <tr className="bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] text-xs uppercase tracking-wider">
                 <th className="p-6">Período</th>
@@ -110,7 +110,7 @@ export default async function EarningsPage() {
                 <th className="p-6 text-right">Referencia</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody className="divide-y divide-[var(--border)]">
               {interpreter.payrollRecords.map((record) => (
                 <tr key={record.id} className="hover:bg-[var(--theme-hover)] transition-colors">
                   <td className="p-6">
@@ -143,7 +143,7 @@ export default async function EarningsPage() {
           </table>
           
           {interpreter.payrollRecords.length === 0 && (
-            <div className="p-20 text-center text-[var(--text-tertiary)]">
+            <div className="p-6 sm:p-20 text-center text-[var(--text-tertiary)]">
               <FileText size={48} className="mx-auto mb-4 opacity-20" />
               <p>Todavía no hay registros de pagos.</p>
             </div>
