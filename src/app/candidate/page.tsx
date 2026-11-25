@@ -157,6 +157,7 @@ export default async function CandidatePortalPage() {
         FAILED: 'Requiere revisión o nuevo intento',
       } as Record<string, string>)[session.status] ?? session.status;
 
+  const preferenceScope = notificationPreferenceScope(identity.userId, 'candidate');
   const recipientIds = authorizedNotificationRecipientIds(identity.userId, identity.profileId);
   const notifications = await loadNavbarNotifications(recipientIds, { candidateOnly: true });
   const showEmailBinding = identity.provider === 'supabase' && process.env.OPERATIONAL_EMAIL_BINDING_ENABLED === 'true';
@@ -174,7 +175,7 @@ export default async function CandidatePortalPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ThemeSwitcher />
-            {recipientIds.length > 0 && <NotificationBell initialNotifications={notifications} preferenceScope={notificationPreferenceScope(identity.userId, 'candidate')} candidateOnly /> }
+            {recipientIds.length > 0 && <NotificationBell key={preferenceScope} initialNotifications={notifications} preferenceScope={preferenceScope} candidateOnly /> }
             <Link href="/postular" className="rounded-xl bg-[#002d72] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
               Continuar mi postulación
             </Link>
