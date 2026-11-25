@@ -269,3 +269,34 @@ export async function readBilingualOpeningRecovery(db: Store, sessionId: string,
     };
   });
 }
+
+/** Explicitly abandon only the caller's matching, unconfirmed reservation.
+ * The DB trigger records retired paths; no live Storage deletion here.
+ * An active verifier is never interrupted. A stale tab cannot discard a
+ * different reservation created by another tab.
+ */
+export async function discardBilingualOpeningReservation(
+  db: Store, sessionId: string, actor: BilingualOpeningActor, path: string,
+): Promise<'pending'> {
+  if (!isCanonicalBilingualOpeningPath(path, sessionId)) throw new BilingualOpeningStoreError('INVALID_EVIDENCE');
+  return openingTransaction(db, async tx => {
+    const session = await lockAuthorizedSession(tx, sessionId, actor);
+    if (!session.required || session.currentIndex !== 0) throw new BilingualOpeningStoreError('FORBIDDEN');
+    if (await readOpening(tx, sessionId)) throw new BilingualOpeningStoreError('CONFLICT');
+    const reservation = await readReservation(tx, sessionId);
+    if (!reservation) return 'pending';
+    const now = new Date();
+    if (reservation.sourceAudioPath !== path ||
+        (reservation.verificationUntil && reservation.verificationUntil > now)) {
+      throw new BilingualOpeningStoreError('CONFLICT');
+    }
+    const rows = await tx.$queryRaw<{ sessionId: string }[]>`
+      DELETE FROM public.roleplay_bilingual_opening_reservations
+      WHERE session_id = ${sessionId} AND source_audio_path = ${path}
+        AND (verification_until IS NULL OR verification_until <= ${now})
+      RETURNING session_id AS "sessionId"
+    `;
+    if (rows.length !== 1 || rows[0].sessionId !== sessionId) throw new BilingualOpeningStoreError('CONFLICT');
+    return 'pending';
+  });
+}
