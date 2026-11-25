@@ -3,6 +3,7 @@ import prisma from '@/lib/prisma';
 import { convertAndStoreMp3 } from '@/lib/roleplay-audio-conversion';
 import { findMissingWorkerEnvVars } from '@/lib/roleplay-audio-worker-config';
 import { markResponseProcessingIfLeaseOwned } from '@/lib/roleplay-audio-worker-lease';
+import { notifyAudioJobFailures } from '@/lib/notifications/notify-audio-job-failures';
 import { safeRoleplayAudioJobError } from '@/lib/roleplay-audio-worker-errors';
 import {
   ROLEPLAY_WORKER_BASE_POLL_MS,
@@ -34,7 +35,7 @@ let stopping = false;
 const shutdown = new AbortController();
 
 async function failExhaustedStaleJobs(): Promise<void> {
-  await prisma.$executeRaw`
+  const failures = await prisma.$queryRaw<Array<{ id: string; failedAt: Date }>>`
     WITH exhausted AS (
       UPDATE public.roleplay_audio_jobs
       SET status = 'FAILED',
@@ -46,15 +47,19 @@ async function failExhaustedStaleJobs(): Promise<void> {
       WHERE status = 'PROCESSING'
         AND locked_at < NOW() - (${STALE_LOCK_MINUTES} * INTERVAL '1 minute')
         AND attempts >= max_attempts
-      RETURNING scenario_id, source_audio_path, last_error
+      RETURNING id, updated_at, scenario_id, source_audio_path, last_error
+    ), responses_updated AS (
+      UPDATE public.roleplay_responses AS response
+      SET audio_status = 'FAILED',
+          processing_error = LEFT(exhausted.last_error, 500)
+      FROM exhausted
+      WHERE response.scenario_id = exhausted.scenario_id
+        AND response.source_audio_path = exhausted.source_audio_path
+      RETURNING response.id
     )
-    UPDATE public.roleplay_responses AS response
-    SET audio_status = 'FAILED',
-        processing_error = LEFT(exhausted.last_error, 500)
-    FROM exhausted
-    WHERE response.scenario_id = exhausted.scenario_id
-      AND response.source_audio_path = exhausted.source_audio_path
+    SELECT id, updated_at AS "failedAt" FROM exhausted
   `;
+  await notifyAudioJobFailures(failures);
 }
 
 async function claimNextJob(): Promise<ClaimedAudioJob | null> {
@@ -193,6 +198,7 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
   const message = safeRoleplayAudioJobError(error);
   const shouldRetry = job.attempts < job.maxAttempts;
   const backoffSeconds = Math.min(300, 15 * (2 ** Math.max(0, job.attempts - 1)));
+  const failedAt = new Date();
 
   const updated = await prisma.$transaction(async (tx) => {
     const jobUpdate = await tx.roleplayAudioJob.updateMany({
@@ -203,6 +209,7 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
         lockedAt: null,
         lockedBy: null,
         lastError: message,
+        updatedAt: failedAt,
       },
     });
     if (jobUpdate.count !== 1) return false;
@@ -221,6 +228,8 @@ async function recordJobFailure(job: ClaimedAudioJob, error: unknown): Promise<v
     console.warn('[ROLEPLAY AUDIO WORKER] Failure update skipped: job lease not owned');
     return;
   }
+
+  if (!shouldRetry) await notifyAudioJobFailures([{ id: job.id, failedAt }]);
 
   console.error(
     `[ROLEPLAY AUDIO WORKER] Conversion failed (attempt ${job.attempts}/${job.maxAttempts}); ${shouldRetry ? `retry in ${backoffSeconds}s` : 'retries exhausted'}:`,
