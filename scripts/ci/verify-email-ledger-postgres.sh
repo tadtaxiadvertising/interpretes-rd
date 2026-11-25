@@ -265,3 +265,57 @@ db -c "UPDATE private_email.candidate_account_binding SET revoked_at=now() WHERE
 assert_equal "$(db -c "$preflight_sql")" 'f|f|f|t' revoked-binding-not-verified
 assert_equal "$(discovered_ids)" "" revoked-pilot-excluded
 echo 'Isolated pilot preflight and discovery checks passed.'
+
+# Private provider vault and quota proposals: synthetic data only.
+db < "$root/docs/operations/proposed-email-provider-vault.sql"
+db < "$root/docs/operations/proposed-email-provider-quota.sql"
+db <<'SQL'
+DO $check$
+DECLARE tbl regclass; role_name text;
+BEGIN
+  FOREACH tbl IN ARRAY ARRAY['private_email.provider_profile'::regclass,'private_email.provider_quota'::regclass] LOOP
+    IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid=tbl) THEN RAISE EXCEPTION 'Provider RLS missing'; END IF;
+    FOREACH role_name IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+      IF has_table_privilege(role_name,tbl,'SELECT,INSERT,UPDATE,DELETE') THEN RAISE EXCEPTION 'Unexpected provider privilege'; END IF;
+    END LOOP;
+  END LOOP;
+END
+$check$;
+GRANT SELECT, UPDATE ON private_email.provider_quota TO email_ledger_test_runtime;
+CREATE POLICY fixture_quota_access ON private_email.provider_quota TO email_ledger_test_runtime USING (true) WITH CHECK (true);
+UPDATE private_email.provider_quota SET daily_limit=1,monthly_limit=2 WHERE provider='brevo';
+SQL
+for role in anon authenticated service_role; do
+  for table in provider_profile provider_quota; do
+    if db -c "SET ROLE $role; SELECT count(*) FROM private_email.$table" >/dev/null 2>&1; then
+      echo "Unexpected provider table read as $role" >&2; exit 1
+    fi
+  done
+done
+quota_sql="$(python3 - "$root/src/lib/email/provider-quota.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const rows = await db.$queryRaw', 1)[1].split('`', 2)[1]
+sql = sql.replace('${provider}', "'brevo'")
+assert '${' not in sql
+print(sql + ';')
+PY
+)"
+# Two simultaneous requests compete for exactly one remaining attempt.
+db -c "SET ROLE email_ledger_test_runtime; BEGIN; $quota_sql SELECT pg_sleep(1); COMMIT;" > "$workdir/quota-first" &
+quota_first=$!
+db -c "SET ROLE email_ledger_test_runtime; $quota_sql" > "$workdir/quota-second" &
+quota_second=$!
+wait "$quota_first"
+wait "$quota_second"
+assert_equal "$(cat "$workdir/quota-first" "$workdir/quota-second" | grep -c '^brevo$' || true)" 1 quota-single-winner
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '1:1' quota-single-reservation
+assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $quota_sql")" "" quota-daily-block
+# Advance the stored buckets backward to exercise rollover independent of wall-clock month/day.
+db -c "UPDATE private_email.provider_quota SET day_start=(statement_timestamp() AT TIME ZONE 'UTC')::date-1, monthly_used=2 WHERE provider='brevo'"
+assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $quota_sql")" "" quota-monthly-block
+db -c "UPDATE private_email.provider_quota SET month_start=(date_trunc('month',statement_timestamp() AT TIME ZONE 'UTC')-interval '1 month')::date WHERE provider='brevo'"
+assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $quota_sql")" brevo quota-rollover
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '1:1' quota-reset
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='resend'")" '0:0' quota-provider-isolation
+echo 'Isolated provider quota and vault isolation checks passed.'
