@@ -220,7 +220,7 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
                   </div>
                   <button
                     onClick={() => handleDismiss(alert.id)}
-                    className="p-1 rounded hover:bg-[var(--theme-hover)] text-[var(--text-tertiary)] hover:text-[var(--foreground)] opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                    className="p-1 rounded hover:bg-[var(--theme-hover)] text-[var(--text-tertiary)] hover:text-[var(--foreground)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 transition-all flex-shrink-0"
                     title="Descartar"
                   >
                     <X size={12} />
