@@ -18,7 +18,11 @@ export async function getMyNotifications() {
   const ids = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
   if (!ids.length) return { success: false as const };
   try {
-    return { success: true as const, data: await loadNavbarNotifications(ids, { throwOnError: true }) };
+    const [data, unreadCount] = await Promise.all([
+      loadNavbarNotifications(ids, { throwOnError: true }),
+      db.notification.count({ where: { userId: { in: ids }, OR: [{ isRead: false }, { isRead: null }] } }),
+    ]);
+    return { success: true as const, data, unreadCount };
   } catch {
     return { success: false as const };
   }
@@ -125,5 +129,24 @@ export async function markNotificationAsRead(id: string) {
   } catch (error) {
     console.error('Failed to update notification:', safeServerErrorCategory(error));
     return { success: false, error: 'Failed to update notification', code: 'INTERNAL_ERROR' };
+  }
+}
+
+/** Mark every unread notification belonging to the current account only. */
+export async function markAllNotificationsAsRead() {
+  const auth = await validateAction();
+  if ('error' in auth) return { success: false as const };
+  const ids = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
+  if (!ids.length) return { success: false as const };
+  try {
+    await db.notification.updateMany({
+      where: { userId: { in: ids }, OR: [{ isRead: false }, { isRead: null }] },
+      data: { isRead: true },
+    });
+    refreshNotificationCache();
+    return { success: true as const };
+  } catch (error) {
+    console.error('Failed to mark notifications as read:', safeServerErrorCategory(error));
+    return { success: false as const };
   }
 }
