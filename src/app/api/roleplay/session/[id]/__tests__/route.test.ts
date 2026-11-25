@@ -164,6 +164,7 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
+    expect(body.data.scenarios[0].interpretationDirection).toBe('es-en');
     for (const key of ['studioTurn', 'studioSpeaker', 'studioLanguage', 'sourceStartSec', 'sourceEndSec']) {
       expect(body.data.scenarios[0]).not.toHaveProperty(key);
     }
@@ -176,7 +177,7 @@ describe('GET /api/roleplay/session/[id]', () => {
           select: expect.objectContaining({
             studioTurn: false,
             studioSpeaker: false,
-            studioLanguage: false,
+            studioLanguage: true,
             sourceStartSec: false,
             sourceEndSec: false,
           }),
@@ -208,6 +209,7 @@ describe('GET /api/roleplay/session/[id]', () => {
       expect(body.data.scenarios[0]).not.toHaveProperty(key);
     }
     expect(body.data.scenarios[0].title).toBe('Scenario 1');
+    expect(body.data.scenarios[0].interpretationDirection).toBe('es-en');
   });
 
   it('signs canonical base audio when a session has no legacy URL', async () => {
