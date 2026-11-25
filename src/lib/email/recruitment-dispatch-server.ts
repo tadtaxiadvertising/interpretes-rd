@@ -26,7 +26,10 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
   const vault = usesProviderVault(process.env);
   if (vault && emailDeliveryMode(process.env) !== 'pilot') return 'disabled';
   const selected = vault ? await readPreferredProvider(prisma, process.env) : null;
-  if (vault ? !selected : readOperationalMailConfig(process.env).status !== 'configured') return 'disabled';
+  const legacy = vault ? null : readOperationalMailConfig(process.env);
+  if (vault ? !selected : legacy?.status !== 'configured') return 'disabled';
+  const provider = selected?.provider ?? (legacy?.status === 'configured' ? legacy.provider : null);
+  if (!provider) return 'disabled';
   const quotaBlocked = new Error('Provider budget unavailable');
   let blocked = false;
   const result = await dispatchRecruitmentEmail(eventId, true, {
@@ -36,10 +39,10 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
         && (!pilot || snapshot.identity?.email.trim().toLowerCase() === pilot) ? snapshot : null;
     },
     claim: async (id) => {
-      if (!selected) return claimRecruitmentEmail(prisma, id);
+      if (!selected) return claimRecruitmentEmail(prisma, id, provider);
       try {
         return await prisma.$transaction(async tx => {
-          const claim = await claimRecruitmentEmail(tx, id);
+          const claim = await claimRecruitmentEmail(tx, id, provider);
           if (!claim) return null;
           if (!await reserveSelectedProvider(tx, selected)) throw quotaBlocked;
           return claim;
