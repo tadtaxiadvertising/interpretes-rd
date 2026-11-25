@@ -153,6 +153,28 @@ export async function createSignedResponseUploadUrl(
   return { token: data.token, path: data.path, expiresIn: 60 * 60 };
 }
 
+/**
+ * Staged opening upload capability. Caller must first authenticate the owner,
+ * verify the required/pending opening and apply admission limits.
+ * No route calls this yet.
+ */
+export async function createSignedBilingualOpeningUploadUrl(
+  sessionId: string, mimeType: string, size: number,
+): Promise<{ token: string; path: string }> {
+  assertStoragePathSegment(sessionId, 'session ID');
+  const validation = validateAudioMetadata(mimeType, size);
+  if (!validation.valid || !validation.extension) throw new Error('Invalid opening audio metadata');
+  const path = `openings/${sessionId}/${randomUUID()}.${validation.extension}`;
+  try {
+    const { data, error } = await getSupabaseAdmin().storage.from(BUCKET)
+      .createSignedUploadUrl(path, { upsert: false });
+    if (error || !data?.token || data.path !== path) throw new Error('Invalid upload capability');
+    return { token: data.token, path };
+  } catch {
+    throw new Error('Unable to authorize opening audio upload');
+  }
+}
+
 export async function confirmUpload(path: string, maxSizeBytes?: number): Promise<string> {
   // Signing a URL alone does not prove that the upload exists. Verify the
   // stored object before marking a session as ready for playback.
