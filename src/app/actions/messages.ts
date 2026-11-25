@@ -4,6 +4,7 @@ import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
+import { messageReceivedEvent } from '@/lib/notifications/communication-notification-events';
 import { publishNotificationEvent } from '@/lib/notifications/publish-notification-event';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { canAccessChat } from '@/lib/messaging-access';
@@ -54,15 +55,7 @@ export async function sendMessage(receiverId: string, content: string) {
     // Message is already committed. Notification/cache failures must not
     // trigger a retry of the message itself.
     try {
-      await publishNotificationEvent({
-        userId: receiver.id,
-        eventKey: 'messaging.message:' + message.id,
-        category: 'messaging',
-        type: 'info',
-        title: 'Nuevo mensaje',
-        message: 'Tienes un nuevo mensaje en tu bandeja de entrada.',
-        link: receiver.role?.toLowerCase() === 'admin' ? '/admin/messages' : '/dashboard/messages',
-      });
+      await publishNotificationEvent(messageReceivedEvent(receiver.id, message.id, receiver.role));
     } catch (error) {
       console.warn('Message saved but notification failed:', safeServerErrorCategory(error));
     }
