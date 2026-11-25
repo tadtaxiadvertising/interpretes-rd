@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Download } from 'lucide-react';
+import { downloadCsv } from '@/lib/download-csv';
 
 interface PayrollRecord {
   id: string;
@@ -60,25 +61,17 @@ export function ExportPayrollButton({ data }: ExportPayrollButtonProps) {
     ].join(','));
 
     const csvContent = [headers.join(','), ...csvRows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    
-    link.setAttribute('href', url);
-    link.setAttribute('download', `payroll_export_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadCsv(csvContent, `payroll_export_${new Date().toISOString().split('T')[0]}.csv`);
   };
 
   return (
-    <button 
+    <button
+      type="button"
       onClick={exportToCSV}
       disabled={!data.length}
-      className="flex items-center gap-2 theme-action-secondary px-6 py-3 rounded-2xl font-bold transition-all active:scale-95"
+      className="theme-action-secondary flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold transition-colors"
     >
-      <Download size={20} />
+      <Download size={20} aria-hidden="true" />
       Export CSV
     </button>
   );
