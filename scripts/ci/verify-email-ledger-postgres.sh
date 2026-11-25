@@ -267,8 +267,12 @@ assert_equal "$(discovered_ids)" "" revoked-pilot-excluded
 echo 'Isolated pilot preflight and discovery checks passed.'
 
 # Private provider vault and quota proposals: synthetic data only.
-db < "$root/docs/operations/proposed-email-provider-vault.sql"
-db < "$root/docs/operations/proposed-email-provider-quota.sql"
+db < "$root/docs/operations/install-email-provider-center.sql"
+# A second run must fail without modifying existing tables or resetting quotas.
+if db < "$root/docs/operations/install-email-provider-center.sql" >/dev/null 2>&1; then
+  echo "Provider installer unexpectedly allowed reinstallation" >&2; exit 1
+fi
+
 db <<'SQL'
 DO $check$
 DECLARE tbl regclass; role_name text;
@@ -321,9 +325,9 @@ assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.p
 echo 'Isolated provider quota and vault isolation checks passed.'
 
 # Preferred profile selection and receipt proof (no provider calls).
-db < "$root/docs/operations/proposed-email-provider-selection.sql"
-db < "$root/docs/operations/proposed-email-provider-budget-audit.sql"
-db < "$root/docs/operations/proposed-email-provider-lifecycle.sql"
+
+
+
 db <<'SQL'
 DO $check$
 DECLARE role_name text;
