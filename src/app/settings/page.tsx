@@ -3,6 +3,7 @@ import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-r
 import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import EmailProviderVault from './EmailProviderVault';
+import EmailProviderReadiness from './EmailProviderReadiness';
 import EmailProviderSetup from './EmailProviderSetup';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
@@ -151,6 +152,7 @@ export default async function SettingsPage() {
               <p className="text-xs">Diagnóstico local de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
             <EmailProviderSetup activeProvider={mailDiagnostic.provider} />
+            <EmailProviderReadiness />
             <EmailProviderVault />
             {vault ? <p className="text-sm">Usa la prueba de perfiles guardados con el despacho pausado. El transporte de entorno no se utiliza en este modo.</p> : <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />}
             <RecruitmentEmailPreview />
