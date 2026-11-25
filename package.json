@@ -12,6 +12,7 @@
     "test:ui": "vitest --ui",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "roleplay:opening-storage": "tsx --tsconfig tsconfig.scripts.json scripts/prepare-roleplay-opening-storage.ts",
     "roleplay:audio-worker": "tsx --tsconfig tsconfig.scripts.json scripts/roleplay-audio-worker.ts",
     "migrate": "tsx scripts/run-migration.ts",
     "seed": "tsx prisma/seed.ts",
