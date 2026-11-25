@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { notificationCategoryLabel, notificationSeverityLabel } from '@/lib/notifications/notification-display';
+import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { NotificationHistory } from './NotificationHistory';
@@ -13,6 +16,8 @@ interface Notification {
   type: string | null;
   isRead: boolean | null;
   createdAt: Date | string | null;
+  category?: string | null;
+  link?: string | null;
 }
 
 function formatNotificationTime(value: Date | string | null): string {
@@ -174,7 +179,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <div id="notification-panel" role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">{showHistory ? "Historial" : "Notificaciones"}</h4>
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
@@ -219,7 +224,12 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                     <div className="mt-1">{getIcon(n.type)}</div>
                     <div className="min-w-0 flex-1 space-y-1 break-words">
                       <p className={cn("text-xs font-bold", !n.isRead ? "text-[var(--foreground)]" : "text-[var(--text-secondary)]")}>{n.title}</p>
+                      <p className="flex flex-wrap gap-x-2 text-[11px] text-[var(--text-secondary)]">
+                        <span>{notificationCategoryLabel(n.category)}</span>
+                        <span className={cn(n.type === 'error' && 'font-semibold text-[var(--theme-danger)]', n.type === 'warning' && 'font-semibold text-[var(--theme-warning)]')}>{notificationSeverityLabel(n.type)}</span>
+                      </p>
                       <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{n.message}</p>
+                      {safeNotificationLink(n.link) && <Link href={safeNotificationLink(n.link)!} prefetch={false} onClick={() => setIsOpen(false)} className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--theme-link)] underline">Ir al módulo<span className="sr-only">: {n.title}</span></Link>}
                       <p className="text-[10px] text-[var(--text-secondary)] uppercase mt-1">
                         {formatNotificationTime(n.createdAt)}
                       </p>
