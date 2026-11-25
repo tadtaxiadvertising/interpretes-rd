@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
+import { legacyRoleplayDraftReady } from '@/lib/roleplay/legacy-draft-readiness';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -136,7 +137,16 @@ export async function POST(
     // Compare-and-set the state we just validated. Without the status predicate,
     // a concurrent submit/evaluation could be overwritten back to STARTED.
     const transition = await db.roleplaySession.updateMany({
-      where: { id: session.id, status: session.status },
+      where: {
+        id: session.id,
+        status: session.status,
+        // Legacy interpreter drafts are startable only once all scenarios exist.
+        ...(identity.role === 'interpreter' && session.status === 'DRAFT' ? {
+          interpreterId: identity.interpreterId,
+          recruitmentCandidateId: null,
+          ...legacyRoleplayDraftReady,
+        } : {}),
+      },
       data: { status: 'STARTED' },
     });
 
