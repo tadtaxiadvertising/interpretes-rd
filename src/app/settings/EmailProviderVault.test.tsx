@@ -135,6 +135,38 @@ describe('EmailProviderVault refresh failures', () => {
     expect(hint?.textContent).toContain('reserva un intento del presupuesto local compartido');
   });
 
+  it('distinguishes an exhausted preferred provider from an active transport', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({
+      ...ready, preferredId: 'profile-1',
+      profiles: [{ ...ready.profiles[0], testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' }],
+      quotas: [{ ...ready.quotas[0], dailyUsed: 100 }],
+    });
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByText('Preferencia sin disponibilidad local: Presupuesto local agotado. Revisa los límites antes de elegir.');
+    expect(screen.getByRole('heading', { name: 'Proveedor preferido: Perfil de prueba' })).toBeTruthy();
+    expect(screen.queryByText(/Recepción confirmada · .* intentos locales restantes/)).toBeNull();
+  });
+
+  it('shows low local availability without requiring the preference to be editable', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({
+      ...ready, preferredId: 'profile-1', preferenceEditable: false,
+      profiles: [{ ...ready.profiles[0], testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' }],
+      quotas: [{ ...ready.quotas[0], dailyUsed: 95 }],
+    });
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByText('Recepción confirmada · 5 intentos locales restantes.');
+    expect(screen.getByText('El presupuesto del proveedor preferido está próximo a agotarse.')).toBeTruthy();
+  });
+
+  it('does not assume availability when the preferred profile is missing from the listing', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...ready, preferredId: 'missing' });
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByText('El perfil preferido no figura en la consulta. No se puede comprobar su disponibilidad local.');
+  });
+
   it('recovers after a later successful consultation', async () => {
     await loadProfiles();
     actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
