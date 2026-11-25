@@ -105,12 +105,15 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       await disabled.scrollIntoViewIfNeeded();
       const neutralTransform = () => disabled.evaluate(node => {
         const style = getComputedStyle(node);
-        return (style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity)
-          && /^(none|0px(?: 0px){0,2})$/.test(style.translate)
-          && /^(none|1(?: 1){0,2})$/.test(style.scale)
-          && /^(none|0deg)$/.test(style.rotate);
+        return {
+          transform: style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity ? 'neutral' : style.transform,
+          translate: /^(none|0(?:px|%)(?: 0(?:px|%)){0,2})$/.test(style.translate) ? 'neutral' : style.translate,
+          scale: /^(none|1(?: 1){0,2})$/.test(style.scale) ? 'neutral' : style.scale,
+          rotate: /^(none|0deg)$/.test(style.rotate) ? 'neutral' : style.rotate,
+        };
       });
-      await expect.poll(neutralTransform).toBe(true);
+      const neutral = { transform: 'neutral', translate: 'neutral', scale: 'neutral', rotate: 'neutral' };
+      await expect.poll(neutralTransform, { message: theme + ': before hover' }).toEqual(neutral);
       const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
       const boundsBefore = await disabled.boundingBox();
       if (!boundsBefore) throw new Error('Disabled button has no geometry');
@@ -118,8 +121,9 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       await page.mouse.move(boundsBefore.x + boundsBefore.width / 2, boundsBefore.y + boundsBefore.height / 2);
       await expect.poll(() => disabled.evaluate(node => node.matches(':hover'))).toBe(true);
       await expect(disabled).toHaveCSS('background-color', disabledBackground);
-      await expect.poll(neutralTransform).toBe(true);
+      await expect.poll(neutralTransform, { message: theme + ': during hover' }).toEqual(neutral);
       await expect(disabled).toHaveCSS('box-shadow', 'none');
+      await expect(disabled).toHaveCSS('transition-property', 'none');
       await expect.poll(async () => {
         const boundsAfter = await disabled.boundingBox();
         if (!boundsAfter) return Infinity;
