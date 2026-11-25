@@ -344,3 +344,43 @@ describe('accessible operational tables', () => {
     }
   });
 });
+
+describe('semantic feedback and production filters', () => {
+  it.each(['src/app/error.tsx', 'src/app/admin/error.tsx'])('keeps error recovery readable in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toContain('theme-action-primary');
+    expect(source).toContain('text-[var(--foreground)]');
+    expect(source).toContain('onClick={reset}');
+    expect(source).toContain('error.digest');
+  });
+
+  it('uses a self-contained system appearance for fatal layout errors', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/global-error.tsx'), 'utf8');
+    expect(source).toContain('@media (prefers-color-scheme: dark)');
+    expect(source).toContain('className="fatal-retry"');
+    for (const color of ['#1554a8', '#002d72']) {
+      expect(contrast(color, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('uses shared control tokens and accessible filter names', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/admin/ProductionLogControls.tsx'), 'utf8');
+    for (const token of ['--theme-control-bg', '--theme-control-border', '--theme-control-text', '--theme-focus']) {
+      expect(source).toContain('var(' + token + ')');
+    }
+    for (const label of ['Buscar registros de producción', 'Estado de producción', 'Desde la fecha', 'Hasta la fecha']) {
+      expect(source).toContain('aria-label="' + label + '"');
+    }
+    expect(source).toContain('aria-expanded={showInterpreterDropdown}');
+    expect(source).not.toContain('bg-slate-950');
+  });
+
+  it('announces monitoring loading and marks the selected production page', () => {
+    const monitor = readFileSync(resolve(process.cwd(), 'src/components/admin/RealTimeMonitor.tsx'), 'utf8');
+    const production = readFileSync(resolve(process.cwd(), 'src/app/production/page.tsx'), 'utf8');
+    expect(monitor).toContain('Cargando estados de los intérpretes…');
+    expect(monitor).toContain('motion-reduce:animate-none');
+    expect(production).toContain('aria-label="Paginación de producción"');
+    expect(production).toContain("aria-current={p === currentPage ? 'page' : undefined}");
+  });
+});

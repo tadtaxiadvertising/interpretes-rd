@@ -7,13 +7,13 @@ export default function MonitoringPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* Page Header */}
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight flex items-center gap-3">
-            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/30" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)] tracking-tight flex items-center gap-3">
+            <span className="w-3 h-3 shrink-0 rounded-full bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/30" />
             Intérpretes en Vivo
           </h1>
-          <p className="text-gray-400 mt-1.5 ml-6">
+          <p className="text-[var(--text-secondary)] mt-1.5 sm:ml-6">
             Monitoreo en tiempo real con estados inteligentes y sesiones activas
           </p>
         </div>
