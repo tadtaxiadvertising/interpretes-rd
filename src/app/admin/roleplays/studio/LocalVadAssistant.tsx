@@ -45,8 +45,8 @@ export default function LocalVadAssistant({
 
   return (
     <section className="rounded-xl border border-cyan-400/20 bg-cyan-400/5 p-4">
-      <h2 className="text-sm font-bold text-cyan-100">Actividad de voz en este equipo (VAD)</h2>
-      <p className="mt-2 text-xs leading-5 text-slate-300">
+      <h2 className="text-sm font-bold text-[var(--theme-info)]">Actividad de voz en este equipo (VAD)</h2>
+      <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
         Reutiliza el audio que el navegador ya decodificó para la forma de onda.
         No envía archivos ni vuelve a decodificar el MP3. Detecta energía acústica,
         no palabras, identidad del hablante ni idioma. Todos los cortes requieren revisión.
@@ -57,27 +57,27 @@ export default function LocalVadAssistant({
           setReviewedPlan({ snapshot, contextKey });
         }}
           disabled={!ready || availableSlots === 0}
-          className="rounded-lg border border-cyan-300/30 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50">
+          className="rounded-lg border border-cyan-300/30 bg-cyan-500/15 px-4 py-2 text-sm font-semibold text-[var(--theme-info)] disabled:opacity-50">
           {status === 'loading' ? 'Preparando audio local…' : 'Revisar actividad local'}
         </button>
-        {ready && <span className="text-xs text-slate-300">
+        {ready && <span className="text-xs text-[var(--text-secondary)]">
           {snapshot?.segments.length ?? 0} regiones con actividad detectadas
         </span>}
       </div>
       {changedSinceReview && (
-        <p role="status" className="mt-2 text-xs text-amber-200">
+        <p role="status" className="mt-2 text-xs text-[var(--theme-warning)]">
           La duración o los cortes existentes cambiaron. Revisa de nuevo la propuesta local antes de añadir regiones.
         </p>
       )}
       {status === 'limited' && (
-        <p role="status" className="mt-2 text-xs text-amber-200">
+        <p role="status" className="mt-2 text-xs text-[var(--theme-warning)]">
           Para cuidar la memoria, el análisis local requiere MP3 de hasta 4 minutos y 8 MiB,
           y una decodificación que respete el presupuesto de memoria del navegador.
           Marca los cortes manualmente o utiliza subtítulos temporizados.
         </p>
       )}
       {status === 'unavailable' && (
-        <p role="status" className="mt-2 text-xs text-amber-200">
+        <p role="status" className="mt-2 text-xs text-[var(--theme-warning)]">
           Este navegador no pudo decodificar el audio. Puedes marcar los cortes a mano,
           importar subtítulos o autorizar expresamente el respaldo del servidor.
         </p>
@@ -85,13 +85,13 @@ export default function LocalVadAssistant({
       {reviewed && ready && (
         <>
           {proposal.clips.length === 0 ? (
-            <p role="status" className="mt-2 text-xs text-amber-200">
+            <p role="status" className="mt-2 text-xs text-[var(--theme-warning)]">
               No hay cortes adicionales compatibles con los límites o no se detectó
               suficiente actividad. Ajusta manualmente los cortes o usa subtítulos.
             </p>
           ) : (
             <div className="mt-3 space-y-2">
-              <p className="text-xs text-amber-100">
+              <p className="text-xs text-[var(--theme-warning)]">
                 Escucha cada región y elige las que deseas añadir. Solo se incluirán
                 cortes completos que no se solapen con intervenciones existentes; revisa
                 hablantes e idioma antes de guardar.
@@ -102,9 +102,9 @@ export default function LocalVadAssistant({
                 className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 Añadir {selectedClips.length} {selectedClips.length === 1 ? 'corte revisable' : 'cortes revisables'}
               </button>
-              <ol className="grid gap-1 text-xs text-slate-300 sm:grid-cols-2">
+              <ol className="grid gap-1 text-xs text-[var(--text-secondary)] sm:grid-cols-2">
                 {proposal.clips.map((cut, index) => (
-                  <li key={clipKey(cut)} className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 p-2">
+                  <li key={clipKey(cut)} className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-2">
                     <label className="flex flex-1 items-center gap-2">
                       <input type="checkbox" aria-label={`Incluir región ${index + 1}`}
                         checked={!excludedCuts.has(clipKey(cut))}
@@ -122,7 +122,7 @@ export default function LocalVadAssistant({
                     {onPreview && (
                       <button type="button" onClick={() => onPreview(cut)}
                         aria-label={`Escuchar región ${index + 1}`}
-                        className="rounded-md border border-cyan-300/30 px-3 py-1.5 text-cyan-100 hover:bg-cyan-500/15">
+                        className="rounded-md border border-cyan-300/30 px-3 py-1.5 text-[var(--theme-info)] hover:bg-cyan-500/15">
                         Escuchar
                       </button>
                     )}
@@ -132,7 +132,7 @@ export default function LocalVadAssistant({
             </div>
           )}
           {proposal.omittedCount > 0 && (
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-[var(--text-secondary)]">
               {proposal.omittedCount} regiones omitidas por duración, solapamientos o cuota.
             </p>
           )}
