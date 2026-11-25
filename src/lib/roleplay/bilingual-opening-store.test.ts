@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { confirmVerifiedBilingualOpening, readBilingualOpeningState, reserveBilingualOpeningPath, claimBilingualOpeningVerification, completeBilingualOpeningVerification } from './bilingual-opening-store';
+import { confirmVerifiedBilingualOpening, readBilingualOpeningState, reserveBilingualOpeningPath, claimBilingualOpeningVerification, completeBilingualOpeningVerification, discardBilingualOpeningReservation } from './bilingual-opening-store';
 
 vi.mock('server-only', () => ({}));
 
@@ -108,5 +108,31 @@ describe('opening reservation fencing', () => {
     await expect(completeBilingualOpeningVerification(expired.db, id, actor, 'current-lease', evidence)).rejects.toMatchObject({ code: 'CONFLICT' });
     const current = fixture([session], [access], [], [lease], [{ sessionId: id }]);
     await expect(completeBilingualOpeningVerification(current.db, id, actor, 'current-lease', evidence)).resolves.toBe('created');
+  });
+});
+
+describe('discard pending opening', () => {
+  const path = evidence.sourceAudioPath;
+  const reservation = { sourceAudioPath: path, expiresAt: new Date(Date.now()+600_000), verificationId: null, verificationUntil: null };
+  it('removes only a matching pending reservation under the session lock', async () => {
+    const { db, query } = fixture([session], [access], [], [reservation], [{ sessionId: id }]);
+    await expect(discardBilingualOpeningReservation(db, id, actor, path)).resolves.toBe('pending');
+    expect(query.mock.calls[4][0].join('')).toContain('DELETE FROM public.roleplay_bilingual_opening_reservations');
+    expect(query.mock.calls[4].slice(1, 3)).toEqual([id, path]);
+  });
+  it('preserves confirmed evidence, active verification and another tab’s reservation', async () => {
+    const confirmed = fixture([session], [access], [existing]);
+    await expect(discardBilingualOpeningReservation(confirmed.db, id, actor, path)).rejects.toMatchObject({ code: 'CONFLICT' });
+    for (const row of [{ ...reservation, verificationUntil: new Date(Date.now()+60_000) }, { ...reservation, sourceAudioPath: path.replace('.webm','.ogg') }]) {
+      const { db, query } = fixture([session], [access], [], [row]);
+      await expect(discardBilingualOpeningReservation(db, id, actor, path)).rejects.toMatchObject({ code: 'CONFLICT' });
+      expect(query).toHaveBeenCalledTimes(4);
+    }
+  });
+  it('supports an idempotent retry and rejects cross-session paths', async () => {
+    const { db, query } = fixture([session], [access], [], []);
+    await expect(discardBilingualOpeningReservation(db, id, actor, path)).resolves.toBe('pending');
+    await expect(discardBilingualOpeningReservation(db, id, actor, path.replace(id,'foreign'))).rejects.toMatchObject({ code: 'INVALID_EVIDENCE' });
+    expect(query).toHaveBeenCalledTimes(4);
   });
 });
