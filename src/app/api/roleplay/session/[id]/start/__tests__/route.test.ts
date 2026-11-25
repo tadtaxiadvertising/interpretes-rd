@@ -313,6 +313,27 @@ describe('POST /api/roleplay/session/[id]/start', () => {
     expect(m.accessUpdateMany).toHaveBeenCalledTimes(1);
   });
 
+  it('starts a historical interpreter draft only with persisted scenarios in the atomic predicate', async () => {
+    m.session = { ...INTERPRETER_SESSION, status: 'DRAFT' };
+    const res = await POST(makeRequest(), { params });
+    expect(res.status).toBe(200);
+    expect(m.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'sess-1', status: 'DRAFT', interpreterId: 7, recruitmentCandidateId: null,
+        scenarios: { some: {}, none: { baseAudioUrl: '' } },
+      },
+      data: { status: 'STARTED' },
+    });
+  });
+
+  it('rejects an incomplete legacy interpreter draft when the readiness predicate matches no row', async () => {
+    m.session = { ...INTERPRETER_SESSION, status: 'DRAFT' };
+    m.updateMany.mockResolvedValueOnce({ count: 0 });
+    const res = await POST(makeRequest(), { params });
+    expect(res.status).toBe(409);
+    expect(m.accessUpdateMany).not.toHaveBeenCalled();
+  });
+
   it('is idempotent for a session already in progress', async () => {
     m.session = { ...INTERPRETER_SESSION, status: 'STARTED' };
 

@@ -65,6 +65,27 @@ describe('GET /api/roleplay/session/[id]', () => {
     m.getSignedAudioUrl.mockImplementation(async (path: string) => `https://signed.test/${path}`);
   });
 
+  it.each([
+    { reason: 'no scenarios', scenarios: [] },
+    { reason: 'empty audio reference', scenarios: [{ id: 'empty', order: 0, title: 'Incomplete', baseAudioUrl: '', responses: [] }] },
+  ])('rejects direct playback of an incomplete interpreter draft: $reason', async ({ scenarios }) => {
+    m.identity = { userId: 'worker', role: 'interpreter', interpreterId: 7 };
+    m.session = { ...candidateSession('DRAFT'), interpreterId: 7, recruitmentCandidateId: null, scenarios };
+    const res = await GET(makeRequest(), { params });
+    expect(res.status).toBe(409);
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+  });
+
+  it('preserves direct access for a completed historical interpreter draft', async () => {
+    m.identity = { userId: 'worker', role: 'interpreter', interpreterId: 7 };
+    m.session = {
+      ...candidateSession('DRAFT'), interpreterId: 7, recruitmentCandidateId: null,
+      scenarios: [{ id: 'ready', order: 0, title: 'Ready', baseAudioUrl: 'https://x/base.webm', responses: [] }],
+    };
+    const res = await GET(makeRequest(), { params });
+    expect(res.status).toBe(200);
+  });
+
   it('keeps cookie-only playback without requiring a Bearer token', async () => {
     const res = await GET(makeRequest('sess-1'), { params });
     expect(res.status).toBe(200);

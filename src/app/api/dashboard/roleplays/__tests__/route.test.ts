@@ -53,7 +53,13 @@ describe('GET /api/dashboard/roleplays — interpreter ownership and minimal exp
     expect(result.status).toBe(200);
     expect(m.validate).toHaveBeenCalledWith('interpreter');
     expect(m.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { interpreterId: 42, recruitmentCandidateId: null },
+      where: {
+        interpreterId: 42, recruitmentCandidateId: null,
+        OR: [
+          { status: { not: 'DRAFT' } },
+          { status: 'DRAFT', scenarios: { some: {}, none: { baseAudioUrl: '' } } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -65,6 +71,16 @@ describe('GET /api/dashboard/roleplays — interpreter ownership and minimal exp
       },
     }));
     expect(body.data[0].id).toBe('own-session');
+  });
+
+  it('keeps a historical complete draft visible alongside published assignments', async () => {
+    m.findMany.mockResolvedValueOnce([
+      { id: 'legacy-ready', status: 'DRAFT', createdAt: new Date('2026-11-01T12:00:00Z'), submittedAt: null, evaluatedAt: null, qaScore: null },
+      { id: 'published', status: 'INVITED', createdAt: new Date('2026-11-01T12:00:00Z'), submittedAt: null, evaluatedAt: null, qaScore: null },
+    ]);
+    const response = await GET(request());
+    const body = await response.json();
+    expect(body.data.map((item: { id: string }) => item.id)).toEqual(['legacy-ready', 'published']);
   });
 
   it('returns only list metadata and never serializes audio secrets or candidate ownership', async () => {
