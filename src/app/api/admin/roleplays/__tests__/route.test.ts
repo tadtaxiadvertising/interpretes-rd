@@ -813,10 +813,21 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.roleplaySession.create).toHaveBeenCalledTimes(1);
       expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.create).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
     });
   });
 
   describe('create-or-resume guard', () => {
+    it('does not publish again or notify when an individual assignment is already invited', async () => {
+      (prisma.roleplaySession.findFirst as any).mockResolvedValueOnce({ id: 'sess-old', status: 'INVITED' });
+      const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
+      expect(res.status).toBe(409);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+
     it('returns 409 before uploading when the participant has an active session', async () => {
       (prisma.roleplaySession.findFirst as any).mockResolvedValueOnce({ id: 'sess-old', status: 'INVITED' });
 
