@@ -22,20 +22,20 @@ export default function LiveRosterPanel() {
   }).slice(0, 5);
 
   return (
-    <div className="glass p-5 rounded-3xl border border-white/5 bg-slate-900/40">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-          <Users className="text-blue-400" size={20} />
+    <div className="glass p-5 rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)]">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+          <Users className="text-[var(--theme-link)]" size={20} />
           Intérpretes en Vivo
         </h3>
         <div className="flex items-center gap-3 text-[10px] font-mono">
-          <span className="flex items-center gap-1 text-emerald-400">
+          <span className="flex items-center gap-1 text-[var(--theme-success)]">
             <Wifi size={10} /> {online}
           </span>
-          <span className="flex items-center gap-1 text-amber-400">
+          <span className="flex items-center gap-1 text-[var(--theme-warning)]">
             <Phone size={10} /> {busy}
           </span>
-          <span className="flex items-center gap-1 text-orange-400">
+          <span className="flex items-center gap-1 text-[var(--theme-away)]">
             <Coffee size={10} className="inline" /> {away}
           </span>
         </div>
@@ -43,14 +43,14 @@ export default function LiveRosterPanel() {
 
       <div className="space-y-1.5 mb-4">
         {sorted.length === 0 && (
-          <p className="text-xs text-slate-500 text-center py-4">Cargando...</p>
+          <p className="text-xs text-[var(--text-tertiary)] text-center py-4">Cargando...</p>
         )}
         {sorted.map((i) => (
           <div
             key={i.id}
-            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+            className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] transition-colors"
           >
-            <span className="text-sm text-slate-200 truncate max-w-[140px]">
+            <span className="text-sm text-[var(--foreground)] truncate max-w-[140px]">
               {i.name}
             </span>
             <StatusBadge status={i.realtimeStatus} size="sm" showTime={false} />
@@ -60,7 +60,7 @@ export default function LiveRosterPanel() {
 
       <Link
         href="/admin/monitoring"
-        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 text-sm font-medium transition-all"
+        className="flex items-center justify-center gap-2 w-full py-2.5 rounded-xl theme-action-secondary text-sm font-medium transition-all"
       >
         Ver todos los intérpretes
         <ArrowRight size={14} />
