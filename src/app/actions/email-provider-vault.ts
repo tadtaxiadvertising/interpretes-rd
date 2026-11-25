@@ -9,9 +9,12 @@ import { sendResendEmail } from '@/lib/email/resend-transport';
 
 import { reserveProviderQuota, listProviderQuotas, type ProviderQuota } from '@/lib/email/provider-quota';
 
+import { providerSelectionPaused, validProfileId, recordProfileAcceptance, confirmProfileReceipt, selectPreferredProfile, clearPreferredProfile } from '@/lib/email/provider-selection';
+
+type ListedProfile = ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null };
 type Status = 'ready' | 'disabled' | 'key_missing' | 'unauthorized' | 'unavailable';
-type ListResult = { status: Status; profiles: ProfileMetadata[]; quotas?: ProviderQuota[] };
-type ProfileRow = Omit<ProfileMetadata, 'updatedAt'> & { updatedAt: Date };
+type ListResult = { status: Status; profiles: ListedProfile[]; quotas?: ProviderQuota[]; preferredId?: string | null; selectionPaused?: boolean };
+type ProfileRow = Omit<ProfileMetadata, 'updatedAt'> & { updatedAt: Date; testAcceptedAt: Date | null; receiptConfirmedAt: Date | null };
 const key = () => process.env.EMAIL_PROVIDER_ENCRYPTION_KEY;
 function availability(): Status {
   if (process.env.EMAIL_PROVIDER_VAULT_ENABLED !== 'true') return 'disabled';
@@ -25,12 +28,19 @@ export async function listEmailProviderProfiles(): Promise<ListResult> {
     const status = availability();
     if (status !== 'ready') return { status, profiles: [] };
     const rows = await prisma.$queryRaw<ProfileRow[]>`
-      SELECT id::text, name, provider, sender AS "from", reply_to AS "replyTo", updated_at AS "updatedAt"
+      SELECT id::text, name, provider, sender AS "from", reply_to AS "replyTo", updated_at AS "updatedAt",
+        test_accepted_at AS "testAcceptedAt", receipt_confirmed_at AS "receiptConfirmedAt"
       FROM private_email.provider_profile ORDER BY updated_at DESC LIMIT 50
     `;
     const quotas = await listProviderQuotas(prisma);
     if (quotas.length !== 2) return { status: 'unavailable', profiles: [] };
-    return { status: 'ready', profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString() })), quotas };
+    const [selection] = await prisma.$queryRaw<{ id: string | null }[]>`
+      SELECT profile_id::text AS id FROM private_email.provider_selection WHERE singleton
+    `;
+    if (!selection) return { status: 'unavailable', profiles: [] };
+    return { status: 'ready', profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString(),
+      testAcceptedAt: row.testAcceptedAt?.toISOString() ?? null, receiptConfirmedAt: row.receiptConfirmedAt?.toISOString() ?? null })),
+      quotas, preferredId: selection.id, selectionPaused: providerSelectionPaused(process.env) };
   } catch {
     return { status: 'unavailable', profiles: [] };
   }
@@ -64,9 +74,8 @@ export async function testSavedEmailProvider(id: string) {
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return 'unauthorized' as const;
-    if (availability() !== 'ready' || process.env.OPERATIONAL_EMAIL_ENABLED !== 'true'
-      || ['OPERATIONAL_EMAIL_DISPATCH_ENABLED', 'OPERATIONAL_EMAIL_BATCH_ENABLED', 'OPERATIONAL_EMAIL_BINDING_ENABLED', 'OPERATIONAL_EMAIL_GENERAL_ENABLED', 'OPERATIONAL_EMAIL_SCHEDULER_ENABLED'].some(flag => process.env[flag] !== 'false')) return 'disabled' as const;
-    if (typeof id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return 'invalid' as const;
+    if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
+    if (!validProfileId(id)) return 'invalid' as const;
     if (testing || Date.now() < nextTestAt) return 'rate_limited' as const;
     testing = true;
     nextTestAt = Date.now() + 60000;
@@ -82,11 +91,40 @@ export async function testSavedEmailProvider(id: string) {
       const message = { recipient: profile.from, subject: 'Prueba de perfil | Intérpretes RD', text: 'Prueba de configuración. No contiene datos de postulantes.', html: '<p>Prueba de configuración. No contiene datos de postulantes.</p>' };
       const config = { apiKey: profile.apiKey, from: profile.from, replyTo: profile.replyTo || undefined };
       if (await reserveProviderQuota(prisma, profile.provider) !== 'reserved') return 'local_quota_reached' as const;
-      return profile.provider === 'brevo' ? await sendBrevoEmailDetailed(config, message) : await sendResendEmail(config, message);
+      const outcome = profile.provider === 'brevo' ? await sendBrevoEmailDetailed(config, message) : await sendResendEmail(config, message);
+      if (outcome === 'accepted') {
+        try {
+          if (!await recordProfileAcceptance(prisma, id)) return 'accepted_evidence_missing' as const;
+        } catch { return 'accepted_evidence_missing' as const; }
+      }
+      return outcome;
     } finally {
       testing = false;
     }
   } catch {
     return 'unavailable' as const;
   }
+}
+
+/** Confirmation means the administrator personally checked the inbox. */
+export async function confirmSavedProviderReceipt(id: string) {
+  try {
+    const auth = await validateAction('admin');
+    if ('error' in auth) return 'unauthorized' as const;
+    if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
+    if (!validProfileId(id)) return 'invalid' as const;
+    return await confirmProfileReceipt(prisma, id, auth.user.userId) ? 'receipt_confirmed' as const : 'selection_blocked' as const;
+  } catch { return 'unavailable' as const; }
+}
+
+/** Preference only. Does not activate operational dispatch or change the ledger. */
+export async function setPreferredEmailProvider(id: string | null) {
+  try {
+    const auth = await validateAction('admin');
+    if ('error' in auth) return 'unauthorized' as const;
+    if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
+    if (id === null) return await clearPreferredProfile(prisma, auth.user.userId) ? 'preference_cleared' as const : 'unavailable' as const;
+    if (!validProfileId(id)) return 'invalid' as const;
+    return await selectPreferredProfile(prisma, id, auth.user.userId) ? 'preferred_saved' as const : 'selection_blocked' as const;
+  } catch { return 'unavailable' as const; }
 }
