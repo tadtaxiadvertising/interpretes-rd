@@ -2,9 +2,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sendBrevoEmail, sendBrevoEmailDetailed, checkBrevoConnection } from './brevo-transport';
 
+const reserve = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/prisma', () => ({ default: {} }));
+vi.mock('./provider-quota', () => ({ reserveProviderQuota: reserve }));
+
 const config = { apiKey: 'fake-fixture-key-only', from: 'office@example.test', replyTo: 'support@example.test' };
 const message = { recipient: 'candidate@example.test', subject: 'Intérpretes RD', text: 'Test', html: '<p>Test</p>' };
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); reserve.mockReset(); });
 
 describe('Brevo transactional transport', () => {
   it('sends one branded message to the fixed HTTPS endpoint without redirects', async () => {
@@ -49,6 +53,8 @@ describe('Brevo transactional transport', () => {
   });
   it('uses only the configured sender for the administrative test and keeps dispatch disabled', async () => {
     vi.resetModules();
+    reserve.mockResolvedValueOnce('reserved');
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'environment');
     vi.stubEnv('OPERATIONAL_EMAIL_ENABLED', 'true');
     vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'brevo');
     vi.stubEnv('BREVO_API_KEY', config.apiKey);
@@ -62,7 +68,10 @@ describe('Brevo transactional transport', () => {
     expect(request).not.toHaveBeenCalled();
     expect(await sendOperationalMailTest()).toBe('accepted');
     expect(JSON.parse(request.mock.calls[0][1].body).to).toEqual([{ email: config.from }]);
+    expect(reserve).toHaveBeenCalledExactlyOnceWith({}, 'brevo');
+    expect(reserve.mock.invocationCallOrder[0]).toBeLessThan(request.mock.invocationCallOrder[0]);
     expect(await sendOperationalMailTest()).toBe('rate_limited');
+    expect(reserve).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledTimes(1);
   });
 });
