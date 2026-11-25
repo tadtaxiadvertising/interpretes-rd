@@ -79,6 +79,21 @@ describe('Roleplay Storage errors never expose provider error messages', () => {
     expect(storage.signed).not.toHaveBeenCalled();
   });
 
+  it('signs private clinical clips exclusively in the dedicated private bucket', async () => {
+    const reference = 'private-base/123e4567-e89b-42d3-a456-426614174000/0.mp3';
+    storage.bucket.mockResolvedValue({ data: { id: 'roleplay-audio-private', name: 'roleplay-audio-private', public: false,
+      file_size_limit: 15 * 1024 * 1024, allowed_mime_types: ['audio/webm', 'audio/mp4', 'audio/wav', 'audio/mpeg'] }, error: null });
+    storage.signed.mockResolvedValue({ data: { signedUrl: 'https://signed.example/private' }, error: null });
+    await expect(getSignedAudioUrl(reference)).resolves.toBe('https://signed.example/private');
+    await expect(getAdminReviewUrl(reference)).resolves.toBe('https://signed.example/private');
+    expect(storage.from.mock.calls).toEqual([['roleplay-audio-private'], ['roleplay-audio-private']]);
+    expect(storage.signed).toHaveBeenCalledWith('base/123e4567-e89b-42d3-a456-426614174000/0.mp3', 3600);
+    storage.from.mockClear();
+    storage.bucket.mockResolvedValue({ data: { public: true }, error: null });
+    await expect(getSignedAudioUrl(reference)).rejects.toThrow('Unable to authorize private clinical playback');
+    expect(storage.from).not.toHaveBeenCalled();
+  });
+
   it('rejects mismatched opening upload paths without exposing provider data', async () => {
     storage.signedUpload.mockResolvedValue({
       data: { token: 'PRIVATE_UPLOAD_TOKEN', path: 'openings/foreign/file.webm' }, error: null,
