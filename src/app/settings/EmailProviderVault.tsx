@@ -4,7 +4,10 @@ import { useState } from 'react';
 import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider } from '@/app/actions/email-provider-vault';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
+import type { ProviderQuota } from '@/lib/email/provider-quota';
+
 const statusText: Record<string, string> = {
+  local_quota_reached: 'Presupuesto local agotado. No se inició el envío.',
   ready: 'Almacén disponible.', disabled: 'Almacén desactivado o controles de prueba no habilitados.',
   key_missing: 'Configura la clave de cifrado privada del almacén.',
   unauthorized: 'Se requiere una sesión administrativa.', unavailable: 'Almacén no disponible. Revisa instalación y permisos.',
@@ -18,12 +21,14 @@ const messageFor = (status: string) => statusText[status] ?? 'Aceptación no con
 
 export default function EmailProviderVault() {
   const [profiles, setProfiles] = useState<ProfileMetadata[]>([]);
+  const [quotas, setQuotas] = useState<ProviderQuota[]>([]);
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
   async function load() {
     const result = await listEmailProviderProfiles();
     setProfiles(result.profiles);
+    setQuotas(result.quotas ?? []);
     setReady(result.status === 'ready');
     setMessage(messageFor(result.status));
   }
@@ -61,15 +66,25 @@ export default function EmailProviderVault() {
           </fieldset>
         </form>
       )}
+      {quotas.map(quota => (
+        <div key={quota.provider} className="rounded-lg border border-[var(--border)] p-3 space-y-1">
+          <p className="font-semibold">{quota.provider === 'brevo' ? 'Brevo' : 'Resend'} · presupuesto local (UTC)</p>
+          <p>Hoy: {quota.dailyUsed} de {quota.dailyLimit} intentos</p>
+          <progress aria-label={'Consumo diario ' + quota.provider} value={Math.min(quota.dailyUsed, quota.dailyLimit)} max={quota.dailyLimit} className="w-full" />
+          <p>Mes: {quota.monthlyUsed} de {quota.monthlyLimit} intentos</p>
+          <progress aria-label={'Consumo mensual ' + quota.provider} value={Math.min(quota.monthlyUsed, quota.monthlyLimit)} max={quota.monthlyLimit} className="w-full" />
+          <p className="text-xs">No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real.</p>
+        </div>
+      ))}
       {profiles.map(profile => (
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
           <p className="font-semibold">{profile.name} · {profile.provider}</p>
           <p>{profile.from}</p>
-          <button type="button" disabled={pending} onClick={() => run(async () => setMessage(messageFor(await testSavedEmailProvider(profile.id))))} className="rounded-lg border border-[var(--border)] px-3 py-2">Enviar prueba a este remitente</button>
+          <button type="button" disabled={pending} onClick={() => run(async () => { const status = await testSavedEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Enviar prueba a este remitente</button>
         </div>
       ))}
       <p role="status" aria-live="polite">{message}</p>
-      <p>La prueba requiere desactivar todos los controles de despacho. El límite de prueba es local al proceso. No reintentes envíos inciertos.</p>
+      <p>La prueba requiere desactivar todos los controles de despacho. La frecuencia de prueba se limita por proceso; el presupuesto es persistente y compartido. No reintentes envíos inciertos.</p>
     </section>
   );
 }
