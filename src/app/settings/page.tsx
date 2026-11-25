@@ -8,15 +8,19 @@ import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
 import CorporateEmailPilot from './CorporateEmailPilot';
 import EmailDatabaseReadiness from './EmailDatabaseReadiness';
+import prisma from '@/lib/prisma';
+import { resolveOperationalMailEnv, usesProviderVault } from '@/lib/email/preferred-provider-runtime';
 import { operationalMailDiagnostic } from '@/lib/email/operational-config';
 import { emailRolloutReadiness } from '@/lib/email/automation-status';
 
 export const dynamic = 'force-dynamic';
 
-export default function SettingsPage() {
-  const mailDiagnostic = operationalMailDiagnostic(process.env);
+export default async function SettingsPage() {
+  const vault = usesProviderVault(process.env);
+  const effectiveEnv = await resolveOperationalMailEnv(prisma, process.env);
+  const mailDiagnostic = operationalMailDiagnostic(effectiveEnv);
   const operationalStatus = mailDiagnostic.status;
-  const automation = emailRolloutReadiness(process.env);
+  const automation = emailRolloutReadiness(effectiveEnv);
   const automationChecks = automation.checks;
   const operationalMessages = {
     disabled: 'Desactivado. No se realizan envíos operativos.',
@@ -104,6 +108,7 @@ export default function SettingsPage() {
             <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
               <h3 className="font-semibold">Configuración de correos operativos</h3>
               <p>{operationalMessages[operationalStatus]}</p>
+              {vault && <p><strong>Origen:</strong> perfil preferido del almacén. Solo piloto; sin alternativa automática. Si no está disponible, revisa la selección, el presupuesto y la clave de cifrado.</p>}
               <p><strong>Proveedor:</strong> {mailDiagnostic.provider === 'brevo' ? 'Brevo API (HTTPS)' : mailDiagnostic.provider === 'resend' ? 'Resend API (HTTPS)' : mailDiagnostic.provider === 'smtp' ? 'SMTP' : 'No válido'}</p>
               {mailDiagnostic.sender && (
                 <dl className="space-y-1 break-all">
@@ -127,7 +132,7 @@ export default function SettingsPage() {
                   <p className="text-xs">El diagnóstico solo muestra nombres de variables y tipos de error; no lee ni muestra el valor de una clave en el navegador.</p>
                 </div>
               )}
-              {operationalStatus !== 'configured' && (
+              {!vault && operationalStatus !== 'configured' && (
                 <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
                   <h4 className="font-semibold">Configurar y probar el remitente</h4>
                   <p>El SMTP personalizado de Supabase no configura automáticamente Next.js. Puedes usar SMTP, Brevo API o Resend API con un remitente autorizado.</p>
@@ -147,7 +152,7 @@ export default function SettingsPage() {
             </div>
             <EmailProviderSetup activeProvider={mailDiagnostic.provider} />
             <EmailProviderVault />
-            <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />
+            {vault ? <p className="text-sm">Usa la prueba de perfiles guardados con el despacho pausado. El transporte de entorno no se utiliza en este modo.</p> : <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />}
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
             <CorporateEmailPilot configured={automation.mode === 'pilot' && automation.ready} />
