@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import { Clock, Wifi, WifiOff, Phone, Coffee, HelpCircle } from 'lucide-react';
+import { Clock, Wifi, WifiOff, Phone, Coffee } from 'lucide-react';
 
 interface StatusBadgeProps {
   status: string | null | undefined;
@@ -24,30 +24,30 @@ const STATUS_CONFIG: Record<string, {
 }> = {
   Online: {
     label: 'Online',
-    color: 'text-emerald-400',
-    bg: 'bg-emerald-500/10 border-emerald-500/20',
-    dot: 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]',
+    color: 'text-[var(--theme-success)]',
+    bg: 'bg-[var(--theme-surface-muted)] border-[var(--border)]',
+    dot: 'bg-current',
     icon: <Wifi size={14} />,
   },
   Busy: {
     label: 'Busy',
-    color: 'text-amber-400',
-    bg: 'bg-amber-500/10 border-amber-500/20',
-    dot: 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.8)]',
+    color: 'text-[var(--theme-warning)]',
+    bg: 'bg-[var(--theme-surface-muted)] border-[var(--border)]',
+    dot: 'bg-current',
     icon: <Phone size={14} />,
   },
   Away: {
     label: 'Ausente',
-    color: 'text-orange-400',
-    bg: 'bg-orange-500/10 border-orange-500/20',
-    dot: 'bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.6)]',
+    color: 'text-[var(--theme-away)]',
+    bg: 'bg-[var(--theme-surface-muted)] border-[var(--border)]',
+    dot: 'bg-current',
     icon: <Coffee size={14} />,
   },
   Offline: {
     label: 'Offline',
-    color: 'text-slate-500',
-    bg: 'bg-slate-500/10 border-slate-500/20',
-    dot: 'bg-slate-500',
+    color: 'text-[var(--text-secondary)]',
+    bg: 'bg-[var(--theme-surface-muted)] border-[var(--border)]',
+    dot: 'bg-current',
     icon: <WifiOff size={14} />,
   },
 };
@@ -86,8 +86,8 @@ export default function StatusBadge({
   size = 'md',
   className,
 }: StatusBadgeProps) {
-  const normalizedStatus = status || 'Offline';
-  const config = STATUS_CONFIG[normalizedStatus] || STATUS_CONFIG.Offline;
+  const normalizedStatus = status && Object.prototype.hasOwnProperty.call(STATUS_CONFIG, status) ? status : 'Offline';
+  const config = STATUS_CONFIG[normalizedStatus];
   const sizes = SIZE_CLASSES[size];
 
   const timeToShow = normalizedStatus === 'Offline' ? statusChangedAt : lastHeartbeat;
@@ -110,8 +110,10 @@ export default function StatusBadge({
     >
       {/* Animated dot */}
       <span
+        aria-hidden="true"
         className={cn(
-          'rounded-full animate-pulse',
+          'shrink-0 rounded-full',
+          normalizedStatus !== 'Offline' && 'motion-safe:animate-pulse',
           config.dot,
           sizes.dot
         )}
@@ -119,7 +121,7 @@ export default function StatusBadge({
 
       {/* Icon */}
       {showIcon && size !== 'sm' && (
-        <span className={cn('opacity-70', sizes.icon)}>
+        <span aria-hidden="true" className={cn('shrink-0', sizes.icon)}>
           {config.icon}
         </span>
       )}
@@ -131,8 +133,8 @@ export default function StatusBadge({
 
       {/* Time */}
       {showTime && timeToShow && size !== 'sm' && (
-        <span className="opacity-50 flex items-center gap-0.5 ml-0.5 font-normal">
-          <Clock size={10} />
+        <span className="text-[var(--text-secondary)] flex items-center gap-0.5 ml-0.5 font-normal">
+          <Clock size={10} aria-hidden="true" />
           {formatTimeAgo(timeToShow)}
         </span>
       )}
