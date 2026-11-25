@@ -65,15 +65,15 @@ export default async function RankingPage() {
     return (
       <div className="space-y-8 animate-in fade-in duration-700">
         <div className="flex items-center gap-3">
-          <Trophy size={28} className="text-amber-400" />
+          <Trophy size={28} className="text-[var(--theme-warning)]" />
           <div>
             <h1 className="text-2xl font-bold text-[var(--foreground)] capitalize">Ranking — {monthName}</h1>
-            <p className="text-sm text-slate-300">Tu posición y métricas privadas</p>
+            <p className="text-sm text-[var(--text-secondary)]">Tu posición y métricas privadas</p>
           </div>
         </div>
 
-        <div className="glass rounded-3xl p-8 border border-white/5 text-center">
-          <p className="text-slate-400">No hay datos de ranking disponibles para este mes.</p>
+        <div className="glass rounded-3xl p-8 border border-[var(--border)] text-center">
+          <p className="text-[var(--text-secondary)]">No hay datos de ranking disponibles para este mes.</p>
         </div>
       </div>
     );
@@ -91,18 +91,18 @@ export default async function RankingPage() {
     <div className="space-y-8 animate-in fade-in duration-700">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Trophy size={28} className="text-amber-400" />
+        <Trophy size={28} className="text-[var(--theme-warning)]" />
         <div>
-          <h1 className="text-2xl font-bold text-white capitalize">Mi Ranking — {monthName}</h1>
-          <p className="text-sm text-slate-300">Top 3 y tu posición basada en producción, QA y adherencia</p>
+          <h1 className="text-2xl font-bold text-[var(--foreground)] capitalize">Mi Ranking — {monthName}</h1>
+          <p className="text-sm text-[var(--text-secondary)]">Top 3 y tu posición basada en producción, QA y adherencia</p>
         </div>
       </div>
 
       {/* Podium - Top 3 */}
-      <div className="glass rounded-3xl overflow-hidden border border-white/5">
-        <div className="px-6 py-4 border-b border-white/5">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <Medal size={20} className="text-amber-400" />
+      <div className="glass rounded-3xl overflow-hidden border border-[var(--border)]">
+        <div className="px-6 py-4 border-b border-[var(--border)]">
+          <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+            <Medal size={20} className="text-[var(--theme-warning)]" />
             Podio del Mes
           </h3>
         </div>
@@ -116,28 +116,28 @@ export default async function RankingPage() {
                 </div>
                 <div className="mt-3 text-center">
                   <p className="font-bold text-[var(--foreground)] truncate max-w-[120px]">{top3[1].name}</p>
-                  <p className="text-xs text-slate-400">{(top3[1].minutes / 60).toFixed(1)} hrs</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{(top3[1].minutes / 60).toFixed(1)} hrs</p>
                   {top3[1].qaScore !== null && (
-                    <p className="text-xs text-emerald-400">QA: {top3[1].qaScore}%</p>
+                    <p className="text-xs text-[var(--theme-success)]">QA: {top3[1].qaScore}%</p>
                   )}
                 </div>
-                <div className="mt-2 text-slate-500 text-xs">2.º Lugar</div>
+                <div className="mt-2 text-[var(--text-tertiary)] text-xs">2.º Lugar</div>
               </div>
             )}
             {/* 1st Place */}
             {top3[0] && (
               <div className="flex-1 flex flex-col items-center">
-                <div className="relative w-32 h-32 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-[0_0_30px_rgba(251,191,36,0.4)]">
+                <div className="relative w-32 h-32 md:w-36 md:h-36 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center shadow-[0_0_30px_rgba(251,191,36,0.4)]">
                   <span className="text-4xl md:text-5xl font-bold text-[#13233b]">#{top3[0].position}</span>
                 </div>
                 <div className="mt-3 text-center">
                   <p className="font-bold text-[var(--foreground)] truncate max-w-[140px]">{top3[0].name}</p>
-                  <p className="text-xs text-slate-300">{(top3[0].minutes / 60).toFixed(1)} hrs</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{(top3[0].minutes / 60).toFixed(1)} hrs</p>
                   {top3[0].qaScore !== null && (
-                    <p className="text-xs text-emerald-400">QA: {top3[0].qaScore}%</p>
+                    <p className="text-xs text-[var(--theme-success)]">QA: {top3[0].qaScore}%</p>
                   )}
                 </div>
-                <div className="mt-2 text-amber-400 text-xs font-bold">1.er Lugar 👑</div>
+                <div className="mt-2 text-[var(--theme-warning)] text-xs font-bold">1.er Lugar 👑</div>
               </div>
             )}
             {/* 3rd Place */}
@@ -148,12 +148,12 @@ export default async function RankingPage() {
                 </div>
                 <div className="mt-3 text-center">
                   <p className="font-bold text-[var(--foreground)] truncate max-w-[120px]">{top3[2].name}</p>
-                  <p className="text-xs text-slate-400">{(top3[2].minutes / 60).toFixed(1)} hrs</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{(top3[2].minutes / 60).toFixed(1)} hrs</p>
                   {top3[2].qaScore !== null && (
-                    <p className="text-xs text-emerald-400">QA: {top3[2].qaScore}%</p>
+                    <p className="text-xs text-[var(--theme-success)]">QA: {top3[2].qaScore}%</p>
                   )}
                 </div>
-                <div className="mt-2 text-slate-500 text-xs">3.er Lugar</div>
+                <div className="mt-2 text-[var(--text-tertiary)] text-xs">3.er Lugar</div>
               </div>
             )}
           </div>
@@ -164,7 +164,7 @@ export default async function RankingPage() {
       {showCurrentUser && (
         <div className="glass rounded-3xl overflow-hidden border border-blue-500/20">
           <div className="px-6 py-4 border-b border-blue-500/20 bg-blue-500/5">
-            <h3 className="text-lg font-bold text-blue-400 flex items-center gap-2">
+            <h3 className="text-lg font-bold text-[var(--theme-link)] flex items-center gap-2">
               <Target size={20} />
               Tu Posición
             </h3>
@@ -172,17 +172,17 @@ export default async function RankingPage() {
           <div className="p-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center shadow-lg">
-                  <span className="text-2xl font-bold text-white">#{position}</span>
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center shadow-lg">
+                  <span className="text-2xl font-bold text-[#ffffff]">#{position}</span>
                 </div>
                 <div>
-                  <p className="font-bold text-white text-lg">Tu posición actual</p>
-                  <p className="text-sm text-slate-400">de {totalEligible} intérpretes activos</p>
+                  <p className="font-bold text-[var(--foreground)] text-lg">Tu posición actual</p>
+                  <p className="text-sm text-[var(--text-secondary)]">de {totalEligible} intérpretes activos</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-2xl font-bold text-blue-400">Top {100 - (percentile ?? 0)}%</p>
-                <p className="text-xs text-slate-400">Superas al {percentile ?? 0}%</p>
+                <p className="text-2xl font-bold text-[var(--theme-link)]">Top {100 - (percentile ?? 0)}%</p>
+                <p className="text-xs text-[var(--text-secondary)]">Superas al {percentile ?? 0}%</p>
               </div>
             </div>
           </div>
@@ -192,32 +192,32 @@ export default async function RankingPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="glass rounded-2xl p-5 border border-amber-500/10">
-          <p className="text-xs text-slate-300 mb-1 uppercase tracking-wide font-bold">Tu Posición</p>
-          <p className="text-3xl font-bold text-amber-400">#{position}</p>
-          <p className="text-xs text-slate-300 mt-1">de {totalEligible} intérpretes</p>
+          <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide font-bold">Tu Posición</p>
+          <p className="text-3xl font-bold text-[var(--theme-warning)]">#{position}</p>
+          <p className="text-xs text-[var(--text-secondary)] mt-1">de {totalEligible} intérpretes</p>
         </div>
-        <div className="glass rounded-2xl p-5 border border-white/5">
-          <p className="text-xs text-slate-300 mb-1 uppercase tracking-wide font-bold">Tu Score</p>
-          <p className="text-3xl font-bold text-white">{score.toFixed(1)}</p>
-          <p className="text-xs text-slate-300 mt-1">puntos ponderados</p>
+        <div className="glass rounded-2xl p-5 border border-[var(--border)]">
+          <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide font-bold">Tu Score</p>
+          <p className="text-3xl font-bold text-[var(--foreground)]">{score.toFixed(1)}</p>
+          <p className="text-xs text-[var(--text-secondary)] mt-1">puntos ponderados</p>
         </div>
-        <div className="glass rounded-2xl p-5 border border-white/5">
-          <p className="text-xs text-slate-300 mb-1 uppercase tracking-wide font-bold">Tus Horas</p>
-          <p className="text-3xl font-bold text-white">{(ownProductionMinutes / 60).toFixed(1)}</p>
-          <p className="text-xs text-slate-300 mt-1">hrs este mes</p>
+        <div className="glass rounded-2xl p-5 border border-[var(--border)]">
+          <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide font-bold">Tus Horas</p>
+          <p className="text-3xl font-bold text-[var(--foreground)]">{(ownProductionMinutes / 60).toFixed(1)}</p>
+          <p className="text-xs text-[var(--text-secondary)] mt-1">hrs este mes</p>
         </div>
-        <div className="glass rounded-2xl p-5 border border-white/5">
-          <p className="text-xs text-slate-300 mb-1 uppercase tracking-wide font-bold">Percentil</p>
-          <p className="text-3xl font-bold text-blue-400">{percentile ?? 0}%</p>
-          <p className="text-xs text-slate-300 mt-1">superas al {percentile ?? 0}%</p>
+        <div className="glass rounded-2xl p-5 border border-[var(--border)]">
+          <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide font-bold">Percentil</p>
+          <p className="text-3xl font-bold text-[var(--theme-link)]">{percentile ?? 0}%</p>
+          <p className="text-xs text-[var(--text-secondary)] mt-1">superas al {percentile ?? 0}%</p>
         </div>
       </div>
 
       {/* Detailed metrics */}
-      <div className="glass rounded-3xl overflow-hidden border border-white/5">
-        <div className="px-6 py-4 border-b border-white/5">
-          <h3 className="text-lg font-bold text-white flex items-center gap-2">
-            <TrendingUp size={20} className="text-blue-400" />
+      <div className="glass rounded-3xl overflow-hidden border border-[var(--border)]">
+        <div className="px-6 py-4 border-b border-[var(--border)]">
+          <h3 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+            <TrendingUp size={20} className="text-[var(--theme-link)]" />
             Detalle de Métricas
           </h3>
         </div>
@@ -225,15 +225,15 @@ export default async function RankingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Production */}
             <div>
-              <p className="text-xs text-slate-400 mb-1 uppercase tracking-wide">Producción Verificada</p>
-              <p className="text-2xl font-bold text-white">{(ownProductionMinutes / 60).toFixed(1)} hrs</p>
-              <p className="text-sm text-slate-400 mt-1">{ownProductionMinutes} minutos totales</p>
+              <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide">Producción Verificada</p>
+              <p className="text-2xl font-bold text-[var(--foreground)]">{(ownProductionMinutes / 60).toFixed(1)} hrs</p>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">{ownProductionMinutes} minutos totales</p>
             </div>
             {/* Goal Progress */}
             <div>
-              <p className="text-xs text-slate-400 mb-1 uppercase tracking-wide">Progreso de Meta</p>
-              <p className="text-2xl font-bold text-emerald-400">{ownGoalProgress.toFixed(1)}%</p>
-              <div className="mt-2 h-2 bg-slate-800 rounded-full overflow-hidden">
+              <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide">Progreso de Meta</p>
+              <p className="text-2xl font-bold text-[var(--theme-success)]">{ownGoalProgress.toFixed(1)}%</p>
+              <div className="mt-2 h-2 bg-[var(--theme-track)] rounded-full overflow-hidden">
                 <div
                   className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                   style={{ width: `${Math.min(ownGoalProgress, 100)}%` }}
@@ -245,48 +245,48 @@ export default async function RankingPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* QA Score */}
             <div>
-              <p className="text-xs text-slate-400 mb-1 uppercase tracking-wide">QA Score Promedio</p>
-              <p className="text-2xl font-bold {ownQaScore !== null && ownQaScore >= 90 ? 'text-emerald-400' : 'text-white'}">
+              <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide">QA Score Promedio</p>
+              <p className={cn("text-2xl font-bold", ownQaScore !== null && ownQaScore >= 90 ? "text-[var(--theme-success)]" : "text-[var(--foreground)]")}>
                 {ownQaScore !== null ? `${ownQaScore}%` : 'Sin datos'}
               </p>
               {ownQaScore !== null && (
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-[var(--text-secondary)] mt-1">
                   {ownQaScore >= 90 ? 'Excelente' : ownQaScore >= 80 ? 'Bueno' : 'Mejorable'}
                 </p>
               )}
             </div>
             {/* Percentile context */}
             <div>
-              <p className="text-xs text-slate-400 mb-1 uppercase tracking-wide">Comparativa</p>
-              <p className="text-2xl font-bold text-blue-400">Top {100 - (percentile ?? 0)}%</p>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-[var(--text-secondary)] mb-1 uppercase tracking-wide">Comparativa</p>
+              <p className="text-2xl font-bold text-[var(--theme-link)]">Top {100 - (percentile ?? 0)}%</p>
+              <p className="text-xs text-[var(--text-secondary)] mt-1">
                 Superas al {percentile ?? 0}% de los {totalEligible} intérpretes activos
               </p>
             </div>
           </div>
 
           {/* Score breakdown */}
-          <div className="pt-4 border-t border-white/5">
-            <p className="text-xs text-slate-400 mb-3 uppercase tracking-wide">Cómo se calcula tu Score</p>
+          <div className="pt-4 border-t border-[var(--border)]">
+            <p className="text-xs text-[var(--text-secondary)] mb-3 uppercase tracking-wide">Cómo se calcula tu Score</p>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="p-3 rounded-xl bg-slate-800/50">
-                <p className="text-xs text-slate-400">Producción (50%)</p>
-                <p className="text-sm font-bold text-white">Basada en minutos verificados</p>
+              <div className="p-3 rounded-xl bg-[var(--theme-surface-muted)]">
+                <p className="text-xs text-[var(--text-secondary)]">Producción (50%)</p>
+                <p className="text-sm font-bold text-[var(--foreground)]">Basada en minutos verificados</p>
               </div>
-              <div className="p-3 rounded-xl bg-slate-800/50">
-                <p className="text-xs text-slate-400">QA (30%)</p>
-                <p className="text-sm font-bold text-white">Calidad de interpretación</p>
+              <div className="p-3 rounded-xl bg-[var(--theme-surface-muted)]">
+                <p className="text-xs text-[var(--text-secondary)]">QA (30%)</p>
+                <p className="text-sm font-bold text-[var(--foreground)]">Calidad de interpretación</p>
               </div>
-              <div className="p-3 rounded-xl bg-slate-800/50">
-                <p className="text-xs text-slate-400">Adherencia (15%)</p>
-                <p className="text-sm font-bold text-white">Cumplimiento de horarios</p>
+              <div className="p-3 rounded-xl bg-[var(--theme-surface-muted)]">
+                <p className="text-xs text-[var(--text-secondary)]">Adherencia (15%)</p>
+                <p className="text-sm font-bold text-[var(--foreground)]">Cumplimiento de horarios</p>
               </div>
-              <div className="p-3 rounded-xl bg-slate-800/50">
-                <p className="text-xs text-slate-400">Consistencia (5%)</p>
-                <p className="text-sm font-bold text-white">Días activos en el mes</p>
+              <div className="p-3 rounded-xl bg-[var(--theme-surface-muted)]">
+                <p className="text-xs text-[var(--text-secondary)]">Consistencia (5%)</p>
+                <p className="text-sm font-bold text-[var(--foreground)]">Días activos en el mes</p>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mt-3 text-center">
+            <p className="text-xs text-[var(--text-tertiary)] mt-3 text-center">
               Pesos configurables en SystemConfig — ver <code className="font-mono">ranking_weight_*</code>
             </p>
           </div>
