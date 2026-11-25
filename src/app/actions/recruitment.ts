@@ -14,6 +14,7 @@ import {
   createApplicationRef,
   verifyApplicationRef,
 } from '@/lib/recruitment/application-ref';
+import { notifyRecruitmentAdmins } from '@/lib/notifications/notify-recruitment';
 import { advanceApplication } from '@/services/recruitment/transitions';
 import {
   deriveFunnelStep as deriveCanonicalFunnelStep,
@@ -226,6 +227,7 @@ type SubmitOutcome = {
   candidateId: number;
   applicationId: string;
   created: boolean;
+  applicationCreated: boolean;
   owned: boolean;
   funnelStep: number;
 };
@@ -295,6 +297,7 @@ export async function submitApplicationAction(data: ApplicantData) {
           }
 
           let application = existing.applications[0];
+          const applicationCreated = !application;
           if (application) {
             await tx.recruitmentApplication.update({
               where: { id: application.id },
@@ -330,6 +333,7 @@ export async function submitApplicationAction(data: ApplicantData) {
             candidateId: existing.id,
             applicationId: application.id,
             created: false,
+            applicationCreated,
             owned,
             funnelStep,
           };
@@ -371,6 +375,7 @@ export async function submitApplicationAction(data: ApplicantData) {
           candidateId: created.id,
           applicationId: application.id,
           created: true,
+          applicationCreated: true,
           owned: true,
           funnelStep,
         };
@@ -385,6 +390,10 @@ export async function submitApplicationAction(data: ApplicantData) {
       if (!isUniqueViolation) throw error;
       // Concurrent first submission won the race; resume now.
       outcome = await runSubmit();
+    }
+
+    if (outcome.applicationCreated) {
+      await notifyRecruitmentAdmins({ kind: 'application-created', applicationId: outcome.applicationId });
     }
 
     // The browser that owns the application keeps (or receives) the reference.

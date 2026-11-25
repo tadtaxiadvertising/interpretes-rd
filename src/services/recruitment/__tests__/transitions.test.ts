@@ -1,10 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const m = vi.hoisted(() => ({
+  notifyRecruitmentAdmins: vi.fn(),
   appFindUnique: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
 }));
+
+vi.mock('@/lib/notifications/notify-recruitment', () => ({ notifyRecruitmentAdmins: m.notifyRecruitmentAdmins }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -143,6 +146,8 @@ describe('advanceApplication', () => {
       },
     });
     expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
+    expect(m.notifyRecruitmentAdmins).toHaveBeenCalledExactlyOnceWith({ kind: 'interview-pending', applicationId: 'app-1', version: 7 });
+    expect(m.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(m.notifyRecruitmentAdmins.mock.invocationCallOrder[0]);
     expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
       where: {
         id: 'app-1',
@@ -191,6 +196,7 @@ describe('advanceApplication', () => {
     });
     expect(m.appUpdateMany).not.toHaveBeenCalled();
     expect(m.eventCreate).not.toHaveBeenCalled();
+    expect(m.notifyRecruitmentAdmins).not.toHaveBeenCalled();
   });
 
   it('returns CONFLICT when a concurrent transition wins the version race', async () => {
@@ -210,6 +216,7 @@ describe('advanceApplication', () => {
       code: 'CONFLICT',
     });
     expect(m.eventCreate).not.toHaveBeenCalled();
+    expect(m.notifyRecruitmentAdmins).not.toHaveBeenCalled();
   });
 
   it('rejects an illegal transition without writing', async () => {
@@ -227,6 +234,7 @@ describe('advanceApplication', () => {
     if (!res.success) expect(res.code).toBe('INVALID_STATE');
     expect(m.appUpdateMany).not.toHaveBeenCalled();
     expect(m.eventCreate).not.toHaveBeenCalled();
+    expect(m.notifyRecruitmentAdmins).not.toHaveBeenCalled();
   });
 
   it('honours an extra fromStatuses guard even when the matrix allows the edge', async () => {
