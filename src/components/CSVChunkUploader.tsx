@@ -1,145 +1,141 @@
 'use client';
 
-import React, { useState, useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
+import React, { useRef, useState } from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadLogChunk } from '@/app/actions/production.actions';
+import { MAX_PRODUCTION_CHUNK_ROWS } from '@/lib/production-csv-validation';
 
-function SubmitButton({ progress }: { progress: number }) {
-  const { pending } = useFormStatus();
-  return (
-    <button
-      type="submit"
-      disabled={pending}
-      className={cn(
-        "w-full py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
-        pending
-          ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
-          : "bg-blue-600 hover:bg-blue-500 text-white shadow-lg shadow-blue-600/20"
-      )}
-    >
-      {pending ? (
-        <>
-          <Loader2 className="animate-spin" size={20} />
-          {progress > 0 ? `Procesando... ${progress}%` : "Iniciando..."}
-        </>
-      ) : (
-        <>
-          <FileText size={20} />
-          Procesar CSV
-        </>
-      )}
-    </button>
-  );
-}
+type Summary = {
+  inserted: number;
+  skipped: number;
+  rejected: number;
+  confirmedBlocks: number;
+  stoppedBlock: number | null;
+  uncertain: boolean;
+  remainingLines: number;
+  message: string;
+};
 
 export function CSVChunkUploader() {
   const [file, setFile] = useState<File | null>(null);
   const [progress, setProgress] = useState(0);
-
-  const processFile = async (prevState: any, formData: FormData) => {
-    const uploadedFile = formData.get('file') as File;
-    if (!uploadedFile || uploadedFile.size === 0) {
-      return { success: false, error: 'No se seleccionó un archivo válido.' };
-    }
-
-    try {
-      const text = await uploadedFile.text();
-      const lines = text.split('\n').filter(l => l.trim() !== '');
-      if (lines.length < 2) return { success: false, error: 'CSV vacío o sin suficientes datos' };
-
-      const headers = lines[0];
-      const dataLines = lines.slice(1);
-      const chunkSize = 500; // Límite conservador para $0 Budget VPS
-      let totalSuccess = 0;
-
-      setProgress(1);
-
-      for (let i = 0; i < dataLines.length; i += chunkSize) {
-        const chunk = dataLines.slice(i, i + chunkSize);
-        const res = await uploadLogChunk(null, { headers, rows: chunk });
-        
-        if (res.success) {
-          totalSuccess += res.count || 0;
-        } else {
-          console.error('[CSV Uploader] Chunk Error:', res.error);
-        }
-        
-        setProgress(Math.round(((i + chunk.length) / dataLines.length) * 100));
-      }
-
-      setProgress(0);
-      setFile(null); // Resetea el archivo visualmente
-      return { success: true, count: totalSuccess, error: null };
-    } catch (error: any) {
-      setProgress(0);
-      return { success: false, error: error.message || 'Error catastrofico procesando el archivo' };
-    }
-  };
-
-  const [state, formAction] = useActionState(processFile, null);
+  const [pending, setPending] = useState(false);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const inFlight = useRef(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
-    }
+    if (inFlight.current) return;
+    setFile(e.target.files?.[0] ?? null);
+    setSummary(null);
+    setProgress(0);
   };
 
+  async function processFile(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!file || inFlight.current || summary) return;
+    inFlight.current = true;
+    setPending(true);
+    setProgress(0);
+    const result: Summary = { inserted: 0, skipped: 0, rejected: 0, confirmedBlocks: 0, stoppedBlock: null, uncertain: false, remainingLines: 0, message: '' };
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      if (lines.length < 2) {
+        result.message = 'CSV vacío o sin suficientes datos.';
+        return;
+      }
+
+      const [headers, ...rows] = lines;
+      const chunkSize = MAX_PRODUCTION_CHUNK_ROWS;
+      for (let offset = 0; offset < rows.length; offset += chunkSize) {
+        const chunk = rows.slice(offset, offset + chunkSize);
+        const block = Math.floor(offset / chunkSize) + 1;
+        result.stoppedBlock = block;
+        result.remainingLines = rows.length - offset - chunk.length;
+        // A rejected request can have committed before its response was lost.
+        result.uncertain = true;
+        const response = await uploadLogChunk(null, { headers, rows: chunk });
+        if (!response.success) {
+          result.uncertain = response.outcome !== 'not-written';
+          result.message = result.uncertain
+            ? 'No se pudo confirmar el bloque. Revisa los registros antes de volver a importar.'
+            : 'El bloque no se guardó. Revisa el archivo y los permisos antes de continuar.';
+          break;
+        }
+        if (![response.count, response.skipped, response.rejected].every(value => Number.isSafeInteger(value) && value >= 0) ||
+            response.count + response.skipped !== response.accepted) {
+          result.message = 'No se pudo confirmar el recuento del bloque. Revisa los registros antes de volver a importar.';
+          break;
+        }
+        result.inserted += response.count;
+        result.skipped += response.skipped;
+        result.rejected += response.rejected;
+        result.confirmedBlocks++;
+        result.stoppedBlock = null;
+        result.uncertain = false;
+        setProgress(Math.round(((offset + chunk.length) / rows.length) * 100));
+      }
+      if (result.stoppedBlock === null) {
+        result.message = result.rejected > 0
+          ? 'Procesamiento terminado con filas rechazadas. Revisa el archivo antes de volver a importar.'
+          : result.inserted > 0 ? 'Procesamiento completado.' : 'No se insertaron filas nuevas.';
+      }
+    } catch {
+      result.message = result.uncertain
+        ? 'No se pudo confirmar el bloque. Revisa los registros antes de volver a importar.'
+        : 'No se pudo leer el archivo.';
+    } finally {
+      setSummary(result);
+      inFlight.current = false;
+      setPending(false);
+    }
+  }
+
+  const warning = Boolean(summary && (summary.stoppedBlock !== null || summary.rejected > 0 || summary.inserted === 0));
   return (
-    <div className="glass p-8 rounded-3xl border border-white/5 space-y-6 bg-slate-900/40">
+    <div className="rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] p-5 sm:p-8 space-y-6 min-w-0">
       <div>
-        <h3 className="text-xl font-bold text-white">Telemetría (Carga Masiva)</h3>
-        <p className="text-sm text-gray-400 mt-1">Sube CSVs pesados. Se fraccionan localmente (Chunks de 500) para evadir Timeouts en Easypanel.</p>
+        <h3 className="text-xl font-bold text-[var(--foreground)]">Telemetría (carga masiva)</h3>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">Procesa archivos CSV en bloques de hasta 500 líneas de datos.</p>
       </div>
-
-      <form action={formAction} className="space-y-6">
+      <form onSubmit={processFile} aria-label="Importación masiva de producción" className="space-y-6">
         <div className={cn(
-          "relative border-2 border-dashed rounded-2xl p-10 flex flex-col items-center justify-center transition-all",
-          state?.success ? "border-green-500/50 bg-green-500/5" :
-          state?.error ? "border-red-500/50 bg-red-500/5" :
-          "border-white/10 hover:border-blue-500/50 hover:bg-blue-500/5"
+          "relative border-2 border-dashed rounded-2xl p-5 sm:p-10 flex flex-col items-center justify-center transition-colors focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--theme-focus)]",
+          warning ? "border-[var(--theme-warning)]" : summary ? "border-[var(--theme-success)]" : "border-[var(--theme-control-border)] hover:bg-[var(--theme-hover)]"
         )}>
-          <input 
-            type="file" 
-            name="file"
-            accept=".csv" 
-            onChange={handleFileChange}
-            className="absolute inset-0 opacity-0 cursor-pointer"
-            required
-          />
-          
-          {state?.success ? (
-            <CheckCircle2 size={48} className="text-green-400 mb-4 animate-in zoom-in duration-300" />
-          ) : state?.error ? (
-            <AlertCircle size={48} className="text-red-400 mb-4 animate-in zoom-in duration-300" />
-          ) : (
-            <Upload size={48} className="text-blue-400 mb-4 opacity-50 transition-opacity" />
-          )}
-
-          <p className="text-white font-medium text-center">
-            {file ? file.name : "Click o arrastra un CSV (Logs/Metrics)"}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">Carga asíncrona segura.</p>
+          <input type="file" name="file" accept=".csv,text/csv" aria-label="Archivo CSV de producción masiva"
+            onChange={handleFileChange} onClick={e => { if (!inFlight.current) e.currentTarget.value = ''; }}
+            disabled={pending} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed" />
+          {warning ? <AlertCircle size={48} aria-hidden="true" className="text-[var(--theme-warning)] mb-4" />
+            : summary ? <CheckCircle2 size={48} aria-hidden="true" className="text-[var(--theme-success)] mb-4" />
+            : <Upload size={48} aria-hidden="true" className="text-[var(--theme-link)] mb-4" />}
+          <p className="text-[var(--foreground)] font-medium text-center break-all">{file ? file.name : 'Selecciona o arrastra un CSV'}</p>
         </div>
 
-        {state && (
-          <div className="p-4 bg-white/5 rounded-xl border border-white/5 space-y-2">
-             {state.success ? (
-                <div className="flex justify-between text-xs text-green-400">
-                  <span>Filas impactadas en BD:</span>
-                  <span className="font-bold">{state.count}</span>
-                </div>
-             ) : (
-                <div className="flex justify-between text-xs text-red-400">
-                  <span>Error:</span>
-                  <span className="font-bold">{state.error}</span>
-                </div>
-             )}
+        {pending && <p role="status" className="text-sm text-[var(--text-secondary)]">Procesado: {progress}%</p>}
+        {summary && (
+          <div className="p-4 bg-[var(--theme-surface-muted)] rounded-xl border border-[var(--border)] space-y-2 text-sm">
+            <p role={warning ? 'alert' : 'status'} className={warning ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-success)]'}>{summary.message}</p>
+            <dl className="space-y-1">
+              <div className="flex justify-between gap-2"><dt>Filas insertadas</dt><dd className="font-bold text-[var(--theme-success)]">{summary.inserted}</dd></div>
+              <div className="flex justify-between gap-2"><dt>Filas omitidas por la base de datos</dt><dd>{summary.skipped}</dd></div>
+              <div className="flex justify-between gap-2"><dt>Filas rechazadas en bloques confirmados</dt><dd className="text-[var(--theme-danger)]">{summary.rejected}</dd></div>
+              <div className="flex justify-between gap-2"><dt>Bloques confirmados</dt><dd>{summary.confirmedBlocks}</dd></div>
+              {summary.stoppedBlock !== null && <>
+                <div className="flex justify-between gap-2"><dt>{summary.uncertain ? 'Bloque sin confirmar' : 'Bloque no guardado'}</dt><dd>{summary.stoppedBlock}</dd></div>
+                <div className="flex justify-between gap-2"><dt>Líneas posteriores no enviadas</dt><dd>{summary.remainingLines}</dd></div>
+              </>}
+            </dl>
+            <p className="text-xs text-[var(--text-secondary)]">Revisa el historial antes de seleccionar otro archivo. No reenvíes los bloques ya importados.</p>
           </div>
         )}
 
-        <SubmitButton progress={progress} />
+        <button type="submit" disabled={!file || pending || summary !== null}
+          className="theme-action-primary w-full py-3 rounded-xl font-bold transition-colors flex items-center justify-center gap-2">
+          {pending ? <Loader2 aria-hidden="true" className="animate-spin" size={20} /> : <FileText aria-hidden="true" size={20} />}
+          {pending ? 'Procesando…' : 'Procesar CSV'}
+        </button>
       </form>
     </div>
   );
