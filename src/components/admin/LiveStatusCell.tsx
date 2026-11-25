@@ -24,14 +24,14 @@ export default function LiveStatusCell({ interpreterId }: Props) {
   const data: InterpreterPresence | undefined = getInterpreter(interpreterId);
 
   if (error) {
-    return <span className="text-[10px] text-gray-600 italic">—</span>;
+    return <span className="text-[10px] text-[var(--text-tertiary)] italic">—</span>;
   }
 
   if (!data) {
     return (
       <div className="flex items-center gap-2">
-        <div className="w-4 h-4 rounded-full bg-gray-700 animate-pulse" />
-        <span className="text-[10px] text-gray-600">cargando...</span>
+        <div className="w-4 h-4 rounded-full bg-[var(--theme-track)] animate-pulse" />
+        <span className="text-[10px] text-[var(--text-tertiary)]">cargando...</span>
       </div>
     );
   }
@@ -47,7 +47,7 @@ export default function LiveStatusCell({ interpreterId }: Props) {
         showTime={true}
       />
       {data.lastHeartbeat && (
-        <span className="text-[10px] text-gray-500 font-mono tabular-nums">
+        <span className="text-[10px] text-[var(--text-tertiary)] font-mono tabular-nums">
           {formatTimeAgo(data.lastHeartbeat)}
         </span>
       )}
