@@ -85,3 +85,15 @@ describe('light dashboard action contrast', () => {
     expect(css).toContain('[class~="bg-slate-950/55"].fixed.inset-0 { background-color: rgba(15, 23, 42, .55); }');
   });
 });
+
+describe('light portal interactive states', () => {
+  it('keeps login and recruitment action colors readable', () => {
+    for (const color of ['#002d72', '#1554a8', '#002452', '#12488f']) {
+      expect(contrast(color, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(contrast('#43546d', '#e2e8f0')).toBeGreaterThanOrEqual(4.5);
+    expect(css).toContain('.theme-login button[type="submit"].from-blue-600.to-blue-500:hover');
+    expect(css).toContain('.theme-postular .recruitment-funnel button[class~="disabled:bg-slate-400"]:disabled');
+    expect(css).toContain('.theme-workspace [class~="hover:bg-slate-800/80"]:hover');
+  });
+});

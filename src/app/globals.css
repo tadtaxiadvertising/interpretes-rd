@@ -808,3 +808,61 @@ html[data-theme="light"] .theme-workspace [class~="hover:border-white/20"]:hover
 html[data-theme="light"] .theme-workspace input[type="file"][class~="file:bg-blue-600"]::file-selector-button { background-color: #1554a8; color: #fff; }
 html[data-theme="light"] .theme-workspace input[type="file"][class~="file:bg-blue-600"]:not(:disabled)::file-selector-button:hover { background-color: #002d72; }
 html[data-theme="light"] .theme-workspace [class~="bg-slate-950/55"].fixed.inset-0 { background-color: rgba(15, 23, 42, .55); }
+
+
+/* Light portal controls: preserve contrast in every interactive state.
+   Keep the candidate brand buttons and login links readable independently
+   of the dashboard compatibility layer. */
+html[data-theme="light"] .theme-workspace [class~="bg-slate-900/30"] {
+  background-color: var(--theme-surface-muted);
+}
+html[data-theme="light"] .theme-workspace [class~="hover:bg-slate-800/80"]:hover {
+  background-color: var(--theme-hover);
+}
+html[data-theme="light"] .theme-workspace :is([class~="border-slate-200/10"], [class~="border-slate-700/50"]) {
+  border-color: var(--border);
+}
+html[data-theme="light"] .theme-workspace [class~="text-yellow-500/80"] {
+  color: var(--theme-warning);
+}
+html[data-theme="light"] .theme-workspace .group:hover [class~="group-hover:text-blue-400"] {
+  color: var(--theme-link);
+}
+html[data-theme="light"] .theme-workspace [class~="focus:border-indigo-500/50"]:focus {
+  border-color: var(--theme-focus);
+}
+html[data-theme="light"] .theme-login [class~="hover:text-blue-300"]:hover {
+  color: var(--theme-link);
+}
+html[data-theme="light"] .theme-login [class~="hover:text-gray-300"]:hover {
+  color: var(--foreground);
+}
+html[data-theme="light"] .theme-login [class~="hover:bg-white/5"]:hover {
+  background-color: var(--theme-hover);
+}
+html[data-theme="light"] .theme-login button[type="submit"].from-blue-600.to-blue-500 {
+  background-image: linear-gradient(90deg, #002d72, #1554a8);
+}
+html[data-theme="light"] .theme-login button[type="submit"].from-blue-600.to-blue-500:hover {
+  background-image: linear-gradient(90deg, #002452, #12488f);
+}
+html[data-theme="light"] .theme-login input:focus {
+  border-color: var(--theme-focus);
+}
+html[data-theme="light"] .theme-candidate [class~="bg-[#1764bf]"].text-white {
+  background-color: #1554a8;
+  color: #fff;
+}
+html[data-theme="light"] .theme-candidate [class~="bg-[#1764bf]"].text-white:hover:not(:disabled) {
+  background-color: #002d72;
+}
+html[data-theme="light"] .theme-postular .recruitment-funnel [class~="bg-[#1764bf]"].text-white:not(:disabled) {
+  background-color: #1554a8;
+}
+html[data-theme="light"] .theme-postular .recruitment-funnel button[class~="bg-[#1764bf]"]:hover:not(:disabled) {
+  background-color: #002d72;
+}
+html[data-theme="light"] .theme-postular .recruitment-funnel button[class~="disabled:bg-slate-400"]:disabled {
+  background-color: #e2e8f0;
+  color: #43546d;
+}
