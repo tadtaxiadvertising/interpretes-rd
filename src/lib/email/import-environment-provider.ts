@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { providerSource } from './provider-source';
 import type { Prisma } from '@prisma/client';
 import { readOperationalMailConfig } from './operational-config';
 import { validateProfile, sealProfileCredentials, vaultKeyAvailable, type ProfileInput } from './provider-vault';
@@ -7,7 +8,7 @@ import { providerSelectionPaused } from './provider-selection';
 type Env = Readonly<Record<string, string | undefined>>;
 type Db = Pick<Prisma.TransactionClient, '$queryRaw' | '$executeRaw'>;
 export function existingEnvironmentProfile(env: Env): ProfileInput | null {
-  if (env.EMAIL_PROVIDER_SOURCE && env.EMAIL_PROVIDER_SOURCE !== 'environment') return null;
+  if (providerSource(env) !== 'environment') return null;
   if (!providerSelectionPaused(env) || !vaultKeyAvailable(env.EMAIL_PROVIDER_ENCRYPTION_KEY)) return null;
   const result = readOperationalMailConfig(env);
   if (result.status !== 'configured' || result.provider === 'smtp') return null;

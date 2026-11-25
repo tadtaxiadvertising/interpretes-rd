@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { providerSource } from './provider-source';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -121,7 +122,7 @@ async function sendMime(config: OperationalMailConfig, recipient: string, mime: 
 
 /** Internal transport. No client action, no retries, no scheduling. */
 export async function sendRecruitmentSmtp(message: RecruitmentMessage): Promise<'accepted' | 'unconfirmed'> {
-  if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true' || process.env.EMAIL_PROVIDER_SOURCE === 'vault') return 'unconfirmed';
+  if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true' || providerSource(process.env) !== 'environment') return 'unconfirmed';
   const result = readOperationalMailConfig(process.env);
   if (result.status !== 'configured') return 'unconfirmed';
   try {
@@ -140,7 +141,7 @@ let busy = false;
  * Process-local throttling is a convenience, not a distributed rate limit.
  */
 export async function sendOperationalMailTest(): Promise<MailTestResult> {
-  if (process.env.EMAIL_PROVIDER_SOURCE === 'vault') return 'disabled';
+  if (providerSource(process.env) !== 'environment') return 'disabled';
   const result = readOperationalMailConfig(process.env);
   if (result.status !== 'configured') return result.status;
   if (busy || Date.now() < nextTestAt) return 'rate_limited';

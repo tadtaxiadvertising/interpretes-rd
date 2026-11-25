@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { providerSource } from './provider-source';
 import { canUnpauseVault, readVaultPause } from './vault-pause';
 
 type Db = Pick<Prisma.TransactionClient, '$queryRaw' | '$executeRaw'>;
@@ -6,7 +7,7 @@ export const validProfileId = (id: unknown): id is string =>
   typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
 
 export function providerSelectionPaused(env: Readonly<Record<string, string | undefined>>): boolean {
-  return env.EMAIL_PROVIDER_VAULT_ENABLED === 'true'
+  return providerSource(env) !== 'invalid' && env.EMAIL_PROVIDER_VAULT_ENABLED === 'true'
     && env.OPERATIONAL_EMAIL_ENABLED === 'true'
     && ['OPERATIONAL_EMAIL_DISPATCH_ENABLED', 'OPERATIONAL_EMAIL_BATCH_ENABLED', 'OPERATIONAL_EMAIL_BINDING_ENABLED', 'OPERATIONAL_EMAIL_GENERAL_ENABLED', 'OPERATIONAL_EMAIL_SCHEDULER_ENABLED'].every(flag => env[flag] === 'false');
 }
@@ -62,7 +63,7 @@ type Env = Readonly<Record<string, string | undefined>>;
 /** Only preference switching can use the database pause. Other maintenance
  * operations still require the deployment-level controls to be disabled. */
 export async function canEditProviderPreference(db: Db, env: Env): Promise<boolean> {
-  if (env.EMAIL_PROVIDER_SOURCE !== 'vault') return providerSelectionPaused(env);
+  if (providerSource(env) !== 'vault') return providerSelectionPaused(env);
   return (providerSelectionPaused(env) || canUnpauseVault(env)) && await readVaultPause(db) === 'paused';
 }
 
@@ -70,7 +71,7 @@ export async function canEditProviderPreference(db: Db, env: Env): Promise<boole
  * and reservations so a stale UI cannot switch a running transport. */
 export async function changeProviderPreference(db: Db, id: string | null, actor: string, env: Env): Promise<'saved' | 'cleared' | 'disabled' | 'blocked'> {
   if ((id !== null && !validProfileId(id)) || !actor || actor.length > 255) return 'blocked';
-  if (env.EMAIL_PROVIDER_SOURCE === 'vault') {
+  if (providerSource(env) === 'vault') {
     if (!providerSelectionPaused(env) && !canUnpauseVault(env)) return 'disabled';
     const rows = await db.$queryRaw<{ paused: boolean }[]>`
       SELECT dispatch_paused AS paused FROM private_email.provider_selection WHERE singleton FOR UPDATE
