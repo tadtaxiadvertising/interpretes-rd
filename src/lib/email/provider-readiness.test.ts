@@ -12,6 +12,9 @@ describe('provider vault readiness', () => {
     expect(report).toEqual({ database: 'ready', enabled: true, encryption: 'valid_format', source: 'vault', paused: true });
     expect(JSON.stringify(report)).not.toContain(env.EMAIL_PROVIDER_ENCRYPTION_KEY);
     expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    const sql = db.$queryRaw.mock.calls[0][0].join('');
+    expect(sql).toContain('attrelid=s');
+    expect(sql).toContain("'dispatch_paused','pause_changed_at','pause_changed_by'");
   });
   it('diagnoses a disabled vault without requiring a key', async () => {
     const db = { $queryRaw: vi.fn().mockResolvedValue([healthy]) };
