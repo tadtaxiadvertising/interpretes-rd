@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { NotificationHistory } from './NotificationHistory';
 import { getMyNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '@/app/actions/notifications';
 
 interface Notification {
@@ -78,6 +79,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
   const acknowledged = rawNotifications.filter(n => !n.isRead && locallyReadIds.includes(n.id)).length;
   const unreadCount = Math.max(0, (snapshot?.unreadCount ?? rawNotifications.filter(n => !n.isRead).length) - acknowledged);
   const [onlyUnread, setOnlyUnread] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const visibleNotifications = onlyUnread ? notifications.filter(n => !n.isRead) : notifications;
 
   useEffect(() => {
@@ -172,9 +174,9 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <div id="notification-panel" role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
-              <h4 className="font-bold text-[var(--foreground)] text-sm">Notificaciones</h4>
+              <h4 className="font-bold text-[var(--foreground)] text-sm">{showHistory ? "Historial" : "Notificaciones"}</h4>
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
             </div>
 
@@ -197,6 +199,9 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               </p>
             )}
 
+            {showHistory ? (
+              <NotificationHistory key={onlyUnread ? 'unread' : 'all'} onlyUnread={onlyUnread} refreshVersion={refreshVersion} locallyReadIds={locallyReadIds} pendingIds={pendingIds} bulkPending={bulkPending} onRead={handleMarkAsRead} onNavigate={() => setIsOpen(false)} />
+            ) : (
             <div className="min-h-0 max-h-[400px] flex-1 overflow-y-auto overscroll-contain">
               {visibleNotifications.length === 0 ? (
                 <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
@@ -238,8 +243,11 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               )}
             </div>
 
-            <div className="p-3 bg-[var(--theme-surface-muted)] text-center border-t border-[var(--border)]">
-              <p className="mb-2 text-xs text-[var(--text-secondary)]">Últimas 10 notificaciones</p>
+            )}
+            <div className="shrink-0 p-3 bg-[var(--theme-surface-muted)] border-t border-[var(--border)]">
+              {!showHistory && <p className="mb-1 text-center text-xs text-[var(--text-secondary)]">Últimas 10 notificaciones</p>}
+              <div className="flex items-center justify-between gap-2">
+              <button type="button" onClick={() => setShowHistory(value => !value)} className="min-h-11 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] hover:bg-[var(--theme-hover)]">{showHistory ? 'Volver a recientes' : 'Ver historial completo'}</button>
               <button
                 type="button"
                 onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }}
@@ -247,6 +255,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               >
                 Cerrar
               </button>
+              </div>
             </div>
           </div>
         </>
