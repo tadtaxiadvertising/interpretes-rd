@@ -35,17 +35,31 @@ export async function retireProviderProfile(db: Db, id: string, actor: string): 
 
 /** A replacement gets a new ID and fresh proof requirements. Old credentials
  * cannot be selected again; no verification evidence is inherited. */
-export async function replaceProviderProfile(db: Db, input: ReplacementInput, actor: string, envKey: string | undefined): Promise<boolean> {
+export async function replaceProviderProfile(db: Db, input: ReplacementInput, actor: string, envKey: string | undefined): Promise<boolean | 'already_saved'> {
   const validated = validateReplacement(input);
-  if (!validated) return false;
+  if (!validated || !actor || actor.length > 255) return false;
   const { id, profile } = validated;
+  // Use the same transaction lock as creation/import before checking conflicts.
+  const selection = await db.$queryRaw<{ singleton: boolean }[]>`
+    SELECT singleton FROM private_email.provider_selection WHERE singleton FOR UPDATE
+  `;
+  if (selection.length !== 1) throw new Error('Selection unavailable');
+  const rows = await db.$queryRaw<{ provider: string }[]>`
+    SELECT provider FROM private_email.provider_profile WHERE id = ${id}::uuid AND retired_at IS NULL
+  `;
+  if (rows.length !== 1) return false;
+  if (rows[0].provider !== profile.provider) throw new Error('Provider type cannot change');
+  const duplicates = await db.$queryRaw<{ present: boolean }[]>`
+    SELECT EXISTS (SELECT 1 FROM private_email.provider_profile
+      WHERE provider=${profile.provider} AND lower(sender)=lower(${profile.from})
+        AND retired_at IS NULL AND id <> ${id}::uuid) AS present
+  `;
+  if (duplicates.length !== 1) throw new Error('Duplicate check unavailable');
+  if (duplicates[0].present) return 'already_saved';
   const newId = randomUUID();
   const sealed = sealProfileCredentials(newId, profile, envKey);
+  // The transaction already holds the selection lock; reacquiring it is safe.
   if (!await retireProviderProfile(db, id, actor)) return false;
-  const rows = await db.$queryRaw<{ provider: string }[]>`
-    SELECT provider FROM private_email.provider_profile WHERE id = ${id}::uuid
-  `;
-  if (rows.length !== 1 || rows[0].provider !== profile.provider) throw new Error('Provider type cannot change');
   const inserted = await db.$executeRaw`
     INSERT INTO private_email.provider_profile (id, name, provider, sender, reply_to, sealed_key, updated_by, replaces_id)
     VALUES (${newId}::uuid, ${profile.name}, ${profile.provider}, ${profile.from}, ${profile.replyTo}, ${sealed}, ${actor}, ${id}::uuid)
