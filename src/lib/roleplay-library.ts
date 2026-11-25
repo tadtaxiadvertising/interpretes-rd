@@ -1,4 +1,6 @@
 import { createHash } from 'crypto';
+import { privateClinicalObjectPath } from '@/lib/roleplay/private-clinical-reference';
+import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 
 export interface ReusableRoleplayScenario {
   order: number;
@@ -77,4 +79,24 @@ export function getRoleplaySnapshotHash(scenarios: ReusableRoleplayScenario[]): 
       sourceEndSec: scenario.sourceEndSec ?? null,
     } : snapshot;
   }))).digest('hex');
+}
+
+/** Resolve an entire trusted database snapshot, not user-supplied paths.
+ * Mixed public/private snapshots are deliberately excluded. Keep the legacy
+ * parser unchanged for callers that specifically need public audio keys.
+ */
+export function getReusableRoleplayAudio(
+  scenarios: ReadonlyArray<Pick<ReusableRoleplayScenario, 'baseAudioUrl'>>,
+  supabaseUrl: string,
+): { kind: 'private' | 'legacy'; paths: string[] } | null {
+  if (!scenarios.length || scenarios.length > ROLEPLAY_MAX_SCENARIOS) return null;
+  const privatePaths = scenarios.map(scenario => privateClinicalObjectPath(scenario.baseAudioUrl));
+  if (privatePaths.every((path): path is string => path !== null)) {
+    return { kind: 'private', paths: privatePaths };
+  }
+  const legacyPaths = scenarios.map(scenario => getReusableBaseAudioPath(scenario.baseAudioUrl, supabaseUrl));
+  if (legacyPaths.every((path): path is string => path !== null)) {
+    return { kind: 'legacy', paths: legacyPaths };
+  }
+  return null;
 }

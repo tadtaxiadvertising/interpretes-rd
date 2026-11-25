@@ -38,6 +38,7 @@ vi.mock('@/lib/prisma', () => ({
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
     roleplayAccess: { create: vi.fn(), findUnique: vi.fn() },
     roleplayLibraryArchive: { findUnique: vi.fn() },
+    $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   },
 }));
@@ -974,6 +975,44 @@ describe('POST /api/admin/roleplays', () => {
       expect(res.status).toBe(409);
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
+    });
+
+    it('reuses private clinical clips and enforces opening despite a false client value', async () => {
+      for (const flag of ['ROLEPLAY_BILINGUAL_OPENING_API_ENABLED','ROLEPLAY_BILINGUAL_OPENING_UI_ENABLED','ROLEPLAY_BILINGUAL_OPENING_ASSIGNMENT_ENABLED']) vi.stubEnv(flag, 'true');
+      try {
+        const reference = 'private-base/123e4567-e89b-42d3-a456-426614174000/0.mp3';
+        const scenario = { ...libraryScenario, baseAudioUrl: reference };
+        vi.mocked(prisma.$queryRaw).mockResolvedValue([{ required: true }]);
+        vi.mocked(prisma.roleplaySession.findUnique).mockResolvedValue({ status: 'INVITED', scenarios: [scenario] } as any);
+        mockGetBucket.mockImplementation(async (id: string) => ({ error: null, data: {
+          id, name: id, public: false, file_size_limit: 15 * 1024 * 1024,
+          allowed_mime_types: ['audio/webm','audio/mp4','audio/mpeg', id === 'roleplay-opening-private' ? 'audio/ogg' : 'audio/wav'],
+        } }));
+        const res = await POST(buildRequest({ participantType: 'all-active-interpreters', librarySessionId: librarySourceId,
+          libraryFingerprint: getRoleplaySnapshotHash([scenario]), requiresBilingualOpening: 'false' }) as any);
+        expect(res.status).toBe(200);
+        expect(mockFrom.mock.calls).toEqual([['roleplay-audio-private']]);
+        expect(mockInfo).toHaveBeenCalledWith('base/123e4567-e89b-42d3-a456-426614174000/0.mp3');
+        expect(mockUpload).not.toHaveBeenCalled();
+        expect(mockGetPublicUrl).not.toHaveBeenCalled();
+        expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+        expect(prisma.roleplaySession.update).toHaveBeenCalledWith(expect.objectContaining({
+          data: { scenarios: { create: [expect.objectContaining({ baseAudioUrl: reference })] } },
+        }));
+      } finally { vi.unstubAllEnvs(); }
+    });
+
+    it('rejects private library assignment while rollout is disabled', async () => {
+      vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', '');
+      try {
+        const scenario = { ...libraryScenario, baseAudioUrl: 'private-base/123e4567-e89b-42d3-a456-426614174000/0.mp3' };
+        vi.mocked(prisma.roleplaySession.findUnique).mockResolvedValue({ status: 'INVITED', scenarios: [scenario] } as any);
+        const res = await POST(buildRequest({ participantType: 'all-active-interpreters', librarySessionId: librarySourceId,
+          libraryFingerprint: getRoleplaySnapshotHash([scenario]) }) as any);
+        expect(res.status).toBe(503);
+        expect(mockInfo).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+      } finally { vi.unstubAllEnvs(); }
     });
 
     it('assigns a library source to active interpreters in bulk without a reupload', async () => {
