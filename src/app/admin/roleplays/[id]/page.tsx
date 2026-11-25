@@ -5,7 +5,7 @@ import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { loadBilingualOpeningReview } from '@/lib/roleplay/bilingual-opening-review';
 import { RoleplayOpeningReview } from '@/components/roleplay/RoleplayOpeningReview';
 import prisma from '@/lib/prisma';
-import { getAdminReviewUrl } from '@/lib/roleplay';
+import { getAdminReviewUrl, getSignedBilingualOpeningAudioUrl } from '@/lib/roleplay';
 import { resolveResponseAudioUrl } from '@/lib/roleplay-review';
 import { resolveAdminBaseAudioPlaybackUrl } from '@/lib/roleplay/admin-base-audio-playback';
 import { RoleplayEvaluationClient } from './RoleplayEvaluationClient';
@@ -45,7 +45,7 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
     notFound();
   }
 
-  const opening = await loadBilingualOpeningReview(prisma, session.id, getAdminReviewUrl);
+  const opening = await loadBilingualOpeningReview(prisma, session.id, getSignedBilingualOpeningAudioUrl);
 
   // Sign first-party base clips as well as participant responses. The
   // originally stored public URL is not a reliable playback URL for private
