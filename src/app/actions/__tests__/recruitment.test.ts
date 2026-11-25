@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ApplicantData } from '@/lib/validators/recruitment';
 
 const m = vi.hoisted(() => ({
+  notifyRecruitmentAdmins: vi.fn(),
   cookieGet: vi.fn(),
   cookieSet: vi.fn(),
   actor: null as any,
@@ -10,6 +11,8 @@ const m = vi.hoisted(() => ({
   sessionFindFirst: vi.fn(),
   inviteCandidateAuthUser: vi.fn(),
 }));
+
+vi.mock('@/lib/notifications/notify-recruitment', () => ({ notifyRecruitmentAdmins: m.notifyRecruitmentAdmins }));
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({ get: m.cookieGet, set: m.cookieSet }),
@@ -137,6 +140,7 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect('candidateId' in result && result.candidateId).toBe(1);
     expect('applicationId' in result && result.applicationId).toBe('app-1');
     expect('alreadyApplied' in result && result.alreadyApplied).toBe(false);
+    expect(m.notifyRecruitmentAdmins).toHaveBeenCalledExactlyOnceWith({ kind: 'application-created', applicationId: 'app-1' });
     expect('funnelStep' in result && result.funnelStep).toBe(2);
     expect(m.inviteCandidateAuthUser).toHaveBeenCalledWith(expect.objectContaining({
       email: 'ana@example.com',
@@ -182,6 +186,7 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect('candidateId' in result && result.candidateId).toBe(7);
     expect('applicationId' in result && result.applicationId).toBe('app-existing');
     expect('alreadyApplied' in result && result.alreadyApplied).toBe(true);
+    expect(m.notifyRecruitmentAdmins).not.toHaveBeenCalled();
     expect(tx.recruitmentCandidate.create).not.toHaveBeenCalled();
     expect(tx.recruitmentCandidate.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -251,6 +256,7 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect('candidateId' in result).toBe(false);
     expect('applicationId' in result).toBe(false);
     expect('alreadyApplied' in result && result.alreadyApplied).toBe(true);
+    expect(m.notifyRecruitmentAdmins).not.toHaveBeenCalled();
     expect(m.cookieSet).not.toHaveBeenCalled();
     // The unverified submission must not create or mutate the linked interpreter.
     expect(tx.interpreter.findFirst).not.toHaveBeenCalled();
