@@ -20,6 +20,7 @@ import { canProgressPastBilingualOpening, OPENING_REQUIRED_MESSAGE } from '@/lib
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 import { publicRoleplayActionError, roleplayBusinessError } from '@/lib/roleplay/action-errors';
+import { prepareOpeningEvaluation, persistOpeningEvaluation } from '@/lib/roleplay/bilingual-opening-evaluation';
 
 const db = prisma;
 
@@ -1331,6 +1332,8 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
         throw roleplayBusinessError('Complete every recording and self-assessment before evaluating');
       }
 
+      const openingRubric = await prepareOpeningEvaluation(tx, input.sessionId, formData);
+
       // Atomic claim: exactly one evaluator wins. Guarded by
       // status = SUBMITTED AND evaluatorId IS NULL; the claim also moves the
       // session into UNDER_REVIEW (plan §32/§33). A concurrent request updates
@@ -1351,6 +1354,8 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
       if (claimed.count !== 1) {
         throw roleplayBusinessError('Concurrent evaluation detected or session not available');
       }
+
+      if (openingRubric) await persistOpeningEvaluation(tx, input.sessionId, auth.user.userId, openingRubric);
 
       const qaScore = await tx.qAScore.create({
         data: {
