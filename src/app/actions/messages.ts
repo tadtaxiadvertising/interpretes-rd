@@ -18,7 +18,7 @@ const SendMessageSchema = z.object({
 });
 
 async function getAllowedContact(currentUserId: string, otherUserId: string, currentRole: string) {
-  if (currentUserId === otherUserId) return null;
+  if (currentUserId.toLowerCase() === otherUserId.toLowerCase()) return null;
   const otherUser = await db.userProfile.findUnique({
     where: { id: otherUserId },
     select: { id: true, role: true },
@@ -31,6 +31,10 @@ async function getAllowedContact(currentUserId: string, otherUserId: string, cur
 export async function sendMessage(receiverId: string, content: string) {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  // Chat contacts and recipients are UserProfile UUIDs, not auth account IDs.
+  const linkedProfile = UserIdSchema.safeParse(auth.user.profileId);
+  if (!linkedProfile.success) return { success: false, error: 'Tu cuenta no tiene un perfil de mensajería vinculado.', code: 'UNAUTHORIZED' };
+  const currentUserId = linkedProfile.data;
 
   const parsed = SendMessageSchema.safeParse({ receiverId, content });
   if (!parsed.success) {
@@ -38,14 +42,14 @@ export async function sendMessage(receiverId: string, content: string) {
   }
 
   try {
-    const receiver = await getAllowedContact(auth.user.userId, parsed.data.receiverId, auth.user.role);
+    const receiver = await getAllowedContact(currentUserId, parsed.data.receiverId, auth.user.role);
     if (!receiver) {
       return { success: false, error: 'Recipient is not available for this conversation', code: 'UNAUTHORIZED' };
     }
 
     const message = await db.message.create({
       data: {
-        senderId: auth.user.userId,
+        senderId: currentUserId,
         receiverId: receiver.id,
         content: parsed.data.content,
       },
@@ -77,6 +81,10 @@ export async function sendMessage(receiverId: string, content: string) {
 export async function getMessages(otherUserId: string, beforeMessageId?: string) {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  // Chat contacts and recipients are UserProfile UUIDs, not auth account IDs.
+  const linkedProfile = UserIdSchema.safeParse(auth.user.profileId);
+  if (!linkedProfile.success) return { success: false, error: 'Tu cuenta no tiene un perfil de mensajería vinculado.', code: 'UNAUTHORIZED' };
+  const currentUserId = linkedProfile.data;
 
   const parsedId = UserIdSchema.safeParse(otherUserId);
   if (!parsedId.success) {
@@ -84,7 +92,7 @@ export async function getMessages(otherUserId: string, beforeMessageId?: string)
   }
 
   try {
-    const contact = await getAllowedContact(auth.user.userId, parsedId.data, auth.user.role);
+    const contact = await getAllowedContact(currentUserId, parsedId.data, auth.user.role);
     if (!contact) {
       return { success: false, error: 'Conversation is not available', code: 'UNAUTHORIZED' };
     }
@@ -100,8 +108,8 @@ export async function getMessages(otherUserId: string, beforeMessageId?: string)
         select: { id: true, senderId: true, receiverId: true },
       });
       const belongsToConversation = cursorMessage && (
-        (cursorMessage.senderId === auth.user.userId && cursorMessage.receiverId === contact.id) ||
-        (cursorMessage.senderId === contact.id && cursorMessage.receiverId === auth.user.userId)
+        (cursorMessage.senderId === currentUserId && cursorMessage.receiverId === contact.id) ||
+        (cursorMessage.senderId === contact.id && cursorMessage.receiverId === currentUserId)
       );
       if (!belongsToConversation) {
         return { success: false, error: 'Message cursor is not part of this conversation', code: 'VALIDATION_ERROR' };
@@ -112,8 +120,8 @@ export async function getMessages(otherUserId: string, beforeMessageId?: string)
     const messages = await db.message.findMany({
       where: {
         OR: [
-          { senderId: auth.user.userId, receiverId: contact.id },
-          { senderId: contact.id, receiverId: auth.user.userId },
+          { senderId: currentUserId, receiverId: contact.id },
+          { senderId: contact.id, receiverId: currentUserId },
         ],
       },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -125,7 +133,7 @@ export async function getMessages(otherUserId: string, beforeMessageId?: string)
     const hasMore = messages.length > 100;
     return { success: true, data: messages.slice(0, 100).reverse(), hasMore };
   } catch (error) {
-    console.error('getMessages failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('getMessages failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Unable to load messages', code: 'INTERNAL_ERROR' };
   }
 }
@@ -134,6 +142,10 @@ export async function getMessages(otherUserId: string, beforeMessageId?: string)
 export async function markMessagesAsRead(senderId: string, messageIds: string[]) {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  // Chat contacts and recipients are UserProfile UUIDs, not auth account IDs.
+  const linkedProfile = UserIdSchema.safeParse(auth.user.profileId);
+  if (!linkedProfile.success) return { success: false, error: 'Tu cuenta no tiene un perfil de mensajería vinculado.', code: 'UNAUTHORIZED' };
+  const currentUserId = linkedProfile.data;
 
   const parsedSender = UserIdSchema.safeParse(senderId);
   const parsedIds = z.array(UserIdSchema).min(1).max(100).safeParse(messageIds);
@@ -142,7 +154,7 @@ export async function markMessagesAsRead(senderId: string, messageIds: string[])
   }
 
   try {
-    const sender = await getAllowedContact(auth.user.userId, parsedSender.data, auth.user.role);
+    const sender = await getAllowedContact(currentUserId, parsedSender.data, auth.user.role);
     if (!sender) {
       return { success: false, error: 'Conversation is not available', code: 'UNAUTHORIZED' };
     }
@@ -151,7 +163,7 @@ export async function markMessagesAsRead(senderId: string, messageIds: string[])
       where: {
         id: { in: parsedIds.data },
         senderId: sender.id,
-        receiverId: auth.user.userId,
+        receiverId: currentUserId,
         isRead: false,
       },
       data: { isRead: true },
@@ -161,7 +173,7 @@ export async function markMessagesAsRead(senderId: string, messageIds: string[])
     revalidatePath('/admin/messages');
     return { success: true };
   } catch (error) {
-    console.error('markMessagesAsRead failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('markMessagesAsRead failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Unable to mark messages as read', code: 'INTERNAL_ERROR' };
   }
 }
@@ -170,6 +182,10 @@ export async function markMessagesAsRead(senderId: string, messageIds: string[])
 export async function getChatList(searchQuery = '') {
   const auth = await validateAction(['admin', 'interpreter']);
   if ('error' in auth) return { success: false, error: auth.error, code: auth.code };
+  // Chat contacts and recipients are UserProfile UUIDs, not auth account IDs.
+  const linkedProfile = UserIdSchema.safeParse(auth.user.profileId);
+  if (!linkedProfile.success) return { success: false, error: 'Tu cuenta no tiene un perfil de mensajería vinculado.', code: 'UNAUTHORIZED' };
+  const currentUserId = linkedProfile.data;
 
   const parsedSearch = z.string().trim().max(100).safeParse(searchQuery);
   if (!parsedSearch.success) {
@@ -185,8 +201,8 @@ export async function getChatList(searchQuery = '') {
       db.message.findMany({
         where: {
           OR: [
-            { senderId: auth.user.userId },
-            { receiverId: auth.user.userId },
+            { senderId: currentUserId },
+            { receiverId: currentUserId },
           ],
         },
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
@@ -195,12 +211,12 @@ export async function getChatList(searchQuery = '') {
       }),
       db.message.groupBy({
         by: ['senderId'],
-        where: { receiverId: auth.user.userId, isRead: false },
+        where: { receiverId: currentUserId, isRead: false },
         _count: { _all: true },
       }),
       db.userProfile.findMany({
         where: {
-          id: { not: auth.user.userId },
+          id: { not: currentUserId },
           role: { in: allowedRoles },
           ...(parsedSearch.data ? {
             OR: [
@@ -217,10 +233,10 @@ export async function getChatList(searchQuery = '') {
 
     const activeContactIds = Array.from(new Set([
       ...recentMessages.map((message) =>
-        message.senderId === auth.user.userId ? message.receiverId : message.senderId,
+        message.senderId === currentUserId ? message.receiverId : message.senderId,
       ),
       ...unreadGroups.map((group) => group.senderId),
-    ])).filter((id) => id !== auth.user.userId);
+    ])).filter((id) => id !== currentUserId);
 
     const activeProfiles = activeContactIds.length
       ? await db.userProfile.findMany({
@@ -240,7 +256,7 @@ export async function getChatList(searchQuery = '') {
       senderId: string;
     }>();
     for (const message of recentMessages) {
-      const contactId = message.senderId === auth.user.userId ? message.receiverId : message.senderId;
+      const contactId = message.senderId === currentUserId ? message.receiverId : message.senderId;
       if (!lastMessageByContact.has(contactId)) {
         lastMessageByContact.set(contactId, {
           content: message.content,
@@ -273,7 +289,7 @@ export async function getChatList(searchQuery = '') {
 
     return { success: true, data: chatList };
   } catch (error) {
-    console.error('getChatList failed:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('getChatList failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Unable to load chat contacts', code: 'INTERNAL_ERROR' };
   }
 }
