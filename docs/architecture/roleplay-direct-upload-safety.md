@@ -98,3 +98,7 @@ Transfiere **un solo archivo a la vez** y comunica únicamente el número de arc
 ## Condiciones que impiden activar
 
 No habilitar el endpoint de firmas antes de confirmar privacidad del bucket, reserva por administrador, verificación de checksum y un plan de reversión. Este PR no cambia Storage, políticas, contraseñas, Easypanel, migraciones o medios reales.
+
+## Reserva HTTP y firma privada (staged)
+
+`POST /api/admin/roleplays/uploads/reserve` permanece deshabilitado salvo `ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED=true`. Acepta solo JSON de hasta 16 KiB (declaraciones ordenadas, SHA-256 y clave idempotente), autentica administrador y Bearer coincidente, rechaza solicitudes cross-site y aplica límites locales por IP y administrador. El servicio comprueba metadatos del bucket privado, persiste la reserva y relee sus datos canónicos antes de generar tokens de subida sin sobrescritura. Una solicitud duplicada no vuelve a firmar ni crea otra reserva. Los tokens son capacidades de Storage con vigencia independiente del vencimiento de la reserva; no deben persistirse en el navegador ni registrarse. La respuesta es privada y no-store. Todavía no existe reconciliación HTTP, verificación remota, publicación transaccional ni integración con el formulario. No activar la ruta en producción ni considerar la subida como publicación. Faltan límites duraderos de reservas/bytes, recuperación de firmas parciales, verificación de políticas y piloto aislado. El multipart histórico permanece operativo.
