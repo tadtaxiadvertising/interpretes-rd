@@ -1,5 +1,6 @@
 import 'server-only';
 import prisma from '@/lib/prisma';
+import type { Prisma } from '@prisma/client';
 import { notificationEventRow } from './notification-event-row';
 import { recruitmentAdminEventRow, type RecruitmentAdminMilestone } from './notify-recruitment';
 import { candidateNotificationEvent } from './notify-candidate';
@@ -12,15 +13,18 @@ const LIMIT = 50;
 const ADMIN_LIMIT = 20;
 const WINDOW_MS = 86_400_000;
 type Row = ReturnType<typeof notificationEventRow>;
-type Module = 'recruitmentAdmin' | 'candidate' | 'qa' | 'roleplayEvaluation' | 'roleplayAssignment' | 'audio';
-const MODULES: Module[] = ['recruitmentAdmin', 'candidate', 'qa', 'roleplayEvaluation', 'roleplayAssignment', 'audio'];
+export const operationalNotificationModules = ['recruitmentAdmin', 'candidate', 'qa', 'roleplayEvaluation', 'roleplayAssignment', 'audio'] as const;
+export type OperationalNotificationModule = typeof operationalNotificationModules[number];
+type Module = OperationalNotificationModule;
+const MODULES = operationalNotificationModules;
+type Reader = Pick<Prisma.TransactionClient, 'userProfile' | 'recruitmentApplication' | 'qAScore' | 'roleplaySession' | 'roleplayAudioJob' | 'notification'>;
 
-/** Read-only sample of the same recent eligible events used by recovery. */
-export async function readOperationalNotificationDiagnostics(now = new Date()) {
+/** Internal shared projection. Never return these rows directly to a client. */
+export async function collectOperationalNotificationRows(db: Reader, now: Date) {
   const recent = { gte: new Date(now.getTime() - WINDOW_MS), lte: now };
   const [admins, applications, scores, assignments, jobs] = await Promise.all([
-    prisma.userProfile.findMany({ where: { role: { equals: 'admin', mode: 'insensitive' } }, select: { id: true }, orderBy: { id: 'asc' }, take: ADMIN_LIMIT + 1 }),
-    prisma.recruitmentApplication.findMany({
+    db.userProfile.findMany({ where: { role: { equals: 'admin', mode: 'insensitive' } }, select: { id: true }, orderBy: { id: 'asc' }, take: ADMIN_LIMIT + 1 }),
+    db.recruitmentApplication.findMany({
       where: { OR: [{ status: 'APPLIED', createdAt: recent }, { lastActivityAt: recent }] },
       select: { id: true, status: true, version: true, candidate: { select: { email: true } }, events: {
         select: { eventType: true, fromStatus: true, toStatus: true, createdAt: true },
@@ -28,7 +32,7 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
       } },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: LIMIT + 1,
     }),
-    prisma.qAScore.findMany({
+    db.qAScore.findMany({
       where: { interpreterId: { not: null }, createdAt: recent, totalScore: { not: null },
         OR: [{ roleplaySession: { is: null } }, { roleplaySession: { is: { recruitmentCandidateId: null, status: 'EVALUATED', evaluatedAt: recent } } }],
       },
@@ -37,11 +41,11 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
       },
       orderBy: { id: 'desc' }, take: LIMIT + 1,
     }),
-    prisma.roleplaySession.findMany({
+    db.roleplaySession.findMany({
       where: { interpreterId: { not: null }, recruitmentCandidateId: null, status: 'INVITED', updatedAt: recent, scenarios: { some: {}, none: { baseAudioUrl: '' } } },
       select: { id: true, interpreterId: true }, orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: LIMIT + 1,
     }),
-    prisma.roleplayAudioJob.findMany({
+    db.roleplayAudioJob.findMany({
       where: { status: 'FAILED', updatedAt: recent }, select: { id: true, updatedAt: true },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: LIMIT + 1,
     }),
@@ -52,7 +56,7 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
   const adminSample = admins.slice(0, ADMIN_LIMIT);
   const emails = [...new Set(appSample.map(app => app.candidate.email))];
   const interpreterIds = [...new Set([...scoreSample, ...assignmentSample].flatMap(item => item.interpreterId === null ? [] : [item.interpreterId]))];
-  const profiles = emails.length || interpreterIds.length ? await prisma.userProfile.findMany({
+  const profiles = emails.length || interpreterIds.length ? await db.userProfile.findMany({
     where: { OR: [{ email: { in: emails } }, { interpreterId: { in: interpreterIds } }] },
     select: { id: true, role: true, email: true, interpreterId: true },
   }) : [];
@@ -100,15 +104,29 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
     for (const admin of adminSample) add('audio', audioFailureEventRow(admin.id, { id: job.id, failedAt: job.updatedAt }));
   }
 
-  const rows = [...expected.values()].flat();
+  return {
+    expected, adminSampled: adminSample.length, adminLimit: ADMIN_LIMIT, sampleLimit: LIMIT,
+    truncated: admins.length > ADMIN_LIMIT || [applications, scores, assignments, jobs].some(items => items.length > LIMIT),
+  };
+}
+
+export async function findStoredOperationalNotices(db: Reader, rows: readonly Row[]) {
+
   const delivered = new Map<string, { userId: string | null; category: string | null }>();
   for (let offset = 0; offset < rows.length; offset += 200) {
-    const stored = await prisma.notification.findMany({
+    const stored = await db.notification.findMany({
       where: { id: { in: rows.slice(offset, offset + 200).map(row => row.id) } },
       select: { id: true, userId: true, category: true },
     });
     for (const item of stored) delivered.set(item.id, item);
   }
+  return delivered;
+}
+
+/** Read-only sample of the same recent eligible events used by repair. */
+export async function readOperationalNotificationDiagnostics(now = new Date()) {
+  const { expected, ...summary } = await collectOperationalNotificationRows(prisma, now);
+  const delivered = await findStoredOperationalNotices(prisma, [...expected.values()].flat());
   const modules = MODULES.map(module => {
     const items = expected.get(module)!;
     return { module, expected: items.length, missing: items.filter(row => {
@@ -117,7 +135,6 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
     }).length };
   });
   return {
-    modules, adminSampled: adminSample.length, adminLimit: ADMIN_LIMIT, sampleLimit: LIMIT,
-    truncated: admins.length > ADMIN_LIMIT || [applications, scores, assignments, jobs].some(items => items.length > LIMIT),
+    modules, ...summary,
   };
 }

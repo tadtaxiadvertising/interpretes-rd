@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { repairMissingMessageNotices } from '@/app/actions/notification-repair';
+import { repairMissingMessageNotices, repairMissingOperationalNotices } from '@/app/actions/notification-repair';
 import { Bell, RefreshCw } from 'lucide-react';
 
 const METRICS = [
@@ -75,6 +75,8 @@ export default function NotificationDiagnostics() {
   const [status, setStatus] = useState('Sin comprobar.');
   const [busy, setBusy] = useState(false);
   const [confirmRepair, setConfirmRepair] = useState(false);
+  const [selectedModule, setSelectedModule] = useState<Module | ''>('');
+  const [confirmOperational, setConfirmOperational] = useState(false);
   const [repairing, setRepairing] = useState(false);
   const [repairStatus, setRepairStatus] = useState('');
   const repairLock = useRef(false);
@@ -84,6 +86,8 @@ export default function NotificationDiagnostics() {
   async function check() {
     if (pending.current || repairLock.current) return;
     setConfirmRepair(false);
+    setSelectedModule('');
+    setConfirmOperational(false);
     const controller = new AbortController();
     pending.current = controller;
     setBusy(true);
@@ -115,19 +119,21 @@ export default function NotificationDiagnostics() {
     }
   }
 
-  async function repair() {
-    if (!confirmRepair || busy || repairLock.current) return;
+  async function repair(module?: Module) {
+    if ((module ? !confirmOperational || selectedModule !== module : !confirmRepair) || busy || repairLock.current) return;
     repairLock.current = true;
     setRepairing(true);
     setConfirmRepair(false);
+    setConfirmOperational(false);
     setRepairStatus('Recalculando y reparando avisos elegibles…');
     try {
-      const result = await repairMissingMessageNotices(true);
+      const result = module ? await repairMissingOperationalNotices(module, true) : await repairMissingMessageNotices(true);
       if (result.success) {
         const { created, conflicts, deferred, skipped } = result.report;
-        setRepairStatus(`Avisos creados: ${created}. Conflictos no modificados: ${conflicts}. Pendientes para otro lote: ${deferred}. Omitidos por concurrencia: ${skipped}. Vuelve a comprobar el diagnóstico para actualizar los resultados.`);
+        setRepairStatus(`${module ? MODULE_LABELS[module] : 'Mensajería'} — Avisos creados: ${created}. Conflictos no modificados: ${conflicts}. Pendientes para otro lote: ${deferred}. Omitidos por concurrencia: ${skipped}. Vuelve a comprobar el diagnóstico para actualizar los resultados.`);
         setReport(null);
         setOperational(null);
+        setSelectedModule('');
         setStatus('Diagnóstico anterior invalidado tras la reparación.');
       } else {
         setRepairStatus(result.code === 'RATE_LIMITED' ? 'Espera al menos un minuto antes de otra reparación.' : result.code === 'UNAUTHORIZED' ? 'No autorizado. Inicia sesión como administrador.' : 'No se pudo confirmar la reparación. Vuelve a comprobar el diagnóstico.');
@@ -173,7 +179,7 @@ export default function NotificationDiagnostics() {
                 <input type="checkbox" checked={confirmRepair} disabled={repairing || busy} onChange={event => setConfirmRepair(event.target.checked)} className="mt-1" />
                 Confirmo la creación de los avisos internos faltantes.
               </label>
-              <button type="button" onClick={repair} disabled={!confirmRepair || repairing || busy} className="min-h-11 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
+              <button type="button" onClick={() => repair()} disabled={!confirmRepair || repairing || busy} className="min-h-11 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
                 {repairing ? 'Reparando…' : 'Reparar avisos de mensajes'}
               </button>
             </div>
@@ -193,6 +199,26 @@ export default function NotificationDiagnostics() {
                   </div>
                 ))}
               </dl>
+              {operational.modules.some(item => item.missing > 0) && (
+                <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
+                  <h3 className="font-semibold text-[var(--foreground)]">Reparar avisos por módulo</h3>
+                  <p className="text-sm text-[var(--text-secondary)]">Selecciona un módulo. Se comprobarán de nuevo los registros y se crearán hasta 50 avisos internos elegibles. No se modificarán evaluaciones, expedientes, trabajos de audio ni avisos existentes.</p>
+                  <label className="block space-y-1 text-sm text-[var(--foreground)]">
+                    <span>Módulo que deseas reparar</span>
+                    <select value={selectedModule} disabled={busy || repairing} onChange={event => { setSelectedModule(event.target.value as Module | ''); setConfirmOperational(false); }} className="block min-h-11 w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-surface-muted)] px-3 text-[var(--foreground)]">
+                      <option value="">Seleccionar módulo</option>
+                      {operational.modules.filter(item => item.missing > 0).map(item => <option key={item.module} value={item.module}>{MODULE_LABELS[item.module]} ({item.missing} faltantes)</option>)}
+                    </select>
+                  </label>
+                  <label className="flex min-h-11 items-start gap-2 text-sm text-[var(--foreground)]">
+                    <input type="checkbox" checked={confirmOperational} disabled={!selectedModule || busy || repairing} onChange={event => setConfirmOperational(event.target.checked)} className="mt-1" />
+                    Confirmo la creación de los avisos faltantes del módulo seleccionado.
+                  </label>
+                  <button type="button" onClick={() => { if (selectedModule) void repair(selectedModule); }} disabled={!selectedModule || !confirmOperational || repairing || busy} className="min-h-11 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
+                    {repairing ? 'Reparando…' : 'Reparar módulo seleccionado'}
+                  </button>
+                </div>
+              )}
               <p className="text-xs text-[var(--text-secondary)]">Una entrega faltante indica que no se encontró su registro esperado, no necesariamente que un usuario haya perdido información. Solo se incluyen etapas vigentes, evaluaciones válidas, ejercicios disponibles y fallos definitivos recientes con destinatarios vinculados.</p>
             </>
           ) : <p className="text-sm text-[var(--text-secondary)]">Diagnóstico operativo no disponible.</p>}
