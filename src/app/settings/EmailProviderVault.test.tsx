@@ -54,6 +54,52 @@ describe('EmailProviderVault refresh failures', () => {
     expect(actions.testSavedEmailProvider).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps nonsecret fields after invalid input but clears credentials', async () => {
+    await loadProfiles();
+    actions.addEmailProviderProfile.mockResolvedValueOnce('invalid');
+    const name = screen.getByLabelText('Nombre') as HTMLInputElement;
+    const from = screen.getByLabelText('Remitente autorizado') as HTMLInputElement;
+    const key = screen.getByLabelText('Clave API') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Nuevo perfil' } });
+    fireEvent.change(from, { target: { value: 'sender@example.test' } });
+    fireEvent.change(key, { target: { value: 'fixture-key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar perfil' }));
+    await screen.findByText('Revisa los campos o la clave de cifrado.');
+    expect(name.value).toBe('Nuevo perfil');
+    expect(from.value).toBe('sender@example.test');
+    expect(key.value).toBe('');
+    expect(actions.addEmailProviderProfile).toHaveBeenCalledTimes(1);
+  });
+
+  it('clears nonsecret fields after a confirmed save', async () => {
+    await loadProfiles();
+    actions.addEmailProviderProfile.mockResolvedValueOnce('saved');
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(ready);
+    const name = screen.getByLabelText('Nombre') as HTMLInputElement;
+    const from = screen.getByLabelText('Remitente autorizado') as HTMLInputElement;
+    const key = screen.getByLabelText('Clave API') as HTMLInputElement;
+    fireEvent.change(name, { target: { value: 'Nuevo perfil' } });
+    fireEvent.change(from, { target: { value: 'sender@example.test' } });
+    fireEvent.change(key, { target: { value: 'fixture-key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar perfil' }));
+    await screen.findByText('Perfil guardado. No se activó para envíos.');
+    expect(name.value).toBe('');
+    expect(from.value).toBe('');
+    expect(key.value).toBe('');
+  });
+
+  it('requires a fresh consultation when profile creation has an uncertain outcome', async () => {
+    await loadProfiles();
+    actions.addEmailProviderProfile.mockResolvedValueOnce('unavailable');
+    fireEvent.change(screen.getByLabelText('Nombre'), { target: { value: 'Nuevo perfil' } });
+    fireEvent.change(screen.getByLabelText('Remitente autorizado'), { target: { value: 'sender@example.test' } });
+    fireEvent.change(screen.getByLabelText('Clave API'), { target: { value: 'fixture-key' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar perfil' }));
+    await screen.findByText(/No se pudo confirmar si el perfil se guardó/);
+    expect(screen.queryByRole('button', { name: 'Guardar perfil' })).toBeNull();
+    expect(actions.addEmailProviderProfile).toHaveBeenCalledTimes(1);
+  });
+
   it('recovers after a later successful consultation', async () => {
     await loadProfiles();
     actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
