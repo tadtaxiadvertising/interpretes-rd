@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { safeNotificationLink } from './safe-notification-link';
 
 describe('safe notification links', () => {
-  it.each(['/dashboard', '/admin/roleplays/studio', '/qa', '/dashboard/roleplays/abc-123'])('allows module path %s', path => {
+  it.each(['/candidate', '/dashboard', '/admin/roleplays/studio', '/qa', '/dashboard/roleplays/abc-123'])('allows module path %s', path => {
     expect(safeNotificationLink(path)).toBe(path);
   });
   it('strips query and fragment metadata', () => {
