@@ -160,11 +160,14 @@ export async function createSignedResponseUploadUrl(
  */
 export async function createSignedBilingualOpeningUploadUrl(
   sessionId: string, mimeType: string, size: number,
+  reservePath?: (path: string) => Promise<void>,
 ): Promise<{ token: string; path: string }> {
   assertStoragePathSegment(sessionId, 'session ID');
   const validation = validateAudioMetadata(mimeType, size);
   if (!validation.valid || !validation.extension) throw new Error('Invalid opening audio metadata');
   const path = `openings/${sessionId}/${randomUUID()}.${validation.extension}`;
+  // Persist the reservation BEFORE issuing a capability in the staged service.
+  if (reservePath) await reservePath(path);
   try {
     const { data, error } = await getSupabaseAdmin().storage.from(BUCKET)
       .createSignedUploadUrl(path, { upsert: false });
