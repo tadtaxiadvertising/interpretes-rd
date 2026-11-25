@@ -1,4 +1,5 @@
 import { getReusableBaseAudioPath } from '@/lib/roleplay-library';
+import { isPrivateClinicalReference, privateClinicalObjectPath } from './private-clinical-reference';
 
 type InvitationAudioSession = {
   baseAudioPath?: string | null;
@@ -30,6 +31,14 @@ export async function resolveInvitationBaseAudioUrl(
 ): Promise<string | null> {
   const storedUrl = session.baseAudioUrl || null;
   const storedPath = session.baseAudioPath;
+  // A private reference is authoritative. Conflicting or malformed fields
+  // must never fall back to legacy public signing or external playback.
+  if (isPrivateClinicalReference(storedPath) || isPrivateClinicalReference(storedUrl)) {
+    const reference = storedPath || storedUrl;
+    if (!reference || !privateClinicalObjectPath(reference) ||
+        (storedUrl && storedUrl !== reference)) return null;
+    try { return await signPath(reference, 3600); } catch { return null; }
+  }
   if (storedPath) {
     const path = canonicalBasePath(storedPath);
     if (!path) return null;

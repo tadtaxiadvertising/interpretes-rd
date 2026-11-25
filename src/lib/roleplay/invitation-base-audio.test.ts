@@ -152,3 +152,18 @@ describe('resolveInvitationBaseAudioUrl', () => {
     expect(sign).not.toHaveBeenCalled();
   });
 });
+
+it('signs a private clinical reference without public fallback', async () => {
+  const reference = 'private-base/123e4567-e89b-42d3-a456-426614174000/0.mp3';
+  const sign = vi.fn().mockResolvedValue('https://signed.example/private');
+  expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: reference, baseAudioPath: reference }, origin, sign)).toBe('https://signed.example/private');
+  expect(sign).toHaveBeenCalledWith(reference, 3600);
+  expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: reference }, origin, sign)).toBe('https://signed.example/private');
+  sign.mockClear();
+  for (const session of [{ baseAudioUrl: reference, baseAudioPath: path }, { baseAudioPath: reference, baseAudioUrl: legacy }, { baseAudioUrl: reference.replace('/0.mp3','/../0.mp3') }, { baseAudioUrl: reference + '?token=old' }]) {
+    expect(await resolveInvitationBaseAudioUrl(session, origin, sign)).toBeNull();
+  }
+  expect(sign).not.toHaveBeenCalled();
+  sign.mockRejectedValueOnce(new Error('private failure'));
+  expect(await resolveInvitationBaseAudioUrl({ baseAudioUrl: reference }, origin, sign)).toBeNull();
+});

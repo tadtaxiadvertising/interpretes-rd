@@ -1,12 +1,14 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockUpload, mockRemove, mockGetPublicUrl, mockList, mockInfo } = vi.hoisted(() => ({
+const { mockUpload, mockRemove, mockGetPublicUrl, mockList, mockInfo, mockGetBucket, mockFrom } = vi.hoisted(() => ({
   mockUpload: vi.fn(),
   mockRemove: vi.fn(),
   mockGetPublicUrl: vi.fn(),
   mockList: vi.fn(),
   mockInfo: vi.fn(),
+  mockGetBucket: vi.fn(),
+  mockFrom: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({
@@ -43,7 +45,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@supabase/supabase-js', () => ({
   createClient: vi.fn(() => ({
     storage: {
-      from: vi.fn(() => ({
+      getBucket: mockGetBucket,
+      from: vi.fn((bucket: string) => (mockFrom(bucket), {
         upload: mockUpload,
         remove: mockRemove,
         getPublicUrl: mockGetPublicUrl,
@@ -129,7 +132,8 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.roleplayAccess.create as any).mockResolvedValue({ id: 'acc-1' });
     (prisma.$transaction as any).mockImplementation(async (cb: any) =>
       cb({
-        $queryRaw: vi.fn().mockResolvedValue([]),
+        $queryRaw: vi.fn().mockImplementation(async (sql: TemplateStringsArray, ...values: unknown[]) =>
+          sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{ id: values[0], updatedAt: draftUpdatedAt }] : []),
         interpreter: { findFirst: prisma.interpreter.findFirst },
         roleplayScenario: { create: prisma.roleplayScenario.create, deleteMany: prisma.roleplayScenario.deleteMany },
         roleplaySession: {
@@ -153,6 +157,25 @@ describe('POST /api/admin/roleplays', () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
+  });
+
+  it('uploads required bulk clinical clips privately without generating public URLs', async () => {
+    for (const flag of ['ROLEPLAY_BILINGUAL_OPENING_API_ENABLED','ROLEPLAY_BILINGUAL_OPENING_UI_ENABLED','ROLEPLAY_BILINGUAL_OPENING_ASSIGNMENT_ENABLED']) vi.stubEnv(flag, 'true');
+    try {
+      mockGetBucket.mockImplementation(async (id: string) => ({ error: null, data: {
+        id, name: id, public: false, file_size_limit: 15 * 1024 * 1024,
+        allowed_mime_types: ['audio/webm','audio/mp4','audio/mpeg', id === 'roleplay-opening-private' ? 'audio/ogg' : 'audio/wav'],
+      } }));
+      const response = await POST(buildRequest({ participantType: 'all-active-interpreters', scenarios: oneScenario,
+        audios: [audioFile()], requiresBilingualOpening: 'true' }) as any);
+      expect(response.status).toBe(200);
+      expect(mockFrom.mock.calls).toEqual([['roleplay-audio-private']]);
+      expect(mockGetPublicUrl).not.toHaveBeenCalled();
+      expect(mockUpload.mock.calls[0][0]).toMatch(/^base\/[a-f0-9-]+\/0\.webm$/);
+      expect(prisma.roleplaySession.update).toHaveBeenCalledWith(expect.objectContaining({
+        data: { scenarios: { create: [expect.objectContaining({ baseAudioUrl: expect.stringMatching(/^private-base\//) })] } },
+      }));
+    } finally { vi.unstubAllEnvs(); }
   });
 
   describe('authorization', () => {

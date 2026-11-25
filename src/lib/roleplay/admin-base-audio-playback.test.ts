@@ -66,3 +66,14 @@ describe('resolveAdminBaseAudioPlaybackUrl', () => {
     expect(sign).not.toHaveBeenCalled();
   });
 });
+
+it('signs canonical private clinical references and rejects malformed ones', async () => {
+  const reference = 'private-base/123e4567-e89b-42d3-a456-426614174000/0.mp3';
+  const sign = vi.fn().mockResolvedValue('https://signed.example/private');
+  expect(await resolveAdminBaseAudioPlaybackUrl(reference, origin, sign)).toBe('https://signed.example/private');
+  expect(sign).toHaveBeenCalledWith(reference);
+  sign.mockClear();
+  expect(await resolveAdminBaseAudioPlaybackUrl(reference + '\n', origin, sign)).toBeNull();
+  expect(await resolveAdminBaseAudioPlaybackUrl(reference.replace('/0.mp3','/25.mp3'), origin, sign)).toBeNull();
+  expect(sign).not.toHaveBeenCalled();
+});

@@ -3,6 +3,8 @@ import { randomUUID } from 'crypto';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { BILINGUAL_OPENING_BUCKET, isCanonicalBilingualOpeningPath } from '@/lib/roleplay/bilingual-opening';
 import { requireBilingualOpeningBucket } from '@/lib/roleplay/bilingual-opening-bucket';
+import { isPrivateClinicalReference, privateClinicalObjectPath } from '@/lib/roleplay/private-clinical-reference';
+import { requirePrivateRoleplayAudioBucket } from '@/lib/roleplay/private-audio-bucket-readiness';
 
 // The Supabase admin client is created lazily on first use. Creating it (and
 // validating env) at module load time made the module crash during the
@@ -260,6 +262,7 @@ export async function getValidationUrl(path: string): Promise<string> {
 }
 
 export async function getAdminReviewUrl(path: string): Promise<string> {
+  if (isPrivateClinicalReference(path)) return getSignedPrivateClinicalUrl(path, 3600);
   const { data, error } = await getSupabaseAdmin().storage
     .from(BUCKET)
     .createSignedUrl(path, 60 * 60 * 24); // 24 hours - for QA review
@@ -275,7 +278,24 @@ export async function deleteAudio(path: string): Promise<void> {
   await getSupabaseAdmin().storage.from(BUCKET).remove([path]);
 }
 
+async function getSignedPrivateClinicalUrl(reference: string, expiresIn: number): Promise<string> {
+  const path = privateClinicalObjectPath(reference);
+  if (!path || !Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > 3600) {
+    throw new Error('Invalid private clinical playback request');
+  }
+  try {
+    const storage = getSupabaseAdmin().storage;
+    const bucket = await requirePrivateRoleplayAudioBucket(storage);
+    const { data, error } = await storage.from(bucket).createSignedUrl(path, expiresIn);
+    if (error || !data?.signedUrl) throw new Error();
+    return data.signedUrl;
+  } catch {
+    throw new Error('Unable to authorize private clinical playback');
+  }
+}
+
 export async function getSignedAudioUrl(path: string, expiresIn: number = 60 * 60): Promise<string> {
+  if (isPrivateClinicalReference(path)) return getSignedPrivateClinicalUrl(path, expiresIn);
   const { data, error } = await getSupabaseAdmin().storage.from(BUCKET).createSignedUrl(path, expiresIn);
   if (error) throw new Error('Failed to create signed URL');
   return data.signedUrl;
