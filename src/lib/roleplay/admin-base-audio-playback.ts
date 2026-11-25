@@ -1,4 +1,5 @@
 import { getReusableBaseAudioPath } from '@/lib/roleplay-library';
+import { isPrivateClinicalReference, privateClinicalObjectPath } from './private-clinical-reference';
 
 /**
  * Refresh a first-party legacy public Storage URL for authorized admin QA.
@@ -14,6 +15,10 @@ export async function resolveAdminBaseAudioPlaybackUrl(
   signPath: (path: string) => Promise<string>,
 ): Promise<string | null> {
   if (!originalUrl) return null;
+  if (isPrivateClinicalReference(originalUrl)) {
+    if (!privateClinicalObjectPath(originalUrl)) return null;
+    try { return await signPath(originalUrl); } catch { return null; }
+  }
   const path = supabaseUrl
     ? getReusableBaseAudioPath(originalUrl, supabaseUrl)
     : null;
