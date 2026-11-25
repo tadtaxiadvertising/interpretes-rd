@@ -25,7 +25,9 @@ export default async function InterpreterMessagesPage() {
         </p>
       </div>
 
-      <ChatSystem currentUserId={userData.id} currentUserRole="interpreter" />
+      {!profile.id ? (
+        <p role="status" className="rounded-xl border border-[var(--border)] p-4 text-sm text-[var(--text-secondary)]">Tu cuenta todavía no tiene un perfil de mensajería vinculado. Contacta al administrador.</p>
+      ) : <ChatSystem key={profile.id} currentUserId={profile.id} currentUserRole="interpreter" />}
     </div>
   );
 }
