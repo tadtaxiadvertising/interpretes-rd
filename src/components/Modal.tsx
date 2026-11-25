@@ -112,23 +112,23 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-2xl'
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          'relative w-full rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl overflow-hidden animate-in zoom-in-95 fade-in duration-300',
+          'relative flex max-h-[calc(100dvh-1.5rem)] w-full flex-col rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl overflow-hidden sm:max-h-[calc(100dvh-3rem)] animate-in zoom-in-95 fade-in duration-300',
           maxWidth
         )}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--theme-panel)] px-5 py-4 sm:px-8 sm:py-6">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--theme-panel)] px-5 py-4 sm:px-8 sm:py-6">
           <h3 id={titleId} className="text-lg sm:text-xl font-bold text-[var(--foreground)] tracking-tight">{title}</h3>
           <button
             type="button"
             ref={closeButtonRef}
             aria-label="Cerrar ventana"
             onClick={onClose}
-            className="rounded-xl p-2 text-[var(--text-secondary)] transition-colors hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+            className="theme-action-secondary shrink-0 rounded-xl p-2 transition-colors"
           >
             <X size={20} aria-hidden="true" />
           </button>
         </div>
-        <div className="max-h-[calc(100dvh-10rem)] overflow-y-auto p-5 sm:p-8 custom-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-8 custom-scrollbar">
           {children}
         </div>
       </div>
