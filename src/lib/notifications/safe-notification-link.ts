@@ -6,7 +6,7 @@ const MODULE_ROOTS = [
 
 export function safeNotificationLink(value: unknown): string | null {
   if (typeof value !== 'string' || value.length > 500 || !value.startsWith('/') ||
-      value.startsWith('//') || /[\\\x00-\x20\x7f]/.test(value)) return null;
+      value.startsWith('//') || value.includes('\\') || [...value].some(char => char.charCodeAt(0) <= 32 || char.charCodeAt(0) === 127)) return null;
   // Keep only the destination path: query strings and fragments may contain
   // credentials, redirect parameters or other private transient metadata.
   const path = value.split(/[?#]/, 1)[0];
