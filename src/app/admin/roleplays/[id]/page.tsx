@@ -136,11 +136,25 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
                 scenario={scenario}
                 scenarioIndex={index + 1}
                 totalEscenarios={scenarios.length}
-                sessionId={session.id}
                 isEvaluated={session.status === 'EVALUATED'}
-                qaScore={session.qaScore}
               />
             ))}
+            <RoleplayEvaluationClient
+              sessionId={session.id}
+              isEvaluated={session.status === 'EVALUATED' || session.qaScoreId !== null}
+              existingScore={session.qaScore ? {
+                protocolScore: Number(session.qaScore.protocolScore ?? 0),
+                interpretationScore: Number(session.qaScore.interpretationScore ?? 0),
+                languageScore: Number(session.qaScore.languageScore ?? 0),
+                serviceScore: Number(session.qaScore.serviceScore ?? 0),
+                technicalScore: Number(session.qaScore.technicalScore ?? 0),
+                totalScore: Number(session.qaScore.totalScore ?? 0),
+                criticalError: session.qaScore.criticalError === true,
+                actionRequired: session.qaScore.accionRequerida ?? '',
+              } : null}
+              requiresOpeningReview={opening.state === 'confirmed'}
+              openingReviewUnavailable={opening.state === 'pending' || opening.state === 'unavailable' || (opening.state === 'confirmed' && !opening.audioUrl)}
+            />
           </div>
         )}
 
@@ -158,18 +172,14 @@ interface ScenarioEvaluationCardProps {
   scenario: any;
   scenarioIndex: number;
   totalEscenarios: number;
-  sessionId: string;
   isEvaluated: boolean;
-  qaScore: any;
 }
 
 function ScenarioEvaluationCard({ 
   scenario, 
   scenarioIndex, 
   totalEscenarios,
-  sessionId,
-  isEvaluated,
-  qaScore
+  isEvaluated
 }: ScenarioEvaluationCardProps) {
   const response = scenario.responses[0];
   const hasResponse = !!response;
@@ -287,18 +297,7 @@ function ScenarioEvaluationCard({
         </div>
       )}
 
-      {/* QA Evaluation Form */}
-      <div className="border-t border-white/5 pt-6">
-        <h4 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-4">
-          QA Evaluation
-        </h4>
-        <RoleplayEvaluationClient 
-          sessionId={scenario.sessionId || ''}
-          scenarioId={scenario.id}
-          isEvaluated={isEvaluated}
-          existingScore={qaScore}
-        />
-      </div>
+
     </div>
   );
 }

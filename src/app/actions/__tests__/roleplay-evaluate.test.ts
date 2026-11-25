@@ -1,9 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const m = vi.hoisted(() => ({
   actor: null as any,
   session: null as any,
   sessionFindUnique: vi.fn(),
+  openingQuery: vi.fn(),
+  openingWrite: vi.fn(),
   sessionUpdate: vi.fn(),
   sessionUpdateMany: vi.fn(),
   qaCreate: vi.fn(),
@@ -35,6 +37,8 @@ vi.mock('@/lib/prisma', () => ({
     userProfile: { findUnique: async () => null },
     $transaction: async (cb: any) =>
       cb({
+        $queryRaw: m.openingQuery,
+        $executeRaw: m.openingWrite,
         roleplaySession: {
           findUnique: m.sessionFindUnique,
           update: m.sessionUpdate,
@@ -112,6 +116,39 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     m.appFindUnique.mockResolvedValue({ id: 'app-5', status: 'ROLEPLAY_REVIEW', version: 6 });
     m.appUpdateMany.mockResolvedValue({ count: 1 });
     m.eventCreate.mockResolvedValue({ id: 'evt-1' });
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  const openingEvidence = { required: true, sourceAudioPath: 'openings/sess-1/123e4567-e89b-42d3-a456-426614174000.webm',
+    durationSec: 42, confirmedAt: new Date() };
+  const openingFields = { opening_englishIntro: 'yes', opening_spanishIntro: 'no', opening_professionalRole: 'yes',
+    opening_consecutiveGuidance: 'yes', opening_clarity: 'yes', opening_notes: 'Review note' };
+
+  it('requires explicit results for all opening criteria before claiming QA', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValue([openingEvidence]);
+    expect(await evaluateRoleplay(null, makeForm())).toMatchObject({ success: false, code: 'INVALID_STATE' });
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.openingWrite).not.toHaveBeenCalled();
+  });
+
+  it('persists the opening rubric separately without altering the overall score', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValue([openingEvidence]);
+    m.openingWrite.mockResolvedValue(1);
+    expect(await evaluateRoleplay(null, makeForm(openingFields))).toMatchObject({ success: true });
+    expect(m.openingWrite.mock.calls[0].slice(1)).toEqual(['sess-1', 'admin-1', true, false, true, true, true, 'Review note']);
+    expect(m.qaCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ totalScore: 83.75 }) }));
+  });
+
+  it('does not persist the opening rubric if another evaluator wins the claim', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValue([openingEvidence]);
+    m.sessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await evaluateRoleplay(null, makeForm(openingFields))).toMatchObject({ success: false, code: 'CONFLICT' });
+    expect(m.openingWrite).not.toHaveBeenCalled();
+    expect(m.qaCreate).not.toHaveBeenCalled();
   });
 
   it('does not let QA claim a legacy submitted session until all assessments are completed', async () => {
