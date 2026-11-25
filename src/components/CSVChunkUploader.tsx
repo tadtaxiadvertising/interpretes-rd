@@ -4,7 +4,7 @@ import React, { useRef, useState } from 'react';
 import { Upload, FileText, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadLogChunk } from '@/app/actions/production.actions';
-import { MAX_PRODUCTION_CHUNK_ROWS } from '@/lib/production-csv-validation';
+import { prepareProductionCsv, ProductionCsvPreparationError } from '@/lib/production-csv-chunks';
 
 type Summary = {
   inserted: number;
@@ -13,7 +13,7 @@ type Summary = {
   confirmedBlocks: number;
   stoppedBlock: number | null;
   uncertain: boolean;
-  remainingLines: number;
+  remainingRecords: number;
   message: string;
 };
 
@@ -37,22 +37,13 @@ export function CSVChunkUploader() {
     inFlight.current = true;
     setPending(true);
     setProgress(0);
-    const result: Summary = { inserted: 0, skipped: 0, rejected: 0, confirmedBlocks: 0, stoppedBlock: null, uncertain: false, remainingLines: 0, message: '' };
+    const result: Summary = { inserted: 0, skipped: 0, rejected: 0, confirmedBlocks: 0, stoppedBlock: null, uncertain: false, remainingRecords: 0, message: '' };
     try {
-      const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim() !== '');
-      if (lines.length < 2) {
-        result.message = 'CSV vacío o sin suficientes datos.';
-        return;
-      }
-
-      const [headers, ...rows] = lines;
-      const chunkSize = MAX_PRODUCTION_CHUNK_ROWS;
-      for (let offset = 0; offset < rows.length; offset += chunkSize) {
-        const chunk = rows.slice(offset, offset + chunkSize);
-        const block = Math.floor(offset / chunkSize) + 1;
-        result.stoppedBlock = block;
-        result.remainingLines = rows.length - offset - chunk.length;
+      const { headers, chunks, totalRows } = await prepareProductionCsv(await file.text());
+      let confirmedRows = 0;
+      for (const [index, chunk] of chunks.entries()) {
+        result.stoppedBlock = index + 1;
+        result.remainingRecords = totalRows - confirmedRows - chunk.length;
         // A rejected request can have committed before its response was lost.
         result.uncertain = true;
         const response = await uploadLogChunk(null, { headers, rows: chunk });
@@ -64,7 +55,7 @@ export function CSVChunkUploader() {
           break;
         }
         if (![response.count, response.skipped, response.rejected].every(value => Number.isSafeInteger(value) && value >= 0) ||
-            response.count + response.skipped !== response.accepted) {
+            response.count + response.skipped !== response.accepted || response.accepted + response.rejected !== chunk.length) {
           result.message = 'No se pudo confirmar el recuento del bloque. Revisa los registros antes de volver a importar.';
           break;
         }
@@ -74,17 +65,18 @@ export function CSVChunkUploader() {
         result.confirmedBlocks++;
         result.stoppedBlock = null;
         result.uncertain = false;
-        setProgress(Math.round(((offset + chunk.length) / rows.length) * 100));
+        confirmedRows += chunk.length;
+        setProgress(Math.round((confirmedRows / totalRows) * 100));
       }
       if (result.stoppedBlock === null) {
         result.message = result.rejected > 0
           ? 'Procesamiento terminado con filas rechazadas. Revisa el archivo antes de volver a importar.'
           : result.inserted > 0 ? 'Procesamiento completado.' : 'No se insertaron filas nuevas.';
       }
-    } catch {
+    } catch (error) {
       result.message = result.uncertain
         ? 'No se pudo confirmar el bloque. Revisa los registros antes de volver a importar.'
-        : 'No se pudo leer el archivo.';
+        : error instanceof ProductionCsvPreparationError ? error.message : 'No se pudo leer el archivo.';
     } finally {
       setSummary(result);
       inFlight.current = false;
@@ -97,7 +89,7 @@ export function CSVChunkUploader() {
     <div className="rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)] p-5 sm:p-8 space-y-6 min-w-0">
       <div>
         <h3 className="text-xl font-bold text-[var(--foreground)]">Telemetría (carga masiva)</h3>
-        <p className="text-sm text-[var(--text-secondary)] mt-1">Procesa archivos CSV en bloques de hasta 500 líneas de datos.</p>
+        <p className="text-sm text-[var(--text-secondary)] mt-1">Procesa archivos CSV en bloques de hasta 500 registros completos, según el tamaño de cada bloque.</p>
       </div>
       <form onSubmit={processFile} aria-label="Importación masiva de producción" className="space-y-6">
         <div className={cn(
@@ -124,7 +116,7 @@ export function CSVChunkUploader() {
               <div className="flex justify-between gap-2"><dt>Bloques confirmados</dt><dd>{summary.confirmedBlocks}</dd></div>
               {summary.stoppedBlock !== null && <>
                 <div className="flex justify-between gap-2"><dt>{summary.uncertain ? 'Bloque sin confirmar' : 'Bloque no guardado'}</dt><dd>{summary.stoppedBlock}</dd></div>
-                <div className="flex justify-between gap-2"><dt>Líneas posteriores no enviadas</dt><dd>{summary.remainingLines}</dd></div>
+                <div className="flex justify-between gap-2"><dt>Registros posteriores no enviados</dt><dd>{summary.remainingRecords}</dd></div>
               </>}
             </dl>
             <p className="text-xs text-[var(--text-secondary)]">Revisa el historial antes de seleccionar otro archivo. No reenvíes los bloques ya importados.</p>

@@ -44,10 +44,17 @@ export async function uploadLogChunk(_prevState: unknown, data: { headers: strin
 
     const records = parse(csvContent, {
       columns: true,
+      bom: true,
+      record_delimiter: ['\r\n', '\n', '\r'],
       skip_empty_lines: true,
       trim: true,
       max_record_size: 8_192,
     }) as ParsedRow[];
+
+    // The number of submitted strings is not necessarily the number of CSV records.
+    if (records.length > MAX_PRODUCTION_CHUNK_ROWS) {
+      return { success: false as const, outcome: 'not-written' as const, error: 'El bloque CSV excede el máximo de 500 registros.' };
+    }
 
     const firstRecord = records[0];
     if (!firstRecord) {
