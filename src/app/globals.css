@@ -753,7 +753,7 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   color: var(--foreground);
 }
 .theme-workspace .theme-action-secondary:not(:disabled):hover {
-  background-color: var(--theme-hover);
+  background-color: var(--theme-surface-muted);
 }
 .theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):disabled {
   background-color: var(--theme-surface-muted);
