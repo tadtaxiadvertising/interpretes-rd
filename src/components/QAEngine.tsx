@@ -15,7 +15,7 @@ function SubmitButton() {
       className={cn(
         "w-full py-4 rounded-xl font-bold transition-all flex items-center justify-center gap-2",
         pending
-          ? "bg-slate-800 text-slate-500 cursor-not-allowed" 
+          ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed" 
           : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
       )}
     >
@@ -50,19 +50,19 @@ export function QAEngine({
   );
 
   return (
-    <div className="glass p-8 rounded-3xl border border-white/5 bg-slate-900/40">
+    <div className="glass p-8 rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)]">
       <div className="mb-8">
-        <h3 className="text-2xl font-bold text-white flex items-center gap-3">
-          <ShieldAlert className="text-red-400" />
+        <h3 className="text-2xl font-bold text-[var(--foreground)] flex items-center gap-3">
+          <ShieldAlert className="text-[var(--theme-danger)]" />
           Engine de Calidad y Auditoría
         </h3>
-        <p className="text-gray-400 mt-2">Completa el formulario de evaluación. Seleccionar <strong className="text-red-400">Error Crítico</strong> forzará automáticamente el score a 0.00% a nivel de backend.</p>
+        <p className="text-[var(--text-secondary)] mt-2">Completa el formulario de evaluación. Seleccionar <strong className="text-[var(--theme-danger)]">Error Crítico</strong> forzará automáticamente el score a 0.00% a nivel de backend.</p>
       </div>
 
       <form action={formAction} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="space-y-2">
-            <label htmlFor="qa-interpreter" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Intérprete Auditado</label>
+            <label htmlFor="qa-interpreter" className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-wider">Intérprete Auditado</label>
             <select 
               id="qa-interpreter"
               name="interpreterId"
@@ -73,7 +73,7 @@ export function QAEngine({
                 // An old suggested ID cannot be submitted for a new person.
                 setProductionLogId('');
               }}
-              className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors"
             >
               <option value="">Seleccione un intérprete...</option>
               {interpreters.map(i => (
@@ -83,7 +83,7 @@ export function QAEngine({
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="qa-production-log" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Production Log ID (Opcional)</label>
+            <label htmlFor="qa-production-log" className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-wider">Production Log ID (Opcional)</label>
             <input
               type="number"
               id="qa-production-log"
@@ -93,7 +93,7 @@ export function QAEngine({
               onChange={(event) => setProductionLogId(event.target.value)}
               list={matchingLogs.length ? 'qa-unreviewed-production-logs' : undefined}
               placeholder="Sin registro o ID anterior"
-              className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors font-mono"
             />
             {matchingLogs.length > 0 && (
               <datalist id="qa-unreviewed-production-logs">
@@ -103,7 +103,7 @@ export function QAEngine({
                 ))}
               </datalist>
             )}
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--text-secondary)]">
               {selectedInterpreterId
                 ? `${matchingLogs.length} registro(s) de producción reciente(s) sin QA sugeridos. También puedes introducir un ID histórico válido.`
                 : 'Selecciona primero un intérprete para ver registros sin QA disponibles.'}
@@ -115,7 +115,7 @@ export function QAEngine({
         {/* Interruptor de Error Crítico */}
         <div className={cn(
           "p-6 rounded-2xl border transition-all flex items-start gap-4",
-          criticalError ? "bg-red-500/10 border-red-500/50" : "bg-white/5 border-white/10 hover:border-red-500/30"
+          criticalError ? "bg-red-500/10 border-red-500/50" : "bg-[var(--theme-surface-muted)] border-[var(--border)] hover:border-red-500/30"
         )}>
           <div className="pt-1">
              <input 
@@ -124,14 +124,14 @@ export function QAEngine({
                id="criticalError"
                checked={criticalError}
                onChange={(e) => setCriticalError(e.target.checked)}
-               className="w-5 h-5 accent-red-500 cursor-pointer rounded bg-slate-950 border-white/10" 
+               className="w-5 h-5 accent-red-500 cursor-pointer rounded bg-[var(--theme-control-bg)] border-[var(--border)]" 
              />
           </div>
           <div>
-            <label htmlFor="criticalError" className="text-lg font-bold text-white cursor-pointer block">
+            <label htmlFor="criticalError" className="text-lg font-bold text-[var(--foreground)] cursor-pointer block">
               Flag: Error Crítico Detectado
             </label>
-            <p className="text-sm text-gray-400 mt-1">Al marcar esta opción, las métricas estándar serán ignoradas y la acción requerida cambiará a "Advertencia / Coaching".</p>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">Al marcar esta opción, las métricas estándar serán ignoradas y la acción requerida cambiará a "Advertencia / Coaching".</p>
           </div>
         </div>
 
@@ -145,7 +145,7 @@ export function QAEngine({
              { name: 'technicalScore', label: 'Técnico (10%)' }
            ].map(field => (
              <div key={field.name} className="space-y-2">
-               <label htmlFor={`qa-${field.name}`} className="text-xs font-bold text-gray-400 uppercase tracking-wider">{field.label}</label>
+               <label htmlFor={`qa-${field.name}`} className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-wider">{field.label}</label>
                <input 
                  type="number" 
                  id={`qa-${field.name}`}
@@ -154,34 +154,34 @@ export function QAEngine({
                  readOnly={criticalError} 
                  defaultValue="100"
                  required={!criticalError}
-                 className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors font-mono" 
+                 className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors font-mono" 
                />
              </div>
            ))}
         </div>
 
         <div className="space-y-2">
-          <label htmlFor="qa-comments" className="text-sm font-bold text-gray-300 uppercase tracking-wider">Comentarios del Auditor</label>
+          <label htmlFor="qa-comments" className="text-sm font-bold text-[var(--text-secondary)] uppercase tracking-wider">Comentarios del Auditor</label>
           <textarea 
             id="qa-comments"
             name="comments" 
             rows={4}
             maxLength={2000}
-            className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-red-500 transition-colors resize-none"
+            className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors resize-none"
             placeholder="Describe la falta de protocolo, problema técnico o excelente desempeño..."
           ></textarea>
         </div>
 
         {/* Feedback Messages */}
         {state?.error && (
-          <div role="alert" className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3 animate-in fade-in">
+          <div role="alert" className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-[var(--theme-danger)] flex items-center gap-3 animate-in fade-in">
              <AlertTriangle />
              <span className="font-bold">{state.error}</span>
           </div>
         )}
 
         {state?.success && (
-          <div role="status" className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400 flex items-center gap-3 animate-in fade-in">
+          <div role="status" className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl text-[var(--theme-success)] flex items-center gap-3 animate-in fade-in">
              <CheckCircle2 />
              <span className="font-bold">{state.message}</span>
           </div>
