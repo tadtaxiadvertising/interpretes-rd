@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
 import SystemReadinessCheck from './SystemReadinessCheck';
 import NotificationDiagnostics from './NotificationDiagnostics';
+import NotificationEmailBudget from './NotificationEmailBudget';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
 import EmailProviderVault from './EmailProviderVault';
 import EmailVaultPause from './EmailVaultPause';
@@ -80,6 +81,7 @@ export default async function SettingsPage() {
         <div className="lg:col-span-2 space-y-5">
           <SystemReadinessCheck />
           <NotificationDiagnostics />
+          <NotificationEmailBudget />
           <section aria-labelledby="email-settings-heading" className="glass rounded-3xl border border-[var(--border)] p-6 space-y-4">
             <div className="flex items-center gap-3">
               <Mail className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
