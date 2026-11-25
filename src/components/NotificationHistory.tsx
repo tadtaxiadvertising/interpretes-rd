@@ -19,6 +19,7 @@ type HistoryItem = {
 
 interface Props {
   onlyUnread: boolean;
+  candidateOnly?: boolean;
   refreshVersion: number;
   locallyReadIds: string[];
   pendingIds: string[];
@@ -27,7 +28,7 @@ interface Props {
   onNavigate: () => void;
 }
 
-export function NotificationHistory({ onlyUnread, refreshVersion, locallyReadIds, pendingIds, bulkPending, onRead, onNavigate }: Props) {
+export function NotificationHistory({ onlyUnread, candidateOnly = false, refreshVersion, locallyReadIds, pendingIds, bulkPending, onRead, onNavigate }: Props) {
   const [page, setPage] = useState(0);
   const [category, setCategory] = useState<NotificationCategory | ''>('');
   const [importantOnly, setImportantOnly] = useState(false);
@@ -62,12 +63,12 @@ export function NotificationHistory({ onlyUnread, refreshVersion, locallyReadIds
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] p-3">
-        <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">Categoría
+        {!candidateOnly && <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">Categoría
           <select value={category} onChange={e => { setCategory(e.target.value as NotificationCategory | ''); setPage(0); }} className="mt-1 block min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] px-2 text-xs text-[var(--foreground)]">
             <option value="">Todas las categorías</option>
             {notificationCategories.map(value => <option key={value} value={value}>{notificationCategoryLabel(value)}</option>)}
           </select>
-        </label>
+        </label>}
         <label className="flex min-h-11 items-center gap-2 text-xs">
           <input type="checkbox" checked={importantOnly} onChange={e => { setImportantOnly(e.target.checked); setPage(0); }} />
           Solo importantes
