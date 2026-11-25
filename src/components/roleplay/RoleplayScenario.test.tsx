@@ -36,11 +36,11 @@ afterEach(() => {
 
 describe('participant scenario playback controls', () => {
   it('shows the opposite response language for reviewed bilingual clips and omits it for legacy or unknown metadata', () => {
-    const { rerender } = render(<RoleplayScenario scenario={{ ...first, studioLanguage: 'en' }} {...shared} />);
+    const { rerender } = render(<RoleplayScenario scenario={{ ...first, interpretationDirection: 'en-es' }} {...shared} />);
     expect(screen.getByText('Escucha en Inglés · Responde en Español')).toBeTruthy();
-    rerender(<RoleplayScenario scenario={{ ...second, studioLanguage: 'es' }} {...shared} />);
+    rerender(<RoleplayScenario scenario={{ ...second, interpretationDirection: 'es-en' }} {...shared} />);
     expect(screen.getByText('Escucha en Español · Responde en Inglés')).toBeTruthy();
-    rerender(<RoleplayScenario scenario={{ ...first, studioLanguage: 'unknown' }} {...shared} />);
+    rerender(<RoleplayScenario scenario={{ ...first, studioLanguage: 'en' }} {...shared} />);
     expect(screen.queryByLabelText('Dirección de interpretación')).toBeNull();
     rerender(<RoleplayScenario scenario={first} {...shared} />);
     expect(screen.queryByLabelText('Dirección de interpretación')).toBeNull();
