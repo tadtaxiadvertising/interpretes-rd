@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { reserveProviderQuota } from './provider-quota';
 import { providerSource } from './provider-source';
 import { emailDeliveryMode, pilotRecipient } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
@@ -41,12 +42,17 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
         && (!pilot || snapshot.identity?.email.trim().toLowerCase() === pilot) ? snapshot : null;
     },
     claim: async (id) => {
-      if (!selected) return claimRecruitmentEmail(prisma, id, provider);
+      // Generic SMTP cannot be attributed to a catalog provider. Preserve its
+      // existing behavior; known API transports share the persistent budget.
+      if (!selected && provider === 'smtp') return claimRecruitmentEmail(prisma, id, provider);
       try {
         return await prisma.$transaction(async tx => {
           const claim = await claimRecruitmentEmail(tx, id, provider);
           if (!claim) return null;
-          if (!await reserveSelectedProvider(tx, selected)) throw quotaBlocked;
+          const reserved = selected
+            ? await reserveSelectedProvider(tx, selected)
+            : (provider === 'brevo' || provider === 'resend') && await reserveProviderQuota(tx, provider) === 'reserved';
+          if (!reserved) throw quotaBlocked;
           return claim;
         });
       } catch (error) {
