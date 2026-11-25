@@ -1,5 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { emailKindForEvent } from './recruitment-event-policy';
+import type { DeliveryProvider } from './history-types';
+import { isProviderId } from './provider-catalog';
 import type { RecruitmentEmailKind } from './recruitment-templates';
 
 /** Server-side persistence primitives. Not connected to a dispatcher.
@@ -22,10 +24,11 @@ export async function enqueueRecruitmentEmail(db: LedgerClient, eventId: string)
   return inserted === 1 ? 'queued' : 'duplicate';
 }
 
-export async function claimRecruitmentEmail(db: LedgerClient, eventId: string): Promise<{ eventId: string; kind: RecruitmentEmailKind } | null> {
+export async function claimRecruitmentEmail(db: LedgerClient, eventId: string, provider: DeliveryProvider): Promise<{ eventId: string; kind: RecruitmentEmailKind } | null> {
+  if (provider !== 'smtp' && !isProviderId(provider)) return null;
   const rows = await db.$queryRaw<Array<{ eventId: string; kind: RecruitmentEmailKind }>>`
     UPDATE private_email.recruitment_delivery
-    SET status = 'sending', claimed_at = now()
+    SET status = 'sending', claimed_at = now(), provider = ${provider}
     WHERE event_id = ${eventId} AND status = 'pending'
     RETURNING event_id AS "eventId", template_kind AS "kind"
   `;

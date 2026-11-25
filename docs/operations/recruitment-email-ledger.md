@@ -125,3 +125,7 @@ En modo almacén, después de instalar la pausa persistente, pausar despacho, es
 ### Importar configuración API existente sin copiar la clave
 
 Con el almacén habilitado, clave válida, origen de variables de entorno (o sin definir), cinco controles desactivados y pausa persistente activa, consultar perfiles en Configuración. Elegir Importar configuración existente y confirmar copia cifrada. Solo importa Brevo/Resend desde la configuración real del servidor, no permite enviar claves al navegador. No sobrescribe un perfil activo del mismo proveedor y remitente, no modifica variables, no selecciona el perfil y no hereda pruebas. Verificar recepción antes de seleccionar. No importar claves SMTP genéricas ni cambiar el origen operativo automáticamente.
+
+### Historial por proveedor previsto
+
+Aplicar explícitamente `docs/operations/proposed-email-delivery-provider.sql` antes de activar el código de atribución. Agrega una columna nullable restringida a los cinco proveedores y SMTP de entorno. No inventa proveedores en registros anteriores. El nombre se registra al reclamar el evento, en la misma transacción que la reserva del almacén; si se cancela antes del envío, no implica contacto externo. La aceptación no implica entrega. No se guardan destinatarios, claves, cuerpos, identificadores de perfil ni errores externos. El historial de solo lectura muestra los últimos 30 eventos operativos; no incluye autenticación, códigos ni pruebas. No hay reintentos.

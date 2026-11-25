@@ -512,3 +512,22 @@ db -c "UPDATE private_email.provider_selection SET dispatch_paused=true WHERE si
 assert_equal "$(db -c "$reservation_guard")" "" vault-repaused-no-reservation
 assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '3:7' vault-pause-preserves-usage
 echo 'Isolated vault emergency pause checks passed.'
+
+# Attribution is part of the claim and preserves historical rows.
+db < "$root/docs/operations/proposed-email-delivery-provider.sql"
+assert_equal "$(db -c "SELECT count(*) FROM private_email.recruitment_delivery WHERE provider IS NOT NULL")" 0 history-no-fabricated-provider
+attribution_sql="$(python3 - "$root/src/lib/email/recruitment-delivery-ledger.ts" <<'PY'
+import pathlib,sys
+source=pathlib.Path(sys.argv[1]).read_text()
+sql=source.split('export async function claimRecruitmentEmail',1)[1].split('`',2)[1]
+sql=sql.replace('${eventId}',"'vault-rollback'").replace('${provider}',"'mailjet'")
+assert '${' not in sql
+print(sql+';')
+PY
+)"
+db -c "BEGIN; $attribution_sql ROLLBACK;"
+assert_equal "$(db -c "SELECT status||':'||COALESCE(provider,'none') FROM private_email.recruitment_delivery WHERE event_id='vault-rollback'")" 'pending:none' history-claim-rollback
+db -c "$attribution_sql"
+assert_equal "$(db -c "SELECT status||':'||provider FROM private_email.recruitment_delivery WHERE event_id='vault-rollback'")" 'sending:mailjet' history-claim-attribution
+assert_equal "$(db -c "$attribution_sql")" "" history-duplicate-claim-blocked
+echo 'Isolated provider attribution checks passed.'

@@ -47,10 +47,12 @@ describe('recruitment email ledger persistence contract', () => {
 
   it('claims only pending rows and reports lost races', async () => {
     const { db, query } = mockDb();
-    expect(await claimRecruitmentEmail(db, event.id)).toEqual({ eventId: event.id, kind: 'application_received' });
+    expect(await claimRecruitmentEmail(db, event.id, 'brevo')).toEqual({ eventId: event.id, kind: 'application_received' });
     expect(query.mock.calls[0][0].join('?')).toContain("AND status = 'pending'");
+    expect(query.mock.calls[0][0].join('?')).toContain('provider = ?');
+    expect(query.mock.calls[0].slice(1)).toEqual(['brevo', event.id]);
     query.mockResolvedValueOnce([]);
-    expect(await claimRecruitmentEmail(db, event.id)).toBeNull();
+    expect(await claimRecruitmentEmail(db, event.id, 'brevo')).toBeNull();
   });
 
   it('records uncertain acceptance without resetting a sending row to pending', async () => {

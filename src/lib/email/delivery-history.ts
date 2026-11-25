@@ -1,8 +1,9 @@
+import { isProviderId } from './provider-catalog';
 import type { Prisma } from '@prisma/client';
 import { RECRUITMENT_EMAIL_KINDS, type RecruitmentEmailKind } from './recruitment-templates';
 import { EMAIL_DELIVERY_STATUSES, type EmailDeliveryStatus, type EmailHistoryReport } from './history-types';
 
-type RawRow = { kind: string; status: string; createdAt: Date; claimedAt: Date | null; completedAt: Date | null };
+type RawRow = { provider: string | null; kind: string; status: string; createdAt: Date; claimedAt: Date | null; completedAt: Date | null };
 
 /** Read-only projection: no recipient, event identifiers, message body or credentials. */
 export async function readEmailHistory(db: Pick<Prisma.TransactionClient, '$queryRaw'>): Promise<EmailHistoryReport> {
@@ -13,14 +14,16 @@ export async function readEmailHistory(db: Pick<Prisma.TransactionClient, '$quer
     if (readiness[0]?.installed === false) return { status: 'not_installed' };
     if (readiness[0]?.installed !== true) return { status: 'unavailable' };
     const rows = await db.$queryRaw<RawRow[]>`
-      SELECT template_kind AS kind, status, created_at AS "createdAt",
+      SELECT template_kind AS kind, status, provider, created_at AS "createdAt",
         claimed_at AS "claimedAt", completed_at AS "completedAt"
       FROM private_email.recruitment_delivery
       ORDER BY created_at DESC, event_id DESC LIMIT 30
     `;
     if (rows.some(row => !(RECRUITMENT_EMAIL_KINDS as readonly string[]).includes(row.kind)
+      || (row.provider !== null && row.provider !== 'smtp' && !isProviderId(row.provider))
       || !(EMAIL_DELIVERY_STATUSES as readonly string[]).includes(row.status))) return { status: 'unavailable' };
     return { status: 'ready', rows: rows.map(row => ({
+      provider: row.provider === 'smtp' || isProviderId(row.provider) ? row.provider : null,
       kind: row.kind as RecruitmentEmailKind,
       status: row.status as EmailDeliveryStatus,
       createdAt: row.createdAt.toISOString(),
