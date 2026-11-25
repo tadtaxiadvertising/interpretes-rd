@@ -101,11 +101,29 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       await expect(disabled).toHaveCSS('cursor', 'not-allowed');
       await expect.poll(() => contrast(disabled)).toBeGreaterThanOrEqual(4.5);
       const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
+      const disabledBounds = await disabled.boundingBox();
+      expect(disabledBounds).not.toBeNull();
       await disabled.hover();
       await expect(disabled).toHaveCSS('background-color', disabledBackground);
-      await expect(disabled).toHaveCSS('transform', 'none');
-      await expect(disabled).toHaveCSS('translate', 'none');
-      await expect(disabled).toHaveCSS('scale', 'none');
+      // Chromium may serialize an unapplied transform as an identity matrix.
+      // Check the effect rather than requiring a particular CSS serialization.
+      await expect.poll(() => disabled.evaluate(node => {
+        const style = getComputedStyle(node);
+        const transform = style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity;
+        const neutral = (value: string, identity: number) =>
+          value === 'none' || value.split(/\s+/).every(part => parseFloat(part) === identity);
+        return transform && neutral(style.translate, 0) && neutral(style.scale, 1);
+      })).toBe(true);
+      await expect.poll(async () => {
+        const hovered = await disabled.boundingBox();
+        if (!hovered || !disabledBounds) return Infinity;
+        return Math.max(
+          Math.abs(hovered.x - disabledBounds.x),
+          Math.abs(hovered.y - disabledBounds.y),
+          Math.abs(hovered.width - disabledBounds.width),
+          Math.abs(hovered.height - disabledBounds.height)
+        );
+      }).toBeLessThan(0.5);
       await expect(disabled).toHaveCSS('box-shadow', 'none');
 
       const motion = page.getByTestId('workspace-motion');
