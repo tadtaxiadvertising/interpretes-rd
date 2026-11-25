@@ -1,6 +1,6 @@
 // Only known application modules, never authentication, API or external URLs.
 const MODULE_ROOTS = [
-  '/admin', '/dashboard', '/interpreters', '/recruitment', '/production',
+  '/candidate', '/admin', '/dashboard', '/interpreters', '/recruitment', '/production',
   '/qa', '/payroll', '/settings', '/live', '/roleplays', '/onboarding',
 ];
 
