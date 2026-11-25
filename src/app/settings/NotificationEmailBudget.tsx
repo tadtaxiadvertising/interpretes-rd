@@ -5,7 +5,7 @@ import { readNotificationEmailBudget } from '@/app/actions/notification-email-bu
 import { providerCatalog } from '@/lib/email/provider-catalog';
 
 type Report = Awaited<ReturnType<typeof readNotificationEmailBudget>>;
-const availabilityText = { available: 'Disponible', low: 'Presupuesto bajo', exhausted: 'Agotado', invalid_period: 'Período inconsistente' } as const;
+const availabilityText: Readonly<Record<string, string | undefined>> = { available: 'Disponible', low: 'Presupuesto bajo', exhausted: 'Agotado', invalid_period: 'Período inconsistente' };
 
 const storageText = {
   ready: 'Registro instalado y permisos del servidor comprobados.',
@@ -58,6 +58,8 @@ export default function NotificationEmailBudget() {
           <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] px-3">
             {report.providers.map(({ provider, availability }) => (
               <div key={provider} className="py-3 text-sm space-y-1">
+                <dt className="font-semibold">{providerCatalog[provider].label}</dt>
+                <dd>{availability ? `${(Object.prototype.hasOwnProperty.call(availabilityText, availability.status) ? availabilityText[availability.status] : undefined) ?? 'Estado no reconocido'} · quedan ${availability.remaining} intentos en el límite más restrictivo` : 'Presupuesto no comprobado o período inválido'}</dd>
                 <dt className="font-semibold">{providerCatalog[provider].label}{report.activeApiProvider === provider ? ' · seleccionado en entorno' : ''}</dt>
                 <dd>{availability ? `${availabilityText[availability.status]} · quedan ${availability.remaining} intentos en el límite más restrictivo` : 'Presupuesto no comprobado o período inválido'}</dd>
                 {availability && <dd className="text-[var(--text-secondary)]">Diario: {availability.dailyRemaining} · mensual: {availability.monthlyRemaining}</dd>}

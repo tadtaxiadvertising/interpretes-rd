@@ -32,7 +32,7 @@ export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port:
   const data = assignment.parse(input);
   const initial = await loadVerifiedPublication(db, actor, requestKey);
   if (initial.plans.length !== data.scenarios.length) throw new Error('SCENARIO_COUNT_MISMATCH');
-  const final = [];
+  const final: Awaited<ReturnType<typeof promoteVerifiedClinicalSlot>>[] = [];
   for (const plan of initial.plans) {
     final.push(await promoteVerifiedClinicalSlot(db, port, actor, requestKey, plan.item.order));
   }
