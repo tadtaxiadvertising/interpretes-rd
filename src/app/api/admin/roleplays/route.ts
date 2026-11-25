@@ -21,6 +21,8 @@ import {
 
 import { openingAssignmentEnabled, readOpeningRequirement, insertOpeningRequiredSession } from '@/lib/roleplay/bilingual-opening-assignment';
 import { requireBilingualOpeningBucket } from '@/lib/roleplay/bilingual-opening-bucket';
+import { ROLEPLAY_PRIVATE_AUDIO_BUCKET, requirePrivateRoleplayAudioBucket } from '@/lib/roleplay/private-audio-bucket-readiness';
+import { makePrivateClinicalReference, privateClinicalObjectPath } from '@/lib/roleplay/private-clinical-reference';
 
 const db = prisma;
 
@@ -132,6 +134,7 @@ export async function POST(req: NextRequest) {
   let libraryArchivedDuringAssignment = false;
   let supabaseAdmin: ReturnType<typeof import('@supabase/supabase-js').createClient> | null = null;
   const uploadedPaths: string[] = [];
+  let uploadBucket = 'roleplay-audio';
   // A successful upload is safe to delete only before any transaction that
   // might have persisted its URL. A failed/ambiguous commit must preserve it.
   let audioCommitMayHaveStarted = false;
@@ -334,6 +337,11 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (requiresOpening && useLibrary) {
+      // The current catalog contains legacy public clips. Copying them into
+      // a private bucket does not revoke the original public URLs.
+      return privateRoleplayJson({ success: false, error: 'Esta plantilla utiliza audio histórico público. Importa clips nuevos para exigir la apertura bilingüe.' }, { status: 409 });
+    }
     if (requiresOpening) {
       // Preflight before reserving sessions or uploading clinical audio.
       // This does not prove object policy isolation; rollout still requires it.
@@ -344,6 +352,8 @@ export async function POST(req: NextRequest) {
         const { createClient } = await import('@supabase/supabase-js');
         const storage = supabaseAdmin ?? createClient(url, key, { auth: { persistSession: false } });
         await requireBilingualOpeningBucket(storage.storage);
+        await requirePrivateRoleplayAudioBucket(storage.storage);
+        uploadBucket = ROLEPLAY_PRIVATE_AUDIO_BUCKET;
       } catch {
         return privateRoleplayJson({ success: false, error: 'El almacenamiento de apertura no está preparado. No se creó ninguna sesión.' }, { status: 503 });
       }
@@ -454,26 +464,31 @@ export async function POST(req: NextRequest) {
       }
       const { createClient } = await import('@supabase/supabase-js');
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-      const batchPath = `base/bulk-${randomUUID()}`;
+      const batchId = randomUUID();
+      const batchPath = `base/bulk-${batchId}`;
       for (let i = 0; i < scenarios.length; i++) {
         const audio = scenarioAudios[i] as File;
         // MIME was validated before any upload. Never derive Storage paths from
         // an attacker-controlled File.name (e.g. .html, .svg or separators).
         const extension = getAdminRoleplayAudioExtension(audio.type);
         if (!extension) throw new Error('Unsupported audio MIME type');
-        const path = `${batchPath}/${i}.${extension}`;
+        const reference = requiresOpening ? makePrivateClinicalReference(batchId, i, extension) : null;
+        const path = reference ? privateClinicalObjectPath(reference)! : `${batchPath}/${i}.${extension}`;
         const { error: uploadError } = await supabaseAdmin.storage
-          .from('roleplay-audio')
+          .from(uploadBucket)
           .upload(path, audio, { contentType: audio.type, upsert: false });
         if (uploadError) throw new Error('Failed to upload audio');
         uploadedPaths.push(path);
-        const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
-        audioUrls.push(publicUrlData.publicUrl);
+        if (reference) audioUrls.push(reference);
+        else {
+          const { data: publicUrlData } = supabaseAdmin.storage.from('roleplay-audio').getPublicUrl(path);
+          audioUrls.push(publicUrlData.publicUrl);
+        }
       }
 
       }
 
-      const firstBaseAudioPath = firstTrustedBaseAudioPath(
+      const firstBaseAudioPath = requiresOpening ? audioUrls[0] : firstTrustedBaseAudioPath(
         uploadedPaths, audioUrls, process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
       );
       if (!firstBaseAudioPath) {
@@ -549,7 +564,7 @@ export async function POST(req: NextRequest) {
       });
       if (bulkResult.created.length === 0) {
         if (uploadedPaths.length > 0 && supabaseAdmin) {
-          await supabaseAdmin.storage.from('roleplay-audio').remove(uploadedPaths);
+          await supabaseAdmin.storage.from(uploadBucket).remove(uploadedPaths);
           uploadedPaths.length = 0;
         }
         return privateRoleplayJson({
@@ -649,28 +664,33 @@ export async function POST(req: NextRequest) {
     if (!useLibrary) {
       const storageClient = supabaseAdmin;
       if (!storageClient) throw new Error('Storage is not configured');
+      const batchId = randomUUID();
       for (let i = 0; i < scenarios.length; i++) {
       const audio = scenarioAudios[i] as File;
       // MIME was validated before any upload. Never derive Storage paths from
         // an attacker-controlled File.name (e.g. .html, .svg or separators).
         const extension = getAdminRoleplayAudioExtension(audio.type);
         if (!extension) throw new Error('Unsupported audio MIME type');
-      const path = `base/${session.id}/upload-${randomUUID()}/${i}.${extension}`;
+      const reference = requiresOpening ? makePrivateClinicalReference(batchId, i, extension) : null;
+      const path = reference ? privateClinicalObjectPath(reference)! : `base/${session.id}/upload-${randomUUID()}/${i}.${extension}`;
 
       const { error: uploadError } = await storageClient.storage
-        .from('roleplay-audio')
+        .from(uploadBucket)
         .upload(path, audio, { contentType: audio.type, upsert: false });
       if (uploadError) throw new Error('Failed to upload audio');
       uploadedPaths.push(path);
 
-      const { data: publicUrlData } = storageClient.storage.from('roleplay-audio').getPublicUrl(path);
-      audioUrls.push(publicUrlData.publicUrl);
+      if (reference) audioUrls.push(reference);
+      else {
+        const { data: publicUrlData } = storageClient.storage.from('roleplay-audio').getPublicUrl(path);
+        audioUrls.push(publicUrlData.publicUrl);
+      }
       }
     }
 
     // Store the same immutable object key used for playback, rather than
     // requiring callers to parse a persisted legacy URL in the future.
-    const firstBaseAudioPath = firstTrustedBaseAudioPath(
+    const firstBaseAudioPath = requiresOpening ? audioUrls[0] : firstTrustedBaseAudioPath(
       uploadedPaths, audioUrls, process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
     );
     if (!firstBaseAudioPath) throw new Error('Roleplay base audio path could not be resolved');
@@ -797,7 +817,7 @@ export async function POST(req: NextRequest) {
     if (!audioCommitMayHaveStarted && uploadedPaths.length > 0 && supabaseAdmin) {
       try {
         const { error: cleanupError } = await supabaseAdmin.storage
-          .from('roleplay-audio').remove(uploadedPaths);
+          .from(uploadBucket).remove(uploadedPaths);
         if (cleanupError) {
           console.error('Roleplay pre-commit audio cleanup failed');
         }
