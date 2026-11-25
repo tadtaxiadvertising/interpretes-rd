@@ -103,3 +103,16 @@ describe('safe configuration issue details', () => {
     expect(operationalMailDiagnostic({ ...valid, OPERATIONAL_SMTP_PORT: '25' }).issues).toEqual(['smtp_port']);
   });
 });
+
+describe('Resend provider selection', () => {
+  const resend = { OPERATIONAL_EMAIL_ENABLED: 'true', OPERATIONAL_EMAIL_PROVIDER: 'resend', RESEND_API_KEY: 're_fixture-only-123', OPERATIONAL_EMAIL_FROM: 'office@example.test' };
+  it('requires only its own key and authorized sender', () => {
+    expect(readOperationalMailConfig(resend)).toMatchObject({ status: 'configured', provider: 'resend' });
+    expect(operationalMailDiagnostic(resend)).toMatchObject({ provider: 'resend', missing: [], tls: 'HTTPS (Resend)' });
+    expect(JSON.stringify(operationalMailDiagnostic(resend))).not.toContain(resend.RESEND_API_KEY);
+  });
+  it('does not fall back to SMTP or Brevo on invalid or missing Resend key', () => {
+    expect(operationalMailDiagnostic({ ...valid, ...resend, RESEND_API_KEY: '' })).toMatchObject({ status: 'incomplete', missing: ['RESEND_API_KEY'] });
+    expect(operationalMailDiagnostic({ ...resend, RESEND_API_KEY: 'fixture-invalid-key' })).toMatchObject({ status: 'invalid', issues: ['resend_key_format'] });
+  });
+});

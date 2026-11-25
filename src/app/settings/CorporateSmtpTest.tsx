@@ -4,6 +4,11 @@ import { useState, useRef } from 'react';
 import { testCorporateSmtp, checkCorporateBrevo } from '@/app/actions/operational-email';
 
 const messages = {
+  resend_auth: 'Resend rechazó la autenticación. Comprueba la clave API.',
+  resend_forbidden: 'Resend denegó el acceso. Comprueba permisos y dominio autorizado.',
+  resend_quota: 'Resend limitó la solicitud. Consulta la cuota y el panel del proveedor antes de enviar nuevamente.',
+  resend_rejected: 'Resend rechazó la solicitud. Revisa el remitente y los registros del proveedor.',
+  resend_unconfirmed: 'No se confirmó la aceptación de Resend. Revisa los registros y el buzón antes de repetir.',
   brevo_ready: 'Brevo respondió correctamente y el remitente configurado está activo. Esta consulta no confirma permisos de envío ni entrega.',
   brevo_sender_missing: 'Brevo respondió, pero no figura activo el remitente configurado. Revisa Remitentes en Brevo.',
   brevo_auth: 'Brevo rechazó la autenticación (HTTP 401). Revisa la clave API y las restricciones de acceso del proveedor.',

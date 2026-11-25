@@ -15,15 +15,17 @@ export type OperationalMailConfig = Readonly<{
 }>;
 
 export type BrevoMailConfig = Readonly<{ apiKey: string; from: string; replyTo?: string }>;
+export type ResendMailConfig = Readonly<{ apiKey: string; from: string; replyTo?: string }>;
 export type MailConfigurationIssue =
-  | 'activation' | 'provider' | 'brevo_smtp_key' | 'brevo_mcp_token' | 'brevo_key_format'
+  | 'activation' | 'provider' | 'brevo_smtp_key' | 'brevo_mcp_token' | 'brevo_key_format' | 'resend_key_format'
   | 'sender' | 'reply_to' | 'smtp_host' | 'smtp_port' | 'smtp_user' | 'smtp_password';
 
 type ConfigurationResult =
   | { status: 'disabled' | 'incomplete' }
   | { status: 'invalid'; issues: MailConfigurationIssue[] }
   | { status: 'configured'; provider: 'smtp'; config: OperationalMailConfig }
-  | { status: 'configured'; provider: 'brevo'; config: BrevoMailConfig };
+  | { status: 'configured'; provider: 'brevo'; config: BrevoMailConfig }
+  | { status: 'configured'; provider: 'resend'; config: ResendMailConfig };
 
 const singleAddress = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,63}$/;
 const hostname = /^(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
@@ -38,7 +40,19 @@ export function readOperationalMailConfig(env: Readonly<Record<string, string | 
   if (enabled !== 'true') return { status: 'invalid', issues: ['activation'] };
 
   const provider = env.OPERATIONAL_EMAIL_PROVIDER || 'smtp';
-  if (provider !== 'smtp' && provider !== 'brevo') return { status: 'invalid', issues: ['provider'] };
+  if (provider !== 'smtp' && provider !== 'brevo' && provider !== 'resend') return { status: 'invalid', issues: ['provider'] };
+  if (provider === 'resend') {
+    const apiKey = env.RESEND_API_KEY;
+    const from = env.OPERATIONAL_EMAIL_FROM?.trim();
+    const replyTo = env.OPERATIONAL_EMAIL_REPLY_TO?.trim();
+    if (!apiKey?.trim() || !from) return { status: 'incomplete' };
+    const issues: MailConfigurationIssue[] = [];
+    if (!/^re_[A-Za-z0-9_-]{8,509}$/.test(apiKey)) issues.push('resend_key_format');
+    if (!singleAddress.test(from) || from.length > 254) issues.push('sender');
+    if (replyTo && (!singleAddress.test(replyTo) || replyTo.length > 254)) issues.push('reply_to');
+    if (issues.length) return { status: 'invalid', issues };
+    return { status: 'configured', provider: 'resend', config: { apiKey, from, ...(replyTo ? { replyTo } : {}) } };
+  }
   if (provider === 'brevo') {
     const apiKey = env.BREVO_API_KEY;
     const from = env.OPERATIONAL_EMAIL_FROM?.trim();
@@ -90,10 +104,10 @@ export function operationalMailDiagnostic(env: Readonly<Record<string, string | 
   return {
     status: result.status,
     issues: result.status === 'invalid' ? result.issues : [],
-    provider: env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? 'brevo' : env.OPERATIONAL_EMAIL_PROVIDER && env.OPERATIONAL_EMAIL_PROVIDER !== 'smtp' ? 'invalid' : 'smtp',
-    missing: (env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? ['BREVO_API_KEY', 'OPERATIONAL_EMAIL_FROM'] : requiredMailKeys).filter(key => !env[key]?.trim()),
+    provider: env.OPERATIONAL_EMAIL_PROVIDER === 'resend' ? 'resend' : env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? 'brevo' : env.OPERATIONAL_EMAIL_PROVIDER && env.OPERATIONAL_EMAIL_PROVIDER !== 'smtp' ? 'invalid' : 'smtp',
+    missing: (env.OPERATIONAL_EMAIL_PROVIDER === 'brevo' ? ['BREVO_API_KEY', 'OPERATIONAL_EMAIL_FROM'] : env.OPERATIONAL_EMAIL_PROVIDER === 'resend' ? ['RESEND_API_KEY', 'OPERATIONAL_EMAIL_FROM'] : requiredMailKeys).filter(key => !env[key]?.trim()),
     sender: result.status === 'configured' ? result.config.from : null,
     replyTo: result.status === 'configured' ? result.config.replyTo ?? null : null,
-    tls: result.status === 'configured' ? (result.provider === 'brevo' ? 'HTTPS (Brevo)' : result.config.secure ? 'TLS 465' : 'STARTTLS 587') : null,
+    tls: result.status === 'configured' ? (result.provider === 'brevo' ? 'HTTPS (Brevo)' : result.provider === 'resend' ? 'HTTPS (Resend)' : result.config.secure ? 'TLS 465' : 'STARTTLS 587') : null,
   };
 }
