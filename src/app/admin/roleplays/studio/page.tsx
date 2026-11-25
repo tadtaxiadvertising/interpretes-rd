@@ -1897,6 +1897,14 @@ export default function RoleplayStudioPage() {
     },
   };
 
+  const sourceReady = Boolean(audio && duration > 0);
+  const studioSteps = [
+    { id: 'studio-source', title: '1. Grabación', detail: sourceReady ? 'Grabación lista' : 'Selecciona audio o video', available: true, done: sourceReady },
+    { id: 'studio-subtitles', title: '2. Transcripción', detail: reviewCues.length ? 'Turnos para seleccionar' : 'Importa subtítulos o usa cortes manuales', available: sourceReady, done: segments.length > 0 },
+    { id: 'studio-turns', title: '3. Intervenciones', detail: segments.length ? `${segments.length} turnos · ${pendingReviewCount} pendientes` : 'Revisa voces, idiomas y cortes', available: sourceReady, done: segments.length > 0 && pendingReviewCount === 0 },
+    { id: 'studio-export', title: '4. Exportación', detail: 'Prepara el paquete para asignar', available: sourceReady && segments.length > 0, done: false },
+  ];
+
   return (
     <main className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
@@ -1921,7 +1929,30 @@ export default function RoleplayStudioPage() {
           }} className="rounded-xl theme-action-primary px-4 py-3 font-semibold">Importar y asignar</Link>
         </div>
       </header>
-      <section className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3">
+      <nav aria-label="Ruta de creación del roleplay" className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
+        <p className="mb-3 text-sm font-semibold text-[var(--foreground)]">Crea tu roleplay en cuatro pasos</p>
+        <ol className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+          {studioSteps.map(step => (
+            <li key={step.id} className="min-w-0">
+              {step.available ? (
+                <a href={`#${step.id}`} className="block h-full rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">
+                  <span className="block text-sm font-semibold text-[var(--foreground)]">{step.title}</span>
+                  <span className="mt-1 block text-xs text-[var(--text-secondary)]">{step.detail}</span>
+                  {step.done && <span className="mt-1 block text-xs font-semibold text-[var(--theme-success)]">Listo</span>}
+                </a>
+              ) : (
+                <div className="h-full rounded-xl border border-[var(--border)] p-3">
+                  <span className="block text-sm font-semibold text-[var(--text-secondary)]">{step.title}</span>
+                  <span className="mt-1 block text-xs text-[var(--text-secondary)]">{step.detail}</span>
+                  <span className="mt-1 block text-xs text-[var(--text-secondary)]">Aún no disponible</span>
+                </div>
+              )}
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3 text-xs text-[var(--text-secondary)]">Puedes volver a cualquier paso disponible sin perder los cambios. La transcripción es opcional.</p>
+      </nav>
+      <section id="studio-source" className="scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
         <label htmlFor="studio-audio" className="block text-sm font-semibold text-[var(--foreground)]">
           Grabación original MP3 o video/audio largo (local, hasta 8 GiB)
         </label>
@@ -2316,7 +2347,7 @@ export default function RoleplayStudioPage() {
                 </div>
               )}
             </div>}
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <div id="studio-subtitles" className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
               </label>
@@ -2565,7 +2596,7 @@ export default function RoleplayStudioPage() {
         </section>
       )}
       {audio && duration > 0 && (
-        <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3">
+        <section id="studio-turns" className="scroll-mt-6 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{ROLEPLAY_MAX_SCENARIOS})</h2>
             <div className="flex flex-wrap items-center gap-2">
@@ -3009,6 +3040,8 @@ export default function RoleplayStudioPage() {
           )}
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
+          <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
+          <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos antes de exportar. Después podrás importar el paquete y asignar el roleplay.</p>
           <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold">
             <Download size={18} /> {busy
