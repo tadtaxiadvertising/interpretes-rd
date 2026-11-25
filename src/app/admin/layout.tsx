@@ -1,6 +1,9 @@
 import { DashboardShell } from "@/components/DashboardShell";
 import { getCurrentProfile } from "@/app/actions/auth";
 import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { authorizedNotificationRecipientIds } from "@/lib/notifications/authorized-recipient-ids";
+import { loadNavbarNotifications } from "@/lib/notifications/load-navbar-notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +19,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/dashboard');
   }
 
+  const { userId } = await auth();
+  const notifications = userId ? await loadNavbarNotifications(authorizedNotificationRecipientIds(userId, profile.id)) : [];
+
   return (
-    <DashboardShell role="admin" userName={profile?.display_name || "Administrador"}>
+    <DashboardShell role="admin" userName={profile?.display_name || "Administrador"} notifications={notifications}>
       {children}
     </DashboardShell>
   );
