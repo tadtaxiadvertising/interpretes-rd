@@ -77,7 +77,6 @@ export default async function InterpretersPage() {
           <input
             type="text"
             aria-label="Buscar por nombre, ID o campaña"
-            aria-label="Buscar intérpretes"
             placeholder="Buscar por nombre, ID o campaña..."
             className="w-full rounded-2xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-3 pl-12 pr-4 text-[var(--theme-control-text)] placeholder:text-[var(--text-secondary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] transition-colors"
           />
