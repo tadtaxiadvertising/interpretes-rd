@@ -39,9 +39,11 @@ interface NewRoleplayFormProps {
   interpreters: Participant[];
   candidates: Participant[];
   initialCandidateId?: number;
+  openingAssignmentEnabled?: boolean;
   librarySource?: {
     id: string;
     fingerprint: string;
+    requiresOpening?: boolean;
     scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null; studioTurn?: number | null; studioSpeaker?: string | null; studioLanguage?: string | null; sourceStartSec?: number | null; sourceEndSec?: number | null }>;
   };
 }
@@ -63,10 +65,11 @@ function normalizeParticipantSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
+  const [requiresOpening, setRequiresOpening] = useState(openingAssignmentEnabled);
   const [scenarios, setScenarios] = useState<Scenario[]>([
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
@@ -460,6 +463,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     try {
       const formData = new FormData();
       formData.append('participantType', participantType);
+      if (openingAssignmentEnabled) formData.append('requiresBilingualOpening', String(requiresOpening || librarySource?.requiresOpening === true));
       if (!isBulk) formData.append('participantId', selectedParticipantId);
       if (librarySource) {
         formData.append('librarySessionId', librarySource.id);
@@ -727,6 +731,18 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </div>
       )}
 
+      {openingAssignmentEnabled && (
+        <section className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4">
+          <label className="flex items-start gap-3 font-semibold text-[var(--foreground)]">
+            <input type="checkbox" checked={requiresOpening || librarySource?.requiresOpening === true}
+              disabled={isCreating || librarySource?.requiresOpening === true}
+              onChange={event => setRequiresOpening(event.target.checked)} />
+            <span>Requerir protocolo de apertura bilingüe</span>
+          </label>
+          <p className="text-sm text-[var(--text-secondary)]">El participante se presenta en inglés y español antes de interpretar. Desactívalo únicamente para ejercicios que no requieran apertura.</p>
+          {librarySource?.requiresOpening && <p className="text-xs text-[var(--text-secondary)]">Esta plantilla conserva su requisito de apertura.</p>}
+        </section>
+      )}
       {librarySource ? (
         <section className="space-y-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
           <h3 className="text-lg font-semibold text-[var(--foreground)]">Plantilla seleccionada</h3>
