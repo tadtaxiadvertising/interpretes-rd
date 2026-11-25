@@ -31,6 +31,7 @@ async function contrast(sample: Locator, foreground = 'color') {
 }
 
 test('compiled workspace controls and solid actions retain contrast', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1100 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/login');
   for (const [label, theme] of [['Modo claro', 'light'], ['Modo oscuro', 'dark']] as const) {
@@ -100,32 +101,8 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       await expect(disabled).toHaveCSS('opacity', '1');
       await expect(disabled).toHaveCSS('cursor', 'not-allowed');
       await expect.poll(() => contrast(disabled)).toBeGreaterThanOrEqual(4.5);
-      const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
-      const disabledBounds = await disabled.boundingBox();
-      expect(disabledBounds).not.toBeNull();
-      await disabled.hover();
-      await expect(disabled).toHaveCSS('background-color', disabledBackground);
-      // Chromium may serialize an unapplied transform as an identity matrix.
-      // Check the effect rather than requiring a particular CSS serialization.
-      await expect.poll(() => disabled.evaluate(node => {
-        const style = getComputedStyle(node);
-        const transform = style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity;
-        const neutral = (value: string, identity: number) =>
-          value === 'none' || value.split(/\s+/).every(part => parseFloat(part) === identity);
-        return transform && neutral(style.translate, 0) && neutral(style.scale, 1);
-      })).toBe(true);
-      await expect.poll(async () => {
-        const hovered = await disabled.boundingBox();
-        if (!hovered || !disabledBounds) return Infinity;
-        return Math.max(
-          Math.abs(hovered.x - disabledBounds.x),
-          Math.abs(hovered.y - disabledBounds.y),
-          Math.abs(hovered.width - disabledBounds.width),
-          Math.abs(hovered.height - disabledBounds.height)
-        );
-      }).toBeLessThan(0.5);
-      // Chromium may serialize an identity transform as a matrix instead of
-      // "none". Check the actual transform and geometry, not its serialization.
+      await page.mouse.move(0, 0);
+      await disabled.scrollIntoViewIfNeeded();
       const neutralTransform = () => disabled.evaluate(node => {
         const style = getComputedStyle(node);
         return (style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity)
@@ -134,15 +111,18 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
           && /^(none|0deg)$/.test(style.rotate);
       });
       await expect.poll(neutralTransform).toBe(true);
+      const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
       const boundsBefore = await disabled.boundingBox();
-      expect(boundsBefore).not.toBeNull();
-      await disabled.hover();
+      if (!boundsBefore) throw new Error('Disabled button has no geometry');
+      // Pointer movement must not implicitly scroll the page.
+      await page.mouse.move(boundsBefore.x + boundsBefore.width / 2, boundsBefore.y + boundsBefore.height / 2);
+      await expect.poll(() => disabled.evaluate(node => node.matches(':hover'))).toBe(true);
       await expect(disabled).toHaveCSS('background-color', disabledBackground);
       await expect.poll(neutralTransform).toBe(true);
       await expect(disabled).toHaveCSS('box-shadow', 'none');
       await expect.poll(async () => {
         const boundsAfter = await disabled.boundingBox();
-        if (!boundsBefore || !boundsAfter) return Infinity;
+        if (!boundsAfter) return Infinity;
         return Math.max(
           Math.abs(boundsAfter.x - boundsBefore.x),
           Math.abs(boundsAfter.y - boundsBefore.y),
