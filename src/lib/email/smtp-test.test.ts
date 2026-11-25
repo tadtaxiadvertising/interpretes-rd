@@ -1,6 +1,8 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest';
-import { smtpTestCurlConfig, smtpTestMessage } from './smtp-test';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { smtpTestCurlConfig, smtpTestMessage, sendOperationalMailTest, sendRecruitmentSmtp } from './smtp-test';
+import { sendBrevoEmail, sendBrevoEmailDetailed } from './brevo-transport';
+vi.mock('./brevo-transport', () => ({ sendBrevoEmail: vi.fn(), sendBrevoEmailDetailed: vi.fn() }));
 import type { OperationalMailConfig } from './operational-config';
 
 const config: OperationalMailConfig = {
@@ -31,5 +33,23 @@ describe('corporate SMTP test payload', () => {
     expect(message).not.toContain(config.password);
     const body = message.split('\r\n\r\n')[1];
     expect(Buffer.from(body, 'base64').toString('utf8')).toContain('No contiene datos de postulantes');
+  });
+});
+
+describe('environment transport source guard', () => {
+  afterEach(() => { vi.unstubAllEnvs(); vi.clearAllMocks(); });
+  it.each(['vualt', 'vault', ' environment '])('blocks direct sends and tests for source %s', async source => {
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', source);
+    vi.stubEnv('OPERATIONAL_EMAIL_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'brevo');
+    vi.stubEnv('BREVO_API_KEY', 'fixture-key-123456789');
+    vi.stubEnv('OPERATIONAL_EMAIL_FROM', 'fixture@example.test');
+    vi.mocked(sendBrevoEmail).mockResolvedValue('accepted');
+    vi.mocked(sendBrevoEmailDetailed).mockResolvedValue('accepted');
+    expect(await sendRecruitmentSmtp({ recipient: 'fixture@example.test', subject: 'Fixture', text: 'Fixture', html: '<p>Fixture</p>' })).toBe('unconfirmed');
+    expect(await sendOperationalMailTest()).toBe('disabled');
+    expect(sendBrevoEmail).not.toHaveBeenCalled();
+    expect(sendBrevoEmailDetailed).not.toHaveBeenCalled();
   });
 });
