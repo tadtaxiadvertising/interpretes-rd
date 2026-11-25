@@ -27,13 +27,13 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     vi.unstubAllGlobals();
   });
 
-  function selectAudio() {
+  function selectAudio(duration = 120) {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [new File(['ID3'], 'medical.mp3', { type: 'audio/mpeg' })] },
     });
     const player = container.querySelector('audio')!;
-    Object.defineProperty(player, 'duration', { configurable: true, value: 120 });
+    Object.defineProperty(player, 'duration', { configurable: true, value: duration });
     fireEvent.loadedMetadata(player);
     return player;
   }
@@ -104,12 +104,14 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
   });
 
   it('applies the medical language pattern only to visible pending doctor and patient turns and supports undo', () => {
-    selectAudio();
+    selectAudio(180);
     for (let i = 0; i < 5; i++) {
       fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     }
     const speakers = screen.getAllByLabelText('Perfil del hablante');
     const languages = screen.getAllByLabelText('Idioma de la intervención');
+    expect(speakers).toHaveLength(5);
+    expect(languages).toHaveLength(5);
     ['doctor', 'patient', 'doctor', 'interpreter', 'patient'].forEach((role, index) => {
       fireEvent.change(speakers[index], { target: { value: role } });
     });

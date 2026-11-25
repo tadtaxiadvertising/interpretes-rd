@@ -164,6 +164,7 @@ describe('GET /api/roleplay/session/[id]', () => {
 
     expect(res.status).toBe(200);
     expect(body.data.scenarios[0]).not.toHaveProperty('expectedKeys');
+    expect(body.data.scenarios[0].interpretationDirection).toBe('es-en');
     for (const key of ['studioTurn', 'studioSpeaker', 'studioLanguage', 'sourceStartSec', 'sourceEndSec']) {
       expect(body.data.scenarios[0]).not.toHaveProperty(key);
     }
@@ -176,13 +177,31 @@ describe('GET /api/roleplay/session/[id]', () => {
           select: expect.objectContaining({
             studioTurn: false,
             studioSpeaker: false,
-            studioLanguage: false,
+            studioLanguage: true,
             sourceStartSec: false,
             sourceEndSec: false,
           }),
         }),
       }),
     }));
+  });
+
+  it('only exposes a supported interpretation direction while base audio access is permitted', async () => {
+    const session = candidateSession('STARTED');
+    const scenario = {
+      id: 'scenario-1', order: 0, title: 'Scenario 1',
+      baseAudioUrl: 'https://x/base.webm', studioLanguage: 'en', responses: [],
+    };
+    m.session = { ...session, scenarios: [scenario, { ...scenario, id: 'scenario-2', order: 1, studioLanguage: 'unknown' }] };
+    let body = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(body.data.scenarios[0].interpretationDirection).toBe('en-es');
+    expect(body.data.scenarios[1]).not.toHaveProperty('interpretationDirection');
+    m.session.access = { ...session.access, validatedAt: null };
+    body = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(body.data.scenarios[0]).not.toHaveProperty('interpretationDirection');
+    m.session.access = { ...session.access, usedAt: new Date() };
+    body = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(body.data.scenarios[0]).not.toHaveProperty('interpretationDirection');
   });
 
   it('does not expose internal Studio metadata to the interpreter owning a session', async () => {
@@ -208,6 +227,7 @@ describe('GET /api/roleplay/session/[id]', () => {
       expect(body.data.scenarios[0]).not.toHaveProperty(key);
     }
     expect(body.data.scenarios[0].title).toBe('Scenario 1');
+    expect(body.data.scenarios[0].interpretationDirection).toBe('es-en');
   });
 
   it('signs canonical base audio when a session has no legacy URL', async () => {

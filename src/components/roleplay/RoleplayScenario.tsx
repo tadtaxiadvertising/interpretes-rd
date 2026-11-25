@@ -15,6 +15,7 @@ interface RoleplayScenarioProps {
     studioTurn?: number | null;
     studioSpeaker?: string | null;
     studioLanguage?: string | null;
+    interpretationDirection?: 'en-es' | 'es-en';
     sourceStartSec?: number | null;
     sourceEndSec?: number | null;
   };
@@ -167,6 +168,11 @@ export function RoleplayScenario({
   };
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  // Use only the participant-facing direction explicitly supplied by the API.
+  const sourceLanguage = scenario.interpretationDirection === 'en-es' ? 'Inglés'
+    : scenario.interpretationDirection === 'es-en' ? 'Español' : null;
+  const responseLanguage = scenario.interpretationDirection === 'en-es' ? 'Español'
+    : scenario.interpretationDirection === 'es-en' ? 'Inglés' : null;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -197,6 +203,14 @@ export function RoleplayScenario({
           </div>
         )}
       </div>
+
+      {sourceLanguage && responseLanguage && (
+        <div aria-label="Dirección de interpretación" className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
+          <p className="text-xs font-medium text-[var(--text-secondary)]">Dirección de interpretación</p>
+          <p className="mt-1 text-base font-semibold text-[var(--foreground)]">Escucha en {sourceLanguage} · Responde en {responseLanguage}</p>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">Interpreta el mensaje completo en primera persona, sin añadir ni omitir información.</p>
+        </div>
+      )}
 
       <div className="glass p-6 rounded-2xl border border-white/5 bg-slate-900/40">
         <div className="flex items-center justify-between mb-4">

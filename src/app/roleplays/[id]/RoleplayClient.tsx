@@ -27,6 +27,7 @@ interface Scenario {
   studioTurn?: number | null;
   studioSpeaker?: string | null;
   studioLanguage?: string | null;
+  interpretationDirection?: 'en-es' | 'es-en';
   sourceStartSec?: number | null;
   sourceEndSec?: number | null;
   responses?: Array<{

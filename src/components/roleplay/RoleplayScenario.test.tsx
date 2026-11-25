@@ -35,6 +35,17 @@ afterEach(() => {
 });
 
 describe('participant scenario playback controls', () => {
+  it('shows the opposite response language for reviewed bilingual clips and omits it for legacy or unknown metadata', () => {
+    const { rerender } = render(<RoleplayScenario scenario={{ ...first, interpretationDirection: 'en-es' }} {...shared} />);
+    expect(screen.getByText('Escucha en Inglés · Responde en Español')).toBeTruthy();
+    rerender(<RoleplayScenario scenario={{ ...second, interpretationDirection: 'es-en' }} {...shared} />);
+    expect(screen.getByText('Escucha en Español · Responde en Inglés')).toBeTruthy();
+    rerender(<RoleplayScenario scenario={{ ...first, studioLanguage: 'en' }} {...shared} />);
+    expect(screen.queryByLabelText('Dirección de interpretación')).toBeNull();
+    rerender(<RoleplayScenario scenario={first} {...shared} />);
+    expect(screen.queryByLabelText('Dirección de interpretación')).toBeNull();
+  });
+
   it('repeats only after a completed listen and the full 4.5-second wait', async () => {
     const { container } = render(<RoleplayScenario scenario={first} {...shared} />);
     const audio = container.querySelector('audio');
