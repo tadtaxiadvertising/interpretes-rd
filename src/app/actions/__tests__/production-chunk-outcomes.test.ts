@@ -49,4 +49,14 @@ describe('production chunk import outcomes', () => {
     expect(mocks.findMany).not.toHaveBeenCalled();
     expect(mocks.createMany).not.toHaveBeenCalled();
   });
+
+  it('rejects more than 500 parsed records even when grouped in fewer submitted strings', async () => {
+    const oversized = Array(501).fill('2026-11-01,TEST,10,90').join('\n');
+    // Stay within the per-string limit while exceeding the logical record cap.
+    const parts = oversized.split('\n');
+    const result = await uploadLogChunk(null, { headers: data.headers, rows: [parts.slice(0, 250).join('\n'), parts.slice(250).join('\n')] });
+    expect(result).toMatchObject({ success: false, outcome: 'not-written' });
+    expect(mocks.findMany).not.toHaveBeenCalled();
+    expect(mocks.createMany).not.toHaveBeenCalled();
+  });
 });
