@@ -131,10 +131,23 @@ export default function EmailProviderVault() {
           const form = event.currentTarget;
           const data = new FormData(form);
           const input = { name: data.get('name'), provider: data.get('provider'), from: data.get('from'), replyTo: data.get('replyTo'), apiKey: data.get('apiKey'), secretKey: data.get('secretKey') };
-          form.reset();
+          // Never keep submitted credentials in the form, even on validation failure.
+          for (const name of ['apiKey', 'secretKey']) {
+            const field = form.elements.namedItem(name);
+            if (field instanceof HTMLInputElement) field.value = '';
+          }
           void run(async () => {
             const status = await addEmailProviderProfile(input);
-            if (status === 'saved') await load();
+            if (status === 'saved') {
+              form.reset();
+              await load();
+            } else if (status === 'unavailable') {
+              invalidateSnapshot(messageFor(status));
+              setMessage('No se pudo confirmar si el perfil se guardó. Consulta los perfiles antes de repetir la operación.');
+              return;
+            } else if (status !== 'invalid') {
+              await load();
+            }
             setMessage(messageFor(status));
           });
         }}>
