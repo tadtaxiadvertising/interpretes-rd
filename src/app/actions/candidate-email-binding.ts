@@ -5,7 +5,7 @@ import prisma from '@/lib/prisma';
 import { createClient } from '@/lib/supabase/server';
 import { APPLICATION_REF_COOKIE, verifyApplicationRef } from '@/lib/recruitment/application-ref';
 import { emailDeliveryMode, pilotRecipient } from '@/lib/email/pilot-recipient';
-import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, readExistingProofBinding, type MailboxState, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
+import { issueMailboxChallenge, consumeMailboxChallenge, readMailboxState, readExistingProofBinding, type ChallengePersistence, type MailboxState, type MailboxChallengeResult, type MailboxProofResult } from '@/lib/email/mailbox-proof';
 import { readOperationalMailConfig } from '@/lib/email/operational-config';
 import { usesProviderVault, readPreferredProvider, reserveSelectedProvider, sendReservedProfile } from '@/lib/email/preferred-provider-runtime';
 import { sendRecruitmentSmtp } from '@/lib/email/smtp-test';
@@ -66,14 +66,30 @@ export async function requestCandidateMailboxProof(): Promise<MailboxChallengeRe
     if (!binding) return 'not_available';
     const profile = vault ? await readPreferredProvider(prisma, process.env) : null;
     if (vault && !profile) return 'not_available';
-    // Reserve before creating a challenge: exhausted quota must not leave an unsent code pending.
-    if (profile && !await prisma.$transaction(tx => reserveSelectedProvider(tx, profile))) return 'not_available';
+    // Reserve only for a newly persisted challenge, in the same transaction.
+    // No network I/O until commit; quota failure rolls back the new code.
+    const quotaBlocked = new Error('Mailbox quota blocked');
+    const persist: ChallengePersistence = async write => {
+      try {
+        return await prisma.$transaction(async tx => {
+          const changed = await write(tx);
+          if (changed !== 1) return changed;
+          if (!profile || !await reserveSelectedProvider(tx, profile)) throw quotaBlocked;
+          return changed;
+        });
+      } catch (error) {
+        if (error === quotaBlocked) return 0;
+        throw error;
+      }
+    };
     const send = profile ? (message: { recipient: string; subject: string; text: string; html: string }) => sendReservedProfile(profile, message) : sendRecruitmentSmtp;
-    return await issueMailboxChallenge(prisma, binding, (recipient, token) => send({
+    const deliver = (recipient: string, token: string) => send({
       recipient, subject: 'Verifica tu correo | Intérpretes RD',
       text: 'Copia este código en tu portal de postulante: ' + token + '. Vence en 15 minutos. No lo compartas.',
       html: '<p>Copia este código en tu portal de postulante:</p><p><strong>' + token + '</strong></p><p>Vence en 15 minutos. No lo compartas.</p>',
-    }));
+    });
+    return profile ? await issueMailboxChallenge(prisma, binding, deliver, persist)
+      : await issueMailboxChallenge(prisma, binding, deliver);
   } catch { return 'unconfirmed'; }
 }
 
