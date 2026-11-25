@@ -33,7 +33,7 @@ describe('bulk production import feedback', () => {
     expect(count('Filas rechazadas en bloques confirmados')).toBe('2');
     expect(count('Bloques confirmados')).toBe('1');
     expect(count('Bloque sin confirmar')).toBe('2');
-    expect(count('Líneas posteriores no enviadas')).toBe('1');
+    expect(count('Registros posteriores no enviados')).toBe('1');
     expect(mocks.upload).toHaveBeenCalledTimes(2);
     fireEvent.submit(form);
     expect(mocks.upload).toHaveBeenCalledTimes(2);
@@ -49,5 +49,15 @@ describe('bulk production import feedback', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('filas rechazadas'));
     expect(count('Filas insertadas')).toBe('0');
     expect(count('Filas rechazadas en bloques confirmados')).toBe('1');
+  });
+
+  it('preflights malformed later records before sending any earlier block', async () => {
+    render(<CSVChunkUploader />);
+    const file = new File(['CSV'], 'production.csv', { type: 'text/csv' });
+    Object.defineProperty(file, 'text', { value: async () => ['Date,External ID,Minutes', ...Array(500).fill('2026-11-01,TEST,10'), '2026-11-02,"TEST'].join('\n') });
+    fireEvent.change(screen.getByLabelText('Archivo CSV de producción masiva'), { target: { files: [file] } });
+    fireEvent.submit(screen.getByRole('form', { name: 'Importación masiva de producción' }));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Corrige el archivo'));
+    expect(mocks.upload).not.toHaveBeenCalled();
   });
 });
