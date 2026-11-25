@@ -60,7 +60,7 @@ CREATE TABLE public.roleplay_bilingual_opening_retired_paths (
   CHECK (cleanup_after >= retired_at + interval '23 hours'),
   CHECK (
     split_part(source_audio_path, '/', 2) = session_id
-    AND source_audio_path ~ '^openings/[a-zA-Z0-9_-]{1,100}/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(webm|mp4|ogg|mp3)
+    AND source_audio_path ~ '^openings/[a-zA-Z0-9_-]{1,100}/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(webm|mp4|ogg|mp3)
 ALTER TABLE public.roleplay_bilingual_opening_reservations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations FROM PUBLIC;
 
