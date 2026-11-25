@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RoleplayOpening } from './RoleplayOpening';
 import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/client';
-import { isCanonicalBilingualOpeningPath, type BilingualOpeningState } from '@/lib/roleplay/bilingual-opening';
+import { BILINGUAL_OPENING_BUCKET, isCanonicalBilingualOpeningPath, type BilingualOpeningState } from '@/lib/roleplay/bilingual-opening';
 
 type Recovery = { state: BilingualOpeningState; reservation?: { path: string; expiresAt: string; retryAt: string | null } };
 type Attempt = { path: string; token: string; blob: Blob; uploaded: boolean };
@@ -96,9 +96,9 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
     if (!current.uploaded) {
       const supabase = createSupabaseBrowserClient();
       if (!supabase) throw new Error('Almacenamiento no disponible.');
-      const { error: uploadError } = await supabase.storage.from('roleplay-audio')
+      const { error: uploadError } = await supabase.storage.from(BILINGUAL_OPENING_BUCKET)
         .uploadToSignedUrl(current.path, current.token, current.blob,
-          { contentType: current.blob.type || 'audio/webm', upsert: false });
+          { contentType: (current.blob.type || 'audio/webm').split(';')[0].trim().toLowerCase(), upsert: false });
       if (uploadError) {
         // The upload may have succeeded despite an ambiguous response.
         // Confirm only the reserved immutable key, never a replacement.
