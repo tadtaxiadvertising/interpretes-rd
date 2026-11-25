@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { notificationCategoryLabel, notificationSeverityLabel } from '@/lib/notifications/notification-display';
+import { defaultNotificationViewPreferences, parseNotificationViewPreferences, notificationImportance, type NotificationViewPreferences } from '@/lib/notifications/notification-view-preferences';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -28,7 +29,7 @@ function formatNotificationTime(value: Date | string | null): string {
     : 'Fecha no disponible';
 }
 
-export function NotificationBell({ initialNotifications, candidateOnly = false }: { initialNotifications: Notification[]; candidateOnly?: boolean }) {
+export function NotificationBell({ initialNotifications, candidateOnly = false, preferenceScope }: { initialNotifications: Notification[]; candidateOnly?: boolean; preferenceScope?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   // Keep local read acknowledgments, not a frozen copy of server props.
   // New notifications supplied by a refreshed layout must appear immediately.
@@ -85,7 +86,46 @@ export function NotificationBell({ initialNotifications, candidateOnly = false }
   const unreadCount = Math.max(0, (snapshot?.unreadCount ?? rawNotifications.filter(n => !n.isRead).length) - acknowledged);
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const visibleNotifications = onlyUnread ? notifications.filter(n => !n.isRead) : notifications;
+  const [showPreferences, setShowPreferences] = useState(false);
+  const [preferences, setPreferences] = useState(defaultNotificationViewPreferences);
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const storageKey = preferenceScope ? 'notification-view:' + preferenceScope : null;
+  const filteredNotifications = onlyUnread ? notifications.filter(n => !n.isRead) : notifications;
+  const visibleNotifications = preferences.prioritizeImportant
+    ? [...filteredNotifications].sort((a, b) => notificationImportance(b.type) - notificationImportance(a.type))
+    : filteredNotifications;
+
+  function togglePanel() {
+    if (!isOpen) {
+      let next = preferences;
+      if (storageKey) {
+        try {
+          next = parseNotificationViewPreferences(window.localStorage.getItem(storageKey));
+          setStorageUnavailable(false);
+        } catch {
+          setStorageUnavailable(true);
+        }
+      }
+      setPreferences(next);
+      setOnlyUnread(next.openUnread);
+      setShowPreferences(false);
+    }
+    setIsOpen(!isOpen);
+    setError(null);
+  }
+
+  function updatePreferences(next: NotificationViewPreferences) {
+    setPreferences(next);
+    if (next.openUnread !== preferences.openUnread) setOnlyUnread(next.openUnread);
+    if (storageKey) {
+      try {
+        window.localStorage.setItem(storageKey, JSON.stringify(next));
+        setStorageUnavailable(false);
+      } catch {
+        setStorageUnavailable(true);
+      }
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return;
@@ -160,7 +200,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false }
     <div className="relative">
       <button
         type="button"
-        onClick={() => { setIsOpen(open => !open); setError(null); }}
+        onClick={togglePanel}
         ref={triggerRef}
         aria-label="Notificaciones"
         aria-description={`${unreadCount} sin leer`}
@@ -191,6 +231,18 @@ export function NotificationBell({ initialNotifications, candidateOnly = false }
                 <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)} className={cn("min-h-9 rounded-lg px-2 text-xs", onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Sin leer</button>
               </div>
               <button type="button" disabled={!unreadCount || bulkPending || pendingIds.length > 0} aria-busy={bulkPending} onClick={() => void handleMarkAll()} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">{bulkPending ? 'Marcando…' : 'Marcar todas como leídas'}</button>
+            </div>
+            <div className="shrink-0 border-b border-[var(--border)] px-3 py-1">
+              <button type="button" aria-expanded={showPreferences} aria-controls="notification-view-preferences" onClick={() => setShowPreferences(value => !value)} className="min-h-9 text-xs font-semibold text-[var(--theme-link)]">Preferencias de visualización</button>
+              {showPreferences && (
+                <div id="notification-view-preferences" className="space-y-1 pb-2 text-xs text-[var(--foreground)]">
+                  <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={preferences.openUnread} onChange={event => updatePreferences({ ...preferences, openUnread: event.target.checked })} /> Abrir en «Sin leer»</label>
+                  <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={preferences.prioritizeImportant} onChange={event => updatePreferences({ ...preferences, prioritizeImportant: event.target.checked })} /> Priorizar importantes en avisos recientes</label>
+                  <p className="text-[var(--text-secondary)]">Solo cambia la vista. No desactiva avisos, correos ni el contador total.</p>
+                  <p role="status" className="text-[var(--text-secondary)]">{!storageKey || storageUnavailable ? 'Preferencias temporales; no se pudieron guardar para este navegador.' : 'Preferencias de esta cuenta en este navegador.'}</p>
+                  <button type="button" onClick={() => updatePreferences({ ...defaultNotificationViewPreferences })} className="min-h-9 text-[var(--theme-link)] underline">Restablecer preferencias</button>
+                </div>
+              )}
             </div>
             {refreshFailed && (
               <div role="status" className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--theme-warning)]">
