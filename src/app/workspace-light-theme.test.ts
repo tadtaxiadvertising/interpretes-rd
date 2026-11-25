@@ -221,3 +221,26 @@ describe('semantic recruitment and production controls', () => {
     expect(calendar).not.toContain('bg-rose-950/50');
   });
 });
+
+describe('semantic operations and notification colors', () => {
+  it.each([
+    'src/components/admin/AccountPlatformForm.tsx',
+    'src/components/admin/ReconciliationReviewForm.tsx',
+    'src/components/admin/LegalAgreementManager.tsx',
+  ])('uses shared readable controls in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toContain('bg-[var(--theme-control-bg)]');
+    expect(source).toContain('border-[var(--theme-control-border)]');
+    expect(source).toContain('text-[var(--theme-control-text)]');
+    expect(source).not.toContain('bg-slate-900 ');
+    expect(source).not.toContain('bg-slate-950 ');
+  });
+
+  it('keeps the notification status and unread count distinct', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/NotificationBell.tsx'), 'utf8');
+    for (const token of ['--theme-success', '--theme-warning', '--theme-danger', '--theme-link']) {
+      expect(source).toContain('text-[var(' + token + ')]');
+    }
+    expect(source).toContain('bg-red-700 text-[10px] font-bold text-white');
+  });
+});
