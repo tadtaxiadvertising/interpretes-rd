@@ -11,9 +11,9 @@ function accountLabel(account: AccountOption) {
 
 export default function AccountPlatformForm({ accounts }: { accounts: AccountOption[] }) {
   const [state, action, pending] = useActionState(async (_previous: Result, data: FormData): Promise<Result> => createAccountPlatform(data), { success: false });
-  const cls = 'rounded-lg border border-white/15 bg-slate-900 p-3 text-white';
+  const cls = 'rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-3 text-[var(--theme-control-text)]';
   return (
-    <form action={action} className="grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-5 md:grid-cols-2">
+    <form action={action} className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-5 md:grid-cols-2">
       <h2 className="md:col-span-2 text-lg font-semibold">Registrar plataforma y conexión VPN</h2>
       <label className="grid gap-1 text-sm">Cuenta
         <select name="accountId" required className={cls}>
@@ -26,9 +26,9 @@ export default function AccountPlatformForm({ accounts }: { accounts: AccountOpt
       <label className="grid gap-1 text-sm">Usuario de plataforma (no contraseña)<input name="usernameHint" maxLength={150} className={cls} /></label>
       <label className="grid gap-1 text-sm md:col-span-2">Referencia externa a gestor seguro (solo referencia)<input name="secretRef" placeholder="vault://empresa/cuenta/plataforma" className={cls} /></label>
 
-      <div className="md:col-span-2 mt-2 border-t border-white/10 pt-4">
+      <div className="md:col-span-2 mt-2 border-t border-[var(--border)] pt-4">
         <h3 className="font-semibold">Configuración VPN</h3>
-        <p className="mt-1 text-xs text-slate-400">Los datos son editables y no están vinculados a un proveedor, país, perfil o slot específico.</p>
+        <p className="mt-1 text-xs text-[var(--text-secondary)]">Los datos son editables y no están vinculados a un proveedor, país, perfil o slot específico.</p>
       </div>
       <label className="grid gap-1 text-sm">Proveedor VPN<input name="vpnProvider" maxLength={120} placeholder="Proveedor o servicio" className={cls} /></label>
       <label className="grid gap-1 text-sm">Aplicación VPN<input name="vpnApp" maxLength={120} placeholder="Nombre de la aplicación" className={cls} /></label>
@@ -43,11 +43,11 @@ export default function AccountPlatformForm({ accounts }: { accounts: AccountOpt
       <label className="grid gap-1 text-sm">Puerto<input name="vpnPort" type="number" min={1} max={65535} inputMode="numeric" className={cls} /></label>
       <label className="grid gap-1 text-sm md:col-span-2">Notas operativas<textarea name="notes" maxLength={500} rows={2} className={cls} /></label>
 
-      <div className="md:col-span-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-amber-100">
+      <div className="md:col-span-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-[var(--theme-warning)]">
         Antes de iniciar sesión en el portal, abre <a href="https://whoer.net/" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Whoer.net</a> y comprueba manualmente que el país y la IP de salida coincidan con los valores esperados. Las contraseñas no se guardan aquí. Las referencias vault:// son solo identificadores: esta aplicación no se conecta al gestor externo.
       </div>
-      <button disabled={pending || !accounts.length} className="rounded-lg bg-[#2675ff] px-4 py-3 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar plataforma'}</button>
-      <p role="status" aria-live="polite" className={state.error ? 'text-red-300' : 'text-emerald-300'}>{state.error || (state.success ? 'Plataforma registrada.' : '')}</p>
+      <button disabled={pending || !accounts.length} className="rounded-lg bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar plataforma'}</button>
+      <p role="status" aria-live="polite" className={state.error ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]'}>{state.error || (state.success ? 'Plataforma registrada.' : '')}</p>
     </form>
   );
 }

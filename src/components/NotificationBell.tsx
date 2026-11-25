@@ -74,10 +74,10 @@ export function NotificationBell({ initialNotifications }: { initialNotification
 
   const getIcon = (type: string | null) => {
     switch (type) {
-      case 'success': return <CheckCircle size={16} className="text-green-400" aria-hidden="true" />;
-      case 'warning': return <AlertTriangle size={16} className="text-yellow-400" aria-hidden="true" />;
-      case 'error': return <X size={16} className="text-red-400" aria-hidden="true" />;
-      default: return <Info size={16} className="text-blue-400" aria-hidden="true" />;
+      case 'success': return <CheckCircle size={16} className="text-[var(--theme-success)]" aria-hidden="true" />;
+      case 'warning': return <AlertTriangle size={16} className="text-[var(--theme-warning)]" aria-hidden="true" />;
+      case 'error': return <X size={16} className="text-[var(--theme-danger)]" aria-hidden="true" />;
+      default: return <Info size={16} className="text-[var(--theme-link)]" aria-hidden="true" />;
     }
   };
 
@@ -89,11 +89,11 @@ export function NotificationBell({ initialNotifications }: { initialNotification
         aria-label="Notificaciones"
         aria-expanded={isOpen}
         aria-controls="notification-panel"
-        className="group relative rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+        className="group relative rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
       >
         <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "animate-bounce")} />
         {unreadCount > 0 && (
-          <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-500 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[var(--theme-nav)]">
+          <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-700 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[var(--theme-nav)]">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -103,20 +103,20 @@ export function NotificationBell({ initialNotifications }: { initialNotification
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
           <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="absolute right-0 z-50 mt-4 w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="p-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+            <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">Notificaciones</h4>
-              <span className="text-[10px] text-gray-500 uppercase tracking-widest">{unreadCount} sin leer</span>
+              <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
             </div>
 
             {error && (
-              <p role="alert" className="px-4 py-3 border-b border-red-500/20 bg-red-500/10 text-xs text-red-300">
+              <p role="alert" className="px-4 py-3 border-b border-red-500/20 bg-red-500/10 text-xs text-[var(--theme-danger)]">
                 {error}
               </p>
             )}
 
             <div className="max-h-[400px] overflow-y-auto">
               {notifications.length === 0 ? (
-                <div className="p-8 text-center text-gray-500 text-xs">
+                <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
                   No hay notificaciones.
                 </div>
               ) : (
@@ -124,7 +124,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
                   <div
                     key={n.id}
                     className={cn(
-                      "p-4 border-b border-white/5 flex gap-3 hover:bg-white/[0.02] transition-colors relative",
+                      "p-4 border-b border-[var(--border)] flex gap-3 hover:bg-[var(--theme-hover)] transition-colors relative",
                       !n.isRead && "bg-blue-500/5",
                     )}
                   >
@@ -155,11 +155,11 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               )}
             </div>
 
-            <div className="p-3 bg-white/[0.01] text-center border-t border-white/5">
+            <div className="p-3 bg-[var(--theme-surface-muted)] text-center border-t border-[var(--border)]">
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                className="text-[10px] font-bold text-blue-400 hover:text-blue-300 transition-colors uppercase tracking-widest"
+                className="text-[10px] font-bold text-[var(--theme-link)] hover:text-[var(--foreground)] transition-colors uppercase tracking-widest"
               >
                 Cerrar
               </button>

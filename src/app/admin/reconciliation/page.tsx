@@ -53,34 +53,34 @@ export default async function CompanyReconciliationPage() {
   const mismatches = comparisons.filter(c => c.difference !== 0).length;
   const noLogs = comparisons.filter(c => c.logCount === 0).length;
 
-  return <section className="space-y-6 text-white">
+  return <section className="space-y-6 text-[var(--foreground)]">
     <header className="space-y-2">
-      <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">Administración · Operaciones</p>
+      <p className="text-sm font-semibold uppercase tracking-widest text-[var(--theme-link)]">Administración · Operaciones</p>
       <h1 className="text-3xl font-bold">Conciliación de producción</h1>
-      <p className="max-w-3xl text-slate-400">Comparación preliminar entre reportes externos y producción interna por cuenta y período. Las diferencias requieren revisión humana: esta página no liquida, aprueba ni modifica nóminas.</p>
-      <Link href="/admin/reports" className="inline-block text-blue-300 hover:underline">Registrar o consultar reportes externos</Link>
+      <p className="max-w-3xl text-[var(--text-secondary)]">Comparación preliminar entre reportes externos y producción interna por cuenta y período. Las diferencias requieren revisión humana: esta página no liquida, aprueba ni modifica nóminas.</p>
+      <Link href="/admin/reports" className="inline-block text-[var(--theme-link)] hover:underline">Registrar o consultar reportes externos</Link>
     </header>
     <div className="grid gap-3 md:grid-cols-3">
       {[
         ['Reportes comparados', comparisons.length],
         ['Con diferencias en minutos', mismatches],
         ['Sin registros internos', noLogs],
-      ].map(([label, value]) => <div key={label} className="rounded-2xl border border-white/10 bg-white/5 p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></div>)}
+      ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-5"><p className="text-sm text-[var(--text-secondary)]">{label}</p><p className="mt-1 text-2xl font-bold">{value}</p></div>)}
     </div>
-    <div className="overflow-x-auto rounded-2xl border border-white/10">
+    <div className="overflow-x-auto rounded-2xl border border-[var(--border)]">
       <table className="w-full min-w-[900px] text-left text-sm">
-        <thead className="bg-white/5"><tr><th className="p-3">Cliente</th><th className="p-3">Compañía / cuenta</th><th className="p-3">Reporte y período</th><th className="p-3 text-right">Externo (min)</th><th className="p-3 text-right">Interno (min)</th><th className="p-3 text-right">Diferencia</th><th className="p-3">Revisión</th><th className="p-3">Registrar decisión</th></tr></thead>
-        <tbody>{comparisons.map(({ report, internalMinutes, difference, logCount, callDifference }) => <tr key={report.id} className="border-t border-white/10">
+        <thead className="bg-[var(--theme-surface-muted)]"><tr><th className="p-3">Cliente</th><th className="p-3">Compañía / cuenta</th><th className="p-3">Reporte y período</th><th className="p-3 text-right">Externo (min)</th><th className="p-3 text-right">Interno (min)</th><th className="p-3 text-right">Diferencia</th><th className="p-3">Revisión</th><th className="p-3">Registrar decisión</th></tr></thead>
+        <tbody>{comparisons.map(({ report, internalMinutes, difference, logCount, callDifference }) => <tr key={report.id} className="border-t border-[var(--border)]">
           <td className="p-3">{report.account.client?.name || 'Pendiente de identificar'}</td><td className="p-3">{report.account.company?.name || 'Sin compañía'} / {report.account.name}</td>
-          <td className="p-3"><span className="block">{report.sourceName}</span><span className="text-xs text-slate-400">{report.periodStart.toISOString().slice(0,10)} — {report.periodEnd.toISOString().slice(0,10)}</span></td>
+          <td className="p-3"><span className="block">{report.sourceName}</span><span className="text-xs text-[var(--text-secondary)]">{report.periodStart.toISOString().slice(0,10)} — {report.periodEnd.toISOString().slice(0,10)}</span></td>
           <td className="p-3 text-right tabular-nums">{report.reportedMinutes.toLocaleString('es-DO')}</td>
           <td className="p-3 text-right tabular-nums">{internalMinutes.toLocaleString('es-DO')}</td>
-          <td className={`p-3 text-right font-semibold tabular-nums ${difference === 0 ? 'text-emerald-300' : 'text-amber-300'}`}>{difference > 0 ? '+' : ''}{difference.toLocaleString('es-DO')}</td>
-          <td className="p-3">{logCount === 0 ? <span className="text-amber-300">Sin registros internos</span> : difference !== 0 || (callDifference !== null && callDifference !== 0) ? <span className="text-amber-300">Revisar diferencias</span> : <span className="text-emerald-300">Coincidencia numérica</span>}</td><td className="p-3"><p className="mb-2 text-xs text-slate-400">Última revisión: {report.reviews[0] ? `${report.reviews[0].decision} (${report.reviews[0].createdAt.toISOString().slice(0,10)})` : "Sin revisar"}</p><ReconciliationReviewForm reportId={report.id} /></td>
+          <td className={`p-3 text-right font-semibold tabular-nums ${difference === 0 ? 'text-[var(--theme-success)]' : 'text-[var(--theme-warning)]'}`}>{difference > 0 ? '+' : ''}{difference.toLocaleString('es-DO')}</td>
+          <td className="p-3">{logCount === 0 ? <span className="text-[var(--theme-warning)]">Sin registros internos</span> : difference !== 0 || (callDifference !== null && callDifference !== 0) ? <span className="text-[var(--theme-warning)]">Revisar diferencias</span> : <span className="text-[var(--theme-success)]">Coincidencia numérica</span>}</td><td className="p-3"><p className="mb-2 text-xs text-[var(--text-secondary)]">Última revisión: {report.reviews[0] ? `${report.reviews[0].decision} (${report.reviews[0].createdAt.toISOString().slice(0,10)})` : "Sin revisar"}</p><ReconciliationReviewForm reportId={report.id} /></td>
         </tr>)}
-        {!comparisons.length && <tr><td colSpan={8} className="p-6 text-center text-slate-400">Registra un reporte externo para iniciar una comparación.</td></tr>}</tbody>
+        {!comparisons.length && <tr><td colSpan={8} className="p-6 text-center text-[var(--text-secondary)]">Registra un reporte externo para iniciar una comparación.</td></tr>}</tbody>
       </table>
     </div>
-    <p className="text-sm text-slate-400">Criterio: minutos interpretados y llamadas de todos los registros internos asociados a la cuenta, dentro de las fechas inclusivas. No se filtra por estado ni se sustituyen valores por minutos verificados. Una coincidencia numérica no significa aprobación. Se muestran los últimos 100 reportes; un mismo período puede aparecer en varios reportes.</p>
+    <p className="text-sm text-[var(--text-secondary)]">Criterio: minutos interpretados y llamadas de todos los registros internos asociados a la cuenta, dentro de las fechas inclusivas. No se filtra por estado ni se sustituyen valores por minutos verificados. Una coincidencia numérica no significa aprobación. Se muestran los últimos 100 reportes; un mismo período puede aparecer en varios reportes.</p>
   </section>;
 }
