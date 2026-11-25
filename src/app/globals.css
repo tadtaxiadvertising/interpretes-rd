@@ -588,25 +588,6 @@ html[data-theme="light"] .theme-workspace :is(.text-slate-500, .text-gray-500, .
   color: var(--text-secondary);
 }
 
-/* Restore white on solid blue/red/green buttons and badge icons; white-on-
-   white must never occur because of the old .text-white text override. */
-html[data-theme="light"] .theme-workspace :is(
-  [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
-  [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"],
-  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
-  [class~="bg-green-500"], [class~="bg-green-600"],
-  [class~="bg-indigo-500"], [class~="bg-indigo-600"]
-).text-white,
-html[data-theme="light"] .theme-workspace :is(
-  [class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"],
-  [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"],
-  [class~="bg-emerald-500"], [class~="bg-emerald-600"],
-  [class~="bg-green-500"], [class~="bg-green-600"],
-  [class~="bg-indigo-500"], [class~="bg-indigo-600"]
-) > .text-white {
-  color: #fff;
-}
-
 /* On dark cards, tiny legacy gray hints should be readable too. */
 html[data-theme="dark"] .theme-workspace :is(
   .text-slate-500, .text-gray-500, .text-slate-600, .text-gray-600
@@ -733,6 +714,39 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
 }
 
 
+/* Shared solid actions work in both themes, without legacy text-white overrides.
+   Use these classes for new workspace controls. Status text remains separate. */
+:root {
+  --theme-action-primary: #1554a8;
+  --theme-action-primary-hover: #002d72;
+  --theme-action-success: #047857;
+  --theme-action-success-hover: #065f46;
+  --theme-action-danger: #b91c1c;
+  --theme-action-danger-hover: #991b1b;
+  --theme-action-text: #ffffff;
+}
+.theme-workspace .theme-action-primary {
+  background-color: var(--theme-action-primary);
+  color: var(--theme-action-text);
+}
+.theme-workspace .theme-action-success {
+  background-color: var(--theme-action-success);
+  color: var(--theme-action-text);
+}
+.theme-workspace .theme-action-danger {
+  background-color: var(--theme-action-danger);
+  color: var(--theme-action-text);
+}
+.theme-workspace .theme-action-primary:not(:disabled):hover {
+  background-color: var(--theme-action-primary-hover);
+}
+.theme-workspace .theme-action-success:not(:disabled):hover {
+  background-color: var(--theme-action-success-hover);
+}
+.theme-workspace .theme-action-danger:not(:disabled):hover {
+  background-color: var(--theme-action-danger-hover);
+}
+
 /* Light workspace: exact legacy utilities used by roleplay library, audio
    studio and live monitoring. Keep media canvases (bg-black), gradients and
    dark mode unchanged. */
@@ -771,15 +785,15 @@ html[data-theme="light"] .theme-workspace :is([class~="bg-blue-500"], [class~="b
 html[data-theme="light"] .theme-workspace :is([class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"]).text-white:is([class~="hover:bg-blue-500"], [class~="hover:bg-blue-600"], [class~="hover:bg-blue-700"]):hover { background-color: #1554a8; filter: brightness(.92); }
 html[data-theme="light"] .theme-workspace :is([class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"]).text-white { background-color: #b91c1c; }
 html[data-theme="light"] .theme-workspace :is([class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"]).text-white:is([class~="hover:bg-red-500"], [class~="hover:bg-red-600"], [class~="hover:bg-red-700"]):hover { background-color: #b91c1c; filter: brightness(.92); }
-html[data-theme="light"] .theme-workspace :is([class~="bg-emerald-500"], [class~="bg-emerald-600"], [class~="bg-emerald-700"]).text-white { background-color: #047857; }
-html[data-theme="light"] .theme-workspace :is([class~="bg-emerald-500"], [class~="bg-emerald-600"], [class~="bg-emerald-700"]).text-white:is([class~="hover:bg-emerald-500"], [class~="hover:bg-emerald-600"], [class~="hover:bg-emerald-700"]):hover { background-color: #047857; filter: brightness(.92); }
+html[data-theme="light"] .theme-workspace :is([class~="bg-emerald-500"], [class~="bg-emerald-600"], [class~="bg-emerald-700"]).text-white,
 html[data-theme="light"] .theme-workspace :is([class~="bg-green-500"], [class~="bg-green-600"], [class~="bg-green-700"]).text-white { background-color: #047857; }
+html[data-theme="light"] .theme-workspace :is([class~="bg-emerald-500"], [class~="bg-emerald-600"], [class~="bg-emerald-700"]).text-white:is([class~="hover:bg-emerald-500"], [class~="hover:bg-emerald-600"], [class~="hover:bg-emerald-700"]):hover,
 html[data-theme="light"] .theme-workspace :is([class~="bg-green-500"], [class~="bg-green-600"], [class~="bg-green-700"]).text-white:is([class~="hover:bg-green-500"], [class~="hover:bg-green-600"], [class~="hover:bg-green-700"]):hover { background-color: #047857; filter: brightness(.92); }
 html[data-theme="light"] .theme-workspace :is([class~="bg-indigo-500"], [class~="bg-indigo-600"], [class~="bg-indigo-700"]).text-white { background-color: #4338ca; }
 html[data-theme="light"] .theme-workspace :is([class~="bg-indigo-500"], [class~="bg-indigo-600"], [class~="bg-indigo-700"]).text-white:is([class~="hover:bg-indigo-500"], [class~="hover:bg-indigo-600"], [class~="hover:bg-indigo-700"]):hover { background-color: #4338ca; filter: brightness(.92); }
-html[data-theme="light"] .theme-workspace :is([class~="bg-violet-500"], [class~="bg-violet-600"], [class~="bg-violet-700"]).text-white { background-color: #6d28d9; }
-html[data-theme="light"] .theme-workspace :is([class~="bg-violet-500"], [class~="bg-violet-600"], [class~="bg-violet-700"]).text-white:is([class~="hover:bg-violet-500"], [class~="hover:bg-violet-600"], [class~="hover:bg-violet-700"]):hover { background-color: #6d28d9; filter: brightness(.92); }
+html[data-theme="light"] .theme-workspace :is([class~="bg-violet-500"], [class~="bg-violet-600"], [class~="bg-violet-700"]).text-white,
 html[data-theme="light"] .theme-workspace :is([class~="bg-purple-500"], [class~="bg-purple-600"], [class~="bg-purple-700"]).text-white { background-color: #6d28d9; }
+html[data-theme="light"] .theme-workspace :is([class~="bg-violet-500"], [class~="bg-violet-600"], [class~="bg-violet-700"]).text-white:is([class~="hover:bg-violet-500"], [class~="hover:bg-violet-600"], [class~="hover:bg-violet-700"]):hover,
 html[data-theme="light"] .theme-workspace :is([class~="bg-purple-500"], [class~="bg-purple-600"], [class~="bg-purple-700"]).text-white:is([class~="hover:bg-purple-500"], [class~="hover:bg-purple-600"], [class~="hover:bg-purple-700"]):hover { background-color: #6d28d9; filter: brightness(.92); }
 html[data-theme="light"] .theme-workspace :is([class~="bg-cyan-500"], [class~="bg-cyan-600"], [class~="bg-cyan-700"]).text-white { background-color: #0e7490; }
 html[data-theme="light"] .theme-workspace :is([class~="bg-cyan-500"], [class~="bg-cyan-600"], [class~="bg-cyan-700"]).text-white:is([class~="hover:bg-cyan-500"], [class~="hover:bg-cyan-600"], [class~="hover:bg-cyan-700"]):hover { background-color: #0e7490; filter: brightness(.92); }

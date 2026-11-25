@@ -244,3 +244,30 @@ describe('semantic operations and notification colors', () => {
     expect(source).toContain('bg-red-700 text-[10px] font-bold text-white');
   });
 });
+
+describe('shared solid actions', () => {
+  it('defines one accessible action palette for both appearances', () => {
+    const tokens = new Map<string, string>();
+    root.walkRules(':root', rule => {
+      rule.walkDecls(/^--theme-action-/, declaration => {
+        tokens.set(declaration.prop, declaration.value);
+      });
+    });
+    for (const variant of ['primary', 'success', 'danger']) {
+      for (const suffix of ['', '-hover']) {
+        expect(contrast(tokens.get('--theme-action-' + variant + suffix)!, tokens.get('--theme-action-text')!))
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it('uses semantic actions in the timer and administrative forms', () => {
+    const timer = readFileSync(resolve(process.cwd(), 'src/components/CallTimer.tsx'), 'utf8');
+    expect(timer).toContain('theme-action-success');
+    expect(timer).toContain('theme-action-danger');
+    for (const name of ['AccountPlatformForm', 'ReconciliationReviewForm']) {
+      const source = readFileSync(resolve(process.cwd(), 'src/components/admin/' + name + '.tsx'), 'utf8');
+      expect(source).toContain('theme-action-primary');
+    }
+  });
+});

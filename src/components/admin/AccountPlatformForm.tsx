@@ -46,7 +46,7 @@ export default function AccountPlatformForm({ accounts }: { accounts: AccountOpt
       <div className="md:col-span-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-3 text-xs text-[var(--theme-warning)]">
         Antes de iniciar sesión en el portal, abre <a href="https://whoer.net/" target="_blank" rel="noopener noreferrer" className="font-semibold underline">Whoer.net</a> y comprueba manualmente que el país y la IP de salida coincidan con los valores esperados. Las contraseñas no se guardan aquí. Las referencias vault:// son solo identificadores: esta aplicación no se conecta al gestor externo.
       </div>
-      <button disabled={pending || !accounts.length} className="rounded-lg bg-blue-600 hover:bg-blue-500 text-white px-4 py-3 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar plataforma'}</button>
+      <button disabled={pending || !accounts.length} className="rounded-lg theme-action-primary px-4 py-3 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar plataforma'}</button>
       <p role="status" aria-live="polite" className={state.error ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]'}>{state.error || (state.success ? 'Plataforma registrada.' : '')}</p>
     </form>
   );
