@@ -95,8 +95,8 @@ export default async function AdminDashboard(props: PageProps) {
     <div className="space-y-8 animate-in fade-in duration-700">
       <header className="flex justify-between items-start">
         <div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Panel de control</h2>
-          <p className="text-gray-400 mt-1 flex items-center gap-2">
+          <h2 className="text-3xl font-bold text-[var(--foreground)] tracking-tight">Panel de control</h2>
+          <p className="text-[var(--text-secondary)] mt-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
             Resumen administrativo · Actualización automática cada 120 segundos
           </p>
@@ -109,24 +109,24 @@ export default async function AdminDashboard(props: PageProps) {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Intérpretes Activos', value: interpreters.length, sub: `${onlineCount} En línea ahora`, icon: Users, color: 'text-purple-400' },
-          { label: 'Minutos Mensuales', value: totalMinutesMonth.toLocaleString(), sub: `Producción del mes`, icon: Activity, color: 'text-blue-400' },
-          { label: 'Tasa de Adherencia', value: `${avgAdherence.toFixed(1)}%`, sub: 'Promedio Global', icon: CheckCircle2, color: 'text-green-400' },
-          { label: 'Alertas de calidad (<80%)', value: qaAlertsCount, sub: 'Evaluaciones críticas', icon: AlertTriangle, color: 'text-red-400' },
+          { label: 'Intérpretes Activos', value: interpreters.length, sub: `${onlineCount} En línea ahora`, icon: Users, color: 'text-[var(--theme-purple)]' },
+          { label: 'Minutos Mensuales', value: totalMinutesMonth.toLocaleString(), sub: `Producción del mes`, icon: Activity, color: 'text-[var(--theme-link)]' },
+          { label: 'Tasa de Adherencia', value: `${avgAdherence.toFixed(1)}%`, sub: 'Promedio Global', icon: CheckCircle2, color: 'text-[var(--theme-success)]' },
+          { label: 'Alertas de calidad (<80%)', value: qaAlertsCount, sub: 'Evaluaciones críticas', icon: AlertTriangle, color: 'text-[var(--theme-danger)]' },
         ].map((stat, i) => (
-          <div key={i} className="glass p-6 rounded-3xl border border-white/5 relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
+          <div key={i} className="glass p-6 rounded-3xl border border-[var(--border)] relative overflow-hidden group flex flex-col justify-between min-h-[160px]">
             <div className="absolute -right-4 -top-4 opacity-5 group-hover:opacity-10 transition-opacity">
               <stat.icon size={80} />
             </div>
-            <div className={cn("p-3 rounded-2xl bg-white/5 w-fit mb-2", stat.color)}>
+            <div className={cn("p-3 rounded-2xl bg-[var(--theme-surface-muted)] w-fit mb-2", stat.color)}>
               <stat.icon size={24} />
             </div>
             <div>
-              <p className="text-sm text-gray-500 font-medium">{stat.label}</p>
-              <h3 className="text-3xl font-bold text-white mt-1 leading-none">{stat.value}</h3>
+              <p className="text-sm text-[var(--text-tertiary)] font-medium">{stat.label}</p>
+              <h3 className="text-3xl font-bold text-[var(--foreground)] mt-1 leading-none">{stat.value}</h3>
             </div>
-            <div className="mt-2 pt-2 border-t border-white/5">
-              <p className="text-xs text-gray-400 flex items-center gap-1">
+            <div className="mt-2 pt-2 border-t border-[var(--border)]">
+              <p className="text-xs text-[var(--text-secondary)] flex items-center gap-1">
                 {stat.sub}
               </p>
             </div>
