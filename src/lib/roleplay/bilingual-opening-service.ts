@@ -4,7 +4,7 @@ import { createSignedBilingualOpeningUploadUrl } from '@/lib/roleplay';
 import { verifyBilingualOpeningAudio } from './bilingual-opening-storage';
 import {
   reserveBilingualOpeningPath, claimBilingualOpeningVerification,
-  completeBilingualOpeningVerification, readBilingualOpeningState,
+  completeBilingualOpeningVerification, readBilingualOpeningState, readBilingualOpeningRecovery,
   type BilingualOpeningActor,
 } from './bilingual-opening-store';
 
@@ -38,4 +38,8 @@ export async function confirmOpeningUpload(
 
 export async function recoverOpeningState(db: Store, sessionId: string, actor: BilingualOpeningActor) {
   return readBilingualOpeningState(db, sessionId, actor);
+}
+
+export async function recoverOpeningDetails(db: Store, sessionId: string, actor: BilingualOpeningActor) {
+  return readBilingualOpeningRecovery(db, sessionId, actor);
 }
