@@ -142,7 +142,16 @@ export default async function RoleplayEvaluationPage({ params }: PageProps) {
             <RoleplayEvaluationClient
               sessionId={session.id}
               isEvaluated={session.status === 'EVALUATED' || session.qaScoreId !== null}
-              existingScore={session.qaScore ? { ...session.qaScore, actionRequired: session.qaScore.accionRequerida ?? '' } : null}
+              existingScore={session.qaScore ? {
+                protocolScore: Number(session.qaScore.protocolScore ?? 0),
+                interpretationScore: Number(session.qaScore.interpretationScore ?? 0),
+                languageScore: Number(session.qaScore.languageScore ?? 0),
+                serviceScore: Number(session.qaScore.serviceScore ?? 0),
+                technicalScore: Number(session.qaScore.technicalScore ?? 0),
+                totalScore: Number(session.qaScore.totalScore ?? 0),
+                criticalError: session.qaScore.criticalError === true,
+                actionRequired: session.qaScore.accionRequerida ?? '',
+              } : null}
               requiresOpeningReview={opening.state === 'confirmed'}
               openingReviewUnavailable={opening.state === 'pending' || opening.state === 'unavailable' || (opening.state === 'confirmed' && !opening.audioUrl)}
             />
