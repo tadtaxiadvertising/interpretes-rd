@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import ProviderBudgetEditor from './ProviderBudgetEditor';
 import { importConfiguredEmailProvider, addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget, retireSavedEmailProvider, replaceSavedEmailProvider } from '@/app/actions/email-provider-vault';
 import { providerCatalog, type ProviderId } from '@/lib/email/provider-catalog';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
@@ -163,23 +164,18 @@ export default function EmailProviderVault() {
           <p className="font-semibold">{available.status === 'exhausted' ? 'Presupuesto local agotado' : available.status === 'low' ? 'Presupuesto local próximo a agotarse' : 'Presupuesto local disponible'} · {available.remaining} intentos restantes según ambos límites.</p>
           </>}
           <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
-          <form key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit} className="space-y-2" onSubmit={event => {
-            event.preventDefault();
-            const data = new FormData(event.currentTarget);
-            void run(async () => {
-              const status = await saveEmailProviderBudget({ provider: quota.provider, dailyLimit: Number(data.get('daily')), monthlyLimit: Number(data.get('monthly')), expectedDailyLimit: quota.dailyLimit, expectedMonthlyLimit: quota.monthlyLimit });
-              await load();
-              setMessage(messageFor(status));
-            });
-          }}>
-            <fieldset disabled={pending || !selectionPaused} className="space-y-2">
-              <legend className="font-medium">Ajustar presupuesto local</legend>
-              <label className="block">Máximo diario<input name="daily" type="number" min={1} max={providerCatalog[quota.provider].daily} step={1} required defaultValue={quota.dailyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
-              <label className="block">Máximo mensual<input name="monthly" type="number" min={1} max={providerCatalog[quota.provider].monthly} step={1} required defaultValue={quota.monthlyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
-              <button type="submit" className="rounded-lg border border-[var(--border)] px-3 py-2">Guardar presupuesto</button>
-            </fieldset>
-            <p className="text-xs">Pausa el despacho para editar. El cambio no reinicia el consumo, no cambia tu plan ni garantiza envíos gratuitos. Configura un límite inferior al saldo de tu cuenta real.</p>
-          </form>
+          <ProviderBudgetEditor
+            key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit}
+            quota={quota}
+            disabled={pending || !selectionPaused}
+            onSave={(dailyLimit, monthlyLimit) => {
+              void run(async () => {
+                const status = await saveEmailProviderBudget({ provider: quota.provider, dailyLimit, monthlyLimit, expectedDailyLimit: quota.dailyLimit, expectedMonthlyLimit: quota.monthlyLimit });
+                await load();
+                setMessage(messageFor(status));
+              });
+            }}
+          />
         </div>
       ); })}
       {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
