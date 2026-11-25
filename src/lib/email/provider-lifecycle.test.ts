@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
+import { openProfileCredentials } from './provider-vault';
 import { retireProviderProfile, replaceProviderProfile, validateReplacement } from './provider-lifecycle';
 
 const id = '123e4567-e89b-42d3-a456-426614174000';
@@ -35,5 +36,17 @@ describe('provider lifecycle', () => {
     expect(args.at(-1)).toBe(id);
     expect(JSON.stringify(args)).not.toContain(profile.apiKey);
     expect(String(args[0])).not.toContain('test_accepted_at');
+  });
+  it('preserves both encrypted SMTP credentials when replacing a profile', async () => {
+    const smtpProfile = { ...profile, provider: 'mailjet' as const, apiKey: 'fixture-user', secretKey: 'fixture-secret' };
+    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'mailjet' }]), $executeRaw: vi.fn().mockResolvedValue(1) };
+    expect(await replaceProviderProfile(db, { id, profile: smtpProfile }, 'fixture', key)).toBe(true);
+    const args = db.$executeRaw.mock.calls[2];
+    const newId = args[1] as string;
+    const sealed = args[6] as string;
+    expect(newId).not.toBe(id);
+    expect(openProfileCredentials(newId, 'mailjet', sealed, key)).toEqual({ apiKey: smtpProfile.apiKey, secretKey: smtpProfile.secretKey });
+    expect(JSON.stringify(args)).not.toContain(smtpProfile.secretKey);
+    expect(openProfileCredentials(id, 'mailjet', sealed, key)).toBeNull();
   });
 });
