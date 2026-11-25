@@ -109,7 +109,13 @@ export default async function NewRoleplayPage({
           </div>
         </div>
 
-        {sourceSessionId && !librarySource ? (
+        {librarySource?.requiresOpening && !openingAssignmentEnabled() ? (
+          <div role="alert" className="rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-6">
+            <p className="font-semibold text-[var(--foreground)]">La asignación privada todavía no está habilitada</p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">Puedes revisar la plantilla en la biblioteca. No se permite omitir su protocolo de apertura.</p>
+            <Link href="/admin/roleplays/library" className="mt-4 inline-block text-[var(--theme-link)] underline">Volver a la biblioteca</Link>
+          </div>
+        ) : sourceSessionId && !librarySource ? (
           <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
             <p className="font-semibold text-[var(--theme-warning)]">La plantilla solicitada no está disponible</p>
             <p className="mt-2 text-sm text-[var(--theme-warning)]">Puede haber cambiado, no tener audios reutilizables o haber sido retirada.</p>
