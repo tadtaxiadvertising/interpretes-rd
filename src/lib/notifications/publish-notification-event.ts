@@ -1,30 +1,13 @@
 import 'server-only';
-import { createHash } from 'node:crypto';
 import prisma from '@/lib/prisma';
-import { safeNotificationLink } from './safe-notification-link';
+import { notificationEventRow, type NotificationEvent } from './notification-event-row';
 
-export type NotificationEvent = {
-  userId: string;
-  eventKey: string;
-  title: string;
-  message: string;
-  category: 'system' | 'qa' | 'messaging' | 'roleplay' | 'recruitment' | 'operations' | 'finance';
-  type: 'info' | 'success' | 'warning' | 'error';
-  link?: string;
-};
+export type { NotificationEvent } from './notification-event-row';
 
 /** Internal-only: callers must authenticate and resolve the recipient first. */
 export async function publishNotificationEvent(event: NotificationEvent) {
-  const id = createHash('sha256').update(JSON.stringify(['notification-event-v1', event.userId.toLowerCase(), event.eventKey])).digest('hex');
+  const row = notificationEventRow(event);
   // The existing primary key enforces idempotency even across concurrent workers.
-  // Never reset a previously read notification or overwrite its original content.
-  const result = await prisma.notification.createMany({
-    data: [{
-      id, userId: event.userId, title: event.title, message: event.message,
-      category: event.category, type: event.type,
-      link: safeNotificationLink(event.link),
-    }],
-    skipDuplicates: true,
-  });
-  return { id, created: result.count === 1 };
+  const result = await prisma.notification.createMany({ data: [row], skipDuplicates: true });
+  return { id: row.id, created: result.count === 1 };
 }
