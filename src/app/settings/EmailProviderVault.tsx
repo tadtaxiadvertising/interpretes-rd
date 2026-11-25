@@ -57,6 +57,8 @@ export default function EmailProviderVault() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [retiringId, setRetiringId] = useState<string | null>(null);
   const [preferredId, setPreferredId] = useState<string | null>(null);
+  const [alternativeId, setAlternativeId] = useState('');
+  const [confirmAlternative, setConfirmAlternative] = useState(false);
   const [selectionPaused, setSelectionPaused] = useState(false);
   const [preferenceEditable, setPreferenceEditable] = useState(false);
   const [quotas, setQuotas] = useState<ProviderQuota[]>([]);
@@ -70,6 +72,8 @@ export default function EmailProviderVault() {
     setProfiles([]);
     setQuotas([]);
     setPreferredId(null);
+    setAlternativeId('');
+    setConfirmAlternative(false);
     setEnvironmentImport(undefined);
     setConfirmImport(false);
     setEditingId(null);
@@ -79,6 +83,8 @@ export default function EmailProviderVault() {
     setRefreshError(reason);
   }
   async function load() {
+    setAlternativeId('');
+    setConfirmAlternative(false);
     try {
       const result = await listEmailProviderProfiles();
       if (result.status !== 'ready') {
@@ -130,6 +136,10 @@ export default function EmailProviderVault() {
 
   const alternatives = providerAlternatives(profiles, quotas, preferredId);
   const preferred = profiles.find(profile => profile.id === preferredId);
+  const alternativeProfiles = profiles.filter(profile => profile.id !== preferredId &&
+    alternatives.alternatives.some(item => item.provider === profile.provider) &&
+    profileSelectionReadiness(profile, quotas.find(quota => quota.provider === profile.provider), true) === 'ready');
+  const selectedAlternative = alternativeProfiles.find(profile => profile.id === alternativeId);
   const preferredQuota = preferred && quotas.find(quota => quota.provider === preferred.provider);
   const preferredReadiness = preferred ? profileSelectionReadiness(preferred, preferredQuota, true) : null;
   const preferredAvailability = preferredQuota ? quotaAvailability(preferredQuota) : null;
@@ -197,7 +207,7 @@ export default function EmailProviderVault() {
           <progress aria-label={'Consumo mensual ' + quota.provider} value={Math.min(quota.monthlyUsed, quota.monthlyLimit)} max={quota.monthlyLimit} className="w-full" />
           <p className="font-semibold">{available.status === 'exhausted' ? 'Presupuesto local agotado' : available.status === 'low' ? 'Presupuesto local próximo a agotarse' : 'Presupuesto local disponible'} · {available.remaining} intentos restantes según ambos límites.</p>
           </>}
-          <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
+          <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos, de autenticación, SMTP genérico ni envíos históricos anteriores a la protección presupuestaria. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
           <ProviderBudgetEditor
             key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit}
             quota={quota}
@@ -238,6 +248,28 @@ export default function EmailProviderVault() {
               <li key={item.provider}>{providerCatalog[item.provider].label} · {item.remaining} intentos restantes · {item.profiles} {item.profiles === 1 ? 'perfil verificado' : 'perfiles verificados'} (cuota compartida)</li>
             ))}</ul>}
           {alternatives.sharedProfiles > 0 && <p>{alternatives.sharedProfiles} {alternatives.sharedProfiles === 1 ? 'perfil adicional comparte' : 'perfiles adicionales comparten'} el presupuesto del proveedor preferido; no amplía su cuota.</p>}
+          {alternativeProfiles.length > 0 && (
+            <div className="space-y-3 rounded-lg border border-[var(--border)] p-3">
+              <label className="block space-y-1">
+                <span className="font-medium">Elegir alternativa verificada</span>
+                <select value={alternativeId} disabled={pending || !preferenceEditable} onChange={event => { setAlternativeId(event.target.value); setConfirmAlternative(false); }} className="block min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-2">
+                  <option value="">Seleccionar perfil</option>
+                  {alternativeProfiles.map(profile => <option key={profile.id} value={profile.id}>{providerCatalog[profile.provider].label} · {profile.name} · {profile.from}</option>)}
+                </select>
+              </label>
+              {selectedAlternative && <p className="text-xs">Se guardará {selectedAlternative.name} como preferencia. No se cambiará el origen del transporte ni se reanudará el despacho.</p>}
+              <label className="flex min-h-11 items-start gap-2">
+                <input type="checkbox" checked={confirmAlternative} disabled={pending || !preferenceEditable || !selectedAlternative} onChange={event => setConfirmAlternative(event.target.checked)} className="mt-1" />
+                Confirmo el cambio de preferencia, sin activar envíos.
+              </label>
+              <button type="button" disabled={pending || !preferenceEditable || !selectedAlternative || !confirmAlternative} onClick={() => {
+                if (!preferenceEditable || !selectedAlternative || !confirmAlternative) return;
+                const id = selectedAlternative.id;
+                setConfirmAlternative(false);
+                void run(() => savePreference(id));
+              }} className="min-h-11 rounded-lg border border-[var(--border)] px-3 py-2 font-semibold text-[var(--theme-link)] disabled:opacity-50">Guardar alternativa preferida</button>
+            </div>
+          )}
           <p className="text-xs">Según la última consulta de perfiles y reservas locales. No representa el saldo real ni garantiza entrega. {preferenceEditable ? 'Puedes revisar los perfiles antes de elegir.' : 'Pausa el despacho y vuelve a consultar antes de elegir.'} No hay cambio automático de proveedor.</p>
         </section>
       )}
