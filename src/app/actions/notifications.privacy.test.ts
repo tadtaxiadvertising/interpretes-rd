@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   validateAction: vi.fn(),
+  reconcileRecruitmentAdminNotifications: vi.fn(),
   notificationCreate: vi.fn(),
   notificationCreateMany: vi.fn(),
   notificationCount: vi.fn(),
@@ -11,6 +12,7 @@ const m = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/notifications/reconcile-recruitment-admin', () => ({ reconcileRecruitmentAdminNotifications: m.reconcileRecruitmentAdminNotifications }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: m.validateAction }));
 vi.mock('@/lib/prisma', () => ({
   default: {
@@ -311,5 +313,16 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
       where: { id: 'old-operational-notice', userId: { in: [profileId] }, category: 'recruitment', link: '/candidate' },
       data: { isRead: true },
     });
+  });
+  it('reconciles only the authenticated administrator profile during feed refresh', async () => {
+    m.notificationFindMany.mockResolvedValue([]);
+    m.notificationCount.mockResolvedValue(0);
+    await getMyNotifications();
+    expect(m.reconcileRecruitmentAdminNotifications).toHaveBeenCalledExactlyOnceWith(profileId);
+    for (const role of ['candidate', 'interpreter']) {
+      m.validateAction.mockResolvedValueOnce({ user: { profileId, userId: 'legacy-user', role } });
+      await getMyNotifications();
+    }
+    expect(m.reconcileRecruitmentAdminNotifications).toHaveBeenCalledTimes(1);
   });
 });
