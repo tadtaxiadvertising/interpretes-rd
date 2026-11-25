@@ -8,11 +8,11 @@ export default function ReconciliationReviewForm({ reportId }: { reportId: numbe
   const [state, action, pending] = useActionState(async (_previous: Result, data: FormData): Promise<Result> => recordReconciliationReview(data), { success: false });
   return <form action={action} className="mt-2 grid min-w-[230px] gap-2">
     <input type="hidden" name="reportId" value={reportId} />
-    <select name="decision" required aria-label="Estado de revisión" className="rounded-lg border border-white/15 bg-slate-900 p-2">
+    <select name="decision" required aria-label="Estado de revisión" className="rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
       <option value="INVESTIGATING">En investigación</option><option value="DISPUTED">En disputa</option><option value="RESOLVED">Resuelto con observaciones</option><option value="MATCHED">Coincidencia confirmada</option>
     </select>
-    <textarea name="note" minLength={5} maxLength={2000} required rows={2} placeholder="Justificación de la decisión" aria-label="Justificación" className="rounded-lg border border-white/15 bg-slate-900 p-2" />
-    <button disabled={pending} className="rounded-lg bg-[#2675ff] p-2 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar revisión'}</button>
-    <p role="status" aria-live="polite" className={state.error ? 'text-red-300' : 'text-emerald-300'}>{state.error || (state.success ? 'Revisión registrada.' : '')}</p>
+    <textarea name="note" minLength={5} maxLength={2000} required rows={2} placeholder="Justificación de la decisión" aria-label="Justificación" className="rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]" />
+    <button disabled={pending} className="rounded-lg bg-blue-600 hover:bg-blue-500 text-white p-2 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar revisión'}</button>
+    <p role="status" aria-live="polite" className={state.error ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]'}>{state.error || (state.success ? 'Revisión registrada.' : '')}</p>
   </form>;
 }
