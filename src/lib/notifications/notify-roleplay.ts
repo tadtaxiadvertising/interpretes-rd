@@ -1,5 +1,6 @@
 import 'server-only';
 import prisma from '@/lib/prisma';
+import { roleplayEvaluationEvent } from './evaluation-notification-events';
 import { publishNotificationEvent } from './publish-notification-event';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
@@ -48,13 +49,7 @@ export async function notifyRoleplayEvaluation(input: {
       select: { id: true, role: true },
     });
     if (profile?.role?.toLowerCase() !== 'interpreter') return;
-    await publishNotificationEvent({
-      userId: profile.id, eventKey: 'roleplay.evaluated:' + input.sessionId,
-      category: 'roleplay', type: input.passed ? 'success' : 'warning',
-      title: 'Roleplay evaluado',
-      message: `Tu roleplay fue evaluado: ${input.totalScore.toFixed(1)}%. Acción: ${input.actionRequired}`,
-      link: '/dashboard/roleplays',
-    });
+    await publishNotificationEvent(roleplayEvaluationEvent(profile.id, input));
   } catch (error) {
     console.warn('Roleplay evaluation saved but notification failed:', safeServerErrorCategory(error));
   }

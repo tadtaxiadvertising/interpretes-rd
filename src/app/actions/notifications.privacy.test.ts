@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   validateAction: vi.fn(),
   reconcileRecruitmentAdminNotifications: vi.fn(),
   reconcileCandidateNotifications: vi.fn(),
+  reconcileInterpreterEvaluations: vi.fn(),
   notificationCreate: vi.fn(),
   notificationCreateMany: vi.fn(),
   notificationCount: vi.fn(),
@@ -13,6 +14,7 @@ const m = vi.hoisted(() => ({
   revalidatePath: vi.fn(),
 }));
 
+vi.mock('@/lib/notifications/reconcile-interpreter-evaluations', () => ({ reconcileInterpreterEvaluations: m.reconcileInterpreterEvaluations }));
 vi.mock('@/lib/notifications/reconcile-candidate', () => ({ reconcileCandidateNotifications: m.reconcileCandidateNotifications }));
 vi.mock('@/lib/notifications/reconcile-recruitment-admin', () => ({ reconcileRecruitmentAdminNotifications: m.reconcileRecruitmentAdminNotifications }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: m.validateAction }));
@@ -338,5 +340,18 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     m.validateAction.mockResolvedValueOnce({ user: { ...actor, role: 'interpreter' } });
     await getMyNotifications();
     expect(m.reconcileCandidateNotifications).toHaveBeenCalledTimes(1);
+  });
+  it('recovers evaluation notices only for the authenticated interpreter actor', async () => {
+    const actor = { profileId, userId: 'legacy-user', role: 'interpreter', interpreterId: 7, email: 'worker@example.test' };
+    m.validateAction.mockResolvedValueOnce({ user: actor });
+    m.notificationFindMany.mockResolvedValue([]);
+    m.notificationCount.mockResolvedValue(0);
+    expect(await getMyNotifications()).toEqual({ success: true, data: [], unreadCount: 0 });
+    expect(m.reconcileInterpreterEvaluations).toHaveBeenCalledExactlyOnceWith(actor);
+    for (const role of ['candidate', 'admin']) {
+      m.validateAction.mockResolvedValueOnce({ user: { ...actor, role } });
+      await getMyNotifications();
+    }
+    expect(m.reconcileInterpreterEvaluations).toHaveBeenCalledTimes(1);
   });
 });
