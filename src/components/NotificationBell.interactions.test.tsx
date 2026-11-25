@@ -179,4 +179,17 @@ describe('NotificationBell interactions', () => {
     await waitFor(() => expect(screen.getByText('25 sin leer')).toBeTruthy());
     expect(screen.queryByText(/No se pudo actualizar/)).toBeNull();
   });
+  it('shows category and severity with safe module links in the quick feed', () => {
+    render(<NotificationBell initialNotifications={[
+      { ...notifications[0], type: 'warning', category: 'qa', link: '/dashboard?token=private' },
+      { ...notifications[1], category: 'private-category', link: '//evil.invalid' },
+    ]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    expect(screen.getByText('Calidad (QA)')).toBeTruthy();
+    expect(screen.getByText('Atención')).toBeTruthy();
+    expect(screen.getByText('Sistema')).toBeTruthy();
+    expect(screen.queryByText('private-category')).toBeNull();
+    expect(screen.getByRole('link', { name: 'Ir al módulo: Auditoría QA' }).getAttribute('href')).toBe('/dashboard');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+  });
 });
