@@ -17,6 +17,7 @@ const statusText: Record<string, string> = {
   profile_retired: 'Perfil desactivado. El consumo y el historial se conservan.',
   profile_replaced: 'Nueva configuración guardada. Repite la prueba y confirma la recepción antes de seleccionarla.',
   budget_saved: 'Presupuesto guardado. El consumo acumulado no ha cambiado.',
+  budget_conflict: 'El presupuesto cambió o ya no está disponible. Revisa los límites actualizados antes de volver a guardar.',
   budget_invalid: 'Introduce límites enteros dentro de los máximos permitidos.',
   accepted_evidence_missing: 'El proveedor aceptó la prueba, pero no se pudo guardar la evidencia. Revisa el buzón y el almacén; no repitas automáticamente.',
   receipt_confirmed: 'Recepción confirmada por el administrador.',
@@ -166,7 +167,7 @@ export default function EmailProviderVault() {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
             void run(async () => {
-              const status = await saveEmailProviderBudget({ provider: quota.provider, dailyLimit: Number(data.get('daily')), monthlyLimit: Number(data.get('monthly')) });
+              const status = await saveEmailProviderBudget({ provider: quota.provider, dailyLimit: Number(data.get('daily')), monthlyLimit: Number(data.get('monthly')), expectedDailyLimit: quota.dailyLimit, expectedMonthlyLimit: quota.monthlyLimit });
               await load();
               setMessage(messageFor(status));
             });
