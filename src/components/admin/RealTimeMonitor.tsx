@@ -577,7 +577,7 @@ export default function RealTimeMonitor() {
       {isInitialLoading ? (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4 animate-pulse">
+            <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 animate-pulse">
               <div className="h-6 w-48 rounded bg-[var(--theme-surface-muted)] mb-4" />
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, j) => (
@@ -812,7 +812,7 @@ export default function RealTimeMonitor() {
               />
               <button
                 onClick={() => setSelectedInterpreter(null)}
-                className="text-[var(--text-tertiary)] hover:text-[var(--foreground)] transition-colors text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-gray-500"
+                className="text-[var(--text-tertiary)] hover:text-[var(--foreground)] transition-colors text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-[var(--theme-control-border)]"
               >
                 Cerrar
               </button>
