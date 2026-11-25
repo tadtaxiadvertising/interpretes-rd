@@ -195,7 +195,15 @@ export default function EmailProviderVault() {
       {ready && <p className="text-xs">{preferenceEditable ? 'Puedes elegir un perfil con recepción confirmada. La pausa se conserva.' : 'Para cambiar de proveedor, pausa el despacho del almacén y vuelve a consultar perfiles. Las pruebas y otras modificaciones mantienen sus requisitos de seguridad.'}</p>}
       {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
       {profiles.map(profile => {
-        const readiness = profileSelectionReadiness(profile, quotas.find(q => q.provider === profile.provider), preferenceEditable);
+        const quota = quotas.find(q => q.provider === profile.provider);
+        const readiness = profileSelectionReadiness(profile, quota, preferenceEditable);
+        const testQuota = quota ? quotaAvailability(quota) : null;
+        const testBlocked = !selectionPaused || !testQuota || testQuota.remaining === 0;
+        const testHint = !selectionPaused ? 'Pausa el despacho para realizar una prueba.'
+          : !testQuota ? 'No hay presupuesto local consultado para realizar una prueba.'
+          : testQuota.status === 'invalid_period' ? 'No se puede realizar la prueba con un período de cuota inconsistente.'
+          : testQuota.remaining === 0 ? 'Presupuesto local agotado: no se puede realizar la prueba.'
+          : 'La prueba reserva un intento del presupuesto local compartido, incluso si no se confirma la entrega.';
         return (
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
           <p className="font-semibold">{profile.name} · {profile.provider}</p>
@@ -203,7 +211,8 @@ export default function EmailProviderVault() {
           <p>{profile.retiredAt ? 'Desactivado (histórico)' : profile.receiptConfirmedAt ? 'Recepción confirmada' : profile.testAcceptedAt ? 'Aceptado; falta verificar el buzón' : 'Sin prueba aceptada'}</p>
           {!profile.retiredAt && preferredId === profile.id && <p className="font-semibold">Proveedor preferido</p>}
           {!profile.retiredAt && <>
-          <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await testSavedEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Enviar prueba a este remitente</button>
+          <button type="button" disabled={pending || testBlocked} aria-describedby={'provider-test-hint-' + profile.id} onClick={() => run(async () => { const status = await testSavedEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2 disabled:opacity-50">Enviar prueba a este remitente</button>
+          <p id={'provider-test-hint-' + profile.id} className="text-xs">{testHint}</p>
           {profile.testAcceptedAt && !profile.receiptConfirmedAt && (
             <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await confirmSavedProviderReceipt(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Confirmo que recibí el correo de prueba</button>
           )}
