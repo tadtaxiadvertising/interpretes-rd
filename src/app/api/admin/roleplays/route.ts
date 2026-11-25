@@ -19,6 +19,9 @@ import {
   interpreterAssignmentScope,
 } from '@/lib/roleplay-assignment-ownership';
 
+import { openingAssignmentEnabled, readOpeningRequirement, insertOpeningRequiredSession } from '@/lib/roleplay/bilingual-opening-assignment';
+import { requireBilingualOpeningBucket } from '@/lib/roleplay/bilingual-opening-bucket';
+
 const db = prisma;
 
 /**
@@ -166,6 +169,15 @@ export async function POST(req: NextRequest) {
     const rawScenarios = formData.get('scenarios');
     const scenarioAudios = formData.getAll('scenarioAudios');
     const rawAudioChecksums = formData.get('scenarioAudioSha256');
+    const openingFields = formData.getAll('requiresBilingualOpening');
+    if (openingFields.length > 1 || (openingFields.length === 1 && !['true', 'false'].includes(String(openingFields[0])))) {
+      return privateRoleplayJson({ success: false, error: 'Configuración de apertura inválida.' }, { status: 400 });
+    }
+    const assignmentEnabled = openingAssignmentEnabled();
+    let requiresOpening = openingFields[0] === 'true';
+    if (requiresOpening && !assignmentEnabled) {
+      return privateRoleplayJson({ success: false, error: 'La apertura bilingüe aún no está habilitada para nuevas sesiones.' }, { status: 503 });
+    }
     const rawLibrarySessionId = formData.get('librarySessionId');
     const rawLibraryFingerprint = formData.get('libraryFingerprint');
     const useLibrary = rawLibrarySessionId !== null;
@@ -251,6 +263,12 @@ export async function POST(req: NextRequest) {
           source.scenarios.length === 0 || source.scenarios.length > ROLEPLAY_MAX_SCENARIOS) {
         return privateRoleplayJson({ success: false, error: 'Reusable roleplay not available' }, { status: 404 });
       }
+      // A previously required template cannot silently lose its opening.
+      if (process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true' &&
+          await readOpeningRequirement(db, rawLibrarySessionId as string)) {
+        if (!assignmentEnabled) return privateRoleplayJson({ success: false, error: 'La asignación con apertura está temporalmente deshabilitada.' }, { status: 503 });
+        requiresOpening = true;
+      }
       if (getRoleplaySnapshotHash(source.scenarios) !== rawLibraryFingerprint) {
         return privateRoleplayJson({
           success: false,
@@ -314,6 +332,21 @@ export async function POST(req: NextRequest) {
         { success: false, error: `Invalid scenarios: expected 1-${ROLEPLAY_MAX_SCENARIOS} entries with a non-empty title` },
         { status: 400 }
       );
+    }
+
+    if (requiresOpening) {
+      // Preflight before reserving sessions or uploading clinical audio.
+      // This does not prove object policy isolation; rollout still requires it.
+      try {
+        const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+        const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (!url || !key) throw new Error();
+        const { createClient } = await import('@supabase/supabase-js');
+        const storage = supabaseAdmin ?? createClient(url, key, { auth: { persistSession: false } });
+        await requireBilingualOpeningBucket(storage.storage);
+      } catch {
+        return privateRoleplayJson({ success: false, error: 'El almacenamiento de apertura no está preparado. No se creó ninguna sesión.' }, { status: 503 });
+      }
     }
 
     let expectedAudioChecksums: Array<string | null> | null = null;
@@ -482,15 +515,7 @@ export async function POST(req: NextRequest) {
             skippedCount++;
             continue;
           }
-          const session = await tx.roleplaySession.create({
-            data: {
-              interpreterId: interpreter.id,
-              recruitmentCandidateId: null,
-              baseAudioUrl: audioUrls[0],
-              baseAudioPath: firstBaseAudioPath,
-              status: 'INVITED',
-              scenarios: {
-                create: scenarios.map((scenario, index) => ({
+          const scenarioRows = scenarios.map((scenario, index) => ({
                   order: index,
                   title: scenario.title,
                   baseAudioUrl: audioUrls[index],
@@ -502,11 +527,22 @@ export async function POST(req: NextRequest) {
         sourceStartSec: scenario.sourceStartSec,
         sourceEndSec: scenario.sourceEndSec,
                   expectedKeys: scenario.expectedKeys ?? [],
-                })),
-              },
-            },
-            select: { id: true },
-          });
+                }));
+          const sessionData = {
+            interpreterId: interpreter.id, recruitmentCandidateId: null,
+            baseAudioUrl: audioUrls[0], baseAudioPath: firstBaseAudioPath, status: 'INVITED' as const,
+          };
+          const session = requiresOpening
+            ? await insertOpeningRequiredSession(tx, sessionData)
+            : await tx.roleplaySession.create({
+                data: { ...sessionData, scenarios: { create: scenarioRows } },
+                select: { id: true },
+              });
+          if (requiresOpening) {
+            await tx.roleplaySession.update({
+              where: { id: session.id }, data: { scenarios: { create: scenarioRows } },
+            });
+          }
           created.push({ id: session.id, interpreterId: interpreter.id });
         }
         return { created, skippedCount };
@@ -581,16 +617,21 @@ export async function POST(req: NextRequest) {
         });
         if (existingAccess) return { conflict: { id: draft.id, status: 'DRAFT' as const }, session: null };
       }
-      if (draft) return { conflict: null, session: draft };
-      const created = await tx.roleplaySession.create({
-        data: {
-          interpreterId: participantType === 'interpreter' ? parsedParticipantId! : null,
-          recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId! : null,
-          baseAudioUrl: '',
-          status: 'DRAFT',
-        },
-        select: { id: true, updatedAt: true },
-      });
+      if (draft) {
+        if (process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true' &&
+            await readOpeningRequirement(tx, draft.id) !== requiresOpening) {
+          return { conflict: { id: draft.id, status: 'DRAFT' as const }, session: null };
+        }
+        return { conflict: null, session: draft };
+      }
+      const sessionData = {
+        interpreterId: participantType === 'interpreter' ? parsedParticipantId! : null,
+        recruitmentCandidateId: participantType === 'candidate' ? parsedParticipantId! : null,
+        baseAudioUrl: '', status: 'DRAFT' as const,
+      };
+      const created = requiresOpening
+        ? await insertOpeningRequiredSession(tx, sessionData)
+        : await tx.roleplaySession.create({ data: sessionData, select: { id: true, updatedAt: true } });
       return { conflict: null, session: created };
     });
     if (reservation.conflict) {

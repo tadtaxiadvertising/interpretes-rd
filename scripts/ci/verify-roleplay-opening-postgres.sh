@@ -12,10 +12,14 @@ db <<'SQL'
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN;
-CREATE TYPE public.roleplay_status AS ENUM ('DRAFT','INVITED','STARTED','IN_PROGRESS','SUBMITTED','UNDER_REVIEW','EVALUATED','PASSED','FAILED','CANCELLED','EXPIRED');
+CREATE TYPE public."RoleplayStatus" AS ENUM ('DRAFT','INVITED','STARTED','IN_PROGRESS','SUBMITTED','UNDER_REVIEW','EVALUATED','PASSED','FAILED','CANCELLED','EXPIRED');
 CREATE TABLE public.roleplay_sessions (
-  id text PRIMARY KEY, status public.roleplay_status NOT NULL DEFAULT 'DRAFT',
-  current_scenario_index integer NOT NULL DEFAULT 0
+  id text PRIMARY KEY, status public."RoleplayStatus" NOT NULL DEFAULT 'DRAFT',
+  current_scenario_index integer NOT NULL DEFAULT 0,
+  interpreter_id integer, recruitment_candidate_id integer,
+  base_audio_url text NOT NULL DEFAULT '', base_audio_path text,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  review_priority integer DEFAULT 0
 );
 CREATE TABLE public.roleplay_scenarios (
   id text PRIMARY KEY, session_id text NOT NULL REFERENCES public.roleplay_sessions(id) ON DELETE CASCADE
@@ -177,4 +181,25 @@ race "UPDATE public.roleplay_bilingual_opening_reservations
   SET verification_id='123e4567-e89b-42d3-a456-426614174001', verification_until=now()+interval '2 minutes'
   WHERE session_id='other' AND (verification_until IS NULL OR verification_until <= now())
   AND expires_at >= now()+interval '2 minutes' RETURNING session_id;"
+# Exercise the exact INSERT used by the new assignment helper.
+assignment_sql="$(python3 - "$root/src/lib/roleplay/bilingual-opening-assignment.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('INSERT INTO public.roleplay_sessions', 1)[1].split(chr(96), 1)[0]
+sql = 'INSERT INTO public.roleplay_sessions' + sql
+for key, value in {
+    '${id}': "'new-assignment'",
+    '${data.interpreterId}': '7',
+    '${data.recruitmentCandidateId}': 'NULL',
+    '${data.baseAudioUrl}': "''",
+    '${data.baseAudioPath ?? null}': 'NULL',
+    '${data.status}': "'DRAFT'",
+}.items():
+    sql = sql.replace(key, value)
+assert '${' not in sql, 'Unexpected assignment parameter'
+print(sql + ';')
+PY
+)"
+db -c "$assignment_sql" >/dev/null
+[[ "$(db -c "SELECT requires_bilingual_opening AND status='DRAFT' AND interpreter_id=7 AND current_scenario_index=0 FROM public.roleplay_sessions WHERE id='new-assignment'")" == t ]]
 echo 'Isolated PostgreSQL opening checks passed.'

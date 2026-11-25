@@ -76,8 +76,10 @@ function buildRequest(fields: {
   audios?: File[];
   librarySessionId?: string;
   libraryFingerprint?: string;
+  requiresBilingualOpening?: string;
 }) {
   const formData = new FormData();
+  if (fields.requiresBilingualOpening !== undefined) formData.append('requiresBilingualOpening', fields.requiresBilingualOpening);
   if (fields.participantType !== undefined) formData.append('participantType', fields.participantType);
   if (fields.participantId !== undefined) formData.append('participantId', fields.participantId);
   if (fields.scenarios !== undefined) formData.append('scenarios', fields.scenarios);
@@ -154,7 +156,18 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('authorization', () => {
-    it('rejects an interpreter Bearer even when an admin cookie is present, before any upload or DB query', async () => {
+    it('rejects required opening assignments before any write while rollout is disabled', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_ASSIGNMENT_ENABLED', '');
+    try {
+      const response = await POST(buildRequest({ participantType: 'interpreter', participantId: '7',
+        scenarios: oneScenario, audios: [audioFile()], requiresBilingualOpening: 'true' }) as any);
+      expect(response.status).toBe(503);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    } finally { vi.unstubAllEnvs(); }
+  });
+
+  it('rejects an interpreter Bearer even when an admin cookie is present, before any upload or DB query', async () => {
       (actorFromBearer as any).mockResolvedValue({
         userId: 'interpreter-bearer', role: 'interpreter', email: 'interpreter@test.invalid',
       });

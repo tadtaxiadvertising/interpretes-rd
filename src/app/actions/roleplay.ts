@@ -21,6 +21,7 @@ import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 import { publicRoleplayActionError, roleplayBusinessError } from '@/lib/roleplay/action-errors';
 import { prepareOpeningEvaluation, persistOpeningEvaluation } from '@/lib/roleplay/bilingual-opening-evaluation';
+import { readOpeningRequirement, insertOpeningRequiredSession } from '@/lib/roleplay/bilingual-opening-assignment';
 
 const db = prisma;
 
@@ -437,13 +438,9 @@ export async function startCandidateRoleplay() {
           return { success: false as const };
         }
 
-        const newSession = await tx.roleplaySession.create({
-          data: {
-            recruitmentCandidateId: candidate.id,
-            baseAudioUrl: previousSession.baseAudioUrl,
-            status: 'STARTED',
-            scenarios: {
-              create: previousSession.scenarios.map((scenario) => ({
+        const requiresOpening = process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true' &&
+          await readOpeningRequirement(tx, previousSession.id);
+        const scenarioRows = previousSession.scenarios.map((scenario) => ({
                 order: scenario.order,
                 title: scenario.title,
                 baseAudioUrl: scenario.baseAudioUrl,
@@ -455,11 +452,24 @@ export async function startCandidateRoleplay() {
                 sourceStartSec: scenario.sourceStartSec,
                 sourceEndSec: scenario.sourceEndSec,
                 expectedKeys: scenario.expectedKeys,
-              })),
-            },
-          },
-          select: { id: true, status: true },
-        });
+              }));
+        const newSession = requiresOpening
+          ? await insertOpeningRequiredSession(tx, {
+              interpreterId: null, recruitmentCandidateId: candidate.id,
+              baseAudioUrl: previousSession.baseAudioUrl, status: 'STARTED',
+            })
+          : await tx.roleplaySession.create({
+              data: {
+                recruitmentCandidateId: candidate.id, baseAudioUrl: previousSession.baseAudioUrl,
+                status: 'STARTED', scenarios: { create: scenarioRows },
+              },
+              select: { id: true, status: true },
+            });
+        if (requiresOpening) {
+          await tx.roleplaySession.update({
+            where: { id: newSession.id }, data: { scenarios: { create: scenarioRows } },
+          });
+        }
         return { success: true as const, session: newSession };
       });
       if (!retryResult.success) {
