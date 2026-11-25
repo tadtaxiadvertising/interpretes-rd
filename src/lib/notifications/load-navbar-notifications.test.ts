@@ -18,7 +18,7 @@ describe('minimal notification lookup for the dashboard navbar', () => {
     vi.clearAllMocks();
     m.findMany.mockResolvedValue([
       { id: 'n1', title: 'QA', message: 'Evaluación lista', type: 'info',
-        isRead: false, createdAt: new Date('2026-11-17T10:00:00Z') },
+        isRead: false, category: 'qa', link: '/dashboard?token=private', createdAt: new Date('2026-11-17T10:00:00Z') },
     ]);
   });
 
@@ -30,17 +30,18 @@ describe('minimal notification lookup for the dashboard navbar', () => {
   it('fetches exactly the fields used by the bell and limits records', async () => {
     const records = await loadNavbarNotifications([id]);
     expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({ category: 'qa', link: '/dashboard' });
     expect(m.findMany).toHaveBeenCalledWith({
       where: { userId: { in: [id] } },
       select: {
         id: true, title: true, message: true, type: true,
-        isRead: true, createdAt: true,
+        isRead: true, createdAt: true, category: true, link: true,
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       take: 10,
     });
     const args = JSON.stringify(m.findMany.mock.calls[0][0]);
-    for (const key of ['userId: true', 'category', 'link', 'recipientEmail', 'password']) {
+    for (const key of ['userId: true', 'recipientEmail', 'password']) {
       expect(args).not.toContain(key);
     }
   });
