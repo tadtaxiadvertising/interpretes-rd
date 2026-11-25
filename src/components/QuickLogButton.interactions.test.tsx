@@ -31,6 +31,9 @@ describe('Quick Log button protects against duplicate writes', () => {
     expect(mocks.quickLog).toHaveBeenCalledTimes(1);
     expect((screen.getByRole('button', { name: 'Cerrar registro rápido' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText('Minutos') as HTMLInputElement).disabled).toBe(true);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.getByRole('dialog', { name: 'Registrar Llamada Manual' })).toBeTruthy();
+    expect(mocks.quickLog).toHaveBeenCalledTimes(1);
 
     await act(async () => { finish({ success: true, data: { id: 18 } }); });
     await waitFor(() => {
@@ -96,6 +99,21 @@ describe('Quick Log button protects against duplicate writes', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('No se guardó'));
     expect(screen.getByRole('alert').textContent).not.toContain('PRIVATE_DATABASE_CREDENTIAL');
     expect((screen.getByRole('button', { name: 'Guardar Registro' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('uses the shared theme dialog and restores focus after Escape when idle', () => {
+    render(<QuickLogButton />);
+    const trigger = screen.getByRole('button', { name: 'Registro Rápido' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole('dialog', { name: 'Registrar Llamada Manual' });
+    expect(dialog.closest('.theme-workspace')).toBeTruthy();
+    expect(screen.getByLabelText('Minutos').className).toContain('bg-[var(--theme-control-bg)]');
+    expect(screen.getByRole('button', { name: 'Guardar Registro' }).className).toContain('theme-action-primary');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(mocks.quickLog).not.toHaveBeenCalled();
   });
 
   it('does not submit zero, invalid seconds or fractional minutes', () => {
