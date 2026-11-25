@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider } from '@/app/actions/email-provider-vault';
+import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget } from '@/app/actions/email-provider-vault';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 
 const statusText: Record<string, string> = {
+  budget_saved: 'Presupuesto guardado. El consumo acumulado no ha cambiado.',
+  budget_invalid: 'Introduce límites enteros dentro de los máximos permitidos.',
   accepted_evidence_missing: 'El proveedor aceptó la prueba, pero no se pudo guardar la evidencia. Revisa el buzón y el almacén; no repitas automáticamente.',
   receipt_confirmed: 'Recepción confirmada por el administrador.',
   preferred_saved: 'Proveedor preferido guardado. No se activaron envíos automáticos.',
@@ -50,7 +52,7 @@ export default function EmailProviderVault() {
   return (
     <section className="rounded-xl border border-[var(--border)] p-4 space-y-3 text-sm text-[var(--foreground)]" aria-labelledby="provider-vault-title">
       <h3 id="provider-vault-title" className="font-semibold">Perfiles de proveedores guardados</h3>
-      <p>Guarda claves de Brevo y Resend cifradas. Puedes guardar una preferencia verificada. Todavía no modifica el proveedor operativo. No se muestran claves guardadas.</p>
+      <p>Guarda claves de Brevo y Resend cifradas. Puedes guardar una preferencia verificada. Con el origen vault, la preferencia se utiliza en el piloto controlado. No se muestran claves guardadas.</p>
       <button type="button" disabled={pending} onClick={() => run(load)} className="rounded-lg border border-[var(--border)] px-3 py-2">Consultar perfiles</button>
       {ready && (
         <form className="space-y-2" autoComplete="off" onSubmit={event => {
@@ -83,9 +85,26 @@ export default function EmailProviderVault() {
           <p>Mes: {quota.monthlyUsed} de {quota.monthlyLimit} intentos</p>
           <progress aria-label={'Consumo mensual ' + quota.provider} value={Math.min(quota.monthlyUsed, quota.monthlyLimit)} max={quota.monthlyLimit} className="w-full" />
           <p className="text-xs">No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real.</p>
+          <form key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit} className="space-y-2" onSubmit={event => {
+            event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            void run(async () => {
+              const status = await saveEmailProviderBudget({ provider: quota.provider, dailyLimit: Number(data.get('daily')), monthlyLimit: Number(data.get('monthly')) });
+              await load();
+              setMessage(messageFor(status));
+            });
+          }}>
+            <fieldset disabled={pending || !selectionPaused} className="space-y-2">
+              <legend className="font-medium">Ajustar presupuesto local</legend>
+              <label className="block">Máximo diario<input name="daily" type="number" min={1} max={quota.provider === 'brevo' ? 300 : 100} step={1} required defaultValue={quota.dailyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+              <label className="block">Máximo mensual<input name="monthly" type="number" min={1} max={quota.provider === 'brevo' ? 9300 : 3000} step={1} required defaultValue={quota.monthlyLimit} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+              <button type="submit" className="rounded-lg border border-[var(--border)] px-3 py-2">Guardar presupuesto</button>
+            </fieldset>
+            <p className="text-xs">Pausa el despacho para editar. El cambio no reinicia el consumo, no cambia tu plan ni garantiza envíos gratuitos. Configura un límite inferior al saldo de tu cuenta real.</p>
+          </form>
         </div>
       ))}
-      {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No modifica los envíos automáticos.</p>}
+      {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
       {preferredId && <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
       {profiles.map(profile => (
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
