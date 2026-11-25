@@ -13,7 +13,7 @@ const message = { id: 'message-1', senderId, receiverId, content: 'Private conve
 
 beforeEach(() => {
   vi.resetAllMocks();
-  m.validateAction.mockResolvedValue({ user: { userId: senderId, role: 'admin' } });
+  m.validateAction.mockResolvedValue({ user: { userId: 'authjs-account', profileId: senderId, role: 'admin' } });
   m.findUnique.mockResolvedValue({ id: receiverId, role: 'interpreter' });
   m.create.mockResolvedValue(message);
   m.publish.mockResolvedValue({ id: 'notification-1', created: true });
@@ -26,14 +26,23 @@ describe('message notification delivery', () => {
       userId: receiverId, eventKey: 'messaging.message:message-1', category: 'messaging', type: 'info',
       title: 'Nuevo mensaje', message: 'Tienes un nuevo mensaje en tu bandeja de entrada.', link: '/dashboard/messages',
     });
+    expect(m.create).toHaveBeenCalledWith(expect.objectContaining({ data: { senderId, receiverId, content: message.content } }));
     expect(m.create.mock.invocationCallOrder[0]).toBeLessThan(m.publish.mock.invocationCallOrder[0]);
   });
 
   it('routes an interpreter message to the administrative inbox', async () => {
-    m.validateAction.mockResolvedValue({ user: { userId: senderId, role: 'interpreter' } });
+    m.validateAction.mockResolvedValue({ user: { userId: 'authjs-account', profileId: senderId, role: 'interpreter' } });
     m.findUnique.mockResolvedValue({ id: receiverId, role: 'ADMIN' });
     expect(await sendMessage(receiverId, message.content)).toMatchObject({ success: true });
     expect(m.publish).toHaveBeenCalledWith(expect.objectContaining({ link: '/admin/messages' }));
+  });
+
+  it('rejects an unlinked account without reading contacts or writing messages', async () => {
+    m.validateAction.mockResolvedValue({ user: { userId: senderId, profileId: null, role: 'admin' } });
+    expect(await sendMessage(receiverId, message.content)).toMatchObject({ success: false, code: 'UNAUTHORIZED' });
+    expect(m.findUnique).not.toHaveBeenCalled();
+    expect(m.create).not.toHaveBeenCalled();
+    expect(m.publish).not.toHaveBeenCalled();
   });
 
   it('never publishes for an unauthorized conversation', async () => {
