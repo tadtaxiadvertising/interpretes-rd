@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { providerSource } from './provider-source';
 import { vaultKeyAvailable } from './provider-vault';
 import { providerSelectionPaused } from './provider-selection';
 
@@ -21,7 +22,7 @@ export async function inspectProviderVault(db: Reader, env: Env): Promise<VaultR
     database: 'unavailable',
     enabled: env.EMAIL_PROVIDER_VAULT_ENABLED === 'true',
     encryption: !env.EMAIL_PROVIDER_ENCRYPTION_KEY ? 'missing' : vaultKeyAvailable(env.EMAIL_PROVIDER_ENCRYPTION_KEY) ? 'valid_format' : 'invalid',
-    source: env.EMAIL_PROVIDER_SOURCE === 'vault' ? 'vault' : !env.EMAIL_PROVIDER_SOURCE || env.EMAIL_PROVIDER_SOURCE === 'environment' ? 'environment' : 'invalid',
+    source: providerSource(env),
     paused: providerSelectionPaused(env),
   };
   try {
