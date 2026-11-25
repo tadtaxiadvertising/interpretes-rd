@@ -36,14 +36,14 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
   const formatMinutes = (mins: number) => new Intl.NumberFormat('en-US').format(mins);
 
   return (
-    <div className="p-8 max-w-full mx-auto text-[var(--foreground)]">
+    <div className="p-0 sm:p-4 lg:p-8 max-w-full mx-auto text-[var(--foreground)]">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-blue-500/20 rounded-xl">
             <CalendarDays className="w-6 h-6 text-[var(--theme-link)]" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold text-[var(--theme-link)]">
+            <h1 className="text-2xl sm:text-3xl font-bold text-[var(--theme-link)]">
               Tablero de Cumplimiento
             </h1>
             <p className="text-sm text-[var(--text-secondary)] mt-1">Mapa de actividad mensual e indicadores de rendimiento</p>
@@ -53,40 +53,42 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
         <div className="flex items-center gap-2 bg-[var(--theme-panel)] p-1.5 rounded-xl border border-[var(--border)]">
           <Link 
             href={`/admin/calendar?year=${prevYear}&month=${prevMonth}`}
-            className="p-2 hover:bg-[var(--theme-hover)] rounded-lg transition-colors"
+            aria-label="Mes anterior"
+            className="theme-action-secondary p-2 rounded-lg transition-colors"
           >
             <ChevronLeft className="w-5 h-5 text-[var(--text-secondary)]" />
           </Link>
-          <div className="px-4 py-2 font-bold text-[var(--theme-link)] min-w-[160px] text-center">
+          <div className="px-2 sm:px-4 py-2 font-bold text-[var(--theme-link)] min-w-0 sm:min-w-[160px] text-center">
             {new Date(year, month - 1).toLocaleString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase()}
           </div>
           <Link 
             href={`/admin/calendar?year=${nextYear}&month=${nextMonth}`}
-            className="p-2 hover:bg-[var(--theme-hover)] rounded-lg transition-colors"
+            aria-label="Mes siguiente"
+            className="theme-action-secondary p-2 rounded-lg transition-colors"
           >
             <ChevronRight className="w-5 h-5 text-[var(--text-secondary)]" />
           </Link>
         </div>
       </div>
 
-      <div className="overflow-x-auto bg-[var(--theme-panel)] rounded-2xl border border-[var(--border)] shadow-2xl relative">
+      <div role="region" aria-label="Calendario mensual de cumplimiento" tabIndex={0} className="max-w-full overflow-x-auto bg-[var(--theme-panel)] rounded-2xl border border-[var(--border)] shadow-2xl relative">
         <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
           <thead>
             <tr className="border-b border-[var(--border)] bg-[var(--theme-panel)] backdrop-blur-md">
-              <th className="p-4 font-bold text-[var(--foreground)] sticky left-0 bg-[var(--theme-panel)] z-20 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-[var(--border)] min-w-[340px] w-[340px]">
+              <th className="p-4 font-bold text-[var(--foreground)] xl:sticky xl:left-0 bg-[var(--theme-panel)] z-20 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-[var(--border)] min-w-[220px] w-[220px] xl:min-w-[340px] xl:w-[340px]">
                 <div className="flex items-center gap-3">
                   <span>Intérprete</span>
                   <span className="text-[9px] uppercase tracking-wider font-normal text-[var(--text-tertiary)]">/ Estado</span>
                 </div>
               </th>
               {/* Resumen Mes actual */}
-              <th className="p-4 text-center font-bold text-[var(--text-secondary)] sticky left-[180px] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] min-w-[80px] w-[80px]">
+              <th className="p-4 text-center font-bold text-[var(--text-secondary)] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] min-w-[80px] w-[80px]">
                 <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4 text-[var(--theme-success)]"/> Mes actual</div>
               </th>
-              <th className="p-4 text-center font-bold text-[var(--text-secondary)] sticky left-[260px] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] min-w-[80px] w-[80px]">
+              <th className="p-4 text-center font-bold text-[var(--text-secondary)] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] min-w-[80px] w-[80px]">
                 Meta
               </th>
-              <th className="p-4 text-center font-bold text-[var(--text-secondary)] sticky left-[340px] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
+              <th className="p-4 text-center font-bold text-[var(--text-secondary)] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
                 %
               </th>
 
@@ -100,21 +102,21 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
           <tbody>
             {board.map((row) => (
               <tr key={row.interpreter.id} className="border-b border-[var(--border)] hover:bg-[var(--theme-hover)] transition-colors group">
-                <td className="p-4 font-semibold sticky left-0 bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-[var(--border)] min-w-[340px] w-[340px]">
+                <td className="p-4 font-semibold xl:sticky xl:left-0 bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-[var(--border)] min-w-[220px] w-[220px] xl:min-w-[340px] xl:w-[340px]">
                   <div className="flex items-center gap-3">
                     <LiveStatusCell interpreterId={row.interpreter.id} />
-                    <span className="truncate">{row.interpreter.name}</span>
+                    <span className="min-w-0 max-w-[160px] xl:max-w-[270px] truncate" title={row.interpreter.name}>{row.interpreter.name}</span>
                   </div>
                 </td>
                 
                 {/* Columnas Resumen */}
-                <td className="p-3 text-center sticky left-[180px] bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] font-bold text-[var(--theme-success)] min-w-[80px] w-[80px]">
+                <td className="p-3 text-center bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] font-bold text-[var(--theme-success)] min-w-[80px] w-[80px]">
                   {formatMinutes(row.mtdMinutes)}
                 </td>
-                <td className="p-3 text-center sticky left-[260px] bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] font-medium text-[var(--text-secondary)] min-w-[80px] w-[80px]">
+                <td className="p-3 text-center bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] font-medium text-[var(--text-secondary)] min-w-[80px] w-[80px]">
                   {formatMinutes(row.monthlyGoal)}
                 </td>
-                <td className="p-3 text-center sticky left-[340px] bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
+                <td className="p-3 text-center bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
                   <span className={`px-2 py-1 rounded text-[10px] font-bold ${
                     row.fulfillmentPercent >= 100 ? 'bg-emerald-500/20 text-[var(--theme-success)]' : 
                     row.fulfillmentPercent >= 75 ? 'bg-amber-500/20 text-[var(--theme-warning)]' : 
