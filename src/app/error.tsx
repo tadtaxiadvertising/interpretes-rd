@@ -16,13 +16,13 @@ export default function AppError({
   }, [error.digest]);
 
   return (
-    <main className="mx-auto flex min-h-[65vh] max-w-2xl flex-col items-center justify-center gap-5 px-6 text-center text-slate-100">
+    <main className="theme-workspace mx-auto flex min-h-[65dvh] max-w-2xl flex-col items-center justify-center gap-5 px-6 text-center text-[var(--foreground)]">
       <h1 className="text-3xl font-bold">No se pudo cargar esta página</h1>
-      <p className="text-slate-400">Ocurrió un error temporal del servidor. Puedes intentar de nuevo o volver al inicio.</p>
-      {error.digest && <p className="rounded-lg bg-slate-800 px-4 py-2 font-mono text-xs text-slate-300">Referencia del error: {error.digest}</p>}
+      <p className="text-[var(--text-secondary)]">Ocurrió un error temporal del servidor. Puedes intentar de nuevo o volver al inicio.</p>
+      {error.digest && <p className="max-w-full break-all rounded-lg bg-[var(--theme-surface-muted)] px-4 py-2 font-mono text-xs text-[var(--text-secondary)]">Referencia del error: {error.digest}</p>}
       <div className="flex flex-wrap justify-center gap-3">
-        <button type="button" onClick={reset} className="rounded-xl bg-blue-600 px-5 py-3 font-semibold hover:bg-blue-500">Reintentar</button>
-        <Link href="/" className="rounded-xl border border-slate-600 px-5 py-3 font-semibold hover:bg-slate-800">Volver al inicio</Link>
+        <button type="button" onClick={reset} className="theme-action-primary rounded-xl px-5 py-3 font-semibold">Reintentar</button>
+        <Link href="/" className="theme-action-secondary rounded-xl px-5 py-3 font-semibold">Volver al inicio</Link>
       </div>
     </main>
   );
