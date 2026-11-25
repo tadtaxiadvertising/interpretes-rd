@@ -124,7 +124,32 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
           Math.abs(hovered.height - disabledBounds.height)
         );
       }).toBeLessThan(0.5);
+      // Chromium may serialize an identity transform as a matrix instead of
+      // "none". Check the actual transform and geometry, not its serialization.
+      const neutralTransform = () => disabled.evaluate(node => {
+        const style = getComputedStyle(node);
+        return (style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity)
+          && /^(none|0px(?: 0px){0,2})$/.test(style.translate)
+          && /^(none|1(?: 1){0,2})$/.test(style.scale)
+          && /^(none|0deg)$/.test(style.rotate);
+      });
+      await expect.poll(neutralTransform).toBe(true);
+      const boundsBefore = await disabled.boundingBox();
+      expect(boundsBefore).not.toBeNull();
+      await disabled.hover();
+      await expect(disabled).toHaveCSS('background-color', disabledBackground);
+      await expect.poll(neutralTransform).toBe(true);
       await expect(disabled).toHaveCSS('box-shadow', 'none');
+      await expect.poll(async () => {
+        const boundsAfter = await disabled.boundingBox();
+        if (!boundsBefore || !boundsAfter) return Infinity;
+        return Math.max(
+          Math.abs(boundsAfter.x - boundsBefore.x),
+          Math.abs(boundsAfter.y - boundsBefore.y),
+          Math.abs(boundsAfter.width - boundsBefore.width),
+          Math.abs(boundsAfter.height - boundsBefore.height),
+        );
+      }).toBeLessThan(0.25);
 
       const motion = page.getByTestId('workspace-motion');
       await expect(motion).toHaveCSS('animation-iteration-count', '1');
