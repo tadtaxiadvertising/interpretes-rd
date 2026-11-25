@@ -36,7 +36,7 @@ db <<'SQL'
 DO $test$
 DECLARE role_name text; table_name text;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY['roleplay_bilingual_openings','roleplay_bilingual_opening_reservations','roleplay_bilingual_opening_reviews'] LOOP
+  FOREACH table_name IN ARRAY ARRAY['roleplay_bilingual_openings','roleplay_bilingual_opening_reservations','roleplay_bilingual_opening_reviews','roleplay_bilingual_opening_retired_paths'] LOOP
     IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = ('public.' || table_name)::regclass) THEN
       RAISE EXCEPTION 'RLS missing on %', table_name;
     END IF;
@@ -202,4 +202,36 @@ PY
 )"
 db -c "$assignment_sql" >/dev/null
 [[ "$(db -c "SELECT requires_bilingual_opening AND status='DRAFT' AND interpreter_id=7 AND current_scenario_index=0 FROM public.roleplay_sessions WHERE id='new-assignment'")" == t ]]
+db <<'SQL'
+-- No deletion of an object yet: its immutable key survives retirement.
+INSERT INTO public.roleplay_sessions (id,status,requires_bilingual_opening) VALUES ('discard-fixture','STARTED',true);
+INSERT INTO public.roleplay_bilingual_opening_reservations(session_id,source_audio_path,expires_at)
+  VALUES ('discard-fixture','openings/discard-fixture/123e4567-e89b-42d3-a456-426614174000.webm',now()+interval '10 minutes');
+UPDATE public.roleplay_bilingual_opening_reservations
+  SET source_audio_path='openings/discard-fixture/123e4567-e89b-42d3-a456-426614174001.webm'
+  WHERE session_id='discard-fixture';
+DELETE FROM public.roleplay_bilingual_opening_reservations WHERE session_id='discard-fixture';
+DO $test$
+BEGIN
+  IF (SELECT count(*) FROM public.roleplay_bilingual_opening_retired_paths
+      WHERE session_id='discard-fixture' AND cleanup_after > now()) <> 2 THEN
+    RAISE EXCEPTION 'Abandoned keys not retained';
+  END IF;
+  BEGIN
+    INSERT INTO public.roleplay_bilingual_opening_reservations(session_id,source_audio_path,expires_at)
+      VALUES ('discard-fixture','openings/discard-fixture/123e4567-e89b-42d3-a456-426614174000.webm',now()+interval '10 minutes');
+    RAISE EXCEPTION 'Retired path reused';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END
+$test$;
+DELETE FROM public.roleplay_sessions WHERE id='discard-fixture';
+DO $test$
+BEGIN
+  IF (SELECT count(*) FROM public.roleplay_bilingual_opening_retired_paths WHERE session_id='discard-fixture') <> 2 THEN
+    RAISE EXCEPTION 'Cleanup ledger lost on session deletion';
+  END IF;
+END
+$test$;
+SQL
 echo 'Isolated PostgreSQL opening checks passed.'

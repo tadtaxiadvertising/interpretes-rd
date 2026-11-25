@@ -5,7 +5,7 @@ import { verifyBilingualOpeningAudio } from './bilingual-opening-storage';
 import {
   reserveBilingualOpeningPath, claimBilingualOpeningVerification,
   completeBilingualOpeningVerification, readBilingualOpeningState, readBilingualOpeningRecovery,
-  type BilingualOpeningActor,
+  discardBilingualOpeningReservation, type BilingualOpeningActor,
 } from './bilingual-opening-store';
 
 type Store = Pick<PrismaClient, '$transaction'>;
@@ -42,4 +42,8 @@ export async function recoverOpeningState(db: Store, sessionId: string, actor: B
 
 export async function recoverOpeningDetails(db: Store, sessionId: string, actor: BilingualOpeningActor) {
   return readBilingualOpeningRecovery(db, sessionId, actor);
+}
+
+export async function discardOpeningUpload(db: Store, sessionId: string, actor: BilingualOpeningActor, path: string) {
+  return discardBilingualOpeningReservation(db, sessionId, actor, path);
 }

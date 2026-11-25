@@ -53,3 +53,17 @@ describe('opening participant flow', () => {
     await waitFor(() => expect(next).toHaveBeenCalledOnce());
   });
 });
+
+it('lets the participant discard an incomplete reservation and return to recording', async () => {
+  const reservation = { path, expiresAt: '2099-01-01T00:00:00Z', retryAt: null };
+  const fetchMock = vi.fn().mockResolvedValueOnce(success({ state: 'pending', reservation }))
+    .mockResolvedValueOnce(success({ state: 'pending' })).mockResolvedValueOnce(success({ state: 'pending' }));
+  vi.stubGlobal('fetch', fetchMock);
+  const next = vi.fn();
+  render(<RoleplayOpeningFlow sessionId="session-1" onContinue={next} />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Descartar y volver a grabar' }));
+  await screen.findByRole('button', { name: 'Guardar apertura' });
+  expect(JSON.parse(fetchMock.mock.calls[1][1].body)).toEqual({ action: 'discard', path });
+  expect(next).not.toHaveBeenCalled();
+  expect(m.upload).not.toHaveBeenCalled();
+});

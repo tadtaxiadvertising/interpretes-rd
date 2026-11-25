@@ -12,6 +12,7 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
   const endpoint = '/api/roleplay/session/' + encodeURIComponent(sessionId) + '/opening';
   const [snapshot, setSnapshot] = useState<Recovery | null>(null);
   const [busy, setBusy] = useState(false);
+  const [recorderRevision, setRecorderRevision] = useState(0);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
   const attempt = useRef<Attempt | null>(null);
@@ -115,6 +116,16 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
   const retry = () => {
     if (pendingPath) void run(() => confirm(pendingPath)).catch(() => {});
   };
+  const discard = () => {
+    if (!pendingPath) return;
+    void run(async () => {
+      const result = await request({ action: 'discard', path: pendingPath });
+      if (result.state !== 'pending') throw new Error('Estado inesperado.');
+      attempt.current = null;
+      setRecorderRevision(revision => revision + 1);
+      await recover();
+    }).catch(() => {});
+  };
   const buttonClass = 'rounded-lg border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] disabled:opacity-50';
 
   return (
@@ -123,14 +134,18 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
       {busy && <p role="status" className="text-sm text-[var(--text-secondary)]">Procesando la apertura. No cierres esta pantalla.</p>}
       {error && <p role="alert" className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--theme-warning)]">{error}</p>}
       {snapshot?.state === 'pending' && (!pendingPath || attempt.current) && (
-        <RoleplayOpening onSave={save} isLoading={busy} />
+        <RoleplayOpening key={recorderRevision} onSave={save} isLoading={busy} />
       )}
       {snapshot?.state === 'pending' && pendingPath && (
         <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
           <h3 className="font-semibold text-[var(--foreground)]">Grabación pendiente de confirmar</h3>
-          <p className="text-sm text-[var(--text-secondary)]">Si ya subiste el audio, recupera la confirmación sin grabar otra vez. Si la subida quedó incompleta, podrás iniciar una nueva cuando caduque la reserva.</p>
+          <p className="text-sm text-[var(--text-secondary)]">Si ya subiste el audio, recupera la confirmación sin grabar otra vez. Si la subida quedó incompleta, puedes descartar la reserva y empezar otra grabación cuando no haya una verificación activa.</p>
           {snapshot.reservation?.retryAt && <p className="text-xs text-[var(--text-secondary)]">Hay una verificación reciente. Consulta el estado antes de reintentar.</p>}
-          <button type="button" className={buttonClass} disabled={busy} onClick={retry}>Reintentar confirmación</button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={buttonClass} disabled={busy} onClick={retry}>Reintentar confirmación</button>
+            <button type="button" className={buttonClass} disabled={busy} onClick={discard}>Descartar y volver a grabar</button>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)]">Descartar abandona el audio pendiente, no una apertura confirmada.</p>
         </div>
       )}
       {(error || pendingPath || snapshot?.state === 'confirmed' || snapshot?.state === 'not-required') && <button type="button" className={buttonClass} disabled={busy} onClick={refresh}>Consultar estado</button>}
