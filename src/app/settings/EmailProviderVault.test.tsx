@@ -265,6 +265,47 @@ describe('EmailProviderVault refresh failures', () => {
     expect(screen.queryByRole('button', { name: 'Guardar presupuesto' })).toBeNull();
   });
 
+  it('requires a fresh consultation when choosing a preference has an uncertain outcome', async () => {
+    const verified = { ...ready, profiles: [{ ...ready.profiles[0], testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' }] };
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(verified);
+    actions.setPreferredEmailProvider.mockResolvedValueOnce('unavailable');
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Elegir como proveedor preferido' }));
+    await screen.findByText('No se pudo confirmar el cambio de preferencia. Consulta los perfiles antes de repetir la operación.');
+    expect(screen.queryByRole('button', { name: 'Elegir como proveedor preferido' })).toBeNull();
+    expect(actions.setPreferredEmailProvider).toHaveBeenCalledExactlyOnceWith('profile-1');
+    expect(actions.listEmailProviderProfiles).toHaveBeenCalledTimes(1);
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...verified, preferredId: 'profile-1' });
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await screen.findByRole('heading', { name: 'Proveedor preferido: Perfil de prueba' });
+    expect(screen.queryByRole('button', { name: 'Elegir como proveedor preferido' })).toBeNull();
+  });
+
+  it('invalidates outdated selection controls after an uncertain clear', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...ready, preferredId: 'profile-1' });
+    actions.setPreferredEmailProvider.mockResolvedValueOnce('unavailable');
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar preferencia' }));
+    await screen.findByText(/No se pudo confirmar el cambio de preferencia/);
+    expect(screen.queryByRole('button', { name: 'Quitar preferencia' })).toBeNull();
+    expect(actions.setPreferredEmailProvider).toHaveBeenCalledExactlyOnceWith(null);
+    expect(actions.listEmailProviderProfiles).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves a confirmed preference outcome when refreshing fails', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...ready, preferredId: 'profile-1' });
+    actions.setPreferredEmailProvider.mockResolvedValueOnce('preference_cleared');
+    actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Quitar preferencia' }));
+    await screen.findByText('Preferencia eliminada.');
+    expect(screen.getByText(/No se pudieron actualizar los perfiles/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Quitar preferencia' })).toBeNull();
+  });
+
   it('recovers after a later successful consultation', async () => {
     await loadProfiles();
     actions.listEmailProviderProfiles.mockRejectedValueOnce(new Error('offline'));
