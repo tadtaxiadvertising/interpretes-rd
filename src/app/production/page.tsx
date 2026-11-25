@@ -253,7 +253,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
             Daily connection metrics, call statistics and full interpreter history — {totalCount} records
           </p>
         </div>
-        <Link href="/admin/production/manual" className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl font-bold transition-all glow">
+        <Link href="/admin/production/manual" className="flex items-center justify-center gap-2 theme-action-primary px-6 py-3 rounded-2xl font-bold transition-all glow">
           <Plus size={20} />
           Log Session
         </Link>
@@ -288,14 +288,14 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
           <ProductionLogControls />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead><tr className="text-[var(--text-tertiary)] text-xs uppercase tracking-wider border-b border-[var(--border)]"><th className="py-6 px-8">Intérprete</th><th className="py-6 px-4">Fecha</th><th className="py-6 px-4">Minutos</th><th className="py-6 px-4">Llamadas</th><th className="py-6 px-4">Estado</th><th className="py-6 px-4">Adherencia</th><th className="py-6 px-4 text-right">Acciones</th></tr></thead>
-            <tbody className="divide-y divide-white/5">
+        <div role="region" aria-label="Historial de producción" tabIndex={0} className="max-w-full overflow-x-auto">
+          <table className="w-full min-w-[850px] text-left">
+            <thead className="bg-[var(--theme-surface-muted)]"><tr className="text-[var(--text-tertiary)] text-xs uppercase tracking-wider border-b border-[var(--border)]"><th className="py-6 px-8">Intérprete</th><th className="py-6 px-4">Fecha</th><th className="py-6 px-4">Minutos</th><th className="py-6 px-4">Llamadas</th><th className="py-6 px-4">Estado</th><th className="py-6 px-4">Adherencia</th><th className="py-6 px-4 text-right">Acciones</th></tr></thead>
+            <tbody className="divide-y divide-[var(--border)]">
               {historyRows.map((row) => {
                 const isPlaceholder = !row.log;
                 return (
-                  <tr key={row.key} className={cn("group transition-colors", isPlaceholder ? "opacity-40" : "hover:bg-[var(--theme-hover)]")}>
+                  <tr key={row.key} className={cn("group transition-colors", isPlaceholder ? "bg-[var(--theme-surface-muted)]" : "hover:bg-[var(--theme-hover)]")}>
                     <td className="py-6 px-8">
                       <div className="flex items-center gap-4">
                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center font-bold border border-[var(--border)]", isPlaceholder ? "bg-slate-500/10 text-[var(--text-secondary)]" : "bg-green-500/10 text-[var(--theme-success)]")}>
@@ -325,7 +325,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
                         {row.status}
                       </span>
                     </td>
-                    <td className="py-6 px-4"><div className="flex items-center gap-2"><div className="w-12 bg-[var(--theme-track)] h-1.5 rounded-full overflow-hidden"><div className={cn("h-full rounded-full", row.adherence >= 90 ? "bg-green-500" : row.adherence >= 80 ? "bg-yellow-500" : "bg-red-500")} style={{ width: `${Math.min(row.adherence, 100)}%` }} /></div><span className="text-xs font-bold text-white">{row.adherence.toFixed(2)}%</span></div></td>
+                    <td className="py-6 px-4"><div className="flex items-center gap-2"><div className="w-12 bg-[var(--theme-track)] h-1.5 rounded-full overflow-hidden"><div className={cn("h-full rounded-full", row.adherence >= 90 ? "bg-[var(--theme-success)]" : row.adherence >= 80 ? "bg-[var(--theme-warning)]" : "bg-[var(--theme-danger)]")} style={{ width: `${Math.min(row.adherence, 100)}%` }} /></div><span className="text-xs font-bold text-[var(--foreground)]">{row.adherence.toFixed(2)}%</span></div></td>
                     <td className="py-6 px-4 text-right">
                       {row.log ? (
                         <ProductionLogActions log={{ id: row.log.id, interpreterId: row.log.interpreterId, date: toDateInputValue(row.log.date), interpretedMinutes: row.interpretedMinutes, callsAttended: row.callsAttended, adherence: row.adherence, status: row.status, observaciones: row.observaciones, interpreterName: row.interpreterName }} />
@@ -342,7 +342,7 @@ export default async function ProductionPage({ searchParams }: { searchParams: P
 
         <Pagination currentPage={currentPage} totalPages={totalPages} searchParams={resolvedSearchParams as Record<string, string | undefined>} />
 
-        {historyRows.length === 0 && <div className="p-20 text-center"><Clock size={48} className="mx-auto text-[var(--text-tertiary)] mb-4" /><p className="text-[var(--text-tertiary)]">No se encontraron registros de producción.</p></div>}
+        {historyRows.length === 0 && <div className="p-6 sm:p-20 text-center"><Clock size={48} className="mx-auto text-[var(--text-tertiary)] mb-4" /><p className="text-[var(--text-tertiary)]">No se encontraron registros de producción.</p></div>}
       </div>
     </div>
   );

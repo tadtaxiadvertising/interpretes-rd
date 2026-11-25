@@ -132,9 +132,9 @@ export default async function RecruitmentPage() {
           </div>
         </div>
 
-        <div className="max-w-full overflow-x-auto">
+        <div role="region" aria-label="Tabla de candidatos" tabIndex={0} className="max-w-full overflow-x-auto">
           <table className="w-full min-w-[850px] text-left">
-          <thead>
+          <thead className="bg-[var(--theme-surface-muted)]">
             <tr className="text-[var(--text-tertiary)] text-xs uppercase tracking-wider border-b border-[var(--border)]">
               <th className="py-6 px-8">Candidato</th>
               <th className="py-6 px-4">Contacto</th>
@@ -143,7 +143,7 @@ export default async function RecruitmentPage() {
               <th className="py-6 px-4 text-right">Acciones</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-[var(--border)]">
             {candidates.map((candidate: Candidate) => {
               const display = candidateStatusDisplay(candidate.applicationStatus);
               return (
@@ -190,8 +190,8 @@ export default async function RecruitmentPage() {
                         <div 
                           className={cn(
                             "h-full rounded-full",
-                            candidate.resultRoleplay >= 80 ? "bg-green-500" :
-                            candidate.resultRoleplay >= 70 ? "bg-yellow-500" : "bg-red-500"
+                            candidate.resultRoleplay >= 80 ? "bg-[var(--theme-success)]" :
+                            candidate.resultRoleplay >= 70 ? "bg-[var(--theme-warning)]" : "bg-[var(--theme-danger)]"
                           )}
                           style={{ width: `${candidate.resultRoleplay}%` }}
                         />
@@ -213,7 +213,7 @@ export default async function RecruitmentPage() {
         </div>
 
         {candidates.length === 0 && (
-          <div className="p-20 text-center">
+          <div className="p-6 sm:p-20 text-center">
             <Clock size={48} className="mx-auto text-[var(--text-tertiary)] mb-4" />
             <p className="text-[var(--text-tertiary)]">Todavía no hay candidatos en el proceso de selección.</p>
           </div>
