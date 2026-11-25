@@ -118,7 +118,7 @@ export default async function RoleplayLibraryPage({
           <Link href="/admin/roleplays" className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] px-4 py-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--theme-hover)]">
             Sesiones
           </Link>
-          <Link href="/admin/roleplays/new" className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white hover:bg-red-500">
+          <Link href="/admin/roleplays/new" className="inline-flex items-center gap-2 rounded-xl theme-action-primary px-4 py-3 text-sm font-semibold">
             <Plus size={17} /> Importar roleplay
           </Link>
         </div>
@@ -149,9 +149,9 @@ export default async function RoleplayLibraryPage({
         <input id="library-query" name="q" type="search" maxLength={100}
           defaultValue={params.q?.slice(0, 100) ?? ''}
           placeholder="Buscar por escenario o identificador SHA-256"
-          className="min-w-0 w-full sm:w-auto sm:min-w-64 flex-1 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-3 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]" />
+          className="min-w-0 w-full sm:w-auto sm:min-w-0 flex-1 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-3 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]" />
         {showArchived && <input type="hidden" name="archived" value="1" />}
-        <button type="submit" className="rounded-xl bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-500">Buscar</button>
+        <button type="submit" className="rounded-xl theme-action-primary px-5 py-3 font-semibold">Buscar</button>
         {q && <Link href={showArchived ? '/admin/roleplays/library?archived=1' : '/admin/roleplays/library'} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]">Limpiar</Link>}
       </form>
 
@@ -177,7 +177,7 @@ export default async function RoleplayLibraryPage({
           <article key={item.fingerprint} className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
-                <h3 className="text-lg font-bold text-[var(--foreground)]">{item.titles[0] || 'Roleplay sin título'}</h3>
+                <h3 className="break-words text-lg font-bold text-[var(--foreground)]">{item.titles[0] || 'Roleplay sin título'}</h3>
                 <p className="mt-1 text-sm text-[var(--text-secondary)]">
                   {item.audioCount} {item.audioCount === 1 ? 'escenario' : 'escenarios'} ·
                   {' '}{item.assignmentsInWindow} {item.assignmentsInWindow === 1 ? 'sesión coincidente' : 'sesiones coincidentes'} en la muestra
@@ -190,7 +190,7 @@ export default async function RoleplayLibraryPage({
                   ))}
                   {item.titles.length > 5 && <span className="px-2 py-1 text-xs text-[var(--text-tertiary)]">+{item.titles.length - 5} más</span>}
                 </div>
-                <p className="mt-3 flex items-center gap-2 font-mono text-xs text-[var(--text-tertiary)]">
+                <p className="mt-3 flex min-w-0 flex-wrap items-center gap-2 break-all font-mono text-xs text-[var(--text-tertiary)]">
                   <Copy size={13} /> Huella de plantilla: {item.fingerprint.slice(0, 16)}…
                 </p>
               </div>
@@ -205,7 +205,7 @@ export default async function RoleplayLibraryPage({
                     </Link>
                     <Link
                       href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(item.sourceSessionId)}`}
-                      className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-500"
+                      className="rounded-xl theme-action-primary px-4 py-3 text-sm font-semibold"
                     >
                       Reutilizar y asignar
                     </Link>
