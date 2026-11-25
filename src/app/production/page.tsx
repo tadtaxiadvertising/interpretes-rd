@@ -209,7 +209,7 @@ function Pagination({ currentPage, totalPages, searchParams }: { currentPage: nu
   }
 
   return (
-    <div className="flex items-center justify-center gap-2 py-6">
+    <nav aria-label="Paginación de producción" className="flex flex-wrap items-center justify-center gap-2 py-6">
       {visiblePages.map((p, idx) => {
         const prev = visiblePages[idx - 1];
         const showGap = idx > 0 && p - prev > 1;
@@ -220,11 +220,12 @@ function Pagination({ currentPage, totalPages, searchParams }: { currentPage: nu
             {showGap && <span className="text-[var(--text-tertiary)] px-1">...</span>}
             <a
               href={`?${query.toString()}`}
+              aria-current={p === currentPage ? 'page' : undefined}
               className={cn(
-                'px-3 py-1 rounded-lg text-sm font-medium transition',
+                'min-h-10 min-w-10 inline-flex items-center justify-center px-3 py-1 rounded-lg text-sm font-medium transition',
                 p === currentPage
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] hover:text-[var(--foreground)]'
+                  ? 'theme-action-primary'
+                  : 'theme-action-secondary'
               )}
             >
               {p}
@@ -232,7 +233,7 @@ function Pagination({ currentPage, totalPages, searchParams }: { currentPage: nu
           </React.Fragment>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
