@@ -1,3 +1,4 @@
+import { notificationPreferenceScope } from '@/lib/notifications/notification-preference-scope';
 import { DashboardShell } from "@/components/DashboardShell";
 import { redirect } from 'next/navigation';
 import { auth } from '@/lib/auth';
@@ -58,6 +59,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         interpreterId={profile?.interpreter_id}
         userEmail={profile?.email || ''}
         notifications={notifications}
+        notificationPreferenceScope={notificationPreferenceScope(userId, 'interpreter')}
         ranking={ranking}
       >
         {children}
