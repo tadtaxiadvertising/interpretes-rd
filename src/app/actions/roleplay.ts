@@ -16,6 +16,7 @@ import { calculateRoleplayScore, ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { candidateCanUploadRoleplayAudio } from '@/lib/roleplay/recording-invite-guard';
+import { canProgressPastBilingualOpening, OPENING_REQUIRED_MESSAGE } from '@/lib/roleplay/bilingual-opening-guard';
 import { rateLimit, RATE_LIMITS } from '@/lib/security/rate-limit';
 import { advanceApplication } from '@/services/recruitment/transitions';
 import { publicRoleplayActionError, roleplayBusinessError } from '@/lib/roleplay/action-errors';
@@ -579,6 +580,10 @@ export async function submitRoleplayResponse(rawInput: SubmitResponseInput) {
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
+    if (!(await canProgressPastBilingualOpening(db, session.id))) {
+      return { success: false, error: OPENING_REQUIRED_MESSAGE, code: 'INVALID_STATE' };
+    }
+
     // Resolve the real database scenario ID from the persisted cursor. Synthetic
     // values such as "scenario_0" cannot be uploaded or confirmed against Prisma.
     const expectedScenario = await db.roleplayScenario.findFirst({
@@ -654,6 +659,9 @@ export async function createRoleplayResponseUpload(rawInput: z.input<typeof Crea
       return { success: false, error: 'Unauthorized', code: 'FORBIDDEN' };
     }
 
+    if (!(await canProgressPastBilingualOpening(db, session.id))) {
+      return { success: false, error: OPENING_REQUIRED_MESSAGE, code: 'INVALID_STATE' };
+    }
     const scenario = await db.roleplayScenario.findFirst({
       where: { id: input.scenarioId, sessionId: session.id, order: session.currentScenarioIndex },
       select: { id: true },
@@ -736,6 +744,7 @@ export async function confirmRoleplayResponse(rawInput: ConfirmResponseInput) {
       if (!(await canAccessRoleplaySession(session, sessionCookie))) {
         throw roleplayBusinessError('Unauthorized');
       }
+      if (!(await canProgressPastBilingualOpening(tx, session.id))) throw roleplayBusinessError(OPENING_REQUIRED_MESSAGE);
       // A response must belong to a real scenario in this session. Without this check a
       // caller could read or overwrite another session's response by passing
       // a foreign scenario id (cross-session write).
@@ -948,6 +957,7 @@ export async function saveSelfAssessment(rawInput: SelfAssessmentInput) {
         throw roleplayBusinessError('Session not available for self-assessment');
       }
       if (!(await canAccessRoleplaySession(session, sessionCookie))) throw roleplayBusinessError('Unauthorized');
+      if (!(await canProgressPastBilingualOpening(tx, session.id))) throw roleplayBusinessError(OPENING_REQUIRED_MESSAGE);
 
       const scenario = await tx.roleplayScenario.findFirst({
         where: { id: input.scenarioId, sessionId: session.id },
@@ -1064,6 +1074,7 @@ export async function submitRoleplaySession(rawInput: { sessionId: string }) {
         throw roleplayBusinessError('Roleplay is not ready to submit');
       }
       if (!(await canAccessRoleplaySession(session, sessionCookie))) throw roleplayBusinessError('Unauthorized');
+      if (!(await canProgressPastBilingualOpening(tx, session.id))) throw roleplayBusinessError(OPENING_REQUIRED_MESSAGE);
 
       const scenarios = await tx.roleplayScenario.findMany({
         where: { sessionId },

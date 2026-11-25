@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   identity: null as any,
@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   response: null as any,
   scenarios: [] as any[],
   sessionFindUnique: vi.fn(),
+  openingQuery: vi.fn(),
   sessionUpdate: vi.fn(),
   sessionUpdateMany: vi.fn(),
   scenarioFindFirst: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@/lib/identity/resolve-user', () => ({
 vi.mock('@/lib/prisma', () => ({
   default: {
     $transaction: async (callback: (tx: any) => Promise<unknown>) => callback({
+      $queryRaw: m.openingQuery,
       roleplaySession: {
         findUnique: m.sessionFindUnique,
         update: m.sessionUpdate,
@@ -90,6 +92,24 @@ describe('Roleplay required stages', () => {
     m.responseUpdate.mockResolvedValue({ id: 'response-1' });
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.advanceApplication.mockResolvedValue({ success: true });
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('blocks assessment and final submission before a required opening is confirmed', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValue([{ required: true, sourceAudioPath: null, durationSec: null, confirmedAt: null }]);
+    const assessment = await saveSelfAssessment({
+      sessionId: 'sess-1', scenarioId: 'scenario-1', scores: SCORES, criticalError: false,
+    });
+    expect(assessment).toMatchObject({ success: false, code: 'INVALID_STATE' });
+    m.session.currentScenarioIndex = 1;
+    m.scenarios = [{ order: 0, responses: [{ sourceAudioUrl: 'https://audio.example/response.webm', selfScore: SCORES }] }];
+    const submission = await submitRoleplaySession({ sessionId: 'sess-1' });
+    expect(submission).toMatchObject({ success: false, code: 'INVALID_STATE' });
+    expect(m.sessionUpdateMany).not.toHaveBeenCalled();
+    expect(m.responseUpdate).not.toHaveBeenCalled();
+    expect(m.advanceApplication).not.toHaveBeenCalled();
   });
 
   it('does not allow self-assessment before a confirmed recording exists', async () => {

@@ -4,6 +4,7 @@
  */
 export const ROLEPLAY_BUSINESS_FAILURE_CODES = {
   'Unauthorized': 'FORBIDDEN',
+  'Confirma el protocolo de apertura bilingüe antes de continuar.': 'INVALID_STATE',
   'Session not available for submission': 'INVALID_STATE',
   'A valid uploaded audio object is required before confirming the response': 'INVALID_STATE',
   'Response already recorded for this scenario': 'CONFLICT',
