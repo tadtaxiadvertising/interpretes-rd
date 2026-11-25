@@ -6,6 +6,7 @@ import { ShieldCheck, CheckCircle2, AlertTriangle, Loader2, Scale } from 'lucide
 import { evaluateRoleplay } from '@/app/actions/roleplay';
 import { calculateRoleplayScore, clampDimensionScore } from '@/lib/roleplay/scoring';
 import { cn } from '@/lib/utils';
+import { OPENING_CRITERIA } from '@/lib/roleplay/bilingual-opening-rubric';
 
 // Dimension inputs are 0..10; weights come from the canonical scoring module.
 const DIMENSION_FIELDS = [
@@ -36,7 +37,9 @@ function SubmitButton() {
 
 interface RoleplayEvaluationClientProps {
   sessionId: string;
-  scenarioId: string;
+  scenarioId?: string;
+  requiresOpeningReview?: boolean;
+  openingReviewUnavailable?: boolean;
   isEvaluated: boolean;
   existingScore?: {
     protocolScore: number;
@@ -52,7 +55,8 @@ interface RoleplayEvaluationClientProps {
 
 export function RoleplayEvaluationClient({ 
   sessionId, 
-  scenarioId, 
+  requiresOpeningReview = false,
+  openingReviewUnavailable = false,
   isEvaluated,
   existingScore 
 }: RoleplayEvaluationClientProps) {
@@ -81,7 +85,7 @@ export function RoleplayEvaluationClient({
             </div>
             <div>
               <h4 className="text-lg font-bold text-white">Ya evaluado</h4>
-              <p className="text-gray-400 text-sm">Este escenario ya fue evaluado.</p>
+              <p className="text-gray-400 text-sm">Esta sesión ya fue evaluada.</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -129,10 +133,31 @@ export function RoleplayEvaluationClient({
           <ShieldCheck className="text-red-400" />
           QA Evaluation
         </h4>
-        <p className="text-gray-400 mt-1">Evalúa el escenario en las cinco dimensiones. Si seleccionas <strong className="text-red-400">Error crítico</strong> la puntuación total será 0.</p>
+        <p className="text-gray-400 mt-1">Evalúa la sesión completa en las cinco dimensiones. Si seleccionas <strong className="text-red-400">Error crítico</strong> la puntuación total será 0.</p>
       </div>
 
+      {openingReviewUnavailable ? <p role="alert" className="mb-4 text-sm text-[var(--foreground)]">La apertura no está disponible para revisión. Actualiza la página antes de evaluar.</p> : null}
       <form action={formAction} className="space-y-6">
+        <input type="hidden" name="sessionId" value={sessionId} />
+        {requiresOpeningReview && (
+          <fieldset className="space-y-4 rounded-xl border border-[var(--border)] p-4" disabled={openingReviewUnavailable}>
+            <legend className="px-2 font-semibold text-[var(--foreground)]">Evaluación de apertura bilingüe</legend>
+            <p className="text-sm text-[var(--text-secondary)]">Selecciona un resultado para cada criterio después de escuchar la apertura. Se guardará por separado, sin modificar la ponderación general.</p>
+            {OPENING_CRITERIA.map(({ key, label }) => (
+              <fieldset key={key} className="space-y-2">
+                <legend className="text-sm font-medium text-[var(--foreground)]">{label}</legend>
+                <div className="flex flex-wrap gap-4 text-sm text-[var(--foreground)]">
+                  <label className="flex items-center gap-2"><input type="radio" name={'opening_' + key} value="yes" required /> Cumple</label>
+                  <label className="flex items-center gap-2"><input type="radio" name={'opening_' + key} value="no" required /> No cumple</label>
+                </div>
+              </fieldset>
+            ))}
+            <label className="block space-y-2 text-sm text-[var(--foreground)]">
+              <span>Observaciones de apertura (opcional)</span>
+              <textarea name="opening_notes" maxLength={2000} rows={3} className="block w-full rounded-lg border border-[var(--border)] bg-[var(--background)] p-3 text-[var(--foreground)]" />
+            </label>
+          </fieldset>
+        )}
         {/* Error crítico Toggle */}
         <div className={cn(
           "p-6 rounded-2xl border transition-all flex items-start gap-4",
@@ -227,7 +252,7 @@ export function RoleplayEvaluationClient({
           </div>
         )}
 
-        <SubmitButton />
+        {!openingReviewUnavailable && <SubmitButton />}
       </form>
     </div>
   );
