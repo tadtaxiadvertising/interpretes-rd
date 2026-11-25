@@ -9,7 +9,7 @@ import { actorFromBearer } from '@/lib/api-auth';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
-import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { getReusableBaseAudioPath, getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 import { isParsedMultipartFile } from '@/lib/roleplay/parsed-multipart-file';
@@ -247,6 +247,7 @@ export async function POST(req: NextRequest) {
     // catalog phase. The browser supplies only a source ID + expected hash.
     // All scenarios, prompts and audio URLs are loaded server-side.
     const sourceAudioUrls: string[] = [];
+    let privateLibrary = false;
     let scenarios: ScenarioInput[] | null = null;
     if (useLibrary) {
       const source = await db.roleplaySession.findUnique({
@@ -293,19 +294,36 @@ export async function POST(req: NextRequest) {
       if (!supabaseUrl || !serviceRoleKey) {
         return privateRoleplayJson({ success: false, error: 'Storage is not configured' }, { status: 503 });
       }
-      const paths = source.scenarios.map((scenario) => getReusableBaseAudioPath(scenario.baseAudioUrl, supabaseUrl));
-      if (paths.some((path) => !path)) {
+      const reusable = getReusableRoleplayAudio(source.scenarios, supabaseUrl);
+      if (!reusable) {
         return privateRoleplayJson({ success: false, error: 'Roleplay has unsupported audio references' }, { status: 409 });
+      }
+      privateLibrary = reusable.kind === 'private';
+      // Private clinical templates always retain opening, even if a stale
+      // browser explicitly requests false or omits the field.
+      if (privateLibrary) {
+        if (!assignmentEnabled) return privateRoleplayJson({ success: false, error: 'La asignación privada con apertura aún no está habilitada.' }, { status: 503 });
+        requiresOpening = true;
+      }
+      if (requiresOpening && !privateLibrary) {
+        return privateRoleplayJson({ success: false, error: 'Esta plantilla utiliza audio histórico público. Selecciona una plantilla privada o importa clips nuevos.' }, { status: 409 });
       }
       const { createClient } = await import('@supabase/supabase-js');
       supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      if (privateLibrary) {
+        try {
+          await requirePrivateRoleplayAudioBucket(supabaseAdmin.storage);
+        } catch {
+          return privateRoleplayJson({ success: false, error: 'El almacenamiento clínico privado no está preparado.' }, { status: 503 });
+        }
+      }
       // Cap concurrent storage lookups: a medical exercise can contain 25 segments.
       // Verify every object before reserving a participant or writing to the database.
-      const uniquePaths = [...new Set(paths as string[])];
+      const uniquePaths = [...new Set(reusable.paths)];
       for (let offset = 0; offset < uniquePaths.length; offset += 5) {
         const batch = await Promise.all(
           uniquePaths.slice(offset, offset + 5).map((path) =>
-            supabaseAdmin!.storage.from('roleplay-audio').info(path)
+            supabaseAdmin!.storage.from(privateLibrary ? ROLEPLAY_PRIVATE_AUDIO_BUCKET : 'roleplay-audio').info(path)
           )
         );
         if (batch.some(({ data, error }) => error || !data)) {
@@ -337,11 +355,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (requiresOpening && useLibrary) {
-      // The current catalog contains legacy public clips. Copying them into
-      // a private bucket does not revoke the original public URLs.
-      return privateRoleplayJson({ success: false, error: 'Esta plantilla utiliza audio histórico público. Importa clips nuevos para exigir la apertura bilingüe.' }, { status: 409 });
-    }
     if (requiresOpening) {
       // Preflight before reserving sessions or uploading clinical audio.
       // This does not prove object policy isolation; rollout still requires it.
