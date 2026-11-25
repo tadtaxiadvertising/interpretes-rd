@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import ffmpegPath from 'ffmpeg-static';
-import { getSignedAudioUrl } from '@/lib/roleplay';
+import { getSignedBilingualOpeningAudioUrl } from '@/lib/roleplay';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
-import { isCanonicalBilingualOpeningPath } from './bilingual-opening';
+import { isCanonicalBilingualOpeningPath, BILINGUAL_OPENING_MAX_BYTES } from './bilingual-opening';
 
-const MAX_BYTES = 15 * 1024 * 1024;
+const MAX_BYTES = BILINGUAL_OPENING_MAX_BYTES;
 const run = promisify(execFile);
 const FORMATS: Record<string, string> = { webm: 'matroska', mp4: 'mov', ogg: 'ogg', mp3: 'mp3' };
 
@@ -41,7 +41,7 @@ export async function verifyBilingualOpeningAudio(sessionId: string, sourceAudio
     directory = await mkdtemp(join(tmpdir(), 'roleplay-opening-'));
     const input = join(directory, 'recording');
     // Sign internally, use a short-lived URL and reject redirection.
-    const url = await getSignedAudioUrl(sourceAudioPath, 120);
+    const url = await getSignedBilingualOpeningAudioUrl(sourceAudioPath, 120);
     const response = await fetch(url, { redirect: 'error', signal: AbortSignal.timeout(30_000), cache: 'no-store' });
     if (!response.ok || !response.body) throw new Error('Audio unavailable');
     const length = response.headers.get('content-length');
