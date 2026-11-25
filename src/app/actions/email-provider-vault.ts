@@ -93,7 +93,13 @@ export async function testSavedEmailProvider(id: string) {
       if (!profile) return 'invalid' as const;
       const message = { recipient: profile.from, subject: 'Prueba de perfil | Intérpretes RD', text: 'Prueba de configuración. No contiene datos de postulantes.', html: '<p>Prueba de configuración. No contiene datos de postulantes.</p>' };
       const config = { apiKey: profile.apiKey, from: profile.from, replyTo: profile.replyTo || undefined };
-      if (await reserveProviderQuota(prisma, profile.provider) !== 'reserved') return 'local_quota_reached' as const;
+      const reserved = await prisma.$transaction(async tx => {
+        const active = await tx.$queryRaw<{ id: string }[]>`
+          SELECT id::text FROM private_email.provider_profile WHERE id = ${id}::uuid AND retired_at IS NULL FOR SHARE
+        `;
+        return active.length === 1 && await reserveProviderQuota(tx, profile.provider) === 'reserved';
+      });
+      if (!reserved) return 'profile_test_blocked' as const;
       const outcome = profile.provider === 'brevo' ? await sendBrevoEmailDetailed(config, message) : await sendResendEmail(config, message);
       if (outcome === 'accepted') {
         try {
@@ -128,7 +134,13 @@ export async function setPreferredEmailProvider(id: string | null) {
     if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
     if (id === null) return await clearPreferredProfile(prisma, auth.user.userId) ? 'preference_cleared' as const : 'unavailable' as const;
     if (!validProfileId(id)) return 'invalid' as const;
-    return await selectPreferredProfile(prisma, id, auth.user.userId) ? 'preferred_saved' as const : 'selection_blocked' as const;
+    const selected = await prisma.$transaction(async tx => {
+      const rows = await tx.$queryRaw<{ singleton: boolean }[]>`
+        SELECT singleton FROM private_email.provider_selection WHERE singleton FOR UPDATE
+      `;
+      return rows.length === 1 && await selectPreferredProfile(tx, id, auth.user.userId);
+    });
+    return selected ? 'preferred_saved' as const : 'selection_blocked' as const;
   } catch { return 'unavailable' as const; }
 }
 
