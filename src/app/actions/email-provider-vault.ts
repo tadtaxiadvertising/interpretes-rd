@@ -7,8 +7,10 @@ import { openProfileKey, sealProfileKey, validateProfile, vaultKeyAvailable, typ
 import { sendBrevoEmailDetailed } from '@/lib/email/brevo-transport';
 import { sendResendEmail } from '@/lib/email/resend-transport';
 
+import { reserveProviderQuota, listProviderQuotas, type ProviderQuota } from '@/lib/email/provider-quota';
+
 type Status = 'ready' | 'disabled' | 'key_missing' | 'unauthorized' | 'unavailable';
-type ListResult = { status: Status; profiles: ProfileMetadata[] };
+type ListResult = { status: Status; profiles: ProfileMetadata[]; quotas?: ProviderQuota[] };
 type ProfileRow = Omit<ProfileMetadata, 'updatedAt'> & { updatedAt: Date };
 const key = () => process.env.EMAIL_PROVIDER_ENCRYPTION_KEY;
 function availability(): Status {
@@ -26,7 +28,9 @@ export async function listEmailProviderProfiles(): Promise<ListResult> {
       SELECT id::text, name, provider, sender AS "from", reply_to AS "replyTo", updated_at AS "updatedAt"
       FROM private_email.provider_profile ORDER BY updated_at DESC LIMIT 50
     `;
-    return { status: 'ready', profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString() })) };
+    const quotas = await listProviderQuotas(prisma);
+    if (quotas.length !== 2) return { status: 'unavailable', profiles: [] };
+    return { status: 'ready', profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString() })), quotas };
   } catch {
     return { status: 'unavailable', profiles: [] };
   }
@@ -77,6 +81,7 @@ export async function testSavedEmailProvider(id: string) {
       if (!profile) return 'invalid' as const;
       const message = { recipient: profile.from, subject: 'Prueba de perfil | Intérpretes RD', text: 'Prueba de configuración. No contiene datos de postulantes.', html: '<p>Prueba de configuración. No contiene datos de postulantes.</p>' };
       const config = { apiKey: profile.apiKey, from: profile.from, replyTo: profile.replyTo || undefined };
+      if (await reserveProviderQuota(prisma, profile.provider) !== 'reserved') return 'local_quota_reached' as const;
       return profile.provider === 'brevo' ? await sendBrevoEmailDetailed(config, message) : await sendResendEmail(config, message);
     } finally {
       testing = false;
