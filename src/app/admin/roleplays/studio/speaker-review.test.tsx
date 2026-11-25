@@ -103,6 +103,30 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getByText('Interpreter: Original rendition')).toBeTruthy();
   });
 
+  it('applies the medical language pattern only to visible pending doctor and patient turns and supports undo', () => {
+    selectAudio();
+    for (let i = 0; i < 5; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    const speakers = screen.getAllByLabelText('Perfil del hablante');
+    const languages = screen.getAllByLabelText('Idioma de la intervención');
+    ['doctor', 'patient', 'doctor', 'interpreter', 'patient'].forEach((role, index) => {
+      fireEvent.change(speakers[index], { target: { value: role } });
+    });
+    fireEvent.change(languages[2], { target: { value: 'es' } });
+    const titles = screen.getAllByLabelText('Título');
+    fireEvent.change(titles[4], { target: { value: 'Oculto' } });
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    fireEvent.change(search, { target: { value: 'Oculto' } });
+    expect(screen.getByRole('button', { name: /Aplicar médico EN \/ paciente ES \(1 pendientes visibles\)/ })).toBeTruthy();
+    fireEvent.change(search, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /Aplicar médico EN \/ paciente ES \(3 pendientes visibles\)/ }));
+    const values = () => (screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[]).map(item => item.value);
+    expect(values()).toEqual(['en', 'es', 'es', 'unknown', 'es']);
+    fireEvent.click(screen.getByRole('button', { name: /Deshacer asignación de idiomas/i }));
+    expect(values()).toEqual(['unknown', 'unknown', 'es', 'unknown', 'unknown']);
+  });
+
   it('assigns a chosen speaker only to pending visible turns and supports undo', () => {
     selectAudio();
     for (let i = 0; i < 3; i++) {
