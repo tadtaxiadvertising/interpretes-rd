@@ -74,23 +74,23 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
     });
   }
 
-  if (loading) return <div className="flex justify-center p-4"><Loader2 className="animate-spin text-blue-400" /></div>;
+  if (loading) return <div role="status" aria-label="Cargando cuentas" className="flex justify-center p-4"><Loader2 className="animate-spin text-[var(--theme-link)]" /></div>;
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2 text-sm font-bold text-gray-300 mb-2">
-        <CreditCard size={16} className="text-blue-400" />
+      <div className="flex items-center gap-2 text-sm font-bold text-[var(--text-secondary)] mb-2">
+        <CreditCard size={16} className="text-[var(--theme-link)]" />
         Tarifas por Cuenta (Pago por Hora)
       </div>
       <div className="grid gap-2">
         {rates.map(rate => {
           const account = accounts.find(a => a.id === rate.accountId);
           return (
-            <div key={rate.accountId} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors">
-              <span className="text-sm text-gray-300">{account ? accountLabel(account) : 'Cuenta no disponible'}</span>
+            <div key={rate.accountId} className="flex flex-wrap items-center justify-between gap-2 p-3 bg-[var(--theme-surface-muted)] border border-[var(--border)] rounded-xl hover:bg-[var(--theme-hover)] transition-colors">
+              <span className="min-w-0 break-words text-sm text-[var(--text-secondary)]">{account ? accountLabel(account) : 'Cuenta no disponible'}</span>
               <div className="flex items-center gap-4">
-                <span className="font-mono text-white font-bold">RD${rate.tariffPerHour.toFixed(2)}/hr</span>
-                <button className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors" onClick={() => handleDeleteRate(rate.accountId)} disabled={isPending} aria-label="Eliminar tarifa">
+                <span className="font-mono text-[var(--foreground)] font-bold">RD${rate.tariffPerHour.toFixed(2)}/hr</span>
+                <button className="p-1.5 text-[var(--text-tertiary)] hover:text-[var(--theme-danger)] hover:bg-red-500/10 rounded-lg transition-colors" onClick={() => handleDeleteRate(rate.accountId)} disabled={isPending} aria-label="Eliminar tarifa">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -98,18 +98,18 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
           );
         })}
       </div>
-      <div className="pt-4 border-t border-white/5">
-        <div className="grid grid-cols-2 gap-2 mb-2">
-          <select value={newAccountId} onChange={e => setNewAccountId(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50">
-            <option value="" className="bg-[#0f1115]">Seleccionar cuenta...</option>
-            {accounts.map(acc => <option key={acc.id} value={acc.id} className="bg-[#0f1115]">{accountLabel(acc)}</option>)}
+      <div className="pt-4 border-t border-[var(--border)]">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+          <select aria-label="Cuenta para tarifa especial" value={newAccountId} onChange={e => setNewAccountId(e.target.value)} className="bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl px-3 py-2 text-sm text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)]">
+            <option value="">Seleccionar cuenta...</option>
+            {accounts.map(acc => <option key={acc.id} value={acc.id}>{accountLabel(acc)}</option>)}
           </select>
           <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">RD$</span>
-            <input type="number" min="0.01" max="99999" step="0.01" placeholder="0.00/hr" value={newRateValue} onChange={e => setNewRateValue(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500/50" />
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm">RD$</span>
+            <input aria-label="Tarifa por hora en pesos dominicanos" type="number" min="0.01" max="99999" step="0.01" placeholder="0.00/hr" value={newRateValue} onChange={e => setNewRateValue(e.target.value)} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl pl-10 pr-3 py-2 text-sm text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)]" />
           </div>
         </div>
-        <button onClick={handleAddRate} disabled={isPending || !newAccountId || !newRateValue} className="w-full flex items-center justify-center gap-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+        <button onClick={handleAddRate} disabled={isPending || !newAccountId || !newRateValue} className="w-full flex items-center justify-center gap-2 theme-action-primary py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           {isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
           Asignar tarifa
         </button>
