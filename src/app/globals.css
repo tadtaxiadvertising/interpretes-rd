@@ -763,11 +763,13 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   color: var(--text-secondary);
   opacity: 1;
   cursor: not-allowed;
-  transform: none;
-  translate: none;
-  scale: none;
-  rotate: none;
-  box-shadow: none;
+  /* Disabled actions must not animate even when legacy hover utilities are present. */
+  transition-property: none !important;
+  transform: none !important;
+  translate: none !important;
+  scale: none !important;
+  rotate: none !important;
+  box-shadow: none !important;
 }
 .theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):focus-visible {
   outline: 2px solid var(--theme-focus);
