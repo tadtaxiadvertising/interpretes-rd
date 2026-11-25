@@ -8,6 +8,7 @@ import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { confirmRoleplayResponse, createRoleplayResponseUpload, saveSelfAssessment, submitRoleplaySession } from '@/app/actions/roleplay';
 import { createClient as createSupabaseBrowserClient } from '@/lib/supabase/client';
 import { RoleplayIntro } from '@/components/roleplay/RoleplayIntro';
+import { RoleplayOpeningFlow } from '@/components/roleplay/RoleplayOpeningFlow';
 import { RoleplayScenario } from '@/components/roleplay/RoleplayScenario';
 import { Recorder } from '@/components/roleplay/Recorder';
 import { SelfAssessment } from '@/components/roleplay/SelfAssessment';
@@ -15,7 +16,7 @@ import { RoleplayProgress } from '@/components/roleplay/RoleplayProgress';
 import { RoleplayCompletion } from '@/components/roleplay/RoleplayCompletion';
 import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessment';
 
-type PageState = 'loading' | 'intro' | 'scenario' | 'recording' | 'review' | 'self-assessment' | 'completion' | 'error';
+type PageState = 'loading' | 'intro' | 'opening' | 'scenario' | 'recording' | 'review' | 'self-assessment' | 'completion' | 'error';
 
 interface Scenario {
   id: string;
@@ -72,12 +73,15 @@ interface ResolvedIdentity {
 interface RoleplayClientProps {
   sessionId: string;
   initialIdentity: ResolvedIdentity | null;
+  openingEnabled?: boolean;
 }
 
-export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientProps) {
+export function RoleplayClient({ sessionId, initialIdentity, openingEnabled = false }: RoleplayClientProps) {
   const router = useRouter();
 
   const [pageState, setPageState] = useState<PageState>('loading');
+  const [openingReturnState, setOpeningReturnState] = useState<'scenario' | 'self-assessment' | 'completion'>('scenario');
+  const handleOpeningContinue = useCallback(() => setPageState(openingReturnState), [openingReturnState]);
   const [session, setSession] = useState<SessionData | null>(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [baseAudioVolume, setBaseAudioVolume] = useState(1);
@@ -93,7 +97,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
     notes: string;
   }>>({});
 
-  const stepLabels = ['Intro', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'];
+  const stepLabels = openingEnabled ? ['Intro', 'Apertura', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'] : ['Intro', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'];
 
   // Fetch session data on mount
   useEffect(() => {
@@ -141,6 +145,11 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
             setPageState('self-assessment');
           } else if (terminalStates.includes(data.data.status)) {
             setPageState('completion');
+          } else if (openingEnabled && ['STARTED', 'IN_PROGRESS'].includes(data.data.status)) {
+            const response = data.data.scenarios[currentIndex]?.responses?.[0];
+            setOpeningReturnState(currentIndex >= data.data.scenarios.length ? 'completion' :
+              response?.sourceAudioUrl && !response.selfScore ? 'self-assessment' : 'scenario');
+            setPageState('opening');
           } else if (currentIndex >= data.data.scenarios.length) {
             setPageState('completion');
           } else {
@@ -165,7 +174,7 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       }
     }
     fetchSession();
-  }, [sessionId]);
+  }, [sessionId, openingEnabled]);
 
   const handleVolumeChange = useCallback((vol: number) => {
     setBaseAudioVolume(vol);
@@ -178,13 +187,14 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
       const res = await fetch(`/api/roleplay/session/${sessionId}/start`, { method: 'POST' });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Failed to start roleplay');
-      setPageState('scenario');
+      setOpeningReturnState('scenario');
+      setPageState(openingEnabled ? 'opening' : 'scenario');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start roleplay');
     } finally {
       setIsLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, openingEnabled]);
 
   const handleStartRecording = useCallback(() => {
     // Listening/review and recording are separate required stages for every scenario.
@@ -388,11 +398,12 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
 
   const currentScenario = session?.scenarios[currentScenarioIndex];
 
-  const totalSteps = 5;
-  const currentStep = pageState === 'intro' ? 0 :
-    pageState === 'scenario' ? 1 :
-    pageState === 'recording' ? 2 :
-    pageState === 'self-assessment' ? 3 : 4;
+  const totalSteps = stepLabels.length;
+  const offset = openingEnabled ? 1 : 0;
+  const currentStep = pageState === 'intro' ? 0 : pageState === 'opening' ? 1 :
+    pageState === 'scenario' ? 1 + offset :
+    pageState === 'recording' ? 2 + offset :
+    pageState === 'self-assessment' ? 3 + offset : 4 + offset;
 
   if (pageState === 'loading') {
     return (
@@ -477,6 +488,10 @@ export function RoleplayClient({ sessionId, initialIdentity }: RoleplayClientPro
               onBack={handleBack}
               isLoading={isLoading}
             />
+          )}
+
+          {pageState === 'opening' && openingEnabled && (
+            <RoleplayOpeningFlow key={session.id} sessionId={session.id} onContinue={handleOpeningContinue} />
           )}
 
           {pageState === 'scenario' && currentScenario && (
