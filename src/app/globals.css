@@ -766,6 +766,12 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   outline-offset: 2px;
 }
 
+/* Scrollable data regions remain operable with a keyboard. */
+.theme-workspace [role="region"][tabindex="0"]:focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: -2px;
+}
+
 /* Light workspace: exact legacy utilities used by roleplay library, audio
    studio and live monitoring. Keep media canvases (bg-black), gradients and
    dark mode unchanged. */
