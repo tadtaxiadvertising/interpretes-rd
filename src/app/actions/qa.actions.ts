@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
+import { notifyQaEvaluation } from '@/lib/notifications/notify-qa-evaluation';
 import { calculateCanonicalQaTotal } from '@/lib/qa-canonical-score';
 
 const prismaClient = prisma;
@@ -137,8 +138,10 @@ export async function submitQAEvaluation(_prevState: unknown, formData: FormData
       if (!storedQaFormTotalMatches(persisted?.totalScore, expectedTotal)) {
         throw new Error('QA stored score contract mismatch');
       }
-      return persisted!;
+      return { id: created.id, totalScore: persisted!.totalScore };
     });
+
+    await notifyQaEvaluation({ evaluationId: saved.id, interpreterId: data.interpreterId, totalScore: Number(saved.totalScore), actionRequired });
 
     // A post-commit cache failure must not claim the QA insert failed and
     // prompt an operator to retry a transaction that already committed.
