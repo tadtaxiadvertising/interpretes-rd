@@ -14,7 +14,7 @@ export async function notifyAudioJobFailures(failures: readonly TerminalFailure[
     });
     // A failed job after a manual requeue is a new event. Replaying the
     // same committed failure uses the same key and preserves read state.
-    const batch = [];
+    let batch: ReturnType<typeof notificationEventRow>[] = [];
     for (const failure of failures) {
       for (const admin of admins) {
         batch.push(notificationEventRow({
@@ -28,7 +28,7 @@ export async function notifyAudioJobFailures(failures: readonly TerminalFailure[
         }));
         if (batch.length >= 100) {
           await prisma.notification.createMany({ data: batch, skipDuplicates: true });
-          batch.length = 0;
+          batch = [];
         }
       }
     }
