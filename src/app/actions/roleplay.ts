@@ -22,6 +22,9 @@ import { advanceApplication } from '@/services/recruitment/transitions';
 import { publicRoleplayActionError, roleplayBusinessError } from '@/lib/roleplay/action-errors';
 import { prepareOpeningEvaluation, persistOpeningEvaluation } from '@/lib/roleplay/bilingual-opening-evaluation';
 import { readOpeningRequirement, insertOpeningRequiredSession } from '@/lib/roleplay/bilingual-opening-assignment';
+import { isPrivateClinicalReference } from '@/lib/roleplay/private-clinical-reference';
+import { resolveInvitationBaseAudioUrl } from '@/lib/roleplay/invitation-base-audio';
+import { getSignedAudioUrl } from '@/lib/roleplay';
 
 const db = prisma;
 
@@ -1224,7 +1227,11 @@ export async function validateInviteToken(rawInput: ValidateInviteTokenInput) {
       success: true, 
       data: { 
         sessionId: access.session.id,
-        baseAudioUrl: await canProgressPastBilingualOpening(db, access.session.id) ? access.session.baseAudioUrl : null,
+        baseAudioUrl: await canProgressPastBilingualOpening(db, access.session.id)
+          ? isPrivateClinicalReference(access.session.baseAudioUrl)
+            ? await resolveInvitationBaseAudioUrl(access.session, process.env.NEXT_PUBLIC_SUPABASE_URL, getSignedAudioUrl)
+            : access.session.baseAudioUrl
+          : null,
         candidateName: access.session.recruitmentCandidateId ? 'Candidate' : undefined,
       } 
     };
