@@ -35,6 +35,28 @@ describe('Audio Studio clip review player', () => {
     vi.unstubAllGlobals();
   });
 
+  it('guides the editor from source selection to subtitles, turns and export in document order', () => {
+    const { container } = render(<RoleplayStudioPage />);
+    expect(screen.queryByRole('link', { name: /4\. Exportación/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'guided.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player);
+
+    const subtitles = container.querySelector('#studio-subtitles')!;
+    const turns = container.querySelector('#studio-turns')!;
+    const exportTitle = container.querySelector('#studio-export')!;
+    const exportMode = screen.getByRole('group', { name: 'Modo de exportación del MP3' });
+    expect(subtitles.compareDocumentPosition(turns) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(turns.contains(exportMode)).toBe(true);
+    expect(exportTitle.compareDocumentPosition(exportMode) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /4\. Exportación/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(screen.getByRole('link', { name: /4\. Exportación/ }).getAttribute('href')).toBe('#studio-export');
+  });
+
   it('undoes a manual fragment creation without losing an earlier edited intervention', () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
