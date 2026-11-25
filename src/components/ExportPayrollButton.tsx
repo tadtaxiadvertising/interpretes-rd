@@ -76,7 +76,7 @@ export function ExportPayrollButton({ data }: ExportPayrollButtonProps) {
     <button 
       onClick={exportToCSV}
       disabled={!data.length}
-      className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-6 py-3 rounded-2xl font-bold border border-white/10 transition-all active:scale-95 disabled:opacity-50"
+      className="flex items-center gap-2 theme-action-secondary px-6 py-3 rounded-2xl font-bold transition-all active:scale-95"
     >
       <Download size={20} />
       Export CSV

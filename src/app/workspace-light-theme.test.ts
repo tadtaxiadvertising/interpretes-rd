@@ -444,5 +444,33 @@ describe('shared production edit and delete dialogs', () => {
     expect(source).toContain('handleSubmit(onEditSubmit)');
     expect(source).toContain('onClick={onDelete}');
     expect(source).toContain('triggerRef.current?.focus()');
+describe('calendar layout and semantic report controls', () => {
+  it('keeps only the interpreter column sticky on wide screens', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/admin/calendar/page.tsx'), 'utf8');
+    expect(source.match(/xl:sticky xl:left-0/g)).toHaveLength(2);
+    expect(source).not.toMatch(/sticky left-\[/);
+    expect(source).toContain('aria-label="Calendario mensual de cumplimiento" tabIndex={0}');
+    expect(source).toContain('aria-label="Mes anterior"');
+    expect(source).toContain('aria-label="Mes siguiente"');
+  });
+
+  it.each([
+    'src/components/admin/CompanyReportForm.tsx',
+    'src/components/admin/CompanyCsvImport.tsx',
+    'src/components/GeneratePayrollButton.tsx',
+  ])('uses shared fields and actions in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    for (const token of ['--theme-control-bg', '--theme-control-border', '--theme-control-text']) {
+      expect(source).toContain('var(' + token + ')');
+    }
+    expect(source).toContain('theme-action-primary');
+  });
+
+  it('keeps payroll date labels associated with their controls', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/GeneratePayrollButton.tsx'), 'utf8');
+    for (const id of ['payroll-period-start', 'payroll-period-end']) {
+      expect(source).toContain('htmlFor="' + id + '"');
+      expect(source).toContain('id="' + id + '"');
+    }
   });
 });

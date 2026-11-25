@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 
 import type { ProviderId as Provider } from './provider-catalog';
 type QuotaDb = Pick<Prisma.TransactionClient, '$queryRaw'>;
-export type ProviderQuota = { provider: Provider; dailyLimit: number; monthlyLimit: number; dailyUsed: number; monthlyUsed: number };
+export type ProviderQuota = { provider: Provider; dailyLimit: number; monthlyLimit: number; dailyUsed: number; monthlyUsed: number; periodValid?: boolean };
 
 /** Reserve one attempt before network I/O. Row-level UPDATE serializes concurrent
  * attempts, including across replicas and profiles of the same provider. Never
@@ -31,6 +31,8 @@ export async function reserveProviderQuota(db: QuotaDb, provider: Provider): Pro
 export async function listProviderQuotas(db: QuotaDb): Promise<ProviderQuota[]> {
   return db.$queryRaw<ProviderQuota[]>`
     SELECT provider, daily_limit AS "dailyLimit", monthly_limit AS "monthlyLimit",
+      (day_start <= (statement_timestamp() AT TIME ZONE 'UTC')::date
+        AND month_start <= date_trunc('month', statement_timestamp() AT TIME ZONE 'UTC')::date) AS "periodValid",
       CASE WHEN day_start < (statement_timestamp() AT TIME ZONE 'UTC')::date THEN 0 ELSE daily_used END AS "dailyUsed",
       CASE WHEN month_start < date_trunc('month', statement_timestamp() AT TIME ZONE 'UTC')::date THEN 0 ELSE monthly_used END AS "monthlyUsed"
     FROM private_email.provider_quota ORDER BY provider

@@ -15,7 +15,7 @@ export function GeneratePayrollButton() {
   const handleGenerate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!startDate || !endDate) {
-      setError('Please select both start and end dates.');
+      setError('Selecciona las fechas de inicio y fin.');
       return;
     }
     setError(null);
@@ -23,9 +23,9 @@ export function GeneratePayrollButton() {
     startTransition(async () => {
       const result = await generatePayrollPeriod(new Date(startDate), new Date(endDate));
       if (!result.success) {
-        setError(result.error || 'Failed to generate payroll');
+        setError(result.error || 'No se pudo generar la nómina');
       } else {
-        alert(result.data?.message || 'Success');
+        alert(result.data?.message || 'Nómina generada');
         setIsOpen(false);
       }
     });
@@ -35,43 +35,45 @@ export function GeneratePayrollButton() {
     <>
       <button 
         onClick={() => setIsOpen(true)}
-        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-2xl font-bold transition-all glow shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)]"
+        className="flex items-center gap-2 theme-action-primary px-6 py-3 rounded-2xl font-bold transition-colors"
       >
         <Plus size={20} />
-        Run Payroll
+        Generar nómina
       </button>
 
       <Modal 
         isOpen={isOpen} 
         onClose={() => setIsOpen(false)} 
-        title="Generate Payroll Period"
+        title="Generar período de nómina"
       >
         <form onSubmit={handleGenerate} className="space-y-6">
           {error && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm">
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[var(--theme-danger)] text-sm">
               {error}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Period Start</label>
+              <label htmlFor="payroll-period-start" className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest ml-1">Inicio del período</label>
               <input
                 required
                 type="date"
+                id="payroll-period-start"
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-white focus:border-blue-500/50 transition-colors"
+                className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Period End</label>
+              <label htmlFor="payroll-period-end" className="text-xs font-bold text-[var(--text-secondary)] uppercase tracking-widest ml-1">Fin del período</label>
               <input
                 required
                 type="date"
+                id="payroll-period-end"
                 value={endDate}
                 onChange={(e) => setEndDate(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 px-4 text-white focus:border-blue-500/50 transition-colors"
+                className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors"
               />
             </div>
           </div>
@@ -80,17 +82,17 @@ export function GeneratePayrollButton() {
             <button
               type="button"
               onClick={() => setIsOpen(false)}
-              className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-gray-400 rounded-2xl font-bold transition-all border border-white/10"
+              className="flex-1 py-4 theme-action-secondary rounded-2xl font-bold transition-colors"
             >
-              Cancel
+              Cancelar
             </button>
             <button
               type="submit"
               disabled={isPending}
-              className="flex-1 py-4 bg-blue-600 hover:bg-blue-500 text-white rounded-2xl font-bold transition-all glow flex items-center justify-center gap-2 disabled:opacity-50"
+              className="flex-1 py-4 theme-action-primary rounded-2xl font-bold transition-colors flex items-center justify-center gap-2"
             >
               {isPending ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
-              Generate
+              Generar
             </button>
           </div>
         </form>

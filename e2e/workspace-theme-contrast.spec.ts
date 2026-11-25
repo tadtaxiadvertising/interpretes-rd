@@ -163,3 +163,46 @@ test('wide workspace tables can scroll with the keyboard at mobile width', async
     }
   }
 });
+
+test('calendar summary columns scroll without overlapping the pinned interpreter', async ({ page }) => {
+  await page.goto('/login');
+  await page.evaluate(() => {
+    const fixture = document.createElement('section');
+    fixture.id = 'calendar-layout-fixture';
+    fixture.className = 'theme-workspace';
+    fixture.style.cssText = 'position:fixed;inset:0;z-index:9999;padding:16px;background:var(--theme-panel)';
+    fixture.innerHTML = `
+      <div data-testid="calendar-region" class="max-w-full overflow-x-auto">
+        <table class="w-full text-left text-sm whitespace-nowrap border-collapse">
+          <thead><tr>
+            <th data-testid="calendar-name" class="p-4 xl:sticky xl:left-0 min-w-[220px] w-[220px] xl:min-w-[340px] xl:w-[340px] bg-[var(--theme-panel)]">Intérprete</th>
+            <th data-testid="calendar-summary" class="p-4 min-w-[80px] w-[80px]">Mes actual</th>
+            <th class="p-4 min-w-[80px] w-[80px]">Meta</th>
+            <th class="p-4 min-w-[70px] w-[70px]">%</th>
+            ${Array.from({ length: 31 }, (_, i) => '<th class="p-2 min-w-[48px]">' + (i + 1) + '</th>').join('')}
+          </tr></thead>
+        </table>
+      </div>`;
+    document.body.appendChild(fixture);
+  });
+  try {
+    const region = page.getByTestId('calendar-region');
+    const name = page.getByTestId('calendar-name');
+    const summary = page.getByTestId('calendar-summary');
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(name).toHaveCSS('position', 'sticky');
+    await expect(summary).not.toHaveCSS('position', 'sticky');
+    const initialNameX = await name.evaluate(node => node.getBoundingClientRect().x);
+    await region.evaluate(node => { node.scrollLeft = 250; });
+    await expect.poll(() => name.evaluate(node => Math.abs(node.getBoundingClientRect().x - initialNameX))).toBeLessThan(2);
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await region.evaluate(node => { node.scrollLeft = 0; });
+    await expect(name).not.toHaveCSS('position', 'sticky');
+    const mobileX = await name.evaluate(node => node.getBoundingClientRect().x);
+    await region.evaluate(node => { node.scrollLeft = 250; });
+    await expect.poll(() => name.evaluate(node => node.getBoundingClientRect().x)).toBeLessThan(mobileX - 100);
+  } finally {
+    await page.locator('#calendar-layout-fixture').evaluate(node => node.remove());
+  }
+});

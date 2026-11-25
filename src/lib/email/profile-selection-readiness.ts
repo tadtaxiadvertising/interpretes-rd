@@ -9,6 +9,7 @@ export function profileSelectionReadiness(profile: ProfileEvidence, quota: Provi
   if (!profile.testAcceptedAt) return 'test_required';
   if (!profile.receiptConfirmedAt) return 'receipt_required';
   if (!quota) return 'quota_unknown';
+  if (quota.periodValid === false) return 'quota_invalid_period';
   if (quotaAvailability(quota).remaining === 0) return 'quota_exhausted';
   if (!preferenceEditable) return 'pause_required';
   return 'ready';
