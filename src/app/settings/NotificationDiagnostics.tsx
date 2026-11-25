@@ -19,6 +19,40 @@ type Report = Record<Metric, number> & {
   checkedAt: string; sampleLimit: number; messagesTruncated: boolean; noticesTruncated: boolean;
 };
 
+const MODULE_LABELS = {
+  recruitmentAdmin: 'Reclutamiento administrativo',
+  candidate: 'Portal del postulante',
+  qa: 'Control de Calidad (QA)',
+  roleplayEvaluation: 'Evaluaciones de Roleplays',
+  roleplayAssignment: 'Asignaciones de Roleplays',
+  audio: 'Fallos definitivos de audio',
+} as const;
+type Module = keyof typeof MODULE_LABELS;
+type OperationalReport = {
+  modules: { module: Module; expected: number; missing: number }[];
+  adminSampled: number; adminLimit: number; sampleLimit: number; truncated: boolean;
+};
+
+function parseOperational(payload: unknown): OperationalReport | null {
+  if (!payload || typeof payload !== 'object') return null;
+  const value = (payload as { operational?: unknown }).operational;
+  if (!value || typeof value !== 'object') return null;
+  const report = value as OperationalReport;
+  const validCount = (n: unknown, max: number) => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 && n <= max;
+  if (!validCount(report.sampleLimit, 50) || report.sampleLimit !== 50 ||
+      report.adminLimit !== 20 || !validCount(report.adminSampled, report.adminLimit) ||
+      typeof report.truncated !== 'boolean' || !Array.isArray(report.modules) ||
+      report.modules.length !== Object.keys(MODULE_LABELS).length) return null;
+  const seen = new Set<string>();
+  for (const item of report.modules) {
+    if (!item || !Object.prototype.hasOwnProperty.call(MODULE_LABELS, item.module) ||
+        seen.has(item.module) || !validCount(item.expected, report.sampleLimit * report.adminLimit) ||
+        !validCount(item.missing, item.expected)) return null;
+    seen.add(item.module);
+  }
+  return report;
+}
+
 function parseReport(payload: unknown): Report | null {
   if (!payload || typeof payload !== 'object') return null;
   const response = payload as { success?: unknown; report?: unknown };
@@ -35,6 +69,7 @@ function parseReport(payload: unknown): Report | null {
 }
 
 export default function NotificationDiagnostics() {
+  const [operational, setOperational] = useState<OperationalReport | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [status, setStatus] = useState('Sin comprobar.');
   const [busy, setBusy] = useState(false);
@@ -47,6 +82,7 @@ export default function NotificationDiagnostics() {
     pending.current = controller;
     setBusy(true);
     setReport(null);
+    setOperational(null);
     setStatus('Consultando registros recientes…');
     try {
       const response = await fetch('/api/admin/notification-diagnostics', {
@@ -62,6 +98,7 @@ export default function NotificationDiagnostics() {
       } else {
         const result = response.ok ? parseReport(payload) : null;
         setReport(result);
+        setOperational(result ? parseOperational(payload) : null);
         setStatus(result ? 'Consulta completada. Resultados de la muestra, no de toda la base de datos.' : 'No se pudo obtener el diagnóstico.');
       }
     } catch {
@@ -96,6 +133,24 @@ export default function NotificationDiagnostics() {
               </div>
             ))}
           </dl>
+          <h3 className="font-semibold text-[var(--foreground)]">Entregas internas por módulo</h3>
+          {operational ? (
+            <>
+              <p className="text-xs text-[var(--text-secondary)]">Últimas 24 horas; hasta {operational.sampleLimit} registros por origen y {operational.adminSampled} de un máximo de {operational.adminLimit} perfiles administrativos. Cada destinatario cuenta como una entrega.</p>
+              {operational.truncated && <p className="text-sm text-[var(--theme-warning)]">Hay registros o perfiles fuera de esta muestra operativa.</p>}
+              <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] px-3">
+                {operational.modules.map(item => (
+                  <div key={item.module} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+                    <dt className="text-[var(--foreground)]">{MODULE_LABELS[item.module]}</dt>
+                    <dd className={item.missing > 0 ? 'font-semibold text-[var(--theme-warning)]' : 'text-[var(--text-secondary)]'}>
+                      {item.expected === 0 ? 'Sin entregas elegibles en la muestra' : `${item.missing} faltantes de ${item.expected}`}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="text-xs text-[var(--text-secondary)]">Una entrega faltante indica que no se encontró su registro esperado, no necesariamente que un usuario haya perdido información. Solo se incluyen etapas vigentes, evaluaciones válidas, ejercicios disponibles y fallos definitivos recientes con destinatarios vinculados.</p>
+            </>
+          ) : <p className="text-sm text-[var(--text-secondary)]">Diagnóstico operativo no disponible.</p>}
           <p className="text-xs leading-relaxed text-[var(--text-secondary)]">Los avisos faltantes se comprueban solo para mensajes sin leer de las últimas 24 horas con perfiles y permisos válidos. Un identificador sin perfil directo puede pertenecer a una cuenta antigua; no demuestra pérdida de datos. El resultado no verifica la entrega de correos ni el estado del trabajador de audio.</p>
         </>
       )}
