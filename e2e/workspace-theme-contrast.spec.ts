@@ -124,3 +124,42 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
     }
   }
 });
+
+test('wide workspace tables can scroll with the keyboard at mobile width', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/login');
+
+  for (const [label, theme] of [['Modo claro', 'light'], ['Modo oscuro', 'dark']] as const) {
+    await page.getByRole('button', { name: label }).click();
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    await page.evaluate(() => {
+      const fixture = document.createElement('section');
+      fixture.id = 'table-scroll-fixture';
+      fixture.className = 'theme-workspace';
+      fixture.style.cssText = 'position:fixed;inset:0;z-index:9999;padding:16px;background:var(--theme-panel)';
+      fixture.innerHTML = `
+        <button data-testid="before-table">Antes</button>
+        <div role="region" aria-label="Historial de ejemplo" tabindex="0" class="max-w-full overflow-x-auto">
+          <table class="w-full min-w-[850px] text-left">
+            <thead class="bg-[var(--theme-surface-muted)] text-[var(--text-secondary)]"><tr><th>Nombre</th><th>Estado</th></tr></thead>
+            <tbody><tr><td>Ejemplo</td><td>Disponible</td></tr></tbody>
+          </table>
+        </div>`;
+      document.body.appendChild(fixture);
+    });
+    try {
+      const region = page.getByRole('region', { name: 'Historial de ejemplo' });
+      await expect.poll(() => region.evaluate(node => node.scrollWidth > node.clientWidth)).toBe(true);
+      await page.getByTestId('before-table').focus();
+      await page.keyboard.press('Tab');
+      await expect(region).toBeFocused();
+      await expect(region).toHaveCSS('outline-style', 'solid');
+      await expect(region).toHaveCSS('outline-width', '2px');
+      await page.keyboard.press('ArrowRight');
+      await expect.poll(() => region.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
+    } finally {
+      await page.locator('#table-scroll-fixture').evaluate(node => node.remove());
+    }
+  }
+});
