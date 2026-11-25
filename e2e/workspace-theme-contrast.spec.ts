@@ -51,7 +51,8 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
         <button data-testid="semantic-primary" class="theme-action-primary">Guardar</button>
         <button data-testid="semantic-success" class="theme-action-success">Iniciar</button>
         <button data-testid="semantic-danger" class="theme-action-danger">Finalizar</button>
-        <button data-testid="semantic-disabled" class="theme-action-primary disabled:opacity-50" disabled>Guardando…</button>
+        <button data-testid="semantic-disabled" class="theme-action-primary disabled:opacity-50 hover:-translate-y-0.5 hover:scale-105 hover:shadow-lg" disabled>Guardando…</button>
+        <span data-testid="workspace-motion" class="animate-pulse">Actualizando…</span>
         <a data-testid="semantic-link" class="theme-action-primary" href="#workspace-contrast-fixture">Importar y asignar</a>
         <button data-testid="semantic-secondary" class="theme-action-secondary">Cancelar</button>
       `;
@@ -102,6 +103,17 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
       await disabled.hover();
       await expect(disabled).toHaveCSS('background-color', disabledBackground);
+      await expect(disabled).toHaveCSS('transform', 'none');
+      await expect(disabled).toHaveCSS('translate', 'none');
+      await expect(disabled).toHaveCSS('scale', 'none');
+      await expect(disabled).toHaveCSS('box-shadow', 'none');
+
+      const motion = page.getByTestId('workspace-motion');
+      await expect(motion).toHaveCSS('animation-iteration-count', '1');
+      await expect(motion).toHaveCSS('animation-delay', '0s');
+      const duration = await motion.evaluate(node => parseFloat(getComputedStyle(node).animationDuration));
+      expect(duration).toBeLessThanOrEqual(0.001);
+
 
       await page.getByTestId('semantic-primary').focus();
       await page.keyboard.press('Tab');
