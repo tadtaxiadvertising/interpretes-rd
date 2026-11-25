@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { importConfiguredEmailProvider, addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget, retireSavedEmailProvider, replaceSavedEmailProvider } from '@/app/actions/email-provider-vault';
 import { providerCatalog, type ProviderId } from '@/lib/email/provider-catalog';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
@@ -59,22 +59,55 @@ export default function EmailProviderVault() {
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState('');
-  async function load() {
-    const result = await listEmailProviderProfiles();
-    setProfiles(result.profiles);
-    setEnvironmentImport(result.environmentImport);
+  const busy = useRef(false);
+  const [refreshError, setRefreshError] = useState('');
+  function invalidateSnapshot(reason: string) {
+    setReady(false);
+    setProfiles([]);
+    setQuotas([]);
+    setPreferredId(null);
+    setEnvironmentImport(undefined);
     setConfirmImport(false);
-    setPreferredId(result.preferredId ?? null);
-    setSelectionPaused(result.selectionPaused === true);
-    setPreferenceEditable(result.preferenceEditable === true);
-    setQuotas(result.quotas ?? []);
-    setReady(result.status === 'ready');
-    setMessage(messageFor(result.status));
+    setEditingId(null);
+    setRetiringId(null);
+    setSelectionPaused(false);
+    setPreferenceEditable(false);
+    setRefreshError(reason);
+  }
+  async function load() {
+    try {
+      const result = await listEmailProviderProfiles();
+      if (result.status !== 'ready') {
+        invalidateSnapshot(messageFor(result.status));
+        return;
+      }
+      setProfiles(result.profiles);
+      setEnvironmentImport(result.environmentImport);
+      setConfirmImport(false);
+      setPreferredId(result.preferredId ?? null);
+      setSelectionPaused(result.selectionPaused === true);
+      setPreferenceEditable(result.preferenceEditable === true);
+      setQuotas(result.quotas ?? []);
+      setReady(true);
+      setRefreshError('');
+    } catch {
+      invalidateSnapshot(messageFor('unavailable'));
+    }
   }
   async function run(task: () => Promise<void>) {
-    if (pending) return;
+    if (busy.current) return;
+    busy.current = true;
     setPending(true);
-    try { await task(); } catch { setMessage(messageFor('unavailable')); } finally { setPending(false); }
+    setMessage('');
+    try {
+      await task();
+    } catch {
+      invalidateSnapshot(messageFor('unavailable'));
+      setMessage('No se pudo confirmar el resultado de la operación. Consulta los perfiles antes de repetirla.');
+    } finally {
+      busy.current = false;
+      setPending(false);
+    }
   }
 
   return (
@@ -213,6 +246,7 @@ export default function EmailProviderVault() {
         </div>
       ); })}
       <p role="status" aria-live="polite">{message}</p>
+      <p role="status" aria-live="polite">{refreshError ? `No se pudieron actualizar los perfiles: ${refreshError} Consulta de nuevo antes de continuar.` : pending ? 'Consultando o procesando…' : ready ? 'Perfiles consultados.' : 'Consulta los perfiles para comenzar.'}</p>
       <p>La prueba requiere desactivar todos los controles de despacho. La frecuencia de prueba se limita por proceso; el presupuesto es persistente y compartido. No reintentes envíos inciertos.</p>
     </section>
   );
