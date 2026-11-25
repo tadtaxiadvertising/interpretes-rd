@@ -170,7 +170,8 @@ export async function replaceSavedEmailProvider(input: unknown) {
     if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
     const replacement = validateReplacement(input);
     if (!replacement) return 'invalid' as const;
-    return await prisma.$transaction(tx => replaceProviderProfile(tx, replacement, auth.user.userId, key())) ? 'profile_replaced' as const : 'invalid' as const;
+    const result = await prisma.$transaction(tx => replaceProviderProfile(tx, replacement, auth.user.userId, key()));
+    return result === 'already_saved' ? 'already_saved' as const : result ? 'profile_replaced' as const : 'invalid' as const;
   } catch { return 'unavailable' as const; }
 }
 

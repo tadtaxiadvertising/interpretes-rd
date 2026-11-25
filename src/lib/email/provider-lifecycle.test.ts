@@ -19,17 +19,24 @@ describe('provider lifecycle', () => {
     expect(db.$executeRaw).not.toHaveBeenCalled();
   });
   it('does not replace an already retired profile', async () => {
-    const db = { $queryRaw: vi.fn().mockResolvedValue([{ singleton: true }]), $executeRaw: vi.fn().mockResolvedValue(0) };
+    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([]), $executeRaw: vi.fn() };
     expect(await replaceProviderProfile(db, { id, profile }, 'fixture', key)).toBe(false);
-    expect(db.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(db.$executeRaw).not.toHaveBeenCalled();
   });
   it('rejects provider type changes so the transaction can roll back', async () => {
     const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'resend' }]), $executeRaw: vi.fn().mockResolvedValue(1) };
     await expect(replaceProviderProfile(db, { id, profile }, 'fixture', key)).rejects.toThrow('Provider type cannot change');
-    expect(db.$executeRaw).toHaveBeenCalledTimes(2);
+    expect(db.$executeRaw).not.toHaveBeenCalled();
+  });
+  it('rejects a conflicting active sender before retiring or clearing preference', async () => {
+    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'brevo' }]).mockResolvedValueOnce([{ present: true }]), $executeRaw: vi.fn() };
+    expect(await replaceProviderProfile(db, { id, profile }, 'fixture', key)).toBe('already_saved');
+    expect(db.$queryRaw.mock.calls[0][0].join('?')).toContain('FOR UPDATE');
+    expect(db.$queryRaw.mock.calls[2][0].join('?')).toContain('AND id <> ?::uuid');
+    expect(db.$executeRaw).not.toHaveBeenCalled();
   });
   it('inserts a replacement with a new identity and without plaintext or old proof', async () => {
-    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'brevo' }]), $executeRaw: vi.fn().mockResolvedValue(1) };
+    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'brevo' }]).mockResolvedValueOnce([{ present: false }]).mockResolvedValueOnce([{ singleton: true }]), $executeRaw: vi.fn().mockResolvedValue(1) };
     expect(await replaceProviderProfile(db, { id, profile }, 'fixture', key)).toBe(true);
     const args = db.$executeRaw.mock.calls[2];
     expect(args[1]).not.toBe(id);
@@ -39,7 +46,7 @@ describe('provider lifecycle', () => {
   });
   it('preserves both encrypted SMTP credentials when replacing a profile', async () => {
     const smtpProfile = { ...profile, provider: 'mailjet' as const, apiKey: 'fixture-user', secretKey: 'fixture-secret' };
-    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'mailjet' }]), $executeRaw: vi.fn().mockResolvedValue(1) };
+    const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ singleton: true }]).mockResolvedValueOnce([{ provider: 'mailjet' }]).mockResolvedValueOnce([{ present: false }]).mockResolvedValueOnce([{ singleton: true }]), $executeRaw: vi.fn().mockResolvedValue(1) };
     expect(await replaceProviderProfile(db, { id, profile: smtpProfile }, 'fixture', key)).toBe(true);
     const args = db.$executeRaw.mock.calls[2];
     const newId = args[1] as string;
