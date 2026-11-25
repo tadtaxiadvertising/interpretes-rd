@@ -322,6 +322,25 @@ db -c "UPDATE private_email.provider_quota SET month_start=(date_trunc('month',s
 assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $quota_sql")" brevo quota-rollover
 assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '1:1' quota-reset
 assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='resend'")" '0:0' quota-provider-isolation
+# The read-only projection must agree with the reservation guard on future buckets.
+quota_read_sql="$(python3 - "$root/src/lib/email/provider-quota.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('export async function listProviderQuotas', 1)[1].split('`', 2)[1]
+assert '${' not in sql
+print(sql.strip())
+PY
+)"
+assert_equal "$(db -c "SELECT \"periodValid\" FROM ($quota_read_sql) q WHERE provider='brevo'")" t quota-valid-period
+db -c "UPDATE private_email.provider_quota SET day_start=(statement_timestamp() AT TIME ZONE 'UTC')::date+1 WHERE provider='brevo'"
+assert_equal "$(db -c "SELECT \"periodValid\" FROM ($quota_read_sql) q WHERE provider='brevo'")" f quota-future-day
+assert_equal "$(db -c "$quota_sql")" "" quota-future-day-blocks
+db -c "UPDATE private_email.provider_quota SET day_start=(statement_timestamp() AT TIME ZONE 'UTC')::date, month_start=(date_trunc('month',statement_timestamp() AT TIME ZONE 'UTC')+interval '1 month')::date WHERE provider='brevo'"
+assert_equal "$(db -c "SELECT \"periodValid\" FROM ($quota_read_sql) q WHERE provider='brevo'")" f quota-future-month
+assert_equal "$(db -c "$quota_sql")" "" quota-future-month-blocks
+db -c "UPDATE private_email.provider_quota SET month_start=date_trunc('month',statement_timestamp() AT TIME ZONE 'UTC')::date WHERE provider='brevo'"
+assert_equal "$(db -c "SELECT \"periodValid\" FROM ($quota_read_sql) q WHERE provider='brevo'")" t quota-period-restored
+assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '1:1' quota-invalid-period-preserves-usage
 echo 'Isolated provider quota and vault isolation checks passed.'
 
 # Preferred profile selection and receipt proof (no provider calls).

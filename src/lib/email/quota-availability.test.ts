@@ -11,6 +11,11 @@ describe('local quota availability', () => {
     expect(quotaAvailability({ ...budget, dailyUsed: 80 }).status).toBe('low');
     expect(quotaAvailability({ ...budget, dailyUsed: 79 }).status).toBe('available');
   });
+  it('blocks availability when a stored period is in the future', () => {
+    expect(quotaAvailability({ ...budget, periodValid: false })).toEqual({
+      dailyRemaining: 0, monthlyRemaining: 0, remaining: 0, status: 'invalid_period',
+    });
+  });
   it('clamps exhausted or reduced budgets to zero', () => {
     expect(quotaAvailability({ ...budget, dailyUsed: 110 })).toEqual({ dailyRemaining: 0, monthlyRemaining: 480, remaining: 0, status: 'exhausted' });
     expect(quotaAvailability({ ...budget, monthlyUsed: 500 }).status).toBe('exhausted');

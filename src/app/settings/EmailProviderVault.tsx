@@ -40,6 +40,7 @@ const readinessText: Record<ReturnType<typeof profileSelectionReadiness>, string
   test_required: 'Primero realiza una prueba aceptada por el proveedor.',
   receipt_required: 'Confirma la recepción en el buzón.',
   quota_unknown: 'No hay presupuesto local consultado para este proveedor.',
+  quota_invalid_period: 'El período de cuota es inconsistente. Revisa el reloj y el registro antes de elegir.',
   quota_exhausted: 'Presupuesto local agotado. Revisa los límites antes de elegir.',
   pause_required: 'Pausa el despacho y vuelve a consultar los perfiles.',
   ready: 'Cumple los requisitos locales para elegirlo. El servidor volverá a verificarlos.',
@@ -153,11 +154,13 @@ export default function EmailProviderVault() {
         return (
         <div key={quota.provider} className="rounded-lg border border-[var(--border)] p-3 space-y-1">
           <p className="font-semibold">{providerCatalog[quota.provider].label} · presupuesto local (UTC)</p>
+          {available.status === 'invalid_period' ? <p className="font-semibold">Período de cuota inconsistente. No se pueden reservar intentos. Revisa el reloj del servidor y el registro.</p> : <>
           <p>Hoy: {quota.dailyUsed} de {quota.dailyLimit} intentos · quedan {available.dailyRemaining}</p>
           <progress aria-label={'Consumo diario ' + quota.provider} value={Math.min(quota.dailyUsed, quota.dailyLimit)} max={quota.dailyLimit} className="w-full" />
           <p>Mes: {quota.monthlyUsed} de {quota.monthlyLimit} intentos · quedan {available.monthlyRemaining}</p>
           <progress aria-label={'Consumo mensual ' + quota.provider} value={Math.min(quota.monthlyUsed, quota.monthlyLimit)} max={quota.monthlyLimit} className="w-full" />
           <p className="font-semibold">{available.status === 'exhausted' ? 'Presupuesto local agotado' : available.status === 'low' ? 'Presupuesto local próximo a agotarse' : 'Presupuesto local disponible'} · {available.remaining} intentos restantes según ambos límites.</p>
+          </>}
           <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
           <form key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit} className="space-y-2" onSubmit={event => {
             event.preventDefault();
