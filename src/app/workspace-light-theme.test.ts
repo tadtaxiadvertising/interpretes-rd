@@ -290,3 +290,35 @@ describe('shared Audio Studio actions', () => {
     expect(studio).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
   });
 });
+
+describe('responsive workspace navigation and library', () => {
+  it('keeps the workspace within the dynamic viewport and respects mobile safe areas', () => {
+    const shell = readFileSync(resolve(process.cwd(), 'src/components/DashboardShell.tsx'), 'utf8');
+    const mobile = readFileSync(resolve(process.cwd(), 'src/components/MobileBottomNav.tsx'), 'utf8');
+    expect(shell).toContain('h-dvh overflow-hidden');
+    expect(shell).toContain('min-h-0 flex-1');
+    expect(shell).toContain('pb-[calc(6rem+env(safe-area-inset-bottom))]');
+    expect(mobile).toContain('70dvh');
+    expect(mobile).toContain('overscroll-contain');
+  });
+
+  it('uses semantic navigation status and progress colors', () => {
+    const sidebar = readFileSync(resolve(process.cwd(), 'src/components/Sidebar.tsx'), 'utf8');
+    const navbar = readFileSync(resolve(process.cwd(), 'src/components/Navbar.tsx'), 'utf8');
+    expect(sidebar).toContain('bg-[var(--theme-track)]');
+    expect(sidebar).toContain('bg-[var(--theme-warning)]');
+    expect(navbar).toContain('text-[var(--theme-danger)]');
+    expect(navbar).toContain('w-[min(16rem,calc(100vw-1.5rem))]');
+    for (const source of [sidebar, navbar]) {
+      expect(source).toContain('focus-visible:outline-[var(--theme-focus)]');
+    }
+  });
+
+  it('keeps library search and exercise titles responsive', () => {
+    const library = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/library/page.tsx'), 'utf8');
+    expect(library).toContain('min-w-0 w-full sm:w-auto sm:min-w-0 flex-1');
+    expect(library).toContain('theme-action-primary px-5 py-3');
+    expect(library).toContain('break-words text-lg');
+    expect(library).toContain('break-all font-mono');
+  });
+});
