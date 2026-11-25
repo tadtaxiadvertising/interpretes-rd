@@ -14,6 +14,12 @@ import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notific
 
 const db = prisma;
 
+// A candidate must not see or acknowledge operational or administrative notices,
+// even if a former operational account shares the same authenticated UUID.
+function candidateNotificationScope(role: string | undefined) {
+  return role === 'candidate' ? { category: 'recruitment', link: '/candidate' } : {};
+}
+
 /** Refresh only the authenticated user's notification feed. */
 export async function getMyNotifications() {
   const auth = await validateAction();
@@ -22,8 +28,8 @@ export async function getMyNotifications() {
   if (!ids.length) return { success: false as const };
   try {
     const [data, unreadCount] = await Promise.all([
-      loadNavbarNotifications(ids, { throwOnError: true }),
-      db.notification.count({ where: { userId: { in: ids }, OR: [{ isRead: false }, { isRead: null }] } }),
+      loadNavbarNotifications(ids, { throwOnError: true, candidateOnly: auth.user.role === 'candidate' }),
+      db.notification.count({ where: { userId: { in: ids }, ...candidateNotificationScope(auth.user.role), OR: [{ isRead: false }, { isRead: null }] } }),
     ]);
     return { success: true as const, data, unreadCount };
   } catch {
@@ -132,6 +138,7 @@ export async function markNotificationAsRead(id: string) {
         // The dashboard lists notifications addressed to either linked ID.
         // Never permit a recipient ID passed by the caller.
         userId: { in: recipientIds },
+        ...candidateNotificationScope(auth.user.role),
       },
       data: { isRead: true },
     });
@@ -156,7 +163,7 @@ export async function markAllNotificationsAsRead() {
   if (!ids.length) return { success: false as const };
   try {
     await db.notification.updateMany({
-      where: { userId: { in: ids }, OR: [{ isRead: false }, { isRead: null }] },
+      where: { userId: { in: ids }, ...candidateNotificationScope(auth.user.role), OR: [{ isRead: false }, { isRead: null }] },
       data: { isRead: true },
     });
     refreshNotificationCache();
@@ -186,9 +193,13 @@ export async function getMyNotificationHistory(input: unknown) {
 
   try {
     const { page, unreadOnly, category, importantOnly } = parsed.data;
+    if (auth.user.role === 'candidate' && category && category !== 'recruitment') {
+      return { success: true as const, data: [], hasMore: false };
+    }
     const rows = await db.notification.findMany({
       where: {
         userId: { in: ids },
+        ...candidateNotificationScope(auth.user.role),
         ...(unreadOnly ? { OR: [{ isRead: false }, { isRead: null }] } : {}),
         ...(category === 'system' ? { AND: [{ OR: [{ category: 'system' }, { category: null }, { category: { notIn: [...notificationCategories] } }] }] } : category ? { category } : {}),
         ...(importantOnly ? { type: { in: ['warning', 'error'] } } : {}),
