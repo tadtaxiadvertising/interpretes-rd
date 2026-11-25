@@ -1,3 +1,5 @@
+/* Important declarations in the first cascade layer outrank later layers. */
+@layer disabled-action-guard;
 @import "tailwindcss";
 
 :root {
@@ -763,13 +765,25 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   color: var(--text-secondary);
   opacity: 1;
   cursor: not-allowed;
-  /* Disabled actions must not animate even when legacy hover utilities are present. */
-  transition-property: none !important;
-  transform: none !important;
-  translate: none !important;
-  scale: none !important;
-  rotate: none !important;
-  box-shadow: none !important;
+}
+
+/* Keep legacy hover utilities from moving native disabled semantic buttons.
+   This layer precedes Tailwind; important layer precedence is reversed. */
+@layer disabled-action-guard {
+  .theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):disabled {
+    transition-property: none !important;
+    transform: none !important;
+    translate: 0px 0px !important;
+    scale: 1 !important;
+    rotate: 0deg !important;
+    box-shadow: none !important;
+    --tw-translate-x: 0px !important;
+    --tw-translate-y: 0px !important;
+    --tw-translate-z: 0px !important;
+    --tw-scale-x: 1 !important;
+    --tw-scale-y: 1 !important;
+    --tw-scale-z: 1 !important;
+  }
 }
 .theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):focus-visible {
   outline: 2px solid var(--theme-focus);

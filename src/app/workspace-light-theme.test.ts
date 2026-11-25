@@ -497,3 +497,27 @@ describe('shared payroll dialogs preserve transaction controls', () => {
     expect(source).not.toContain('fixed inset-0 z-50 flex items-center justify-center bg-black/80');
   });
 });
+
+describe('disabled semantic action cascade guard', () => {
+  it('declares the important guard before Tailwind and limits it to disabled workspace actions', () => {
+    expect(css.indexOf('@layer disabled-action-guard;')).toBeGreaterThanOrEqual(0);
+    expect(css.indexOf('@layer disabled-action-guard;')).toBeLessThan(css.indexOf('@import "tailwindcss";'));
+    const values = new Map<string, string>();
+    root.walkAtRules('layer', layer => {
+      if (layer.params !== 'disabled-action-guard' || !layer.nodes) return;
+      layer.walkRules(rule => {
+        expect(rule.selector).toBe('.theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):disabled');
+        rule.walkDecls(declaration => {
+          expect(declaration.important).toBe(true);
+          values.set(declaration.prop, declaration.value);
+        });
+      });
+    });
+    for (const [property, value] of Object.entries({
+      'transition-property': 'none', transform: 'none', translate: '0px 0px',
+      scale: '1', rotate: '0deg', 'box-shadow': 'none',
+      '--tw-translate-x': '0px', '--tw-translate-y': '0px', '--tw-translate-z': '0px',
+      '--tw-scale-x': '1', '--tw-scale-y': '1', '--tw-scale-z': '1',
+    })) expect(values.get(property)).toBe(value);
+  });
+});
