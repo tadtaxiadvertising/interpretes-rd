@@ -174,7 +174,7 @@ export default async function RoleplayLibraryPage({
           </div>
         )}
         {matches.map((item) => (
-          <article key={item.fingerprint} className="rounded-2xl border border-[var(--border)] bg-white/[0.03] p-5">
+          <article key={item.fingerprint} className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0 flex-1">
                 <h3 className="text-lg font-bold text-[var(--foreground)]">{item.titles[0] || 'Roleplay sin título'}</h3>
