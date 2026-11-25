@@ -32,7 +32,7 @@ db <<'SQL'
 DO $test$
 DECLARE role_name text; table_name text;
 BEGIN
-  FOREACH table_name IN ARRAY ARRAY['roleplay_bilingual_openings','roleplay_bilingual_opening_reservations'] LOOP
+  FOREACH table_name IN ARRAY ARRAY['roleplay_bilingual_openings','roleplay_bilingual_opening_reservations','roleplay_bilingual_opening_reviews'] LOOP
     IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = ('public.' || table_name)::regclass) THEN
       RAISE EXCEPTION 'RLS missing on %', table_name;
     END IF;
@@ -123,11 +123,33 @@ BEGIN
   END;
 END
 $test$;
+INSERT INTO public.roleplay_bilingual_opening_reviews
+  (session_id,reviewer_id,english_intro,spanish_intro,professional_role,consecutive_guidance,clarity,notes)
+  VALUES ('required','qa-fixture',true,false,true,true,true,'QA fixture');
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.roleplay_bilingual_opening_reviews
+      (session_id,reviewer_id,english_intro,spanish_intro,professional_role,consecutive_guidance,clarity)
+      VALUES ('required','second-reviewer',true,true,true,true,true);
+    RAISE EXCEPTION 'Duplicate opening review accepted';
+  EXCEPTION WHEN unique_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.roleplay_bilingual_opening_reviews
+      (session_id,reviewer_id,english_intro,spanish_intro,professional_role,consecutive_guidance,clarity)
+      VALUES ('other','qa-fixture',true,true,true,true,true);
+    RAISE EXCEPTION 'Review without confirmed opening accepted';
+  EXCEPTION WHEN foreign_key_violation THEN NULL;
+  END;
+END
+$test$;
 DELETE FROM public.roleplay_sessions WHERE id='required';
 DO $test$
 BEGIN
   IF EXISTS (SELECT 1 FROM public.roleplay_bilingual_openings WHERE session_id='required')
     OR EXISTS (SELECT 1 FROM public.roleplay_bilingual_opening_reservations WHERE session_id='required')
+    OR EXISTS (SELECT 1 FROM public.roleplay_bilingual_opening_reviews WHERE session_id='required')
   THEN RAISE EXCEPTION 'Cascade cleanup failed'; END IF;
 END
 $test$;
