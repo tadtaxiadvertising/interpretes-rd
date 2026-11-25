@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { ArrowLeft, AudioLines, Library, ShieldCheck } from 'lucide-react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { getAdminReviewUrl } from '@/lib/roleplay';
-import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 
 export const dynamic = 'force-dynamic';
@@ -13,6 +14,9 @@ export default async function RoleplayLibraryDetailPage({
 }: {
   params: Promise<{ sourceSessionId: string }>;
 }) {
+  const identity = await resolveCurrentIdentity();
+  if (!identity) redirect('/login');
+  if (identity.role !== 'admin') redirect('/dashboard');
   const { sourceSessionId } = await params;
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   if (!supabaseUrl || !/^[a-zA-Z0-9_-]{5,120}$/.test(sourceSessionId)) notFound();
@@ -48,8 +52,8 @@ export default async function RoleplayLibraryDetailPage({
     notFound();
   }
 
-  const paths = source.scenarios.map((scenario) => getReusableBaseAudioPath(scenario.baseAudioUrl, supabaseUrl));
-  if (paths.some((path) => !path)) notFound();
+  const reusable = getReusableRoleplayAudio(source.scenarios, supabaseUrl);
+  if (!reusable) notFound();
 
   const fingerprint = getRoleplaySnapshotHash(source.scenarios);
   const visibility = await prisma.roleplayLibraryArchive.findUnique({
@@ -66,7 +70,7 @@ export default async function RoleplayLibraryDetailPage({
     const scenario = source.scenarios[index];
     let audioUrl: string | null = null;
     try {
-      audioUrl = await getAdminReviewUrl(paths[index]!);
+      audioUrl = await getAdminReviewUrl(reusable.kind === 'private' ? scenario.baseAudioUrl : reusable.paths[index]);
     } catch {
       // Storage exceptions may embed signed URLs or object keys. Log only
       // a stable category, never participant/scenario IDs or provider details.
@@ -98,6 +102,7 @@ export default async function RoleplayLibraryDetailPage({
           </Link>
           <div className="mb-2 flex items-center gap-2 text-sm text-gray-400"><Library size={17} /> Vista previa de plantilla</div>
           <h1 className="text-3xl font-bold text-white">{preview[0]?.title ?? 'Roleplay'}</h1>
+          <p className="mt-2 text-sm text-[var(--text-secondary)]">{reusable.kind === 'private' ? 'Audio privado · Apertura bilingüe obligatoria' : 'Audio histórico público'}</p>
           <p className="mt-2 text-sm text-gray-400">
             {preview.length} escenarios · Creado el {source.createdAt.toLocaleDateString('es-DO')} · Estado de referencia: {source.status}
           </p>
