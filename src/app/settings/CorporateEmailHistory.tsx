@@ -49,7 +49,7 @@ export default function CorporateEmailHistory() {
   return (
     <section aria-labelledby="corporate-email-history" className="space-y-3 border-t border-[var(--border)] pt-4 text-[var(--foreground)]">
       <h3 id="corporate-email-history" className="font-semibold">Historial de comunicaciones</h3>
-      <p className="text-sm">Registro operativo de solo lectura. No incluye correos de autenticación, códigos de verificación ni pruebas administrativas. El proveedor previsto se registra al reservar el envío; una cancelación puede no haber llegado al proveedor.</p>
+      <p className="text-sm">Registro operativo de solo lectura. No incluye correos de autenticación, códigos de verificación ni pruebas administrativas. El proveedor previsto se registra al reservar el envío; una cancelación puede no haber llegado al proveedor. Los registros antiguos o sin atribución muestran «Sin registro».</p>
       <button type="button" onClick={load} disabled={pending} className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50">
         {pending ? 'Consultando…' : 'Consultar historial'}
       </button>
@@ -77,7 +77,7 @@ export default function CorporateEmailHistory() {
           </table>
         </div>
       )}
-      <p className="text-xs">Hora de República Dominicana. Aceptado por SMTP no significa entregado al buzón. Los envíos sin confirmar o en procesamiento requieren revisión; esta pantalla no reintenta ni envía mensajes.</p>
+      <p className="text-xs">Hora de República Dominicana. Aceptado por el proveedor no significa entregado al buzón. Los envíos sin confirmar o en procesamiento requieren revisión; esta pantalla no reintenta ni envía mensajes.</p>
     </section>
   );
 }
