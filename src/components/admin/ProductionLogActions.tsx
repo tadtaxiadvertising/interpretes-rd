@@ -2,10 +2,10 @@
 
 import { deleteRecord, editRecord } from '@/app/actions/admin-actions';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Loader2, MoreVertical, Pencil, Trash2, X } from 'lucide-react';
+import { Loader2, MoreVertical, Pencil, Trash2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { z } from 'zod';
-import { createPortal } from 'react-dom';
+import { Modal } from '@/components/Modal';
 import { useForm } from 'react-hook-form';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import toast from 'react-hot-toast';
@@ -65,6 +65,7 @@ export function ProductionLogActions({ log }: { log: LogRow }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   /* ── react-hook-form ────────────────────────────────────── */
 
@@ -99,32 +100,6 @@ export function ProductionLogActions({ log }: { log: LogRow }) {
       });
     }
   }, [editOpen, log, reset]);
-
-  /* ── Scroll lock ────────────────────────────────────────── */
-
-  useEffect(() => {
-    if (editOpen || deleteOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
-    return () => {
-      document.body.style.overflow = '';
-    };
-  }, [editOpen, deleteOpen]);
-
-  /* ── Escape key ─────────────────────────────────────────── */
-
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') {
-        if (deleteOpen) setDeleteOpen(false);
-        else if (editOpen) setEditOpen(false);
-      }
-    }
-    if (editOpen || deleteOpen) window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [editOpen, deleteOpen]);
 
   /* ── Close dropdown on outside click ────────────────────── */
 
@@ -181,17 +156,17 @@ export function ProductionLogActions({ log }: { log: LogRow }) {
   /* ── Shared input classes ────────────────────────────────── */
 
   const baseInput =
-    'w-full rounded-xl border bg-gray-50 px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:outline-none transition-colors';
+    'min-w-0 w-full rounded-xl border bg-[var(--theme-control-bg)] px-4 py-2.5 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none transition-colors';
 
-  const inputCls = cn(baseInput, 'border-gray-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20');
-  const errorInputCls = cn(baseInput, 'border-red-300 bg-red-50 focus:border-red-500 focus:ring-2 focus:ring-red-500/20');
+  const inputCls = cn(baseInput, 'border-[var(--theme-control-border)] focus:border-[var(--theme-focus)] focus:ring-2 focus:ring-[var(--theme-focus)]');
+  const errorInputCls = cn(baseInput, 'border-[var(--theme-danger)] focus:border-[var(--theme-danger)] focus:ring-2 focus:ring-[var(--theme-danger)]');
 
   /* ── Inline error helper ─────────────────────────────────── */
 
   function FieldError({ name }: { name: keyof EditFormData }) {
     const err = errors[name];
     if (!err) return null;
-    return <p className="text-xs text-red-600 mt-1">{err.message}</p>;
+    return <p id={`production-${log.id}-${name}-error`} className="text-xs text-[var(--theme-danger)] mt-1">{err.message}</p>;
   }
 
   /* ── Render ──────────────────────────────────────────────── */
@@ -202,9 +177,9 @@ export function ProductionLogActions({ log }: { log: LogRow }) {
       <div ref={menuRef} className="relative inline-block text-left">
         <button
           type="button"
+          ref={triggerRef}
           onClick={() => setMenuOpen((o) => !o)}
-          className="p-2 hover:bg-white/10 rounded-xl text-gray-400 hover:text-white transition-colors"
-          aria-haspopup="menu"
+          className="theme-action-secondary p-2 rounded-xl transition-colors"
           aria-expanded={menuOpen}
           aria-label="Abrir acciones"
         >
@@ -212,18 +187,18 @@ export function ProductionLogActions({ log }: { log: LogRow }) {
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-white/10 bg-slate-950 shadow-2xl">
+          <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] shadow-2xl">
             <button
               type="button"
-              onClick={() => { setEditOpen(true); setMenuOpen(false); }}
-              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-gray-200 hover:bg-white/10"
+              onClick={() => { triggerRef.current?.focus(); setEditOpen(true); setMenuOpen(false); }}
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-[var(--foreground)] hover:bg-[var(--theme-hover)]"
             >
               <Pencil size={16} /> Editar
             </button>
             <button
               type="button"
-              onClick={() => { setDeleteOpen(true); setMenuOpen(false); }}
-              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-red-300 hover:bg-red-500/10"
+              onClick={() => { triggerRef.current?.focus(); setDeleteOpen(true); setMenuOpen(false); }}
+              className="flex w-full items-center gap-2 px-4 py-3 text-left text-sm text-[var(--theme-danger)] hover:bg-red-500/10"
             >
               <Trash2 size={16} /> Eliminar
             </button>
@@ -231,193 +206,147 @@ export function ProductionLogActions({ log }: { log: LogRow }) {
         )}
       </div>
 
-      {/* ── Edit Modal (portal → body) ────────────────────── */}
-      {editOpen &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`edit-log-${log.id}`}
-          >
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in"
-              onClick={() => setEditOpen(false)}
+      <Modal isOpen={editOpen} onClose={() => setEditOpen(false)} title="Editar registro" maxWidth="max-w-lg">
+        <p className="mb-4 text-sm text-[var(--text-secondary)]">{log.interpreterName}</p>
+      <form onSubmit={handleSubmit(onEditSubmit)} noValidate>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {/* Date */}
+          <div>
+            <label htmlFor={`production-${log.id}-date`} className="text-sm font-medium text-[var(--text-secondary)]">Fecha</label>
+            <input
+              type="date"
+              id={`production-${log.id}-date`}
+              aria-invalid={Boolean(errors.date)}
+              aria-describedby={errors.date ? `production-${log.id}-date-error` : undefined}
+              {...register('date')}
+              className={errors.date ? errorInputCls : inputCls}
             />
+            <FieldError name="date" />
+          </div>
 
-            {/* Modal panel */}
-            <div className="modal-light relative z-10 w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl animate-in">
-              {/* Header */}
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <h3
-                    id={`edit-log-${log.id}`}
-                    className="text-xl font-semibold text-gray-900"
-                  >
-                    Editar registro
-                  </h3>
-                  <p className="text-sm text-gray-500">{log.interpreterName}</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setEditOpen(false)}
-                  className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              {/* Form */}
-              <form onSubmit={handleSubmit(onEditSubmit)} noValidate>
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  {/* Date */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Fecha</label>
-                    <input
-                      type="date"
-                      {...register('date')}
-                      className={errors.date ? errorInputCls : inputCls}
-                    />
-                    <FieldError name="date" />
-                  </div>
-
-                  {/* Status */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Estado</label>
-                    <input
-                      {...register('status')}
-                      className={errors.status ? errorInputCls : inputCls}
-                    />
-                    <FieldError name="status" />
-                  </div>
-
-                  {/* Interpreted Minutes */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Minutos</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={1440}
-                      {...register('interpretedMinutes', { valueAsNumber: true })}
-                      className={errors.interpretedMinutes ? errorInputCls : inputCls}
-                    />
-                    <FieldError name="interpretedMinutes" />
-                  </div>
-
-                  {/* Calls Attended */}
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Llamadas</label>
-                    <input
-                      type="number"
-                      min={0}
-                      {...register('callsAttended', { valueAsNumber: true })}
-                      className={errors.callsAttended ? errorInputCls : inputCls}
-                    />
-                    <FieldError name="callsAttended" />
-                  </div>
-
-                  {/* Adherence */}
-                  <div className="sm:col-span-2">
-                    <label className="text-sm font-medium text-gray-700">Adherencia (%)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.01}
-                      {...register('adherence', { valueAsNumber: true })}
-                      className={errors.adherence ? errorInputCls : inputCls}
-                    />
-                    <FieldError name="adherence" />
-                  </div>
-
-                  {/* Observaciones */}
-                  <div className="sm:col-span-2">
-                    <label className="text-sm font-medium text-gray-700">Observaciones</label>
-                    <textarea
-                      {...register('observaciones')}
-                      rows={3}
-                      className={errors.observaciones ? errorInputCls : inputCls}
-                    />
-                    <FieldError name="observaciones" />
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="mt-6 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setEditOpen(false)}
-                    className="rounded-xl border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isPending}
-                    className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 font-semibold text-white hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {isPending ? 'Guardando…' : 'Guardar'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>,
-          document.body,
-        )}
-
-      {/* ── Delete Modal (portal → body) ──────────────────── */}
-      {deleteOpen &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby={`delete-log-${log.id}`}
-          >
-            {/* Backdrop */}
-            <div
-              className="absolute inset-0 bg-black/50 backdrop-blur-sm animate-in"
-              onClick={() => setDeleteOpen(false)}
+          {/* Status */}
+          <div>
+            <label htmlFor={`production-${log.id}-status`} className="text-sm font-medium text-[var(--text-secondary)]">Estado</label>
+            <input
+              id={`production-${log.id}-status`}
+              aria-invalid={Boolean(errors.status)}
+              aria-describedby={errors.status ? `production-${log.id}-status-error` : undefined}
+              {...register('status')}
+              className={errors.status ? errorInputCls : inputCls}
             />
+            <FieldError name="status" />
+          </div>
 
-            {/* Modal panel */}
-            <div className="modal-light relative z-10 w-full max-w-md rounded-2xl bg-white p-6 shadow-xl animate-in">
-              <h3
-                id={`delete-log-${log.id}`}
-                className="text-xl font-semibold text-gray-900"
-              >
-                Eliminar registro
-              </h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Esta acción eliminará el registro de producción de{' '}
-                <span className="font-medium text-gray-700">{log.interpreterName}</span>{' '}
-                y actualizará las vistas relacionadas.
-              </p>
+          {/* Interpreted Minutes */}
+          <div>
+            <label htmlFor={`production-${log.id}-interpretedMinutes`} className="text-sm font-medium text-[var(--text-secondary)]">Minutos</label>
+            <input
+              type="number"
+              min={0}
+              max={1440}
+              id={`production-${log.id}-interpretedMinutes`}
+              aria-invalid={Boolean(errors.interpretedMinutes)}
+              aria-describedby={errors.interpretedMinutes ? `production-${log.id}-interpretedMinutes-error` : undefined}
+              {...register('interpretedMinutes', { valueAsNumber: true })}
+              className={errors.interpretedMinutes ? errorInputCls : inputCls}
+            />
+            <FieldError name="interpretedMinutes" />
+          </div>
 
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setDeleteOpen(false)}
-                  className="rounded-xl border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  disabled={isPending}
-                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-500 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-                >
-                  {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {isPending ? 'Eliminando…' : 'Eliminar'}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body,
-        )}
+          {/* Calls Attended */}
+          <div>
+            <label htmlFor={`production-${log.id}-callsAttended`} className="text-sm font-medium text-[var(--text-secondary)]">Llamadas</label>
+            <input
+              type="number"
+              min={0}
+              id={`production-${log.id}-callsAttended`}
+              aria-invalid={Boolean(errors.callsAttended)}
+              aria-describedby={errors.callsAttended ? `production-${log.id}-callsAttended-error` : undefined}
+              {...register('callsAttended', { valueAsNumber: true })}
+              className={errors.callsAttended ? errorInputCls : inputCls}
+            />
+            <FieldError name="callsAttended" />
+          </div>
+
+          {/* Adherence */}
+          <div className="sm:col-span-2">
+            <label htmlFor={`production-${log.id}-adherence`} className="text-sm font-medium text-[var(--text-secondary)]">Adherencia (%)</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={0.01}
+              id={`production-${log.id}-adherence`}
+              aria-invalid={Boolean(errors.adherence)}
+              aria-describedby={errors.adherence ? `production-${log.id}-adherence-error` : undefined}
+              {...register('adherence', { valueAsNumber: true })}
+              className={errors.adherence ? errorInputCls : inputCls}
+            />
+            <FieldError name="adherence" />
+          </div>
+
+          {/* Observaciones */}
+          <div className="sm:col-span-2">
+            <label htmlFor={`production-${log.id}-observaciones`} className="text-sm font-medium text-[var(--text-secondary)]">Observaciones</label>
+            <textarea
+              id={`production-${log.id}-observaciones`}
+              aria-invalid={Boolean(errors.observaciones)}
+              aria-describedby={errors.observaciones ? `production-${log.id}-observaciones-error` : undefined}
+              {...register('observaciones')}
+              rows={3}
+              className={errors.observaciones ? errorInputCls : inputCls}
+            />
+            <FieldError name="observaciones" />
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          <button
+            type="button"
+            onClick={() => setEditOpen(false)}
+            className="theme-action-secondary rounded-xl px-4 py-2 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            disabled={isPending}
+            className="inline-flex items-center gap-2 theme-action-primary rounded-xl px-4 py-2 font-semibold transition-colors"
+          >
+            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isPending ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </form>
+      </Modal>
+
+      <Modal isOpen={deleteOpen} onClose={() => setDeleteOpen(false)} title="Eliminar registro" maxWidth="max-w-md">
+      <p className="mt-2 text-sm text-[var(--text-secondary)]">
+        Esta acción eliminará el registro de producción de{' '}
+        <span className="font-medium text-[var(--foreground)]">{log.interpreterName}</span>{' '}
+        y actualizará las vistas relacionadas.
+      </p>
+
+      <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <button
+          type="button"
+          onClick={() => setDeleteOpen(false)}
+          className="theme-action-secondary rounded-xl px-4 py-2 transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={isPending}
+          className="inline-flex items-center gap-2 theme-action-danger rounded-xl px-4 py-2 font-semibold transition-colors"
+        >
+          {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {isPending ? 'Eliminando…' : 'Eliminar'}
+        </button>
+      </div>
+      </Modal>
     </>
   );
 }
