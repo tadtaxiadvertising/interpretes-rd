@@ -48,6 +48,9 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
         <select data-testid="workspace-select" class="border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] text-[var(--theme-control-text)]"><option>Ejemplo</option></select>
         <button data-testid="workspace-action" class="bg-blue-600 hover:bg-blue-500 text-white">Guardar</button>
         <button data-testid="workspace-danger" class="bg-red-600 hover:bg-red-500 text-white">Cancelar</button>
+        <button data-testid="semantic-primary" class="theme-action-primary">Guardar</button>
+        <button data-testid="semantic-success" class="theme-action-success">Iniciar</button>
+        <button data-testid="semantic-danger" class="theme-action-danger">Finalizar</button>
       `;
       document.body.appendChild(fixture);
     });
@@ -60,6 +63,17 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
         const field = page.getByTestId(id);
         await expect(field).toHaveCSS('color-scheme', theme);
         await expect.poll(() => contrast(field, 'border-top-color')).toBeGreaterThanOrEqual(3);
+      }
+      // Shared actions must retain contrast on both themes, before and after hover.
+      for (const id of ['semantic-primary', 'semantic-success', 'semantic-danger']) {
+        const action = page.getByTestId(id);
+        await expect(action).toHaveCSS('color', 'rgb(255, 255, 255)');
+        await expect.poll(() => contrast(action)).toBeGreaterThanOrEqual(4.5);
+        const normal = await action.evaluate(node => getComputedStyle(node).backgroundColor);
+        await action.hover();
+        await expect.poll(() => action.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(normal);
+        await expect.poll(() => contrast(action)).toBeGreaterThanOrEqual(4.5);
+        await page.mouse.move(0, 0);
       }
       // The legacy light overrides must not turn text on a solid CTA dark.
       if (theme === 'light') {
