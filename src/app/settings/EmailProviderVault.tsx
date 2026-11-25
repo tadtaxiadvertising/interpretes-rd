@@ -117,6 +117,17 @@ export default function EmailProviderVault() {
     }
   }
 
+  async function savePreference(id: string | null) {
+    const status = await setPreferredEmailProvider(id);
+    if (status === 'unavailable') {
+      invalidateSnapshot(messageFor(status));
+      setMessage('No se pudo confirmar el cambio de preferencia. Consulta los perfiles antes de repetir la operación.');
+      return;
+    }
+    await load();
+    setMessage(messageFor(status));
+  }
+
   const alternatives = providerAlternatives(profiles, quotas, preferredId);
   const preferred = profiles.find(profile => profile.id === preferredId);
   const preferredQuota = preferred && quotas.find(quota => quota.provider === preferred.provider);
@@ -231,7 +242,7 @@ export default function EmailProviderVault() {
         </section>
       )}
       {ready && <p className="text-xs">{preferenceEditable ? 'Puedes elegir un perfil con recepción confirmada. La pausa se conserva.' : 'Para cambiar de proveedor, pausa el despacho del almacén y vuelve a consultar perfiles. Las pruebas y otras modificaciones mantienen sus requisitos de seguridad.'}</p>}
-      {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
+      {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(() => savePreference(null))} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
       {profiles.map(profile => {
         const quota = quotas.find(q => q.provider === profile.provider);
         const readiness = profileSelectionReadiness(profile, quota, preferenceEditable);
@@ -256,7 +267,7 @@ export default function EmailProviderVault() {
           )}
           {preferredId !== profile.id && <p className="text-xs">{readinessText[readiness]}</p>}
           {profile.receiptConfirmedAt && preferredId !== profile.id && (
-            <button type="button" disabled={pending || readiness !== 'ready'} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
+            <button type="button" disabled={pending || readiness !== 'ready'} onClick={() => run(() => savePreference(profile.id))} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
           )}
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={pending || !selectionPaused} onClick={() => { setEditingId(profile.id); setRetiringId(null); }} className="rounded-lg border border-[var(--border)] px-3 py-2">Editar configuración / clave</button>
