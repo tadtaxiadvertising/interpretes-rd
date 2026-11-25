@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const mocks = vi.hoisted(() => ({ cookies: vi.fn(), verify: vi.fn(), createClient: vi.fn(), getUser: vi.fn(), link: vi.fn(), rate: vi.fn(), issue: vi.fn(), consume: vi.fn(), state: vi.fn(), existing: vi.fn(), prisma: {} }));
+const mocks = vi.hoisted(() => ({ cookies: vi.fn(), verify: vi.fn(), createClient: vi.fn(), getUser: vi.fn(), link: vi.fn(), rate: vi.fn(), issue: vi.fn(), consume: vi.fn(), state: vi.fn(), existing: vi.fn(), prisma: { $transaction: vi.fn() }, preferred: vi.fn(), reserve: vi.fn() }));
 vi.mock('next/headers', () => ({ cookies: mocks.cookies }));
 vi.mock('@/lib/prisma', () => ({ default: mocks.prisma }));
 vi.mock('@/lib/recruitment/application-ref', () => ({ APPLICATION_REF_COOKIE: 'rd_app_ref', verifyApplicationRef: mocks.verify }));
@@ -9,6 +9,7 @@ vi.mock('@/lib/email/link-candidate-account', () => ({ linkCandidateAccount: moc
 vi.mock('@/lib/security/rate-limit', () => ({ rateLimit: mocks.rate }));
 vi.mock('@/lib/email/mailbox-proof', () => ({ issueMailboxChallenge: mocks.issue, consumeMailboxChallenge: mocks.consume, readMailboxState: mocks.state, readExistingProofBinding: mocks.existing }));
 vi.mock('@/lib/email/operational-config', () => ({ readOperationalMailConfig: () => ({ status: 'configured' }) }));
+vi.mock('@/lib/email/preferred-provider-runtime', () => ({ usesProviderVault: (env: Record<string, string | undefined>) => env.EMAIL_PROVIDER_SOURCE === 'vault', readPreferredProvider: mocks.preferred, reserveSelectedProvider: mocks.reserve, sendReservedProfile: vi.fn() }));
 vi.mock('@/lib/email/smtp-test', () => ({ sendRecruitmentSmtp: vi.fn() }));
 import { enableCandidateEmailBinding, requestCandidateMailboxProof, confirmCandidateMailboxProof, getCandidateMailboxState } from './candidate-email-binding';
 describe('candidate binding action', () => {
@@ -81,6 +82,35 @@ describe('mailbox proof rate limits and identity', () => {
     expect(await requestCandidateMailboxProof()).toBe('sent');
     expect(mocks.link).toHaveBeenCalledTimes(1);
     expect(mocks.issue).toHaveBeenCalledWith(mocks.prisma, { candidateId: 1, accountId: 'account-1', email: 'candidate@example.test' }, expect.any(Function));
+  });
+  it('does not reserve a provider credit when no new challenge is written', async () => {
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'vault');
+    mocks.preferred.mockResolvedValue({ id: 'fixture', provider: 'brevo' });
+    const tx = {};
+    mocks.prisma.$transaction.mockImplementation(async callback => callback(tx));
+    mocks.issue.mockImplementation(async (_db, _binding, _deliver, persist) => {
+      expect(await persist(async () => 0)).toBe(0);
+      return 'code_pending';
+    });
+    expect(await requestCandidateMailboxProof()).toBe('code_pending');
+    expect(mocks.reserve).not.toHaveBeenCalled();
+  });
+  it('rolls back a new challenge when the provider cannot reserve quota', async () => {
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'vault');
+    mocks.preferred.mockResolvedValue({ id: 'fixture', provider: 'brevo' });
+    mocks.reserve.mockResolvedValue(false);
+    const tx = {};
+    let rolledBack = false;
+    mocks.prisma.$transaction.mockImplementation(async callback => {
+      try { return await callback(tx); } catch (error) { rolledBack = true; throw error; }
+    });
+    mocks.issue.mockImplementation(async (_db, _binding, _deliver, persist) => {
+      expect(await persist(async () => 1)).toBe(0);
+      return 'not_available';
+    });
+    expect(await requestCandidateMailboxProof()).toBe('not_available');
+    expect(rolledBack).toBe(true);
+    expect(mocks.reserve).toHaveBeenCalledExactlyOnceWith(tx, { id: 'fixture', provider: 'brevo' });
   });
   it('rejects a different pilot recipient before writing', async () => {
     vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', 'other@example.test');
