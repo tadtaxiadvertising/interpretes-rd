@@ -1,10 +1,10 @@
 'use server';
 
-import { randomUUID } from 'node:crypto';
+import { createProviderProfile } from '@/lib/email/create-provider-profile';
 import { existingEnvironmentProfile, importEnvironmentProvider } from '@/lib/email/import-environment-provider';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
-import { openProfileCredentials, sealProfileCredentials, profileSmtpConfig, validateProfile, vaultKeyAvailable, type ProfileMetadata } from '@/lib/email/provider-vault';
+import { openProfileCredentials, profileSmtpConfig, validateProfile, vaultKeyAvailable, type ProfileMetadata } from '@/lib/email/provider-vault';
 import { sendBrevoEmailDetailed } from '@/lib/email/brevo-transport';
 import { isProviderId } from '@/lib/email/provider-catalog';
 import { sendReservedSmtpProfile } from '@/lib/email/smtp-test';
@@ -54,21 +54,13 @@ export async function listEmailProviderProfiles(): Promise<ListResult> {
   }
 }
 
-export async function addEmailProviderProfile(input: unknown): Promise<'saved' | 'invalid' | 'unauthorized' | 'disabled' | 'key_missing' | 'unavailable'> {
+export async function addEmailProviderProfile(input: unknown): Promise<'saved' | 'already_saved' | 'invalid' | 'unauthorized' | 'disabled' | 'key_missing' | 'unavailable'> {
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return 'unauthorized';
     const status = availability();
     if (status !== 'ready') return status;
-    const profile = validateProfile(input);
-    if (!profile) return 'invalid';
-    const id = randomUUID();
-    const sealed = sealProfileCredentials(id, profile, key());
-    await prisma.$executeRaw`
-      INSERT INTO private_email.provider_profile (id, name, provider, sender, reply_to, sealed_key, updated_by)
-      VALUES (${id}::uuid, ${profile.name}, ${profile.provider}, ${profile.from}, ${profile.replyTo}, ${sealed}, ${auth.user.userId})
-    `;
-    return 'saved';
+    return await prisma.$transaction(tx => createProviderProfile(tx, input, auth.user.userId, key()));
   } catch {
     return 'unavailable';
   }
