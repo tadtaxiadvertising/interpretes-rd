@@ -2,11 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const m = vi.hoisted(() => ({
   notifyRecruitmentAdmins: vi.fn(),
+  notifyCandidateMilestone: vi.fn(),
   appFindUnique: vi.fn(),
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
 }));
 
+vi.mock('@/lib/notifications/notify-candidate', () => ({ notifyCandidateMilestone: m.notifyCandidateMilestone }));
 vi.mock('@/lib/notifications/notify-recruitment', () => ({ notifyRecruitmentAdmins: m.notifyRecruitmentAdmins }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -147,6 +149,7 @@ describe('advanceApplication', () => {
     });
     expect(m.appUpdateMany).toHaveBeenCalledTimes(1);
     expect(m.notifyRecruitmentAdmins).toHaveBeenCalledExactlyOnceWith({ kind: 'interview-pending', applicationId: 'app-1', version: 7 });
+    expect(m.notifyCandidateMilestone).toHaveBeenCalledExactlyOnceWith({ applicationId: 'app-1', status: 'INTERVIEW_PENDING', version: 7 });
     expect(m.eventCreate.mock.invocationCallOrder[0]).toBeLessThan(m.notifyRecruitmentAdmins.mock.invocationCallOrder[0]);
     expect(m.appUpdateMany.mock.calls[0][0]).toEqual({
       where: {

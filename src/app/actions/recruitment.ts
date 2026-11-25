@@ -14,6 +14,7 @@ import {
   createApplicationRef,
   verifyApplicationRef,
 } from '@/lib/recruitment/application-ref';
+import { notifyCandidateMilestone } from '@/lib/notifications/notify-candidate';
 import { notifyRecruitmentAdmins } from '@/lib/notifications/notify-recruitment';
 import { advanceApplication } from '@/services/recruitment/transitions';
 import {
@@ -410,6 +411,10 @@ export async function submitApplicationAction(data: ApplicantData) {
           name: parsed.name,
         })
       : undefined;
+
+    if (outcome.applicationCreated && outcome.owned && accountAccess !== 'manual') {
+      await notifyCandidateMilestone({ applicationId: outcome.applicationId, status: 'APPLIED', version: 0 });
+    }
 
     revalidatePath('/recruitment');
 

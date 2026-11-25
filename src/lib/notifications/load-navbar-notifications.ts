@@ -7,12 +7,12 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
  * Expose only presentation fields and sanitized public categories/links.
  * Never serialize recipient IDs or internal metadata.
  */
-export async function loadNavbarNotifications(userIds: readonly string[], options: { throwOnError?: boolean } = {}) {
+export async function loadNavbarNotifications(userIds: readonly string[], options: { throwOnError?: boolean; candidateOnly?: boolean } = {}) {
   if (userIds.length === 0) return [];
 
   try {
     const rows = await prisma.notification.findMany({
-      where: { userId: { in: [...userIds] } },
+      where: { userId: { in: [...userIds] }, ...(options.candidateOnly ? { category: 'recruitment', link: '/candidate' } : {}) },
       select: {
         id: true,
         title: true,

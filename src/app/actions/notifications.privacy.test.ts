@@ -285,4 +285,31 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     expect(await getMyNotificationHistory({ page: 0, unreadOnly: false, category: 'private-internal' })).toEqual({ success: false });
     expect(m.notificationFindMany).not.toHaveBeenCalled();
   });
+  it('restricts candidate feed, counter, history and read operations to candidate notices', async () => {
+    m.validateAction.mockResolvedValue({ user: { profileId, userId: 'candidate-1', role: 'candidate' } });
+    m.notificationFindMany.mockResolvedValue([]);
+    m.notificationCount.mockResolvedValue(0);
+    expect(await getMyNotifications()).toEqual({ success: true, data: [], unreadCount: 0 });
+    await getMyNotificationHistory({ page: 0, unreadOnly: false });
+    await markNotificationAsRead('candidate-notice');
+    await markAllNotificationsAsRead();
+    const scope = { userId: { in: [profileId] }, category: 'recruitment', link: '/candidate' };
+    for (const call of m.notificationFindMany.mock.calls) expect(call[0].where).toMatchObject(scope);
+    expect(m.notificationFindMany).toHaveBeenCalledTimes(2);
+    expect(m.notificationCount).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining(scope) }));
+    expect(m.notificationUpdateMany).toHaveBeenCalledTimes(2);
+    for (const call of m.notificationUpdateMany.mock.calls) expect(call[0].where).toMatchObject(scope);
+  });
+
+  it('does not let a candidate request operational categories or acknowledge a hidden notice', async () => {
+    m.validateAction.mockResolvedValue({ user: { profileId, userId: 'candidate-1', role: 'candidate' } });
+    expect(await getMyNotificationHistory({ page: 0, unreadOnly: false, category: 'finance' })).toEqual({ success: true, data: [], hasMore: false });
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
+    m.notificationUpdateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await markNotificationAsRead('old-operational-notice')).toMatchObject({ success: false, code: 'NOT_FOUND' });
+    expect(m.notificationUpdateMany).toHaveBeenCalledWith({
+      where: { id: 'old-operational-notice', userId: { in: [profileId] }, category: 'recruitment', link: '/candidate' },
+      data: { isRead: true },
+    });
+  });
 });

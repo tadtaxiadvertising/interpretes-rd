@@ -11,6 +11,7 @@
 
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { notifyCandidateMilestone } from '@/lib/notifications/notify-candidate';
 import { notifyRecruitmentAdmins } from '@/lib/notifications/notify-recruitment';
 import type {
   RecruitmentApplicationStatus,
@@ -396,6 +397,7 @@ export async function advanceApplication(
     const kind = result.data.toStatus === 'ROLEPLAY_REVIEW' ? 'roleplay-review'
       : result.data.toStatus === 'INTERVIEW_PENDING' ? 'interview-pending' : null;
     if (kind) await notifyRecruitmentAdmins({ kind, applicationId: result.data.applicationId, version: result.data.version });
+    await notifyCandidateMilestone({ applicationId: result.data.applicationId, status: result.data.toStatus, version: result.data.version });
   }
   return result;
 }

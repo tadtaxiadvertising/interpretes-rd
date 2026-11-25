@@ -28,7 +28,7 @@ function formatNotificationTime(value: Date | string | null): string {
     : 'Fecha no disponible';
 }
 
-export function NotificationBell({ initialNotifications }: { initialNotifications: Notification[] }) {
+export function NotificationBell({ initialNotifications, candidateOnly = false }: { initialNotifications: Notification[]; candidateOnly?: boolean }) {
   const [isOpen, setIsOpen] = useState(false);
   // Keep local read acknowledgments, not a frozen copy of server props.
   // New notifications supplied by a refreshed layout must appear immediately.
@@ -179,7 +179,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <div id="notification-panel" role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className={cn("fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300", candidateOnly ? "sm:inset-x-auto sm:right-4 sm:w-96" : "sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96")}>
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">{showHistory ? "Historial" : "Notificaciones"}</h4>
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
@@ -205,7 +205,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
             )}
 
             {showHistory ? (
-              <NotificationHistory key={onlyUnread ? 'unread' : 'all'} onlyUnread={onlyUnread} refreshVersion={refreshVersion} locallyReadIds={locallyReadIds} pendingIds={pendingIds} bulkPending={bulkPending} onRead={handleMarkAsRead} onNavigate={() => setIsOpen(false)} />
+              <NotificationHistory candidateOnly={candidateOnly} key={onlyUnread ? 'unread' : 'all'} onlyUnread={onlyUnread} refreshVersion={refreshVersion} locallyReadIds={locallyReadIds} pendingIds={pendingIds} bulkPending={bulkPending} onRead={handleMarkAsRead} onNavigate={() => setIsOpen(false)} />
             ) : (
             <div className="min-h-0 max-h-[400px] flex-1 overflow-y-auto overscroll-contain">
               {visibleNotifications.length === 0 ? (
