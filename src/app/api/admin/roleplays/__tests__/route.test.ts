@@ -32,7 +32,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     interpreter: { findUnique: vi.fn(), findMany: vi.fn(), findFirst: vi.fn() },
     recruitmentCandidate: { findUnique: vi.fn() },
-    roleplaySession: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
+    roleplaySession: { create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), findUnique: vi.fn() },
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
     roleplayAccess: { create: vi.fn(), findUnique: vi.fn() },
     roleplayLibraryArchive: { findUnique: vi.fn() },
@@ -119,6 +119,7 @@ describe('POST /api/admin/roleplays', () => {
     (prisma.roleplayLibraryArchive.findUnique as any).mockResolvedValue(null);
     (prisma.interpreter.findFirst as any).mockResolvedValue({ id: 7 });
     (prisma.roleplaySession.update as any).mockResolvedValue({});
+    (prisma.roleplaySession.updateMany as any).mockResolvedValue({ count: 1 });
     (prisma.roleplaySession.delete as any).mockResolvedValue({});
     (prisma.roleplaySession.findFirst as any).mockResolvedValue(null);
     (prisma.roleplayScenario.create as any).mockResolvedValue({ id: 'sc-1' });
@@ -133,6 +134,7 @@ describe('POST /api/admin/roleplays', () => {
           findFirst: prisma.roleplaySession.findFirst,
           findUnique: prisma.roleplaySession.findUnique,
           update: prisma.roleplaySession.update,
+          updateMany: prisma.roleplaySession.updateMany,
           create: prisma.roleplaySession.create,
         },
         roleplayAccess: { findUnique: prisma.roleplayAccess.findUnique, create: prisma.roleplayAccess.create },
@@ -381,7 +383,7 @@ describe('POST /api/admin/roleplays', () => {
       }) as any);
       expect(res.status).toBe(200);
       expect((await res.json()).data.inviteLink).toBe('https://front.test/roleplays/sess-1');
-      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).toHaveBeenCalledWith([{ id: 'sess-1', interpreterId: 7 }]);
     });
 
     it('rejects missing required fields', async () => {
@@ -523,6 +525,21 @@ describe('POST /api/admin/roleplays', () => {
   });
 
   describe('happy path', () => {
+    it('does not notify if the individual draft changes during publication', async () => {
+      (prisma.roleplaySession.updateMany as any).mockResolvedValueOnce({ count: 0 });
+      const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
+      expect(res.status).toBe(409);
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+
+    it('does not notify for a candidate invitation or publish it as an interpreter session', async () => {
+      const res = await POST(buildRequest({ participantType: 'candidate', participantId: '9', scenarios: oneScenario, audios: [audioFile()] }) as any);
+      expect(res.status).toBe(200);
+      expect(prisma.roleplayAccess.create).toHaveBeenCalledTimes(1);
+      expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+
     it('creates an interpreter session with scenarios and points session baseAudioUrl at scenario 0', async () => {
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any);
       const body = await res.json();
@@ -551,15 +568,12 @@ describe('POST /api/admin/roleplays', () => {
           }),
         })
       );
-      expect(prisma.roleplaySession.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'sess-1' },
-          data: {
-            baseAudioUrl: 'https://cdn.test/base/0.webm',
-            baseAudioPath: mockUpload.mock.calls[0][0],
-          },
-        })
-      );
+      expect(prisma.roleplaySession.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sess-1', status: 'DRAFT', updatedAt: draftUpdatedAt, interpreterId: 7, recruitmentCandidateId: null },
+        data: { baseAudioUrl: 'https://cdn.test/base/0.webm', baseAudioPath: mockUpload.mock.calls[0][0], status: 'INVITED' },
+      });
+      expect(notificationMocks.notifyRoleplayAssignments).toHaveBeenCalledWith([{ id: 'sess-1', interpreterId: 7 }]);
+      expect((prisma.roleplaySession.updateMany as any).mock.invocationCallOrder[0]).toBeLessThan(notificationMocks.notifyRoleplayAssignments.mock.invocationCallOrder[0]);
       expect(prisma.roleplayAccess.create).not.toHaveBeenCalled();
     });
 
@@ -866,6 +880,8 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.roleplaySession.delete).not.toHaveBeenCalled();
       expect(prisma.roleplayScenario.deleteMany).not.toHaveBeenCalled();
       expect(prisma.roleplaySession.update).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.updateMany).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
     });
 
     it('creates a brand-new session when only cancelled/expired sessions exist', async () => {
@@ -968,11 +984,12 @@ describe('POST /api/admin/roleplays', () => {
       expect((await res.json()).data.scenarioCount).toBe(1);
       expect(mockInfo).toHaveBeenCalledWith('base/bulk-source/0.mp3');
       expect(mockUpload).not.toHaveBeenCalled();
-      expect(prisma.roleplaySession.update).toHaveBeenCalledWith(
+      expect(prisma.roleplaySession.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { baseAudioUrl: libraryAudio, baseAudioPath: 'base/bulk-source/0.mp3' },
+          data: { baseAudioUrl: libraryAudio, baseAudioPath: 'base/bulk-source/0.mp3', status: 'INVITED' },
         })
       );
+      expect(notificationMocks.notifyRoleplayAssignments).toHaveBeenCalledWith([{ id: 'sess-1', interpreterId: 7 }]);
       expect(prisma.roleplayScenario.create).toHaveBeenCalledWith(expect.objectContaining({
         data: expect.objectContaining({
           title: libraryScenario.title,
