@@ -463,6 +463,21 @@ VALUES ('123e4567-e89b-42d3-a456-426614174001','Replacement','brevo','new@exampl
 SQL
 assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE name='Replacement' AND retired_at IS NULL AND test_accepted_at IS NULL AND receipt_confirmed_at IS NULL")" 1 replacement-requires-fresh-proof
 echo 'Isolated provider lifecycle checks passed.'
+# Check the actual duplicate predicate used by manual creation against active
+# and historical profiles. No credentials are opened or changed.
+duplicate_sql="$(python3 - "$root/src/lib/email/create-provider-profile.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const duplicates = await db.$queryRaw', 1)[1].split('`', 2)[1]
+sql = sql.replace('${profile.provider}', "'brevo'").replace('${profile.from}', "'NEW@example.test'")
+assert '${' not in sql
+print(sql.strip())
+PY
+)"
+assert_equal "$(db -c "$duplicate_sql")" t manual-profile-active-duplicate
+assert_equal "$(db -c "${duplicate_sql//'NEW@example.test'/'absent@example.test'}")" f manual-profile-new-sender
+assert_equal "$(db -c "${duplicate_sql//'brevo'/'resend'}")" f manual-profile-other-provider
+
 
 # Read-only vault metadata probe must work through the actual SQL.
 readiness_sql="$(python3 - "$root/src/lib/email/provider-readiness.ts" <<'PY'
