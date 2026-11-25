@@ -6,6 +6,7 @@ import { providerCatalog, type ProviderId } from '@/lib/email/provider-catalog';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
+import { quotaAvailability } from '@/lib/email/quota-availability';
 
 const statusText: Record<string, string> = {
   imported: 'Configuración existente copiada al almacén. Falta probar y confirmar recepción. No se cambió el transporte activo.',
@@ -103,14 +104,17 @@ export default function EmailProviderVault() {
           </fieldset>
         </form>
       )}
-      {quotas.map(quota => (
+      {quotas.map(quota => {
+        const available = quotaAvailability(quota);
+        return (
         <div key={quota.provider} className="rounded-lg border border-[var(--border)] p-3 space-y-1">
           <p className="font-semibold">{providerCatalog[quota.provider].label} · presupuesto local (UTC)</p>
-          <p>Hoy: {quota.dailyUsed} de {quota.dailyLimit} intentos</p>
+          <p>Hoy: {quota.dailyUsed} de {quota.dailyLimit} intentos · quedan {available.dailyRemaining}</p>
           <progress aria-label={'Consumo diario ' + quota.provider} value={Math.min(quota.dailyUsed, quota.dailyLimit)} max={quota.dailyLimit} className="w-full" />
-          <p>Mes: {quota.monthlyUsed} de {quota.monthlyLimit} intentos</p>
+          <p>Mes: {quota.monthlyUsed} de {quota.monthlyLimit} intentos · quedan {available.monthlyRemaining}</p>
           <progress aria-label={'Consumo mensual ' + quota.provider} value={Math.min(quota.monthlyUsed, quota.monthlyLimit)} max={quota.monthlyLimit} className="w-full" />
-          <p className="text-xs">No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real.</p>
+          <p className="font-semibold">{available.status === 'exhausted' ? 'Presupuesto local agotado' : available.status === 'low' ? 'Presupuesto local próximo a agotarse' : 'Presupuesto local disponible'} · {available.remaining} intentos restantes según ambos límites.</p>
+          <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
           <form key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit} className="space-y-2" onSubmit={event => {
             event.preventDefault();
             const data = new FormData(event.currentTarget);
@@ -129,7 +133,7 @@ export default function EmailProviderVault() {
             <p className="text-xs">Pausa el despacho para editar. El cambio no reinicia el consumo, no cambia tu plan ni garantiza envíos gratuitos. Configura un límite inferior al saldo de tu cuenta real.</p>
           </form>
         </div>
-      ))}
+      ); })}
       {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
       {ready && <p className="text-xs">{preferenceEditable ? 'Puedes elegir un perfil con recepción confirmada. La pausa se conserva.' : 'Para cambiar de proveedor, pausa el despacho del almacén y vuelve a consultar perfiles. Las pruebas y otras modificaciones mantienen sus requisitos de seguridad.'}</p>}
       {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
@@ -145,7 +149,7 @@ export default function EmailProviderVault() {
             <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await confirmSavedProviderReceipt(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Confirmo que recibí el correo de prueba</button>
           )}
           {profile.receiptConfirmedAt && preferredId !== profile.id && (
-            <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
+            <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
           )}
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={pending || !selectionPaused} onClick={() => { setEditingId(profile.id); setRetiringId(null); }} className="rounded-lg border border-[var(--border)] px-3 py-2">Editar configuración / clave</button>
