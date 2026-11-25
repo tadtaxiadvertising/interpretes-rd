@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
-import { validateProfile, sealProfileKey, type ProfileInput } from './provider-vault';
+import { validateProfile, sealProfileCredentials, type ProfileInput } from './provider-vault';
 import { validProfileId } from './provider-selection';
 
 type Db = Pick<Prisma.TransactionClient, '$queryRaw' | '$executeRaw'>;
