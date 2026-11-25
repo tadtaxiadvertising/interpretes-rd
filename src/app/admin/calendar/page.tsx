@@ -36,62 +36,62 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
   const formatMinutes = (mins: number) => new Intl.NumberFormat('en-US').format(mins);
 
   return (
-    <div className="p-8 max-w-full mx-auto text-white">
+    <div className="p-8 max-w-full mx-auto text-[var(--foreground)]">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-blue-500/20 rounded-xl">
-            <CalendarDays className="w-6 h-6 text-blue-400" />
+            <CalendarDays className="w-6 h-6 text-[var(--theme-link)]" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 via-indigo-400 to-purple-500 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-bold text-[var(--theme-link)]">
               Tablero de Cumplimiento
             </h1>
-            <p className="text-sm text-slate-400 mt-1">Mapa de actividad mensual e indicadores de rendimiento</p>
+            <p className="text-sm text-[var(--text-secondary)] mt-1">Mapa de actividad mensual e indicadores de rendimiento</p>
           </div>
         </div>
         
-        <div className="flex items-center gap-2 bg-slate-900/80 p-1.5 rounded-xl border border-white/10">
+        <div className="flex items-center gap-2 bg-[var(--theme-panel)] p-1.5 rounded-xl border border-[var(--border)]">
           <Link 
             href={`/admin/calendar?year=${prevYear}&month=${prevMonth}`}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            className="p-2 hover:bg-[var(--theme-hover)] rounded-lg transition-colors"
           >
-            <ChevronLeft className="w-5 h-5 text-slate-300" />
+            <ChevronLeft className="w-5 h-5 text-[var(--text-secondary)]" />
           </Link>
-          <div className="px-4 py-2 font-bold text-blue-100 min-w-[160px] text-center">
+          <div className="px-4 py-2 font-bold text-[var(--theme-link)] min-w-[160px] text-center">
             {new Date(year, month - 1).toLocaleString('es-ES', { month: 'long', year: 'numeric' }).toUpperCase()}
           </div>
           <Link 
             href={`/admin/calendar?year=${nextYear}&month=${nextMonth}`}
-            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+            className="p-2 hover:bg-[var(--theme-hover)] rounded-lg transition-colors"
           >
-            <ChevronRight className="w-5 h-5 text-slate-300" />
+            <ChevronRight className="w-5 h-5 text-[var(--text-secondary)]" />
           </Link>
         </div>
       </div>
 
-      <div className="overflow-x-auto bg-slate-900/80 rounded-2xl border border-white/10 shadow-2xl relative">
+      <div className="overflow-x-auto bg-[var(--theme-panel)] rounded-2xl border border-[var(--border)] shadow-2xl relative">
         <table className="w-full text-left text-sm whitespace-nowrap border-collapse">
           <thead>
-            <tr className="border-b border-white/10 bg-slate-950/80 backdrop-blur-md">
-              <th className="p-4 font-bold text-slate-200 sticky left-0 bg-slate-950 z-20 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-white/10 min-w-[340px] w-[340px]">
+            <tr className="border-b border-[var(--border)] bg-[var(--theme-panel)] backdrop-blur-md">
+              <th className="p-4 font-bold text-[var(--foreground)] sticky left-0 bg-[var(--theme-panel)] z-20 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-[var(--border)] min-w-[340px] w-[340px]">
                 <div className="flex items-center gap-3">
                   <span>Intérprete</span>
-                  <span className="text-[9px] uppercase tracking-wider font-normal text-slate-500">/ Estado</span>
+                  <span className="text-[9px] uppercase tracking-wider font-normal text-[var(--text-tertiary)]">/ Estado</span>
                 </div>
               </th>
               {/* Resumen Mes actual */}
-              <th className="p-4 text-center font-bold text-slate-300 sticky left-[180px] bg-slate-900/90 z-20 border-r border-white/10 min-w-[80px] w-[80px]">
-                <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4 text-emerald-400"/> Mes actual</div>
+              <th className="p-4 text-center font-bold text-[var(--text-secondary)] sticky left-[180px] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] min-w-[80px] w-[80px]">
+                <div className="flex items-center justify-center gap-1"><TrendingUp className="w-4 h-4 text-[var(--theme-success)]"/> Mes actual</div>
               </th>
-              <th className="p-4 text-center font-bold text-slate-300 sticky left-[260px] bg-slate-900/90 z-20 border-r border-white/10 min-w-[80px] w-[80px]">
+              <th className="p-4 text-center font-bold text-[var(--text-secondary)] sticky left-[260px] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] min-w-[80px] w-[80px]">
                 Meta
               </th>
-              <th className="p-4 text-center font-bold text-slate-300 sticky left-[340px] bg-slate-900/90 z-20 border-r border-white/10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
+              <th className="p-4 text-center font-bold text-[var(--text-secondary)] sticky left-[340px] bg-[var(--theme-panel)] z-20 border-r border-[var(--border)] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
                 %
               </th>
 
               {board[0]?.days.map((d) => (
-                <th key={d.date} className={`p-2 min-w-[48px] text-center text-xs font-bold ${d.isWeekend ? 'text-slate-500' : 'text-slate-300'}`}>
+                <th key={d.date} className={`p-2 min-w-[48px] text-center text-xs font-bold ${d.isWeekend ? 'text-[var(--text-tertiary)]' : 'text-[var(--text-secondary)]'}`}>
                   {d.date.split('-')[2]}
                 </th>
               ))}
@@ -99,8 +99,8 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
           </thead>
           <tbody>
             {board.map((row) => (
-              <tr key={row.interpreter.id} className="border-b border-white/5 hover:bg-white/5 transition-colors group">
-                <td className="p-4 font-semibold sticky left-0 bg-slate-900 group-hover:bg-slate-800 z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-white/10 min-w-[340px] w-[340px]">
+              <tr key={row.interpreter.id} className="border-b border-[var(--border)] hover:bg-[var(--theme-hover)] transition-colors group">
+                <td className="p-4 font-semibold sticky left-0 bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] border-r border-[var(--border)] min-w-[340px] w-[340px]">
                   <div className="flex items-center gap-3">
                     <LiveStatusCell interpreterId={row.interpreter.id} />
                     <span className="truncate">{row.interpreter.name}</span>
@@ -108,33 +108,33 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
                 </td>
                 
                 {/* Columnas Resumen */}
-                <td className="p-3 text-center sticky left-[180px] bg-slate-900 group-hover:bg-slate-800 z-10 border-r border-white/10 font-bold text-emerald-400 min-w-[80px] w-[80px]">
+                <td className="p-3 text-center sticky left-[180px] bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] font-bold text-[var(--theme-success)] min-w-[80px] w-[80px]">
                   {formatMinutes(row.mtdMinutes)}
                 </td>
-                <td className="p-3 text-center sticky left-[260px] bg-slate-900 group-hover:bg-slate-800 z-10 border-r border-white/10 font-medium text-slate-400 min-w-[80px] w-[80px]">
+                <td className="p-3 text-center sticky left-[260px] bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] font-medium text-[var(--text-secondary)] min-w-[80px] w-[80px]">
                   {formatMinutes(row.monthlyGoal)}
                 </td>
-                <td className="p-3 text-center sticky left-[340px] bg-slate-900 group-hover:bg-slate-800 z-10 border-r border-white/10 shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
+                <td className="p-3 text-center sticky left-[340px] bg-[var(--theme-panel)] group-hover:bg-[var(--theme-hover)] z-10 border-r border-[var(--border)] shadow-[4px_0_10px_-4px_rgba(0,0,0,0.5)] min-w-[70px] w-[70px]">
                   <span className={`px-2 py-1 rounded text-[10px] font-bold ${
-                    row.fulfillmentPercent >= 100 ? 'bg-emerald-500/20 text-emerald-400' : 
-                    row.fulfillmentPercent >= 75 ? 'bg-amber-500/20 text-amber-400' : 
-                    'bg-rose-500/20 text-rose-400'
+                    row.fulfillmentPercent >= 100 ? 'bg-emerald-500/20 text-[var(--theme-success)]' : 
+                    row.fulfillmentPercent >= 75 ? 'bg-amber-500/20 text-[var(--theme-warning)]' : 
+                    'bg-rose-500/20 text-[var(--theme-danger)]'
                   }`}>
                     {row.fulfillmentPercent.toFixed(1)}%
                   </span>
                 </td>
 
                 {row.days.map((d) => {
-                  let bgColor = 'bg-slate-800/30 text-slate-500'; // Weekend not worked
+                  let bgColor = 'bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)]'; // Weekend not worked
                   
                   if (d.status === 'Overproduction') {
-                    bgColor = 'bg-blue-500/20 text-blue-400 ring-1 ring-blue-500/30';
+                    bgColor = 'bg-blue-500/20 text-[var(--theme-link)] ring-1 ring-blue-500/30';
                   } else if (d.status === 'Fulfilled') {
-                    bgColor = 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30';
+                    bgColor = 'bg-emerald-500/20 text-[var(--theme-success)] ring-1 ring-emerald-500/30';
                   } else if (d.status === 'Late') {
-                    bgColor = 'bg-amber-500/20 text-amber-400';
+                    bgColor = 'bg-amber-500/20 text-[var(--theme-warning)]';
                   } else if (d.status === 'No-Show' && !d.isWeekend) {
-                    bgColor = 'bg-rose-950/50 text-rose-500 ring-1 ring-rose-500/20';
+                    bgColor = 'bg-rose-500/10 text-[var(--theme-danger)] ring-1 ring-rose-500/20';
                   }
                   
                   return (
@@ -148,23 +148,23 @@ export default async function AdminCalendarPage(props: { searchParams: Promise<{
                         
                         {/* Custom Tooltip */}
                         <div className="absolute bottom-full mb-2 hidden group-hover/tooltip:block z-50">
-                          <div className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg p-3 shadow-xl whitespace-nowrap min-w-[150px]">
-                            <p className="font-bold text-slate-300 mb-2 border-b border-slate-700 pb-1">{d.date}</p>
+                          <div className="bg-[var(--theme-surface-muted)] border border-[var(--border)] text-[var(--foreground)] text-xs rounded-lg p-3 shadow-xl whitespace-nowrap min-w-[150px]">
+                            <p className="font-bold text-[var(--text-secondary)] mb-2 border-b border-[var(--border)] pb-1">{d.date}</p>
                             <div className="flex justify-between items-center mb-1">
-                              <span className="text-slate-400">Histórico CSV:</span>
-                              <span className="font-mono text-emerald-400">{formatMinutes(d.logsMinutes)} min</span>
+                              <span className="text-[var(--text-secondary)]">Histórico CSV:</span>
+                              <span className="font-mono text-[var(--theme-success)]">{formatMinutes(d.logsMinutes)} min</span>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="text-slate-400">Sesiones en vivo:</span>
-                              <span className="font-mono text-blue-400">{formatMinutes(d.sessionsMinutes)} min</span>
+                              <span className="text-[var(--text-secondary)]">Sesiones en vivo:</span>
+                              <span className="font-mono text-[var(--theme-link)]">{formatMinutes(d.sessionsMinutes)} min</span>
                             </div>
-                            <div className="flex justify-between items-center mt-2 pt-1 border-t border-slate-700">
-                              <span className="text-slate-300 font-bold">Total:</span>
-                              <span className="font-mono font-bold text-white">{formatMinutes(d.minutes)} min</span>
+                            <div className="flex justify-between items-center mt-2 pt-1 border-t border-[var(--border)]">
+                              <span className="text-[var(--text-secondary)] font-bold">Total:</span>
+                              <span className="font-mono font-bold text-[var(--foreground)]">{formatMinutes(d.minutes)} min</span>
                             </div>
                           </div>
                           {/* Tooltip Arrow */}
-                          <div className="w-3 h-3 bg-slate-800 border-r border-b border-slate-700 transform rotate-45 absolute -bottom-1.5 left-1/2 -translate-x-1/2"></div>
+                          <div className="w-3 h-3 bg-[var(--theme-surface-muted)] border-r border-b border-[var(--border)] transform rotate-45 absolute -bottom-1.5 left-1/2 -translate-x-1/2"></div>
                         </div>
                       </div>
                     </td>
