@@ -101,12 +101,32 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       await expect(disabled).toHaveCSS('cursor', 'not-allowed');
       await expect.poll(() => contrast(disabled)).toBeGreaterThanOrEqual(4.5);
       const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
+      // Chromium may serialize an identity transform as a matrix instead of
+      // "none". Check the actual transform and geometry, not its serialization.
+      const neutralTransform = () => disabled.evaluate(node => {
+        const style = getComputedStyle(node);
+        return (style.transform === 'none' || new DOMMatrixReadOnly(style.transform).isIdentity)
+          && /^(none|0px(?: 0px){0,2})$/.test(style.translate)
+          && /^(none|1(?: 1){0,2})$/.test(style.scale)
+          && /^(none|0deg)$/.test(style.rotate);
+      });
+      await expect.poll(neutralTransform).toBe(true);
+      const boundsBefore = await disabled.boundingBox();
+      expect(boundsBefore).not.toBeNull();
       await disabled.hover();
       await expect(disabled).toHaveCSS('background-color', disabledBackground);
-      await expect(disabled).toHaveCSS('transform', 'none');
-      await expect(disabled).toHaveCSS('translate', 'none');
-      await expect(disabled).toHaveCSS('scale', 'none');
+      await expect.poll(neutralTransform).toBe(true);
       await expect(disabled).toHaveCSS('box-shadow', 'none');
+      await expect.poll(async () => {
+        const boundsAfter = await disabled.boundingBox();
+        if (!boundsBefore || !boundsAfter) return Infinity;
+        return Math.max(
+          Math.abs(boundsAfter.x - boundsBefore.x),
+          Math.abs(boundsAfter.y - boundsBefore.y),
+          Math.abs(boundsAfter.width - boundsBefore.width),
+          Math.abs(boundsAfter.height - boundsBefore.height),
+        );
+      }).toBeLessThan(0.25);
 
       const motion = page.getByTestId('workspace-motion');
       await expect(motion).toHaveCSS('animation-iteration-count', '1');
