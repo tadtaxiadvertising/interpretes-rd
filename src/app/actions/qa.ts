@@ -5,7 +5,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { calculateCanonicalQaTotal } from '@/lib/qa-canonical-score';
 import { revalidatePath } from 'next/cache';
-import { createNotification } from './notifications';
+import { notifyQaEvaluation } from '@/lib/notifications/notify-qa-evaluation';
 import { z } from 'zod';
 
 // QA dimensions use canonical percentages, stored as NUMERIC(5,2).
@@ -118,35 +118,7 @@ export async function submitQAEvaluation(rawInput: QAScoreInput) {
 
   // Sending notifications and refreshing caches happen AFTER COMMIT.
   // Their failures must never report a committed evaluation as unsaved.
-  try {
-    const interpreter = await prisma.interpreter.findUnique({
-      where: { id: input.interpreterId },
-      select: { emailCorporativo: true },
-    });
-    if (interpreter?.emailCorporativo) {
-      const profile = await prisma.userProfile.findUnique({
-        where: { email: interpreter.emailCorporativo },
-        select: { id: true },
-      });
-      if (profile) {
-        const confirmedScore = data.totalScore;
-        const delivery = await createNotification({
-          userId: profile.id,
-          title: 'Evaluación QA Lista',
-          message: `Tu puntaje de sesión: ${confirmedScore.toFixed(1)}%. Acción: ${actionRequired}`,
-          type: confirmedScore >= 85 ? 'success' : confirmedScore >= 70 ? 'info' : 'warning',
-          link: '/dashboard/earnings',
-        });
-        // A Server Action may return a failure result instead of throwing.
-        // Do not leak its arbitrary message, and never undo the QA commit.
-        if (delivery?.success === false) {
-          console.warn('QA saved but notification not delivered');
-        }
-      }
-    }
-  } catch (notifyError: unknown) {
-    console.error('Notification failed but QA saved:', safeServerErrorCategory(notifyError));
-  }
+  await notifyQaEvaluation({ evaluationId: data.id, interpreterId: input.interpreterId, totalScore: data.totalScore, actionRequired });
 
   for (const path of ['/qa', '/dashboard']) {
     try {
