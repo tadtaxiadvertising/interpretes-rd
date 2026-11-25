@@ -154,7 +154,7 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
           </label>
           <div className="flex flex-wrap gap-3">
             <button type="button" disabled={busy} onClick={save} className="rounded-xl theme-action-primary px-5 py-2.5 text-sm font-semibold disabled:opacity-50">{busy ? 'Procesando…' : 'Guardar borrador'}</button>
-            <button type="button" disabled={busy} onClick={newDraft} className="rounded-xl border border-[var(--border)] px-5 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-50">Nuevo borrador</button>
+            <button type="button" disabled={busy} onClick={newDraft} className="theme-action-secondary rounded-xl px-5 py-2.5 text-sm font-semibold">Nuevo borrador</button>
           </div>
         </div>
 
@@ -167,7 +167,7 @@ export default function LegalAgreementManager({ initialData, initialError }: { i
             {draft.legalReviewedAt && draft.legalReviewedBy
               ? <p className="text-xs text-[var(--theme-success)]">Revisión registrada por {draft.legalReviewedBy} · {new Date(draft.legalReviewedAt).toLocaleString()}</p>
               : <p className="text-xs text-[var(--theme-warning)]">Pendiente de revisión jurídica</p>}
-            <button type="button" disabled={busy} onClick={() => editDraft(draft)} className="w-full rounded-lg border border-[var(--border)] px-3 py-2 text-sm hover:bg-[var(--theme-hover)] disabled:opacity-50">Editar borrador</button>
+            <button type="button" disabled={busy} onClick={() => editDraft(draft)} className="theme-action-secondary w-full rounded-lg px-3 py-2 text-sm">Editar borrador</button>
             <button type="button" disabled={busy} onClick={() => approve(draft.id)} className="w-full rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-semibold text-[var(--theme-link)] hover:bg-blue-500/10 disabled:opacity-50">Registrar revisión jurídica</button>
             <button type="button" disabled={busy || !draft.legalReviewedAt || !draft.legalReviewedBy} onClick={() => publish(draft.id)} className="w-full rounded-lg theme-action-success px-3 py-2 text-sm font-semibold disabled:opacity-50">Publicar versión</button>
           </div>)}
