@@ -279,7 +279,7 @@ export async function discardBilingualOpeningReservation(
   db: Store, sessionId: string, actor: BilingualOpeningActor, path: string,
 ): Promise<'pending'> {
   if (!isCanonicalBilingualOpeningPath(path, sessionId)) throw new BilingualOpeningStoreError('INVALID_EVIDENCE');
-  return openingTransaction(db, async tx => {
+  return openingTransaction<'pending'>(db, async tx => {
     const session = await lockAuthorizedSession(tx, sessionId, actor);
     if (!session.required || session.currentIndex !== 0) throw new BilingualOpeningStoreError('FORBIDDEN');
     if (await readOpening(tx, sessionId)) throw new BilingualOpeningStoreError('CONFLICT');

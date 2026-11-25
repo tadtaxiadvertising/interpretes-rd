@@ -31,7 +31,19 @@ CREATE TABLE public.roleplay_responses (
 INSERT INTO public.roleplay_sessions VALUES ('legacy','STARTED',0);
 INSERT INTO public.roleplay_scenarios VALUES ('legacy-turn','legacy');
 SQL
-db < "$root/docs/operations/staged-sql/roleplay-bilingual-openings.sql"
+schema="$root/docs/operations/staged-sql/roleplay-bilingual-openings.sql"
+# Catch accidentally duplicated or truncated generated SQL before executing it.
+python3 - "$schema" <<'PY'
+import pathlib, re, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+for keyword in ('BEGIN;', 'COMMIT;'):
+    assert len(re.findall(r'^' + re.escape(keyword) + r'\s*$', source, re.M)) == 1, f'Expected one outer {keyword}'
+assert source.rstrip().endswith('COMMIT;'), 'Unexpected content after transaction'
+for pattern in (r'^CREATE TABLE\s+(\S+)', r'^CREATE FUNCTION\s+(\S+)', r'^CREATE TRIGGER\s+(\S+)'):
+    names = re.findall(pattern, source, re.M)
+    assert names and len(names) == len(set(names)), 'Duplicate or missing schema objects'
+PY
+db < "$schema"
 db <<'SQL'
 DO $test$
 DECLARE role_name text; table_name text;
