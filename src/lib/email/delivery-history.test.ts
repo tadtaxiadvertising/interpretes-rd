@@ -31,7 +31,18 @@ describe('read-only email delivery history', () => {
     }] });
     const sql = query.mock.calls[1][0].join('?');
     expect(sql).toContain('LIMIT 30');
+    expect(sql).toContain("to_jsonb(d)->>'provider' AS provider");
     expect(sql).not.toMatch(/SELECT\s+\*/);
+  });
+  it('preserves unattributed historical rows without inventing a provider', async () => {
+    const { db, query } = fixture();
+    const createdAt = new Date('2026-11-24T05:00:00Z');
+    query.mockReset().mockResolvedValueOnce([{ installed: true }]).mockResolvedValueOnce([{
+      kind: 'application_received', status: 'pending', provider: null, createdAt, claimedAt: null, completedAt: null,
+    }]);
+    expect(await readEmailHistory(db)).toEqual({ status: 'ready', rows: [{
+      kind: 'application_received', status: 'pending', provider: null, createdAt: createdAt.toISOString(), claimedAt: null, completedAt: null,
+    }] });
   });
   it('fails closed for unexpected status values', async () => {
     const { db, query } = fixture();

@@ -513,6 +513,16 @@ assert_equal "$(db -c "$reservation_guard")" "" vault-repaused-no-reservation
 assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '3:7' vault-pause-preserves-usage
 echo 'Isolated vault emergency pause checks passed.'
 
+# Read the same history projection before and after the optional attribution migration.
+history_sql="$(python3 - "$root/src/lib/email/delivery-history.ts" <<'PY'
+import pathlib, re, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = re.search(r'\$queryRaw<RawRow\[\]>\x60([^\x60]+)\x60', source).group(1)
+assert '${' not in sql
+print(sql.strip())
+PY
+)"
+assert_equal "$(db -c "SELECT count(*) > 0 AND count(provider)=0 FROM ($history_sql) AS history")" t history-before-attribution
 # Attribution is part of the claim and preserves historical rows.
 db < "$root/docs/operations/proposed-email-delivery-provider.sql"
 assert_equal "$(db -c "SELECT count(*) FROM private_email.recruitment_delivery WHERE provider IS NOT NULL")" 0 history-no-fabricated-provider
@@ -530,4 +540,6 @@ assert_equal "$(db -c "SELECT status||':'||COALESCE(provider,'none') FROM privat
 db -c "$attribution_sql"
 assert_equal "$(db -c "SELECT status||':'||provider FROM private_email.recruitment_delivery WHERE event_id='vault-rollback'")" 'sending:mailjet' history-claim-attribution
 assert_equal "$(db -c "$attribution_sql")" "" history-duplicate-claim-blocked
+assert_equal "$(db -c "SELECT count(*) > 0 AND count(provider)=0 FROM ($history_sql) AS history WHERE provider IS NULL")" t history-preserves-unattributed
+assert_equal "$(db -c "SELECT count(*) FROM ($history_sql) AS history WHERE provider='mailjet'")" 1 history-reads-attribution
 echo 'Isolated provider attribution checks passed.'
