@@ -9,6 +9,7 @@ import type { ProfileMetadata } from '@/lib/email/provider-vault';
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 import { quotaAvailability } from '@/lib/email/quota-availability';
 import { profileSelectionReadiness } from '@/lib/email/profile-selection-readiness';
+import { providerAlternatives } from '@/lib/email/provider-alternatives';
 
 const statusText: Record<string, string> = {
   imported: 'Configuración existente copiada al almacén. Falta probar y confirmar recepción. No se cambió el transporte activo.',
@@ -113,6 +114,8 @@ export default function EmailProviderVault() {
     }
   }
 
+  const alternatives = providerAlternatives(profiles, quotas, preferredId);
+
   return (
     <section className="rounded-xl border border-[var(--border)] p-4 space-y-3 text-sm text-[var(--foreground)]" aria-labelledby="provider-vault-title">
       <h3 id="provider-vault-title" className="font-semibold">Perfiles de proveedores guardados</h3>
@@ -192,6 +195,18 @@ export default function EmailProviderVault() {
         </div>
       ); })}
       {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
+      {ready && (
+        <section aria-labelledby="provider-alternatives-title" className="rounded-lg border border-[var(--border)] p-3 space-y-2">
+          <h4 id="provider-alternatives-title" className="font-semibold">Alternativas verificadas con presupuesto local</h4>
+          {!alternatives.providerKnown ? <p>No se conoce el proveedor del perfil preferido en esta consulta. No se pueden distinguir alternativas independientes.</p>
+            : alternatives.alternatives.length === 0 ? <p>No hay otros proveedores verificados con presupuesto local disponible en los perfiles consultados.</p>
+            : <ul className="space-y-1">{alternatives.alternatives.map(item => (
+              <li key={item.provider}>{providerCatalog[item.provider].label} · {item.remaining} intentos restantes · {item.profiles} {item.profiles === 1 ? 'perfil verificado' : 'perfiles verificados'} (cuota compartida)</li>
+            ))}</ul>}
+          {alternatives.sharedProfiles > 0 && <p>{alternatives.sharedProfiles} {alternatives.sharedProfiles === 1 ? 'perfil adicional comparte' : 'perfiles adicionales comparten'} el presupuesto del proveedor preferido; no amplía su cuota.</p>}
+          <p className="text-xs">Según la última consulta de perfiles y reservas locales. No representa el saldo real ni garantiza entrega. {preferenceEditable ? 'Puedes revisar los perfiles antes de elegir.' : 'Pausa el despacho y vuelve a consultar antes de elegir.'} No hay cambio automático de proveedor.</p>
+        </section>
+      )}
       {ready && <p className="text-xs">{preferenceEditable ? 'Puedes elegir un perfil con recepción confirmada. La pausa se conserva.' : 'Para cambiar de proveedor, pausa el despacho del almacén y vuelve a consultar perfiles. Las pruebas y otras modificaciones mantienen sus requisitos de seguridad.'}</p>}
       {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
       {profiles.map(profile => {
