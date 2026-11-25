@@ -440,3 +440,17 @@ VALUES ('123e4567-e89b-42d3-a456-426614174001','Replacement','brevo','new@exampl
 SQL
 assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE name='Replacement' AND retired_at IS NULL AND test_accepted_at IS NULL AND receipt_confirmed_at IS NULL")" 1 replacement-requires-fresh-proof
 echo 'Isolated provider lifecycle checks passed.'
+
+# Read-only vault metadata probe must work through the actual SQL.
+readiness_sql="$(python3 - "$root/src/lib/email/provider-readiness.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const [row] = await db.$queryRaw', 1)[1].split('`', 2)[1]
+assert '${' not in sql
+print(sql+';')
+PY
+)"
+assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' provider-readiness-owner
+# A non-owner with incomplete grants must not be diagnosed as ready.
+assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $readiness_sql")" 't|t|t|f|t' provider-readiness-incomplete-runtime
+echo 'Isolated provider readiness checks passed.'
