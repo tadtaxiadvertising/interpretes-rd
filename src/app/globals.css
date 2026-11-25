@@ -243,9 +243,6 @@ html[data-theme="light"] .theme-workspace input::placeholder,
 html[data-theme="light"] .theme-workspace textarea::placeholder {
   color: var(--text-muted);
 }
-@media (prefers-reduced-motion: reduce) {
-  .theme-workspace, .theme-workspace * { transition-duration: .01ms !important; }
-}
 
 
 /* Public-facing surfaces retain their layout while following the same preference. */
@@ -682,12 +679,18 @@ html[data-theme="dark"] .theme-workspace :is(input,textarea)::placeholder {
 html[data-theme="light"] .theme-workspace :is(input,textarea)::placeholder {
   color: #52627a;
 }
+/* Keep the final animation state, without repeated or delayed motion, across all portals. */
 @media (prefers-reduced-motion: reduce) {
-  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *,
-  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::before,
-  :is(.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::after {
+  :is(.theme-workspace,.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience),
+  :is(.theme-workspace,.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *,
+  :is(.theme-workspace,.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::before,
+  :is(.theme-workspace,.theme-public,.theme-login,.theme-postular,.theme-candidate,.theme-experience) *::after {
     animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
     transition-duration: .01ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
@@ -760,6 +763,11 @@ html[data-theme="dark"] .modal-light input:-webkit-autofill:focus {
   color: var(--text-secondary);
   opacity: 1;
   cursor: not-allowed;
+  transform: none;
+  translate: none;
+  scale: none;
+  rotate: none;
+  box-shadow: none;
 }
 .theme-workspace :is(.theme-action-primary, .theme-action-success, .theme-action-danger, .theme-action-secondary):focus-visible {
   outline: 2px solid var(--theme-focus);
