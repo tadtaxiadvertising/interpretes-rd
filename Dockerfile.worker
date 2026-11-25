@@ -21,6 +21,9 @@ COPY src/lib/prisma.ts src/lib/database-pool-config.ts ./src/lib/
 COPY src/lib/roleplay-limits.ts src/lib/roleplay-audio-conversion.ts ./src/lib/
 COPY src/lib/roleplay-audio-worker-lease.ts src/lib/roleplay-audio-worker-config.ts ./src/lib/
 COPY src/lib/roleplay-audio-worker-errors.ts src/lib/roleplay-audio-worker-polling.ts ./src/lib/
+# The standalone worker shares notification projection without importing Next.js.
+COPY src/lib/notifications/notify-audio-job-failures.ts src/lib/notifications/notification-event-row.ts src/lib/notifications/safe-notification-link.ts ./src/lib/notifications/
+COPY src/lib/security/safe-server-error.ts ./src/lib/security/
 COPY scripts/roleplay-audio-worker.ts ./scripts/roleplay-audio-worker.ts
 
 # tsx depends on esbuild; only the builder uses either development tool.
