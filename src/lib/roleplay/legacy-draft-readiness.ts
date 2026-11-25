@@ -18,3 +18,8 @@ export const interpreterRoleplayVisibility = {
     { status: 'DRAFT', ...legacyRoleplayDraftReady },
   ],
 } satisfies Prisma.RoleplaySessionWhereInput;
+
+/** Same readiness rule for detail responses that already loaded scenarios. */
+export function hasCompleteLegacyRoleplayScenarios(scenarios: readonly { baseAudioUrl: string }[]): boolean {
+  return scenarios.length > 0 && scenarios.every(scenario => scenario.baseAudioUrl !== '');
+}
