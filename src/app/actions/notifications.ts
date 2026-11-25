@@ -7,7 +7,18 @@ import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
+import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
+
 const db = prisma;
+
+/** Refresh only the authenticated user's notification feed. */
+export async function getMyNotifications() {
+  const auth = await validateAction();
+  if ('error' in auth) return { success: false as const };
+  const ids = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
+  if (!ids.length) return { success: false as const };
+  return { success: true as const, data: await loadNavbarNotifications(ids) };
+}
 
 const CreateNotificationSchema = z.object({
   userId: z.string().uuid(),
