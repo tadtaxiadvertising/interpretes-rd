@@ -105,3 +105,7 @@ Para una base que tenga las dos tablas de reclutamiento privadas existentes pero
 6. En Configuración → Correos corporativos → Perfiles de proveedores guardados, pulsar Consultar perfiles. Si aparece Almacén disponible, crear un perfil autorizado, realizar una única prueba, comprobar su recepción y confirmar manualmente. Seleccionar la preferencia y seguir la sección de piloto anterior; para usarla en el piloto se requiere el opt-in de `EMAIL_PROVIDER_SOURCE=vault`. No activar el despacho general.
 
 El instalador no envía mensajes, no contrata planes y no cambia el proveedor operativo. Un presupuesto local no garantiza el saldo del plan gratuito. No ejecutar un despliegue concurrente de otros servicios.
+
+### Diagnóstico del almacén desde el frontend
+
+En Configuración → Correos corporativos, pulsar Comprobar preparación del almacén. El diagnóstico de solo lectura funciona aun con el almacén desactivado y distingue instalación incompleta, permisos/RLS y disponibilidad de base de datos, formato de clave de cifrado, origen operativo y controles de pausa. Para el despliegue propietario actual verifica permisos efectivos de tabla y secuencia, ausencia de acceso API y RLS. Si el runtime utiliza un rol no propietario sometido a RLS, el diagnóstico exige revisión conservadora en vez de asumir que sus políticas permiten escribir. No conceder acceso a roles API ni desactivar RLS para resolver el diagnóstico. El formato de la clave no confirma descifrado ni la entrega externa. No se leen secretos guardados ni se envían mensajes.
