@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# Never connects to application databases. Dedicated CI service only.
+set -euo pipefail
+: "${POSTGRES_CONTAINER:?Dedicated PostgreSQL service container required}"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+db() {
+  docker exec -i "$POSTGRES_CONTAINER" psql -X -q -A -t -v ON_ERROR_STOP=1 -U postgres -d roleplay_opening_test "$@"
+}
+[[ "$(db -c 'SELECT current_database()')" == roleplay_opening_test ]]
+[[ "$(db -c "SELECT to_regclass('public.roleplay_sessions') IS NULL")" == t ]]
+db <<'SQL'
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN;
+CREATE TYPE public.roleplay_status AS ENUM ('DRAFT','INVITED','STARTED','IN_PROGRESS','SUBMITTED','UNDER_REVIEW','EVALUATED','PASSED','FAILED','CANCELLED','EXPIRED');
+CREATE TABLE public.roleplay_sessions (
+  id text PRIMARY KEY, status public.roleplay_status NOT NULL DEFAULT 'DRAFT',
+  current_scenario_index integer NOT NULL DEFAULT 0
+);
+CREATE TABLE public.roleplay_scenarios (
+  id text PRIMARY KEY, session_id text NOT NULL REFERENCES public.roleplay_sessions(id) ON DELETE CASCADE
+);
+CREATE TABLE public.roleplay_responses (
+  id text PRIMARY KEY, scenario_id text NOT NULL UNIQUE REFERENCES public.roleplay_scenarios(id) ON DELETE CASCADE,
+  self_score jsonb
+);
+INSERT INTO public.roleplay_sessions VALUES ('legacy','STARTED',0);
+INSERT INTO public.roleplay_scenarios VALUES ('legacy-turn','legacy');
+SQL
+db < "$root/docs/operations/staged-sql/roleplay-bilingual-openings.sql"
+db <<'SQL'
+DO $test$
+DECLARE role_name text; table_name text;
+BEGIN
+  FOREACH table_name IN ARRAY ARRAY['roleplay_bilingual_openings','roleplay_bilingual_opening_reservations'] LOOP
+    IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = ('public.' || table_name)::regclass) THEN
+      RAISE EXCEPTION 'RLS missing on %', table_name;
+    END IF;
+    FOREACH role_name IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+      IF has_table_privilege(role_name, 'public.' || table_name, 'SELECT,INSERT,UPDATE,DELETE') THEN
+        RAISE EXCEPTION 'Unexpected access for %', role_name;
+      END IF;
+    END LOOP;
+  END LOOP;
+END
+$test$;
+-- Old exercises progress normally.
+INSERT INTO public.roleplay_responses VALUES ('legacy-response','legacy-turn',NULL);
+UPDATE public.roleplay_sessions SET current_scenario_index=1,status='SUBMITTED' WHERE id='legacy';
+INSERT INTO public.roleplay_sessions (id,status,requires_bilingual_opening)
+  VALUES ('required','STARTED',true), ('other','STARTED',true);
+INSERT INTO public.roleplay_scenarios VALUES ('required-turn','required');
+DO $test$
+BEGIN
+  BEGIN
+    UPDATE public.roleplay_sessions SET requires_bilingual_opening=false WHERE id='required';
+    RAISE EXCEPTION 'Requirement changed';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.roleplay_sessions SET current_scenario_index=1 WHERE id='required';
+    RAISE EXCEPTION 'Cursor advanced';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.roleplay_sessions SET status='SUBMITTED' WHERE id='required';
+    RAISE EXCEPTION 'Submission bypassed';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.roleplay_responses VALUES ('required-response','required-turn',NULL);
+    RAISE EXCEPTION 'Clinical response bypassed';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.roleplay_scenarios SET session_id='required' WHERE id='legacy-turn';
+    RAISE EXCEPTION 'Scenario moved';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.roleplay_bilingual_openings(session_id,source_audio_path,duration_sec)
+      VALUES ('required','openings/required/123e4567-e89b-42d3-a456-426614174000.webm',42);
+    RAISE EXCEPTION 'Unreserved opening accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END
+$test$;
+INSERT INTO public.roleplay_bilingual_opening_reservations(session_id,source_audio_path,expires_at,verification_id,verification_until)
+  VALUES ('required','openings/required/123e4567-e89b-42d3-a456-426614174000.webm',
+  now()+interval '10 minutes','123e4567-e89b-42d3-a456-426614174001',now()+interval '2 minutes');
+DO $test$
+BEGIN
+  BEGIN
+    INSERT INTO public.roleplay_bilingual_openings(session_id,source_audio_path,duration_sec)
+      VALUES ('required','openings/required/123e4567-e89b-42d3-a456-426614174000.webm',301);
+    RAISE EXCEPTION 'Invalid duration accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    INSERT INTO public.roleplay_bilingual_openings(session_id,source_audio_path,duration_sec)
+      VALUES ('required','openings/required/123e4567-e89b-42d3-a456-426614174002.webm',42);
+    RAISE EXCEPTION 'Wrong reservation accepted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END
+$test$;
+INSERT INTO public.roleplay_bilingual_openings(session_id,source_audio_path,duration_sec)
+  VALUES ('required','openings/required/123e4567-e89b-42d3-a456-426614174000.webm',42);
+INSERT INTO public.roleplay_responses VALUES ('required-response','required-turn',NULL);
+UPDATE public.roleplay_responses SET self_score='{"protocol":8}' WHERE id='required-response';
+UPDATE public.roleplay_sessions SET current_scenario_index=1,status='SUBMITTED' WHERE id='required';
+DO $test$
+BEGIN
+  BEGIN
+    DELETE FROM public.roleplay_bilingual_openings WHERE session_id='required';
+    RAISE EXCEPTION 'Confirmed evidence deleted';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+  BEGIN
+    UPDATE public.roleplay_bilingual_openings SET duration_sec=43 WHERE session_id='required';
+    RAISE EXCEPTION 'Confirmed evidence changed';
+  EXCEPTION WHEN check_violation THEN NULL;
+  END;
+END
+$test$;
+DELETE FROM public.roleplay_sessions WHERE id='required';
+DO $test$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.roleplay_bilingual_openings WHERE session_id='required')
+    OR EXISTS (SELECT 1 FROM public.roleplay_bilingual_opening_reservations WHERE session_id='required')
+  THEN RAISE EXCEPTION 'Cascade cleanup failed'; END IF;
+END
+$test$;
+SQL
+echo 'Isolated PostgreSQL opening checks passed.'
