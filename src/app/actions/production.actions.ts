@@ -24,21 +24,22 @@ interface ParsedRow {
 }
 
 export async function uploadLogChunk(_prevState: unknown, data: { headers: string; rows: string[] }) {
+  let writeStarted = false;
   const authorization = await validateAction('admin');
   if ('error' in authorization) {
-    return { success: false, error: authorization.error };
+    return { success: false as const, outcome: 'not-written' as const, error: authorization.error };
   }
 
   try {
     const parsed = LogChunkSchema.safeParse(data);
     if (!parsed.success) {
-      return { success: false, error: 'El chunk CSV excede los límites o tiene un formato inválido.' };
+      return { success: false as const, outcome: 'not-written' as const, error: 'El chunk CSV excede los límites o tiene un formato inválido.' };
     }
 
     const { headers, rows } = parsed.data;
     const csvContent = [headers, ...rows].join('\n');
     if (Buffer.byteLength(csvContent, 'utf8') > MAX_PRODUCTION_CHUNK_BYTES) {
-      return { success: false, error: 'El chunk CSV supera el tamaño máximo permitido (2 MB).' };
+      return { success: false as const, outcome: 'not-written' as const, error: 'El chunk CSV supera el tamaño máximo permitido (2 MB).' };
     }
 
     const records = parse(csvContent, {
@@ -50,12 +51,12 @@ export async function uploadLogChunk(_prevState: unknown, data: { headers: strin
 
     const firstRecord = records[0];
     if (!firstRecord) {
-      return { success: false, error: 'CSV vacío o sin datos válidos.' };
+      return { success: false as const, outcome: 'not-written' as const, error: 'CSV vacío o sin datos válidos.' };
     }
 
     const headerColumns = Object.keys(firstRecord);
     if (headerColumns.length > 100) {
-      return { success: false, error: 'El CSV no puede contener más de 100 columnas.' };
+      return { success: false as const, outcome: 'not-written' as const, error: 'El CSV no puede contener más de 100 columnas.' };
     }
 
     // Preserve original header keys while matching names case-insensitively.
@@ -77,7 +78,7 @@ export async function uploadLogChunk(_prevState: unknown, data: { headers: strin
     )?.key;
 
     if (!dateKey || !externalIdKey) {
-      return { success: false, error: 'CSV requiere columnas: Fecha, External ID.' };
+      return { success: false as const, outcome: 'not-written' as const, error: 'CSV requiere columnas: Fecha, External ID.' };
     }
 
     const externalIds = Array.from(
@@ -142,25 +143,36 @@ export async function uploadLogChunk(_prevState: unknown, data: { headers: strin
       affectedInterpreterIds.add(interpreterId);
     }
 
+    let inserted = 0;
     if (logsToCreate.length > 0) {
-      await prisma.productionLog.createMany({
+      writeStarted = true;
+      const result = await prisma.productionLog.createMany({
         data: logsToCreate,
         skipDuplicates: true,
       });
+      inserted = result.count;
     }
 
+    // A cache invalidation failure does not undo an acknowledged database write.
     for (const interpreterId of affectedInterpreterIds) {
-      revalidateInterpreterProfileRecords(interpreterId);
+      try {
+        revalidateInterpreterProfileRecords(interpreterId);
+      } catch {
+        console.warn('Production import cache refresh failed');
+      }
     }
 
     return {
-      success: true,
-      count: logsToCreate.length,
+      success: true as const,
+      count: inserted,
+      accepted: logsToCreate.length,
+      skipped: logsToCreate.length - inserted,
+      rejected: errors.length,
       errors: errors.length > 0 ? errors.slice(0, 10) : undefined,
       error: null,
     };
   } catch (error) {
     console.error('uploadLogChunk failed:', error instanceof Error ? error.message : 'Unknown error');
-    return { success: false, error: 'No fue posible procesar el chunk CSV.' };
+    return { success: false as const, outcome: writeStarted ? 'uncertain' as const : 'not-written' as const, error: 'No fue posible procesar el chunk CSV.' };
   }
 }
