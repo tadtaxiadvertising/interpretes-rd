@@ -137,30 +137,30 @@ export function CallTimer({ activeCall, currentRate }: CallTimerProps) {
         'relative w-64 h-64 rounded-full flex items-center justify-center mb-8 transition-all duration-500',
         isActive
           ? 'bg-gradient-to-br from-blue-600/20 to-purple-600/20 border-2 border-blue-500/30 shadow-[0_0_60px_rgba(59,130,246,0.15)]'
-          : 'bg-white/5 border-2 border-white/10'
+          : 'bg-[var(--theme-surface-muted)] border-2 border-[var(--border)]'
       )}>
         {isActive && (
           <div className="absolute inset-0 rounded-full border-2 border-blue-400/20 animate-ping" style={{ animationDuration: '3s' }} />
         )}
         <div className="text-center z-10">
-          <p className="text-5xl font-mono font-bold text-white tracking-wider">
+          <p className="text-5xl font-mono font-bold text-[var(--foreground)] tracking-wider">
             {formatTime(elapsed)}
           </p>
           {isActive && (
-            <div className="flex items-center justify-center gap-1 mt-3 text-emerald-400">
+            <div className="flex items-center justify-center gap-1 mt-3 text-[var(--theme-success)]">
               <DollarSign size={14} />
               <span className="text-sm font-semibold">RD${estimatedCost.toFixed(2)}</span>
-              <span className="text-xs text-slate-400 ml-1">est.</span>
+              <span className="text-xs text-[var(--text-secondary)] ml-1">est.</span>
             </div>
           )}
         </div>
       </div>
 
-      {/* Rate info — IMPROVED CONTRAST: text-slate-200 instead of text-slate-300 */}
-      <div className="flex items-center gap-2 mb-6 text-slate-200 text-sm font-medium">
-        <Clock size={14} className="text-blue-400" />
+      {/* Rate info follows the selected theme */}
+      <div className="flex items-center gap-2 mb-6 text-[var(--foreground)] text-sm font-medium">
+        <Clock size={14} className="text-[var(--theme-link)]" />
         <span>
-          Tarifa: <span className="text-white font-bold">RD${(tariff * 60).toFixed(2)}/hr</span>
+          Tarifa: <span className="text-[var(--foreground)] font-bold">RD${(tariff * 60).toFixed(2)}/hr</span>
         </span>
       </div>
 
@@ -174,7 +174,7 @@ export function CallTimer({ activeCall, currentRate }: CallTimerProps) {
               onClick={handleStart}
               disabled={isPending}
               id="btn-start-call"
-              className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-green-600 to-green-500 text-white font-bold rounded-2xl hover:from-green-500 hover:to-green-400 transition-all duration-300 disabled:opacity-50 shadow-lg shadow-green-600/20 hover:shadow-green-500/30 hover:-translate-y-0.5"
+              className="flex items-center gap-2 px-8 py-4 theme-action-success font-bold rounded-2xl transition-all duration-300 disabled:opacity-50 shadow-lg shadow-green-600/20 hover:shadow-green-500/30 hover:-translate-y-0.5"
             >
               {isPending ? <Loader2 size={20} className="animate-spin" /> : <Play size={20} />}
               Iniciar Llamada
@@ -189,7 +189,7 @@ export function CallTimer({ activeCall, currentRate }: CallTimerProps) {
             onClick={handleEnd}
             disabled={isPending}
             id="btn-end-call"
-            className="flex items-center gap-2 px-8 py-4 bg-gradient-to-r from-red-600 to-red-500 text-white font-bold rounded-2xl hover:from-red-500 hover:to-red-400 transition-all duration-300 disabled:opacity-50 shadow-lg shadow-red-600/20 hover:shadow-red-500/30 hover:-translate-y-0.5"
+            className="flex items-center gap-2 px-8 py-4 theme-action-danger font-bold rounded-2xl transition-all duration-300 disabled:opacity-50 shadow-lg shadow-red-600/20 hover:shadow-red-500/30 hover:-translate-y-0.5"
           >
             {isPending ? <Loader2 size={20} className="animate-spin" /> : <Square size={20} />}
             Finalizar Llamada
@@ -200,15 +200,15 @@ export function CallTimer({ activeCall, currentRate }: CallTimerProps) {
       {/* Call Result card — slides in from bottom after ending a call */}
       {callResult && (
         <div className="mt-8 glass rounded-2xl p-6 w-full max-w-sm border border-green-500/20 animate-in slide-in-from-bottom-4 duration-500">
-          <h4 className="text-sm font-bold text-green-400 mb-3">Llamada Completada ✓</h4>
+          <h4 className="text-sm font-bold text-[var(--theme-success)] mb-3">Llamada Completada ✓</h4>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-slate-400">Duración</p>
-              <p className="text-lg font-bold text-white">{formatTime(callResult.duration)}</p>
+              <p className="text-xs text-[var(--text-secondary)]">Duración</p>
+              <p className="text-lg font-bold text-[var(--foreground)]">{formatTime(callResult.duration)}</p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Ganancia</p>
-              <p className="text-lg font-bold text-green-400">RD${callResult.cost.toFixed(2)}</p>
+              <p className="text-xs text-[var(--text-secondary)]">Ganancia</p>
+              <p className="text-lg font-bold text-[var(--theme-success)]">RD${callResult.cost.toFixed(2)}</p>
             </div>
           </div>
         </div>
