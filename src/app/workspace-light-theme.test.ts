@@ -384,3 +384,34 @@ describe('semantic feedback and production filters', () => {
     expect(production).toContain("aria-current={p === currentPage ? 'page' : undefined}");
   });
 });
+
+describe('semantic dashboard and payroll surfaces', () => {
+  it('keeps the interpreter dashboard legible without fixed dark cards', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/dashboard/page.tsx'), 'utf8');
+    expect(source).not.toContain('from-indigo-900/50 to-slate-900');
+    expect(source).toContain('bg-[var(--theme-panel)]');
+    expect(source).toContain('bg-[var(--theme-track)]');
+    expect(source).toContain('bg-[var(--theme-purple)]');
+    expect(source).toContain('bg-[var(--theme-success)]');
+  });
+
+  it('uses shared controls for payroll filters and transaction forms', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/PayrollEngine.tsx'), 'utf8');
+    for (const token of ['--theme-control-bg', '--theme-control-border', '--theme-control-text', '--theme-focus']) {
+      expect(source).toContain('var(' + token + ')');
+    }
+    expect(source).toContain('aria-pressed={filterStatus === status}');
+    expect(source).toContain('max-h-[calc(100dvh-2rem)] overflow-y-auto');
+    expect(source).toContain('theme-action-primary');
+    expect(source).toContain('theme-action-secondary');
+    expect(source).not.toContain('bg-slate-950');
+  });
+
+  it('keeps live roster counters readable on the shared panel', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/admin/LiveRosterPanel.tsx'), 'utf8');
+    expect(source).toContain('bg-[var(--theme-panel)]');
+    for (const token of ['--theme-success', '--theme-warning', '--theme-away']) {
+      expect(source).toContain('text-[var(' + token + ')]');
+    }
+  });
+});

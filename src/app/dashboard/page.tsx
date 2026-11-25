@@ -53,21 +53,21 @@ export default async function InterpreterDashboard() {
   if (!profile || !profile.interpreter_id) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="glass p-10 rounded-[2.5rem] text-center max-w-lg border border-white/5 shadow-2xl relative overflow-hidden group">
+        <div className="glass p-5 sm:p-10 rounded-[2.5rem] text-center max-w-lg border border-[var(--border)] shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-32 bg-orange-500/10 blur-[100px] rounded-full -mr-16 -mt-16" />
 
           <div className="relative z-10">
-            <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center text-orange-400 mx-auto mb-6 border border-orange-500/20">
+            <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center text-[var(--theme-away)] mx-auto mb-6 border border-orange-500/20">
               <ShieldCheck size={40} />
             </div>
 
-            <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Acceso Restringido</h2>
-            <p className="text-slate-300 leading-relaxed mb-8">
+            <h2 className="text-3xl font-black text-[var(--foreground)] mb-4 tracking-tight">Acceso Restringido</h2>
+            <p className="text-[var(--text-secondary)] leading-relaxed mb-8">
               {!profile
                 ? "No pudimos localizar tu perfil de usuario en el sistema."
                 : "Tu cuenta de usuario no está vinculada a un perfil de intérprete activo."}
               <br />
-              <span className="text-slate-500 text-sm mt-4 block">
+              <span className="text-[var(--text-tertiary)] text-sm mt-4 block">
                 Por favor, contacta al administrador para completar tu vinculación de ID corporativo.
               </span>
             </p>
@@ -75,22 +75,22 @@ export default async function InterpreterDashboard() {
             <div className="flex flex-col gap-3">
               <a
                 href="/dashboard"
-                className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white px-6 py-4 rounded-2xl font-bold transition-all border border-white/5"
+                className="flex items-center justify-center gap-2 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--foreground)] px-6 py-4 rounded-2xl font-bold transition-all border border-[var(--border)]"
               >
                 <RefreshCw size={18} />
                 Reintentar Conexión
               </a>
               <a
                 href="/login"
-                className="flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-medium"
+                className="flex items-center justify-center gap-2 text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors text-sm font-medium"
               >
                 <LogIn size={14} />
                 Cerrar Sesión e Identificarse
               </a>
             </div>
 
-            <div className="mt-10 pt-8 border-t border-white/5">
-              <p className="text-[10px] text-orange-500 font-black uppercase tracking-[0.2em]">
+            <div className="mt-10 pt-8 border-t border-[var(--border)]">
+              <p className="text-[10px] text-[var(--theme-away)] font-black uppercase tracking-[0.2em]">
                 System Diagnostic: {profile ? 'INTERPRETER_LINK_MISSING' : 'PROFILE_MISSING_IN_DB'}
               </p>
             </div>
@@ -216,21 +216,21 @@ export default async function InterpreterDashboard() {
   if (!profile || !interpreter) {
     return (
       <div className="flex items-center justify-center min-h-[80vh]">
-        <div className="glass p-10 rounded-[2.5rem] text-center max-w-lg border border-white/5 shadow-2xl relative overflow-hidden group">
+        <div className="glass p-5 sm:p-10 rounded-[2.5rem] text-center max-w-lg border border-[var(--border)] shadow-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-32 bg-orange-500/10 blur-[100px] rounded-full -mr-16 -mt-16" />
 
           <div className="relative z-10">
-            <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center text-orange-400 mx-auto mb-6 border border-orange-500/20">
+            <div className="w-20 h-20 bg-orange-500/10 rounded-3xl flex items-center justify-center text-[var(--theme-away)] mx-auto mb-6 border border-orange-500/20">
               <ShieldCheck size={40} />
             </div>
 
-            <h2 className="text-3xl font-black text-white mb-4 tracking-tight">Acceso Restringido</h2>
-            <p className="text-slate-300 leading-relaxed mb-8">
+            <h2 className="text-3xl font-black text-[var(--foreground)] mb-4 tracking-tight">Acceso Restringido</h2>
+            <p className="text-[var(--text-secondary)] leading-relaxed mb-8">
               {!profile
                 ? "No pudimos localizar tu perfil de usuario en el sistema."
                 : "Tu cuenta de usuario no está vinculada a un perfil de intérprete activo."}
               <br />
-              <span className="text-slate-500 text-sm mt-4 block">
+              <span className="text-[var(--text-tertiary)] text-sm mt-4 block">
                 Por favor, contacta al administrador para completar tu vinculación de ID corporativo.
               </span>
             </p>
@@ -238,22 +238,22 @@ export default async function InterpreterDashboard() {
             <div className="flex flex-col gap-3">
               <a
                 href="/dashboard"
-                className="flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 text-white px-6 py-4 rounded-2xl font-bold transition-all border border-white/5"
+                className="flex items-center justify-center gap-2 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--foreground)] px-6 py-4 rounded-2xl font-bold transition-all border border-[var(--border)]"
               >
                 <RefreshCw size={18} />
                 Reintentar Conexión
               </a>
               <a
                 href="/login"
-                className="flex items-center justify-center gap-2 text-slate-400 hover:text-white transition-colors text-sm font-medium"
+                className="flex items-center justify-center gap-2 text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors text-sm font-medium"
               >
                 <LogIn size={14} />
                 Cerrar Sesión e Identificarse
               </a>
             </div>
 
-            <div className="mt-10 pt-8 border-t border-white/5">
-              <p className="text-[10px] text-orange-500 font-black uppercase tracking-[0.2em]">
+            <div className="mt-10 pt-8 border-t border-[var(--border)]">
+              <p className="text-[10px] text-[var(--theme-away)] font-black uppercase tracking-[0.2em]">
                 System Diagnostic: {profile ? 'INTERPRETER_LINK_MISSING' : 'PROFILE_MISSING_IN_DB'}
               </p>
             </div>
@@ -267,75 +267,74 @@ export default async function InterpreterDashboard() {
     <>
       <div className="space-y-8 animate-in fade-in duration-700">
         {/* Hero Section & Gamification */}
-        <div className="relative rounded-3xl overflow-hidden bg-gradient-to-br from-indigo-900/50 to-slate-900 border border-indigo-500/20 p-8 shadow-2xl">
+        <div className="relative rounded-3xl overflow-hidden bg-[var(--theme-panel)] border border-indigo-500/20 p-4 sm:p-8 shadow-2xl">
           <div className="absolute top-0 right-0 p-32 bg-indigo-500/10 blur-[100px] rounded-full pointer-events-none" />
           <div className="absolute bottom-0 left-0 p-32 bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none" />
 
           <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
-                <h2 className="text-3xl font-bold text-white tracking-tight">Hola, {interpreter.name}</h2>
+                <h2 className="text-3xl font-bold text-[var(--foreground)] tracking-tight">Hola, {interpreter.name}</h2>
                 {isQaExcellent && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                  <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-[var(--theme-success)] border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
                     Top Tier QA ✨
                   </span>
                 )}
               </div>
-              <p className="text-slate-200 font-medium">
+              <p className="text-[var(--foreground)] font-medium">
                 {interpreter.languageA} ↔ {interpreter.languageB}
-                {interpreter.campaign && <span className="ml-3 text-indigo-300">• {interpreter.campaign}</span>}
+                {interpreter.campaign && <span className="ml-3 text-[var(--theme-purple)]">• {interpreter.campaign}</span>}
               </p>
             </div>
             <PresenceBadge />
           </div>
 
-          <div className="relative z-10 grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          <div className="relative z-10 grid grid-cols-1 xl:grid-cols-3 gap-6 mt-8">
             {/* MTD Progress — DYNAMIC GOAL with enhanced tracking */}
-            <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
+            <div className="bg-[var(--theme-panel)] rounded-2xl p-6 border border-[var(--border)] backdrop-blur-sm">
               <div className="flex justify-between items-end mb-4">
                 <div>
-                  <p className="text-sm text-white font-semibold mb-1">Horas del mes</p>
-                  <p className="text-3xl font-bold text-white">
+                  <p className="text-sm text-[var(--foreground)] font-semibold mb-1">Horas del mes</p>
+                  <p className="text-3xl font-bold text-[var(--foreground)]">
                     <span suppressHydrationWarning>{(mtdMinutes / 60).toFixed(1)}</span>
-                    <span className="text-lg text-slate-300"> / {Math.round(monthlyGoal / 60)}</span>
+                    <span className="text-lg text-[var(--text-secondary)]"> / {Math.round(monthlyGoal / 60)}</span>
                   </p>
                 </div>
-                <div className="p-3 rounded-xl bg-indigo-500/10 text-indigo-400">
+                <div className="p-3 rounded-xl bg-indigo-500/10 text-[var(--theme-purple)]">
                   <Clock size={24} />
                 </div>
               </div>
-              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-[var(--theme-track)] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-indigo-500 to-indigo-400 rounded-full relative"
+                  className="h-full bg-[var(--theme-purple)] rounded-full relative"
                   style={{ width: `${mtdProgress}%` }}
                 >
-                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
                 </div>
               </div>
 
               {/* Enhanced meta / avances tracking */}
               <div className="mt-4 space-y-2.5 text-sm" suppressHydrationWarning>
-                <div className="flex justify-between text-slate-300">
+                <div className="flex justify-between text-[var(--text-secondary)]">
                   <span>Faltan</span>
-                  <span className="font-semibold text-white">{(mtdRemaining / 60).toFixed(1)} hrs ({mtdRemaining} min)</span>
+                  <span className="font-semibold text-[var(--foreground)]">{(mtdRemaining / 60).toFixed(1)} hrs ({mtdRemaining} min)</span>
                 </div>
-                <div className="flex justify-between text-slate-300">
+                <div className="flex justify-between text-[var(--text-secondary)]">
                   <span>Días laborables restantes</span>
-                  <span className="font-semibold text-white">{wd.remaining} de {wd.total}</span>
+                  <span className="font-semibold text-[var(--foreground)]">{wd.remaining} de {wd.total}</span>
                 </div>
-                <div className="flex justify-between text-slate-300">
+                <div className="flex justify-between text-[var(--text-secondary)]">
                   <span>Ritmo actual</span>
-                  <span className="font-semibold text-white">{currentPace} min/día</span>
+                  <span className="font-semibold text-[var(--foreground)]">{currentPace} min/día</span>
                 </div>
-                <div className="flex justify-between text-slate-300">
+                <div className="flex justify-between text-[var(--text-secondary)]">
                   <span>Ritmo necesario</span>
-                  <span className={`font-semibold ${requiredPace > currentPace ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  <span className={`font-semibold ${requiredPace > currentPace ? 'text-[var(--theme-warning)]' : 'text-[var(--theme-success)]'}`}>
                     {requiredPace} min/día
                   </span>
                 </div>
-                <div className="flex justify-between text-slate-300 pt-1.5 border-t border-white/5">
+                <div className="flex justify-between text-[var(--text-secondary)] pt-1.5 border-t border-[var(--border)]">
                   <span>Proyección</span>
-                  <span className={`font-semibold ${projectedOnTrack ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <span className={`font-semibold ${projectedOnTrack ? 'text-[var(--theme-success)]' : 'text-[var(--theme-warning)]'}`}>
                     {projectedOnTrack ? '✅ En camino' : `⚠️ ${(projectedMinutes / 60).toFixed(1)} hrs`}
                   </span>
                 </div>
@@ -343,49 +342,48 @@ export default async function InterpreterDashboard() {
             </div>
 
             {/* Meta Diaria Progress */}
-            <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
+            <div className="bg-[var(--theme-panel)] rounded-2xl p-6 border border-[var(--border)] backdrop-blur-sm">
               <div className="flex justify-between items-end mb-4">
                 <div>
-                  <p className="text-sm text-white font-semibold mb-1">Meta Diaria</p>
-                  <p className="text-3xl font-bold text-white">
+                  <p className="text-sm text-[var(--foreground)] font-semibold mb-1">Meta Diaria</p>
+                  <p className="text-3xl font-bold text-[var(--foreground)]">
                     <span suppressHydrationWarning>{Math.round(todayMinutes)}</span>
-                    <span className="text-lg text-slate-300"> / {Math.round(dailyGoal)} min</span>
+                    <span className="text-lg text-[var(--text-secondary)]"> / {Math.round(dailyGoal)} min</span>
                   </p>
                 </div>
-                <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
+                <div className="p-3 rounded-xl bg-emerald-500/10 text-[var(--theme-success)]">
                   <TrendingUp size={24} />
                 </div>
               </div>
 
-              <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
+              <div className="w-full h-3 bg-[var(--theme-track)] rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-emerald-600 to-emerald-400 rounded-full relative"
+                  className="h-full bg-[var(--theme-success)] rounded-full relative"
                   style={{ width: `${todayProgress}%` }}
                 >
-                  <div className="absolute inset-0 bg-white/20 animate-pulse" />
                 </div>
               </div>
 
-              <p suppressHydrationWarning className="text-xs text-slate-200 mt-2 text-right font-medium">
+              <p suppressHydrationWarning className="text-xs text-[var(--foreground)] mt-2 text-right font-medium">
                 {todayProgress.toFixed(1)}% completado (Faltan {Math.max(0, Math.round(dailyGoal - todayMinutes))} min)
               </p>
             </div>
 
             {/* Earnings — IMPROVED CONTRAST */}
-            <div className="bg-slate-900/50 rounded-2xl p-6 border border-white/5 backdrop-blur-sm flex flex-col justify-center">
+            <div className="bg-[var(--theme-panel)] rounded-2xl p-6 border border-[var(--border)] backdrop-blur-sm flex flex-col justify-center">
               <div className="flex justify-between items-center mb-2">
-                <p className="text-sm text-white font-semibold">Ganancias del mes</p>
-                <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400">
+                <p className="text-sm text-[var(--foreground)] font-semibold">Ganancias del mes</p>
+                <div className="p-2 rounded-xl bg-purple-500/10 text-[var(--theme-purple)]">
                   <DollarSign size={20} />
                 </div>
               </div>
               <div className="flex items-baseline gap-2">
-                <p className="text-4xl font-bold text-white tracking-tight">
+                <p className="text-3xl sm:text-4xl font-bold text-[var(--foreground)] tracking-tight break-words">
                   RD${mtdEarnings.toFixed(2)}
                 </p>
-                <span className="text-slate-300 text-sm font-medium">({(mtdMinutes / 60).toFixed(1)} hrs)</span>
+                <span className="text-[var(--text-secondary)] text-sm font-medium">({(mtdMinutes / 60).toFixed(1)} hrs)</span>
               </div>
-              <p className="text-xs text-slate-200 mt-2 font-medium">Tarifa: RD${(Number(interpreter.tariffPerMinute || 0) * 60).toFixed(2)}/hr</p>
+              <p className="text-xs text-[var(--foreground)] mt-2 font-medium">Tarifa: RD${(Number(interpreter.tariffPerMinute || 0) * 60).toFixed(2)}/hr</p>
             </div>
           </div>
 
@@ -401,16 +399,16 @@ export default async function InterpreterDashboard() {
         {/* Quick Tools & Production Registry */}
         <div className="w-full">
           {/* Call Timer */}
-          <div className="glass rounded-3xl p-8 border border-white/5 relative overflow-hidden group">
+          <div className="glass rounded-3xl p-8 border border-[var(--border)] relative overflow-hidden group">
             <div className="absolute top-0 right-0 p-16 bg-blue-500/5 blur-[50px] rounded-full -mr-8 -mt-8 pointer-events-none" />
             <div className="flex items-center justify-between mb-6 relative z-10">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400">
+                <div className="p-2.5 rounded-xl bg-blue-500/10 text-[var(--theme-link)]">
                   <TrendingUp size={22} />
                 </div>
-                <h3 className="text-xl font-bold text-white tracking-tight">Temporizador en Vivo</h3>
+                <h3 className="text-xl font-bold text-[var(--foreground)] tracking-tight">Temporizador en Vivo</h3>
               </div>
-              <span className="text-[10px] font-black text-blue-500 bg-blue-500/10 px-2 py-1 rounded-md uppercase tracking-wider border border-blue-500/20">En tiempo real</span>
+              <span className="text-[10px] font-black text-[var(--theme-link)] bg-blue-500/10 px-2 py-1 rounded-md uppercase tracking-wider border border-blue-500/20">En tiempo real</span>
             </div>
             <div className="relative z-10">
               <CallTimer
