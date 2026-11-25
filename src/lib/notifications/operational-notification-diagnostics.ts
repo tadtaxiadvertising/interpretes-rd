@@ -79,7 +79,7 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
     }
   }
   for (const score of scoreSample) {
-    const recipient = interpreterById.get(score.interpreterId);
+    const recipient = score.interpreterId === null ? undefined : interpreterById.get(score.interpreterId);
     const totalScore = Number(score.totalScore);
     const actionRequired = score.accionRequerida;
     if (!recipient || score.totalScore === null || !Number.isFinite(totalScore) || totalScore < 0 || totalScore > 100 ||
@@ -93,7 +93,7 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
     } else add('qa', notificationEventRow(qaEvaluationEvent(recipient, { evaluationId: score.id, totalScore, actionRequired })));
   }
   for (const assignment of assignmentSample) {
-    const recipient = interpreterById.get(assignment.interpreterId);
+    const recipient = assignment.interpreterId === null ? undefined : interpreterById.get(assignment.interpreterId);
     if (recipient) add('roleplayAssignment', notificationEventRow(roleplayAssignmentEvent(recipient, assignment.id)));
   }
   for (const job of jobs.slice(0, LIMIT)) {
@@ -113,7 +113,7 @@ export async function readOperationalNotificationDiagnostics(now = new Date()) {
     const items = expected.get(module)!;
     return { module, expected: items.length, missing: items.filter(row => {
       const stored = delivered.get(row.id);
-      return stored?.userId !== row.userId || stored.category !== row.category;
+      return !stored || stored.userId !== row.userId || stored.category !== row.category;
     }).length };
   });
   return {
