@@ -6,7 +6,7 @@ import { actorFromBearer } from '@/lib/api-auth';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, rateLimit, createRateLimitHeaders } from '@/lib/security/rate-limit';
 import { validateAudioMetadata } from '@/lib/roleplay';
-import { authorizeOpeningUpload, confirmOpeningUpload, recoverOpeningDetails } from '@/lib/roleplay/bilingual-opening-service';
+import { authorizeOpeningUpload, confirmOpeningUpload, recoverOpeningDetails, discardOpeningUpload } from '@/lib/roleplay/bilingual-opening-service';
 import { BilingualOpeningStoreError, type BilingualOpeningActor } from '@/lib/roleplay/bilingual-opening-store';
 
 export const runtime = 'nodejs';
@@ -16,6 +16,7 @@ const requestSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('authorize'), mimeType: z.string().min(1).max(100),
     size: z.number().int().positive().max(15 * 1024 * 1024) }).strict(),
   z.object({ action: z.literal('confirm'), path: z.string().min(1).max(256) }).strict(),
+  z.object({ action: z.literal('discard'), path: z.string().min(1).max(256) }).strict(),
 ]);
 
 function failure(status: number, error: string, headers?: HeadersInit) {
@@ -105,6 +106,10 @@ async function handle(req: NextRequest, params: Promise<{ id: string }>, write: 
       if (!validateAudioMetadata(command.mimeType, command.size).valid) return failure(400, 'Formato o tamaño de audio inválido.');
       const data = await authorizeOpeningUpload(prisma, id, actor, command);
       return privateRoleplayResponse({ success: true, data });
+    }
+    if (command.action === 'discard') {
+      const state = await discardOpeningUpload(prisma, id, actor, command.path);
+      return privateRoleplayResponse({ success: true, data: { state } });
     }
     await confirmOpeningUpload(prisma, id, actor, command.path);
     return privateRoleplayResponse({ success: true, data: { state: 'confirmed' } });
