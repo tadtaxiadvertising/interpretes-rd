@@ -11,6 +11,7 @@
 
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
+import { notifyRecruitmentAdmins } from '@/lib/notifications/notify-recruitment';
 import type {
   RecruitmentApplicationStatus,
   RecruitmentEventType,
@@ -389,5 +390,12 @@ export async function advanceApplication(
   if (params.db) {
     return run(params.db);
   }
-  return prisma.$transaction((tx) => run(tx));
+  const result = await prisma.$transaction((tx) => run(tx));
+  // Caller-owned transactions must notify after their outer commit instead.
+  if (result.success && result.data.advanced) {
+    const kind = result.data.toStatus === 'ROLEPLAY_REVIEW' ? 'roleplay-review'
+      : result.data.toStatus === 'INTERVIEW_PENDING' ? 'interview-pending' : null;
+    if (kind) await notifyRecruitmentAdmins({ kind, applicationId: result.data.applicationId, version: result.data.version });
+  }
+  return result;
 }
