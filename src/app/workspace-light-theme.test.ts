@@ -322,3 +322,25 @@ describe('responsive workspace navigation and library', () => {
     expect(library).toContain('break-all font-mono');
   });
 });
+
+describe('accessible operational tables', () => {
+  it.each([
+    'src/app/admin/accounts/page.tsx',
+    'src/app/admin/assignments/page.tsx',
+    'src/app/recruitment/page.tsx',
+    'src/app/production/page.tsx',
+    'src/app/dashboard/earnings/page.tsx',
+  ])('provides a named keyboard-scrollable region in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toMatch(/role="region" aria-label="[^"]+" tabIndex=\{0\} className="max-w-full overflow-x-auto/);
+    expect(source).not.toContain('divide-white/5');
+  });
+
+  it('keeps missing production records readable and progress colors semantic', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/production/page.tsx'), 'utf8');
+    expect(source).not.toContain('isPlaceholder ? "opacity-40"');
+    for (const token of ['--theme-success', '--theme-warning', '--theme-danger']) {
+      expect(source).toContain('bg-[var(' + token + ')]');
+    }
+  });
+});
