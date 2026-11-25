@@ -4,6 +4,16 @@ import { providerCatalog, isProviderId } from './provider-catalog';
 export const budgetCeilings = providerCatalog;
 export type BudgetProvider = keyof typeof budgetCeilings;
 export type BudgetInput = { provider: BudgetProvider; dailyLimit: number; monthlyLimit: number };
+export type BudgetRevision = { expectedDailyLimit: number; expectedMonthlyLimit: number };
+
+export function validateBudgetRevision(input: unknown): BudgetRevision | null {
+  if (!input || typeof input !== 'object') return null;
+  const { expectedDailyLimit, expectedMonthlyLimit } = input as Record<string, unknown>;
+  if (typeof expectedDailyLimit !== 'number' || typeof expectedMonthlyLimit !== 'number'
+    || !Number.isSafeInteger(expectedDailyLimit) || !Number.isSafeInteger(expectedMonthlyLimit)
+    || expectedDailyLimit < 1 || expectedMonthlyLimit < 1) return null;
+  return { expectedDailyLimit, expectedMonthlyLimit };
+}
 
 export function validateBudget(input: unknown): BudgetInput | null {
   if (!input || typeof input !== 'object') return null;
@@ -18,14 +28,17 @@ export function validateBudget(input: unknown): BudgetInput | null {
 
 /** One atomic update and audit insert. Never reset counters, even when lowering
  * a budget below the amount already used. Quota reservations lock the same row. */
-export async function updateProviderBudget(db: Pick<Prisma.TransactionClient, '$queryRaw'>, input: BudgetInput, actor: string): Promise<boolean> {
+export async function updateProviderBudget(db: Pick<Prisma.TransactionClient, '$queryRaw'>, input: BudgetInput, actor: string, revision: BudgetRevision): Promise<boolean> {
   const validated = validateBudget(input);
-  if (!validated || !actor || actor.length > 255) return false;
+  const expected = validateBudgetRevision(revision);
+  if (!validated || !expected || !actor || actor.length > 255) return false;
+  const { expectedDailyLimit, expectedMonthlyLimit } = expected;
   const { provider, dailyLimit, monthlyLimit } = validated;
   const rows = await db.$queryRaw<{ provider: string }[]>`
     WITH previous AS (
       SELECT provider, daily_limit, monthly_limit FROM private_email.provider_quota
-      WHERE provider = ${provider} FOR UPDATE
+      WHERE provider = ${provider} AND daily_limit = ${expectedDailyLimit}
+        AND monthly_limit = ${expectedMonthlyLimit} FOR UPDATE
     ), changed AS (
       UPDATE private_email.provider_quota q
       SET daily_limit = ${dailyLimit}, monthly_limit = ${monthlyLimit}
