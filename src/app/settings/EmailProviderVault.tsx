@@ -1,12 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider } from '@/app/actions/email-provider-vault';
+import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider } from '@/app/actions/email-provider-vault';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 
 const statusText: Record<string, string> = {
+  accepted_evidence_missing: 'El proveedor aceptó la prueba, pero no se pudo guardar la evidencia. Revisa el buzón y el almacén; no repitas automáticamente.',
+  receipt_confirmed: 'Recepción confirmada por el administrador.',
+  preferred_saved: 'Proveedor preferido guardado. No se activaron envíos automáticos.',
+  preference_cleared: 'Preferencia eliminada.',
+  selection_blocked: 'No se puede guardar: requiere aceptación, recepción confirmada y presupuesto disponible para seleccionar.',
   local_quota_reached: 'Presupuesto local agotado. No se inició el envío.',
   ready: 'Almacén disponible.', disabled: 'Almacén desactivado o controles de prueba no habilitados.',
   key_missing: 'Configura la clave de cifrado privada del almacén.',
@@ -20,7 +25,9 @@ const statusText: Record<string, string> = {
 const messageFor = (status: string) => statusText[status] ?? 'Aceptación no confirmada. Revisa el proveedor y el buzón antes de repetir.';
 
 export default function EmailProviderVault() {
-  const [profiles, setProfiles] = useState<ProfileMetadata[]>([]);
+  const [profiles, setProfiles] = useState<(ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null })[]>([]);
+  const [preferredId, setPreferredId] = useState<string | null>(null);
+  const [selectionPaused, setSelectionPaused] = useState(false);
   const [quotas, setQuotas] = useState<ProviderQuota[]>([]);
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(false);
@@ -28,6 +35,8 @@ export default function EmailProviderVault() {
   async function load() {
     const result = await listEmailProviderProfiles();
     setProfiles(result.profiles);
+    setPreferredId(result.preferredId ?? null);
+    setSelectionPaused(result.selectionPaused === true);
     setQuotas(result.quotas ?? []);
     setReady(result.status === 'ready');
     setMessage(messageFor(result.status));
@@ -41,7 +50,7 @@ export default function EmailProviderVault() {
   return (
     <section className="rounded-xl border border-[var(--border)] p-4 space-y-3 text-sm text-[var(--foreground)]" aria-labelledby="provider-vault-title">
       <h3 id="provider-vault-title" className="font-semibold">Perfiles de proveedores guardados</h3>
-      <p>Guarda claves de Brevo y Resend cifradas. Los perfiles no modifican el proveedor activo. No se muestran claves guardadas.</p>
+      <p>Guarda claves de Brevo y Resend cifradas. Puedes guardar una preferencia verificada. Todavía no modifica el proveedor operativo. No se muestran claves guardadas.</p>
       <button type="button" disabled={pending} onClick={() => run(load)} className="rounded-lg border border-[var(--border)] px-3 py-2">Consultar perfiles</button>
       {ready && (
         <form className="space-y-2" autoComplete="off" onSubmit={event => {
@@ -76,11 +85,21 @@ export default function EmailProviderVault() {
           <p className="text-xs">No incluye envíos externos ni los del proveedor configurado en variables de entorno. Consulta su saldo real.</p>
         </div>
       ))}
+      {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No modifica los envíos automáticos.</p>}
+      {preferredId && <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
       {profiles.map(profile => (
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
           <p className="font-semibold">{profile.name} · {profile.provider}</p>
           <p>{profile.from}</p>
-          <button type="button" disabled={pending} onClick={() => run(async () => { const status = await testSavedEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Enviar prueba a este remitente</button>
+          <p>{profile.receiptConfirmedAt ? 'Recepción confirmada' : profile.testAcceptedAt ? 'Aceptado; falta verificar el buzón' : 'Sin prueba aceptada'}</p>
+          {preferredId === profile.id && <p className="font-semibold">Proveedor preferido</p>}
+          <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await testSavedEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Enviar prueba a este remitente</button>
+          {profile.testAcceptedAt && !profile.receiptConfirmedAt && (
+            <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await confirmSavedProviderReceipt(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Confirmo que recibí el correo de prueba</button>
+          )}
+          {profile.receiptConfirmedAt && preferredId !== profile.id && (
+            <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
+          )}
         </div>
       ))}
       <p role="status" aria-live="polite">{message}</p>
