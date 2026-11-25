@@ -51,6 +51,7 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
         <button data-testid="semantic-primary" class="theme-action-primary">Guardar</button>
         <button data-testid="semantic-success" class="theme-action-success">Iniciar</button>
         <button data-testid="semantic-danger" class="theme-action-danger">Finalizar</button>
+        <button data-testid="semantic-disabled" class="theme-action-primary disabled:opacity-50" disabled>Guardando…</button>
       `;
       document.body.appendChild(fixture);
     });
@@ -75,6 +76,22 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
         await expect.poll(() => contrast(action)).toBeGreaterThanOrEqual(4.5);
         await page.mouse.move(0, 0);
       }
+      const disabled = page.getByTestId('semantic-disabled');
+      await expect(disabled).toBeDisabled();
+      await expect(disabled).toHaveCSS('opacity', '1');
+      await expect(disabled).toHaveCSS('cursor', 'not-allowed');
+      await expect.poll(() => contrast(disabled)).toBeGreaterThanOrEqual(4.5);
+      const disabledBackground = await disabled.evaluate(node => getComputedStyle(node).backgroundColor);
+      await disabled.hover();
+      await expect(disabled).toHaveCSS('background-color', disabledBackground);
+
+      await page.getByTestId('semantic-primary').focus();
+      await page.keyboard.press('Tab');
+      const focused = page.getByTestId('semantic-success');
+      await expect(focused).toBeFocused();
+      await expect(focused).toHaveCSS('outline-style', 'solid');
+      await expect(focused).toHaveCSS('outline-width', '2px');
+
       // The legacy light overrides must not turn text on a solid CTA dark.
       if (theme === 'light') {
         for (const id of ['workspace-action', 'workspace-danger']) {
