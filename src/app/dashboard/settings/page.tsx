@@ -67,64 +67,64 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-4xl space-y-8 animate-in fade-in duration-700">
       <header>
-        <h2 className="text-3xl font-bold text-white flex items-center gap-3">
-          <Settings className="text-blue-400" />
+        <h2 className="text-3xl font-bold text-[var(--foreground)] flex items-center gap-3">
+          <Settings className="text-[var(--theme-link)]" />
           Configuración del perfil
         </h2>
-        <p className="text-gray-400 mt-2">Administra tu información personal y tus preferencias de pago.</p>
+        <p className="text-[var(--text-secondary)] mt-2">Administra tu información personal y tus preferencias de pago.</p>
       </header>
 
       <form action={updateInterpreterProfileFromForm} className="space-y-6">
         
         {/* Personal Info */}
-        <div className="glass p-8 rounded-3xl border border-white/5 space-y-6">
-          <div className="flex items-center gap-3 pb-4 border-b border-white/5">
-            <User className="text-blue-400" size={20} />
-            <h3 className="text-lg font-bold text-white">Información personal</h3>
+        <div className="glass p-8 rounded-3xl border border-[var(--border)] space-y-6">
+          <div className="flex items-center gap-3 pb-4 border-b border-[var(--border)]">
+            <User className="text-[var(--theme-link)]" size={20} />
+            <h3 className="text-lg font-bold text-[var(--foreground)]">Información personal</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Nombre completo</label>
+              <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Nombre completo</label>
               <input 
                 type="text" 
                 disabled 
                 value={interpreter?.name || profile.display_name}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-gray-400 cursor-not-allowed"
+                className="w-full bg-[var(--theme-surface-muted)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-secondary)] cursor-not-allowed"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Correo electrónico</label>
+              <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Correo electrónico</label>
               <input 
                 type="text" 
                 disabled 
                 value={interpreter?.emailCorporativo || profile.email || ''}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-gray-400 cursor-not-allowed"
+                className="w-full bg-[var(--theme-surface-muted)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text-secondary)] cursor-not-allowed"
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Número de teléfono</label>
+              <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Número de teléfono</label>
               <div className="relative">
-                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={16} />
                 <input 
                   name="phone"
                   type="text" 
                   defaultValue={interpreter?.telefono || ''}
                   placeholder="+1 234 567 890"
-                  className="w-full bg-white/5 border border-white/10 focus:border-blue-500/50 rounded-xl px-12 py-3 text-white focus:outline-none transition-all"
+                  className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] focus:border-[var(--theme-focus)] rounded-xl px-12 py-3 text-[var(--theme-control-text)] focus:outline-none transition-all"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">País de residencia</label>
+              <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">País de residencia</label>
               <div className="relative">
-                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={16} />
                 <input 
                   name="country"
                   type="text" 
                   defaultValue={interpreter?.pais || ''}
                   placeholder="Ej.: República Dominicana"
-                  className="w-full bg-white/5 border border-white/10 focus:border-blue-500/50 rounded-xl px-12 py-3 text-white focus:outline-none transition-all"
+                  className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] focus:border-[var(--theme-focus)] rounded-xl px-12 py-3 text-[var(--theme-control-text)] focus:outline-none transition-all"
                 />
               </div>
             </div>
@@ -132,10 +132,10 @@ export default async function SettingsPage() {
         </div>
 
         {/* Payment Info */}
-        <div className="glass p-8 rounded-3xl border border-white/5 space-y-6">
-          <div className="flex items-center gap-3 pb-4 border-b border-white/5">
-            <CreditCard className="text-green-400" size={20} />
-            <h3 className="text-lg font-bold text-white">Preferencias de pago (República Dominicana)</h3>
+        <div className="glass p-8 rounded-3xl border border-[var(--border)] space-y-6">
+          <div className="flex items-center gap-3 pb-4 border-b border-[var(--border)]">
+            <CreditCard className="text-[var(--theme-success)]" size={20} />
+            <h3 className="text-lg font-bold text-[var(--foreground)]">Preferencias de pago (República Dominicana)</h3>
           </div>
 
           {showBankingForm ? (
@@ -155,11 +155,11 @@ export default async function SettingsPage() {
               <div className="p-4 rounded-2xl bg-green-500/5 border border-green-500/10 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                    <CreditCard className="text-green-400" size={20} />
+                    <CreditCard className="text-[var(--theme-success)]" size={20} />
                   </div>
                   <div>
-                    <p className="text-sm font-bold text-white">Método de pago</p>
-                    <p className="text-xs text-green-400">{onboardingComplete ? 'Verificado' : (hasBankingData ? 'Registrado' : 'Pendiente')}</p>
+                    <p className="text-sm font-bold text-[var(--foreground)]">Método de pago</p>
+                    <p className="text-xs text-[var(--theme-success)]">{onboardingComplete ? 'Verificado' : (hasBankingData ? 'Registrado' : 'Pendiente')}</p>
                   </div>
                 </div>
                 {hasBankingData && (
@@ -177,20 +177,20 @@ export default async function SettingsPage() {
               {hasBankingData && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Banco</label>
-                    <p className="text-white font-mono">{interpreter?.banco || profile.bank_name || '—'}</p>
+                    <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Banco</label>
+                    <p className="text-[var(--foreground)] font-mono">{interpreter?.banco || profile.bank_name || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Tipo de cuenta</label>
-                    <p className="text-white font-mono">{interpreter?.tipoCuenta || profile.bank_account_type || '—'}</p>
+                    <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Tipo de cuenta</label>
+                    <p className="text-[var(--foreground)] font-mono">{interpreter?.tipoCuenta || profile.bank_account_type || '—'}</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cuenta bancaria</label>
-                    <p className="text-white font-mono">{maskAccount(interpreter?.cuentaPago || profile.bank_account || '')}</p>
+                    <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Cuenta bancaria</label>
+                    <p className="text-[var(--foreground)] font-mono">{maskAccount(interpreter?.cuentaPago || profile.bank_account || '')}</p>
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-500 uppercase tracking-wider">Cédula o RNC</label>
-                    <p className="text-white font-mono">{maskIdentityDocument(interpreter?.cedulaRnc || profile.bank_cedula || '')}</p>
+                    <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-wider">Cédula o RNC</label>
+                    <p className="text-[var(--foreground)] font-mono">{maskIdentityDocument(interpreter?.cedulaRnc || profile.bank_cedula || '')}</p>
                   </div>
                 </div>
               )}
@@ -198,8 +198,8 @@ export default async function SettingsPage() {
               {!hasBankingData && !onboardingComplete && (
                 <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Info className="text-amber-400 shrink-0" size={20} />
-                    <p className="text-xs text-amber-400">
+                    <Info className="text-[var(--theme-warning)] shrink-0" size={20} />
+                    <p className="text-xs text-[var(--theme-warning)]">
                       Completa tu onboarding para registrar tu método de pago.
                     </p>
                   </div>
@@ -209,8 +209,8 @@ export default async function SettingsPage() {
           )}
 
           <div className="p-4 rounded-2xl bg-blue-500/5 border border-blue-500/10 flex gap-4">
-            <Info className="text-blue-400 shrink-0" size={20} />
-            <p className="text-xs text-gray-400 leading-relaxed">
+            <Info className="text-[var(--theme-link)] shrink-0" size={20} />
+            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
               Los pagos se procesan cada 15 días en pesos dominicanos (DOP). Verifica que la cédula o el RNC coincida con la identidad del titular de la cuenta bancaria para evitar rechazos.
             </p>
           </div>
@@ -229,7 +229,7 @@ export default async function SettingsPage() {
       </form>
 
       {/* Security Info */}
-      <footer className="flex items-center justify-center gap-2 text-gray-600 text-xs py-8">
+      <footer className="flex items-center justify-center gap-2 text-[var(--text-tertiary)] text-xs py-8">
         <Shield size={14} />
         Tus datos se protegen mediante medidas de seguridad y se gestionan conforme a las normas de privacidad y regulación bancaria aplicables.
       </footer>
