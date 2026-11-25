@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import prisma from '@/lib/prisma';
+import { hasCompleteLegacyRoleplayScenarios } from '@/lib/roleplay/legacy-draft-readiness';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
@@ -106,6 +107,16 @@ export async function GET(
     const hasAccess = checkSessionAccess(identity, session, sessionCookie);
     if (!hasAccess) {
       return privateRoleplayResponse({ success: false, error: 'Access denied' }, { status: 403 });
+    }
+
+    // A direct link must not expose audio for an unfinished interpreter draft.
+    // Candidate invitation and administrative review retain their own gates.
+    if (identity.role === 'interpreter' && session.status === 'DRAFT' &&
+        !hasCompleteLegacyRoleplayScenarios(session.scenarios)) {
+      return privateRoleplayResponse(
+        { success: false, error: 'El roleplay todavía no está disponible.' },
+        { status: 409 },
+      );
     }
 
     let baseAudioUrl: string | null = session.baseAudioUrl;
