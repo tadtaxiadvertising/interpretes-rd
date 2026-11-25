@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
 import NewRoleplayForm from './NewRoleplayForm';
-import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { openingAssignmentEnabled, readOpeningRequirement } from '@/lib/roleplay/bilingual-opening-assignment';
 
@@ -59,6 +59,7 @@ export default async function NewRoleplayPage({
     id: string;
     fingerprint: string;
     requiresOpening?: boolean;
+    audioKind?: 'private' | 'legacy';
     scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null; studioTurn: number | null; studioSpeaker: string | null; studioLanguage: string | null; sourceStartSec: number | null; sourceEndSec: number | null }>;
   } | undefined;
 
@@ -73,9 +74,10 @@ export default async function NewRoleplayPage({
         },
       },
     });
+    const reusable = source ? getReusableRoleplayAudio(source.scenarios, storageUrl) : null;
     if (source && source.status !== 'DRAFT' && source.status !== 'CANCELLED' &&
         source.scenarios.length > 0 && source.scenarios.length <= ROLEPLAY_MAX_SCENARIOS &&
-        source.scenarios.every((scenario) => getReusableBaseAudioPath(scenario.baseAudioUrl, storageUrl))) {
+        reusable) {
       const fingerprint = getRoleplaySnapshotHash(source.scenarios);
       const visibility = await prisma.roleplayLibraryArchive.findUnique({
         where: { fingerprint },
@@ -84,8 +86,9 @@ export default async function NewRoleplayPage({
       if (!visibility?.archivedAt) librarySource = {
         id: sourceSessionId,
         fingerprint: getRoleplaySnapshotHash(source.scenarios),
-        requiresOpening: process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true'
-          ? await readOpeningRequirement(prisma, sourceSessionId) : false,
+        audioKind: reusable.kind,
+        requiresOpening: reusable.kind === 'private' || (process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true'
+          ? await readOpeningRequirement(prisma, sourceSessionId) : false),
         scenarios: source.scenarios.map(({ title, durationLimitSec, scriptPrompt, studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }) => ({ title, durationLimitSec, scriptPrompt, studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec })),
       };
     }
