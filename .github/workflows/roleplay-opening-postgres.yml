@@ -1,0 +1,38 @@
+name: Isolated roleplay opening PostgreSQL
+
+on:
+  pull_request:
+    paths:
+      - 'docs/operations/staged-sql/roleplay-bilingual-openings.sql'
+      - 'src/lib/roleplay/bilingual-opening*.ts'
+      - 'scripts/ci/verify-roleplay-opening-postgres.sh'
+      - '.github/workflows/roleplay-opening-postgres.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  opening:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: roleplay_opening_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: isolated-ci-fixture-only
+        options: >-
+          --health-cmd "pg_isready -U postgres -d roleplay_opening_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify staged opening schema on disposable PostgreSQL
+        env:
+          POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
+        run: bash scripts/ci/verify-roleplay-opening-postgres.sh
