@@ -53,7 +53,7 @@ export function SessionActions({ sessionId, status }: { sessionId: string; statu
             type="button"
             onClick={() => setConfirming(false)}
             disabled={isPending}
-            className="px-3 py-2 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--text-secondary)] rounded-xl text-sm font-medium border border-[var(--border)] transition-colors"
+            className="px-3 py-2 theme-action-secondary rounded-xl text-sm font-medium transition-colors"
           >
             Keep
           </button>
