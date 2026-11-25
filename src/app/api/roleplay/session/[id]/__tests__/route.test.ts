@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
   identity: null as any,
   session: null as any,
   findUnique: vi.fn(),
+  openingQuery: vi.fn(),
   getSignedAudioUrl: vi.fn(),
   actorFromBearer: vi.fn(),
 }));
@@ -16,7 +17,7 @@ vi.mock('@/lib/identity/resolve-user', () => ({
 vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
-  default: { roleplaySession: { findUnique: m.findUnique } },
+  default: { roleplaySession: { findUnique: m.findUnique }, $queryRaw: m.openingQuery },
 }));
 
 vi.mock('@/lib/security/rate-limit', () => ({
@@ -249,6 +250,29 @@ describe('GET /api/roleplay/session/[id]', () => {
     }
     expect(body.data.scenarios[0].title).toBe('Scenario 1');
     expect(body.data.scenarios[0].interpretationDirection).toBe('es-en');
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('withholds clinical audio and prompts until required opening evidence exists', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.session = { ...candidateSession('STARTED'), baseAudioPath: 'base/sess-1/original.webm',
+      scenarios: [{ id: 'first', order: 0, title: 'Consultation', baseAudioUrl: 'https://x/clinical.webm',
+        scriptPrompt: 'Clinical prompt', studioLanguage: 'en', responses: [] }] };
+    m.openingQuery.mockResolvedValueOnce([{ required: true }]);
+    const locked = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(locked.data.openingPlaybackLocked).toBe(true);
+    expect(locked.data.baseAudioUrl).toBeNull();
+    expect(locked.data.scenarios[0]).toMatchObject({ baseAudioUrl: '', scriptPrompt: null });
+    expect(locked.data.scenarios[0]).not.toHaveProperty('interpretationDirection');
+    expect(m.getSignedAudioUrl).not.toHaveBeenCalled();
+    m.openingQuery.mockResolvedValueOnce([{ required: true,
+      sourceAudioPath: 'openings/sess-1/123e4567-e89b-42d3-a456-426614174000.webm',
+      durationSec: 42, confirmedAt: new Date() }]);
+    const unlocked = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(unlocked.data).not.toHaveProperty('openingPlaybackLocked');
+    expect(unlocked.data.baseAudioUrl).toBe('https://signed.test/base/sess-1/original.webm');
+    expect(unlocked.data.scenarios[0]).toMatchObject({ baseAudioUrl: 'https://x/clinical.webm', scriptPrompt: 'Clinical prompt', interpretationDirection: 'en-es' });
   });
 
   it('signs canonical base audio when a session has no legacy URL', async () => {

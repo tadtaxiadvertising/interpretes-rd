@@ -8,7 +8,7 @@ import { isCanonicalBilingualOpeningPath, type BilingualOpeningState } from '@/l
 type Recovery = { state: BilingualOpeningState; reservation?: { path: string; expiresAt: string; retryAt: string | null } };
 type Attempt = { path: string; token: string; blob: Blob; uploaded: boolean };
 
-export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: string; onContinue: () => void }) {
+export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: string; onContinue: () => void | Promise<void> }) {
   const endpoint = '/api/roleplay/session/' + encodeURIComponent(sessionId) + '/opening';
   const [snapshot, setSnapshot] = useState<Recovery | null>(null);
   const [busy, setBusy] = useState(false);
@@ -39,7 +39,7 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
     if (!signal?.aborted) {
       setSnapshot(data);
       if (attempt.current && data.reservation?.path !== attempt.current.path) attempt.current = null;
-      if (data.state === 'confirmed' || data.state === 'not-required') onContinue();
+      if (data.state === 'confirmed' || data.state === 'not-required') await onContinue();
     }
     return data;
   }, [request, sessionId, onContinue]);
@@ -56,7 +56,7 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
     const data = await request({ action: 'confirm', path });
     if (data.state !== 'confirmed') throw new Error('La apertura aún no está confirmada.');
     attempt.current = null;
-    onContinue();
+    await onContinue();
   };
 
   const run = async (work: () => Promise<void>) => {
@@ -133,7 +133,7 @@ export function RoleplayOpeningFlow({ sessionId, onContinue }: { sessionId: stri
           <button type="button" className={buttonClass} disabled={busy} onClick={retry}>Reintentar confirmación</button>
         </div>
       )}
-      {(error || pendingPath) && <button type="button" className={buttonClass} disabled={busy} onClick={refresh}>Consultar estado</button>}
+      {(error || pendingPath || snapshot?.state === 'confirmed' || snapshot?.state === 'not-required') && <button type="button" className={buttonClass} disabled={busy} onClick={refresh}>Consultar estado</button>}
     </section>
   );
 }

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { getSignedAudioUrl } from '@/lib/roleplay';
 import { resolveInvitationBaseAudioUrl } from '@/lib/roleplay/invitation-base-audio';
+import { canProgressPastBilingualOpening } from '@/lib/roleplay/bilingual-opening-guard';
 import prisma from '@/lib/prisma';
 import { createHash } from 'crypto';
 import { cookies } from 'next/headers';
@@ -153,7 +154,9 @@ export async function POST(req: NextRequest) {
         success: true,
         data: {
           sessionId: access.session.id,
-          baseAudioUrl: await resolveInvitationBaseAudioUrl(access.session, process.env.NEXT_PUBLIC_SUPABASE_URL, getSignedAudioUrl),
+          baseAudioUrl: await canProgressPastBilingualOpening(db, access.session.id)
+            ? await resolveInvitationBaseAudioUrl(access.session, process.env.NEXT_PUBLIC_SUPABASE_URL, getSignedAudioUrl)
+            : null,
         },
       },
       { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } },

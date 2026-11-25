@@ -9,6 +9,7 @@ import { hasCompleteRoleplaySelfAssessment } from '@/lib/roleplay/self-assessmen
 import { hasPersistedRoleplayRecording } from '@/lib/roleplay/recording-presence';
 import { getSignedAudioUrl } from '@/lib/roleplay';
 import { resolveInvitationBaseAudioUrl } from '@/lib/roleplay/invitation-base-audio';
+import { canProgressPastBilingualOpening } from '@/lib/roleplay/bilingual-opening-guard';
 
 const db = prisma;
 
@@ -151,6 +152,16 @@ export async function GET(
       }
     }
 
+    // Do not mint clinical playback links until the persisted opening allows it.
+    // Administrators keep their authorized review access.
+    const openingPlaybackLocked = identity.role !== 'admin' &&
+      !(await canProgressPastBilingualOpening(db, session.id));
+    if (openingPlaybackLocked) {
+      mayExposeBaseAudio = false;
+      baseAudioUrl = null;
+      scenarios = scenarios.map(scenario => ({ ...scenario, baseAudioUrl: '', scriptPrompt: null }));
+    }
+
     // A session may have a canonical base object key but no legacy URL.
     // Reuse the same strict resolver as invitation entry, only AFTER ownership
     // checks and invitation redaction. Never re-sign hidden candidate audio.
@@ -231,6 +242,7 @@ export async function GET(
           baseAudioUrl,
           recordedAudioUrl,
           status: session.status,
+          ...(openingPlaybackLocked ? { openingPlaybackLocked: true } : {}),
           canCompleteSelfAssessment:
             session.status === 'SUBMITTED' &&
             !session.evaluatorId &&
