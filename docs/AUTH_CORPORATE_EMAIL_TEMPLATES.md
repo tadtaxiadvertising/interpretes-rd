@@ -20,6 +20,17 @@ Plantillas de referencia para Supabase Auth. El SMTP corporativo se configura en
 
 Referencias: [SMTP personalizado](https://supabase.com/docs/guides/auth/auth-smtp), [Plantillas](https://supabase.com/docs/guides/auth/auth-email-templates), [Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls).
 
+## Activación y recuperación mediante verificación SSR
+
+El callback de la aplicación admite los tokens de invitación y recuperación de Supabase mediante `verifyOtp` y conserva el intercambio PKCE por código. Para una instalación que utiliza enlaces implícitos o necesita abrir correos desde otro dispositivo, probar primero las siguientes variantes en un entorno de prueba. Aplicarlas **solo después de desplegar y validar el callback**; los ejemplos estándar de las secciones siguientes siguen siendo válidos para flujos PKCE existentes.
+
+- Invite user: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&amp;type=invite`
+- Reset password: `{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&amp;type=recovery`
+
+Sustituir únicamente el atributo `href` correspondiente en cada plantilla. Confirmar antes que Site URL apunta al dominio HTTPS real de la aplicación (sin barra final). No cambiar las demás plantillas ni añadir destinos externos. Ambos enlaces llevan a la pantalla de nueva contraseña tras verificar la sesión. El inicio de sesión posterior deriva el rol del expediente existente.
+
+Verificar con un buzón de prueba: apertura desde otro navegador sin cookies previas, creación de contraseña, reingreso al portal de candidato, caducidad/reutilización y solicitud de un nuevo enlace. Los enlaces consumidos por escáneres de correo requieren un flujo de confirmación explícita; si ocurre, no declarar la incidencia resuelta y restaurar la plantilla anterior hasta validar ese flujo. Nunca registrar tokens. Esta modificación del repositorio no modifica automáticamente la configuración alojada de Supabase.
+
 ## Plantillas de referencia
 
 ### Confirm sign up
