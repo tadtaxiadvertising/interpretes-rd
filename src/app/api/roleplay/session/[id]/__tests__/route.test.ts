@@ -186,6 +186,24 @@ describe('GET /api/roleplay/session/[id]', () => {
     }));
   });
 
+  it('only exposes a supported interpretation direction while base audio access is permitted', async () => {
+    const session = candidateSession('STARTED');
+    const scenario = {
+      id: 'scenario-1', order: 0, title: 'Scenario 1',
+      baseAudioUrl: 'https://x/base.webm', studioLanguage: 'en', responses: [],
+    };
+    m.session = { ...session, scenarios: [scenario, { ...scenario, id: 'scenario-2', order: 1, studioLanguage: 'unknown' }] };
+    let body = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(body.data.scenarios[0].interpretationDirection).toBe('en-es');
+    expect(body.data.scenarios[1]).not.toHaveProperty('interpretationDirection');
+    m.session.access = { ...session.access, validatedAt: null };
+    body = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(body.data.scenarios[0]).not.toHaveProperty('interpretationDirection');
+    m.session.access = { ...session.access, usedAt: new Date() };
+    body = await (await GET(makeRequest('sess-1'), { params })).json();
+    expect(body.data.scenarios[0]).not.toHaveProperty('interpretationDirection');
+  });
+
   it('does not expose internal Studio metadata to the interpreter owning a session', async () => {
     m.identity = { role: 'interpreter', interpreterId: 7, candidateId: null };
     m.session = {
