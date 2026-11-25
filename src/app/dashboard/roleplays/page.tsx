@@ -24,9 +24,9 @@ type RoleplaysResponse = {
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  DRAFT: 'Borrador',
+  DRAFT: 'Disponible',
   PENDING: 'Pendiente',
-  INVITED: 'Invitado',
+  INVITED: 'Disponible',
   STARTED: 'Iniciado',
   IN_PROGRESS: 'En progreso',
   SUBMITTED: 'Enviado',
