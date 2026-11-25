@@ -1,5 +1,6 @@
 import 'server-only';
 import prisma from '@/lib/prisma';
+import type { NotificationEvent } from './notification-event-row';
 import { publishNotificationEvent } from './publish-notification-event';
 import { authorizedNotificationRecipientIds } from './authorized-recipient-ids';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
@@ -16,10 +17,20 @@ const content: Partial<Record<RecruitmentApplicationStatus, { title: string; mes
   REJECTED: { title: 'Actualización de tu postulación', message: 'El estado de tu solicitud cambió. Consulta tu portal privado.', type: 'info' },
 };
 
-/** Called after commit. Never accept an email or recipient ID from the caller. */
-export async function notifyCandidateMilestone(input: { applicationId: string; status: RecruitmentApplicationStatus; version: number }): Promise<void> {
+export type CandidateMilestone = { applicationId: string; status: RecruitmentApplicationStatus; version: number };
+
+export function candidateNotificationEvent(userId: string, input: CandidateMilestone): NotificationEvent | null {
   const notice = content[input.status];
-  if (!notice) return;
+  if (!notice) return null;
+  return {
+    userId, eventKey: 'recruitment.candidate:' + input.applicationId + ':' + input.version + ':' + input.status,
+    category: 'recruitment', link: '/candidate', ...notice,
+  };
+}
+
+/** Called after commit. Never accept an email or recipient ID from the caller. */
+export async function notifyCandidateMilestone(input: CandidateMilestone): Promise<void> {
+  if (!content[input.status]) return;
   try {
     // Do not publish an older milestone after another transition has won.
     const application = await prisma.recruitmentApplication.findUnique({
@@ -36,10 +47,8 @@ export async function notifyCandidateMilestone(input: { applicationId: string; s
     if (profile?.role?.toLowerCase() !== 'candidate' || profile.interpreterId !== null) return;
     const [userId] = authorizedNotificationRecipientIds(null, profile.id);
     if (!userId) return;
-    await publishNotificationEvent({
-      userId, eventKey: 'recruitment.candidate:' + input.applicationId + ':' + input.version + ':' + input.status,
-      category: 'recruitment', link: '/candidate', ...notice,
-    });
+    const event = candidateNotificationEvent(userId, input);
+    if (event) await publishNotificationEvent(event);
   } catch (error) {
     console.warn('Candidate milestone saved but notification failed:', safeServerErrorCategory(error));
   }
