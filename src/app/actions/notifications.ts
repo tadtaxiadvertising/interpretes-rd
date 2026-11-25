@@ -17,7 +17,11 @@ export async function getMyNotifications() {
   if ('error' in auth) return { success: false as const };
   const ids = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
   if (!ids.length) return { success: false as const };
-  return { success: true as const, data: await loadNavbarNotifications(ids) };
+  try {
+    return { success: true as const, data: await loadNavbarNotifications(ids, { throwOnError: true }) };
+  } catch {
+    return { success: false as const };
+  }
 }
 
 const CreateNotificationSchema = z.object({
