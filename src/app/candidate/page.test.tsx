@@ -3,9 +3,13 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const m = vi.hoisted(() => ({
   identity: vi.fn(),
+  loadNotifications: vi.fn(),
   findCandidate: vi.fn(),
   findSession: vi.fn(),
 }));
+
+vi.mock('@/lib/notifications/load-navbar-notifications', () => ({ loadNavbarNotifications: m.loadNotifications }));
+vi.mock('@/components/NotificationBell', () => ({ NotificationBell: ({ candidateOnly }: { candidateOnly?: boolean }) => <button data-testid="candidate-notifications">{candidateOnly ? 'Avisos de postulación' : 'Avisos generales'}</button> }));
 
 vi.mock('@/lib/identity/resolve-user', () => ({
   resolveCurrentIdentity: m.identity,
@@ -43,6 +47,7 @@ import CandidatePortalPage from './page';
 describe('candidate roleplay entry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.loadNotifications.mockResolvedValue([]);
     m.identity.mockResolvedValue({ role: 'candidate', candidateId: 5, provider: 'authjs' });
     m.findCandidate.mockResolvedValue({
       name: 'Candidate',
@@ -290,4 +295,13 @@ describe('candidate roleplay entry', () => {
     expect(markup).not.toContain('>TECH_SETUP_PENDING<');
   });
 
+  it('loads and renders the restricted bell for a linked candidate account', async () => {
+    const id = '123e4567-e89b-42d3-a456-426614174000';
+    m.identity.mockResolvedValue({ role: 'candidate', candidateId: 5, provider: 'authjs', profileId: id, userId: 'legacy-user' });
+    m.findSession.mockResolvedValue(null);
+    const markup = renderToStaticMarkup(await CandidatePortalPage());
+    expect(m.loadNotifications).toHaveBeenCalledWith([id], { candidateOnly: true });
+    expect(markup).toContain('Avisos de postulación');
+    expect(markup).not.toContain('Avisos generales');
+  });
 });
