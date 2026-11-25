@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const m = vi.hoisted(() => ({
   identity: null as any,
+  openingQuery: vi.fn(),
   access: null as any,
   findUnique: vi.fn(),
   accessUpdate: vi.fn(),
@@ -20,6 +21,7 @@ vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
+    $queryRaw: m.openingQuery,
     roleplayAccess: {
       findUnique: m.findUnique,
       update: m.accessUpdate,
@@ -66,6 +68,19 @@ describe('POST /api/roleplay/validate-invite-by-code', () => {
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('binds the valid invitation without exposing audio while the opening is pending', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValueOnce([{ required: true }]);
+    const response = await POST(makeRequest('ABCD1234'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data.baseAudioUrl).toBeNull();
+    expect(m.setCookie).toHaveBeenCalled();
   });
 
   it('rejects an invalid Bearer before looking up an invitation code', async () => {
