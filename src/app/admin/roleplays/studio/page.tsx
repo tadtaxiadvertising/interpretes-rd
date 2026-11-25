@@ -1154,6 +1154,37 @@ export default function RoleplayStudioPage() {
     setNotice(`Idioma ${language.toUpperCase()} asignado a ${pendingIds.size} intervenciones pendientes, sin modificar idiomas ya revisados ni al intérprete original. Puedes deshacerlo; verifica cada audio antes de exportar.`);
   };
 
+  const applyMedicalLanguagePattern = (visibleIds: readonly string[]) => {
+    const visible = new Set(visibleIds);
+    const pending = segments.filter(item => visible.has(item.id) &&
+      item.language === 'unknown' && (item.speakerRole === 'doctor' || item.speakerRole === 'patient'));
+    if (!pending.length) return;
+    const ids = new Set(pending.map(item => item.id));
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'idiomas', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    setSegments(previous => {
+      const order = [...previous].sort((a, b) => a.start - b.start);
+      return previous.map(item => {
+        if (!ids.has(item.id) || item.language !== 'unknown' ||
+          (item.speakerRole !== 'doctor' && item.speakerRole !== 'patient')) return item;
+        const language: StudioLanguage = item.speakerRole === 'doctor' ? 'en' : 'es';
+        return {
+          ...item, language,
+          title: titleAfterProfileChange(item.title, item.speakerRole, item.language,
+            order.findIndex(turn => turn.id === item.id), item.speakerRole, language),
+        };
+      });
+    });
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice(`Patrón médico EN / paciente ES aplicado a ${pending.length} turnos pendientes. Escucha y confirma los idiomas; puedes deshacer esta acción.`);
+  };
+
   const setSpeakerForPendingTurns = (
     role: 'doctor' | 'patient' | 'nurse' | 'operator', visibleIds: readonly string[],
   ) => {
@@ -1831,6 +1862,9 @@ export default function RoleplayStudioPage() {
 
   const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
     segment.language === 'unknown' && segment.speakerRole !== 'interpreter')
+    .map(({ segment }) => segment.id);
+  const medicalLanguagePendingIds = visibleSegments.filter(({ segment }) =>
+    segment.language === 'unknown' && (segment.speakerRole === 'doctor' || segment.speakerRole === 'patient'))
     .map(({ segment }) => segment.id);
   const pendingSpeakerIds = visibleSegments.filter(({ segment }) =>
     segment.speakerRole === 'unknown').map(({ segment }) => segment.id);
@@ -2591,6 +2625,33 @@ export default function RoleplayStudioPage() {
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
           )}
+          <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">Flujo médico bilingüe</h3>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">El participante inicia con el protocolo en ambos idiomas. Conserva las voces del médico y paciente; el nuevo intérprete realiza las traducciones.</p>
+            </div>
+            <ol className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-5">
+              {[
+                ['Apertura · EN + ES', 'Intérprete participante'],
+                ['Médico · EN', 'Conservar audio'],
+                ['Interpretación · ES', 'Respuesta del participante'],
+                ['Paciente · ES', 'Conservar audio'],
+                ['Interpretación · EN', 'Respuesta del participante'],
+              ].map(([title, detail]) => (
+                <li key={title} className="rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
+                  <span className="block font-semibold text-[var(--foreground)]">{title}</span>
+                  <span className="mt-1 block text-[var(--text-secondary)]">{detail}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="text-xs text-[var(--text-secondary)]">Repite el ciclo según la grabación. Excluye las traducciones y la apertura del intérprete original; no se identifica una voz por su posición en la secuencia.</p>
+            {medicalLanguagePendingIds.length > 0 && (
+              <button type="button" onClick={() => applyMedicalLanguagePattern(medicalLanguagePendingIds)}
+                className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
+                Aplicar médico EN / paciente ES ({medicalLanguagePendingIds.length} pendientes visibles)
+              </button>
+            )}
+          </section>
           <details open={!sourceRequiresLocal} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
             <summary className="cursor-pointer text-sm font-semibold text-[var(--theme-info)]">
               Protocolos de interpretación consecutiva (opcional)
