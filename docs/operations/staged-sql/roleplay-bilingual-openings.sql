@@ -33,6 +33,22 @@ CREATE TABLE public.roleplay_bilingual_opening_reservations (
   )
 );
 
+-- One independent QA rubric per confirmed opening. Written in the same
+-- transaction as the existing overall QA evaluation, without changing weights.
+CREATE TABLE public.roleplay_bilingual_opening_reviews (
+  session_id TEXT PRIMARY KEY REFERENCES public.roleplay_bilingual_openings(session_id) ON DELETE CASCADE,
+  reviewer_id TEXT NOT NULL CHECK (length(btrim(reviewer_id)) BETWEEN 1 AND 256),
+  english_intro BOOLEAN NOT NULL,
+  spanish_intro BOOLEAN NOT NULL,
+  professional_role BOOLEAN NOT NULL,
+  consecutive_guidance BOOLEAN NOT NULL,
+  clarity BOOLEAN NOT NULL,
+  notes TEXT NOT NULL DEFAULT '' CHECK (length(notes) <= 2000),
+  reviewed_at TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE public.roleplay_bilingual_opening_reviews ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.roleplay_bilingual_opening_reviews FROM PUBLIC;
+
 ALTER TABLE public.roleplay_bilingual_openings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.roleplay_bilingual_opening_reservations ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations FROM PUBLIC;
@@ -139,7 +155,7 @@ DECLARE role_name text;
 BEGIN
   FOREACH role_name IN ARRAY ARRAY['anon', 'authenticated', 'service_role'] LOOP
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = role_name) THEN
-      EXECUTE format('REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations FROM %I', role_name);
+      EXECUTE format('REVOKE ALL ON TABLE public.roleplay_bilingual_openings, public.roleplay_bilingual_opening_reservations, public.roleplay_bilingual_opening_reviews FROM %I', role_name);
       EXECUTE format('REVOKE ALL ON FUNCTION public.enforce_roleplay_opening_session(), public.enforce_roleplay_opening_response(), public.enforce_roleplay_opening_scenario_owner(), public.enforce_roleplay_opening_record() FROM %I', role_name);
     END IF;
   END LOOP;
