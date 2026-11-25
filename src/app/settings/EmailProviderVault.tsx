@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget } from '@/app/actions/email-provider-vault';
+import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget, retireSavedEmailProvider, replaceSavedEmailProvider } from '@/app/actions/email-provider-vault';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 
 const statusText: Record<string, string> = {
+  profile_retired: 'Perfil desactivado. El consumo y el historial se conservan.',
+  profile_replaced: 'Nueva configuración guardada. Repite la prueba y confirma la recepción antes de seleccionarla.',
   budget_saved: 'Presupuesto guardado. El consumo acumulado no ha cambiado.',
   budget_invalid: 'Introduce límites enteros dentro de los máximos permitidos.',
   accepted_evidence_missing: 'El proveedor aceptó la prueba, pero no se pudo guardar la evidencia. Revisa el buzón y el almacén; no repitas automáticamente.',
@@ -27,7 +29,9 @@ const statusText: Record<string, string> = {
 const messageFor = (status: string) => statusText[status] ?? 'Aceptación no confirmada. Revisa el proveedor y el buzón antes de repetir.';
 
 export default function EmailProviderVault() {
-  const [profiles, setProfiles] = useState<(ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null })[]>([]);
+  const [profiles, setProfiles] = useState<(ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null; retiredAt: string | null })[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [retiringId, setRetiringId] = useState<string | null>(null);
   const [preferredId, setPreferredId] = useState<string | null>(null);
   const [selectionPaused, setSelectionPaused] = useState(false);
   const [quotas, setQuotas] = useState<ProviderQuota[]>([]);
@@ -110,8 +114,9 @@ export default function EmailProviderVault() {
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
           <p className="font-semibold">{profile.name} · {profile.provider}</p>
           <p>{profile.from}</p>
-          <p>{profile.receiptConfirmedAt ? 'Recepción confirmada' : profile.testAcceptedAt ? 'Aceptado; falta verificar el buzón' : 'Sin prueba aceptada'}</p>
-          {preferredId === profile.id && <p className="font-semibold">Proveedor preferido</p>}
+          <p>{profile.retiredAt ? 'Desactivado (histórico)' : profile.receiptConfirmedAt ? 'Recepción confirmada' : profile.testAcceptedAt ? 'Aceptado; falta verificar el buzón' : 'Sin prueba aceptada'}</p>
+          {!profile.retiredAt && preferredId === profile.id && <p className="font-semibold">Proveedor preferido</p>}
+          {!profile.retiredAt && <>
           <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await testSavedEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Enviar prueba a este remitente</button>
           {profile.testAcceptedAt && !profile.receiptConfirmedAt && (
             <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await confirmSavedProviderReceipt(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Confirmo que recibí el correo de prueba</button>
@@ -119,6 +124,48 @@ export default function EmailProviderVault() {
           {profile.receiptConfirmedAt && preferredId !== profile.id && (
             <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
           )}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={pending || !selectionPaused} onClick={() => { setEditingId(profile.id); setRetiringId(null); }} className="rounded-lg border border-[var(--border)] px-3 py-2">Editar configuración / clave</button>
+            <button type="button" disabled={pending || !selectionPaused} onClick={() => { setRetiringId(profile.id); setEditingId(null); }} className="rounded-lg border border-[var(--border)] px-3 py-2">Desactivar perfil</button>
+          </div>
+          {editingId === profile.id && (
+            <form className="space-y-2 border-t border-[var(--border)] pt-3" autoComplete="off" onSubmit={event => {
+              event.preventDefault();
+              const form = event.currentTarget;
+              const data = new FormData(form);
+              const input = { id: profile.id, profile: { name: data.get('name'), provider: profile.provider, from: data.get('from'), replyTo: data.get('replyTo'), apiKey: data.get('apiKey') } };
+              const secret = form.elements.namedItem('apiKey') as HTMLInputElement;
+              secret.value = '';
+              void run(async () => {
+                const status = await replaceSavedEmailProvider(input);
+                if (status === 'profile_replaced') { setEditingId(null); await load(); }
+                setMessage(messageFor(status));
+              });
+            }}>
+              <fieldset disabled={pending || !selectionPaused} className="space-y-2">
+                <legend className="font-medium">Reemplazar configuración</legend>
+                <p>Se conserva el perfil anterior como histórico. La nueva configuración requiere una prueba nueva y no queda seleccionada automáticamente.</p>
+                <label className="block">Nombre<input name="name" defaultValue={profile.name} required maxLength={80} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+                <label className="block">Remitente autorizado<input name="from" defaultValue={profile.from} type="email" required maxLength={254} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+                <label className="block">Responder a<input name="replyTo" defaultValue={profile.replyTo} type="email" maxLength={254} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+                <label className="block">Clave API (nueva o vigente)<input name="apiKey" type="password" autoComplete="new-password" required maxLength={512} className="block w-full rounded-lg border border-[var(--border)] bg-transparent p-2" /></label>
+                <button type="submit" className="rounded-lg bg-blue-700 text-white px-3 py-2">Guardar reemplazo</button>
+                <button type="button" onClick={() => setEditingId(null)} className="ml-2 rounded-lg border border-[var(--border)] px-3 py-2">Cancelar</button>
+              </fieldset>
+            </form>
+          )}
+          {retiringId === profile.id && (
+            <div className="space-y-2 border-t border-[var(--border)] pt-3">
+              <p>¿Desactivar este perfil? Si era el preferido, se quitará la selección. No se borrará el historial ni se revocará la clave en el proveedor externo.</p>
+              <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => {
+                const status = await retireSavedEmailProvider(profile.id);
+                if (status === 'profile_retired') { setRetiringId(null); await load(); }
+                setMessage(messageFor(status));
+              })} className="rounded-lg border border-[var(--border)] px-3 py-2">Confirmar desactivación</button>
+              <button type="button" disabled={pending} onClick={() => setRetiringId(null)} className="ml-2 rounded-lg border border-[var(--border)] px-3 py-2">Cancelar</button>
+            </div>
+          )}
+          </>}
         </div>
       ))}
       <p role="status" aria-live="polite">{message}</p>
