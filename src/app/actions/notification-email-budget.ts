@@ -3,6 +3,7 @@
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { rateLimit } from '@/lib/security/rate-limit';
+import { inspectQuotaStorage } from '@/lib/email/quota-storage-readiness';
 import { listProviderQuotas } from '@/lib/email/provider-quota';
 import { quotaAvailability } from '@/lib/email/quota-availability';
 import { providerSource } from '@/lib/email/provider-source';
@@ -21,7 +22,11 @@ export async function readNotificationEmailBudget() {
     const dispatchEnabled = process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED === 'true';
     const emailEnabled = process.env.OPERATIONAL_EMAIL_ENABLED === 'true';
     const vaultEnabled = process.env.EMAIL_PROVIDER_VAULT_ENABLED === 'true';
-    const base = { source, mode, dispatchEnabled, emailEnabled, vaultEnabled };
+    const storage = await inspectQuotaStorage(prisma);
+    const configured = process.env.OPERATIONAL_EMAIL_PROVIDER;
+    const activeApiProvider = source === 'environment' && (configured === 'brevo' || configured === 'resend') ? configured : null;
+    const base = { source, mode, dispatchEnabled, emailEnabled, vaultEnabled, storage, activeApiProvider };
+    if (storage !== 'ready') return { status: 'quota_unavailable' as const, ...base };
     try {
       // These counters represent locally reserved attempts, not external balance.
       // This query never retrieves credentials, sends mail or reserves quota.

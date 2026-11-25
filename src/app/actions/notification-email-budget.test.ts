@@ -1,10 +1,11 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-const m = vi.hoisted(() => ({ auth: vi.fn(), limit: vi.fn(), quotas: vi.fn() }));
+const m = vi.hoisted(() => ({ auth: vi.fn(), limit: vi.fn(), quotas: vi.fn(), storage: vi.fn() }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: m.auth }));
 vi.mock('@/lib/security/rate-limit', () => ({ rateLimit: m.limit }));
 vi.mock('@/lib/prisma', () => ({ default: {} }));
 vi.mock('@/lib/email/provider-quota', () => ({ listProviderQuotas: m.quotas }));
+vi.mock('@/lib/email/quota-storage-readiness', () => ({ inspectQuotaStorage: m.storage }));
 import { readNotificationEmailBudget } from './notification-email-budget';
 
 beforeEach(() => {
@@ -12,6 +13,8 @@ beforeEach(() => {
   m.auth.mockResolvedValue({ user: { userId: 'admin-account' } });
   m.limit.mockReturnValue({ success: true });
   m.quotas.mockResolvedValue([]);
+  m.storage.mockResolvedValue('ready');
+  vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'brevo');
   vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'environment');
   vi.stubEnv('OPERATIONAL_EMAIL_ENABLED', 'true');
   vi.stubEnv('OPERATIONAL_EMAIL_DISPATCH_ENABLED', 'false');
@@ -31,6 +34,7 @@ describe('notification email budget', () => {
     m.limit.mockReturnValueOnce({ success: false });
     expect(await readNotificationEmailBudget()).toEqual({ status: 'rate_limited' });
     expect(m.quotas).not.toHaveBeenCalled();
+    expect(m.storage).not.toHaveBeenCalled();
   });
 
   it('shows the restrictive local balance without disclosing credentials', async () => {
@@ -39,7 +43,7 @@ describe('notification email budget', () => {
       { provider: 'resend', dailyLimit: 100, dailyUsed: 100, monthlyLimit: 3000, monthlyUsed: 200, periodValid: true },
     ]);
     const result = await readNotificationEmailBudget();
-    expect(result).toMatchObject({ status: 'ready', source: 'environment', emailEnabled: true, dispatchEnabled: false,
+    expect(result).toMatchObject({ status: 'ready', source: 'environment', emailEnabled: true, dispatchEnabled: false, storage: 'ready', activeApiProvider: 'brevo',
       providers: expect.arrayContaining([
         { provider: 'brevo', availability: { dailyRemaining: 60, monthlyRemaining: 10, remaining: 10, status: 'low' } },
         { provider: 'resend', availability: { dailyRemaining: 0, monthlyRemaining: 2800, remaining: 0, status: 'exhausted' } },
@@ -71,7 +75,12 @@ describe('notification email budget', () => {
     vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', 'private@example.test');
     m.quotas.mockRejectedValueOnce(new Error('PRIVATE_DATABASE_URL'));
     const result = await readNotificationEmailBudget();
-    expect(result).toEqual({ status: 'quota_unavailable', source: 'vault', mode: 'pilot', emailEnabled: true, dispatchEnabled: false, vaultEnabled: true });
+    expect(result).toEqual({ status: 'quota_unavailable', source: 'vault', mode: 'pilot', emailEnabled: true, dispatchEnabled: false, vaultEnabled: true, storage: 'ready', activeApiProvider: null });
     expect(JSON.stringify(result)).not.toContain('private@example.test');
+  });
+  it.each(['not_installed', 'permission_mismatch', 'unavailable'])('does not read counters when quota storage is %s', async storage => {
+    m.storage.mockResolvedValueOnce(storage);
+    expect(await readNotificationEmailBudget()).toMatchObject({ status: 'quota_unavailable', storage, activeApiProvider: 'brevo' });
+    expect(m.quotas).not.toHaveBeenCalled();
   });
 });
