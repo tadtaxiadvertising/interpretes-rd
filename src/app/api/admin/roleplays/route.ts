@@ -704,10 +704,26 @@ export async function POST(req: NextRequest) {
           select: { id: true },
         });
       }
-      await tx.roleplaySession.update({
-        where: { id: session.id },
-        data: { baseAudioUrl: audioUrls[0], baseAudioPath: firstBaseAudioPath },
-      });
+      if (participantType === 'interpreter') {
+        // Publish only after every scenario is persisted. A concurrent start
+        // or change must not be overwritten by a stale draft publication.
+        const published = await tx.roleplaySession.updateMany({
+          where: {
+            id: session.id, status: 'DRAFT', updatedAt: reservation.session.updatedAt,
+            interpreterId: parsedParticipantId!, recruitmentCandidateId: null,
+          },
+          data: { baseAudioUrl: audioUrls[0], baseAudioPath: firstBaseAudioPath, status: 'INVITED' },
+        });
+        if (published.count !== 1) {
+          draftConflict = true;
+          throw new Error('Roleplay draft changed before publication');
+        }
+      } else {
+        await tx.roleplaySession.update({
+          where: { id: session.id },
+          data: { baseAudioUrl: audioUrls[0], baseAudioPath: firstBaseAudioPath },
+        });
+      }
       if (candidateAccess) {
         await tx.roleplayAccess.create({
           data: { sessionId: session.id, ...candidateAccess },
@@ -715,6 +731,9 @@ export async function POST(req: NextRequest) {
       }
     });
 
+    if (participantType === 'interpreter') {
+      await notifyRoleplayAssignments([{ id: session.id, interpreterId: parsedParticipantId! }]);
+    }
     revalidateCommittedRoleplayViews(revalidatePath);
     return privateRoleplayJson({
       success: true,
