@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { providerSource } from './provider-source';
 import { openProfileCredentials, profileSmtpConfig, validateProfile, vaultKeyAvailable, type ProfileInput } from './provider-vault';
 import { emailDeliveryMode } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
@@ -14,7 +15,7 @@ type SelectedProfile = ProfileInput & { id: string };
 type Message = { recipient: string; subject: string; text: string; html: string };
 
 export function usesProviderVault(env: Env): boolean {
-  return env.EMAIL_PROVIDER_SOURCE === 'vault';
+  return providerSource(env) === 'vault';
 }
 
 /** Vault operation is initially pilot-only. No fallback to environment secrets. */
@@ -44,6 +45,7 @@ export async function readPreferredProvider(db: Reader, env: Env): Promise<Selec
 
 /** Only server-side diagnostics may consume this environment projection. */
 export async function resolveOperationalMailEnv(db: Reader, env: Env): Promise<Env> {
+  if (providerSource(env) === 'invalid') return { ...env, OPERATIONAL_EMAIL_PROVIDER: 'invalid_source' };
   if (!usesProviderVault(env)) return env;
   const profile = await readPreferredProvider(db, env);
   const pilot = emailDeliveryMode(env) === 'pilot';
@@ -60,6 +62,7 @@ export async function resolveOperationalMailEnv(db: Reader, env: Env): Promise<E
 }
 
 export async function runtimeMailConfigured(db: Reader, env: Env): Promise<boolean> {
+  if (providerSource(env) === 'invalid') return false;
   if (!usesProviderVault(env)) return readOperationalMailConfig(env).status === 'configured';
   return emailDeliveryMode(env) === 'pilot' && !!await readPreferredProvider(db, env);
 }
