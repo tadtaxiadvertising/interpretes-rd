@@ -48,6 +48,25 @@ describe('independent mailbox proof', () => {
     expect(f.send).not.toHaveBeenCalled();
     expect(f.query.mock.calls[0][0].join('?')).toContain('b.challenge_expires_at > now()');
   });
+  it('does not send when atomic persistence rolls back the challenge', async () => {
+    const f = fixture();
+    const persist = vi.fn().mockResolvedValue(0);
+    expect(await issueMailboxChallenge(f.db, binding, f.send, persist)).toBe('not_available');
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(f.execute).not.toHaveBeenCalled();
+    expect(f.send).not.toHaveBeenCalled();
+  });
+  it('sends only after the supplied persistence completes', async () => {
+    const f = fixture();
+    let committed = false;
+    f.send.mockImplementation(async () => { expect(committed).toBe(true); return 'accepted'; });
+    expect(await issueMailboxChallenge(f.db, binding, f.send, async write => {
+      const changed = await write(f.db);
+      committed = true;
+      return changed;
+    })).toBe('sent');
+    expect(f.send).toHaveBeenCalledTimes(1);
+  });
   it('does not retry ambiguous SMTP acceptance', async () => {
     const f = fixture();
     f.send.mockRejectedValue(new Error('provider failure'));
