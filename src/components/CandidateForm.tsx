@@ -82,33 +82,33 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm animate-in fade-in slide-in-from-top-2">
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-[var(--theme-danger)] text-sm animate-in fade-in slide-in-from-top-2">
           {error}
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Full Name</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">Full Name</label>
           <div className="relative">
-            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <User className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               required
               name="name"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="Applicant Name"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Email Address</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">Email Address</label>
           <div className="relative">
-            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               required
               type="email"
               name="email"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="email@example.com"
             />
           </div>
@@ -117,23 +117,23 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Phone / WhatsApp</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">Phone / WhatsApp</label>
           <div className="relative">
-            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               name="telefono"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="+1 234 567 890"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Country</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">Country</label>
           <div className="relative">
-            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               name="pais"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="Dominican Republic"
             />
           </div>
@@ -142,24 +142,24 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">EF SET Link</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">EF SET Link</label>
           <div className="relative">
-            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               name="efsetLink"
               type="url"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="https://efset.org/..."
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">English Level</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">English Level</label>
           <div className="relative">
-            <Award className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" size={18} />
+            <Award className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] pointer-events-none" size={18} />
             <select
               name="englishLevel"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none cursor-pointer [&>option]:bg-[#1a1a1a]"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)] appearance-none cursor-pointer"
             >
               <option value="B1">B1 (Intermediate)</option>
               <option value="B2">B2 (Upper Intermediate)</option>
@@ -169,25 +169,25 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">CV URL (optional)</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">CV URL (optional)</label>
           <div className="relative">
-            <Share2 className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Share2 className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               name="cvUrl"
               type="url"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="https://...pdf"
             />
           </div>
         </div>
         <div className="space-y-2">
-          <label className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Speedtest (Mbps)</label>
+          <label className="text-xs font-bold text-[var(--text-tertiary)] uppercase tracking-widest ml-1">Speedtest (Mbps)</label>
           <div className="relative">
-            <Zap className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Zap className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" size={18} />
             <input
               type="number"
               name="speedtestMbps"
-              className="w-full bg-white/5 border border-white/10 rounded-2xl py-3 pl-12 pr-4 text-white focus:border-blue-500/50 transition-all outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
               placeholder="50"
             />
           </div>
@@ -201,7 +201,7 @@ export function CandidateForm({ onSuccess, onCancel }: CandidateFormProps) {
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-gray-400 rounded-2xl font-bold transition-all border border-white/10 active:scale-95"
+          className="flex-1 py-4 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--text-secondary)] rounded-2xl font-bold transition-all border border-[var(--border)] active:scale-95"
         >
           Cancel
         </button>

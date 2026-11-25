@@ -69,7 +69,7 @@ export function ExportCandidatesButton({ data }: ExportCandidatesButtonProps) {
     <button 
       onClick={exportToCSV}
       disabled={!data.length}
-      className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-2xl text-gray-300 hover:bg-white/10 transition-all font-bold disabled:opacity-50 active:scale-95"
+      className="flex items-center gap-2 px-6 py-3 bg-[var(--theme-surface-muted)] border border-[var(--border)] rounded-2xl text-[var(--text-secondary)] hover:bg-[var(--theme-hover)] transition-all font-bold disabled:opacity-50 active:scale-95"
     >
       <Download size={20} />
       Export CSV

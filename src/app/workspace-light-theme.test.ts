@@ -196,3 +196,28 @@ describe('semantic messaging and quality controls', () => {
     }
   });
 });
+
+describe('semantic recruitment and production controls', () => {
+  it.each(['src/components/CandidateForm.tsx', 'src/app/admin/production/manual/page.tsx'])('uses shared field tokens in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toContain('bg-[var(--theme-control-bg)]');
+    expect(source).toContain('border-[var(--theme-control-border)]');
+    expect(source).toContain('text-[var(--theme-control-text)]');
+    expect(source).toContain('focus:ring-[var(--theme-focus)]');
+  });
+
+  it('lets native select and calendar controls adapt to the chosen theme', () => {
+    const candidate = readFileSync(resolve(process.cwd(), 'src/components/CandidateForm.tsx'), 'utf8');
+    const manual = readFileSync(resolve(process.cwd(), 'src/app/admin/production/manual/page.tsx'), 'utf8');
+    expect(candidate).not.toContain('[&>option]:bg-[#1a1a1a]');
+    expect(manual).not.toContain('::-webkit-calendar-picker-indicator');
+  });
+
+  it('keeps calendar status and sticky surfaces theme-aware', () => {
+    const calendar = readFileSync(resolve(process.cwd(), 'src/app/admin/calendar/page.tsx'), 'utf8');
+    expect(calendar).toContain('bg-[var(--theme-panel)]');
+    expect(calendar).toContain('group-hover:bg-[var(--theme-hover)]');
+    expect(calendar).toContain('bg-rose-500/10 text-[var(--theme-danger)]');
+    expect(calendar).not.toContain('bg-rose-950/50');
+  });
+});
