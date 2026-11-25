@@ -1,8 +1,9 @@
 import 'server-only';
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { getBilingualOpeningState } from './bilingual-opening';
+import { randomUUID } from 'node:crypto';
+import { getBilingualOpeningState, isCanonicalBilingualOpeningPath } from './bilingual-opening';
 
-type Actor = { role: 'candidate'; candidateId: number; sessionCookie: string | null }
+export type BilingualOpeningActor = { role: 'candidate'; candidateId: number; sessionCookie: string | null }
   | { role: 'interpreter'; interpreterId: number };
 type SessionRow = {
   id: string;
@@ -31,7 +32,7 @@ export class BilingualOpeningStoreError extends Error {
 // Future server-only adapter. Deliberately not called by any live route.
 // Raw parameterized queries isolate the staged schema from existing Prisma
 // model queries until an additive schema rollout is verified.
-async function lockAuthorizedSession(tx: Tx, sessionId: string, actor: Actor): Promise<SessionRow> {
+async function lockAuthorizedSession(tx: Tx, sessionId: string, actor: BilingualOpeningActor): Promise<SessionRow> {
   const [session] = await tx.$queryRaw<SessionRow[]>`
     SELECT id, requires_bilingual_opening AS required, status::text AS status,
       current_scenario_index AS "currentIndex",
@@ -70,7 +71,7 @@ async function readOpening(tx: Tx, sessionId: string): Promise<OpeningRow | null
   return row ?? null;
 }
 
-export async function readBilingualOpeningState(db: Store, sessionId: string, actor: Actor) {
+export async function readBilingualOpeningState(db: Store, sessionId: string, actor: BilingualOpeningActor) {
   try {
     return await db.$transaction(async tx => {
       const session = await lockAuthorizedSession(tx, sessionId, actor);
@@ -90,7 +91,7 @@ export async function readBilingualOpeningState(db: Store, sessionId: string, ac
  * The locked session serializes confirmation with session progression.
  */
 export async function confirmVerifiedBilingualOpening(
-  db: Store, sessionId: string, actor: Actor,
+  db: Store, sessionId: string, actor: BilingualOpeningActor,
   evidence: { sourceAudioPath: string; durationSec: number },
 ): Promise<'created' | 'replayed'> {
   const confirmedAt = new Date();
@@ -125,4 +126,122 @@ export async function confirmVerifiedBilingualOpening(
     if (error instanceof BilingualOpeningStoreError) throw error;
     throw new BilingualOpeningStoreError('STORE_UNAVAILABLE');
   }
+}
+
+const RESERVATION_MS = 10 * 60_000;
+const VERIFICATION_MS = 120_000;
+type ReservationRow = { sourceAudioPath: string; expiresAt: Date; verificationId: string | null; verificationUntil: Date | null };
+
+async function readReservation(tx: Tx, sessionId: string): Promise<ReservationRow | null> {
+  const [row] = await tx.$queryRaw<ReservationRow[]>`
+    SELECT source_audio_path AS "sourceAudioPath", expires_at AS "expiresAt",
+      verification_id::text AS "verificationId", verification_until AS "verificationUntil"
+    FROM public.roleplay_bilingual_opening_reservations WHERE session_id = ${sessionId}
+  `;
+  return row ?? null;
+}
+
+async function openingTransaction<T>(db: Store, callback: (tx: Tx) => Promise<T>): Promise<T> {
+  try {
+    return await db.$transaction(callback);
+  } catch (error) {
+    if (error instanceof BilingualOpeningStoreError) throw error;
+    throw new BilingualOpeningStoreError('STORE_UNAVAILABLE');
+  }
+}
+
+/** Reserve one immutable object before minting any upload capability. */
+export async function reserveBilingualOpeningPath(
+  db: Store, sessionId: string, actor: BilingualOpeningActor, path: string,
+): Promise<void> {
+  if (!isCanonicalBilingualOpeningPath(path, sessionId)) throw new BilingualOpeningStoreError('INVALID_EVIDENCE');
+  await openingTransaction(db, async tx => {
+    const session = await lockAuthorizedSession(tx, sessionId, actor);
+    if (!session.required || session.currentIndex !== 0 || await readOpening(tx, sessionId)) {
+      throw new BilingualOpeningStoreError('FORBIDDEN');
+    }
+    const existing = await readReservation(tx, sessionId);
+    const now = new Date();
+    if (existing && existing.expiresAt > now) throw new BilingualOpeningStoreError('CONFLICT');
+    const expires = new Date(now.getTime() + RESERVATION_MS);
+    const rows = await tx.$queryRaw<{ sessionId: string }[]>`
+      INSERT INTO public.roleplay_bilingual_opening_reservations (session_id, source_audio_path, expires_at)
+      VALUES (${sessionId}, ${path}, ${expires})
+      ON CONFLICT (session_id) DO UPDATE SET source_audio_path = EXCLUDED.source_audio_path,
+        expires_at = EXCLUDED.expires_at, verification_id = NULL, verification_until = NULL
+      WHERE public.roleplay_bilingual_opening_reservations.expires_at <= ${now}
+      RETURNING session_id AS "sessionId"
+    `;
+    if (rows.length !== 1 || rows[0].sessionId !== sessionId) throw new BilingualOpeningStoreError('CONFLICT');
+  });
+}
+
+/** Claim verification before any storage download or CPU-intensive decoding. */
+export async function claimBilingualOpeningVerification(
+  db: Store, sessionId: string, actor: BilingualOpeningActor, path: string,
+): Promise<{ kind: 'claimed'; verificationId: string } | { kind: 'replayed' }> {
+  if (!isCanonicalBilingualOpeningPath(path, sessionId)) throw new BilingualOpeningStoreError('INVALID_EVIDENCE');
+  return openingTransaction(db, async tx => {
+    const session = await lockAuthorizedSession(tx, sessionId, actor);
+    if (!session.required) throw new BilingualOpeningStoreError('FORBIDDEN');
+    const opening = await readOpening(tx, sessionId);
+    if (opening) {
+      if (opening.sourceAudioPath === path && getBilingualOpeningState(sessionId, true, opening) === 'confirmed') {
+        return { kind: 'replayed' };
+      }
+      throw new BilingualOpeningStoreError('CONFLICT');
+    }
+    if (session.currentIndex !== 0) throw new BilingualOpeningStoreError('FORBIDDEN');
+    const reservation = await readReservation(tx, sessionId);
+    const now = new Date();
+    const until = new Date(now.getTime() + VERIFICATION_MS);
+    if (!reservation || reservation.sourceAudioPath !== path || reservation.expiresAt < until ||
+        (reservation.verificationUntil && reservation.verificationUntil > now)) {
+      throw new BilingualOpeningStoreError('CONFLICT');
+    }
+    const verificationId = randomUUID();
+    const rows = await tx.$queryRaw<{ sessionId: string }[]>`
+      UPDATE public.roleplay_bilingual_opening_reservations
+      SET verification_id = ${verificationId}::uuid, verification_until = ${until}
+      WHERE session_id = ${sessionId} AND source_audio_path = ${path}
+        AND expires_at >= ${until} AND (verification_until IS NULL OR verification_until <= ${now})
+      RETURNING session_id AS "sessionId"
+    `;
+    if (rows.length !== 1 || rows[0].sessionId !== sessionId) throw new BilingualOpeningStoreError('CONFLICT');
+    return { kind: 'claimed', verificationId };
+  });
+}
+
+/** Only the current verifier can commit measured evidence; no stale lease can publish. */
+export async function completeBilingualOpeningVerification(
+  db: Store, sessionId: string, actor: BilingualOpeningActor, verificationId: string,
+  evidence: { sourceAudioPath: string; durationSec: number },
+): Promise<'created' | 'replayed'> {
+  if (getBilingualOpeningState(sessionId, true, { ...evidence, confirmedAt: new Date() }) !== 'confirmed') {
+    throw new BilingualOpeningStoreError('INVALID_EVIDENCE');
+  }
+  return openingTransaction(db, async tx => {
+    const session = await lockAuthorizedSession(tx, sessionId, actor);
+    if (!session.required) throw new BilingualOpeningStoreError('FORBIDDEN');
+    const existing = await readOpening(tx, sessionId);
+    if (existing) {
+      if (getBilingualOpeningState(sessionId, true, existing) === 'confirmed' &&
+          existing.sourceAudioPath === evidence.sourceAudioPath && existing.durationSec === evidence.durationSec) return 'replayed';
+      throw new BilingualOpeningStoreError('CONFLICT');
+    }
+    const reservation = await readReservation(tx, sessionId);
+    const now = new Date();
+    if (session.currentIndex !== 0 || !reservation || reservation.sourceAudioPath !== evidence.sourceAudioPath ||
+        reservation.verificationId !== verificationId || !reservation.verificationUntil ||
+        reservation.verificationUntil <= now || reservation.expiresAt <= now) {
+      throw new BilingualOpeningStoreError('CONFLICT');
+    }
+    const rows = await tx.$queryRaw<{ sessionId: string }[]>`
+      INSERT INTO public.roleplay_bilingual_openings (session_id, source_audio_path, duration_sec, confirmed_at)
+      VALUES (${sessionId}, ${evidence.sourceAudioPath}, ${evidence.durationSec}, ${now})
+      ON CONFLICT (session_id) DO NOTHING RETURNING session_id AS "sessionId"
+    `;
+    if (rows.length !== 1 || rows[0].sessionId !== sessionId) throw new BilingualOpeningStoreError('CONFLICT');
+    return 'created';
+  });
 }
