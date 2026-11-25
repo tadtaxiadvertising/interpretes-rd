@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { providerSource } from './provider-source';
 import { emailDeliveryMode, pilotRecipient } from './pilot-recipient';
 import { readOperationalMailConfig } from './operational-config';
 import { dispatchRecruitmentEmail, type DispatchResult } from './recruitment-dispatch';
@@ -23,6 +24,7 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
   const cutoverTime = cutover && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/.test(cutover) ? Date.parse(cutover) : NaN;
   if (!Number.isFinite(cutoverTime) || cutoverTime > Date.now()) return 'disabled';
 
+  if (providerSource(process.env) === 'invalid') return 'disabled';
   const vault = usesProviderVault(process.env);
   if (vault && emailDeliveryMode(process.env) !== 'pilot') return 'disabled';
   const selected = vault ? await readPreferredProvider(prisma, process.env) : null;
