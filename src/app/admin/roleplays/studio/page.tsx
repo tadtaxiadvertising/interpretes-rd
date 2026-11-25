@@ -1918,7 +1918,7 @@ export default function RoleplayStudioPage() {
           }} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)]">Configurar Audio Studio</Link>
           <Link href="/admin/roleplays/new" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
-          }} className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
+          }} className="rounded-xl theme-action-primary px-4 py-3 font-semibold">Importar y asignar</Link>
         </div>
       </header>
       <section className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3">
@@ -2006,7 +2006,7 @@ export default function RoleplayStudioPage() {
               )}
               <button type="button" onClick={() => void importHappyScribeTranscript()}
                 disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
-                className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+                className="rounded-lg theme-action-success px-4 py-2 text-sm font-semibold">
                 {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
               </button>
               {happyScribeImporting && (
@@ -2310,7 +2310,7 @@ export default function RoleplayStudioPage() {
                   </p>
                   <button type="button" onClick={applySilenceSuggestions}
                     disabled={analyzingSilences || busy || draftBusy}
-                    className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">
+                    className="rounded-lg theme-action-primary px-4 py-2 text-sm font-bold">
                     Reemplazar con {suggestedClips.length} cortes sugeridos
                   </button>
                 </div>
@@ -2624,7 +2624,7 @@ export default function RoleplayStudioPage() {
                 </button>
               )}
               <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
-                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white disabled:opacity-50"><Plus size={16}/> Añadir fragmento</button>
+                className="inline-flex items-center gap-2 rounded-lg theme-action-primary px-3 py-1.5 text-sm font-semibold"><Plus size={16}/> Añadir fragmento</button>
             </div>
           </div>
           {segments.length > 0 && (
@@ -3010,7 +3010,7 @@ export default function RoleplayStudioPage() {
           {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
+            className="inline-flex items-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold">
             <Download size={18} /> {busy
               ? 'Procesando segmentos…'
               : draftBusy ? 'Verificando proyecto…'
