@@ -245,3 +245,27 @@ export async function completeBilingualOpeningVerification(
     return 'created';
   });
 }
+
+/** Authorized recovery details; never return a signed token or a verifier ID. */
+export async function readBilingualOpeningRecovery(db: Store, sessionId: string, actor: BilingualOpeningActor) {
+  return openingTransaction(db, async tx => {
+    const session = await lockAuthorizedSession(tx, sessionId, actor);
+    if (!session.required) return { state: 'not-required' as const };
+    const state = getBilingualOpeningState(sessionId, true, await readOpening(tx, sessionId));
+    if (state !== 'pending') return { state };
+    if (session.currentIndex !== 0) throw new BilingualOpeningStoreError('CONFLICT');
+    const reservation = await readReservation(tx, sessionId);
+    const now = Date.now();
+    if (!reservation || reservation.expiresAt.getTime() <= now ||
+        !isCanonicalBilingualOpeningPath(reservation.sourceAudioPath, sessionId)) return { state };
+    return {
+      state,
+      reservation: {
+        path: reservation.sourceAudioPath,
+        expiresAt: reservation.expiresAt.toISOString(),
+        retryAt: reservation.verificationUntil && reservation.verificationUntil.getTime() > now
+          ? reservation.verificationUntil.toISOString() : null,
+      },
+    };
+  });
+}
