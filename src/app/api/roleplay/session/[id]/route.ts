@@ -72,12 +72,12 @@ export async function GET(
             baseAudioUrl: true,
             durationLimitSec: true,
             scriptPrompt: true,
-            // Internal curation fields are never queried for participants.
-            // The response redaction below additionally protects mocks and
-            // future adapters that return more fields than selected.
+            // Internal curation fields remain private. Language alone is
+            // selected to derive a public interpretation direction; the raw
+            // metadata is still stripped from participant responses.
             studioTurn: identity.role === 'admin',
             studioSpeaker: identity.role === 'admin',
-            studioLanguage: identity.role === 'admin',
+            studioLanguage: true,
             sourceStartSec: identity.role === 'admin',
             sourceEndSec: identity.role === 'admin',
             // Expected keys are evaluator-only material. Do not even retrieve
@@ -157,7 +157,11 @@ export async function GET(
     // curation and QA, not for answering the scenario.
     if (identity.role !== 'admin') {
       scenarios = scenarios.map((scenario) => {
-        const safeScenario = { ...scenario };
+        const interpretationDirection = mayExposeBaseAudio
+          ? scenario.studioLanguage === 'en' ? 'en-es' as const
+            : scenario.studioLanguage === 'es' ? 'es-en' as const : undefined
+          : undefined;
+        const safeScenario = { ...scenario, interpretationDirection };
         for (const internal of [
           'expectedKeys', 'studioTurn', 'studioSpeaker', 'studioLanguage',
           'sourceStartSec', 'sourceEndSec',
