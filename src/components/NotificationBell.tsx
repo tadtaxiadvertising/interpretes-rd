@@ -42,7 +42,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
     let active = true;
     let busy = false;
     const refresh = async () => {
-      if (busy || document.visibilityState === 'hidden') return;
+      if (busy || bulkRef.current || document.visibilityState === 'hidden') return;
       busy = true;
       const currentGeneration = generation.current;
       try {
@@ -120,6 +120,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
   const handleMarkAll = async () => {
     if (bulkRef.current || pendingRef.current.size || unreadCount === 0) return;
     bulkRef.current = true;
+    generation.current += 1;
     setBulkPending(true);
     setError(null);
     try {
@@ -130,12 +131,12 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       }
       setLocallyReadIds(current => [...new Set([...current, ...rawNotifications.map(n => n.id)])]);
       setFeed(current => current ? { ...current, unreadCount: 0, data: current.data.map(n => ({ ...n, isRead: true })) } : current);
-      requestRefresh();
     } catch {
       setError('No se pudieron marcar todas las notificaciones. Inténtalo de nuevo.');
     } finally {
       bulkRef.current = false;
       setBulkPending(false);
+      requestRefresh();
     }
   };
 
@@ -154,7 +155,8 @@ export function NotificationBell({ initialNotifications }: { initialNotification
         type="button"
         onClick={() => { setIsOpen(open => !open); setError(null); }}
         ref={triggerRef}
-        aria-label={`Notificaciones (${unreadCount} sin leer)`}
+        aria-label="Notificaciones"
+        aria-description={`${unreadCount} sin leer`}
         aria-expanded={isOpen}
         aria-controls="notification-panel"
         className="group relative rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
@@ -170,7 +172,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
+          <div id="notification-panel" role="region" aria-label="Notificaciones recientes" className="fixed inset-x-3 top-[4.5rem] z-50 sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-80 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">Notificaciones</h4>
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
@@ -195,7 +197,7 @@ export function NotificationBell({ initialNotifications }: { initialNotification
               </p>
             )}
 
-            <div className="max-h-[min(400px,calc(100dvh-15rem))] overflow-y-auto overscroll-contain">
+            <div className="min-h-0 max-h-[400px] flex-1 overflow-y-auto overscroll-contain">
               {visibleNotifications.length === 0 ? (
                 <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
                   {onlyUnread ? 'No hay notificaciones recientes sin leer.' : 'No hay notificaciones.'}
