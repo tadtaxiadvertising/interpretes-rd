@@ -12,6 +12,7 @@ const m = vi.hoisted(() => ({
   appUpdateMany: vi.fn(),
   eventCreate: vi.fn(),
   rateLimit: vi.fn(),
+  notifyRoleplayEvaluation: vi.fn(),
 }));
 
 vi.mock('next/cache', () => ({ revalidatePath: () => {} }));
@@ -58,7 +59,7 @@ vi.mock('@/lib/roleplay', () => ({
   validateAudioFile: vi.fn(),
 }));
 
-vi.mock('@/app/actions/notifications', () => ({ createNotification: vi.fn() }));
+vi.mock('@/lib/notifications/notify-roleplay', () => ({ notifyRoleplayEvaluation: m.notifyRoleplayEvaluation }));
 
 import { evaluateRoleplay } from '@/app/actions/roleplay';
 
@@ -88,6 +89,7 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
     vi.clearAllMocks();
     m.rateLimit.mockReturnValue({ success: true, remaining: 2, resetAt: Date.now() + 60_000 });
     m.actor = ADMIN;
+    m.notifyRoleplayEvaluation.mockResolvedValue(undefined);
     m.session = {
       id: 'sess-1',
       qaScoreId: null,
@@ -380,5 +382,21 @@ describe('evaluateRoleplay (claim, scoring, application pipeline advancement)', 
 
     expect(res.success).toBe(false);
     expect(m.sessionFindUnique).not.toHaveBeenCalled();
+  });
+  it('passes committed session ownership and results to the notification service', async () => {
+    m.session = { ...m.session, interpreterId: 7, recruitmentCandidateId: null };
+    const result = await evaluateRoleplay(null, makeForm());
+    expect(result.success).toBe(true);
+    expect(m.notifyRoleplayEvaluation).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'sess-1', interpreterId: 7, recruitmentCandidateId: null,
+      totalScore: expect.any(Number), passed: expect.any(Boolean),
+    }));
+    expect(m.sessionUpdate.mock.invocationCallOrder[0]).toBeLessThan(m.notifyRoleplayEvaluation.mock.invocationCallOrder[0]);
+  });
+
+  it('never publishes an evaluation notification when the claim fails', async () => {
+    m.sessionUpdateMany.mockResolvedValueOnce({ count: 0 });
+    expect((await evaluateRoleplay(null, makeForm())).success).toBe(false);
+    expect(m.notifyRoleplayEvaluation).not.toHaveBeenCalled();
   });
 });

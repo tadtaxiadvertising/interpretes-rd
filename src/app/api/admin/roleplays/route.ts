@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { privateRoleplayResponse as privateRoleplayJson } from '@/lib/roleplay/private-response';
 import { revalidatePath } from 'next/cache';
+import { notifyRoleplayAssignments } from '@/lib/notifications/notify-roleplay';
 import { revalidateCommittedRoleplayViews } from '@/lib/roleplay/admin-revalidation';
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
@@ -460,7 +461,7 @@ export async function POST(req: NextRequest) {
             throw new Error('Roleplay library snapshot archived during assignment');
           }
         }
-        const created: Array<{ id: string }> = [];
+        const created: Array<{ id: string; interpreterId: number }> = [];
         let skippedCount = 0;
         for (const interpreter of activeInterpreters) {
           // A transaction-scoped advisory lock serializes bulk and individual
@@ -506,7 +507,7 @@ export async function POST(req: NextRequest) {
             },
             select: { id: true },
           });
-          created.push(session);
+          created.push({ id: session.id, interpreterId: interpreter.id });
         }
         return { created, skippedCount };
       });
@@ -522,6 +523,7 @@ export async function POST(req: NextRequest) {
         }, { status: 409 });
       }
 
+      await notifyRoleplayAssignments(bulkResult.created);
       revalidateCommittedRoleplayViews(revalidatePath);
       return privateRoleplayJson({
         success: true,

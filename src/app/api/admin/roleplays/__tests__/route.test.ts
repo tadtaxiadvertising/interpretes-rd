@@ -13,6 +13,9 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+const notificationMocks = vi.hoisted(() => ({ notifyRoleplayAssignments: vi.fn() }));
+vi.mock('@/lib/notifications/notify-roleplay', () => notificationMocks);
+
 vi.mock('@/lib/auth/actions', () => ({
   validateAction: vi.fn(),
 }));
@@ -100,6 +103,7 @@ describe('POST /api/admin/roleplays', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    notificationMocks.notifyRoleplayAssignments.mockResolvedValue(undefined);
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://supabase.test';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
     process.env.FRONTEND_ORIGIN = 'https://front.test';
@@ -366,6 +370,7 @@ describe('POST /api/admin/roleplays', () => {
       }) as any);
       expect(res.status).toBe(200);
       expect((await res.json()).data.createdCount).toBe(2);
+      expect(notificationMocks.notifyRoleplayAssignments).toHaveBeenCalledWith([{ id: 'sess-1', interpreterId: 7 }, { id: 'sess-1', interpreterId: 8 }]);
     });
 
     it('normalizes a configured HTTPS origin without copying its trailing slash into invite links', async () => {
@@ -376,6 +381,7 @@ describe('POST /api/admin/roleplays', () => {
       }) as any);
       expect(res.status).toBe(200);
       expect((await res.json()).data.inviteLink).toBe('https://front.test/roleplays/sess-1');
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
     });
 
     it('rejects missing required fields', async () => {

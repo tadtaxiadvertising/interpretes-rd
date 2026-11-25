@@ -7,7 +7,7 @@ import { canBindRoleplayInvitation } from '@/lib/roleplay/invite-ownership';
 import { revalidatePath } from 'next/cache';
 import { createSignedUploadUrl, createSignedResponseUploadUrl, getBaseAudioPath, getResponseAudioPath, confirmUpload, validateAudioMetadata } from '@/lib/roleplay';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
-import { createNotification } from './notifications';
+import { notifyRoleplayEvaluation } from '@/lib/notifications/notify-roleplay';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
 import { cookies } from 'next/headers';
@@ -1405,40 +1405,23 @@ export async function evaluateRoleplay(_prevState: any, formData: FormData) {
       });
     }
 
-    // Send notification to interpreter if this was an interpreter session
-    if (result.interpreterId) {
+    await notifyRoleplayEvaluation({
+      sessionId: input.sessionId,
+      interpreterId: result.interpreterId,
+      recruitmentCandidateId: result.recruitmentCandidateId,
+      totalScore: result.totalScore,
+      actionRequired: result.actionRequired,
+      passed: score.passed,
+    });
+
+    // Cache failures after the commit must not report a saved evaluation as failed.
+    for (const path of ['/admin/roleplays', '/recruitment', '/qa', '/dashboard/roleplays']) {
       try {
-        const interpreter = await db.interpreter.findUnique({
-          where: { id: result.interpreterId },
-          select: { emailCorporativo: true, name: true },
-        });
-
-        if (interpreter?.emailCorporativo) {
-          const profile = await db.userProfile.findUnique({
-            where: { email: interpreter.emailCorporativo },
-            select: { id: true },
-          });
-
-          if (profile) {
-            const scoreDisplay = result.totalScore.toFixed(1);
-            await createNotification({
-              userId: profile.id,
-              title: 'Roleplay Evaluado',
-              message: `Tu roleplay "${interpreter.name}" fue evaluado: ${scoreDisplay}%. Acción: ${result.actionRequired}`,
-              type: result.totalScore >= 85 ? 'success' : (result.totalScore >= 70 ? 'info' : 'warning'),
-              link: `/dashboard/roleplays`,
-            });
-          }
-        }
-      } catch (notifyErr: unknown) {
-        logRoleplayActionError('Notification failed but roleplay evaluation saved:', notifyErr);
+        revalidatePath(path);
+      } catch (error) {
+        logRoleplayActionError('Roleplay evaluation saved but cache refresh failed:', error);
       }
     }
-
-    revalidatePath('/admin/roleplays');
-    revalidatePath('/recruitment');
-    revalidatePath('/qa');
-    revalidatePath('/dashboard/roleplays');
     return { success: true, data: result };
   } catch (error: unknown) {
     logRoleplayActionError('Evaluate Roleplay Error:', error);
