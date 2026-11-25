@@ -1,8 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
   identity: null as any,
+  openingQuery: vi.fn(),
   access: null as any,
   accessFindUnique: vi.fn(),
   accessUpdate: vi.fn(),
@@ -21,6 +22,7 @@ vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 
 vi.mock('@/lib/prisma', () => ({
   default: {
+    $queryRaw: m.openingQuery,
     roleplayAccess: {
       findUnique: m.accessFindUnique,
       update: m.accessUpdate,
@@ -70,6 +72,19 @@ describe('POST /api/roleplay/validate-invite race protection', () => {
     m.accessUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionUpdateMany.mockResolvedValue({ count: 1 });
     m.sessionFindUnique.mockResolvedValue({ status: 'STARTED' });
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('binds the valid invitation without exposing audio while the opening is pending', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValueOnce([{ required: true }]);
+    const response = await POST(makeRequest('secret-token'));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.data.baseAudioUrl).toBeNull();
+    expect(m.setCookie).toHaveBeenCalled();
   });
 
   it('rejects an invalid Bearer before reading invitations or binding a session', async () => {
