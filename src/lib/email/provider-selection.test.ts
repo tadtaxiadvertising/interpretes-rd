@@ -15,6 +15,11 @@ describe('provider selection gates', () => {
       expect(providerSelectionPaused({ ...paused, [key]: value === 'true' ? 'false' : 'true' })).toBe(false);
     }
   });
+  it('does not consider an invalid provider source safely paused', () => {
+    expect(providerSelectionPaused({ ...paused, EMAIL_PROVIDER_SOURCE: 'vualt' })).toBe(false);
+    expect(providerSelectionPaused({ ...paused, EMAIL_PROVIDER_SOURCE: 'environment' })).toBe(true);
+    expect(providerSelectionPaused({ ...paused, EMAIL_PROVIDER_SOURCE: 'vault' })).toBe(true);
+  });
   it('accepts only a UUID-shaped string', () => {
     expect(validProfileId('123e4567-e89b-42d3-a456-426614174000')).toBe(true);
     expect(validProfileId(null)).toBe(false);
@@ -33,6 +38,15 @@ describe('pause-aware provider preference', () => {
     expect(await changeProviderPreference(db, id, 'fixture', { ...paused, EMAIL_PROVIDER_SOURCE: 'vault' })).toBe('disabled');
     expect(db.$executeRaw).not.toHaveBeenCalled();
     expect(db.$queryRaw).toHaveBeenCalledTimes(3);
+  });
+  it('rejects preference changes for an invalid source without querying the database', async () => {
+    const db = { $queryRaw: vi.fn(), $executeRaw: vi.fn() };
+    const invalid = { ...paused, EMAIL_PROVIDER_SOURCE: 'vualt' };
+    expect(await canEditProviderPreference(db, invalid)).toBe(false);
+    expect(await changeProviderPreference(db, id, 'fixture', invalid)).toBe('disabled');
+    expect(await changeProviderPreference(db, null, 'fixture', invalid)).toBe('disabled');
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+    expect(db.$executeRaw).not.toHaveBeenCalled();
   });
   it('switches only under the selection lock without changing the pause', async () => {
     const db = { $queryRaw: vi.fn().mockResolvedValueOnce([{ paused: true }]).mockResolvedValueOnce([{ id }]), $executeRaw: vi.fn() };
