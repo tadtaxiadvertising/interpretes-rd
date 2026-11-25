@@ -2,9 +2,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { sendResendEmail } from './resend-transport';
 
+const reserve = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/prisma', () => ({ default: {} }));
+vi.mock('./provider-quota', () => ({ reserveProviderQuota: reserve }));
+
 const config = { apiKey: 're_fixture-only-123', from: 'office@example.test', replyTo: 'support@example.test' };
 const message = { recipient: 'candidate@example.test', subject: 'Intérpretes RD', text: 'Test', html: '<p>Test</p>' };
-afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); });
+afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.resetModules(); reserve.mockReset(); });
 
 describe('Resend transport', () => {
   it('sends one message via the fixed HTTPS endpoint and requires an ID', async () => {
@@ -39,6 +43,8 @@ describe('Resend transport', () => {
   });
   it('keeps dispatch disabled and sends the test only to the configured sender', async () => {
     vi.resetModules();
+    reserve.mockResolvedValueOnce('reserved');
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'environment');
     vi.stubEnv('OPERATIONAL_EMAIL_ENABLED', 'true');
     vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'resend');
     vi.stubEnv('RESEND_API_KEY', config.apiKey);
@@ -52,7 +58,10 @@ describe('Resend transport', () => {
     expect(request).not.toHaveBeenCalled();
     expect(await sendOperationalMailTest()).toBe('accepted');
     expect(JSON.parse(request.mock.calls[0][1].body).to).toEqual([config.from]);
+    expect(reserve).toHaveBeenCalledExactlyOnceWith({}, 'resend');
+    expect(reserve.mock.invocationCallOrder[0]).toBeLessThan(request.mock.invocationCallOrder[0]);
     expect(await sendOperationalMailTest()).toBe('rate_limited');
+    expect(reserve).toHaveBeenCalledTimes(1);
     expect(request).toHaveBeenCalledTimes(1);
   });
 });
