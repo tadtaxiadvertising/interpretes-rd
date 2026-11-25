@@ -1,3 +1,4 @@
+import { notificationPreferenceScope } from '@/lib/notifications/notification-preference-scope';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -173,7 +174,7 @@ export default async function CandidatePortalPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ThemeSwitcher />
-            {recipientIds.length > 0 && <NotificationBell initialNotifications={notifications} candidateOnly /> }
+            {recipientIds.length > 0 && <NotificationBell initialNotifications={notifications} preferenceScope={notificationPreferenceScope(identity.userId, 'candidate')} candidateOnly /> }
             <Link href="/postular" className="rounded-xl bg-[#002d72] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
               Continuar mi postulación
             </Link>
