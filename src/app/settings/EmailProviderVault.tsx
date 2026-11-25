@@ -1,13 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget, retireSavedEmailProvider, replaceSavedEmailProvider } from '@/app/actions/email-provider-vault';
+import { importConfiguredEmailProvider, addEmailProviderProfile, listEmailProviderProfiles, testSavedEmailProvider, confirmSavedProviderReceipt, setPreferredEmailProvider, saveEmailProviderBudget, retireSavedEmailProvider, replaceSavedEmailProvider } from '@/app/actions/email-provider-vault';
 import { providerCatalog, type ProviderId } from '@/lib/email/provider-catalog';
 import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 
 const statusText: Record<string, string> = {
+  imported: 'Configuración existente copiada al almacén. Falta probar y confirmar recepción. No se cambió el transporte activo.',
+  already_saved: 'Ya existe un perfil activo de este proveedor y remitente. No se sobrescribieron credenciales.',
+  blocked: 'Importación no permitida: comprueba la pausa y la configuración privada.',
   profile_test_blocked: 'No se inició la prueba: perfil desactivado o presupuesto agotado.',
   profile_retired: 'Perfil desactivado. El consumo y el historial se conservan.',
   profile_replaced: 'Nueva configuración guardada. Repite la prueba y confirma la recepción antes de seleccionarla.',
@@ -31,6 +34,8 @@ const statusText: Record<string, string> = {
 const messageFor = (status: string) => statusText[status] ?? 'Aceptación no confirmada. Revisa el proveedor y el buzón antes de repetir.';
 
 export default function EmailProviderVault() {
+  const [environmentImport, setEnvironmentImport] = useState<{ provider: 'brevo' | 'resend'; from: string } | undefined>();
+  const [confirmImport, setConfirmImport] = useState(false);
   const [choice, setChoice] = useState<ProviderId>('brevo');
   const [profiles, setProfiles] = useState<(ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null; retiredAt: string | null })[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -45,6 +50,8 @@ export default function EmailProviderVault() {
   async function load() {
     const result = await listEmailProviderProfiles();
     setProfiles(result.profiles);
+    setEnvironmentImport(result.environmentImport);
+    setConfirmImport(false);
     setPreferredId(result.preferredId ?? null);
     setSelectionPaused(result.selectionPaused === true);
     setPreferenceEditable(result.preferenceEditable === true);
@@ -63,6 +70,14 @@ export default function EmailProviderVault() {
       <h3 id="provider-vault-title" className="font-semibold">Perfiles de proveedores guardados</h3>
       <p>Guarda las credenciales cifradas de tus proveedores. Puedes guardar una preferencia verificada. Con el origen vault, la preferencia se utiliza en el piloto controlado. No se muestran claves guardadas.</p>
       <button type="button" disabled={pending} onClick={() => run(load)} className="rounded-lg border border-[var(--border)] px-3 py-2">Consultar perfiles</button>
+      {ready && environmentImport && (
+        <div className="rounded-lg border border-[var(--border)] p-3 space-y-2">
+          <p className="font-semibold">Aprovechar configuración existente</p>
+          <p>{providerCatalog[environmentImport.provider].label} · {environmentImport.from}</p>
+          <p>Copia la configuración del servidor de forma cifrada sin volver a introducir la clave. No cambia el proveedor activo ni envía mensajes.</p>
+          {!confirmImport ? <button type="button" disabled={pending} onClick={() => setConfirmImport(true)} className="rounded-lg border border-[var(--border)] px-3 py-2">Importar configuración existente</button> : <div className="flex flex-wrap gap-2"><button type="button" disabled={pending} onClick={() => run(async () => { const status = await importConfiguredEmailProvider(); await load(); setMessage(messageFor(status)); })} className="rounded-lg bg-blue-700 text-white px-3 py-2">Confirmar copia cifrada</button><button type="button" disabled={pending} onClick={() => setConfirmImport(false)} className="underline">Cancelar</button></div>}
+        </div>
+      )}
       {ready && (
         <form className="space-y-2" autoComplete="off" onSubmit={event => {
           event.preventDefault();
