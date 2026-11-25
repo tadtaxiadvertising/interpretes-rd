@@ -33,6 +33,14 @@ describe('preferred provider runtime', () => {
     expect(await runtimeMailConfigured(db([row]), general)).toBe(false);
     expect(await resolveOperationalMailEnv(db([row]), general)).toMatchObject({ OPERATIONAL_EMAIL_PROVIDER: 'vault_unavailable' });
   });
+  it('rejects an invalid source without reading the vault or using environment credentials', async () => {
+    const reader = db([row]);
+    const invalid = { ...env, EMAIL_PROVIDER_SOURCE: 'vualt', OPERATIONAL_EMAIL_PROVIDER: 'resend', RESEND_API_KEY: apiKey };
+    expect(await runtimeMailConfigured(reader, invalid)).toBe(false);
+    expect(await resolveOperationalMailEnv(reader, invalid)).toMatchObject({ OPERATIONAL_EMAIL_PROVIDER: 'invalid_source' });
+    expect(reader.$queryRaw).not.toHaveBeenCalled();
+    expect(await runtimeMailConfigured(reader, { ...invalid, EMAIL_PROVIDER_SOURCE: 'environment' })).toBe(true);
+  });
   it('never reserves after the selected profile changes', async () => {
     const reader = db([]);
     expect(await reserveSelectedProvider(reader, { ...row, apiKey })).toBe(false);
