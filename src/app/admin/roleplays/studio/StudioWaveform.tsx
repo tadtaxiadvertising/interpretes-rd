@@ -194,23 +194,23 @@ export default function StudioWaveform({
   };
 
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-950/80 p-4" data-testid="audio-studio-waveform">
+    <div className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4" data-testid="audio-studio-waveform">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-white">Línea de tiempo del audio</p>
-        <p className="text-xs text-slate-400">
+        <p className="text-sm font-semibold text-[var(--foreground)]">Línea de tiempo del audio</p>
+        <p className="text-xs text-[var(--text-secondary)]">
           {status === 'ready' ? 'Ondas generadas localmente' :
             status === 'loading' ? 'Preparando ondas…' :
             status === 'limited' ? 'Vista de tiempo simplificada' : 'Vista de ondas no disponible'}
         </p>
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-2 text-slate-300">
+        <label className="flex items-center gap-2 text-[var(--text-secondary)]">
           Detalle
           <select
             aria-label="Zoom de la línea de tiempo"
             value={zoom}
             onChange={event => centerOnPlayhead(Number(event.currentTarget.value))}
-            className="rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white"
+            className="rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-[var(--theme-control-text)]"
           >
 {availableZoomLevels.map(level => (
               <option key={level} value={level}>
@@ -220,34 +220,34 @@ export default function StudioWaveform({
           </select>
         </label>
         <button type="button" onClick={() => pan(-1)} disabled={zoom === 1 || windowStart <= 0}
-          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
+          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] disabled:opacity-40">
           Anterior
         </button>
         <button type="button" onClick={() => pan(1)} disabled={zoom === 1 || windowStart >= maxStart}
-          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
+          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] disabled:opacity-40">
           Siguiente
         </button>
         <button type="button" onClick={() => centerOnPlayhead(zoom)} disabled={zoom === 1}
-          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200 disabled:opacity-40">
+          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] disabled:opacity-40">
           Ir al cursor
         </button>
         <button type="button" onClick={() => onSeek(Math.max(0, safeTime - 5))}
           aria-label="Retroceder cinco segundos"
-          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200">
+          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)]">
           −5 s
         </button>
         <button type="button" onClick={() => onSeek(Math.min(safeDuration, safeTime + 5))}
           aria-label="Avanzar cinco segundos"
-          className="rounded-md border border-white/15 px-2 py-1.5 text-slate-200">
+          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)]">
           +5 s
         </button>
-        <span className="text-slate-400">Ventana: {timeLabel(windowStart)}–{timeLabel(windowEnd)}</span>
+        <span className="text-[var(--text-secondary)]">Ventana: {timeLabel(windowStart)}–{timeLabel(windowEnd)}</span>
       </div>
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         preserveAspectRatio="none"
         aria-hidden="true"
-        className="block h-24 w-full cursor-crosshair overflow-hidden rounded-lg bg-slate-900"
+        className="block h-24 w-full cursor-crosshair overflow-hidden rounded-lg bg-[var(--theme-surface-muted)]"
         onClick={event => {
           const bounds = event.currentTarget.getBoundingClientRect();
           if (!(bounds.width > 0)) return;
@@ -256,7 +256,7 @@ export default function StudioWaveform({
         }}
       >
         <line x1={0} y1={HALF_HEIGHT} x2={CHART_WIDTH} y2={HALF_HEIGHT}
-          stroke="currentColor" className="text-slate-700" strokeWidth={1}/>
+          stroke="currentColor" className="text-[var(--theme-control-border)]" strokeWidth={1}/>
         {bars.map((peak, index) => {
           const width = CHART_WIDTH / bars.length;
           const height = Math.max(3, Math.min(1, peak) * (CHART_HEIGHT - 10));
@@ -264,7 +264,7 @@ export default function StudioWaveform({
             <rect key={index}
               x={index * width} y={(CHART_HEIGHT - height) / 2}
               width={Math.max(0.6, width - 0.7)} height={height}
-              className="fill-blue-400/80"/>
+              className="fill-[var(--theme-link)]"/>
           );
         })}
         {segments.filter(segment =>
@@ -275,11 +275,11 @@ export default function StudioWaveform({
           <rect key={segment.id} data-testid="studio-window-segment"
             x={(Math.max(segment.start, windowStart) - windowStart) / windowSeconds * CHART_WIDTH} y={0}
             width={(Math.min(segment.end, windowEnd) - Math.max(segment.start, windowStart)) / windowSeconds * CHART_WIDTH}
-            height={CHART_HEIGHT} className="fill-emerald-400/25"/>
+            height={CHART_HEIGHT} className="fill-[var(--theme-success)] opacity-25"/>
         ))}
         {playheadVisible && (
           <line x1={progressX} y1={0} x2={progressX} y2={CHART_HEIGHT}
-            strokeWidth={2.5} className="stroke-amber-300"/>
+            strokeWidth={2.5} className="stroke-[var(--theme-warning)]"/>
         )}
       </svg>
       <input
@@ -293,24 +293,24 @@ export default function StudioWaveform({
           const value = event.currentTarget.valueAsNumber;
           if (Number.isFinite(value)) onSeek(Math.min(safeDuration, Math.max(0, value)));
         }}
-        className="mt-2 w-full cursor-pointer accent-blue-400"
+        className="mt-2 w-full cursor-pointer accent-[var(--theme-link)]"
       />
-      <div className="flex items-center justify-between text-xs text-slate-400">
+      <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
         <span aria-label="Tiempo exacto del cursor">{preciseTimeLabel(safeTime)}</span>
         <span>{timeLabel(safeDuration)}</span>
       </div>
       {!playheadVisible && (
-        <p className="mt-1 text-xs text-amber-200">El cursor está fuera de esta ventana. Usa «Ir al cursor» para localizarlo.</p>
+        <p className="mt-1 text-xs text-[var(--theme-warning)]">El cursor está fuera de esta ventana. Usa «Ir al cursor» para localizarlo.</p>
       )}
       {status === 'limited' && (
-        <p className="mt-3 text-xs leading-5 text-amber-200">
+        <p className="mt-3 text-xs leading-5 text-[var(--theme-warning)]">
           Para proteger la memoria del navegador, las ondas solo se calculan en grabaciones
           de hasta 4 minutos y 8 MiB y cuando su tamaño estimado tras decodificar es seguro.
           La línea de tiempo y el zoom siguen disponibles sin decodificar el audio.
         </p>
       )}
       {status === 'unavailable' && (
-        <p className="mt-3 text-xs text-slate-400">
+        <p className="mt-3 text-xs text-[var(--text-secondary)]">
           No se pudo dibujar el audio en este navegador. Puedes seguir escuchando,
           marcando y exportando los fragmentos normalmente.
         </p>

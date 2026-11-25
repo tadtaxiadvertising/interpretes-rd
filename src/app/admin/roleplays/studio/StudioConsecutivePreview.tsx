@@ -184,26 +184,26 @@ export default function StudioConsecutivePreview({
   return (
     <section aria-label="Simulador consecutivo de prueba" className="space-y-4 rounded-2xl border border-indigo-400/25 bg-indigo-500/5 p-5">
       <div>
-        <h2 className="text-lg font-bold text-white">Simulador consecutivo · vista previa</h2>
-        <p className="mt-1 text-sm leading-5 text-slate-300">
+        <h2 className="text-lg font-bold text-[var(--foreground)]">Simulador consecutivo · vista previa</h2>
+        <p className="mt-1 text-sm leading-5 text-[var(--text-secondary)]">
           Reproduce cada intervención, deja una pausa para interpretar y permite pedir repetición.
           Solo funciona en este navegador del administrador: no graba, no crea sesiones ni modifica QA.
         </p>
       </div>
       {result.error ? (
-        <p role="status" className="text-sm text-amber-300">{result.error}</p>
+        <p role="status" className="text-sm text-[var(--theme-warning)]">{result.error}</p>
       ) : (
         <>
           {result.plan!.excludedInterpreterCount > 0 && (
-            <p className="text-sm text-amber-300">
+            <p className="text-sm text-[var(--theme-warning)]">
               Se excluyen {result.plan!.excludedInterpreterCount} fragmentos del intérprete original de esta simulación.
               Debes quitarlos también del editor antes de exportar.
             </p>
           )}
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-sm text-slate-200">Pausa por duración (×)
+            <label className="text-sm text-[var(--foreground)]">Pausa por duración (×)
               <select aria-label="Multiplicador de pausa" value={multiplier} onChange={e => setMultiplier(Number(e.currentTarget.value))}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                 <option value={0.5}>0.5×</option>
                 <option value={1}>1×</option>
                 <option value={1.2}>1.2×</option>
@@ -213,22 +213,22 @@ export default function StudioConsecutivePreview({
                 <option value={3}>3×</option>
               </select>
             </label>
-            <label className="text-sm text-slate-200">Segundos extra
+            <label className="text-sm text-[var(--foreground)]">Segundos extra
               <select aria-label="Pausa fija" value={fixedSeconds} onChange={e => setFixedSeconds(Number(e.currentTarget.value))}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                 {[0, 1, 3, 5, 10, 15, 30].map(n => <option key={n} value={n}>{n} s</option>)}
               </select>
             </label>
-            <label className="text-sm text-slate-200">Velocidad de escucha
+            <label className="text-sm text-[var(--foreground)]">Velocidad de escucha
               <select aria-label="Velocidad de escucha" value={speed} onChange={e => setSpeed(Number(e.currentTarget.value))}
-                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                 <option value={0.85}>0.85×</option>
                 <option value={1}>1× (original)</option>
                 <option value={1.15}>1.15×</option>
               </select>
             </label>
           </div>
-          <label className="flex items-center gap-2 text-sm text-slate-200">
+          <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
             <input type="checkbox" checked={autoAdvance} onChange={e => setAutoAdvance(e.currentTarget.checked)} />
             Pasar automáticamente al siguiente turno al terminar la pausa
           </label>
@@ -263,13 +263,13 @@ export default function StudioConsecutivePreview({
               setPhase('error');
             }}
           />
-          <div className="rounded-xl border border-white/10 bg-slate-950/70 p-4">
-            <p className="font-semibold text-white">Turno {index + 1} de {turns.length} · {turn?.title}</p>
-            <p className="mt-1 text-sm text-slate-400">
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4">
+            <p className="font-semibold text-[var(--foreground)]">Turno {index + 1} de {turns.length} · {turn?.title}</p>
+            <p className="mt-1 text-sm text-[var(--text-secondary)]">
               {timeLabel(turn?.start ?? 0)} – {timeLabel(turn?.end ?? 0)}
               {' · '}Repeticiones solicitadas: {repeatCount}
             </p>
-            <p role="status" aria-live="polite" className="mt-3 text-sm font-medium text-indigo-200">
+            <p role="status" aria-live="polite" className="mt-3 text-sm font-medium text-[var(--theme-purple)]">
               {phase === 'idle' && 'Listo para practicar'}
               {phase === 'playing' && 'Escuchando intervención'}
               {phase === 'practice' && 'Tu turno para interpretar: ' + Math.ceil(remaining) + ' s'}
@@ -287,19 +287,19 @@ export default function StudioConsecutivePreview({
                 {busy ? 'Detener simulación' : phase === 'ready' ? 'Continuar' : 'Reproducir turno'}
               </button>
               <button type="button" onClick={() => advance(-1)} disabled={!canPlay || index === 0}
-                className="rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-200 disabled:opacity-40">Anterior</button>
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] disabled:opacity-40">Anterior</button>
               <button type="button" onClick={() => advance(1)} disabled={!canPlay || index >= turns.length - 1}
-                className="rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-200 disabled:opacity-40">Siguiente</button>
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] disabled:opacity-40">Siguiente</button>
               <button type="button" onClick={requestRepetition} disabled={!canPlay}
-                className="rounded-lg border border-amber-400/30 px-3 py-2 text-sm text-amber-200 disabled:opacity-40">
+                className="rounded-lg border border-amber-400/30 px-3 py-2 text-sm text-[var(--theme-warning)] disabled:opacity-40">
                 Pedir repetición (4,5 s)
               </button>
-              <button type="button" onClick={reset} className="rounded-lg border border-white/15 px-3 py-2 text-sm text-slate-200">
+              <button type="button" onClick={reset} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)]">
                 Reiniciar
               </button>
             </div>
           </div>
-          <p className="text-xs leading-5 text-slate-400">
+          <p className="text-xs leading-5 text-[var(--text-secondary)]">
             La velocidad cambia solamente la escucha en esta vista previa. No modifica el archivo MP3,
             la biblioteca, las grabaciones ni las puntuaciones de QA.
           </p>

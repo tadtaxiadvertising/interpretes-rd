@@ -1903,9 +1903,9 @@ export default function RoleplayStudioPage() {
         <div>
           <Link href="/admin/roleplays" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
-          }} className="mb-3 inline-flex items-center gap-2 text-sm text-blue-300"><ArrowLeft size={16} /> Volver a roleplays</Link>
-          <h1 className="text-3xl font-bold text-white">Estudio de audio para roleplays</h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-400">
+          }} className="mb-3 inline-flex items-center gap-2 text-sm text-[var(--theme-link)]"><ArrowLeft size={16} /> Volver a roleplays</Link>
+          <h1 className="text-3xl font-bold text-[var(--foreground)]">Estudio de audio para roleplays</h1>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--text-secondary)]">
             Prepara intervenciones desde una grabación de audio o video sin crear sesiones
             ni modificar audios publicados. Los MP3 pequeños permiten exportar el ZIP;
             fuentes extensas se revisan localmente. Los MP3 pequeños también se preparan sin subirlos,
@@ -1915,19 +1915,19 @@ export default function RoleplayStudioPage() {
         <div className="flex flex-wrap gap-2">
           <Link href="/admin/roleplays/settings" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
-          }} className="rounded-xl border border-white/15 px-4 py-3 text-sm font-semibold text-white hover:bg-white/5">Configurar Audio Studio</Link>
+          }} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)]">Configurar Audio Studio</Link>
           <Link href="/admin/roleplays/new" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
           }} className="rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white hover:bg-blue-500">Importar y asignar</Link>
         </div>
       </header>
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-        <label htmlFor="studio-audio" className="block text-sm font-semibold text-white">
+      <section className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3">
+        <label htmlFor="studio-audio" className="block text-sm font-semibold text-[var(--foreground)]">
           Grabación original MP3 o video/audio largo (local, hasta 8 GiB)
         </label>
         <input id="studio-audio" type="file"
           accept=".mp3,.m4a,.wav,.aac,.ogg,.oga,.opus,.flac,.mp4,.m4v,.mov,.webm,.mkv,audio/*,video/*"
-          className="mt-2 block w-full text-sm text-slate-300"
+          className="mt-2 block w-full text-sm text-[var(--text-secondary)]"
           onChange={event => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
@@ -1939,24 +1939,24 @@ export default function RoleplayStudioPage() {
         <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-emerald-100">Importar desde HappyScribe</p>
-              <p className="mt-1 text-xs text-slate-400">
+              <p className="text-sm font-semibold text-[var(--theme-success)]">Importar desde HappyScribe</p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">
                 Importa el MP3 original desde HappyScribe o selecciónalo en tu equipo. Después importa los tiempos y textos; revisa las voces antes de excluir al intérprete original.
               </p>
             </div>
             <button type="button" onClick={() => void loadHappyScribeItems()}
               disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
-              className="rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-emerald-100 disabled:opacity-50">
+              className="rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-[var(--theme-success)] disabled:opacity-50">
               {happyScribeLoading ? 'Consultando…' : 'Actualizar biblioteca'}
             </button>
           </div>
           {happyScribeConfigUnavailable && (
-            <div role="alert" className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-amber-100">
+            <div role="alert" className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-sm text-[var(--theme-warning)]">
               <p>La biblioteca no está disponible por la configuración del servidor. No se ha descargado ningún audio ni transcripción.</p>
-              <Link href="/admin/roleplays/settings" className="mt-2 inline-block font-semibold text-blue-300 underline hover:text-blue-200">
+              <Link href="/admin/roleplays/settings" className="mt-2 inline-block font-semibold text-[var(--theme-link)] underline hover:text-[var(--theme-link)]">
                 Revisar configuración de Audio Studio
               </Link>
-              <p className="mt-2 text-xs text-amber-200">
+              <p className="mt-2 text-xs text-[var(--theme-warning)]">
                 Si ya existe una credencial cifrada, recupera la clave original de Easypanel. No la sustituyas por una nueva sin recuperar la anterior.
               </p>
             </div>
@@ -1976,7 +1976,7 @@ export default function RoleplayStudioPage() {
                   setHappyScribeMediaImporting(false);
                   setHappyScribeSelectedId(event.currentTarget.value);
                 }}
-                className="min-w-0 flex-1 rounded-lg border border-white/15 bg-slate-900 p-2 text-sm text-white">
+                className="min-w-0 flex-1 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]">
                 <option value="">Selecciona una transcripción</option>
                 {happyScribeItems.map(item => (
                   <option key={item.id} value={item.id} disabled={!['automatic_done', 'done'].includes(item.state)}>
@@ -1988,7 +1988,7 @@ export default function RoleplayStudioPage() {
                 <button type="button" onClick={() => void importHappyScribeAudio()}
                   disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
                     happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
-                  className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-emerald-100 disabled:opacity-50">
+                  className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-[var(--theme-success)] disabled:opacity-50">
                   {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
                 </button>
               )}
@@ -2000,7 +2000,7 @@ export default function RoleplayStudioPage() {
                   // The old request's finally block checks controller identity.
                   setHappyScribeMediaImporting(false);
                   setNotice('Descarga de audio cancelada. Puedes seguir trabajando con la grabación actual.');
-                }} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
+                }} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-[var(--theme-warning)]">
                   Cancelar descarga
                 </button>
               )}
@@ -2016,26 +2016,26 @@ export default function RoleplayStudioPage() {
                   subtitleImportRevision.current += 1;
                   setHappyScribeImporting(false);
                 }}
-                  className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-amber-100">
+                  className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm text-[var(--theme-warning)]">
                   Cancelar transcripción
                 </button>
               )}
             </div>
           )}
           {happyScribeItems.length > 0 && (
-            <p className="mt-2 text-xs text-slate-400">
+            <p className="mt-2 text-xs text-[var(--text-secondary)]">
               {happyScribeItems.length} transcripciones cargadas · {happyScribeHasMore ? 'hay más resultados disponibles' : 'no hay más páginas disponibles'} · sin importar ni descargar archivos.
             </p>
           )}
           {happyScribeHasMore && (
             <button type="button" onClick={() => void loadHappyScribeItems(happyScribePage + 1)}
               disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
-              className="mt-2 rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-emerald-100 disabled:opacity-50">
+              className="mt-2 rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-[var(--theme-success)] disabled:opacity-50">
               {happyScribeLoading ? 'Consultando…' : 'Cargar más transcripciones (50)'}
             </button>
           )}
           {happyScribeItems.length === 0 && !happyScribeLoading && (
-            <p className="mt-2 text-xs text-slate-500">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
+            <p className="mt-2 text-xs text-[var(--text-tertiary)]">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
           )}
         </div>
 
@@ -2075,9 +2075,9 @@ export default function RoleplayStudioPage() {
           }}
           className="hidden" />}
             {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
-              <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-white/15 bg-slate-950/60 p-3">
-                <legend className="px-1 text-sm font-semibold text-white">Dónde preparar el ZIP</legend>
-                <label className="flex items-start gap-2 text-sm text-cyan-100">
+              <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar el ZIP</legend>
+                <label className="flex items-start gap-2 text-sm text-[var(--theme-info)]">
                   <input type="radio" name="studio-export-location"
                     checked={!allowServerZipExport}
                     onChange={() => {
@@ -2095,7 +2095,7 @@ export default function RoleplayStudioPage() {
                     className="mt-1 accent-cyan-400"/>
                   Local (predeterminado): no subir el MP3. Descarga el proyecto JSON y genera el ZIP en tu equipo.
                 </label>
-                <label className="mt-2 flex items-start gap-2 text-sm text-slate-200">
+                <label className="mt-2 flex items-start gap-2 text-sm text-[var(--foreground)]">
                   <input type="radio" name="studio-export-location"
                     checked={allowServerZipExport}
                     onChange={() => {
@@ -2116,9 +2116,9 @@ export default function RoleplayStudioPage() {
               </fieldset>
             )}
             {localOnly && duration > 0 && (
-              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-cyan-100">
+              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-[var(--theme-info)]">
                 {hasCompound && (
-                  <p className="mb-2 font-semibold text-amber-100">
+                  <p className="mb-2 font-semibold text-[var(--theme-warning)]">
                     Proyecto compuesto v2: la exportación local se ha activado automáticamente.
                     Usa un exportador actualizado para que el MP3 omita las pausas; la grabación no se envía al servidor.
                   </p>
@@ -2127,14 +2127,14 @@ export default function RoleplayStudioPage() {
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
                 El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
                 FFmpeg en tu equipo; esta opción no convierte audio en el navegador.
-                <p className="mt-2 font-medium text-white">
+                <p className="mt-2 font-medium text-[var(--foreground)]">
                   Paso 1: descarga el proyecto JSON. Paso 2: genera el ZIP junto a tu grabación
                   original en el exportador local. Paso 3: importa el ZIP desde «Crear roleplay».
                 </p>
                 <a
                   href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
                   target="_blank" rel="noopener noreferrer"
-                  className="mt-1 inline-block font-semibold text-cyan-200 underline underline-offset-2">
+                  className="mt-1 inline-block font-semibold text-[var(--theme-info)] underline underline-offset-2">
                   Cómo obtener el exportador local actualizado
                 </a>
                 <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
@@ -2148,7 +2148,7 @@ export default function RoleplayStudioPage() {
                   <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
                     <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
                     <p className="mt-1">En un equipo con el repositorio instalado, ejecuta:</p>
-                    <code className="mt-1 block break-all rounded bg-slate-950/70 p-2 text-[11px] text-slate-200">
+                    <code className="mt-1 block break-all rounded bg-[var(--theme-surface-muted)] p-2 text-[11px] text-[var(--foreground)]">
                       node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
                     </code>
                   </details>
@@ -2167,35 +2167,35 @@ export default function RoleplayStudioPage() {
                 }}
               />
             )}
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--text-secondary)]">
               Duración: {formatTime(duration)} · Navega por la línea de tiempo
               y marca los límites en el cursor. El zoom no decodifica el archivo completo.
             </p>
             {segments.length > 0 && (
-              <section aria-label="Resumen de cortes y espacios" className="rounded-lg border border-cyan-300/15 bg-slate-950/50 p-2.5">
+              <section aria-label="Resumen de cortes y espacios" className="rounded-lg border border-cyan-300/15 bg-[var(--theme-surface-muted)] p-2.5">
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                  <span className="font-semibold text-cyan-100">
+                  <span className="font-semibold text-[var(--theme-info)]">
                     Seleccionado: {formatTime(coverage.selectedSeconds)}
                   </span>
-                  <span className="text-slate-300">
+                  <span className="text-[var(--text-secondary)]">
                     Fuera de cortes: {formatTime(coverage.excludedSeconds)}
                   </span>
-                  <span className="text-slate-400">
+                  <span className="text-[var(--text-secondary)]">
                     {segments.length} intervenciones
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   El paquete reúne únicamente los cortes seleccionados, sin los espacios intermedios.
                   Los intervalos fuera de cortes pueden contener conversaciones: no son silencios detectados.
                 </p>
                 {coverage.hasOverlaps && (
-                  <p className="mt-1 text-xs font-semibold text-amber-200">
+                  <p className="mt-1 text-xs font-semibold text-[var(--theme-warning)]">
                     Hay intervenciones solapadas. Corrige sus límites antes de exportar.
                   </p>
                 )}
                 {largestGaps.length > 0 && (
                   <details className="mt-2">
-                    <summary className="cursor-pointer text-xs font-medium text-cyan-200">
+                    <summary className="cursor-pointer text-xs font-medium text-[var(--theme-info)]">
                       Revisar los {largestGaps.length} espacios sin cortes más extensos (al menos 5 s)
                     </summary>
                     <div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
@@ -2203,9 +2203,9 @@ export default function RoleplayStudioPage() {
                         <button key={`${gap.start}-${gap.end}`} type="button"
                           onClick={() => seekAudio(gap.start + Math.min(2, gap.duration / 2))}
                           aria-label={`Escuchar espacio sin cortes desde ${formatTime(gap.start)}`}
-                          className="rounded border border-white/15 px-2 py-1 text-xs text-slate-300 hover:border-cyan-300/40">
+                          className="rounded border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)] hover:border-cyan-300/40">
                           {formatTime(gap.start)}–{formatTime(gap.end)}
-                          <span className="ml-1 text-cyan-200">({formatTime(gap.duration)})</span>
+                          <span className="ml-1 text-[var(--theme-info)]">({formatTime(gap.duration)})</span>
                         </button>
                       ))}
                     </div>
@@ -2244,15 +2244,15 @@ export default function RoleplayStudioPage() {
               />
             )}
             {!sourceRequiresLocal && <div className="rounded-xl border border-violet-400/20 bg-violet-400/5 p-4">
-              <h2 className="text-sm font-bold text-violet-100">Respaldo opcional: detección en servidor</h2>
-              <p className="mt-2 text-xs leading-5 text-slate-300">
+              <h2 className="text-sm font-bold text-[var(--theme-purple)]">Respaldo opcional: detección en servidor</h2>
+              <p className="mt-2 text-xs leading-5 text-[var(--text-secondary)]">
                 Utiliza el detector local anterior para no subir la grabación ni consumir
                 recursos del servidor. Si el navegador no puede decodificar el MP3,
                 puedes autorizar un análisis temporal con FFmpeg en nuestro servidor.
                 No transcribe ni identifica al médico, paciente o intérprete.
                 No se guarda en la biblioteca, pero el archivo sí se transmite para procesarlo.
               </p>
-              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-200">
+              <label className="mt-3 flex items-start gap-2 text-xs leading-5 text-[var(--foreground)]">
                 <input type="checkbox" className="mt-1 accent-violet-400"
                   checked={serverConsent}
                   onChange={event => {
@@ -2279,12 +2279,12 @@ export default function RoleplayStudioPage() {
               </label>
               <button type="button" onClick={() => void analyzeSilences()}
                 disabled={!serverConsent || analyzingSilences || busy || draftBusy}
-                className="mt-3 rounded-lg border border-violet-300/30 bg-violet-500/20 px-4 py-2 text-sm font-semibold text-violet-100 disabled:opacity-50">
+                className="mt-3 rounded-lg border border-violet-300/30 bg-violet-500/20 px-4 py-2 text-sm font-semibold text-[var(--theme-purple)] disabled:opacity-50">
                 {analyzingSilences ? 'Analizando pausas…' : 'Detectar pausas en servidor'}
               </button>
               {detectedSilences.length > 0 && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-sm text-slate-200">
+                  <p className="text-sm text-[var(--foreground)]">
                     {detectedSilences.length} pausas detectadas · {suggestedClips.length} cortes sugeridos
                     {omittedSuggestions > 0 ? ` · ${omittedSuggestions} intervalos omitidos por los límites` : ''}
                   </p>
@@ -2292,19 +2292,19 @@ export default function RoleplayStudioPage() {
                     {detectedSilences.slice(0, 40).map((pause, index) => (
                       <button key={index} type="button"
                         onClick={() => seekAudio((pause.start + pause.end) / 2)}
-                        className="rounded-md border border-white/10 bg-slate-950/70 px-2 py-1 text-xs text-blue-200">
+                        className="rounded-md border border-[var(--border)] bg-[var(--theme-surface-muted)] px-2 py-1 text-xs text-[var(--theme-link)]">
                         Pausa {index + 1}: {formatTime(pause.start)}–{formatTime(pause.end)}
                       </button>
                     ))}
                   </div>
                   {detectedSilences.length > 40 && (
-                    <p className="text-xs text-slate-400">Se muestran las primeras 40 pausas. Navega el resto con la línea de tiempo.</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Se muestran las primeras 40 pausas. Navega el resto con la línea de tiempo.</p>
                   )}
                 </div>
               )}
               {suggestedClips.length > 0 && (
                 <div className="mt-3 space-y-2">
-                  <p className="text-xs leading-5 text-amber-100">
+                  <p className="text-xs leading-5 text-[var(--theme-warning)]">
                     Las sugerencias pueden dividir frases o incluir la voz del intérprete original.
                     Aplicarlas reemplazará los segmentos actuales; los títulos e idiomas quedarán por revisar.
                   </p>
@@ -2317,22 +2317,22 @@ export default function RoleplayStudioPage() {
               )}
             </div>}
             <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-              <label htmlFor="studio-transcript" className="block text-sm font-semibold text-blue-100">
+              <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
               </label>
-              <p className="mt-1 text-xs text-blue-100">
+              <p className="mt-1 text-xs text-[var(--theme-link)]">
                 ¿HappyScribe descargó un .md? No es un proyecto JSON ni un archivo de subtítulos con tiempos.
                 Usa «Importar transcripción» en la biblioteca HappyScribe de arriba (solicita SRT automáticamente),
                 o exporta un .srt desde HappyScribe. No es necesario convertir archivos manualmente.
               </p>
               <input id="studio-transcript" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip"
-                className="mt-2 block w-full text-sm text-slate-300"
+                className="mt-2 block w-full text-sm text-[var(--text-secondary)]"
                 onChange={event => {
                   const file = event.currentTarget.files?.[0];
                   event.currentTarget.value = '';
                   if (file) void importSubtitles(file);
                 }}/>
-              <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
+              <label className="mt-3 flex items-center gap-2 text-sm text-[var(--foreground)]">
                 <input type="checkbox" checked={excludeInterpreter}
                   onChange={event => {
                     subtitleImportRevision.current += 1;
@@ -2342,7 +2342,7 @@ export default function RoleplayStudioPage() {
                   className="h-4 w-4 accent-blue-500"/>
                 Excluir intervenciones del intérprete original al importar
               </label>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-[var(--text-secondary)]">
                 El filtro solo reconoce etiquetas genéricas exactas (por ejemplo, Interpreter o Intérprete).
                 Revisa manualmente cualquier hablante desconocido. Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
                 Los nombres personales se reemplazan por títulos neutrales. La transcripción se muestra
@@ -2354,18 +2354,18 @@ export default function RoleplayStudioPage() {
       </section>
       {audio && duration > 0 && reviewCues.length > 0 && (
         <section className="space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
-          <h2 className="text-lg font-bold text-white">Seleccionar turnos de la transcripción</h2>
-          <p className="text-sm text-slate-300">
+          <h2 className="text-lg font-bold text-[var(--foreground)]">Seleccionar turnos de la transcripción</h2>
+          <p className="text-sm text-[var(--text-secondary)]">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
             (máximo {ROLEPLAY_MAX_SCENARIOS}). La propuesta abarca distintos momentos de la grabación.
             Escucha y ajusta los turnos; después pulsa «Aplicar» para revisar hablantes e idiomas.
             Tus cortes actuales no se reemplazan sin confirmación.
           </p>
-          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-slate-300">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
             <input type="search" aria-label="Buscar turnos en transcripción"
               value={cueSearch} placeholder="Buscar texto, hablante o número…"
               onChange={event => { setCueSearch(event.currentTarget.value); setCuePage(0); }}
-              className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white placeholder:text-slate-500"/>
+              className="min-w-0 flex-1 rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]"/>
             <label className="flex shrink-0 items-center gap-1.5">
               <input type="checkbox" checked={showOnlySelectedCues}
                 onChange={event => { setShowOnlySelectedCues(event.currentTarget.checked); setShowCueReviewAlertsOnly(false); setCuePage(0); }}
@@ -2375,21 +2375,21 @@ export default function RoleplayStudioPage() {
             <button type="button"
               onClick={() => completeFilteredCueSelection(visibleCues.map(entry => entry.index))}
               disabled={visibleCues.length === 0 || chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS}
-              className="rounded border border-amber-300/30 px-2 py-1 text-xs font-semibold text-amber-100 disabled:opacity-40">
+              className="rounded border border-amber-300/30 px-2 py-1 text-xs font-semibold text-[var(--theme-warning)] disabled:opacity-40">
               Completar con turnos compatibles de esta página
             </button>
             <button type="button" onClick={restoreBalancedCueSuggestion}
               disabled={reviewCues.length === 0}
-              className="rounded border border-blue-300/30 px-2 py-1 text-xs font-semibold text-blue-100 disabled:opacity-40">
+              className="rounded border border-blue-300/30 px-2 py-1 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-40">
               Recuperar propuesta equilibrada
             </button>
             <button type="button" onClick={clearCueSelection}
               disabled={chosenCueIndices.length === 0}
-              className="rounded border border-white/15 px-2 py-1 text-xs disabled:opacity-40">
+              className="rounded border border-[var(--border)] px-2 py-1 text-xs disabled:opacity-40">
               Limpiar selección SRT
             </button>
           </div>
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--text-secondary)]">
             <span>
               {filteredCueEntries.length
                 ? `Mostrando ${currentCuePage * CUES_PER_PAGE + 1}–${Math.min((currentCuePage + 1) * CUES_PER_PAGE, filteredCueEntries.length)} de ${filteredCueEntries.length} turnos`
@@ -2399,7 +2399,7 @@ export default function RoleplayStudioPage() {
             <div className="flex items-center gap-2">
               <button type="button" aria-label="Anterior página SRT"
                 onClick={() => setCuePage(page => Math.max(0, page - 1))}
-                disabled={currentCuePage === 0} className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                disabled={currentCuePage === 0} className="rounded border border-[var(--border)] px-2 py-1 disabled:opacity-30">
                 Anterior
               </button>
               <label className="flex items-center gap-1">
@@ -2412,36 +2412,36 @@ export default function RoleplayStudioPage() {
                       setCuePage(requested - 1);
                     }
                   }}
-                  className="w-14 rounded border border-white/15 bg-slate-900 px-1 py-1 text-center text-xs text-white"/>
+                  className="w-14 rounded border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-1 py-1 text-center text-xs text-[var(--theme-control-text)]"/>
                 / {pageCount}
               </label>
               <button type="button" aria-label="Siguiente página SRT"
                 onClick={() => setCuePage(page => Math.min(pageCount - 1, page + 1))}
                 disabled={currentCuePage >= pageCount - 1}
-                className="rounded border border-white/15 px-2 py-1 disabled:opacity-30">
+                className="rounded border border-[var(--border)] px-2 py-1 disabled:opacity-30">
                 Siguiente
               </button>
             </div>
           </div>
-          <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-white/10 bg-slate-950/70 p-3">
+          <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             {visibleCues.map(({ cue, index }) => {
               return (
-              <div key={index} className="flex items-start gap-3 rounded-lg border border-white/5 p-2">
+              <div key={index} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
                   aria-label={`Seleccionar turno ${index + 1}`}
                   onChange={() => toggleCueSelection(index)}
                   className="mt-1 h-4 w-4 shrink-0 accent-blue-500"/>
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold text-amber-200">
+                  <p className="text-xs font-semibold text-[var(--theme-warning)]">
                     {index + 1} · {formatTime(cue.start)}–{formatTime(cue.end)} ·
                     {classifySpeakerRole(cue.speaker) === 'unknown'
                       ? ' Hablante por revisar'
                       : ` ${cue.speaker}`}
                     {overlappingSelectedCues.includes(index) && (
-                      <span className="font-semibold text-rose-200"> · Solapa otro turno seleccionado</span>
+                      <span className="font-semibold text-[var(--theme-danger)]"> · Solapa otro turno seleccionado</span>
                     )}
                   </p>
-                  <p className="mt-1 break-words text-xs text-slate-300">
+                  <p className="mt-1 break-words text-xs text-[var(--text-secondary)]">
                     {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
                   </p>
                 </div>
@@ -2450,14 +2450,14 @@ export default function RoleplayStudioPage() {
                     ? `Detener escucha de turno ${index + 1}`
                     : `Escuchar solo turno ${index + 1}`}
                   aria-pressed={previewingId === `subtitle-${index}`}
-                  className="shrink-0 text-xs text-blue-300 hover:underline">
+                  className="shrink-0 text-xs text-[var(--theme-link)] hover:underline">
                   {previewingId === `subtitle-${index}` ? 'Detener' : 'Escuchar turno'}
                 </button>
               </div>
             ); })}
           </div>
           <p role="status" aria-label="Estado de selección SRT"
-            className="text-xs leading-5 text-slate-200">
+            className="text-xs leading-5 text-[var(--foreground)]">
             {cueSelectionStatus.issue
               ? `Selección no válida: ${cueSelectionStatus.issue}`
               : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)} de 15:00 como máximo. Verifica los roles antes de aplicar.`}
@@ -2465,7 +2465,7 @@ export default function RoleplayStudioPage() {
           {(chosenCueIndices.length > 0 || showCueReviewAlertsOnly) && (
             <div className="flex flex-wrap items-center justify-between gap-2">
               {chosenCueIndices.length > 0 && <p role="status" aria-label="Resumen de calidad de selección SRT"
-                className="text-xs leading-5 text-amber-100">
+                className="text-xs leading-5 text-[var(--theme-warning)]">
                 Revisión rápida antes de aplicar: {cueReviewSummary.unknownSpeakers} sin hablante identificado
                 {' · '}{cueReviewSummary.originalInterpreters} del intérprete original
                 {' · '}{cueReviewSummary.longCues} cortes de más de 1 minuto
@@ -2484,7 +2484,7 @@ export default function RoleplayStudioPage() {
                     setCuePage(0);
                   }}
                   aria-pressed={showCueReviewAlertsOnly}
-                  className="rounded border border-amber-300/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-300/10">
+                  className="rounded border border-amber-300/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-warning)] hover:bg-amber-300/10">
                   {showCueReviewAlertsOnly
                     ? chosenCueIndices.length > 0 ? 'Volver a turnos seleccionados' : 'Mostrar todos los turnos'
                     : selectedCueReviewAlerts === 1 ? 'Revisar 1 turno con alerta' : `Revisar ${selectedCueReviewAlerts} turnos con alertas`}
@@ -2494,15 +2494,15 @@ export default function RoleplayStudioPage() {
           )}
           <button type="button" onClick={applyCueSelection}
             disabled={cueSelectionStatus.issue !== null}
-            className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40">
+            className="rounded-xl bg-amber-500/20 px-4 py-2 text-sm font-bold text-[var(--theme-warning)] hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40">
             Aplicar selección al editor ({chosenCueIndices.length})
           </button>
         </section>
       )}
       {audio && duration > 0 && (
         <section className="space-y-3 rounded-2xl border border-indigo-400/20 bg-indigo-400/5 p-5">
-          <h2 className="text-lg font-bold text-white">Proyecto de edición</h2>
-          <p className="text-sm leading-6 text-slate-300">
+          <h2 className="text-lg font-bold text-[var(--foreground)]">Proyecto de edición</h2>
+          <p className="text-sm leading-6 text-[var(--text-secondary)]">
             {localOnly
               ? 'Guarda los tiempos y perfiles sin subir el archivo. El proyecto se vincula a la fuente mediante tamaño, duración y SHA-256 de muestras: no es una verificación de todos sus bytes.'
               : 'Guarda los cortes y perfiles. El proyecto se verifica contra el MP3 original mediante SHA-256 completo.'}
@@ -2512,7 +2512,7 @@ export default function RoleplayStudioPage() {
             y usa «Guardar proyecto JSON» aquí para crear un proyecto compatible.
           </p>
           {hasUnstoredDraftContext && (
-            <p className="text-xs leading-5 text-amber-100" aria-label="Contenido no incluido en el proyecto JSON">
+            <p className="text-xs leading-5 text-[var(--theme-warning)]" aria-label="Contenido no incluido en el proyecto JSON">
               Atención: el JSON no guarda referencias privadas de transcripción, turnos SRT
               todavía sin aplicar, sugerencias sin confirmar ni el historial de «Deshacer».
               Aplica los cortes que necesites y conserva los SRT/VTT originales antes de abandonar el editor.
@@ -2521,14 +2521,14 @@ export default function RoleplayStudioPage() {
           <div className="flex flex-wrap items-end gap-4">
             <button type="button" onClick={() => void saveDraft()}
               disabled={busy || draftBusy}
-              className="rounded-xl border border-indigo-300/30 bg-indigo-500/20 px-4 py-2 text-sm font-semibold text-indigo-100 disabled:opacity-50">
+              className="rounded-xl border border-indigo-300/30 bg-indigo-500/20 px-4 py-2 text-sm font-semibold text-[var(--theme-purple)] disabled:opacity-50">
               {draftBusy ? 'Verificando proyecto…' : 'Guardar proyecto JSON'}
             </button>
             {hasActiveEditorWork && (
-              <span className="text-xs text-indigo-200">Atajo: Ctrl/⌘+S · descarga local</span>
+              <span className="text-xs text-[var(--theme-purple)]">Atajo: Ctrl/⌘+S · descarga local</span>
             )}
             <div className="space-y-2">
-              <label className="block text-sm text-indigo-100">
+              <label className="block text-sm text-[var(--theme-purple)]">
                 Abrir proyecto JSON de la grabación seleccionada
                 <input type="file" accept=".json,application/json"
                   disabled={busy || draftBusy}
@@ -2537,7 +2537,7 @@ export default function RoleplayStudioPage() {
                     event.currentTarget.value = '';
                     if (file) void openDraftFile(file);
                   }}
-                  className="mt-2 block w-full text-xs text-slate-300 disabled:opacity-50"/>
+                  className="mt-2 block w-full text-xs text-[var(--text-secondary)] disabled:opacity-50"/>
               </label>
               <div role="group" aria-label="Zona para recuperar proyecto JSON"
                 onDragOver={event => {
@@ -2556,7 +2556,7 @@ export default function RoleplayStudioPage() {
                   // replacement confirmation as the file input above.
                   void openDraftFile(files[0]);
                 }}
-                className="rounded-lg border border-dashed border-indigo-300/30 bg-slate-950/40 px-3 py-2 text-xs text-indigo-100">
+                className="rounded-lg border border-dashed border-indigo-300/30 bg-[var(--theme-panel)] px-3 py-2 text-xs text-[var(--theme-purple)]">
                 O arrastra aquí un único proyecto JSON. Primero selecciona su grabación original.
                 No se sube ningún archivo.
               </div>
@@ -2565,15 +2565,15 @@ export default function RoleplayStudioPage() {
         </section>
       )}
       {audio && duration > 0 && (
-        <section className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+        <section className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-white"><AudioLines size={20} /> Intervenciones ({segments.length}/{ROLEPLAY_MAX_SCENARIOS})</h2>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{ROLEPLAY_MAX_SCENARIOS})</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input type="search" aria-label="Buscar intervenciones" value={segmentSearch}
                 onChange={event => setSegmentSearch(event.currentTarget.value)}
                 placeholder="Buscar turno, hablante o nota…"
-                className="w-48 rounded-lg border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white placeholder:text-slate-500"/>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-slate-200">
+                className="w-48 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]"/>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-[var(--foreground)]">
                 <input type="checkbox" checked={showPendingReview}
                   onChange={event => setShowPendingReview(event.currentTarget.checked)}
                   className="accent-blue-500"/>
@@ -2582,20 +2582,20 @@ export default function RoleplayStudioPage() {
               {visiblePendingTurns.length > 1 && (
                 <button type="button" onClick={() => focusPendingTurn(-1)}
                   aria-label="Ir al pendiente anterior"
-                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10">
+                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-info)] hover:bg-cyan-500/10">
                   Anterior pendiente
                 </button>
               )}
               {visiblePendingTurns.length > 0 && (
                 <button type="button" onClick={() => focusPendingTurn(1)}
                   aria-label="Ir al siguiente pendiente"
-                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/10">
+                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-info)] hover:bg-cyan-500/10">
                   Siguiente pendiente
                 </button>
               )}
               <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
                 aria-pressed={compactRows}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-slate-200">
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--foreground)]">
                 {compactRows ? 'Vista detallada' : 'Vista compacta'}
               </button>
               {lastStructuralEdit && (
@@ -2619,7 +2619,7 @@ export default function RoleplayStudioPage() {
                               : lastStructuralEdit.kind === 'apertura de proyecto'
                                 ? 'Deshacer apertura de proyecto JSON'
                                 : 'Deshacer última división o unión'}
-                  className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-amber-100 hover:bg-amber-400/10">
+                  className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
               )}
@@ -2629,7 +2629,7 @@ export default function RoleplayStudioPage() {
           </div>
           {segments.length > 0 && (
             <p role="status" aria-label="Resumen de revisión de intervenciones"
-              className="text-xs text-slate-300">
+              className="text-xs text-[var(--text-secondary)]">
               Revisión de roles e idiomas: {reviewedCount}/{segments.length} sin pendientes ·
               {' '}{unidentifiedSpeakerCount} sin hablante · {unreviewedLanguageCount} sin idioma
               {originalInterpreterCount > 0 &&
@@ -2637,29 +2637,29 @@ export default function RoleplayStudioPage() {
             </p>
           )}
           <details open={!sourceRequiresLocal} className="space-y-3 rounded-lg border border-teal-400/20 bg-teal-400/5 p-3">
-            <summary className="cursor-pointer text-sm font-semibold text-teal-100">
+            <summary className="cursor-pointer text-sm font-semibold text-[var(--theme-info)]">
               Protocolos de interpretación consecutiva (opcional)
             </summary>
-            <p className="text-xs leading-5 text-slate-300">
+            <p className="text-xs leading-5 text-[var(--text-secondary)]">
               Plantillas opcionales de apertura, petición de repetición y cierre.
               Solo se insertan en las instrucciones de la intervención que elijas;
               no crean audios ni respuestas modelo. El participante podrá leerlas al abrir «Ver guión».
               Evita incluirlas en evaluaciones sin ayuda si revelarían la respuesta.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <label className="text-sm text-slate-200">Protocolo
+              <label className="text-sm text-[var(--foreground)]">Protocolo
                 <select value={protocolKind}
                   onChange={event => setProtocolKind(event.currentTarget.value as StudioProtocolKind)}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                  className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                   <option value="opening">Apertura</option>
                   <option value="repetition">Pedir repetición / aclaración</option>
                   <option value="closing">Cierre</option>
                 </select>
               </label>
-              <label className="text-sm text-slate-200">Idioma del protocolo
+              <label className="text-sm text-[var(--foreground)]">Idioma del protocolo
                 <select value={protocolLanguage}
                   onChange={event => { preferenceEdits.current.protocolLanguage = true; setProtocolLanguage(event.currentTarget.value as StudioProtocolLanguage); }}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                  className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                   <option value="en">Inglés</option>
                   <option value="es">Español</option>
                 </select>
@@ -2667,15 +2667,15 @@ export default function RoleplayStudioPage() {
             </div>
           </details>
           {pendingSpeakerIds.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2">
-              <span className="mr-auto text-xs text-slate-300">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-2">
+              <span className="mr-auto text-xs text-[var(--text-secondary)]">
                 {pendingSpeakerIds.length} intervenciones visibles sin hablante. Se respetarán los perfiles revisados y los filtros actuales.
               </span>
-              <label className="flex items-center gap-2 text-xs text-slate-200">
+              <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
                 Perfil
                 <select aria-label="Hablante para pendientes" value={bulkSpeakerRole}
                   onChange={event => setBulkSpeakerRole(event.target.value as typeof bulkSpeakerRole)}
-                  className="rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-white">
+                  className="rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-[var(--theme-control-text)]">
                   <option value="doctor">Médico</option>
                   <option value="patient">Paciente</option>
                   <option value="nurse">Enfermería</option>
@@ -2683,106 +2683,106 @@ export default function RoleplayStudioPage() {
                 </select>
               </label>
               <button type="button" onClick={() => setSpeakerForPendingTurns(bulkSpeakerRole, pendingSpeakerIds)}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
                 Asignar hablante a {pendingSpeakerIds.length} pendientes
               </button>
             </div>
           )}
           {pendingLanguageIds.length > 1 && (
-            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-white/10 bg-slate-950/50 px-3 py-2">
-              <span className="mr-auto text-xs text-slate-300">
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-2">
+              <span className="mr-auto text-xs text-[var(--text-secondary)]">
                 {pendingLanguageIds.length} intervenciones visibles sin idioma. Solo se cambiarán las que aparecen con los filtros actuales.
               </span>
               <button type="button" onClick={() => setLanguageForPendingTurns('en', pendingLanguageIds)}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
                 Marcar pendientes como inglés
               </button>
               <button type="button" onClick={() => setLanguageForPendingTurns('es', pendingLanguageIds)}
-                className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-blue-200 hover:bg-blue-500/10">
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
                 Marcar pendientes como español
               </button>
             </div>
           )}
           {originalInterpreterCount > 0 && (
-            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-amber-100">
+            <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-[var(--theme-warning)]">
               <p>
                 {originalInterpreterCount} {originalInterpreterCount === 1 ? 'turno identificado' : 'turnos identificados'}
                 {' '}como intérprete original. Excluye esos fragmentos antes de exportar el roleplay.
               </p>
               <button type="button" onClick={excludeOriginalInterpreterTurns}
-                className="rounded-lg border border-amber-300/40 px-3 py-2 font-semibold text-amber-100 hover:bg-amber-400/10">
+                className="rounded-lg border border-amber-300/40 px-3 py-2 font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
                 Excluir {originalInterpreterCount} {originalInterpreterCount === 1 ? 'intervención' : 'intervenciones'} del intérprete
               </button>
             </div>
           )}
           {segments.length > 0 && (
-            <p className="text-xs text-slate-400">
-              Cursor: <span className="font-medium text-cyan-200">{formatTime(playhead)}</span>.
+            <p className="text-xs text-[var(--text-secondary)]">
+              Cursor: <span className="font-medium text-[var(--theme-info)]">{formatTime(playhead)}</span>.
               {' '}«Dividir» corta en el cursor cuando está dentro del turno; fuera de él usa el punto medio.
               {' '}«Unir» combina turnos compatibles. Si están separados por más de 2 s,
               crea un único MP3 sin la pausa al exportar localmente el proyecto v2.
             </p>
           )}
-          {segments.length === 0 && <p className="text-sm text-slate-400">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
+          {segments.length === 0 && <p className="text-sm text-[var(--text-secondary)]">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
-            <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
+            <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
               <span>{showPendingReview && pendingReviewCount === 0
                 ? 'Todas las intervenciones tienen hablante e idioma revisados.'
                 : 'No hay intervenciones que coincidan con los filtros.'}</span>
               {(showPendingReview || segmentSearch) && (
                 <button type="button" onClick={() => { setShowPendingReview(false); setSegmentSearch(''); }}
-                  className="rounded-md border border-white/15 px-2 py-1 text-blue-200">Limpiar filtros</button>
+                  className="rounded-md border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">Limpiar filtros</button>
               )}
             </div>
           )}
           {segments.length >= 6 && (
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-[var(--text-secondary)]">
               {visibleSegments.length} de {segments.length} turnos. Identifica hablante e idioma
               en la fila compacta; abre «Editar» para ajustar tiempos e instrucciones.
             </p>
           )}
           {visibleSegments.map(({ segment, index }) => (
             <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
-              className="space-y-2 rounded-lg border border-white/10 bg-slate-950/70 p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300">
+              className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-white">
+                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--foreground)]">
                   #{index + 1} · {segment.title}
-                  <span className="ml-2 text-xs font-normal text-slate-400">
+                  <span className="ml-2 text-xs font-normal text-[var(--text-secondary)]">
                     {segment.ranges
                       ? segment.ranges.map(range => formatTime(range.start) + '–' + formatTime(range.end)).join(' + ')
                       : formatTime(segment.start) + '–' + formatTime(segment.end)}
                     {' · '}{segment.speakerRole} · {segment.language.toUpperCase()}
                   </span>
                   {captionTexts[segment.id] && compactRows && (
-                    <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-amber-200/80">
+                    <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-[var(--theme-warning)]">
                       {captionTexts[segment.id]}
                     </span>
                   )}
                 </h3>
                 <button type="button" onClick={() => seekAudio(segment.start)}
                   aria-label={'Ir al inicio de intervención ' + (index + 1)}
-                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
+                  className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)]">
                   Ir al inicio
                 </button>
                 <button type="button" onClick={() => splitAtPlayhead(segment.id)}
                   disabled={Boolean(segment.ranges)}
                   aria-label={'Dividir intervención ' + (index + 1) + ' en cursor o punto medio'}
                   title={segment.ranges ? 'Separa los dos cortes antes de dividir' : 'Divide en cursor o punto medio'}
-                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
+                  className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)]">
                   Dividir
                 </button>
                 <button type="button" onClick={() => mergeWithNext(segment.id)}
                   disabled={Boolean(segment.ranges)}
                   aria-label={'Unir intervención ' + (index + 1) + ' con siguiente'}
                   title={segment.ranges ? 'Separa los dos cortes antes de añadir otro' : 'Une con el siguiente turno visible; omite pausas largas en el MP3 local'}
-                  className="rounded-md border border-white/15 px-2 py-1 text-xs text-slate-300">
+                  className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)]">
                   {orderedSegments[index + 1] &&
                     orderedSegments[index + 1].start - segment.end > 2 ? 'Unir sin pausa' : 'Unir'}
                 </button>
                 {segment.ranges && (
                   <button type="button" onClick={() => separateCompound(segment.id)}
                     aria-label={'Separar cortes de intervención ' + (index + 1)}
-                    className="rounded-md border border-amber-400/30 px-2 py-1 text-xs text-amber-100">
+                    className="rounded-md border border-amber-400/30 px-2 py-1 text-xs text-[var(--theme-warning)]">
                     Separar cortes
                   </button>
                 )}
@@ -2794,7 +2794,7 @@ export default function RoleplayStudioPage() {
                       aria-label={'Preescuchar intervenciones ' + (index + 1) + ' y ' + (index + 2) + ' sin pausa'}
                       aria-pressed={pairPreviewId === segment.id}
                       title="Preescucha dos cortes; usa Unir sin pausa para generar una intervención física en el proyecto v2"
-                      className="rounded-md border border-cyan-400/30 px-2 py-1 text-xs text-cyan-200 hover:bg-cyan-400/10">
+                      className="rounded-md border border-cyan-400/30 px-2 py-1 text-xs text-[var(--theme-info)] hover:bg-cyan-400/10">
                       {pairPreviewId === segment.id ? 'Detener preescucha' : 'Escuchar sin pausa'}
                     </button>
                   )}
@@ -2804,7 +2804,7 @@ export default function RoleplayStudioPage() {
                       aria-label={segment.ranges
                         ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
                         : `${previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'} de intervención ${index + 1}`}
-                      className="rounded-md border border-emerald-400/25 px-2 py-1 text-xs text-emerald-200">
+                      className="rounded-md border border-emerald-400/25 px-2 py-1 text-xs text-[var(--theme-success)]">
                       {segment.ranges
                         ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
                         : previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
@@ -2812,7 +2812,7 @@ export default function RoleplayStudioPage() {
                     <button type="button" onClick={() =>
                       setExpandedSegmentId(prev => prev === segment.id ? null : segment.id)}
                       aria-expanded={expandedSegmentId === segment.id}
-                      className="rounded-md border border-blue-400/25 px-2 py-1 text-xs text-blue-200">
+                      className="rounded-md border border-blue-400/25 px-2 py-1 text-xs text-[var(--theme-link)]">
                       {expandedSegmentId === segment.id ? 'Contraer' : 'Editar'}
                     </button>
                   </>
@@ -2838,18 +2838,18 @@ export default function RoleplayStudioPage() {
                   setError('');
                   setNotice('Intervención eliminada. Usa «Deshacer eliminación» si necesitas recuperarla.');
                 }}
-                  className="rounded-lg p-2 text-red-300 hover:bg-red-500/10"><Trash2 size={16}/></button>
+                  className="rounded-lg p-2 text-[var(--theme-danger)] hover:bg-red-500/10"><Trash2 size={16}/></button>
               </div>
               {orderedSegments[index + 1] &&
                 visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
                 planGaplessPair(segment, orderedSegments[index + 1], duration) && (
-                  <p className="text-xs text-cyan-200/80">
+                  <p className="text-xs text-[var(--theme-info)]">
                     Pausa entre ambos cortes: {formatTime(orderedSegments[index + 1].start - segment.end)}.
                     Puedes preescucharlos o pulsar «Unir sin pausa» para generar un único MP3 en el exportador local.
                   </p>
                 )}
               {segment.ranges && (
-                <p className="text-xs text-amber-100">
+                <p className="text-xs text-[var(--theme-warning)]">
                   Intervención compuesta · {formatTime(studioSelectedSeconds(segment.ranges))} de audio útil;
                   pausa de {formatTime(segment.ranges[1].start - segment.ranges[0].end)} excluida.
                   El proyecto v2 se exporta como un único MP3 con el exportador local actualizado.
@@ -2860,21 +2860,21 @@ export default function RoleplayStudioPage() {
                 <p
                   role={turnActionFeedback.error ? 'alert' : 'status'}
                   className={turnActionFeedback.error
-                    ? 'rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-100'
-                    : 'rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100'}>
+                    ? 'rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-[var(--theme-warning)]'
+                    : 'rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs text-[var(--theme-success)]'}>
                   {turnActionFeedback.message}
                 </p>
               )}
               {compactRows && expandedSegmentId !== segment.id && (
-                <div className="flex flex-wrap items-center gap-2 border-t border-white/5 pt-2">
-                  <label className="flex min-w-[180px] flex-1 items-center gap-2 text-xs text-slate-300">
+                <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
+                  <label className="flex min-w-[180px] flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
                     <span className="shrink-0">Hablante</span>
                     <select aria-label={'Hablante rápido intervención ' + (index + 1)}
                       value={segment.speakerRole}
                       onChange={event => update(segment.id, {
                         speakerRole: event.target.value as StudioSpeakerRole,
                       })}
-                      className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                      className="min-w-0 flex-1 rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)]">
                       <option value="unknown">Por identificar</option>
                       <option value="doctor">Médico</option>
                       <option value="patient">Paciente</option>
@@ -2883,14 +2883,14 @@ export default function RoleplayStudioPage() {
                       <option value="interpreter">Intérprete original — excluir</option>
                     </select>
                   </label>
-                  <label className="flex min-w-[140px] flex-1 items-center gap-2 text-xs text-slate-300">
+                  <label className="flex min-w-[140px] flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
                     <span className="shrink-0">Idioma</span>
                     <select aria-label={'Idioma rápido intervención ' + (index + 1)}
                       value={segment.language}
                       onChange={event => update(segment.id, {
                         language: event.target.value as StudioLanguage,
                       })}
-                      className="min-w-0 flex-1 rounded-md border border-white/15 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                      className="min-w-0 flex-1 rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)]">
                       <option value="unknown">Por revisar</option>
                       <option value="en">Inglés (EN)</option>
                       <option value="es">Español (ES)</option>
@@ -2899,42 +2899,42 @@ export default function RoleplayStudioPage() {
                 </div>
               )}
               {(!compactRows || expandedSegmentId === segment.id) && (
-              <div className="space-y-2 border-t border-white/5 pt-2">
-              <label className="block text-sm text-slate-300">Título
+              <div className="space-y-2 border-t border-[var(--border)] pt-2">
+              <label className="block text-sm text-[var(--text-secondary)]">Título
                 <input value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
+                  className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
               </label>
               <div className="grid gap-3 sm:grid-cols-3">
-                <label className="text-sm text-slate-300">Inicio (segundos)
+                <label className="text-sm text-[var(--text-secondary)]">Inicio (segundos)
                   <input type="number" min={0} max={duration} step="0.1" value={segment.start}
                     disabled={Boolean(segment.ranges)}
                     onChange={event => update(segment.id, {start: event.target.valueAsNumber})}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
                 </label>
-                <label className="text-sm text-slate-300">Final (segundos)
+                <label className="text-sm text-[var(--text-secondary)]">Final (segundos)
                   <input type="number" min={0} max={duration} step="0.1" value={segment.end}
                     disabled={Boolean(segment.ranges)}
                     onChange={event => update(segment.id, {end: event.target.valueAsNumber})}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
                 </label>
-                <label className="text-sm text-slate-300">Límite de respuesta (segundos)
+                <label className="text-sm text-[var(--text-secondary)]">Límite de respuesta (segundos)
                   <input type="number" min={0} max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC} step={1} value={segment.responseLimit}
                     onChange={event => update(segment.id, {responseLimit: event.target.valueAsNumber})}
-                    className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
                 </label>
               </div>
               {captionTexts[segment.id] && (
                 <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
-                  <p className="text-xs font-bold text-amber-200">Transcripción de referencia · solo editor</p>
-                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-300">{captionTexts[segment.id]}</p>
+                  <p className="text-xs font-bold text-[var(--theme-warning)]">Transcripción de referencia · solo editor</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--text-secondary)]">{captionTexts[segment.id]}</p>
                 </div>
               )}
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className="block text-sm text-slate-300">
+                <label className="block text-sm text-[var(--text-secondary)]">
                   Perfil del hablante
                   <select value={segment.speakerRole} onChange={event => {
                     update(segment.id, { speakerRole: event.target.value as StudioSpeakerRole });
-                  }} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                  }} className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                     <option value="unknown">Hablante sin identificar</option>
                     <option value="doctor">Médico / profesional de salud</option>
                     <option value="patient">Paciente</option>
@@ -2943,41 +2943,41 @@ export default function RoleplayStudioPage() {
                     <option value="interpreter">Intérprete original — excluir</option>
                   </select>
                 </label>
-                <label className="block text-sm text-slate-300">
+                <label className="block text-sm text-[var(--text-secondary)]">
                   Idioma de la intervención
                   <select value={segment.language} onChange={event => {
                     update(segment.id, { language: event.target.value as StudioLanguage });
-                  }} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white">
+                  }} className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                     <option value="unknown">Por revisar</option>
                     <option value="en">Inglés (EN)</option>
                     <option value="es">Español (ES)</option>
                   </select>
                 </label>
               </div>
-              <button type="button" className="text-sm text-blue-300 hover:underline"
+              <button type="button" className="text-sm text-[var(--theme-link)] hover:underline"
                 onClick={() => update(segment.id, {
                   title: makeNeutralSegmentTitle(segment.speakerRole, segment.language, index),
                 })}>
                 Aplicar perfil e idioma al título
               </button>
-              <label className="block text-sm text-slate-300">Instrucciones para el participante
+              <label className="block text-sm text-[var(--text-secondary)]">Instrucciones para el participante
                 <textarea value={segment.scriptPrompt} maxLength={5000} rows={2}
                   onChange={event => update(segment.id, {scriptPrompt: event.target.value})}
-                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-white"/>
+                  className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
               </label>
               <button type="button" onClick={() => insertProtocol(segment)}
-                className="rounded-lg border border-teal-400/30 bg-teal-400/5 px-3 py-2 text-sm text-teal-100 hover:bg-teal-400/10">
+                className="rounded-lg border border-teal-400/30 bg-teal-400/5 px-3 py-2 text-sm text-[var(--theme-info)] hover:bg-teal-400/10">
                 Añadir protocolo seleccionado a esta intervención
               </button>
               <div className="flex flex-wrap items-center gap-3 text-sm">
-                <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-[var(--theme-link)] hover:bg-blue-500/10"
                   disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
-                <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-blue-200 hover:bg-blue-500/10"
+                <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-[var(--theme-link)] hover:bg-blue-500/10"
                   disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
                 {!compactRows && (
-                  <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-emerald-200 hover:bg-emerald-500/10"
+                  <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-[var(--theme-success)] hover:bg-emerald-500/10"
                     aria-label={segment.ranges
                       ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
                       : `${previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'} de intervención ${index + 1}`}
@@ -3002,13 +3002,13 @@ export default function RoleplayStudioPage() {
             />
           )}
           {hasCompound && !sourceRequiresLocal && (
-            <p className="text-xs text-amber-200">
+            <p className="text-xs text-[var(--theme-warning)]">
               El simulador consecutivo de intervalos continuos está deshabilitado para proyectos compuestos.
               Utiliza «Escuchar unido» para revisar cada unión física antes de generar el ZIP local.
             </p>
           )}
-          {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}
-          {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">{notice}</p>}
+          {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
+          {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-3 font-bold text-white hover:bg-emerald-500 disabled:opacity-50">
             <Download size={18} /> {busy
@@ -3018,13 +3018,13 @@ export default function RoleplayStudioPage() {
           </button>
         </section>
       )}
-      {error && (!audio || !duration) && <p role="alert" className="text-sm text-red-300">{error}</p>}
+      {error && (!audio || !duration) && <p role="alert" className="text-sm text-[var(--theme-danger)]">{error}</p>}
       {notice && (!audio || !duration) && (
-        <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+        <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">
           {notice}
         </p>
       )}
-      <p className="text-xs leading-5 text-slate-500">
+      <p className="text-xs leading-5 text-[var(--text-tertiary)]">
         Solo administración · Los archivos originales locales no se guardan en la biblioteca.
         Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.
       </p>
