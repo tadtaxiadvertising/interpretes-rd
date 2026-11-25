@@ -98,7 +98,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
   function togglePanel() {
     if (!isOpen) {
       let next = preferences;
-      if (storageKey) {
+      if (storageKey && !storageUnavailable) {
         try {
           next = parseNotificationViewPreferences(window.localStorage.getItem(storageKey));
           setStorageUnavailable(false);
@@ -235,7 +235,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
             <div className="shrink-0 border-b border-[var(--border)] px-3 py-1">
               <button type="button" aria-expanded={showPreferences} aria-controls="notification-view-preferences" onClick={() => setShowPreferences(value => !value)} className="min-h-9 text-xs font-semibold text-[var(--theme-link)]">Preferencias de visualización</button>
               {showPreferences && (
-                <div id="notification-view-preferences" className="space-y-1 pb-2 text-xs text-[var(--foreground)]">
+                <div id="notification-view-preferences" className="max-h-[min(12rem,30dvh)] overflow-y-auto space-y-1 pb-2 text-xs text-[var(--foreground)]">
                   <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={preferences.openUnread} onChange={event => updatePreferences({ ...preferences, openUnread: event.target.checked })} /> Abrir en «Sin leer»</label>
                   <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={preferences.prioritizeImportant} onChange={event => updatePreferences({ ...preferences, prioritizeImportant: event.target.checked })} /> Priorizar importantes en avisos recientes</label>
                   <p className="text-[var(--text-secondary)]">Solo cambia la vista. No desactiva avisos, correos ni el contador total.</p>
