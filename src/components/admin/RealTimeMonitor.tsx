@@ -20,10 +20,10 @@ import { cn } from '@/lib/utils';
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'Todos los estados' },
-  { value: 'Online', label: '🟢 Online', color: 'text-emerald-400' },
-  { value: 'Busy', label: '🟡 En llamada', color: 'text-amber-400' },
-  { value: 'Away', label: '🟠 Ausente', color: 'text-orange-400' },
-  { value: 'Offline', label: '🔴 Offline', color: 'text-slate-400' },
+  { value: 'Online', label: '🟢 Online', color: 'text-[var(--theme-success)]' },
+  { value: 'Busy', label: '🟡 En llamada', color: 'text-[var(--theme-warning)]' },
+  { value: 'Away', label: '🟠 Ausente', color: 'text-[var(--theme-away)]' },
+  { value: 'Offline', label: '🔴 Offline', color: 'text-[var(--text-secondary)]' },
 ];
 
 interface PresenceTrackPayload {
@@ -53,49 +53,49 @@ const WORKDAY_STATUS_CONFIG: Record<string, {
   'En llamada': {
     label: 'En llamada',
     icon: PhoneCall,
-    color: 'text-amber-400',
+    color: 'text-[var(--theme-warning)]',
     bg: 'bg-amber-500/10',
     border: 'border-amber-500/20',
   },
   'Activo': {
     label: 'Activo',
     icon: PlayCircle,
-    color: 'text-emerald-400',
+    color: 'text-[var(--theme-success)]',
     bg: 'bg-emerald-500/10',
     border: 'border-emerald-500/20',
   },
   'Disponible': {
     label: 'Disponible',
     icon: Wifi,
-    color: 'text-blue-400',
+    color: 'text-[var(--theme-link)]',
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/20',
   },
   'En pausa': {
     label: 'En pausa',
     icon: PauseCircle,
-    color: 'text-orange-400',
+    color: 'text-[var(--theme-away)]',
     bg: 'bg-orange-500/10',
     border: 'border-orange-500/20',
   },
   'Desconectado (laboró)': {
     label: 'Desconectado',
     icon: LogOut,
-    color: 'text-slate-400',
+    color: 'text-[var(--text-secondary)]',
     bg: 'bg-slate-500/10',
     border: 'border-slate-500/20',
   },
   'Online sin registro': {
     label: 'Online sin registro',
     icon: AlertTriangle,
-    color: 'text-yellow-400',
+    color: 'text-[var(--theme-warning)]',
     bg: 'bg-yellow-500/10',
     border: 'border-yellow-500/20',
   },
   'Sin actividad hoy': {
     label: 'Sin actividad',
     icon: Hourglass,
-    color: 'text-gray-500',
+    color: 'text-[var(--text-tertiary)]',
     bg: 'bg-gray-500/10',
     border: 'border-gray-500/20',
   },
@@ -413,7 +413,7 @@ export default function RealTimeMonitor() {
             label: 'Total activos',
             value: workdayKPIs.total,
             icon: Users,
-            color: 'text-blue-400',
+            color: 'text-[var(--theme-link)]',
             bg: 'bg-blue-500/10',
             border: 'border-blue-500/20',
           },
@@ -421,7 +421,7 @@ export default function RealTimeMonitor() {
             label: 'En jornada',
             value: workdayKPIs.workingNow,
             icon: Activity,
-            color: 'text-emerald-400',
+            color: 'text-[var(--theme-success)]',
             bg: 'bg-emerald-500/10',
             border: 'border-emerald-500/20',
           },
@@ -429,7 +429,7 @@ export default function RealTimeMonitor() {
             label: 'Online',
             value: workdayKPIs.onlineCount,
             icon: Wifi,
-            color: 'text-emerald-400',
+            color: 'text-[var(--theme-success)]',
             bg: 'bg-emerald-500/10',
             border: 'border-emerald-500/20',
           },
@@ -437,7 +437,7 @@ export default function RealTimeMonitor() {
             label: 'En llamada',
             value: workdayKPIs.busyCount,
             icon: PhoneCall,
-            color: 'text-amber-400',
+            color: 'text-[var(--theme-warning)]',
             bg: 'bg-amber-500/10',
             border: 'border-amber-500/20',
           },
@@ -445,7 +445,7 @@ export default function RealTimeMonitor() {
             label: 'Horas hoy',
             value: formatHours(workdayKPIs.totalHoursToday),
             icon: Clock,
-            color: 'text-purple-400',
+            color: 'text-[var(--theme-purple)]',
             bg: 'bg-purple-500/10',
             border: 'border-purple-500/20',
           },
@@ -453,7 +453,7 @@ export default function RealTimeMonitor() {
             label: 'Llamadas hoy',
             value: workdayKPIs.totalCallsToday,
             icon: Phone,
-            color: 'text-cyan-400',
+            color: 'text-[var(--theme-info)]',
             bg: 'bg-cyan-500/10',
             border: 'border-cyan-500/20',
           },
@@ -461,7 +461,7 @@ export default function RealTimeMonitor() {
             label: 'Adherencia',
             value: `${workdayKPIs.avgAdherence.toFixed(1)}%`,
             icon: Target,
-            color: workdayKPIs.avgAdherence >= 80 ? 'text-emerald-400' : 'text-amber-400',
+            color: workdayKPIs.avgAdherence >= 80 ? 'text-[var(--theme-success)]' : 'text-[var(--theme-warning)]',
             bg: workdayKPIs.avgAdherence >= 80 ? 'bg-emerald-500/10' : 'bg-amber-500/10',
             border: workdayKPIs.avgAdherence >= 80 ? 'border-emerald-500/20' : 'border-amber-500/20',
           },
@@ -469,7 +469,7 @@ export default function RealTimeMonitor() {
             label: 'Actualizado',
             value: lastUpdated ? formatTime(lastUpdated) : '...',
             icon: RefreshCw,
-            color: 'text-slate-400',
+            color: 'text-[var(--text-secondary)]',
             bg: 'bg-slate-500/10',
             border: 'border-slate-500/20',
           },
@@ -485,11 +485,11 @@ export default function RealTimeMonitor() {
             <div className="absolute -right-3 -top-3 opacity-5 group-hover:opacity-10 transition-opacity">
               <card.icon size={48} />
             </div>
-            <div className={cn('p-2 rounded-lg bg-white/5 w-fit', card.color)}>
+            <div className={cn('p-2 rounded-lg bg-[var(--theme-surface-muted)] w-fit', card.color)}>
               <card.icon size={16} />
             </div>
             <div>
-              <p className="text-[10px] text-gray-500 font-medium uppercase tracking-wider leading-tight">
+              <p className="text-[10px] text-[var(--text-tertiary)] font-medium uppercase tracking-wider leading-tight">
                 {card.label}
               </p>
               <h3 className={cn('text-2xl font-bold mt-1 leading-none', card.color)}>
@@ -503,22 +503,22 @@ export default function RealTimeMonitor() {
       {/* ── FILTER BAR ── */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative min-w-48 flex-1 max-w-xs">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
           <input
             type="text"
             value={search}
             onChange={(e) => handleSearchChange(e.target.value)}
             placeholder="Buscar por nombre o ID..."
-            className="w-full rounded-lg border border-gray-700 bg-gray-950 py-2 pl-9 pr-3 text-sm text-gray-100 outline-none ring-0 placeholder:text-gray-500 focus:border-gray-500"
+            className="w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-2 pl-9 pr-3 text-sm text-[var(--foreground)] outline-none ring-0 placeholder:text-[var(--text-tertiary)] focus:border-[var(--theme-focus)]"
           />
         </div>
 
         <div className="relative">
-          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
           <select
             value={statusFilter}
             onChange={(e) => handleStatusFilterChange(e.target.value)}
-            className="rounded-lg border border-gray-700 bg-gray-950 py-2 pl-9 pr-8 text-sm text-gray-100 appearance-none focus:border-gray-500 cursor-pointer"
+            className="rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-2 pl-9 pr-8 text-sm text-[var(--foreground)] appearance-none focus:border-[var(--theme-focus)] cursor-pointer"
           >
             {STATUS_FILTER_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -527,11 +527,11 @@ export default function RealTimeMonitor() {
         </div>
 
         <div className="relative">
-          <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+          <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
           <select
             value={campaign}
             onChange={(e) => handleCampaignChange(e.target.value)}
-            className="rounded-lg border border-gray-700 bg-gray-950 py-2 pl-9 pr-8 text-sm text-gray-100 appearance-none focus:border-gray-500 cursor-pointer"
+            className="rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] py-2 pl-9 pr-8 text-sm text-[var(--foreground)] appearance-none focus:border-[var(--theme-focus)] cursor-pointer"
           >
             <option value="">Todas las Campañas</option>
             {campaigns.map((c) => (
@@ -545,8 +545,8 @@ export default function RealTimeMonitor() {
           className={cn(
             'flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors',
             autoRefresh
-              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-              : 'bg-gray-800 text-gray-400 border border-gray-700'
+              ? 'bg-emerald-500/10 text-[var(--theme-success)] border border-emerald-500/20'
+              : 'bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] border border-[var(--border)]'
           )}
         >
           <RefreshCw size={14} className={cn(autoRefresh && 'animate-spin-slow')} />
@@ -554,21 +554,21 @@ export default function RealTimeMonitor() {
         </button>
 
         {isPending && !isInitialLoading && (
-          <span className="text-xs text-gray-400 animate-pulse">Actualizando...</span>
+          <span className="text-xs text-[var(--text-secondary)] animate-pulse">Actualizando...</span>
         )}
 
-        <span className="text-xs text-gray-500 ml-auto flex items-center gap-2">
+        <span className="text-xs text-[var(--text-tertiary)] ml-auto flex items-center gap-2">
           {lastUpdated && (
-            <span className="flex items-center gap-1 text-gray-600">
+            <span className="flex items-center gap-1 text-[var(--text-tertiary)]">
               <Clock size={11} />
               {formatRelativeTime(lastUpdated.toISOString())}
             </span>
           )}
           <ShieldCheck size={12} />
           {telemetryStatus === 'connected' ? (
-            <span className="text-emerald-400">Presence</span>
+            <span className="text-[var(--theme-success)]">Presence</span>
           ) : (
-            <span className="text-red-400">Sin telemetría</span>
+            <span className="text-[var(--theme-danger)]">Sin telemetría</span>
           )}
         </span>
       </div>
@@ -577,17 +577,17 @@ export default function RealTimeMonitor() {
       {isInitialLoading ? (
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-gray-800 bg-gray-900/60 p-4 animate-pulse">
-              <div className="h-6 w-48 rounded bg-gray-800 mb-4" />
+            <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4 animate-pulse">
+              <div className="h-6 w-48 rounded bg-[var(--theme-surface-muted)] mb-4" />
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, j) => (
                   <div key={j} className="flex items-center gap-3 py-2">
-                    <div className="w-8 h-8 rounded-lg bg-gray-800" />
+                    <div className="w-8 h-8 rounded-lg bg-[var(--theme-surface-muted)]" />
                     <div className="flex-1 space-y-1">
-                      <div className="h-4 w-40 rounded bg-gray-800" />
-                      <div className="h-3 w-24 rounded bg-gray-800/60" />
+                      <div className="h-4 w-40 rounded bg-[var(--theme-surface-muted)]" />
+                      <div className="h-3 w-24 rounded bg-[var(--theme-surface-muted)]" />
                     </div>
-                    <div className="h-5 w-20 rounded-full bg-gray-800" />
+                    <div className="h-5 w-20 rounded-full bg-[var(--theme-surface-muted)]" />
                   </div>
                 ))}
               </div>
@@ -606,20 +606,20 @@ export default function RealTimeMonitor() {
               <div
                 key={status}
                 className={cn(
-                  'rounded-xl border overflow-hidden bg-gray-900/80',
+                  'rounded-xl border overflow-hidden bg-[var(--theme-panel)]',
                   statusConfig.bg,
                   statusConfig.border
                 )}
               >
                 {/* Section Header */}
-                <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800/50">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--border)]">
                   <div className="flex items-center gap-2.5">
                     <StatusIcon size={16} className={statusConfig.color} />
-                    <h3 className="text-sm font-semibold text-gray-200">{status}</h3>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">{status}</h3>
                     <span
                       className={cn(
                         'text-xs font-mono px-1.5 py-0.5 rounded',
-                        'bg-white/5 text-gray-400'
+                        'bg-[var(--theme-surface-muted)] text-[var(--text-secondary)]'
                       )}
                     >
                       {interpreters.length}
@@ -643,7 +643,7 @@ export default function RealTimeMonitor() {
                     return (
                       <div
                         key={interpreter.id}
-                        className="rounded-xl border border-gray-800 bg-gray-950/60 p-4 hover:bg-gray-900/80 hover:border-gray-700 transition-all cursor-pointer group"
+                        className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 hover:bg-[var(--theme-hover)] hover:border-[var(--theme-control-border)] transition-all cursor-pointer group"
                         onClick={() => setSelectedInterpreter(interpreter)}
                       >
                         {/* Header row */}
@@ -651,18 +651,18 @@ export default function RealTimeMonitor() {
                           <div className="flex items-center gap-2.5">
                             <div className={cn(
                               'w-9 h-9 rounded-xl flex items-center justify-center text-sm font-bold shrink-0',
-                              interpreter.realtimeStatus === 'Online' ? 'bg-emerald-500/20 text-emerald-400' :
-                              interpreter.realtimeStatus === 'Busy' ? 'bg-amber-500/20 text-amber-400' :
-                              interpreter.realtimeStatus === 'Away' ? 'bg-orange-500/20 text-orange-400' :
-                              'bg-slate-500/20 text-slate-400'
+                              interpreter.realtimeStatus === 'Online' ? 'bg-emerald-500/20 text-[var(--theme-success)]' :
+                              interpreter.realtimeStatus === 'Busy' ? 'bg-amber-500/20 text-[var(--theme-warning)]' :
+                              interpreter.realtimeStatus === 'Away' ? 'bg-orange-500/20 text-[var(--theme-away)]' :
+                              'bg-slate-500/20 text-[var(--text-secondary)]'
                             )}>
                               {interpreter.name.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-100 truncate">
+                              <p className="text-sm font-semibold text-[var(--foreground)] truncate">
                                 {interpreter.name}
                               </p>
-                              <p className="text-[11px] text-gray-500 font-mono">
+                              <p className="text-[11px] text-[var(--text-tertiary)] font-mono">
                                 {interpreter.externalId}
                               </p>
                             </div>
@@ -691,20 +691,20 @@ export default function RealTimeMonitor() {
                         {/* Hours Progress */}
                         <div className="space-y-2 mb-3">
                           <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500">Horas hoy</span>
+                            <span className="text-[var(--text-tertiary)]">Horas hoy</span>
                             <span className={cn(
                               'font-mono font-bold',
-                              currentHours >= goalHours ? 'text-emerald-400' : currentHours >= 4 ? 'text-blue-400' : 'text-gray-300'
+                              currentHours >= goalHours ? 'text-[var(--theme-success)]' : currentHours >= 4 ? 'text-[var(--theme-link)]' : 'text-[var(--text-secondary)]'
                             )}>
                               {formatHours(currentHours)}
                               {isBusy && sessionDuration > 0 && (
-                                <span className="text-amber-400 text-[10px] ml-1">
+                                <span className="text-[var(--theme-warning)] text-[10px] ml-1">
                                   ({formatDuration(sessionDuration)})
                                 </span>
                               )}
                             </span>
                           </div>
-                          <div className="h-1.5 rounded-full bg-gray-800 overflow-hidden">
+                          <div className="h-1.5 rounded-full bg-[var(--theme-track)] overflow-hidden">
                             <div
                               className={cn(
                                 'h-full rounded-full transition-all',
@@ -719,27 +719,27 @@ export default function RealTimeMonitor() {
 
                         {/* Stats grid */}
                         <div className="grid grid-cols-3 gap-2 text-center">
-                          <div className="rounded-lg bg-gray-900/60 border border-gray-800/50 p-2">
-                            <p className="text-[10px] text-gray-500 mb-0.5">Llamadas</p>
-                            <p className="text-sm font-bold text-gray-200">
+                          <div className="rounded-lg bg-[var(--theme-surface-muted)] border border-[var(--border)] p-2">
+                            <p className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Llamadas</p>
+                            <p className="text-sm font-bold text-[var(--foreground)]">
                               {interpreter.callsAttended}
                               {sessionDuration > 0 && interpreter.realtimeStatus === 'Busy' && (
                                 <span className="inline-block w-1 h-1 rounded-full bg-amber-500 animate-pulse ml-1" />
                               )}
                             </p>
                           </div>
-                          <div className="rounded-lg bg-gray-900/60 border border-gray-800/50 p-2">
-                            <p className="text-[10px] text-gray-500 mb-0.5">Minutos</p>
-                            <p className="text-sm font-bold text-gray-200">
+                          <div className="rounded-lg bg-[var(--theme-surface-muted)] border border-[var(--border)] p-2">
+                            <p className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Minutos</p>
+                            <p className="text-sm font-bold text-[var(--foreground)]">
                               {interpreter.interpretedMinutes}
                             </p>
                           </div>
-                          <div className="rounded-lg bg-gray-900/60 border border-gray-800/50 p-2">
-                            <p className="text-[10px] text-gray-500 mb-0.5">Adherencia</p>
+                          <div className="rounded-lg bg-[var(--theme-surface-muted)] border border-[var(--border)] p-2">
+                            <p className="text-[10px] text-[var(--text-tertiary)] mb-0.5">Adherencia</p>
                             <p className={cn(
                               'text-sm font-bold',
-                              interpreter.adherence && interpreter.adherence >= 80 ? 'text-emerald-400' :
-                              interpreter.adherence && interpreter.adherence >= 60 ? 'text-amber-400' : 'text-gray-500'
+                              interpreter.adherence && interpreter.adherence >= 80 ? 'text-[var(--theme-success)]' :
+                              interpreter.adherence && interpreter.adherence >= 60 ? 'text-[var(--theme-warning)]' : 'text-[var(--text-tertiary)]'
                             )}>
                               {interpreter.adherence != null ? `${interpreter.adherence.toFixed(1)}%` : '—'}
                             </p>
@@ -747,14 +747,14 @@ export default function RealTimeMonitor() {
                         </div>
 
                         {/* Login / Logout row */}
-                        <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-800/50 text-[10px] text-gray-500">
+                        <div className="flex items-center justify-between mt-3 pt-2 border-t border-[var(--border)] text-[10px] text-[var(--text-tertiary)]">
                           <span className="flex items-center gap-1">
-                            <LogIn size={10} className="text-emerald-500" />
+                            <LogIn size={10} className="text-[var(--theme-success)]" />
                             {formatTime(interpreter.loginTime)}
                           </span>
                           <span className="flex items-center gap-1">
                             {formatTime(interpreter.logoutTime)}
-                            <LogOut size={10} className="text-slate-500" />
+                            <LogOut size={10} className="text-[var(--text-tertiary)]" />
                           </span>
                         </div>
                       </div>
@@ -770,11 +770,11 @@ export default function RealTimeMonitor() {
       {/* ── CAMPAIGN MINI STATS ── */}
       {campaigns.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          <span className="text-xs text-gray-500 mr-1">Campañas activas:</span>
+          <span className="text-xs text-[var(--text-tertiary)] mr-1">Campañas activas:</span>
           {campaigns.map((c) => (
             <span
               key={c}
-              className="text-[11px] text-gray-400 px-2.5 py-1 rounded-full bg-gray-900 border border-gray-800 font-mono"
+              className="text-[11px] text-[var(--text-secondary)] px-2.5 py-1 rounded-full bg-[var(--theme-panel)] border border-[var(--border)] font-mono"
             >
               {c}
             </span>
@@ -784,21 +784,21 @@ export default function RealTimeMonitor() {
 
       {/* ── STATUS TIMELINE (when expanded) ── */}
       {selectedInterpreter && (
-        <div className="rounded-xl border border-gray-800 bg-gray-900/80 p-6">
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-6">
           <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
               <div className={cn(
                 'w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold',
-                selectedInterpreter.realtimeStatus === 'Online' ? 'bg-emerald-500/20 text-emerald-400' :
-                selectedInterpreter.realtimeStatus === 'Busy' ? 'bg-amber-500/20 text-amber-400' :
-                selectedInterpreter.realtimeStatus === 'Away' ? 'bg-orange-500/20 text-orange-400' :
-                'bg-slate-500/20 text-slate-400'
+                selectedInterpreter.realtimeStatus === 'Online' ? 'bg-emerald-500/20 text-[var(--theme-success)]' :
+                selectedInterpreter.realtimeStatus === 'Busy' ? 'bg-amber-500/20 text-[var(--theme-warning)]' :
+                selectedInterpreter.realtimeStatus === 'Away' ? 'bg-orange-500/20 text-[var(--theme-away)]' :
+                'bg-slate-500/20 text-[var(--text-secondary)]'
               )}>
                 {selectedInterpreter.name.charAt(0).toUpperCase()}
               </div>
               <div>
-                <h3 className="text-white font-bold text-lg">{selectedInterpreter.name}</h3>
-                <p className="text-xs text-gray-400">
+                <h3 className="text-[var(--foreground)] font-bold text-lg">{selectedInterpreter.name}</h3>
+                <p className="text-xs text-[var(--text-secondary)]">
                   {selectedInterpreter.externalId} · Campaña: {selectedInterpreter.campaign || '—'}
                 </p>
               </div>
@@ -812,7 +812,7 @@ export default function RealTimeMonitor() {
               />
               <button
                 onClick={() => setSelectedInterpreter(null)}
-                className="text-gray-500 hover:text-white transition-colors text-xs px-3 py-1.5 rounded-lg border border-gray-700 hover:border-gray-500"
+                className="text-[var(--text-tertiary)] hover:text-[var(--foreground)] transition-colors text-xs px-3 py-1.5 rounded-lg border border-[var(--border)] hover:border-gray-500"
               >
                 Cerrar
               </button>
@@ -821,26 +821,26 @@ export default function RealTimeMonitor() {
 
           {/* Workday detail */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
-            <div className="rounded-lg bg-gray-950/60 border border-gray-800 p-3">
-              <p className="text-[10px] text-gray-500 mb-1">Horas conectadas</p>
-              <p className="text-lg font-bold text-purple-400">
+            <div className="rounded-lg bg-[var(--theme-panel)] border border-[var(--border)] p-3">
+              <p className="text-[10px] text-[var(--text-tertiary)] mb-1">Horas conectadas</p>
+              <p className="text-lg font-bold text-[var(--theme-purple)]">
                 {formatHours(selectedInterpreter.connectedHours)}
               </p>
             </div>
-            <div className="rounded-lg bg-gray-950/60 border border-gray-800 p-3">
-              <p className="text-[10px] text-gray-500 mb-1">Llamadas atendidas</p>
-              <p className="text-lg font-bold text-cyan-400">{selectedInterpreter.callsAttended}</p>
+            <div className="rounded-lg bg-[var(--theme-panel)] border border-[var(--border)] p-3">
+              <p className="text-[10px] text-[var(--text-tertiary)] mb-1">Llamadas atendidas</p>
+              <p className="text-lg font-bold text-[var(--theme-info)]">{selectedInterpreter.callsAttended}</p>
             </div>
-            <div className="rounded-lg bg-gray-950/60 border border-gray-800 p-3">
-              <p className="text-[10px] text-gray-500 mb-1">Minutos interpretados</p>
-              <p className="text-lg font-bold text-blue-400">{selectedInterpreter.interpretedMinutes}</p>
+            <div className="rounded-lg bg-[var(--theme-panel)] border border-[var(--border)] p-3">
+              <p className="text-[10px] text-[var(--text-tertiary)] mb-1">Minutos interpretados</p>
+              <p className="text-lg font-bold text-[var(--theme-link)]">{selectedInterpreter.interpretedMinutes}</p>
             </div>
-            <div className="rounded-lg bg-gray-950/60 border border-gray-800 p-3">
-              <p className="text-[10px] text-gray-500 mb-1">Adherencia</p>
+            <div className="rounded-lg bg-[var(--theme-panel)] border border-[var(--border)] p-3">
+              <p className="text-[10px] text-[var(--text-tertiary)] mb-1">Adherencia</p>
               <p className={cn(
                 'text-lg font-bold',
-                selectedInterpreter.adherence && selectedInterpreter.adherence >= 80 ? 'text-emerald-400' :
-                selectedInterpreter.adherence && selectedInterpreter.adherence >= 60 ? 'text-amber-400' : 'text-gray-500'
+                selectedInterpreter.adherence && selectedInterpreter.adherence >= 80 ? 'text-[var(--theme-success)]' :
+                selectedInterpreter.adherence && selectedInterpreter.adherence >= 60 ? 'text-[var(--theme-warning)]' : 'text-[var(--text-tertiary)]'
               )}>
                 {selectedInterpreter.adherence != null ? `${selectedInterpreter.adherence.toFixed(1)}%` : '—'}
               </p>
@@ -849,32 +849,32 @@ export default function RealTimeMonitor() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5 text-xs">
             <div>
-              <p className="text-gray-500 mb-1">Login</p>
-              <p className="text-gray-300 font-mono flex items-center gap-1">
-                <LogIn size={11} className="text-emerald-500" />
+              <p className="text-[var(--text-tertiary)] mb-1">Login</p>
+              <p className="text-[var(--text-secondary)] font-mono flex items-center gap-1">
+                <LogIn size={11} className="text-[var(--theme-success)]" />
                 {formatTime(selectedInterpreter.loginTime)}
               </p>
             </div>
             <div>
-              <p className="text-gray-500 mb-1">Logout</p>
-              <p className="text-gray-300 font-mono flex items-center gap-1">
-                <LogOut size={11} className="text-slate-500" />
+              <p className="text-[var(--text-tertiary)] mb-1">Logout</p>
+              <p className="text-[var(--text-secondary)] font-mono flex items-center gap-1">
+                <LogOut size={11} className="text-[var(--text-tertiary)]" />
                 {formatTime(selectedInterpreter.logoutTime)}
               </p>
             </div>
             <div>
-              <p className="text-gray-500 mb-1">Jornada</p>
-              <p className="text-gray-300">{selectedInterpreter.workdayStatus}</p>
+              <p className="text-[var(--text-tertiary)] mb-1">Jornada</p>
+              <p className="text-[var(--text-secondary)]">{selectedInterpreter.workdayStatus}</p>
             </div>
             <div>
-              <p className="text-gray-500 mb-1">Tarifa</p>
-              <p className="text-gray-300 font-mono">RD$ {selectedInterpreter.tariffPerMinute.toFixed(2)}/min</p>
+              <p className="text-[var(--text-tertiary)] mb-1">Tarifa</p>
+              <p className="text-[var(--text-secondary)] font-mono">RD$ {selectedInterpreter.tariffPerMinute.toFixed(2)}/min</p>
             </div>
           </div>
 
           {/* Timeline */}
           <div>
-            <h4 className="text-sm font-semibold text-gray-300 mb-3">Historial de estados</h4>
+            <h4 className="text-sm font-semibold text-[var(--text-secondary)] mb-3">Historial de estados</h4>
             <StatusTimeline interpreterId={selectedInterpreter.id} />
           </div>
         </div>
