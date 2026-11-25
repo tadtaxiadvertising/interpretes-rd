@@ -23,7 +23,7 @@ vi.mock('@/lib/prisma', () => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidatePath }));
 
-import { createNotification, markNotificationAsRead, getMyNotifications, markAllNotificationsAsRead } from './notifications';
+import { createNotification, markNotificationAsRead, getMyNotifications, markAllNotificationsAsRead, getMyNotificationHistory } from './notifications';
 
 const profileId = '123e4567-e89b-42d3-a456-426614174000';
 const sensitive = 'postgresql://admin:PRIVATE_PASSWORD@db.internal/notifications';
@@ -218,5 +218,33 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     expect(m.notificationCount).not.toHaveBeenCalled();
     expect(m.notificationFindMany).not.toHaveBeenCalled();
     expect(m.notificationUpdateMany).not.toHaveBeenCalled();
+  });
+  it('paginates only the current account history, filters unread and returns sanitized links', async () => {
+    const records = Array.from({ length: 21 }, (_, i) => ({
+      id: 'n' + i, title: 'Aviso', message: 'Mensaje', type: 'info', isRead: false,
+      createdAt: null, link: i === 0 ? '/dashboard/roleplays?token=secret' : '//evil.invalid',
+    }));
+    m.notificationFindMany.mockResolvedValueOnce(records);
+    const response = await getMyNotificationHistory({ page: 1, unreadOnly: true });
+    expect(response).toMatchObject({ success: true, hasMore: true });
+    if (response.success) {
+      expect(response.data).toHaveLength(20);
+      expect(response.data[0].link).toBe('/dashboard/roleplays');
+      expect(response.data[1].link).toBeNull();
+    }
+    expect(m.notificationFindMany).toHaveBeenCalledWith({
+      where: { userId: { in: [profileId] }, OR: [{ isRead: false }, { isRead: null }] },
+      select: { id: true, title: true, message: true, type: true, isRead: true, createdAt: true, link: true },
+      orderBy: [{ createdAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+      skip: 20, take: 21,
+    });
+  });
+
+  it('rejects invalid pagination and unauthorized history before querying', async () => {
+    expect(await getMyNotificationHistory({ page: -1, unreadOnly: true })).toEqual({ success: false });
+    expect(await getMyNotificationHistory({ page: 100001, unreadOnly: false })).toEqual({ success: false });
+    m.validateAction.mockResolvedValueOnce({ error: 'Unauthorized' });
+    expect(await getMyNotificationHistory({ page: 0, unreadOnly: false })).toEqual({ success: false });
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
   });
 });
