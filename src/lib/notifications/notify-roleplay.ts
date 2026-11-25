@@ -1,5 +1,6 @@
 import 'server-only';
 import prisma from '@/lib/prisma';
+import { roleplayAssignmentEvent } from './communication-notification-events';
 import { roleplayEvaluationEvent } from './evaluation-notification-events';
 import { publishNotificationEvent } from './publish-notification-event';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
@@ -21,12 +22,7 @@ export async function notifyRoleplayAssignments(assignments: readonly Assignment
         const userId = recipients.get(assignment.interpreterId);
         if (!userId) return;
         try {
-          await publishNotificationEvent({
-            userId, eventKey: 'roleplay.assigned:' + assignment.id,
-            category: 'roleplay', type: 'info', title: 'Nuevo roleplay asignado',
-            message: 'Tienes un ejercicio disponible en Mis Roleplays.',
-            link: '/dashboard/roleplays',
-          });
+          await publishNotificationEvent(roleplayAssignmentEvent(userId, assignment.id));
         } catch (error) {
           console.warn('Roleplay assignment saved but notification failed:', safeServerErrorCategory(error));
         }
