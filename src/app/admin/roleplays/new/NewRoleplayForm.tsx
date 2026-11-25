@@ -580,22 +580,22 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   if (success) {
     return (
-      <div className="glass p-8 rounded-3xl border border-white/5 text-center animate-in fade-in">
+      <div className="glass p-8 rounded-3xl border border-[var(--border)] text-center animate-in fade-in">
         <div className="w-20 h-20 bg-green-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <Mic2 size={40} className="text-green-400" />
+          <Mic2 size={40} className="text-[var(--theme-success)]" />
         </div>
-        <h2 className="text-2xl font-bold text-white mb-2">{success.summary ? 'Roleplays creados correctamente' : '¡Roleplay creado correctamente!'}</h2>
-        <p className="text-gray-400 mb-6">
-          Creado para <span className="font-bold text-white">{success.participantName}</span>
+        <h2 className="text-2xl font-bold text-[var(--foreground)] mb-2">{success.summary ? 'Roleplays creados correctamente' : '¡Roleplay creado correctamente!'}</h2>
+        <p className="text-[var(--text-secondary)] mb-6">
+          Creado para <span className="font-bold text-[var(--foreground)]">{success.participantName}</span>
         </p>
-        <p className="text-gray-400 mb-6">{librarySource?.scenarios.length ?? scenarios.length} escenarios configurados</p>
-        {success.summary && <p className="text-sm text-gray-300 mb-6">{success.summary}</p>}
-        <div className="mb-6 p-4 bg-slate-900/50 rounded-xl">
+        <p className="text-[var(--text-secondary)] mb-6">{librarySource?.scenarios.length ?? scenarios.length} escenarios configurados</p>
+        {success.summary && <p className="text-sm text-[var(--text-secondary)] mb-6">{success.summary}</p>}
+        <div className="mb-6 p-4 bg-[var(--theme-surface-muted)] rounded-xl">
           <input 
             type="text" 
             value={success.link} 
             readOnly
-            className="w-full bg-slate-950 border border-white/10 rounded-xl py-3 px-4 text-white text-sm text-center"
+            className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] text-sm text-center"
           />
         </div>
         <div className="flex gap-4 justify-center">
@@ -607,7 +607,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           </button>
           <Link 
             href="/admin/roleplays"
-            className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-colors"
+            className="px-6 py-3 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--foreground)] rounded-xl font-bold transition-colors"
           >
             Ver todos los roleplays
           </Link>
@@ -617,9 +617,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   }
 
   return (
-    <div className="glass rounded-3xl border border-white/5 p-4 sm:p-6 space-y-5">
+    <div className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6 space-y-5">
       <div>
-        <h3 className="text-lg font-bold text-white mb-2">¿A quién se asignará?</h3>
+        <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">¿A quién se asignará?</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <button
             type="button"
@@ -629,11 +629,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               "p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-3",
               participantType === 'interpreter'
                 ? "border-blue-500 bg-blue-500/10"
-                : "border-white/10 hover:border-white/20"
+                : "border-[var(--border)] hover:border-[var(--theme-control-border)]"
             )}
           >
-            <User size={24} className={cn(participantType === 'interpreter' ? 'text-blue-400' : 'text-gray-400')} />
-            <span className={cn(participantType === 'interpreter' ? 'text-blue-400' : 'text-gray-300')}>
+            <User size={24} className={cn(participantType === 'interpreter' ? 'text-[var(--theme-link)]' : 'text-[var(--text-secondary)]')} />
+            <span className={cn(participantType === 'interpreter' ? 'text-[var(--theme-link)]' : 'text-[var(--text-secondary)]')}>
               Intérprete
             </span>
           </button>
@@ -645,11 +645,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               "p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-3",
               participantType === 'candidate'
                 ? "border-green-500 bg-green-500/10"
-                : "border-white/10 hover:border-white/20"
+                : "border-[var(--border)] hover:border-[var(--theme-control-border)]"
             )}
           >
-            <UserPlus size={24} className={cn(participantType === 'candidate' ? 'text-green-400' : 'text-gray-400')} />
-            <span className={cn(participantType === 'candidate' ? 'text-green-400' : 'text-gray-300')}>
+            <UserPlus size={24} className={cn(participantType === 'candidate' ? 'text-[var(--theme-success)]' : 'text-[var(--text-secondary)]')} />
+            <span className={cn(participantType === 'candidate' ? 'text-[var(--theme-success)]' : 'text-[var(--text-secondary)]')}>
               Candidato
             </span>
           </button>
@@ -659,35 +659,35 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             onClick={() => changeParticipantType('all-active-interpreters')}
             className={cn(
               "p-4 rounded-2xl border-2 transition-all flex flex-col items-center justify-center gap-2",
-              isBulk ? "border-blue-500 bg-blue-500/10" : "border-white/10 hover:border-white/20"
+              isBulk ? "border-blue-500 bg-blue-500/10" : "border-[var(--border)] hover:border-[var(--theme-control-border)]"
             )}
           >
-            <UserPlus size={24} className={cn(isBulk ? 'text-blue-400' : 'text-gray-400')} />
-            <span className={cn("text-center", isBulk ? 'text-blue-400' : 'text-gray-300')}>Todos los intérpretes activos</span>
+            <UserPlus size={24} className={cn(isBulk ? 'text-[var(--theme-link)]' : 'text-[var(--text-secondary)]')} />
+            <span className={cn("text-center", isBulk ? 'text-[var(--theme-link)]' : 'text-[var(--text-secondary)]')}>Todos los intérpretes activos</span>
           </button>
         </div>
       </div>
 
       {isBulk ? (
         <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5">
-          <p className="font-semibold text-white">Asignación masiva</p>
-          <p className="text-sm text-gray-300 mt-1">
+          <p className="font-semibold text-[var(--foreground)]">Asignación masiva</p>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
             Se creará una sesión para los intérpretes elegibles con estado «Activo».
             {activeInterpreterCount > 0 ? ` Hay ${activeInterpreterCount} activos en la lista.` : ' El servidor verificará el total antes de crear sesiones.'}
           </p>
-          <p className="text-xs text-gray-400 mt-2">Se omiten las sesiones anteriores que impidan una nueva asignación. Los audios se cargan una sola vez y se reutilizan según la elegibilidad verificada en el servidor.</p>
-          {eligibilityLoading && <p role="status" className="mt-3 text-sm text-blue-200">Verificando destinatarios elegibles…</p>}
+          <p className="text-xs text-[var(--text-secondary)] mt-2">Se omiten las sesiones anteriores que impidan una nueva asignación. Los audios se cargan una sola vez y se reutilizan según la elegibilidad verificada en el servidor.</p>
+          {eligibilityLoading && <p role="status" className="mt-3 text-sm text-[var(--theme-link)]">Verificando destinatarios elegibles…</p>}
           {eligibility && !eligibilityLoading && (
-            <p role="status" className="mt-3 text-sm font-medium text-blue-100">
+            <p role="status" className="mt-3 text-sm font-medium text-[var(--theme-link)]">
               Vista previa (solo lectura): {eligibility.eligibleCount} elegibles de {eligibility.activeCount} activos; {eligibility.skippedCount} omitidos por sesiones previas.
             </p>
           )}
-          {eligibilityError && <p role="alert" className="mt-3 text-xs text-amber-300">{eligibilityError}</p>}
-          <p className="mt-2 text-xs text-slate-400">Esta vista previa puede cambiar; al crear, el servidor vuelve a comprobar la elegibilidad.</p>
+          {eligibilityError && <p role="alert" className="mt-3 text-xs text-[var(--theme-warning)]">{eligibilityError}</p>}
+          <p className="mt-2 text-xs text-[var(--text-secondary)]">Esta vista previa puede cambiar; al crear, el servidor vuelve a comprobar la elegibilidad.</p>
         </div>
       ) : (
         <div className="space-y-2">
-          <label htmlFor="roleplay-participant-search" className="block text-sm font-semibold text-white">
+          <label htmlFor="roleplay-participant-search" className="block text-sm font-semibold text-[var(--foreground)]">
             Buscar {participantType === 'candidate' ? 'candidato' : 'intérprete'}
           </label>
           <input
@@ -697,16 +697,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             value={participantSearch}
             onChange={(event) => setParticipantSearch(event.currentTarget.value)}
             placeholder="Nombre, correo o identificador…"
-            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-2.5 text-white placeholder:text-slate-500 focus:border-blue-500"
+            className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-2.5 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:border-[var(--theme-focus)]"
           />
-          <label htmlFor="roleplay-participant-select" className="block text-sm text-slate-300">
+          <label htmlFor="roleplay-participant-select" className="block text-sm text-[var(--text-secondary)]">
             Destinatario · {matchingParticipants.length} coincidencia(s)
           </label>
           <select
             id="roleplay-participant-select"
             value={selectedParticipantId}
             onChange={(event) => { setSelectedParticipantId(event.currentTarget.value); setError(null); }}
-            className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-blue-500"
+            className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-3 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)]"
           >
             <option value="">Selecciona un {participantType === 'candidate' ? 'candidato' : 'intérprete'}…</option>
             {visibleParticipants.map((participant) => {
@@ -719,7 +719,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             })}
           </select>
           {search && matchingParticipants.length === 0 && (
-            <p className="text-xs text-amber-200">
+            <p className="text-xs text-[var(--theme-warning)]">
               Sin coincidencias. Prueba otro nombre, correo o identificador.
               {selectedParticipant ? ' El destinatario seleccionado se conserva.' : ''}
             </p>
@@ -729,37 +729,37 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       {librarySource ? (
         <section className="space-y-4 rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
-          <h3 className="text-lg font-semibold text-white">Plantilla seleccionada</h3>
-          <p className="text-sm text-blue-100/80">
+          <h3 className="text-lg font-semibold text-[var(--foreground)]">Plantilla seleccionada</h3>
+          <p className="text-sm text-[var(--theme-link)]">
             Los siguientes audios se reutilizarán sin volver a subir archivos. El servidor
             verificará que sigan disponibles antes de asignarlos.
           </p>
           <ol className="space-y-2">
             {librarySource.scenarios.map((scenario, index) => (
-              <li key={index} className="rounded-xl border border-white/10 bg-slate-950/50 p-3">
-                <p className="font-medium text-white">{index + 1}. {scenario.title}</p>
-                <p className="mt-1 text-xs text-gray-400">
+              <li key={index} className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+                <p className="font-medium text-[var(--foreground)]">{index + 1}. {scenario.title}</p>
+                <p className="mt-1 text-xs text-[var(--text-secondary)]">
                   {scenario.durationLimitSec ? `Límite de ${scenario.durationLimitSec} segundos` : 'Duración predeterminada'}
                 </p>
               </li>
             ))}
           </ol>
-          <p className="font-mono text-xs text-gray-500">Huella SHA-256: {librarySource.fingerprint.slice(0, 16)}…</p>
-          <Link href="/admin/roleplays/library" className="inline-block text-sm font-medium text-blue-300 hover:text-blue-200">
+          <p className="font-mono text-xs text-[var(--text-tertiary)]">Huella SHA-256: {librarySource.fingerprint.slice(0, 16)}…</p>
+          <Link href="/admin/roleplays/library" className="inline-block text-sm font-medium text-[var(--theme-link)] hover:text-[var(--theme-link)]">
             Elegir otra plantilla
           </Link>
         </section>
       ) : (
       <div>
         <div className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-          <label htmlFor="manifest-roleplay-upload" className="block text-sm font-semibold text-blue-100">
+          <label htmlFor="manifest-roleplay-upload" className="block text-sm font-semibold text-[var(--theme-link)]">
             Importar roleplay preparado (ZIP de Audio Studio o manifest.json + MP3)
           </label>
-          <p className="mt-1 text-xs text-slate-300">
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">
             Importa un ZIP o manifest.json con sus MP3. Se sustituirá el borrador,
             pero no se creará ninguna sesión hasta que confirmes la asignación.
           </p>
-          <p className="mt-2 text-xs text-blue-100">
+          <p className="mt-2 text-xs text-[var(--theme-link)]">
             Los .md de HappyScribe son transcripciones; los JSON de proyecto guardan
             cortes de edición. Ninguno se puede asignar directamente. Abre Audio Studio,
             importa el SRT desde HappyScribe, revisa los turnos y genera un ZIP con
@@ -767,11 +767,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             ábrelo junto a la grabación original y genera el ZIP con el exportador local.
           </p>
           <Link href="/admin/roleplays/studio"
-            className="mt-2 inline-block text-xs font-semibold text-blue-200 underline underline-offset-2">
+            className="mt-2 inline-block text-xs font-semibold text-[var(--theme-link)] underline underline-offset-2">
             Preparar paquete en Audio Studio
           </Link>
-          <details className="mt-2 text-xs text-slate-300">
-            <summary className="cursor-pointer text-blue-200">Formatos admitidos y privacidad</summary>
+          <details className="mt-2 text-xs text-[var(--text-secondary)]">
+            <summary className="cursor-pointer text-[var(--theme-link)]">Formatos admitidos y privacidad</summary>
             <p className="mt-2 leading-5">
               Se admiten paquetes ZIP del estudio integrado o externo (STORE/DEFLATE, sin cifrado),
               o manifest.json con todos los MP3 individuales. En los ZIP externos se omiten
@@ -787,13 +787,13 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             accept=".zip,.json,.mp3,audio/mpeg,application/json,application/zip"
             disabled={isImporting || isCreating}
             onChange={(event) => { void handleManifestImport(event); }}
-            className="mt-3 block w-full text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white disabled:opacity-50"
+            className="mt-3 block w-full text-sm text-[var(--text-secondary)] file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white disabled:opacity-50"
           />
-          {isImporting && <p role="status" className="mt-2 text-sm text-blue-200">Verificando archivos y huellas SHA-256…</p>}
-          {importNotice && <p role="status" className="mt-2 text-sm text-emerald-200">{importNotice}</p>}
+          {isImporting && <p role="status" className="mt-2 text-sm text-[var(--theme-link)]">Verificando archivos y huellas SHA-256…</p>}
+          {importNotice && <p role="status" className="mt-2 text-sm text-[var(--theme-success)]">{importNotice}</p>}
         </div>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-bold text-white">Escenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>
+          <h3 className="text-lg font-bold text-[var(--foreground)]">Escenarios ({scenarios.length}/{ROLEPLAY_MAX_SCENARIOS})</h3>
           <button
             onClick={addScenario}
             disabled={scenarios.length >= ROLEPLAY_MAX_SCENARIOS}
@@ -805,12 +805,12 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </div>
 
         {defaultResponseLimitCount >= 2 && (
-          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-white/10 bg-slate-950/50 p-3">
-            <label htmlFor="roleplay-bulk-response-limit" className="flex-1 min-w-44 text-sm text-slate-200">
+          <div className="mb-4 flex flex-wrap items-end gap-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+            <label htmlFor="roleplay-bulk-response-limit" className="flex-1 min-w-44 text-sm text-[var(--foreground)]">
               Tiempo de respuesta para {defaultResponseLimitCount} escenarios sin límite personalizado
               <select id="roleplay-bulk-response-limit" value={bulkResponseLimitSec}
                 onChange={event => setBulkResponseLimitSec(Number(event.target.value))}
-                className="mt-1 block w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white">
+                className="mt-1 block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2 text-sm text-[var(--theme-control-text)]">
                 <option value={60}>1 minuto</option>
                 <option value={90}>1 minuto y medio</option>
                 <option value={120}>2 minutos</option>
@@ -819,16 +819,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               </select>
             </label>
             <button type="button" onClick={applyResponseLimitToDefaultScenarios}
-              className="rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-medium text-blue-200 hover:bg-blue-500/10">
+              className="rounded-lg border border-blue-400/30 px-3 py-2 text-sm font-medium text-[var(--theme-link)] hover:bg-blue-500/10">
               Aplicar solo a los sin configurar
             </button>
           </div>
         )}
         {lastRemoved && (
           <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-400/20 bg-amber-400/5 px-3 py-2">
-            <p className="text-sm text-amber-100">Escenario eliminado. Puedes recuperar sus datos y audio antes de editar otra cosa.</p>
+            <p className="text-sm text-[var(--theme-warning)]">Escenario eliminado. Puedes recuperar sus datos y audio antes de editar otra cosa.</p>
             <button type="button" onClick={restoreRemovedScenario}
-              className="rounded-lg border border-amber-300/30 px-3 py-1.5 text-sm font-semibold text-amber-100 hover:bg-amber-400/10">
+              className="rounded-lg border border-amber-300/30 px-3 py-1.5 text-sm font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
               Deshacer eliminación de escenario
             </button>
           </div>
@@ -837,8 +837,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           {scenarios.map((scenario, index) => (
             <div key={scenario.id} className="group" onDragStart={() => setDraggingId(scenario.id)} onDragEnd={() => setDraggingId(null)}>
               <div className="flex items-center gap-2 mb-2">
-                <span className="text-sm font-medium text-gray-400">Escenario {index + 1}</span>
-                <span className="text-xs text-gray-500">(usa las flechas para cambiar el orden)</span>
+                <span className="text-sm font-medium text-[var(--text-secondary)]">Escenario {index + 1}</span>
+                <span className="text-xs text-[var(--text-tertiary)]">(usa las flechas para cambiar el orden)</span>
               </div>
               <ScenarioCard
                 scenario={scenario}
@@ -856,7 +856,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           ))}
           
           {scenarios.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-[var(--text-tertiary)]">
               No hay escenarios. Pulsa «Añadir escenario» para empezar.
             </div>
           )}
@@ -865,10 +865,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       )}
 
-      <section aria-label="Resumen de asignación" className="rounded-xl border border-white/10 bg-slate-950/60 p-3 sm:p-4 space-y-2">
-        <h3 className="text-sm font-semibold text-white">Revisión antes de crear</h3>
-        <p className="text-sm text-slate-300">
-          Destinatario: <span className="font-medium text-white">
+      <section aria-label="Resumen de asignación" className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3 sm:p-4 space-y-2">
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">Revisión antes de crear</h3>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Destinatario: <span className="font-medium text-[var(--foreground)]">
             {isBulk
               ? eligibility && !eligibilityLoading
                 ? `${eligibility.eligibleCount} ${eligibility.eligibleCount === 1 ? 'intérprete elegible' : 'intérpretes elegibles'} de ${eligibility.activeCount} activos`
@@ -878,16 +878,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
                 : 'Sin seleccionar'}
           </span>
         </p>
-        <p className="text-sm text-slate-300">
-          Escenarios listos: <span className="font-medium text-white">{readyScenarioCount} de {scenarioCount}</span>
+        <p className="text-sm text-[var(--text-secondary)]">
+          Escenarios listos: <span className="font-medium text-[var(--foreground)]">{readyScenarioCount} de {scenarioCount}</span>
         </p>
         {!librarySource && selectedAudioBytes > 0 && (
-          <p className="text-sm text-slate-300">
-            Audio seleccionado: <span className="font-medium text-white">{(selectedAudioBytes / (1024 * 1024)).toFixed(1)} MiB</span>
+          <p className="text-sm text-[var(--text-secondary)]">
+            Audio seleccionado: <span className="font-medium text-[var(--foreground)]">{(selectedAudioBytes / (1024 * 1024)).toFixed(1)} MiB</span>
           </p>
         )}
         {!librarySource && selectedAudioBytes > LARGE_AUDIO_BATCH_CONFIRM_BYTES && (
-          <div className="space-y-1 text-xs text-amber-200">
+          <div className="space-y-1 text-xs text-[var(--theme-warning)]">
             <p>
               Este lote es voluminoso. La publicación actual envía los audios al servidor;
               se solicitará tu confirmación antes de transferirlos. Una carga grande puede
@@ -901,24 +901,24 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           </div>
         )}
         {(!isBulk && !selectedParticipantId) ? (
-          <p className="text-xs text-amber-200">Elige un destinatario antes de crear. El formulario te llevará al primer dato pendiente.</p>
+          <p className="text-xs text-[var(--theme-warning)]">Elige un destinatario antes de crear. El formulario te llevará al primer dato pendiente.</p>
         ) : readyScenarioCount !== scenarioCount || scenarioCount === 0 ? (
-          <p className="text-xs text-amber-200">Completa el título y audio de cada escenario antes de crear.</p>
+          <p className="text-xs text-[var(--theme-warning)]">Completa el título y audio de cada escenario antes de crear.</p>
         ) : (
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-[var(--text-secondary)]">
             Revisa la selección antes de crear. El servidor validará los permisos y la elegibilidad.
           </p>
         )}
       </section>
 
       {error && (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3">
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-[var(--theme-danger)] flex items-center gap-3">
           <AlertCircle />
           <span>{error}</span>
         </div>
       )}
       {submissionUncertain && (
-        <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-amber-100">
+        <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-[var(--theme-warning)]">
           El servidor no pudo confirmar la operación o se interrumpió la conexión. El roleplay podría haberse creado.
           {' '}<Link href="/admin/roleplays" className="font-semibold underline underline-offset-2">
             Comprobar los roleplays existentes
@@ -932,7 +932,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
           isCreating || isImporting
-            ? "bg-slate-800 text-slate-500 cursor-not-allowed"
+            ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed"
             : "bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20"
         )}
       >

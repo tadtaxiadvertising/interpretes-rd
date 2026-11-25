@@ -53,7 +53,7 @@ export function SessionActions({ sessionId, status }: { sessionId: string; statu
             type="button"
             onClick={() => setConfirming(false)}
             disabled={isPending}
-            className="px-3 py-2 bg-white/5 hover:bg-white/10 text-gray-300 rounded-xl text-sm font-medium border border-white/10 transition-colors"
+            className="px-3 py-2 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--text-secondary)] rounded-xl text-sm font-medium border border-[var(--border)] transition-colors"
           >
             Keep
           </button>
@@ -67,7 +67,7 @@ export function SessionActions({ sessionId, status }: { sessionId: string; statu
             Confirm cancel
           </button>
         </div>
-        {error && <span className="text-xs text-red-400">{error}</span>}
+        {error && <span className="text-xs text-[var(--theme-danger)]">{error}</span>}
       </div>
     );
   }
@@ -79,7 +79,7 @@ export function SessionActions({ sessionId, status }: { sessionId: string; statu
       title="Cancel this session so the participant can be invited again"
       className={cn(
         'px-4 py-2 rounded-xl font-medium transition-colors border text-sm',
-        'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+        'bg-red-500/10 hover:bg-red-500/20 text-[var(--theme-danger)] border-red-500/20'
       )}
     >
       Cancel
