@@ -194,6 +194,11 @@ export default function EmailProviderVault() {
             onSave={(dailyLimit, monthlyLimit) => {
               void run(async () => {
                 const status = await saveEmailProviderBudget({ provider: quota.provider, dailyLimit, monthlyLimit, expectedDailyLimit: quota.dailyLimit, expectedMonthlyLimit: quota.monthlyLimit });
+                if (status === 'unavailable') {
+                  invalidateSnapshot(messageFor(status));
+                  setMessage('No se pudo confirmar el cambio de presupuesto. Consulta los perfiles antes de repetir la operación.');
+                  return;
+                }
                 await load();
                 setMessage(messageFor(status));
               });
