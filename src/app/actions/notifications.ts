@@ -7,6 +7,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
+import { reconcileCandidateNotifications } from '@/lib/notifications/reconcile-candidate';
 import { reconcileRecruitmentAdminNotifications } from '@/lib/notifications/reconcile-recruitment-admin';
 import { publishNotificationEvent } from '@/lib/notifications/publish-notification-event';
 import { notificationCategories, publicNotificationCategory } from '@/lib/notifications/notification-display';
@@ -30,6 +31,8 @@ export async function getMyNotifications() {
   try {
     if (auth.user.role === 'admin' && auth.user.profileId && ids.includes(auth.user.profileId)) {
       await reconcileRecruitmentAdminNotifications(auth.user.profileId);
+    } else if (auth.user.role === 'candidate' && auth.user.profileId && ids.includes(auth.user.profileId)) {
+      await reconcileCandidateNotifications(auth.user);
     }
     const [data, unreadCount] = await Promise.all([
       loadNavbarNotifications(ids, { throwOnError: true, candidateOnly: auth.user.role === 'candidate' }),
