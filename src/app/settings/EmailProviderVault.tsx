@@ -7,6 +7,7 @@ import type { ProfileMetadata } from '@/lib/email/provider-vault';
 
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 import { quotaAvailability } from '@/lib/email/quota-availability';
+import { profileSelectionReadiness } from '@/lib/email/profile-selection-readiness';
 
 const statusText: Record<string, string> = {
   imported: 'Configuración existente copiada al almacén. Falta probar y confirmar recepción. No se cambió el transporte activo.',
@@ -33,6 +34,16 @@ const statusText: Record<string, string> = {
   brevo_rate_limited: 'Brevo limitó las solicitudes.', resend_quota: 'Resend limitó las solicitudes.',
 };
 const messageFor = (status: string) => statusText[status] ?? 'Aceptación no confirmada. Revisa el proveedor y el buzón antes de repetir.';
+
+const readinessText: Record<ReturnType<typeof profileSelectionReadiness>, string> = {
+  retired: 'Perfil desactivado.',
+  test_required: 'Primero realiza una prueba aceptada por el proveedor.',
+  receipt_required: 'Confirma la recepción en el buzón.',
+  quota_unknown: 'No hay presupuesto local consultado para este proveedor.',
+  quota_exhausted: 'Presupuesto local agotado. Revisa los límites antes de elegir.',
+  pause_required: 'Pausa el despacho y vuelve a consultar los perfiles.',
+  ready: 'Cumple los requisitos locales para elegirlo. El servidor volverá a verificarlos.',
+};
 
 export default function EmailProviderVault() {
   const [environmentImport, setEnvironmentImport] = useState<{ provider: 'brevo' | 'resend'; from: string } | undefined>();
@@ -137,7 +148,9 @@ export default function EmailProviderVault() {
       {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
       {ready && <p className="text-xs">{preferenceEditable ? 'Puedes elegir un perfil con recepción confirmada. La pausa se conserva.' : 'Para cambiar de proveedor, pausa el despacho del almacén y vuelve a consultar perfiles. Las pruebas y otras modificaciones mantienen sus requisitos de seguridad.'}</p>}
       {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
-      {profiles.map(profile => (
+      {profiles.map(profile => {
+        const readiness = profileSelectionReadiness(profile, quotas.find(q => q.provider === profile.provider), preferenceEditable);
+        return (
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
           <p className="font-semibold">{profile.name} · {profile.provider}</p>
           <p>{profile.from}</p>
@@ -148,8 +161,9 @@ export default function EmailProviderVault() {
           {profile.testAcceptedAt && !profile.receiptConfirmedAt && (
             <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await confirmSavedProviderReceipt(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Confirmo que recibí el correo de prueba</button>
           )}
+          {preferredId !== profile.id && <p className="text-xs">{readinessText[readiness]}</p>}
           {profile.receiptConfirmedAt && preferredId !== profile.id && (
-            <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
+            <button type="button" disabled={pending || readiness !== 'ready'} onClick={() => run(async () => { const status = await setPreferredEmailProvider(profile.id); await load(); setMessage(messageFor(status)); })} className="block rounded-lg border border-[var(--border)] px-3 py-2">Elegir como proveedor preferido</button>
           )}
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled={pending || !selectionPaused} onClick={() => { setEditingId(profile.id); setRetiringId(null); }} className="rounded-lg border border-[var(--border)] px-3 py-2">Editar configuración / clave</button>
@@ -197,7 +211,7 @@ export default function EmailProviderVault() {
           )}
           </>}
         </div>
-      ))}
+      ); })}
       <p role="status" aria-live="polite">{message}</p>
       <p>La prueba requiere desactivar todos los controles de despacho. La frecuencia de prueba se limita por proceso; el presupuesto es persistente y compartido. No reintentes envíos inciertos.</p>
     </section>
