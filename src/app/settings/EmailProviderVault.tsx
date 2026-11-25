@@ -7,6 +7,7 @@ import type { ProfileMetadata } from '@/lib/email/provider-vault';
 import type { ProviderQuota } from '@/lib/email/provider-quota';
 
 const statusText: Record<string, string> = {
+  profile_test_blocked: 'No se inició la prueba: perfil desactivado o presupuesto agotado.',
   profile_retired: 'Perfil desactivado. El consumo y el historial se conservan.',
   profile_replaced: 'Nueva configuración guardada. Repite la prueba y confirma la recepción antes de seleccionarla.',
   budget_saved: 'Presupuesto guardado. El consumo acumulado no ha cambiado.',
