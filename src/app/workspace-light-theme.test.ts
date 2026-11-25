@@ -127,3 +127,22 @@ describe('semantic monitoring palette', () => {
     });
   });
 });
+
+describe('Audio Studio semantic theme', () => {
+  it('uses theme-aware controls and preserves the video surface and solid actions', () => {
+    const studio = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/page.tsx'), 'utf8');
+    expect(studio).toContain('bg-[var(--theme-control-bg)]');
+    expect(studio).toContain('text-[var(--theme-control-text)]');
+    expect(studio).toContain('border-[var(--theme-control-border)]');
+    expect(studio).toContain('rounded-lg bg-black');
+    expect(studio).toContain('bg-blue-600 px-4 py-3 font-semibold text-white');
+  });
+
+  it('uses theme colors for the waveform, selection and playhead', () => {
+    const waveform = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/StudioWaveform.tsx'), 'utf8');
+    expect(waveform).toContain('fill-[var(--theme-link)]');
+    expect(waveform).toContain('fill-[var(--theme-success)] opacity-25');
+    expect(waveform).toContain('stroke-[var(--theme-warning)]');
+    expect(waveform).toContain('bg-[var(--theme-surface-muted)]');
+  });
+});
