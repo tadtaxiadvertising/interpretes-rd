@@ -61,7 +61,7 @@ export function NotificationHistory({ onlyUnread, refreshVersion, locallyReadIds
           items.length === 0 ? <p className="p-5 text-center text-sm text-[var(--text-secondary)]">{onlyUnread ? 'No hay notificaciones sin leer en esta página.' : 'No hay notificaciones en esta página.'}</p> :
           items.map(item => {
             const read = item.isRead || locallyReadIds.includes(item.id);
-            const date = item.createdAt ? new Date(item.createdAt) : null;
+            const date = item.createdAt instanceof Date ? item.createdAt : item.createdAt ? new Date(item.createdAt) : null;
             return <article key={item.id} className={`border-b border-[var(--border)] p-4 text-sm ${read ? '' : 'bg-blue-500/5'}`}>
               <div className="flex items-start justify-between gap-2">
                 <h5 className="min-w-0 break-words font-semibold">{item.title}</h5>
@@ -71,7 +71,7 @@ export function NotificationHistory({ onlyUnread, refreshVersion, locallyReadIds
               <p className="mt-1 text-xs text-[var(--text-secondary)]">{date && Number.isFinite(date.getTime()) ? date.toLocaleString('es-DO') : 'Fecha no disponible'}</p>
               <div className="mt-1 flex flex-wrap items-center gap-3">
                 {item.link && <Link href={item.link} prefetch={false} onClick={onNavigate} className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--theme-link)] underline">Ir al módulo<span className="sr-only">: {item.title}</span></Link>}
-                {!read && <button type="button" disabled={bulkPending || pendingIds.includes(item.id)} onClick={() => void onRead(item.id)} className="min-h-11 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">Marcar como leída<span className="sr-only">: {item.title}</span></button>}
+                {!read && <button type="button" disabled={bulkPending || pendingIds.includes(item.id)} onClick={() => void onRead(item.id)} aria-busy={pendingIds.includes(item.id)} className="min-h-11 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">Marcar como leída<span className="sr-only">: {item.title}</span></button>}
               </div>
             </article>;
           })}
