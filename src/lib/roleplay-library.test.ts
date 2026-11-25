@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getReusableBaseAudioPath } from './roleplay-library';
+import { getReusableBaseAudioPath, getReusableRoleplayAudio } from './roleplay-library';
 
 const origin = 'https://project.supabase.co';
 const url = (path: string) =>
@@ -52,6 +52,21 @@ describe('getReusableBaseAudioPath', () => {
       `${url('base/cksession123.mp3')}?download=1`,
     ]) {
       expect(getReusableBaseAudioPath(value, origin)).toBeNull();
+    }
+  });
+});
+
+describe('reusable snapshot storage isolation', () => {
+  const ref = 'private-base/123e4567-e89b-42d3-a456-426614174000/0.mp3';
+  const clip = (baseAudioUrl: string) => ({ baseAudioUrl });
+  it('accepts private references without changing the legacy parser', () => {
+    expect(getReusableRoleplayAudio([clip(ref)], origin)).toEqual({ kind: 'private', paths: ['base/123e4567-e89b-42d3-a456-426614174000/0.mp3'] });
+    expect(getReusableBaseAudioPath(ref, origin)).toBeNull();
+    expect(getReusableRoleplayAudio([clip(url('base/legacy.mp3'))], origin)).toEqual({ kind: 'legacy', paths: ['base/legacy.mp3'] });
+  });
+  it('rejects mixed, malformed, empty and oversized snapshots', () => {
+    for (const clips of [[], [clip(ref), clip(url('base/legacy.mp3'))], [clip(ref+'?token=secret')], [clip(ref.replace('/0.mp3','/25.mp3'))], Array.from({length:26},()=>clip(ref))]) {
+      expect(getReusableRoleplayAudio(clips, origin)).toBeNull();
     }
   });
 });
