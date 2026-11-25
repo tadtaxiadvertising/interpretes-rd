@@ -50,19 +50,19 @@ export default async function SettingsPage() {
           <ArrowLeft size={16} aria-hidden="true" /> Volver al administrador
         </Link>
         <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)]">Configuración y diagnóstico</h1>
-        <p className="text-gray-400">
+        <p className="text-[var(--text-secondary)]">
           Consulta el estado conocido de la plataforma sin exponer credenciales ni ejecutar cambios de infraestructura.
         </p>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <aside className="space-y-4">
-          <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
+          <section className="glass rounded-3xl border border-[var(--border)] p-6 space-y-3">
             <div className="flex items-center gap-3">
-              <LockKeyhole className="text-blue-400" aria-hidden="true" />
+              <LockKeyhole className="text-[var(--theme-link)]" aria-hidden="true" />
               <h2 className="font-semibold text-[var(--foreground)]">Acceso administrativo</h2>
             </div>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-[var(--text-secondary)]">
               El diagnóstico requiere una sesión administradora y no devuelve credenciales ni datos de pacientes.
             </p>
           </section>
@@ -70,7 +70,7 @@ export default async function SettingsPage() {
             href="/settings/import"
             className="glass flex items-center gap-3 rounded-2xl border border-[var(--border)] p-5 text-[var(--foreground)] hover:bg-[var(--theme-hover)]"
           >
-            <ClipboardList className="text-blue-400 shrink-0" aria-hidden="true" />
+            <ClipboardList className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
             <span className="text-sm font-semibold">Importar datos CSV</span>
           </Link>
         </aside>
@@ -173,12 +173,12 @@ export default async function SettingsPage() {
               <p className="text-xs">Diagnóstico de configuración solamente. No confirma permisos de base de datos, recepción real ni la existencia de una tarea programada. No muestra secretos ni inicia envíos.</p>
             </section>
           </section>
-          <section className="glass rounded-3xl border border-white/10 p-6 space-y-3">
+          <section className="glass rounded-3xl border border-[var(--border)] p-6 space-y-3">
             <div className="flex items-center gap-3">
-              <HardDrive className="text-amber-400" aria-hidden="true" />
+              <HardDrive className="text-[var(--theme-warning)]" aria-hidden="true" />
               <h2 className="font-semibold text-[var(--foreground)]">Mantenimiento</h2>
             </div>
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-[var(--text-secondary)]">
               Las migraciones, la rotación de secretos y el reinicio de caché requieren procedimientos operativos
               autorizados. Esta pantalla no ejecuta esas operaciones.
             </p>
