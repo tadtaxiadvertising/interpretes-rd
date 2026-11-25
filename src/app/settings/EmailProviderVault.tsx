@@ -37,6 +37,7 @@ export default function EmailProviderVault() {
   const [retiringId, setRetiringId] = useState<string | null>(null);
   const [preferredId, setPreferredId] = useState<string | null>(null);
   const [selectionPaused, setSelectionPaused] = useState(false);
+  const [preferenceEditable, setPreferenceEditable] = useState(false);
   const [quotas, setQuotas] = useState<ProviderQuota[]>([]);
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(false);
@@ -46,6 +47,7 @@ export default function EmailProviderVault() {
     setProfiles(result.profiles);
     setPreferredId(result.preferredId ?? null);
     setSelectionPaused(result.selectionPaused === true);
+    setPreferenceEditable(result.preferenceEditable === true);
     setQuotas(result.quotas ?? []);
     setReady(result.status === 'ready');
     setMessage(messageFor(result.status));
@@ -114,7 +116,8 @@ export default function EmailProviderVault() {
         </div>
       ))}
       {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
-      {preferredId && <button type="button" disabled={pending || !selectionPaused} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
+      {ready && <p className="text-xs">{preferenceEditable ? 'Puedes elegir un perfil con recepción confirmada. La pausa se conserva.' : 'Para cambiar de proveedor, pausa el despacho del almacén y vuelve a consultar perfiles. Las pruebas y otras modificaciones mantienen sus requisitos de seguridad.'}</p>}
+      {preferredId && <button type="button" disabled={pending || !preferenceEditable} onClick={() => run(async () => { const status = await setPreferredEmailProvider(null); await load(); setMessage(messageFor(status)); })} className="rounded-lg border border-[var(--border)] px-3 py-2">Quitar preferencia</button>}
       {profiles.map(profile => (
         <div key={profile.id} className="rounded-lg border border-[var(--border)] p-3 space-y-1 break-words">
           <p className="font-semibold">{profile.name} · {profile.provider}</p>

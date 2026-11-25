@@ -12,13 +12,13 @@ import { sendResendEmail } from '@/lib/email/resend-transport';
 import { validateBudget, updateProviderBudget } from '@/lib/email/provider-budget';
 import { reserveProviderQuota, listProviderQuotas, type ProviderQuota } from '@/lib/email/provider-quota';
 
-import { providerSelectionPaused, validProfileId, recordProfileAcceptance, confirmProfileReceipt, selectPreferredProfile, clearPreferredProfile } from '@/lib/email/provider-selection';
+import { providerSelectionPaused, validProfileId, recordProfileAcceptance, confirmProfileReceipt, canEditProviderPreference, changeProviderPreference } from '@/lib/email/provider-selection';
 
 import { retireProviderProfile, replaceProviderProfile, validateReplacement } from '@/lib/email/provider-lifecycle';
 
 type ListedProfile = ProfileMetadata & { testAcceptedAt: string | null; receiptConfirmedAt: string | null; retiredAt: string | null };
 type Status = 'ready' | 'disabled' | 'key_missing' | 'unauthorized' | 'unavailable';
-type ListResult = { status: Status; profiles: ListedProfile[]; quotas?: ProviderQuota[]; preferredId?: string | null; selectionPaused?: boolean };
+type ListResult = { status: Status; profiles: ListedProfile[]; quotas?: ProviderQuota[]; preferredId?: string | null; selectionPaused?: boolean; preferenceEditable?: boolean };
 type ProfileRow = Omit<ProfileMetadata, 'updatedAt'> & { updatedAt: Date; testAcceptedAt: Date | null; receiptConfirmedAt: Date | null; retiredAt: Date | null };
 const key = () => process.env.EMAIL_PROVIDER_ENCRYPTION_KEY;
 function availability(): Status {
@@ -45,7 +45,7 @@ export async function listEmailProviderProfiles(): Promise<ListResult> {
     if (!selection) return { status: 'unavailable', profiles: [] };
     return { status: 'ready', profiles: rows.map(row => ({ ...row, updatedAt: row.updatedAt.toISOString(),
       testAcceptedAt: row.testAcceptedAt?.toISOString() ?? null, receiptConfirmedAt: row.receiptConfirmedAt?.toISOString() ?? null, retiredAt: row.retiredAt?.toISOString() ?? null })),
-      quotas, preferredId: selection.id, selectionPaused: providerSelectionPaused(process.env) };
+      quotas, preferredId: selection.id, selectionPaused: providerSelectionPaused(process.env), preferenceEditable: await canEditProviderPreference(prisma, process.env) };
   } catch {
     return { status: 'unavailable', profiles: [] };
   }
@@ -136,16 +136,11 @@ export async function setPreferredEmailProvider(id: string | null) {
   try {
     const auth = await validateAction('admin');
     if ('error' in auth) return 'unauthorized' as const;
-    if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
-    if (id === null) return await clearPreferredProfile(prisma, auth.user.userId) ? 'preference_cleared' as const : 'unavailable' as const;
-    if (!validProfileId(id)) return 'invalid' as const;
-    const selected = await prisma.$transaction(async tx => {
-      const rows = await tx.$queryRaw<{ singleton: boolean }[]>`
-        SELECT singleton FROM private_email.provider_selection WHERE singleton FOR UPDATE
-      `;
-      return rows.length === 1 && await selectPreferredProfile(tx, id, auth.user.userId);
-    });
-    return selected ? 'preferred_saved' as const : 'selection_blocked' as const;
+    if (availability() !== 'ready') return 'disabled' as const;
+    if (id !== null && !validProfileId(id)) return 'invalid' as const;
+    const result = await prisma.$transaction(tx => changeProviderPreference(tx, id, auth.user.userId, process.env));
+    return result === 'saved' ? 'preferred_saved' as const : result === 'cleared' ? 'preference_cleared' as const
+      : result === 'disabled' ? 'disabled' as const : 'selection_blocked' as const;
   } catch { return 'unavailable' as const; }
 }
 
