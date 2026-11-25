@@ -4,6 +4,7 @@ import React, { useState, useActionState, useMemo } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Search, DollarSign, CheckCircle2, AlertTriangle, Loader2, Edit3, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Modal } from '@/components/Modal';
 import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus } from '@/lib/payroll-validation';
 import { updatePayrollAdjustments, verifyPayrollMinutes, markPayrollAsPaid } from '@/app/actions/payroll.actions';
 
@@ -172,7 +173,7 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
 
         <div className="overflow-x-auto hidden md:block">
           <table className="w-full text-left">
-            <thead className="bg-white/[0.02] text-[var(--text-secondary)] text-xs uppercase tracking-wider">
+            <thead className="bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] text-xs uppercase tracking-wider">
               <tr>
                 <th className="py-4 px-6 font-semibold">Intérprete</th>
                 <th className="py-4 px-4 font-semibold">Período</th>
@@ -244,108 +245,93 @@ export function PayrollEngine({ initialRecords }: { initialRecords: any[] }) {
       </div>
 
       {/* --- MODAL: AJUSTES --- */}
-      {activeModal === 'ADJUST' && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[var(--theme-panel)] border border-[var(--border)] rounded-3xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">Ajustes de Nómina</h3>
-              <p className="text-sm text-[var(--text-secondary)] mb-6">{selectedRecord.interpreter?.name}</p>
-              
-              <form action={adjustAction} className="space-y-4">
-                <input type="hidden" name="id" value={selectedRecord.id} />
-                
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Incentivos Adicionales (RD$)</label>
-                  <input type="number" step="0.01" name="incentives" defaultValue={selectedRecord.incentivesTotal || 0} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Penalidades (RD$)</label>
-                  <input type="number" step="0.01" name="penalties" defaultValue={selectedRecord.penalidades || 0} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors" />
-                </div>
+      {selectedRecord && activeModal === 'ADJUST' && (
+        <Modal isOpen onClose={closeModal} title="Ajustes de Nómina" maxWidth="max-w-md">
+        <p className="text-sm text-[var(--text-secondary)] mb-6">{selectedRecord.interpreter?.name}</p>
+        
+        <form action={adjustAction} className="space-y-4">
+          <input type="hidden" name="id" value={selectedRecord.id} />
+          
+          <div>
+            <label htmlFor="payroll-incentives" className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Incentivos Adicionales (RD$)</label>
+            <input type="number" step="0.01" id="payroll-incentives" name="incentives" defaultValue={selectedRecord.incentivesTotal || 0} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors" />
+          </div>
+          <div>
+            <label htmlFor="payroll-penalties" className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Penalidades (RD$)</label>
+            <input type="number" step="0.01" id="payroll-penalties" name="penalties" defaultValue={selectedRecord.penalidades || 0} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors" />
+          </div>
 
-                {adjustState?.error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-[var(--theme-danger)]">{adjustState.error}</div>}
-                {adjustState?.success && <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-xs text-[var(--theme-success)]">{adjustState.message}</div>}
+          {adjustState?.error && <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-[var(--theme-danger)]">{adjustState.error}</div>}
+          {adjustState?.success && <div role="status" className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-xs text-[var(--theme-success)]">{adjustState.message}</div>}
 
-                <div className="flex gap-3 pt-4">
-                  <button type="button" onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold theme-action-secondary transition-all">Cancelar</button>
-                  <div className="flex-1">
-                    <SubmitButton label="Guardar" loadingLabel="Guardando" />
-                  </div>
-                </div>
-              </form>
+          <div className="flex gap-3 pt-4">
+            <button type="button" onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold theme-action-secondary transition-all">Cancelar</button>
+            <div className="flex-1">
+              <SubmitButton label="Guardar" loadingLabel="Guardando" />
             </div>
           </div>
-        </div>
+        </form>
+        </Modal>
       )}
 
       {/* --- MODAL: VERIFICACIÓN --- */}
-      {activeModal === 'VERIFY' && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[var(--theme-panel)] border border-[var(--border)] rounded-3xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">Verificar Producción</h3>
-              <p className="text-sm text-[var(--text-secondary)] mb-6">Confirma los minutos auditados para aprobar la nómina de {selectedRecord.interpreter?.name}.</p>
-              
-              <form action={verifyAction} className="space-y-4">
-                <input type="hidden" name="id" value={selectedRecord.id} />
-                
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Minutos Finales Verificados</label>
-                  <input type="number" name="verifiedMinutes" required defaultValue={selectedRecord.verifiedMinutes || selectedRecord.totalMinutes} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors font-mono text-xl" />
-                </div>
+      {selectedRecord && activeModal === 'VERIFY' && (
+        <Modal isOpen onClose={closeModal} title="Verificar Producción" maxWidth="max-w-md">
+        <p className="text-sm text-[var(--text-secondary)] mb-6">Confirma los minutos auditados para aprobar la nómina de {selectedRecord.interpreter?.name}.</p>
+        
+        <form action={verifyAction} className="space-y-4">
+          <input type="hidden" name="id" value={selectedRecord.id} />
+          
+          <div>
+            <label htmlFor="payroll-verifiedMinutes" className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Minutos Finales Verificados</label>
+            <input type="number" id="payroll-verifiedMinutes" name="verifiedMinutes" required defaultValue={selectedRecord.verifiedMinutes || selectedRecord.totalMinutes} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors font-mono text-xl" />
+          </div>
 
-                {verifyState?.error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-[var(--theme-danger)] flex items-center gap-2"><AlertTriangle size={14}/> {verifyState.error}</div>}
-                {verifyState?.success && <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-xs text-[var(--theme-success)] flex items-center gap-2"><CheckCircle2 size={14}/> {verifyState.message}</div>}
+          {verifyState?.error && <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-[var(--theme-danger)] flex items-center gap-2"><AlertTriangle size={14}/> {verifyState.error}</div>}
+          {verifyState?.success && <div role="status" className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-xs text-[var(--theme-success)] flex items-center gap-2"><CheckCircle2 size={14}/> {verifyState.message}</div>}
 
-                <div className="flex gap-3 pt-4">
-                  <button type="button" onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold theme-action-secondary transition-all">Cancelar</button>
-                  <div className="flex-1">
-                    <SubmitButton label="Aprobar Nómina" loadingLabel="Aprobando" />
-                  </div>
-                </div>
-              </form>
+          <div className="flex gap-3 pt-4">
+            <button type="button" onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold theme-action-secondary transition-all">Cancelar</button>
+            <div className="flex-1">
+              <SubmitButton label="Aprobar Nómina" loadingLabel="Aprobando" />
             </div>
           </div>
-        </div>
+        </form>
+        </Modal>
       )}
 
       {/* --- MODAL: PAGAR --- */}
-      {activeModal === 'PAY' && selectedRecord && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="bg-[var(--theme-panel)] border border-[var(--border)] rounded-3xl w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-200">
-            <div className="p-6">
-              <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center text-[var(--theme-success)] mb-4 border border-green-500/20">
-                 <DollarSign size={24} />
-              </div>
-              <h3 className="text-xl font-bold text-[var(--foreground)] mb-2">Desembolsar Pago</h3>
-              <p className="text-sm text-[var(--text-secondary)] mb-6">Monto a depositar: <strong className="text-[var(--theme-success)]">RD${Number(selectedRecord.netTotal).toLocaleString()}</strong> a {selectedRecord.interpreter?.name}.</p>
-              
-              <div className="mb-6 p-4 bg-[var(--theme-surface-muted)] border border-[var(--border)] rounded-xl text-sm">
-                <p className="text-[var(--text-secondary)]">Método: <span className="text-[var(--foreground)] font-bold">{selectedRecord.interpreter?.metodoPago}</span></p>
-                <p className="text-[var(--text-secondary)]">Cuenta/Banco: <span className="text-[var(--foreground)]">{selectedRecord.interpreter?.cuentaPago} - {selectedRecord.interpreter?.banco}</span></p>
-              </div>
+      {selectedRecord && activeModal === 'PAY' && (
+        <Modal isOpen onClose={closeModal} title="Desembolsar Pago" maxWidth="max-w-md">
+        <div className="w-12 h-12 bg-green-500/10 rounded-2xl flex items-center justify-center text-[var(--theme-success)] mb-4 border border-green-500/20">
+           <DollarSign size={24} />
+        </div>
+        <p className="text-sm text-[var(--text-secondary)] mb-6">Monto a depositar: <strong className="text-[var(--theme-success)]">RD${Number(selectedRecord.netTotal).toLocaleString()}</strong> a {selectedRecord.interpreter?.name}.</p>
+        
+        <div className="mb-6 p-4 bg-[var(--theme-surface-muted)] border border-[var(--border)] rounded-xl text-sm">
+          <p className="text-[var(--text-secondary)]">Método: <span className="text-[var(--foreground)] font-bold">{selectedRecord.interpreter?.metodoPago}</span></p>
+          <p className="text-[var(--text-secondary)]">Cuenta/Banco: <span className="text-[var(--foreground)]">{selectedRecord.interpreter?.cuentaPago} - {selectedRecord.interpreter?.banco}</span></p>
+        </div>
 
-              <form action={payAction} className="space-y-4">
-                <input type="hidden" name="id" value={selectedRecord.id} />
-                
-                <div>
-                  <label className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Referencia de Transacción (Banco)</label>
-                  <input type="text" name="transactionReference" required placeholder="Ej. BHD-8849201" className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors font-mono" />
-                </div>
+        <form action={payAction} className="space-y-4">
+          <input type="hidden" name="id" value={selectedRecord.id} />
+          
+          <div>
+            <label htmlFor="payroll-transactionReference" className="block text-xs font-bold text-[var(--text-secondary)] mb-1 uppercase tracking-wider">Referencia de Transacción (Banco)</label>
+            <input type="text" id="payroll-transactionReference" name="transactionReference" required placeholder="Ej. BHD-8849201" className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl py-3 px-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-colors font-mono" />
+          </div>
 
-                {payState?.error && <div className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-[var(--theme-danger)] flex items-center gap-2"><AlertTriangle size={14}/> {payState.error}</div>}
-                {payState?.success && <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-xs text-[var(--theme-success)] flex items-center gap-2"><CheckCircle2 size={14}/> {payState.message}</div>}
+          {payState?.error && <div role="alert" className="p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-[var(--theme-danger)] flex items-center gap-2"><AlertTriangle size={14}/> {payState.error}</div>}
+          {payState?.success && <div role="status" className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-xs text-[var(--theme-success)] flex items-center gap-2"><CheckCircle2 size={14}/> {payState.message}</div>}
 
-                <div className="flex gap-3 pt-4">
-                  <button type="button" onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold theme-action-secondary transition-all">Cancelar</button>
-                  <div className="flex-1">
-                    <SubmitButton label="Confirmar Pago" loadingLabel="Procesando" />
-                  </div>
-                </div>
-              </form>
+          <div className="flex gap-3 pt-4">
+            <button type="button" onClick={closeModal} className="flex-1 py-3 rounded-xl font-bold theme-action-secondary transition-all">Cancelar</button>
+            <div className="flex-1">
+              <SubmitButton label="Confirmar Pago" loadingLabel="Procesando" />
             </div>
           </div>
-        </div>
+        </form>
+        </Modal>
       )}
 
     </div>

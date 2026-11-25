@@ -401,7 +401,10 @@ describe('semantic dashboard and payroll surfaces', () => {
       expect(source).toContain('var(' + token + ')');
     }
     expect(source).toContain('aria-pressed={filterStatus === status}');
-    expect(source).toContain('max-h-[calc(100dvh-2rem)] overflow-y-auto');
+    expect(source.match(/<Modal isOpen onClose=\{closeModal\}/g)).toHaveLength(3);
+    const modal = readFileSync(resolve(process.cwd(), 'src/components/Modal.tsx'), 'utf8');
+    expect(modal).toContain('max-h-[calc(100dvh-1.5rem)]');
+    expect(modal).toContain('overflow-y-auto overscroll-contain');
     expect(source).toContain('theme-action-primary');
     expect(source).toContain('theme-action-secondary');
     expect(source).not.toContain('bg-slate-950');
@@ -444,6 +447,9 @@ describe('shared production edit and delete dialogs', () => {
     expect(source).toContain('handleSubmit(onEditSubmit)');
     expect(source).toContain('onClick={onDelete}');
     expect(source).toContain('triggerRef.current?.focus()');
+  });
+});
+
 describe('calendar layout and semantic report controls', () => {
   it('keeps only the interpreter column sticky on wide screens', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/app/admin/calendar/page.tsx'), 'utf8');
@@ -472,5 +478,22 @@ describe('calendar layout and semantic report controls', () => {
       expect(source).toContain('htmlFor="' + id + '"');
       expect(source).toContain('id="' + id + '"');
     }
+  });
+});
+
+describe('shared payroll dialogs preserve transaction controls', () => {
+  it('retains each form action, identifier and required payment reference', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/PayrollEngine.tsx'), 'utf8');
+    for (const action of ['adjustAction', 'verifyAction', 'payAction']) {
+      expect(source).toContain('<form action={' + action + '}');
+    }
+    expect(source.match(/name="id" value=\{selectedRecord.id\}/g)).toHaveLength(3);
+    expect(source).toContain('name="transactionReference" required');
+    expect(source).toContain('disabled={pending}');
+    for (const field of ['incentives', 'penalties', 'verifiedMinutes', 'transactionReference']) {
+      expect(source).toContain('htmlFor="payroll-' + field + '"');
+      expect(source).toContain('id="payroll-' + field + '"');
+    }
+    expect(source).not.toContain('fixed inset-0 z-50 flex items-center justify-center bg-black/80');
   });
 });
