@@ -554,7 +554,7 @@ export default function RealTimeMonitor() {
         </button>
 
         {isPending && !isInitialLoading && (
-          <span className="text-xs text-[var(--text-secondary)] animate-pulse">Actualizando...</span>
+          <span role="status" className="text-xs text-[var(--text-secondary)]">Actualizando...</span>
         )}
 
         <span className="text-xs text-[var(--text-tertiary)] ml-auto flex items-center gap-2">
@@ -575,16 +575,17 @@ export default function RealTimeMonitor() {
 
       {/* ── WORKDAY ROSTER BY STATUS ── */}
       {isInitialLoading ? (
-        <div className="space-y-4">
+        <div role="status" className="space-y-4">
+          <span className="text-sm text-[var(--text-secondary)]">Cargando estados de los intérpretes…</span>
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 animate-pulse">
-              <div className="h-6 w-48 rounded bg-[var(--theme-surface-muted)] mb-4" />
+            <div key={i} aria-hidden="true" className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 animate-pulse motion-reduce:animate-none">
+              <div className="h-6 w-48 max-w-full rounded bg-[var(--theme-surface-muted)] mb-4" />
               <div className="space-y-2">
                 {Array.from({ length: 3 }).map((_, j) => (
                   <div key={j} className="flex items-center gap-3 py-2">
                     <div className="w-8 h-8 rounded-lg bg-[var(--theme-surface-muted)]" />
                     <div className="flex-1 space-y-1">
-                      <div className="h-4 w-40 rounded bg-[var(--theme-surface-muted)]" />
+                      <div className="h-4 w-40 max-w-full rounded bg-[var(--theme-surface-muted)]" />
                       <div className="h-3 w-24 rounded bg-[var(--theme-surface-muted)]" />
                     </div>
                     <div className="h-5 w-20 rounded-full bg-[var(--theme-surface-muted)]" />
