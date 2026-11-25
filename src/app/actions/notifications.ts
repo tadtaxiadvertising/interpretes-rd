@@ -7,6 +7,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
+import { publishNotificationEvent } from '@/lib/notifications/publish-notification-event';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 
@@ -34,8 +35,10 @@ const CreateNotificationSchema = z.object({
   title: z.string().trim().min(1).max(160),
   message: z.string().trim().min(1).max(4000),
   type: z.enum(['info', 'success', 'warning', 'error']).optional(),
-  // Notifications may navigate only within this application.
-  link: z.string().trim().max(500).regex(/^\/(?!\/)/).optional(),
+  category: z.enum(['system', 'qa', 'messaging', 'roleplay', 'recruitment', 'operations', 'finance']).optional(),
+  eventKey: z.string().trim().min(1).max(200).optional(),
+  // Notifications may navigate only to known internal modules.
+  link: z.string().trim().max(500).refine(value => safeNotificationLink(value) !== null).optional(),
 });
 
 const NotificationIdSchema = z.string().min(1).max(128);
@@ -70,13 +73,24 @@ export async function createNotification(input: unknown) {
   }
 
   try {
+    if (parsed.data.eventKey) {
+      const event = await publishNotificationEvent({
+        ...parsed.data,
+        eventKey: parsed.data.eventKey,
+        category: parsed.data.category ?? 'system',
+        type: parsed.data.type ?? 'info',
+      });
+      if (event.created) refreshNotificationCache();
+      return { success: true, data: { id: event.id } };
+    }
     const notification = await db.notification.create({
       data: {
         userId: parsed.data.userId,
         title: parsed.data.title,
         message: parsed.data.message,
         type: parsed.data.type ?? 'info',
-        link: parsed.data.link,
+        link: parsed.data.link ? safeNotificationLink(parsed.data.link) : undefined,
+        ...(parsed.data.category ? { category: parsed.data.category } : {}),
       },
       select: { id: true },
     });
