@@ -36,7 +36,9 @@ export async function inspectProviderVault(db: Reader, env: Env): Promise<VaultR
       )
       SELECT (p IS NOT NULL AND q IS NOT NULL AND s IS NOT NULL AND a IS NOT NULL AND seq IS NOT NULL) AS installed,
         (SELECT count(*) = 6 FROM pg_attribute WHERE attrelid=p AND NOT attisdropped
-          AND attname IN ('test_accepted_at','receipt_confirmed_at','receipt_confirmed_by','retired_at','retired_by','replaces_id')) AS "columnsReady",
+          AND attname IN ('test_accepted_at','receipt_confirmed_at','receipt_confirmed_by','retired_at','retired_by','replaces_id'))
+          AND (SELECT count(*) = 3 FROM pg_attribute WHERE attrelid=s AND NOT attisdropped
+            AND attname IN ('dispatch_paused','pause_changed_at','pause_changed_by')) AS "columnsReady",
         NOT EXISTS (
           SELECT 1 FROM pg_roles r WHERE r.rolname IN ('anon','authenticated','service_role')
             AND (has_schema_privilege(r.oid,ns,'USAGE,CREATE')
