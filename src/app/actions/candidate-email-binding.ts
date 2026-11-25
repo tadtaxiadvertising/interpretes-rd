@@ -57,15 +57,15 @@ async function resolveProofBinding(operation: 'request' | 'confirm') {
 /** Explicit proof request; no client-provided recipient. */
 export async function requestCandidateMailboxProof(): Promise<MailboxChallengeResult> {
   try {
-    if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true'
-      ) return 'not_available';
+    if (process.env.OPERATIONAL_EMAIL_DISPATCH_ENABLED !== 'true') return 'not_available';
     const vault = usesProviderVault(process.env);
     if (vault && emailDeliveryMode(process.env) !== 'pilot') return 'not_available';
-    const profile = vault ? await readPreferredProvider(prisma, process.env) : null;
-    if (vault ? !profile : readOperationalMailConfig(process.env).status !== 'configured') return 'not_available';
+    if (!vault && readOperationalMailConfig(process.env).status !== 'configured') return 'not_available';
     if (!rateLimit('global', { maxRequests: 30, windowMs: 60000, keyPrefix: 'email-proof-request-global' }).success) return 'not_available';
     const binding = await resolveProofBinding('request');
     if (!binding) return 'not_available';
+    const profile = vault ? await readPreferredProvider(prisma, process.env) : null;
+    if (vault && !profile) return 'not_available';
     // Reserve before creating a challenge: exhausted quota must not leave an unsent code pending.
     if (profile && !await prisma.$transaction(tx => reserveSelectedProvider(tx, profile))) return 'not_available';
     const send = profile ? (message: { recipient: string; subject: string; text: string; html: string }) => sendReservedProfile(profile, message) : sendRecruitmentSmtp;
