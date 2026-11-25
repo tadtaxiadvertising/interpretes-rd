@@ -1,6 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { BILINGUAL_OPENING_BUCKET, isCanonicalBilingualOpeningPath } from '@/lib/roleplay/bilingual-opening';
+import { requireBilingualOpeningBucket } from '@/lib/roleplay/bilingual-opening-bucket';
 
 // The Supabase admin client is created lazily on first use. Creating it (and
 // validating env) at module load time made the module crash during the
@@ -166,15 +168,33 @@ export async function createSignedBilingualOpeningUploadUrl(
   const validation = validateAudioMetadata(mimeType, size);
   if (!validation.valid || !validation.extension) throw new Error('Invalid opening audio metadata');
   const path = `openings/${sessionId}/${randomUUID()}.${validation.extension}`;
+  // Reject an unsafe or unavailable bucket before reserving a path.
+  const storage = getSupabaseAdmin().storage;
+  await requireBilingualOpeningBucket(storage);
   // Persist the reservation BEFORE issuing a capability in the staged service.
   if (reservePath) await reservePath(path);
   try {
-    const { data, error } = await getSupabaseAdmin().storage.from(BUCKET)
+    const { data, error } = await storage.from(BILINGUAL_OPENING_BUCKET)
       .createSignedUploadUrl(path, { upsert: false });
     if (error || !data?.token || data.path !== path) throw new Error('Invalid upload capability');
     return { token: data.token, path };
   } catch {
     throw new Error('Unable to authorize opening audio upload');
+  }
+}
+
+/** Server-only opening playback. Never fall back to the historical bucket. */
+export async function getSignedBilingualOpeningAudioUrl(path: string, expiresIn = 60 * 60): Promise<string> {
+  if (!isCanonicalBilingualOpeningPath(path, path.split('/')[1] ?? '') ||
+      !Number.isInteger(expiresIn) || expiresIn < 1 || expiresIn > 3600) throw new Error('Invalid opening playback request');
+  try {
+    const storage = getSupabaseAdmin().storage;
+    await requireBilingualOpeningBucket(storage);
+    const { data, error } = await storage.from(BILINGUAL_OPENING_BUCKET).createSignedUrl(path, expiresIn);
+    if (error || !data?.signedUrl) throw new Error();
+    return data.signedUrl;
+  } catch {
+    throw new Error('Unable to authorize opening audio playback');
   }
 }
 
