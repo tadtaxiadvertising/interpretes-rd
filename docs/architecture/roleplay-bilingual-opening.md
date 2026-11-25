@@ -16,3 +16,9 @@ This change is intentionally inactive. The staged SQL is outside Prisma migratio
 8. Cover legacy sessions, candidate/interpreter ownership, invite expiry, cross-session paths, retry/concurrency, reload, QA playback, cleanup and both themes in automated tests.
 
 Do not enable the feature or apply the staged SQL to production until schema and runtime verification are complete.
+
+## Staged participant API
+
+`GET /api/roleplay/session/[id]/opening` returns only the opening state. `POST` accepts a strict JSON command: `authorize` with `mimeType` and `size`, or `confirm` with the reserved object `path`. The server verifies identity, candidate cookie, eligibility, invitation and ownership before invoking the private service. No client-supplied duration is accepted. Responses are private and non-cacheable. Request bodies are bounded to 2 KiB, audio to 15 MiB, and admission is limited per actor and ingress IP (process-local; a shared limiter is still needed for a multi-instance global quota).
+
+The route returns 404 by default. `ROLEPLAY_BILINGUAL_OPENING_API_ENABLED` is a server-only rollout flag, not a public client flag. **Do not enable it yet**: verify the staged SQL in disposable PostgreSQL, integrate the participant workflow and all progression guards, verify Storage policies and QA playback, and address abandoned reservation cleanup and retry UX. Existing sessions and production schema are unchanged by this PR.
