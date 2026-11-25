@@ -36,7 +36,7 @@ test('brand, status and form tokens meet contrast requirements in both appearanc
   await page.goto('/login');
   const semanticTokens = [
     '--foreground', '--theme-link', '--theme-success',
-    '--theme-warning', '--theme-danger', '--theme-purple',
+    '--theme-warning', '--theme-danger', '--theme-purple', '--theme-away', '--theme-info',
   ];
 
   for (const [mode, theme] of [['Modo claro', 'light'], ['Modo oscuro', 'dark']] as const) {
@@ -46,6 +46,10 @@ test('brand, status and form tokens meet contrast requirements in both appearanc
     for (const token of semanticTokens) {
       expect(await paletteContrast(page, token, '--theme-panel'),
         `${theme}: ${token} on panel`).toBeGreaterThanOrEqual(4.5);
+    }
+    for (const token of ['--theme-success', '--theme-warning', '--theme-danger', '--theme-purple']) {
+      expect(await paletteContrast(page, token, '--theme-track'),
+        `${theme}: ${token} against the progress track`).toBeGreaterThanOrEqual(3);
     }
     expect(await paletteContrast(page, '--theme-control-border', '--theme-control-bg'),
       `${theme}: neutral form boundary`).toBeGreaterThanOrEqual(3);
