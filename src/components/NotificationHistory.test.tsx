@@ -40,4 +40,17 @@ describe('notification history', () => {
     await waitFor(() => expect(screen.getByText('Aviso anterior')).toBeTruthy());
     expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, unreadOnly: true });
   });
+  it('resets pagination and requests category and severity filters from the server', async () => {
+    m.getMyNotificationHistory.mockResolvedValue({ success: true, data: [{ ...item, category: 'roleplay', type: 'warning' }], hasMore: true });
+    render(<NotificationHistory {...props} />);
+    await screen.findByText('Aviso anterior');
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    await waitFor(() => expect(screen.getByText('Página 2')).toBeTruthy());
+    await screen.findByText('Aviso anterior');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Categoría' }), { target: { value: 'roleplay' } });
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, unreadOnly: false, category: 'roleplay' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Solo importantes' }));
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, unreadOnly: false, category: 'roleplay', importantOnly: true }));
+    expect(await screen.findByText('Atención')).toBeTruthy();
+  });
 });

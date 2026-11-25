@@ -237,7 +237,7 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     }
     expect(m.notificationFindMany).toHaveBeenCalledWith({
       where: { userId: { in: [profileId] }, OR: [{ isRead: false }, { isRead: null }] },
-      select: { id: true, title: true, message: true, type: true, isRead: true, createdAt: true, link: true },
+      select: { id: true, title: true, message: true, type: true, isRead: true, createdAt: true, link: true, category: true },
       orderBy: [{ createdAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       skip: 20, take: 21,
     });
@@ -271,5 +271,18 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
       .toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
     expect(m.notificationCreateMany).not.toHaveBeenCalled();
     expect(m.notificationCreate).not.toHaveBeenCalled();
+  });
+  it('filters important history by category only within the current recipient', async () => {
+    m.notificationFindMany.mockResolvedValueOnce([]);
+    expect(await getMyNotificationHistory({ page: 0, unreadOnly: true, category: 'qa', importantOnly: true }))
+      .toMatchObject({ success: true, data: [], hasMore: false });
+    expect(m.notificationFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { userId: { in: [profileId] }, OR: [{ isRead: false }, { isRead: null }], category: 'qa', type: { in: ['warning', 'error'] } },
+    }));
+  });
+
+  it('rejects unknown category filters without querying the database', async () => {
+    expect(await getMyNotificationHistory({ page: 0, unreadOnly: false, category: 'private-internal' })).toEqual({ success: false });
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
   });
 });
