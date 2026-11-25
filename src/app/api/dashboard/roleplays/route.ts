@@ -2,6 +2,7 @@
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import prisma from '@/lib/prisma';
+import { interpreterRoleplayVisibility } from '@/lib/roleplay/legacy-draft-readiness';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 
@@ -39,7 +40,7 @@ export async function GET(req: Request) {
     // Candidate-owned sessions must never appear in the interpreter dashboard,
     // matching the ownership rule of GET /api/roleplay/session/[id].
     const sessions = await db.roleplaySession.findMany({
-      where: { interpreterId, recruitmentCandidateId: null },
+      where: { interpreterId, recruitmentCandidateId: null, ...interpreterRoleplayVisibility },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
