@@ -12,7 +12,7 @@ export default function ReconciliationReviewForm({ reportId }: { reportId: numbe
       <option value="INVESTIGATING">En investigación</option><option value="DISPUTED">En disputa</option><option value="RESOLVED">Resuelto con observaciones</option><option value="MATCHED">Coincidencia confirmada</option>
     </select>
     <textarea name="note" minLength={5} maxLength={2000} required rows={2} placeholder="Justificación de la decisión" aria-label="Justificación" className="rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]" />
-    <button disabled={pending} className="rounded-lg bg-blue-600 hover:bg-blue-500 text-white p-2 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar revisión'}</button>
+    <button disabled={pending} className="rounded-lg theme-action-primary p-2 font-semibold disabled:opacity-50">{pending ? 'Guardando…' : 'Registrar revisión'}</button>
     <p role="status" aria-live="polite" className={state.error ? 'text-[var(--theme-danger)]' : 'text-[var(--theme-success)]'}>{state.error || (state.success ? 'Revisión registrada.' : '')}</p>
   </form>;
 }
