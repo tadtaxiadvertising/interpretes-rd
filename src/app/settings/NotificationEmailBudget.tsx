@@ -58,10 +58,8 @@ export default function NotificationEmailBudget() {
           <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] px-3">
             {report.providers.map(({ provider, availability }) => (
               <div key={provider} className="py-3 text-sm space-y-1">
-                <dt className="font-semibold">{providerCatalog[provider].label}</dt>
-                <dd>{availability ? `${(Object.prototype.hasOwnProperty.call(availabilityText, availability.status) ? availabilityText[availability.status] : undefined) ?? 'Estado no reconocido'} · quedan ${availability.remaining} intentos en el límite más restrictivo` : 'Presupuesto no comprobado o período inválido'}</dd>
                 <dt className="font-semibold">{providerCatalog[provider].label}{report.activeApiProvider === provider ? ' · seleccionado en entorno' : ''}</dt>
-                <dd>{availability ? `${availabilityText[availability.status]} · quedan ${availability.remaining} intentos en el límite más restrictivo` : 'Presupuesto no comprobado o período inválido'}</dd>
+                <dd>{availability ? `${(Object.prototype.hasOwnProperty.call(availabilityText, availability.status) ? availabilityText[availability.status] : undefined) ?? 'Estado no reconocido'} · quedan ${availability.remaining} intentos en el límite más restrictivo` : 'Presupuesto no comprobado o período inválido'}</dd>
                 {availability && <dd className="text-[var(--text-secondary)]">Diario: {availability.dailyRemaining} · mensual: {availability.monthlyRemaining}</dd>}
               </div>
             ))}
