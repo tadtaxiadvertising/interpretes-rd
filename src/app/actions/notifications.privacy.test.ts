@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const m = vi.hoisted(() => ({
   validateAction: vi.fn(),
   notificationCreate: vi.fn(),
+  notificationCreateMany: vi.fn(),
   notificationCount: vi.fn(),
   notificationFindMany: vi.fn(),
   notificationUpdateMany: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     notification: {
       create: m.notificationCreate,
+      createMany: m.notificationCreateMany,
       count: m.notificationCount,
       findMany: m.notificationFindMany,
       updateMany: m.notificationUpdateMany,
@@ -42,6 +44,7 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
       user: { profileId, role: 'admin', userId: 'admin-1' },
     });
     m.notificationCreate.mockResolvedValue({ id: 'notification-1' });
+    m.notificationCreateMany.mockResolvedValue({ count: 1 });
     m.notificationUpdateMany.mockResolvedValue({ count: 1 });
   });
 
@@ -246,5 +249,27 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     m.validateAction.mockResolvedValueOnce({ error: 'Unauthorized' });
     expect(await getMyNotificationHistory({ page: 0, unreadOnly: false })).toEqual({ success: false });
     expect(m.notificationFindMany).not.toHaveBeenCalled();
+  });
+  it('accepts idempotent admin events, without refreshing caches on duplicate delivery', async () => {
+    m.notificationCreateMany.mockResolvedValueOnce({ count: 1 }).mockResolvedValueOnce({ count: 0 });
+    const event = { ...data, eventKey: 'qa.evaluation:42', category: 'qa', link: '/dashboard?token=private' };
+    const first = await createNotification(event);
+    const retry = await createNotification(event);
+    expect(first).toMatchObject({ success: true });
+    expect(retry).toEqual(first);
+    expect(m.notificationCreateMany).toHaveBeenCalledTimes(2);
+    expect(m.notificationCreateMany).toHaveBeenCalledWith({
+      data: [expect.objectContaining({ userId: profileId, category: 'qa', link: '/dashboard' })],
+      skipDuplicates: true,
+    });
+    expect(m.notificationCreate).not.toHaveBeenCalled();
+    expect(m.revalidatePath).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects unsafe module destinations before writing notification events', async () => {
+    expect(await createNotification({ ...data, eventKey: 'qa.evaluation:42', link: '/api/auth/signout' }))
+      .toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    expect(m.notificationCreateMany).not.toHaveBeenCalled();
+    expect(m.notificationCreate).not.toHaveBeenCalled();
   });
 });

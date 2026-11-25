@@ -261,6 +261,22 @@ describe('QA Server Actions credential-safe error boundaries', () => {
     } finally { log.mockRestore(); }
   });
 
+  it('notifies the linked profile after a successful form evaluation', async () => {
+    expect(await submitQaForm(undefined, qaFormData())).toMatchObject({ success: true });
+    expect(m.profileFindUnique).toHaveBeenCalledWith({
+      where: { interpreterId: 7 }, select: { id: true },
+    });
+    expect(m.createNotification).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'profile-1', category: 'qa', eventKey: 'qa.evaluation:qa-1', link: '/dashboard',
+    }));
+  });
+
+  it('does not notify an unlinked profile after a form evaluation', async () => {
+    m.profileFindUnique.mockResolvedValueOnce(null);
+    expect(await submitQaForm(undefined, qaFormData())).toMatchObject({ success: true });
+    expect(m.createNotification).not.toHaveBeenCalled();
+  });
+
   it('does not silently ignore a notification action that returns a failed delivery result', async () => {
     m.createNotification.mockResolvedValueOnce({
       success: false, code: 'INTERNAL_ERROR', error: 'PRIVATE_PASSWORD',
