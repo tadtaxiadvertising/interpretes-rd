@@ -1,3 +1,5 @@
+import prisma from '@/lib/prisma';
+import { reserveProviderQuota } from './provider-quota';
 import { spawn } from 'node:child_process';
 import { providerSource } from './provider-source';
 import { randomUUID } from 'node:crypto';
@@ -10,7 +12,7 @@ import { sendBrevoEmail, sendBrevoEmailDetailed, type BrevoFailure } from './bre
 
 import { sendResendEmail, type ResendFailure } from './resend-transport';
 
-export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited' | BrevoFailure | ResendFailure;
+export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited' | 'local_quota_reached' | 'local_quota_unavailable' | BrevoFailure | ResendFailure;
 
 function quote(value: string): string {
   if (Array.from(value).some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) throw new Error('Invalid SMTP configuration');
@@ -148,6 +150,13 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
   busy = true;
   nextTestAt = Date.now() + 60000;
   try {
+    if (result.provider === 'brevo' || result.provider === 'resend') {
+      try {
+        if (await reserveProviderQuota(prisma, result.provider) !== 'reserved') return 'local_quota_reached';
+      } catch {
+        return 'local_quota_unavailable';
+      }
+    }
     if (result.provider === 'resend') return await sendResendEmail(result.config, {
       recipient: result.config.from,
       subject: 'Prueba de correo | Intérpretes RD',
