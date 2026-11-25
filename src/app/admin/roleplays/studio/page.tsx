@@ -1900,7 +1900,7 @@ export default function RoleplayStudioPage() {
   const sourceReady = Boolean(audio && duration > 0);
   const studioSteps = [
     { id: 'studio-source', title: '1. Grabación', detail: sourceReady ? 'Grabación lista' : 'Selecciona audio o video', available: true, done: sourceReady },
-    { id: 'studio-subtitles', title: '2. Transcripción', detail: reviewCues.length ? 'Turnos para seleccionar' : 'Importa subtítulos o usa cortes manuales', available: sourceReady, done: segments.length > 0 },
+    { id: reviewCues.length ? 'studio-transcript-review' : 'studio-subtitles', title: '2. Transcripción', detail: reviewCues.length ? 'Turnos para seleccionar' : 'Importa subtítulos o usa cortes manuales', available: sourceReady, done: segments.length > 0 && reviewCues.length === 0 },
     { id: 'studio-turns', title: '3. Intervenciones', detail: segments.length ? `${segments.length} turnos · ${pendingReviewCount} pendientes` : 'Revisa voces, idiomas y cortes', available: sourceReady, done: segments.length > 0 && pendingReviewCount === 0 },
     { id: 'studio-export', title: '4. Exportación', detail: 'Prepara el paquete para asignar', available: sourceReady && segments.length > 0, done: false },
   ];
@@ -2105,87 +2105,43 @@ export default function RoleplayStudioPage() {
             setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
           }}
           className="hidden" />}
-            {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
-              <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
-                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar el ZIP</legend>
-                <label className="flex items-start gap-2 text-sm text-[var(--theme-info)]">
-                  <input type="radio" name="studio-export-location"
-                    checked={!allowServerZipExport}
-                    onChange={() => {
-                      subtitleImportRevision.current += 1;
-                      draftOperationRevision.current += 1;
-                      exportRevision.current += 1;
-                      exportAbort.current?.abort();
-                      exportAbort.current = null;
-                      setBusy(false);
-                      setDraftBusy(false);
-                      setAllowServerZipExport(false);
-                      setError('');
-                      setNotice('Modo local: descarga el JSON y genera el ZIP en tu equipo con el exportador de escritorio.');
-                    }}
-                    className="mt-1 accent-cyan-400"/>
-                  Local (predeterminado): no subir el MP3. Descarga el proyecto JSON y genera el ZIP en tu equipo.
-                </label>
-                <label className="mt-2 flex items-start gap-2 text-sm text-[var(--foreground)]">
-                  <input type="radio" name="studio-export-location"
-                    checked={allowServerZipExport}
-                    onChange={() => {
-                      subtitleImportRevision.current += 1;
-                      draftOperationRevision.current += 1;
-                      exportRevision.current += 1;
-                      exportAbort.current?.abort();
-                      exportAbort.current = null;
-                      setBusy(false);
-                      setDraftBusy(false);
-                      setAllowServerZipExport(true);
-                      setError('');
-                      setNotice('Modo servidor seleccionado: al exportar, el MP3 se enviará para generar el ZIP.');
-                    }}
-                    className="mt-1 accent-blue-400"/>
-                  Servidor (opcional): el MP3 se subirá al exportar y consumirá recursos de la plataforma.
-                </label>
-              </fieldset>
-            )}
-            {localOnly && duration > 0 && (
-              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-[var(--theme-info)]">
-                {hasCompound && (
-                  <p className="mb-2 font-semibold text-[var(--theme-warning)]">
-                    Proyecto compuesto v2: la exportación local se ha activado automáticamente.
-                    Usa un exportador actualizado para que el MP3 omita las pausas; la grabación no se envía al servidor.
-                  </p>
-                )}
-                <strong>Preparación local:</strong> la grabación no se sube al servidor.
-                Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
-                El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
-                FFmpeg en tu equipo; esta opción no convierte audio en el navegador.
-                <p className="mt-2 font-medium text-[var(--foreground)]">
-                  Paso 1: descarga el proyecto JSON. Paso 2: genera el ZIP junto a tu grabación
-                  original en el exportador local. Paso 3: importa el ZIP desde «Crear roleplay».
+            <div id="studio-subtitles" className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+              <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
+                Opcional: importar tiempos de transcripción SRT / WebVTT
+              </label>
+              <p className="mt-1 text-sm text-[var(--text-secondary)]">Importa los subtítulos para preparar los turnos sin marcar cada tiempo a mano. Si no tienes subtítulos, usa el editor de audio de abajo.</p>
+              <details className="mt-2 text-xs text-[var(--text-secondary)]">
+                <summary className="cursor-pointer font-medium text-[var(--theme-link)]">Ayuda con los formatos de HappyScribe</summary>
+                <p className="mt-1">
+                ¿HappyScribe descargó un .md? No es un proyecto JSON ni un archivo de subtítulos con tiempos.
+                Usa «Importar transcripción» en la biblioteca HappyScribe de arriba (solicita SRT automáticamente),
+                o exporta un .srt desde HappyScribe. No es necesario convertir archivos manualmente.
                 </p>
-                <a
-                  href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
-                  target="_blank" rel="noopener noreferrer"
-                  className="mt-1 inline-block font-semibold text-[var(--theme-info)] underline underline-offset-2">
-                  Cómo obtener el exportador local actualizado
-                </a>
-                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
-                  <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
-                  <p className="mt-2">
-                    Opción con interfaz gráfica: cuando el mantenedor haya generado y verificado
-                    la aplicación de escritorio, ábrela y pulsa «Elegir grabación + JSON».
-                    Selecciona ambos archivos una vez: se propondrá un nombre ZIP disponible.
-                    Pulsa «Generar ZIP local»; no requiere comandos ni subir la grabación.
-                  </p>
-                  <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
-                    <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
-                    <p className="mt-1">En un equipo con el repositorio instalado, ejecuta:</p>
-                    <code className="mt-1 block break-all rounded bg-[var(--theme-surface-muted)] p-2 text-[11px] text-[var(--foreground)]">
-                      node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
-                    </code>
-                  </details>
-                </details>
-              </div>
-            )}
+              </details>
+              <input id="studio-transcript" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip"
+                className="mt-2 block w-full text-sm text-[var(--text-secondary)]"
+                onChange={event => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (file) void importSubtitles(file);
+                }}/>
+              <label className="mt-3 flex items-center gap-2 text-sm text-[var(--foreground)]">
+                <input type="checkbox" checked={excludeInterpreter}
+                  onChange={event => {
+                    subtitleImportRevision.current += 1;
+                    preferenceEdits.current.exclude = true;
+                    setExcludeInterpreter(event.currentTarget.checked);
+                  }}
+                  className="h-4 w-4 accent-blue-500"/>
+                Excluir intervenciones del intérprete original al importar
+              </label>
+              <p className="mt-2 text-xs text-[var(--text-secondary)]">
+                El filtro solo reconoce etiquetas genéricas exactas (por ejemplo, Interpreter o Intérprete).
+                Revisa manualmente cualquier hablante desconocido. Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
+                Los nombres personales se reemplazan por títulos neutrales. La transcripción se muestra
+                únicamente aquí y no se envía al participante. Revisa y excluye las intervenciones del intérprete.
+              </p>
+            </div>
             {audio && duration > 0 && (
               <StudioWaveform
                 file={audio}
@@ -2347,44 +2303,12 @@ export default function RoleplayStudioPage() {
                 </div>
               )}
             </div>}
-            <div id="studio-subtitles" className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-              <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
-                Opcional: importar tiempos de transcripción SRT / WebVTT
-              </label>
-              <p className="mt-1 text-xs text-[var(--theme-link)]">
-                ¿HappyScribe descargó un .md? No es un proyecto JSON ni un archivo de subtítulos con tiempos.
-                Usa «Importar transcripción» en la biblioteca HappyScribe de arriba (solicita SRT automáticamente),
-                o exporta un .srt desde HappyScribe. No es necesario convertir archivos manualmente.
-              </p>
-              <input id="studio-transcript" type="file" accept=".srt,.vtt,text/vtt,application/x-subrip"
-                className="mt-2 block w-full text-sm text-[var(--text-secondary)]"
-                onChange={event => {
-                  const file = event.currentTarget.files?.[0];
-                  event.currentTarget.value = '';
-                  if (file) void importSubtitles(file);
-                }}/>
-              <label className="mt-3 flex items-center gap-2 text-sm text-[var(--foreground)]">
-                <input type="checkbox" checked={excludeInterpreter}
-                  onChange={event => {
-                    subtitleImportRevision.current += 1;
-                    preferenceEdits.current.exclude = true;
-                    setExcludeInterpreter(event.currentTarget.checked);
-                  }}
-                  className="h-4 w-4 accent-blue-500"/>
-                Excluir intervenciones del intérprete original al importar
-              </label>
-              <p className="mt-2 text-xs text-[var(--text-secondary)]">
-                El filtro solo reconoce etiquetas genéricas exactas (por ejemplo, Interpreter o Intérprete).
-                Revisa manualmente cualquier hablante desconocido. Se importan los tiempos y solo las etiquetas genéricas de rol (Médico, Paciente, etc.).
-                Los nombres personales se reemplazan por títulos neutrales. La transcripción se muestra
-                únicamente aquí y no se envía al participante. Revisa y excluye las intervenciones del intérprete.
-              </p>
-            </div>
+
           </div>
         )}
       </section>
       {audio && duration > 0 && reviewCues.length > 0 && (
-        <section className="space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
+        <section id="studio-transcript-review" className="scroll-mt-6 space-y-4 rounded-2xl border border-amber-400/25 bg-amber-400/5 p-5">
           <h2 className="text-lg font-bold text-[var(--foreground)]">Seleccionar turnos de la transcripción</h2>
           <p className="text-sm text-[var(--text-secondary)]">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
@@ -3042,6 +2966,87 @@ export default function RoleplayStudioPage() {
           {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
           <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos antes de exportar. Después podrás importar el paquete y asignar el roleplay.</p>
+            {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
+              <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar el ZIP</legend>
+                <label className="flex items-start gap-2 text-sm text-[var(--theme-info)]">
+                  <input type="radio" name="studio-export-location"
+                    checked={!allowServerZipExport}
+                    onChange={() => {
+                      subtitleImportRevision.current += 1;
+                      draftOperationRevision.current += 1;
+                      exportRevision.current += 1;
+                      exportAbort.current?.abort();
+                      exportAbort.current = null;
+                      setBusy(false);
+                      setDraftBusy(false);
+                      setAllowServerZipExport(false);
+                      setError('');
+                      setNotice('Modo local: descarga el JSON y genera el ZIP en tu equipo con el exportador de escritorio.');
+                    }}
+                    className="mt-1 accent-cyan-400"/>
+                  Local (predeterminado): no subir el MP3. Descarga el proyecto JSON y genera el ZIP en tu equipo.
+                </label>
+                <label className="mt-2 flex items-start gap-2 text-sm text-[var(--foreground)]">
+                  <input type="radio" name="studio-export-location"
+                    checked={allowServerZipExport}
+                    onChange={() => {
+                      subtitleImportRevision.current += 1;
+                      draftOperationRevision.current += 1;
+                      exportRevision.current += 1;
+                      exportAbort.current?.abort();
+                      exportAbort.current = null;
+                      setBusy(false);
+                      setDraftBusy(false);
+                      setAllowServerZipExport(true);
+                      setError('');
+                      setNotice('Modo servidor seleccionado: al exportar, el MP3 se enviará para generar el ZIP.');
+                    }}
+                    className="mt-1 accent-blue-400"/>
+                  Servidor (opcional): el MP3 se subirá al exportar y consumirá recursos de la plataforma.
+                </label>
+              </fieldset>
+            )}
+            {localOnly && duration > 0 && (
+              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-[var(--theme-info)]">
+                {hasCompound && (
+                  <p className="mb-2 font-semibold text-[var(--theme-warning)]">
+                    Proyecto compuesto v2: la exportación local se ha activado automáticamente.
+                    Usa un exportador actualizado para que el MP3 omita las pausas; la grabación no se envía al servidor.
+                  </p>
+                )}
+                <strong>Preparación local:</strong> la grabación no se sube al servidor.
+                Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
+                El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
+                FFmpeg en tu equipo; esta opción no convierte audio en el navegador.
+                <p className="mt-2 font-medium text-[var(--foreground)]">
+                  Paso 1: descarga el proyecto JSON. Paso 2: genera el ZIP junto a tu grabación
+                  original en el exportador local. Paso 3: importa el ZIP desde «Crear roleplay».
+                </p>
+                <a
+                  href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
+                  target="_blank" rel="noopener noreferrer"
+                  className="mt-1 inline-block font-semibold text-[var(--theme-info)] underline underline-offset-2">
+                  Cómo obtener el exportador local actualizado
+                </a>
+                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
+                  <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
+                  <p className="mt-2">
+                    Opción con interfaz gráfica: cuando el mantenedor haya generado y verificado
+                    la aplicación de escritorio, ábrela y pulsa «Elegir grabación + JSON».
+                    Selecciona ambos archivos una vez: se propondrá un nombre ZIP disponible.
+                    Pulsa «Generar ZIP local»; no requiere comandos ni subir la grabación.
+                  </p>
+                  <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
+                    <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
+                    <p className="mt-1">En un equipo con el repositorio instalado, ejecuta:</p>
+                    <code className="mt-1 block break-all rounded bg-[var(--theme-surface-muted)] p-2 text-[11px] text-[var(--foreground)]">
+                      node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
+                    </code>
+                  </details>
+                </details>
+              </div>
+            )}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length}
             className="inline-flex items-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold">
             <Download size={18} /> {busy
