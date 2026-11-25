@@ -40,7 +40,7 @@ export default function NotificationEmailBudget() {
         <dl className="space-y-2 text-sm">
           <div><dt className="font-medium">Origen del transporte</dt><dd>{report.source === 'vault' ? 'Almacén de proveedores' : report.source === 'environment' ? 'Variables de entorno' : 'Configuración no válida'}</dd></div>
           <div><dt className="font-medium">Controles de correo</dt><dd>Correo {report.emailEnabled ? 'habilitado' : 'desactivado'} · despacho {report.dispatchEnabled ? 'habilitado' : 'desactivado'} · modo {report.mode === 'pilot' ? 'piloto' : report.mode === 'general' ? 'general' : 'desactivado'}</dd></div>
-          <div><dt className="font-medium">Cobertura de presupuesto</dt><dd>{report.source === 'vault' && report.vaultEnabled ? 'El despacho mediante el perfil del almacén reserva intentos locales; actualmente limitado al piloto.' : 'Los envíos por variables de entorno no están protegidos por estas reservas del almacén. No uses estos saldos como garantía de disponibilidad.'}</dd></div>
+          <div><dt className="font-medium">Cobertura de presupuesto</dt><dd>{report.source === 'vault' && report.vaultEnabled ? 'El despacho mediante el perfil del almacén reserva intentos locales; actualmente limitado al piloto.' : report.source === 'environment' ? 'Los envíos por variables de entorno no están protegidos por estas reservas del almacén. No uses estos saldos como garantía de disponibilidad.' : 'El origen del transporte no está disponible o el almacén está desactivado. Estos saldos no confirman que se pueda enviar correo.'}</dd></div>
         </dl>
       )}
       {report?.status === 'ready' && (
