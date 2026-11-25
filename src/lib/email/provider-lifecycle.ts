@@ -40,7 +40,7 @@ export async function replaceProviderProfile(db: Db, input: ReplacementInput, ac
   if (!validated) return false;
   const { id, profile } = validated;
   const newId = randomUUID();
-  const sealed = sealProfileKey(newId, profile.provider, profile.apiKey, envKey);
+  const sealed = sealProfileCredentials(newId, profile, envKey);
   if (!await retireProviderProfile(db, id, actor)) return false;
   const rows = await db.$queryRaw<{ provider: string }[]>`
     SELECT provider FROM private_email.provider_profile WHERE id = ${id}::uuid
