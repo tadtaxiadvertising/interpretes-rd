@@ -115,6 +115,10 @@ export default function EmailProviderVault() {
   }
 
   const alternatives = providerAlternatives(profiles, quotas, preferredId);
+  const preferred = profiles.find(profile => profile.id === preferredId);
+  const preferredQuota = preferred && quotas.find(quota => quota.provider === preferred.provider);
+  const preferredReadiness = preferred ? profileSelectionReadiness(preferred, preferredQuota, true) : null;
+  const preferredAvailability = preferredQuota ? quotaAvailability(preferredQuota) : null;
 
   return (
     <section className="rounded-xl border border-[var(--border)] p-4 space-y-3 text-sm text-[var(--foreground)]" aria-labelledby="provider-vault-title">
@@ -194,7 +198,18 @@ export default function EmailProviderVault() {
           />
         </div>
       ); })}
-      {ready && <p>Proveedor preferido: {profiles.find(profile => profile.id === preferredId)?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}. No activa por sí sola los envíos automáticos.</p>}
+      {ready && (
+        <section aria-labelledby="preferred-provider-title" className="rounded-lg border border-[var(--border)] p-3 space-y-2">
+          <h4 id="preferred-provider-title" className="font-semibold">Proveedor preferido: {preferred?.name ?? (preferredId ? 'Perfil seleccionado' : 'Ninguno')}</h4>
+          {!preferredId ? <p>No hay una preferencia guardada.</p>
+            : !preferred || !preferredReadiness ? <p>El perfil preferido no figura en la consulta. No se puede comprobar su disponibilidad local.</p>
+            : preferredReadiness === 'ready' && preferredAvailability ? <>
+              <p>Recepción confirmada · {preferredAvailability.remaining} intentos locales restantes.</p>
+              {preferredAvailability.status === 'low' && <p className="font-semibold">El presupuesto del proveedor preferido está próximo a agotarse.</p>}
+            </> : <p className="font-semibold">Preferencia sin disponibilidad local: {readinessText[preferredReadiness]}</p>}
+          <p className="text-xs">La preferencia guardada no activa por sí sola los envíos automáticos. Este diagnóstico local no comprueba credenciales, saldo externo ni autorización efectiva de despacho.</p>
+        </section>
+      )}
       {ready && (
         <section aria-labelledby="provider-alternatives-title" className="rounded-lg border border-[var(--border)] p-3 space-y-2">
           <h4 id="provider-alternatives-title" className="font-semibold">Alternativas verificadas con presupuesto local</h4>
