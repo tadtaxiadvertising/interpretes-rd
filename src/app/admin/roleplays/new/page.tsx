@@ -5,6 +5,7 @@ import prisma from '@/lib/prisma';
 import NewRoleplayForm from './NewRoleplayForm';
 import { getReusableBaseAudioPath, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { openingAssignmentEnabled, readOpeningRequirement } from '@/lib/roleplay/bilingual-opening-assignment';
 
 // Data is read straight from Prisma instead of self-fetching the REST API:
 // server components must not rely on internal HTTP calls (no cookie
@@ -57,6 +58,7 @@ export default async function NewRoleplayPage({
   let librarySource: {
     id: string;
     fingerprint: string;
+    requiresOpening?: boolean;
     scenarios: Array<{ title: string; durationLimitSec: number | null; scriptPrompt: string | null; studioTurn: number | null; studioSpeaker: string | null; studioLanguage: string | null; sourceStartSec: number | null; sourceEndSec: number | null }>;
   } | undefined;
 
@@ -82,6 +84,8 @@ export default async function NewRoleplayPage({
       if (!visibility?.archivedAt) librarySource = {
         id: sourceSessionId,
         fingerprint: getRoleplaySnapshotHash(source.scenarios),
+        requiresOpening: process.env.ROLEPLAY_BILINGUAL_OPENING_API_ENABLED === 'true'
+          ? await readOpeningRequirement(prisma, sourceSessionId) : false,
         scenarios: source.scenarios.map(({ title, durationLimitSec, scriptPrompt, studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec }) => ({ title, durationLimitSec, scriptPrompt, studioTurn, studioSpeaker, studioLanguage, sourceStartSec, sourceEndSec })),
       };
     }
@@ -110,7 +114,8 @@ export default async function NewRoleplayPage({
           </div>
         ) : (
           <NewRoleplayForm interpreters={interpreters} candidates={candidates}
-            initialCandidateId={initialCandidateId} librarySource={librarySource} />
+            initialCandidateId={initialCandidateId} librarySource={librarySource}
+            openingAssignmentEnabled={openingAssignmentEnabled()} />
         )}
       </div>
     </div>
