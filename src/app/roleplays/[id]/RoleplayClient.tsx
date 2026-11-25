@@ -42,7 +42,8 @@ interface Scenario {
 interface SessionData {
   id: string;
   status: string;
-  baseAudioUrl: string;
+  baseAudioUrl: string | null;
+  openingPlaybackLocked?: boolean;
   currentScenarioIndex: number;
   canCompleteSelfAssessment?: boolean;
   scenarios: Scenario[];
@@ -81,7 +82,6 @@ export function RoleplayClient({ sessionId, initialIdentity, openingEnabled = fa
 
   const [pageState, setPageState] = useState<PageState>('loading');
   const [openingReturnState, setOpeningReturnState] = useState<'scenario' | 'self-assessment' | 'completion'>('scenario');
-  const handleOpeningContinue = useCallback(() => setPageState(openingReturnState), [openingReturnState]);
   const [session, setSession] = useState<SessionData | null>(null);
   const [currentScenarioIndex, setCurrentScenarioIndex] = useState(0);
   const [baseAudioVolume, setBaseAudioVolume] = useState(1);
@@ -96,6 +96,22 @@ export function RoleplayClient({ sessionId, initialIdentity, openingEnabled = fa
     criticalError: boolean;
     notes: string;
   }>>({});
+
+  // Refresh authorized playback links after opening, including after a
+  // recovered confirmation. Never continue using the pre-opening snapshot.
+  const handleOpeningContinue = useCallback(async () => {
+    const res = await fetch(`/api/roleplay/session/${sessionId}`, { cache: 'no-store' });
+    const result = await res.json();
+    const fresh = result.data as SessionData | undefined;
+    if (!res.ok || !result.success || !fresh || fresh.id !== sessionId ||
+        fresh.openingPlaybackLocked || !['STARTED', 'IN_PROGRESS'].includes(fresh.status) ||
+        fresh.currentScenarioIndex !== currentScenarioIndex ||
+        (openingReturnState === 'scenario' && !fresh.scenarios[currentScenarioIndex]?.baseAudioUrl)) {
+      throw new Error('No se pudo actualizar el audio de la conversación. Consulta el estado nuevamente.');
+    }
+    setSession(fresh);
+    setPageState(openingReturnState);
+  }, [sessionId, currentScenarioIndex, openingReturnState]);
 
   const stepLabels = openingEnabled ? ['Intro', 'Apertura', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'] : ['Intro', 'Escuchar', 'Grabar', 'Autoeval', 'Enviar'];
 
@@ -482,7 +498,8 @@ export function RoleplayClient({ sessionId, initialIdentity, openingEnabled = fa
           {pageState === 'intro' && (
             <RoleplayIntro
               sessionId={session.id}
-              baseAudioUrl={session.baseAudioUrl}
+              baseAudioUrl={session.baseAudioUrl ?? ''}
+              openingPlaybackLocked={session.openingPlaybackLocked === true}
               scenarioCount={session.scenarios.length}
               onStart={handleStartRoleplay}
               onBack={handleBack}
