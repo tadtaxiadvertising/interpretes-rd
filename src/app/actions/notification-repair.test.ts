@@ -56,8 +56,8 @@ describe('administrative notification repair', () => {
   });
 
   it('rejects unknown modules and caller-provided recipient objects', async () => {
-    for (const module of ['all', '__proto__', { module: 'qa', userId: 'other' }]) {
-      expect(await repairMissingOperationalNotices(module, true)).toEqual({ success: false, code: 'INVALID_MODULE' });
+    for (const invalidSelection of ['all', '__proto__', { module: 'qa', userId: 'other' }]) {
+      expect(await repairMissingOperationalNotices(invalidSelection, true)).toEqual({ success: false, code: 'INVALID_MODULE' });
     }
     expect(m.limit).not.toHaveBeenCalled();
     expect(m.operational).not.toHaveBeenCalled();
