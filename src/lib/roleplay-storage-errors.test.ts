@@ -22,6 +22,7 @@ vi.mock('@supabase/supabase-js', () => ({
 
 import {
   confirmUpload,
+  createSignedBilingualOpeningUploadUrl,
   createSignedUploadUrl,
   getAdminReviewUrl,
   getPlaybackUrl,
@@ -46,6 +47,27 @@ describe('Roleplay Storage errors never expose provider error messages', () => {
     vi.clearAllMocks();
     storage.info.mockResolvedValue({ data: { metadata: { size: 5 } }, error: null });
     storage.remove.mockResolvedValue({ error: null });
+  });
+
+  it('issues a non-overwriting opening capability scoped to the session', async () => {
+    storage.signedUpload.mockImplementation(async (path: string) => ({
+      data: { token: 'isolated-test-token', path }, error: null,
+    }));
+    const result = await createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 100);
+    expect(result.path).toMatch(/^openings\/session-1\/[a-f0-9-]+\.webm$/);
+    expect(storage.signedUpload).toHaveBeenCalledWith(result.path, { upsert: false });
+    await expect(createSignedBilingualOpeningUploadUrl('../foreign', 'audio/webm', 100)).rejects.toThrow();
+    await expect(createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 0)).rejects.toThrow();
+    await expect(createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 16 * 1024 * 1024)).rejects.toThrow();
+    expect(storage.signedUpload).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects mismatched opening upload paths without exposing provider data', async () => {
+    storage.signedUpload.mockResolvedValue({
+      data: { token: 'PRIVATE_UPLOAD_TOKEN', path: 'openings/foreign/file.webm' }, error: null,
+    });
+    await expect(createSignedBilingualOpeningUploadUrl('session-1', 'audio/webm', 100))
+      .rejects.toThrow('Unable to authorize opening audio upload');
   });
 
   it('redacts provider tokens when issuing a signed upload URL', async () => {
