@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import postcss from 'postcss';
 
 const css = readFileSync(resolve(process.cwd(), 'src/app/globals.css'), 'utf8');
-const patch = css.split('/* Light workspace: exact legacy utilities')[1];
+const patch = css.split('/* Light workspace: exact legacy utilities')[1]?.split('/* Light portal controls:')[0];
 const root = postcss.parse(css);
 const lightTokens = new Map<string, string>();
 root.walkRules('html[data-theme="light"]', rule => {
@@ -52,7 +52,8 @@ describe('light workspace compatibility', () => {
 
   it('keeps shared text and semantic status tokens above 4.5:1 on neutral surfaces', () => {
     for (const token of ['--foreground', '--text-secondary', '--theme-link',
-      '--theme-success', '--theme-warning', '--theme-danger', '--theme-purple']) {
+      '--theme-success', '--theme-warning', '--theme-danger', '--theme-purple',
+      '--theme-away', '--theme-info', '--text-tertiary']) {
       for (const surface of ['--theme-panel', '--theme-surface-muted']) {
         expect(contrast(lightTokens.get(token)!, lightTokens.get(surface)!)).toBeGreaterThanOrEqual(4.5);
       }
@@ -95,5 +96,34 @@ describe('light portal interactive states', () => {
     expect(css).toContain('.theme-login button[type="submit"].from-blue-600.to-blue-500:hover');
     expect(css).toContain('.theme-postular .recruitment-funnel button[class~="disabled:bg-slate-400"]:disabled');
     expect(css).toContain('.theme-workspace [class~="hover:bg-slate-800/80"]:hover');
+  });
+});
+
+describe('semantic monitoring palette', () => {
+  it('keeps the away and informational states distinct and legible in both themes', () => {
+    const darkTokens = new Map<string, string>();
+    root.walkRules(':root', rule => {
+      rule.walkDecls(/^--/, declaration => {
+        darkTokens.set(declaration.prop, declaration.value);
+      });
+    });
+    for (const tokens of [darkTokens, lightTokens]) {
+      expect(tokens.get('--theme-away')).not.toBe(tokens.get('--theme-warning'));
+      for (const token of ['--theme-away', '--theme-info']) {
+        for (const surface of ['--theme-panel', '--theme-surface-muted']) {
+          expect(contrast(tokens.get(token)!, tokens.get(surface)!)).toBeGreaterThanOrEqual(4.5);
+        }
+      }
+    }
+  });
+
+  it('keeps portal-specific compatibility rules within the light theme', () => {
+    const portal = css.split('/* Light portal controls:')[1];
+    expect(portal).toBeDefined();
+    postcss.parse('/* Light portal controls:' + portal).walkRules(rule => {
+      for (const selector of rule.selectors) {
+        expect(selector.trim()).toMatch(/^html\[data-theme="light"\] \.theme-(workspace|login|candidate|postular)\b/);
+      }
+    });
   });
 });
