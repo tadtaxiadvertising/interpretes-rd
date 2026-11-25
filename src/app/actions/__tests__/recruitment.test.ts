@@ -3,6 +3,7 @@ import type { ApplicantData } from '@/lib/validators/recruitment';
 
 const m = vi.hoisted(() => ({
   notifyRecruitmentAdmins: vi.fn(),
+  notifyCandidateMilestone: vi.fn(),
   cookieGet: vi.fn(),
   cookieSet: vi.fn(),
   actor: null as any,
@@ -12,6 +13,7 @@ const m = vi.hoisted(() => ({
   inviteCandidateAuthUser: vi.fn(),
 }));
 
+vi.mock('@/lib/notifications/notify-candidate', () => ({ notifyCandidateMilestone: m.notifyCandidateMilestone }));
 vi.mock('@/lib/notifications/notify-recruitment', () => ({ notifyRecruitmentAdmins: m.notifyRecruitmentAdmins }));
 
 vi.mock('next/headers', () => ({
@@ -141,6 +143,7 @@ describe('submitApplicationAction (create-or-resume with ownership)', () => {
     expect('applicationId' in result && result.applicationId).toBe('app-1');
     expect('alreadyApplied' in result && result.alreadyApplied).toBe(false);
     expect(m.notifyRecruitmentAdmins).toHaveBeenCalledExactlyOnceWith({ kind: 'application-created', applicationId: 'app-1' });
+    expect(m.notifyCandidateMilestone).toHaveBeenCalledExactlyOnceWith({ applicationId: 'app-1', status: 'APPLIED', version: 0 });
     expect('funnelStep' in result && result.funnelStep).toBe(2);
     expect(m.inviteCandidateAuthUser).toHaveBeenCalledWith(expect.objectContaining({
       email: 'ana@example.com',
