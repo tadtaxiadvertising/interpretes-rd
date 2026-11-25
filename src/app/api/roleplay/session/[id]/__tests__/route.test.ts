@@ -66,9 +66,9 @@ describe('GET /api/roleplay/session/[id]', () => {
   });
 
   it.each([
-    [],
-    [{ id: 'empty', order: 0, title: 'Incomplete', baseAudioUrl: '', responses: [] }],
-  ])('rejects direct playback of an incomplete interpreter draft', async (...scenarios) => {
+    { reason: 'no scenarios', scenarios: [] },
+    { reason: 'empty audio reference', scenarios: [{ id: 'empty', order: 0, title: 'Incomplete', baseAudioUrl: '', responses: [] }] },
+  ])('rejects direct playback of an incomplete interpreter draft: $reason', async ({ scenarios }) => {
     m.identity = { userId: 'worker', role: 'interpreter', interpreterId: 7 };
     m.session = { ...candidateSession('DRAFT'), interpreterId: 7, recruitmentCandidateId: null, scenarios };
     const res = await GET(makeRequest(), { params });
