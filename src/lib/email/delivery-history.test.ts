@@ -23,11 +23,11 @@ describe('read-only email delivery history', () => {
     const { db, query } = fixture();
     const createdAt = new Date('2026-11-24T05:00:00Z');
     query.mockReset().mockResolvedValueOnce([{ installed: true }]).mockResolvedValueOnce([{
-      kind: 'application_received', status: 'unconfirmed', createdAt, claimedAt: createdAt, completedAt: createdAt,
+      kind: 'application_received', status: 'unconfirmed', provider: 'mailjet', createdAt, claimedAt: createdAt, completedAt: createdAt,
       email: 'private@example.test', eventId: 'private-id',
     }]);
     expect(await readEmailHistory(db)).toEqual({ status: 'ready', rows: [{
-      kind: 'application_received', status: 'unconfirmed', createdAt: createdAt.toISOString(), claimedAt: createdAt.toISOString(), completedAt: createdAt.toISOString(),
+      kind: 'application_received', status: 'unconfirmed', provider: 'mailjet', createdAt: createdAt.toISOString(), claimedAt: createdAt.toISOString(), completedAt: createdAt.toISOString(),
     }] });
     const sql = query.mock.calls[1][0].join('?');
     expect(sql).toContain('LIMIT 30');
