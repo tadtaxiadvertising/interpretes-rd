@@ -87,26 +87,26 @@ export default async function NewRoleplayPage({
     }
   }
   return (
-    <div className="min-h-screen bg-slate-950 py-12 px-4">
+    <div className="min-h-screen bg-[var(--background)] py-12 px-4">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center gap-4 mb-8">
           <Link 
             href="/admin/roleplays"
-            className="p-2 hover:bg-white/10 rounded-xl transition-colors text-gray-400 hover:text-white"
+            className="p-2 hover:bg-[var(--theme-hover)] rounded-xl transition-colors text-[var(--text-secondary)] hover:text-[var(--foreground)]"
           >
             <ArrowLeft size={20} />
           </Link>
           <div>
-            <h1 className="text-3xl font-bold text-white">{librarySource ? 'Asignar ejercicio de la biblioteca' : 'Crear sesión de práctica'}</h1>
-            <p className="text-gray-400">{librarySource ? 'Reutiliza un ejercicio sin volver a cargar el audio' : 'Asigna ejercicios y audios a los participantes'}</p>
+            <h1 className="text-3xl font-bold text-[var(--foreground)]">{librarySource ? 'Asignar ejercicio de la biblioteca' : 'Crear sesión de práctica'}</h1>
+            <p className="text-[var(--text-secondary)]">{librarySource ? 'Reutiliza un ejercicio sin volver a cargar el audio' : 'Asigna ejercicios y audios a los participantes'}</p>
           </div>
         </div>
 
         {sourceSessionId && !librarySource ? (
           <div role="alert" className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-6">
-            <p className="font-semibold text-amber-200">La plantilla solicitada no está disponible</p>
-            <p className="mt-2 text-sm text-amber-100/80">Puede haber cambiado, no tener audios reutilizables o haber sido retirada.</p>
-            <Link href="/admin/roleplays/library" className="mt-4 inline-block text-blue-300 underline">Volver a la biblioteca</Link>
+            <p className="font-semibold text-[var(--theme-warning)]">La plantilla solicitada no está disponible</p>
+            <p className="mt-2 text-sm text-[var(--theme-warning)]">Puede haber cambiado, no tener audios reutilizables o haber sido retirada.</p>
+            <Link href="/admin/roleplays/library" className="mt-4 inline-block text-[var(--theme-link)] underline">Volver a la biblioteca</Link>
           </div>
         ) : (
           <NewRoleplayForm interpreters={interpreters} candidates={candidates}
