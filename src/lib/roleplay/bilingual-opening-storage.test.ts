@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { measuredOpeningDuration, verifyBilingualOpeningAudio } from './bilingual-opening-storage';
 
 vi.mock('server-only', () => ({}));
-vi.mock('@/lib/roleplay', () => ({ getSignedAudioUrl: vi.fn() }));
+vi.mock('@/lib/roleplay', () => ({ getSignedBilingualOpeningAudioUrl: vi.fn() }));
 
-import { getSignedAudioUrl } from '@/lib/roleplay';
+import { getSignedBilingualOpeningAudioUrl } from '@/lib/roleplay';
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -27,16 +27,16 @@ describe('staged opening audio verifier', () => {
   });
 
   it('rejects a foreign recording before signing or fetching it', async () => {
-    vi.mocked(getSignedAudioUrl).mockClear();
+    vi.mocked(getSignedBilingualOpeningAudioUrl).mockClear();
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
     await expect(verifyBilingualOpeningAudio('session-2', path)).rejects.toThrow('Invalid opening audio path');
-    expect(getSignedAudioUrl).not.toHaveBeenCalled();
+    expect(getSignedBilingualOpeningAudioUrl).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects oversized objects before decoding', async () => {
-    vi.mocked(getSignedAudioUrl).mockResolvedValue('https://storage.example.test/signed');
+    vi.mocked(getSignedBilingualOpeningAudioUrl).mockResolvedValue('https://storage.example.test/signed');
     const response = new Response(new Uint8Array([1]), { headers: { 'content-length': String(16 * 1024 * 1024) } });
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response));
     await expect(verifyBilingualOpeningAudio('session-1', path)).rejects.toThrow('Unable to verify opening audio');
@@ -44,7 +44,7 @@ describe('staged opening audio verifier', () => {
   });
 
   it('rejects empty or truncated streams without trusting the declared size', async () => {
-    vi.mocked(getSignedAudioUrl).mockResolvedValue('https://storage.example.test/signed');
+    vi.mocked(getSignedBilingualOpeningAudioUrl).mockResolvedValue('https://storage.example.test/signed');
     for (const response of [
       new Response(new Uint8Array()),
       new Response(new Uint8Array([1]), { headers: { 'content-length': '10' } }),
