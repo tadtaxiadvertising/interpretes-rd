@@ -15,7 +15,7 @@ describe('bilingual opening contract', () => {
   it('rejects cross-session and scenario response paths, URLs and traversal', () => {
     for (const invalid of [path.replace('session-1', 'session-2'),
       path.replace('openings', 'responses'), 'https://storage.test/' + path,
-      path.replace('session-1', '../session-1'), path + '?token=abc']) {
+      path.replace('session-1', '../session-1'), path + '?token=abc', path + '\n']) {
       expect(isCanonicalBilingualOpeningPath(invalid, sessionId)).toBe(false);
       expect(getBilingualOpeningState(sessionId, true, { ...recording, sourceAudioPath: invalid })).toBe('pending');
     }
