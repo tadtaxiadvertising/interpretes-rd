@@ -62,6 +62,32 @@ describe('roleplay access recovery', () => {
     expect(screen.queryByRole('heading', { name: 'Protocolo de apertura bilingüe' })).toBeNull();
   });
 
+  it('refreshes the clinical session after opening confirmation before continuing', async () => {
+    const locked = activeSession();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ success: true, data: { ...locked.data,
+        openingPlaybackLocked: true, baseAudioUrl: null,
+        scenarios: [{ ...locked.data.scenarios[0], baseAudioUrl: '' }],
+      } }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: { state: 'confirmed' } }))
+      .mockResolvedValueOnce(Response.json(activeSession()));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<RoleplayClient sessionId="sess-1" initialIdentity={candidate} openingEnabled />);
+    expect(await screen.findByText('Scenario')).toBeTruthy();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2][0]).toBe('/api/roleplay/session/sess-1');
+  });
+
+  it('does not enter the clinical turn if refreshed playback remains locked', async () => {
+    const locked = activeSession();
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => Response.json(
+      url.endsWith('/opening') ? { success: true, data: { state: 'confirmed' } } :
+        { success: true, data: { ...locked.data, openingPlaybackLocked: true, baseAudioUrl: null } })));
+    render(<RoleplayClient sessionId="sess-1" initialIdentity={candidate} openingEnabled />);
+    expect(await screen.findByText(/No se pudo consultar la apertura/)).toBeTruthy();
+    expect(screen.queryByText('Scenario')).toBeNull();
+  });
+
   it('does not bypass a failed opening state check', async () => {
     vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) =>
       url.endsWith('/opening') ? Response.json({ success: false }, { status: 503 }) : Response.json(activeSession())));
