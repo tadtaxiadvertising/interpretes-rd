@@ -170,3 +170,29 @@ describe('semantic administration forms', () => {
     expect(source).toContain('bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed');
   });
 });
+
+describe('semantic messaging and quality controls', () => {
+  it.each(['src/components/ChatSystem.tsx', 'src/components/QAEngine.tsx'])('uses shared control tokens in %s', path => {
+    const source = readFileSync(resolve(process.cwd(), path), 'utf8');
+    expect(source).toContain('bg-[var(--theme-control-bg)]');
+    expect(source).toContain('border-[var(--theme-control-border)]');
+    expect(source).toContain('text-[var(--theme-control-text)]');
+    expect(source).not.toContain('bg-slate-950 ');
+  });
+
+  it('preserves sent and received message distinction', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/components/ChatSystem.tsx'), 'utf8');
+    expect(source).toContain('bg-blue-600 text-white rounded-br-none');
+    expect(source).toContain('bg-[var(--theme-surface-muted)] text-[var(--foreground)] rounded-bl-none');
+    expect(source).toContain('disabled:opacity-50 text-white');
+  });
+
+  it('keeps payroll summary surfaces independent of dark gradients', () => {
+    const source = readFileSync(resolve(process.cwd(), 'src/app/payroll/page.tsx'), 'utf8');
+    expect(source).not.toMatch(/from-(indigo|orange|blue)-900\/40/);
+    expect(source).toContain('bg-[var(--theme-panel)]');
+    for (const token of ['--theme-purple', '--theme-away', '--theme-link']) {
+      expect(source).toContain('text-[var(' + token + ')]');
+    }
+  });
+});

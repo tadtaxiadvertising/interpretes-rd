@@ -95,19 +95,19 @@ export default function SystemReadinessCheck() {
   const checking = status === 'checking';
 
   return (
-    <section aria-label="Estado real de la base de datos" className="glass rounded-3xl border border-white/10 p-6 md:p-8 space-y-5">
+    <section aria-label="Estado real de la base de datos" className="glass rounded-3xl border border-[var(--border)] p-6 md:p-8 space-y-5">
       <div className="flex items-center gap-3">
-        <Database className="text-blue-400 shrink-0" size={23} aria-hidden="true" />
+        <Database className="text-[var(--theme-link)] shrink-0" size={23} aria-hidden="true" />
         <div>
-          <h2 className="text-xl font-bold text-white">Conexión y esquema</h2>
-          <p className="text-sm text-gray-400">Diagnóstico de lectura disponible solo para administradores.</p>
+          <h2 className="text-xl font-bold text-[var(--foreground)]">Conexión y esquema</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Diagnóstico de lectura disponible solo para administradores.</p>
         </div>
       </div>
-      <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex items-start gap-3">
-        {healthy ? <CheckCircle2 className="text-green-400 shrink-0" aria-hidden="true" /> :
-          failed ? <AlertTriangle className="text-amber-400 shrink-0" aria-hidden="true" /> :
-            <ShieldAlert className="text-gray-400 shrink-0" aria-hidden="true" />}
-        <p role="status" aria-live="polite" className="text-sm text-gray-200">{messages[status]}</p>
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4 flex items-start gap-3">
+        {healthy ? <CheckCircle2 className="text-[var(--theme-success)] shrink-0" aria-hidden="true" /> :
+          failed ? <AlertTriangle className="text-[var(--theme-warning)] shrink-0" aria-hidden="true" /> :
+            <ShieldAlert className="text-[var(--text-secondary)] shrink-0" aria-hidden="true" />}
+        <p role="status" aria-live="polite" className="text-sm text-[var(--foreground)]">{messages[status]}</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -124,7 +124,7 @@ export default function SystemReadinessCheck() {
             type="button"
             aria-expanded={showDetails}
             onClick={() => setShowDetails(value => !value)}
-            className="rounded-xl border border-white/20 px-5 py-3 text-sm font-medium text-gray-200 hover:bg-white/10"
+            className="rounded-xl border border-[var(--theme-control-border)] px-5 py-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--theme-hover)]"
           >
             {showDetails ? 'Ocultar detalles' : 'Ver detalles del esquema'}
           </button>
@@ -133,16 +133,16 @@ export default function SystemReadinessCheck() {
       {schema && showDetails && (
         <ul className="space-y-2" aria-label="Comprobaciones de esquema">
           {SCHEMA_CHECKS.map(([key, label]) => (
-            <li key={key} className="flex justify-between gap-3 border-b border-white/5 py-2 text-sm">
-              <span className="text-gray-300">{label}</span>
-              <span className={schema[key] === true ? 'text-green-400' : schema[key] === false ? 'text-amber-400' : 'text-gray-400'}>
+            <li key={key} className="flex justify-between gap-3 border-b border-[var(--border)] py-2 text-sm">
+              <span className="text-[var(--text-secondary)]">{label}</span>
+              <span className={schema[key] === true ? 'text-[var(--theme-success)]' : schema[key] === false ? 'text-[var(--theme-warning)]' : 'text-[var(--text-secondary)]'}>
                 {schema[key] === true ? 'Correcto' : schema[key] === false ? 'Pendiente' : 'No informado'}
               </span>
             </li>
           ))}
         </ul>
       )}
-      <p className="text-xs leading-relaxed text-gray-400">
+      <p className="text-xs leading-relaxed text-[var(--text-secondary)]">
         Esta consulta solo comprueba la disponibilidad de la base de datos y elementos del esquema.
         No verifica certificados TLS, historial completo de migraciones, estado del contenedor ni despliegue de Easypanel.
         No modifica registros ni permite gestionar secretos.

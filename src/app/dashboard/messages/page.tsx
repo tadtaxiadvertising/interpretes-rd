@@ -19,8 +19,8 @@ export default async function InterpreterMessagesPage() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Soporte y Mensajería</h1>
-        <p className="text-slate-400 mt-2">
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">Soporte y Mensajería</h1>
+        <p className="text-[var(--text-secondary)] mt-2">
           Comunícate de forma directa y segura con el equipo de administración.
         </p>
       </div>

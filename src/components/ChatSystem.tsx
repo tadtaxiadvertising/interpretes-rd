@@ -249,16 +249,16 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
   const filteredContacts = contacts;
 
   return (
-    <div className="flex h-[calc(100vh-12rem)] min-h-[500px] border border-white/10 rounded-2xl overflow-hidden glass shadow-2xl">
+    <div className="flex h-[calc(100vh-12rem)] min-h-[500px] border border-[var(--border)] rounded-2xl overflow-hidden glass shadow-2xl">
       {/* ── Left Sidebar (Contacts List) ── */}
-      <div className="w-80 border-r border-white/10 flex flex-col bg-slate-950/40">
-        <div className="p-4 border-b border-white/5 space-y-3">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-blue-500" />
+      <div className="w-80 border-r border-[var(--border)] flex flex-col bg-[var(--theme-surface-muted)]">
+        <div className="p-4 border-b border-[var(--border)] space-y-3">
+          <h2 className="text-lg font-bold text-[var(--foreground)] flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-[var(--theme-link)]" />
             Centro de Mensajes
           </h2>
           <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-500" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-[var(--text-tertiary)]" />
             <input
               type="text"
               placeholder="Buscar chat..."
@@ -269,19 +269,19 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
                 setSearchQuery(query);
                 loadContacts(false, query);
               }}
-              className="w-full pl-9 pr-4 py-2 bg-slate-950 border border-slate-700/50 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+              className="w-full pl-9 pr-4 py-2 bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl text-sm text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] transition-all"
             />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto divide-y divide-white/5 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto divide-y divide-[var(--border)] scrollbar-thin scrollbar-thumb-[var(--theme-control-border)] scrollbar-track-transparent">
           {loadingContacts ? (
-            <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-[var(--text-tertiary)]">
+              <Loader2 className="w-6 h-6 animate-spin text-[var(--theme-link)]" />
               <span className="text-xs font-medium">Cargando chats...</span>
             </div>
           ) : filteredContacts.length === 0 ? (
-            <div className="p-8 text-center text-slate-500 text-xs">
+            <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
               No se encontraron contactos disponibles.
             </div>
           ) : (
@@ -292,30 +292,30 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
                   key={contact.id}
                   onClick={() => selectContact(contact)}
                   className={cn(
-                    "w-full text-left p-4 flex gap-3 hover:bg-white/5 transition-all relative border-l-4",
+                    "w-full text-left p-4 flex gap-3 hover:bg-[var(--theme-hover)] transition-all relative border-l-4",
                     isActive ? "bg-blue-600/10 border-l-blue-500" : "border-l-transparent",
                     contact.unreadCount > 0 && "bg-emerald-500/5"
                   )}
                 >
                   <div className="relative shrink-0">
-                    <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-white/10 text-slate-300">
+                    <div className="w-10 h-10 rounded-full bg-[var(--theme-surface-muted)] flex items-center justify-center border border-[var(--border)] text-[var(--text-secondary)]">
                       <User size={18} />
                     </div>
-                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border border-slate-950 animate-pulse" />
+                    <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border border-[var(--theme-panel)] animate-pulse" />
                   </div>
 
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-sm text-white truncate flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-[var(--foreground)] truncate flex items-center gap-1.5">
                         {contact.name}
                         {contact.role === 'admin' && (
                           <span title="Administrador">
-                            <Shield size={12} className="text-blue-400" />
+                            <Shield size={12} className="text-[var(--theme-link)]" />
                           </span>
                         )}
                       </span>
                       {contact.lastMessage?.createdAt && (
-                        <span className="text-[10px] text-slate-500">
+                        <span className="text-[10px] text-[var(--text-tertiary)]">
                           {new Date(contact.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
@@ -323,14 +323,14 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
                     
                     <p className={cn(
                       "text-xs truncate",
-                      contact.unreadCount > 0 ? "text-slate-200 font-semibold" : "text-slate-400"
+                      contact.unreadCount > 0 ? "text-[var(--foreground)] font-semibold" : "text-[var(--text-secondary)]"
                     )}>
                       {contact.lastMessage ? contact.lastMessage.content : "Sin mensajes aún"}
                     </p>
                   </div>
 
                   {contact.unreadCount > 0 && (
-                    <span className="absolute top-4 right-4 bg-emerald-500 text-[10px] font-bold text-white px-2 py-0.5 rounded-full">
+                    <span className="absolute top-4 right-4 bg-emerald-700 text-[10px] font-bold text-white px-2 py-0.5 rounded-full">
                       {contact.unreadCount}
                     </span>
                   )}
@@ -342,54 +342,54 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
       </div>
 
       {/* ── Right Panel (Chat Conversation) ── */}
-      <div className="flex-1 flex flex-col bg-slate-950/20">
+      <div className="flex-1 flex flex-col bg-[var(--theme-panel)]">
         {activeContact ? (
           <>
             {/* Header */}
-            <div className="p-4 border-b border-white/10 flex items-center justify-between bg-slate-950/40">
+            <div className="p-4 border-b border-[var(--border)] flex items-center justify-between bg-[var(--theme-surface-muted)]">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center border border-white/10 text-slate-300">
+                  <div className="w-10 h-10 rounded-full bg-[var(--theme-surface-muted)] flex items-center justify-center border border-[var(--border)] text-[var(--text-secondary)]">
                     <User size={18} />
                   </div>
-                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border border-slate-950 animate-pulse" />
+                  <div className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-green-500 border border-[var(--theme-panel)] animate-pulse" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm text-white flex items-center gap-1.5">
+                  <h3 className="font-bold text-sm text-[var(--foreground)] flex items-center gap-1.5">
                     {activeContact.name}
                     {activeContact.role === 'admin' && (
                       <span title="Administrador">
-                        <Shield size={12} className="text-blue-400" />
+                        <Shield size={12} className="text-[var(--theme-link)]" />
                       </span>
                     )}
                   </h3>
-                  <span className="text-[10px] text-slate-400 font-medium">Activo ahora</span>
+                  <span className="text-[10px] text-[var(--text-secondary)] font-medium">Activo ahora</span>
                 </div>
               </div>
             </div>
 
             {/* Message Area */}
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-[var(--theme-control-border)] scrollbar-track-transparent">
               {hasMoreMessages && !loadingMessages && (
                 <div className="flex justify-center">
                   <button
                     type="button"
                     onClick={loadOlderMessages}
                     disabled={loadingOlderMessages}
-                    className="px-4 py-2 text-xs font-semibold text-blue-300 hover:text-white disabled:opacity-50"
+                    className="px-4 py-2 text-xs font-semibold text-[var(--theme-link)] hover:text-[var(--foreground)] disabled:opacity-50"
                   >
                     {loadingOlderMessages ? 'Cargando mensajes...' : 'Cargar mensajes anteriores'}
                   </button>
                 </div>
               )}
               {loadingMessages ? (
-                <div className="flex flex-col items-center justify-center h-full gap-2 text-slate-500">
-                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                <div className="flex flex-col items-center justify-center h-full gap-2 text-[var(--text-tertiary)]">
+                  <Loader2 className="w-6 h-6 animate-spin text-[var(--theme-link)]" />
                   <span className="text-xs">Cargando conversación...</span>
                 </div>
               ) : messages.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-slate-500 gap-2">
-                  <MessageSquare className="w-12 h-12 text-slate-700" />
+                <div className="h-full flex flex-col items-center justify-center text-[var(--text-tertiary)] gap-2">
+                  <MessageSquare className="w-12 h-12 text-[var(--text-tertiary)]" />
                   <span className="text-sm">Envía un mensaje para comenzar la conversación.</span>
                 </div>
               ) : (
@@ -408,20 +408,20 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
                           "px-4 py-2.5 rounded-2xl text-sm shadow-md",
                           isMe
                             ? "bg-blue-600 text-white rounded-br-none"
-                            : "bg-slate-800 text-slate-100 rounded-bl-none border border-slate-700/50"
+                            : "bg-[var(--theme-surface-muted)] text-[var(--foreground)] rounded-bl-none border border-[var(--border)]"
                         )}
                       >
                         <p className="leading-relaxed break-words whitespace-pre-wrap">{m.content}</p>
                       </div>
                       
-                      <div className="flex items-center gap-1 mt-1 text-[9px] text-slate-500">
+                      <div className="flex items-center gap-1 mt-1 text-[9px] text-[var(--text-tertiary)]">
                         {m.createdAt && (
                           <span>
                             {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         )}
                         {isMe && (
-                          m.isRead ? <CheckCheck size={10} className="text-blue-400" /> : <Check size={10} className="text-slate-500" />
+                          m.isRead ? <CheckCheck size={10} className="text-[var(--theme-link)]" /> : <Check size={10} className="text-[var(--text-tertiary)]" />
                         )}
                       </div>
                     </div>
@@ -432,19 +432,19 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
             </div>
 
             {/* Input Form */}
-            <form onSubmit={handleSendMessage} className="p-4 border-t border-white/10 bg-slate-950/40 flex gap-3">
+            <form onSubmit={handleSendMessage} className="p-4 border-t border-[var(--border)] bg-[var(--theme-surface-muted)] flex gap-3">
               <input
                 type="text"
                 placeholder="Escribe tu mensaje aquí..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 disabled={isSending}
-                className="flex-1 bg-slate-950 border border-slate-700/50 rounded-xl px-4 py-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                className="flex-1 bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl px-4 py-3 text-sm text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--theme-focus)] focus:border-transparent transition-all"
               />
               <button
                 type="submit"
                 disabled={!newMessage.trim() || isSending}
-                className="bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/40 text-white px-4 rounded-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:scale-100"
+                className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white px-4 rounded-xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 disabled:scale-100"
               >
                 {isSending ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -455,13 +455,13 @@ export function ChatSystem({ currentUserId, currentUserRole }: ChatSystemProps) 
             </form>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-500 gap-4 p-8">
-            <div className="p-4 rounded-full bg-slate-800/50 border border-white/5">
-              <MessageSquare className="w-10 h-10 text-blue-500/80" />
+          <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-tertiary)] gap-4 p-8">
+            <div className="p-4 rounded-full bg-[var(--theme-surface-muted)] border border-[var(--border)]">
+              <MessageSquare className="w-10 h-10 text-[var(--theme-link)]" />
             </div>
             <div className="text-center space-y-1">
-              <h3 className="font-bold text-white text-base">Conversación Activa</h3>
-              <p className="text-xs text-slate-400 max-w-xs">
+              <h3 className="font-bold text-[var(--foreground)] text-base">Conversación Activa</h3>
+              <p className="text-xs text-[var(--text-secondary)] max-w-xs">
                 Selecciona a un contacto de la barra lateral para empezar a chatear en tiempo real.
               </p>
             </div>

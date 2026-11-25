@@ -19,8 +19,8 @@ export default async function AdminMessagesPage() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-white">Mensajería y Soporte</h1>
-        <p className="text-slate-400 mt-2">
+        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">Mensajería y Soporte</h1>
+        <p className="text-[var(--text-secondary)] mt-2">
           Chat en tiempo real con los intérpretes de la plataforma.
         </p>
       </div>

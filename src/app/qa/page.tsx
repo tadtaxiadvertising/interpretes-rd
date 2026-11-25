@@ -59,8 +59,8 @@ export default async function QAPage(props: PageProps) {
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
       <header>
-        <h2 className="text-3xl font-bold text-white tracking-tight">Auditoría de Calidad</h2>
-        <p className="text-gray-400 mt-1 flex items-center gap-2">
+        <h2 className="text-3xl font-bold text-[var(--foreground)] tracking-tight">Auditoría de Calidad</h2>
+        <p className="text-[var(--text-secondary)] mt-1 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
           Quality Assurance Engine • Reglas de Penalización Activas
         </p>
@@ -72,9 +72,9 @@ export default async function QAPage(props: PageProps) {
         </div>
 
         <div className="space-y-6">
-          <div className="glass p-6 rounded-3xl border border-white/5 bg-slate-900/40">
-            <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-              <CheckCircle2 className="text-green-400" />
+          <div className="glass p-6 rounded-3xl border border-[var(--border)] bg-[var(--theme-panel)]">
+            <h3 className="text-xl font-bold text-[var(--foreground)] mb-6 flex items-center gap-2">
+              <CheckCircle2 className="text-[var(--theme-success)]" />
               Últimas Auditorías
             </h3>
 
@@ -89,31 +89,31 @@ export default async function QAPage(props: PageProps) {
                     "p-4 rounded-2xl border transition-all",
                     needsAttention ? "bg-red-500/5 border-red-500/20" :
                       isExcellent ? "bg-green-500/5 border-green-500/20" :
-                        display.severity === 'unscored' ? "bg-white/5 border-white/10" :
+                        display.severity === 'unscored' ? "bg-[var(--theme-surface-muted)] border-[var(--border)]" :
                         "bg-orange-500/5 border-orange-500/20"
                   )}>
                     <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="font-bold text-white leading-none">{score.interpreter?.name || 'Desconocido'}</p>
-                        <p className="text-xs text-gray-500 mt-1">{score.auditor}</p>
+                        <p className="font-bold text-[var(--foreground)] leading-none">{score.interpreter?.name || 'Desconocido'}</p>
+                        <p className="text-xs text-[var(--text-tertiary)] mt-1">{score.auditor}</p>
                       </div>
                       <span className={cn(
                         "px-3 py-1 rounded-lg text-xs font-black uppercase border",
-                        needsAttention ? 'bg-red-500/10 text-red-400 border-red-500/20' :
-                          isExcellent ? 'bg-green-500/10 text-green-400 border-green-500/20' :
-                            display.severity === 'unscored' ? 'bg-white/5 text-gray-300 border-white/10' :
-                            'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                        needsAttention ? 'bg-red-500/10 text-[var(--theme-danger)] border-red-500/20' :
+                          isExcellent ? 'bg-green-500/10 text-[var(--theme-success)] border-green-500/20' :
+                            display.severity === 'unscored' ? 'bg-[var(--theme-surface-muted)] text-[var(--text-secondary)] border-[var(--border)]' :
+                            'bg-orange-500/10 text-[var(--theme-away)] border-orange-500/20'
                       )}>
                         {display.scoreLabel}
                       </span>
                     </div>
-                    <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
-                      <p className="text-[10px] text-gray-500 font-mono tracking-wider">
+                    <div className="mt-3 pt-3 border-t border-[var(--border)] flex justify-between items-center">
+                      <p className="text-[10px] text-[var(--text-tertiary)] font-mono tracking-wider">
                         QA-{score.id} • {new Date(score.auditDate).toLocaleDateString()}
                       </p>
-                      <p className="text-[10px] font-bold uppercase text-gray-400">
+                      <p className="text-[10px] font-bold uppercase text-[var(--text-secondary)]">
                         {display.criticalLabel ? (
-                          <span className="text-red-400">{display.criticalLabel} · </span>
+                          <span className="text-[var(--theme-danger)]">{display.criticalLabel} · </span>
                         ) : null}
                         {score.accionRequerida ?? 'Sin acción definida'}
                       </p>
@@ -122,8 +122,8 @@ export default async function QAPage(props: PageProps) {
                 )
               })}
               {recentScores.length === 0 && (
-                <div className="p-8 text-center border-2 border-dashed border-white/10 rounded-2xl">
-                  <p className="text-gray-500 text-sm">No hay auditorías registradas en el sistema.</p>
+                <div className="p-8 text-center border-2 border-dashed border-[var(--border)] rounded-2xl">
+                  <p className="text-[var(--text-tertiary)] text-sm">No hay auditorías registradas en el sistema.</p>
                 </div>
               )}
             </div>
