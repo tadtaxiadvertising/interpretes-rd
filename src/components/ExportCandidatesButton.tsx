@@ -3,6 +3,7 @@
 import React from 'react';
 import { Download } from 'lucide-react';
 import { downloadCsv } from '@/lib/download-csv';
+import { csvTextCell } from '@/lib/legacy-csv-cells';
 import { candidateStatusDisplay } from '@/lib/recruitment/status-display';
 
 interface Candidate {
@@ -41,16 +42,16 @@ export function ExportCandidatesButton({ data }: ExportCandidatesButtonProps) {
     ];
 
     const csvRows = data.map(candidate => [
-      `"${candidate.name}"`,
-      candidate.email,
-      candidate.telefono || 'N/A',
-      candidate.pais || 'N/A',
-      candidate.fuente || 'N/A',
-      candidate.englishLevel || 'N/A',
-      candidate.speedtestMbps ? `${candidate.speedtestMbps} Mbps` : 'N/A',
-      candidateStatusDisplay(candidate.applicationStatus).label,
-      candidate.resultRoleplay ? `${candidate.resultRoleplay}%` : 'N/A',
-      new Date(candidate.fechaPostulacion).toLocaleDateString()
+      csvTextCell(candidate.name, true),
+      csvTextCell(candidate.email),
+      csvTextCell(candidate.telefono || 'N/A'),
+      csvTextCell(candidate.pais || 'N/A'),
+      csvTextCell(candidate.fuente || 'N/A'),
+      csvTextCell(candidate.englishLevel || 'N/A'),
+      csvTextCell(candidate.speedtestMbps ? `${candidate.speedtestMbps} Mbps` : 'N/A'),
+      csvTextCell(candidateStatusDisplay(candidate.applicationStatus).label),
+      csvTextCell(candidate.resultRoleplay ? `${candidate.resultRoleplay}%` : 'N/A'),
+      csvTextCell(new Date(candidate.fechaPostulacion).toLocaleDateString())
     ].join(','));
 
     const csvContent = [headers.join(','), ...csvRows].join('\n');

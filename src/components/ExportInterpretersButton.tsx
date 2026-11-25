@@ -3,6 +3,7 @@
 import React from 'react';
 import { Download } from 'lucide-react';
 import { downloadCsv } from '@/lib/download-csv';
+import { csvTextCell, csvNumberCell } from '@/lib/legacy-csv-cells';
 
 interface Interpreter {
   id: number;
@@ -36,15 +37,15 @@ export function ExportInterpretersButton({ data }: ExportInterpretersButtonProps
     ];
 
     const csvRows = data.map(interpreter => [
-      interpreter.id,
-      interpreter.externalId,
-      `"${interpreter.name}"`,
-      interpreter.emailCorporativo || 'N/A',
-      interpreter.status,
-      `"${interpreter.campaign || 'N/A'}"`,
-      interpreter.tariffPerMinute,
-      (parseFloat(interpreter.tariffPerMinute.toString()) * 60).toFixed(2),
-      new Date(interpreter.createdAt).toLocaleDateString()
+      csvNumberCell(interpreter.id),
+      csvTextCell(interpreter.externalId),
+      csvTextCell(interpreter.name, true),
+      csvTextCell(interpreter.emailCorporativo || 'N/A'),
+      csvTextCell(interpreter.status),
+      csvTextCell(interpreter.campaign || 'N/A', true),
+      csvNumberCell(interpreter.tariffPerMinute),
+      csvNumberCell((parseFloat(interpreter.tariffPerMinute.toString()) * 60).toFixed(2)),
+      csvTextCell(new Date(interpreter.createdAt).toLocaleDateString())
     ].join(','));
 
     const csvContent = [headers.join(','), ...csvRows].join('\n');
