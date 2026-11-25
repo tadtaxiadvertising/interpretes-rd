@@ -13,6 +13,7 @@ describe('provider selection readiness snapshot', () => {
   });
   it('blocks missing or exhausted local budgets', () => {
     expect(profileSelectionReadiness(profile, undefined, true)).toBe('quota_unknown');
+    expect(profileSelectionReadiness(profile, { ...quota, periodValid: false }, true)).toBe('quota_invalid_period');
     expect(profileSelectionReadiness(profile, { ...quota, dailyUsed: 100 }, true)).toBe('quota_exhausted');
     expect(profileSelectionReadiness(profile, { ...quota, monthlyUsed: 501 }, true)).toBe('quota_exhausted');
   });
