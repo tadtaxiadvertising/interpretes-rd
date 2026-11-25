@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
 import SystemReadinessCheck from './SystemReadinessCheck';
 import RecruitmentEmailPreview from './RecruitmentEmailPreview';
+import EmailProviderVault from './EmailProviderVault';
 import EmailProviderSetup from './EmailProviderSetup';
 import CorporateSmtpTest from './CorporateSmtpTest';
 import CorporateEmailHistory from './CorporateEmailHistory';
@@ -145,6 +146,7 @@ export default function SettingsPage() {
               <p className="text-xs">Diagnóstico local de Next.js. No se muestran credenciales ni se prueba la red automáticamente.</p>
             </div>
             <EmailProviderSetup activeProvider={mailDiagnostic.provider} />
+            <EmailProviderVault />
             <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
