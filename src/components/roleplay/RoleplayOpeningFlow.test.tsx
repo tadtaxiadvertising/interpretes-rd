@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RoleplayOpeningFlow } from './RoleplayOpeningFlow';
 
-const m = vi.hoisted(() => ({ upload: vi.fn() }));
-vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ storage: { from: () => ({ uploadToSignedUrl: m.upload }) } }) }));
+const m = vi.hoisted(() => ({ upload: vi.fn(), from: vi.fn() }));
+vi.mock('@/lib/supabase/client', () => ({ createClient: () => ({ storage: { from: (bucket: string) => (m.from(bucket), { uploadToSignedUrl: m.upload }) } }) }));
 vi.mock('./RoleplayOpening', () => ({
   RoleplayOpening: ({ onSave }: { onSave: (url: string, duration: number, blob: Blob) => Promise<void> }) =>
     <button onClick={() => void onSave('blob:test', 999, new Blob(['audio'], { type: 'audio/webm' })).catch(() => {})}>Guardar apertura</button>,
@@ -25,6 +25,7 @@ describe('opening participant flow', () => {
     render(<RoleplayOpeningFlow sessionId="session-1" onContinue={next} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Guardar apertura' }));
     await waitFor(() => expect(next).toHaveBeenCalledOnce());
+    expect(m.from).toHaveBeenCalledWith('roleplay-opening-private');
     expect(m.upload).toHaveBeenCalledWith(path, 'test-token', expect.any(Blob), { contentType: 'audio/webm', upsert: false });
     expect(JSON.parse(fetchMock.mock.calls[2][1].body)).toEqual({ action: 'confirm', path });
   });
