@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const m = vi.hoisted(() => ({
   validateAction: vi.fn(),
   notificationCreate: vi.fn(),
+  notificationCount: vi.fn(),
+  notificationFindMany: vi.fn(),
   notificationUpdateMany: vi.fn(),
   revalidatePath: vi.fn(),
 }));
@@ -13,13 +15,15 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     notification: {
       create: m.notificationCreate,
+      count: m.notificationCount,
+      findMany: m.notificationFindMany,
       updateMany: m.notificationUpdateMany,
     },
   },
 }));
 vi.mock('next/cache', () => ({ revalidatePath: m.revalidatePath }));
 
-import { createNotification, markNotificationAsRead } from './notifications';
+import { createNotification, markNotificationAsRead, getMyNotifications, markAllNotificationsAsRead } from './notifications';
 
 const profileId = '123e4567-e89b-42d3-a456-426614174000';
 const sensitive = 'postgresql://admin:PRIVATE_PASSWORD@db.internal/notifications';
@@ -189,5 +193,30 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     } finally {
       log.mockRestore();
     }
+  });
+  it('counts all unread notifications only for authenticated recipients', async () => {
+    m.notificationFindMany.mockResolvedValueOnce([]);
+    m.notificationCount.mockResolvedValueOnce(24);
+    expect(await getMyNotifications()).toEqual({ success: true, data: [], unreadCount: 24 });
+    expect(m.notificationCount).toHaveBeenCalledWith({
+      where: { userId: { in: [profileId] }, OR: [{ isRead: false }, { isRead: null }] },
+    });
+  });
+
+  it('marks all unread notifications only for the authenticated recipient', async () => {
+    expect(await markAllNotificationsAsRead()).toEqual({ success: true });
+    expect(m.notificationUpdateMany).toHaveBeenCalledWith({
+      where: { userId: { in: [profileId] }, OR: [{ isRead: false }, { isRead: null }] },
+      data: { isRead: true },
+    });
+  });
+
+  it('denies bulk updates and feed reads for unauthorized sessions', async () => {
+    m.validateAction.mockResolvedValue({ error: 'Unauthorized', code: 'UNAUTHORIZED' });
+    expect(await getMyNotifications()).toEqual({ success: false });
+    expect(await markAllNotificationsAsRead()).toEqual({ success: false });
+    expect(m.notificationCount).not.toHaveBeenCalled();
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
+    expect(m.notificationUpdateMany).not.toHaveBeenCalled();
   });
 });
