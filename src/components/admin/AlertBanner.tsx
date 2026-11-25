@@ -19,20 +19,20 @@ const ALERT_STYLES: Record<string, { bg: string; border: string; text: string; i
   critical: {
     bg: 'bg-red-500/10',
     border: 'border-red-500/20',
-    text: 'text-red-400',
-    icon: 'text-red-400',
+    text: 'text-[var(--theme-danger)]',
+    icon: 'text-[var(--theme-danger)]',
   },
   warning: {
     bg: 'bg-amber-500/10',
     border: 'border-amber-500/20',
-    text: 'text-amber-400',
-    icon: 'text-amber-400',
+    text: 'text-[var(--theme-warning)]',
+    icon: 'text-[var(--theme-warning)]',
   },
   info: {
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/20',
-    text: 'text-blue-400',
-    icon: 'text-blue-400',
+    text: 'text-[var(--theme-link)]',
+    icon: 'text-[var(--theme-link)]',
   },
 };
 
@@ -121,10 +121,10 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
         className={cn(
           'fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-full px-4 py-3 shadow-2xl border transition-all hover:scale-105',
           criticalCount > 0
-            ? 'bg-red-500/20 border-red-500/30 text-red-400'
+            ? 'bg-red-500/20 border-red-500/30 text-[var(--theme-danger)]'
             : totalCount > 0
-              ? 'bg-amber-500/20 border-amber-500/30 text-amber-400'
-              : 'bg-gray-800/80 border-gray-700/50 text-gray-400'
+              ? 'bg-amber-500/20 border-amber-500/30 text-[var(--theme-warning)]'
+              : 'bg-[var(--theme-surface-muted)] border-[var(--border)] text-[var(--text-secondary)]'
         )}
       >
         {totalCount > 0 ? (
@@ -147,17 +147,17 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
   return (
     <div className={cn(
       'fixed bottom-6 right-6 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-2xl border shadow-2xl backdrop-blur-xl overflow-hidden transition-all',
-      'bg-gray-900/95 border-gray-800'
+      'bg-[var(--theme-panel)] border-[var(--border)]'
     )}>
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-2">
-          <Bell size={16} className={cn(criticalCount > 0 ? 'text-red-400' : 'text-gray-400')} />
-          <span className="text-sm font-bold text-white">
+          <Bell size={16} className={cn(criticalCount > 0 ? 'text-[var(--theme-danger)]' : 'text-[var(--text-secondary)]')} />
+          <span className="text-sm font-bold text-[var(--foreground)]">
             Alertas {totalCount > 0 && `(${totalCount})`}
           </span>
           {criticalCount > 0 && (
-            <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 text-[10px] font-bold">
+            <span className="px-1.5 py-0.5 rounded bg-red-500/20 text-[var(--theme-danger)] text-[10px] font-bold">
               {criticalCount} crítica{criticalCount > 1 ? 's' : ''}
             </span>
           )}
@@ -166,7 +166,7 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
           <button
             onClick={runAnomalyDetection}
             disabled={isScanning}
-            className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+            className="p-1.5 rounded-lg hover:bg-[var(--theme-hover)] text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors disabled:opacity-50"
             title="Escanear anomalías"
           >
             <RefreshCw size={14} className={cn(isScanning && 'animate-spin')} />
@@ -174,7 +174,7 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
           {totalCount > 0 && (
             <button
               onClick={handleDismissAll}
-              className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors text-xs"
+              className="p-1.5 rounded-lg hover:bg-[var(--theme-hover)] text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors text-xs"
               title="Descartar todas"
             >
               <X size={14} />
@@ -182,7 +182,7 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
           )}
           <button
             onClick={() => setIsCollapsed(true)}
-            className="p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg hover:bg-[var(--theme-hover)] text-[var(--text-secondary)] hover:text-[var(--foreground)] transition-colors"
           >
             <BellOff size={14} />
           </button>
@@ -190,37 +190,37 @@ export default function AlertBanner({ autoDetect = true, collapsed: initialColla
       </div>
 
       {/* Alerts list */}
-      <div className="max-h-80 overflow-y-auto divide-y divide-gray-800/50">
+      <div className="max-h-80 overflow-y-auto divide-y divide-[var(--border)]">
         {isLoading ? (
           <div className="p-6 text-center">
             <div className="animate-pulse space-y-3">
-              <div className="h-4 w-3/4 rounded bg-gray-800 mx-auto" />
-              <div className="h-3 w-1/2 rounded bg-gray-800 mx-auto" />
+              <div className="h-4 w-3/4 rounded bg-[var(--theme-surface-muted)] mx-auto" />
+              <div className="h-3 w-1/2 rounded bg-[var(--theme-surface-muted)] mx-auto" />
             </div>
           </div>
         ) : alerts.length === 0 ? (
           <div className="p-8 text-center">
-            <BellOff size={24} className="mx-auto text-gray-600 mb-2" />
-            <p className="text-sm text-gray-500">No hay alertas activas</p>
-            <p className="text-xs text-gray-600 mt-1">El sistema monitorea automáticamente</p>
+            <BellOff size={24} className="mx-auto text-[var(--text-tertiary)] mb-2" />
+            <p className="text-sm text-[var(--text-tertiary)]">No hay alertas activas</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">El sistema monitorea automáticamente</p>
           </div>
         ) : (
           alerts.map((alert) => {
             const style = ALERT_STYLES[alert.type] || ALERT_STYLES.info;
             return (
-              <div key={alert.id} className={cn('px-4 py-3 hover:bg-white/5 transition-colors group relative', style.bg)}>
+              <div key={alert.id} className={cn('px-4 py-3 hover:bg-[var(--theme-hover)] transition-colors group relative', style.bg)}>
                 <div className="flex items-start gap-3">
                   <div className={cn('mt-0.5 flex-shrink-0', style.icon)}>
                     {ALERT_ICONS[alert.type] || <Info size={16} />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={cn('text-sm font-semibold', style.text)}>{alert.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{alert.message}</p>
-                    <p className="text-[10px] text-gray-600 mt-1">{formatTime(alert.createdAt)}</p>
+                    <p className="text-xs text-[var(--text-secondary)] mt-0.5 line-clamp-2">{alert.message}</p>
+                    <p className="text-[10px] text-[var(--text-tertiary)] mt-1">{formatTime(alert.createdAt)}</p>
                   </div>
                   <button
                     onClick={() => handleDismiss(alert.id)}
-                    className="p-1 rounded hover:bg-white/10 text-gray-500 hover:text-white opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
+                    className="p-1 rounded hover:bg-[var(--theme-hover)] text-[var(--text-tertiary)] hover:text-[var(--foreground)] opacity-0 group-hover:opacity-100 transition-all flex-shrink-0"
                     title="Descartar"
                   >
                     <X size={12} />
