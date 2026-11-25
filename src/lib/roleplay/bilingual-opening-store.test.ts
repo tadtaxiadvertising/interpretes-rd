@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { confirmVerifiedBilingualOpening, readBilingualOpeningState } from './bilingual-opening-store';
+import { confirmVerifiedBilingualOpening, readBilingualOpeningState, reserveBilingualOpeningPath, claimBilingualOpeningVerification, completeBilingualOpeningVerification } from './bilingual-opening-store';
 
 vi.mock('server-only', () => ({}));
 
@@ -77,5 +77,36 @@ describe('staged bilingual opening persistence', () => {
   it('authorizes the interpreter owner of a non-recruitment session', async () => {
     const { db } = fixture([{ ...session, candidateId: null }], []);
     await expect(readBilingualOpeningState(db, id, { role: 'interpreter', interpreterId: 7 })).resolves.toBe('pending');
+  });
+});
+
+describe('opening reservation fencing', () => {
+  const reservation = () => ({
+    sourceAudioPath: evidence.sourceAudioPath, expiresAt: new Date(Date.now() + 600_000),
+    verificationId: null, verificationUntil: null,
+  });
+  it('reserves before verification and rejects a second live reservation', async () => {
+    const first = fixture([session], [access], [], [], [{ sessionId: id }]);
+    await expect(reserveBilingualOpeningPath(first.db, id, actor, evidence.sourceAudioPath)).resolves.toBeUndefined();
+    const second = fixture([session], [access], [], [reservation()]);
+    await expect(reserveBilingualOpeningPath(second.db, id, actor, evidence.sourceAudioPath)).rejects.toMatchObject({ code: 'CONFLICT' });
+    expect(second.query).toHaveBeenCalledTimes(4);
+  });
+  it('claims only the currently reserved path and rejects concurrent verification', async () => {
+    const first = fixture([session], [access], [], [reservation()], [{ sessionId: id }]);
+    await expect(claimBilingualOpeningVerification(first.db, id, actor, evidence.sourceAudioPath)).resolves.toMatchObject({ kind: 'claimed', verificationId: expect.any(String) });
+    const concurrent = fixture([session], [access], [], [{ ...reservation(), verificationUntil: new Date(Date.now() + 60_000) }]);
+    await expect(claimBilingualOpeningVerification(concurrent.db, id, actor, evidence.sourceAudioPath)).rejects.toMatchObject({ code: 'CONFLICT' });
+    const foreign = fixture([session], [access], [], [{ ...reservation(), sourceAudioPath: evidence.sourceAudioPath.replace('.webm', '.ogg') }]);
+    await expect(claimBilingualOpeningVerification(foreign.db, id, actor, evidence.sourceAudioPath)).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+  it('rejects stale verifier evidence and allows only the current lease to publish', async () => {
+    const lease = { ...reservation(), verificationId: 'current-lease', verificationUntil: new Date(Date.now() + 60_000) };
+    const stale = fixture([session], [access], [], [lease]);
+    await expect(completeBilingualOpeningVerification(stale.db, id, actor, 'stale-lease', evidence)).rejects.toMatchObject({ code: 'CONFLICT' });
+    const expired = fixture([session], [access], [], [{ ...lease, verificationUntil: new Date(0) }]);
+    await expect(completeBilingualOpeningVerification(expired.db, id, actor, 'current-lease', evidence)).rejects.toMatchObject({ code: 'CONFLICT' });
+    const current = fixture([session], [access], [], [lease], [{ sessionId: id }]);
+    await expect(completeBilingualOpeningVerification(current.db, id, actor, 'current-lease', evidence)).resolves.toBe('created');
   });
 });
