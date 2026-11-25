@@ -76,10 +76,14 @@ describe('communication notification reconciliation', () => {
     expect(m.insert).not.toHaveBeenCalled();
   });
 
-  it('does not recover unreachable messages when authenticated ID and profile ID differ', async () => {
-    await reconcileCommunications({ ...actor(5), userId: 'legacy-account' }, now);
+  it('recovers messages at the linked profile even when the authenticated account ID differs', async () => {
+    const a = actor(5);
+    m.messages.mockResolvedValueOnce([{ id: 'message-1', senderId: uid(90) }]);
+    m.senders.mockResolvedValueOnce([{ id: uid(90), role: 'admin' }]);
+    await reconcileCommunications({ ...a, provider: 'authjs', userId: 'legacy-account' }, now);
     expect(m.sessions).toHaveBeenCalledTimes(1);
-    expect(m.messages).not.toHaveBeenCalled();
+    expect(m.messages).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ receiverId: a.profileId }) }));
+    expect(m.insert).toHaveBeenCalledExactlyOnceWith({ data: [notificationEventRow(messageReceivedEvent(a.profileId!, 'message-1', 'interpreter'))], skipDuplicates: true });
   });
 
   it('throttles retries and advances bounded independent cursors', async () => {

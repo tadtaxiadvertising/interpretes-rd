@@ -67,10 +67,7 @@ export async function reconcileCommunications(actor: CurrentActor, nowMs = Date.
       }
     }
 
-    // The current chat reader uses the authenticated account ID, whereas
-    // sendMessage addresses profile IDs. Do not create unreachable notices
-    // for legacy accounts with different IDs until chat ownership is unified.
-    if (actor.userId.toLowerCase() !== profile.id.toLowerCase()) return;
+    // All chat operations now address the verified linked profile UUID.
     try {
       const messages = await prisma.message.findMany({
         where: {
