@@ -101,7 +101,7 @@ export function ThemeSwitcher() {
           aria-label={label}
           aria-pressed={preference === mode}
           onClick={() => selectTheme(mode)}
-          className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 ${preference === mode ? 'bg-[#083b83] text-white shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]'}`}
+          className={`flex h-9 w-9 items-center justify-center rounded-lg transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] ${preference === mode ? 'bg-[#083b83] text-white shadow-sm' : 'text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]'}`}
         >
           <Icon size={16} aria-hidden="true" />
         </button>

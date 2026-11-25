@@ -53,6 +53,7 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
         <button data-testid="semantic-danger" class="theme-action-danger">Finalizar</button>
         <button data-testid="semantic-disabled" class="theme-action-primary disabled:opacity-50" disabled>Guardando…</button>
         <a data-testid="semantic-link" class="theme-action-primary" href="#workspace-contrast-fixture">Importar y asignar</a>
+        <button data-testid="semantic-secondary" class="theme-action-secondary">Cancelar</button>
       `;
       document.body.appendChild(fixture);
     });
@@ -83,6 +84,15 @@ test('compiled workspace controls and solid actions retain contrast', async ({ p
       await link.hover();
       await expect(link).toHaveCSS('background-color', 'rgb(0, 45, 114)');
       await expect.poll(() => contrast(link)).toBeGreaterThanOrEqual(4.5);
+
+      const secondary = page.getByTestId('semantic-secondary');
+      await expect.poll(() => contrast(secondary)).toBeGreaterThanOrEqual(4.5);
+      await expect.poll(() => contrast(secondary, 'border-top-color')).toBeGreaterThanOrEqual(3);
+      const secondaryBackground = await secondary.evaluate(node => getComputedStyle(node).backgroundColor);
+      await secondary.hover();
+      await expect.poll(() => secondary.evaluate(node => getComputedStyle(node).backgroundColor)).not.toBe(secondaryBackground);
+      await expect.poll(() => contrast(secondary)).toBeGreaterThanOrEqual(4.5);
+      await expect.poll(() => contrast(secondary, 'border-top-color')).toBeGreaterThanOrEqual(3);
 
       const disabled = page.getByTestId('semantic-disabled');
       await expect(disabled).toBeDisabled();
