@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import EmailProviderVault from './EmailProviderVault';
 
@@ -315,5 +315,65 @@ describe('EmailProviderVault refresh failures', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
     await screen.findByText('Perfil de prueba · brevo');
     await waitFor(() => expect(screen.queryByText(/No se pudieron actualizar los perfiles/)).toBeNull());
+  });
+  const alternativesFixture = {
+    ...ready,
+    preferredId: 'profile-1',
+    profiles: [
+      { ...ready.profiles[0], testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' },
+      { ...ready.profiles[0], id: 'same-provider', name: 'Misma cuota', testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' },
+      { ...ready.profiles[0], id: 'backup', name: 'Alternativa Resend', provider: 'resend', testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' },
+      { ...ready.profiles[0], id: 'backup-2', name: 'Segundo Resend', provider: 'resend', testAcceptedAt: 'accepted', receiptConfirmedAt: 'confirmed' },
+      { ...ready.profiles[0], id: 'untested', name: 'Sin verificar', provider: 'resend' },
+    ],
+    quotas: [...ready.quotas, { provider: 'resend', dailyLimit: 50, dailyUsed: 10, monthlyLimit: 100, monthlyUsed: 20 }],
+  };
+
+  it('offers verified independent profiles only and requires confirmation for the quick selection', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(alternativesFixture);
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    const selector = await screen.findByLabelText('Elegir alternativa verificada') as HTMLSelectElement;
+    expect(within(selector).getAllByRole('option').map(option => (option as HTMLOptionElement).value)).toEqual(['', 'backup', 'backup-2']);
+    const button = screen.getByRole('button', { name: 'Guardar alternativa preferida' }) as HTMLButtonElement;
+    const confirmation = screen.getByRole('checkbox', { name: 'Confirmo el cambio de preferencia, sin activar envíos.' }) as HTMLInputElement;
+    fireEvent.change(selector, { target: { value: 'backup' } });
+    expect(button.disabled).toBe(true);
+    fireEvent.click(confirmation);
+    expect(button.disabled).toBe(false);
+    fireEvent.change(selector, { target: { value: 'backup-2' } });
+    expect(confirmation.checked).toBe(false);
+    expect(button.disabled).toBe(true);
+    expect(actions.setPreferredEmailProvider).not.toHaveBeenCalled();
+    fireEvent.click(confirmation);
+    actions.setPreferredEmailProvider.mockResolvedValueOnce('preferred_saved');
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...alternativesFixture, preferredId: 'backup-2' });
+    fireEvent.click(button);
+    await screen.findByRole('heading', { name: 'Proveedor preferido: Segundo Resend' });
+    expect(actions.setPreferredEmailProvider).toHaveBeenCalledExactlyOnceWith('backup-2');
+    expect(actions.testSavedEmailProvider).not.toHaveBeenCalled();
+  });
+
+  it('does not permit quick selection while the preference is locked', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce({ ...alternativesFixture, preferenceEditable: false });
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    expect((await screen.findByLabelText('Elegir alternativa verificada') as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Guardar alternativa preferida' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(actions.setPreferredEmailProvider).not.toHaveBeenCalled();
+  });
+
+  it('clears the quick selection on refresh so stale confirmation cannot be reused', async () => {
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(alternativesFixture);
+    render(<EmailProviderVault />);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    const selector = await screen.findByLabelText('Elegir alternativa verificada') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: 'backup' } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Confirmo el cambio de preferencia, sin activar envíos.' }));
+    actions.listEmailProviderProfiles.mockResolvedValueOnce(alternativesFixture);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar perfiles' }));
+    await waitFor(() => expect(selector.value).toBe(''));
+    expect((screen.getByRole('button', { name: 'Guardar alternativa preferida' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(actions.setPreferredEmailProvider).not.toHaveBeenCalled();
   });
 });
