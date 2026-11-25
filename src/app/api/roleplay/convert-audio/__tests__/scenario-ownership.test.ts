@@ -1,10 +1,11 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const m = vi.hoisted(() => ({
   identity: { role: 'candidate', interpreterId: null, candidateId: 42 } as any,
   sessionFindUnique: vi.fn(),
+  openingQuery: vi.fn(),
   scenarioFindFirst: vi.fn(),
   responseFindUnique: vi.fn(),
   storageUpload: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@/lib/identity/resolve-user', () => ({
 vi.mock('@/lib/api-auth', () => ({ actorFromBearer: m.actorFromBearer }));
 vi.mock('@/lib/prisma', () => ({
   default: {
+    $queryRaw: m.openingQuery,
     roleplaySession: { findUnique: m.sessionFindUnique },
     roleplayScenario: { findFirst: m.scenarioFindFirst },
     roleplayResponse: { findUnique: m.responseFindUnique },
@@ -84,6 +86,17 @@ describe('POST /api/roleplay/convert-audio scenario ownership', () => {
     m.storageRemove.mockResolvedValue({ error: null });
     m.createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.test/audio' }, error: null });
     m.confirmResponse.mockResolvedValue({ success: true, data: { recordedAudioUrl: 'https://signed.test/audio' } });
+  });
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  it('denies legacy clinical upload while a required opening remains pending', async () => {
+    vi.stubEnv('ROLEPLAY_BILINGUAL_OPENING_API_ENABLED', 'true');
+    m.openingQuery.mockResolvedValueOnce([{ required: true, sourceAudioPath: null, durationSec: null, confirmedAt: null }]);
+    const response = await POST(makeRequest({ cookie: 'session-1' }));
+    expect(response.status).toBe(403);
+    expect(m.storageUpload).not.toHaveBeenCalled();
+    expect(m.confirmResponse).not.toHaveBeenCalled();
   });
 
   it('denies a matching candidate cookie when the invitation was never validated', async () => {
