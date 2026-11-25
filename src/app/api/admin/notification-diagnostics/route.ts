@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { guardApiAuth } from '@/lib/api-auth';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
+import { readOperationalNotificationDiagnostics } from '@/lib/notifications/operational-notification-diagnostics';
 import { readNotificationDiagnostics } from '@/lib/notifications/notification-diagnostics';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
@@ -21,7 +22,8 @@ export async function GET(req: NextRequest) {
   });
   try {
     const report = await readNotificationDiagnostics();
-    return privateRoleplayResponse({ success: true, report }, { headers: createRateLimitHeaders(limit) });
+    const operational = await readOperationalNotificationDiagnostics();
+    return privateRoleplayResponse({ success: true, report, operational }, { headers: createRateLimitHeaders(limit) });
   } catch (error) {
     console.warn('Notification diagnostics unavailable:', safeServerErrorCategory(error));
     return privateRoleplayResponse({ success: false }, { status: 503 });
