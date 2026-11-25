@@ -73,3 +73,15 @@ describe('light workspace compatibility', () => {
     for (const color of colors) expect(contrast(color, '#ffffff')).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+describe('light dashboard action contrast', () => {
+  it('keeps call gradient endpoints readable, including hover', () => {
+    for (const color of ['#065f46', '#047857', '#064e3b', '#991b1b', '#b91c1c', '#7f1d1d', '#1554a8', '#002d72']) {
+      expect(contrast(color, '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(css).toContain('linear-gradient(90deg, #065f46, #047857)');
+    expect(css).toContain('linear-gradient(90deg, #991b1b, #b91c1c)');
+    expect(css).toContain('input[type="file"][class~="file:bg-blue-600"]::file-selector-button');
+    expect(css).toContain('[class~="bg-slate-950/55"].fixed.inset-0 { background-color: rgba(15, 23, 42, .55); }');
+  });
+});
