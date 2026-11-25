@@ -54,7 +54,7 @@ export default async function AdminAccountsPage() {
     <header>
       <p className="text-sm font-semibold uppercase tracking-widest text-blue-400">Administración · Operaciones</p>
       <h1 className="mt-2 text-3xl font-bold">Cuentas operativas</h1>
-      <p className="mt-2 text-slate-400">Cada cuenta pertenece a un cliente. La compañía identifica a qué compañía corresponde, sin sustituir al cliente propietario. Las contraseñas nunca se muestran ni se almacenan en texto plano.</p>
+      <p className="mt-2 text-[var(--text-secondary)]">Cada cuenta pertenece a un cliente. La compañía identifica a qué compañía corresponde, sin sustituir al cliente propietario. Las contraseñas nunca se muestran ni se almacenan en texto plano.</p>
     </header>
     {vpnSchemaStatus !== 'complete' && (
       <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-[var(--theme-warning)]">
@@ -71,10 +71,10 @@ export default async function AdminAccountsPage() {
         ['Cuentas registradas', accounts.length.toLocaleString('es-DO')],
         ['Asignaciones vigentes', totalAssignedInterpreters.toLocaleString('es-DO')],
         ['Minutos históricos', totalMinutes.toLocaleString('es-DO')],
-      ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5"><p className="text-sm text-slate-400">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}
+      ].map(([label, value]) => <div key={label} className="rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5"><p className="text-sm text-[var(--text-secondary)]">{label}</p><p className="mt-2 text-3xl font-bold">{value}</p></div>)}
     </div>
     <CreateAccountForm clients={clients} companies={companies} />
-    <div className="max-w-full overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)]">
+    <div role="region" aria-label="Tabla de cuentas operativas" tabIndex={0} className="max-w-full overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)]">
       <table className="w-full min-w-[1250px] text-left text-sm">
         <thead className="bg-[var(--theme-surface-muted)] text-[var(--text-secondary)]"><tr>
           <th className="p-4">Titular / cuenta</th><th className="p-4">Correo</th><th className="p-4">Página de trabajo</th><th className="p-4">Cliente</th><th className="p-4">Compañía</th><th className="p-4">Intérpretes asignados</th><th className="p-4">Minutos</th><th className="p-4">Horas conectadas</th>
@@ -83,15 +83,15 @@ export default async function AdminAccountsPage() {
           const totals = productionByAccount.get(account.id);
           const platform = account.platforms.find(item => item.name === 'Plataforma principal') ?? account.platforms[0];
           const vpn = platform ? vpnByPlatformId.get(platform.id) : undefined;
-          return <tr key={account.id} className="border-t border-[var(--border)] align-top">
-            <td className="p-4"><strong className="text-[var(--foreground)]">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-slate-400">{account.name}</p>{account.description && <p className="mt-1 text-xs text-slate-500">{account.description}</p>}<EditOperationalAccountForm account={{ id: account.id, name: account.name, holderName: account.holderName, email: account.email, description: account.description, clientId: account.clientId, companyId: account.companyId, platform: platform ? { loginUrl: platform.loginUrl, secretRef: platform.secretRef } : null }} clients={clients} companies={companies} /></td>
+          return <tr key={account.id} className="border-t border-[var(--border)] align-top hover:bg-[var(--theme-hover)] transition-colors">
+            <td className="p-4"><strong className="text-[var(--foreground)]">{account.holderName || 'Titular pendiente'}</strong><p className="mt-1 text-[var(--text-secondary)]">{account.name}</p>{account.description && <p className="mt-1 text-xs text-[var(--text-tertiary)]">{account.description}</p>}<EditOperationalAccountForm account={{ id: account.id, name: account.name, holderName: account.holderName, email: account.email, description: account.description, clientId: account.clientId, companyId: account.companyId, platform: platform ? { loginUrl: platform.loginUrl, secretRef: platform.secretRef } : null }} clients={clients} companies={companies} /></td>
             <td className="p-4">{account.email || 'Pendiente'}</td>
-            <td className="p-4">{platform?.loginUrl ? <div className="space-y-2"><p className="text-xs text-slate-400">{platform.name}</p>{vpnSchemaStatus === 'complete' ? (
+            <td className="p-4">{platform?.loginUrl ? <div className="space-y-2"><p className="text-xs text-[var(--text-secondary)]">{platform.name}</p>{vpnSchemaStatus === 'complete' ? (
               <WhoerAccessGate url={platform.loginUrl} expectedCountry={vpn?.vpnCountry} />
             ) : (
               <p className="text-xs text-[var(--theme-warning)]">Acceso suspendido hasta verificar la configuración VPN.</p>
             )}
-            {(vpn?.vpnProvider || vpn?.vpnApp || vpn?.vpnServer) && <p className="text-[11px] text-slate-500">{[vpn.vpnProvider, vpn.vpnApp, vpn.vpnServer, vpn.vpnProfile, vpn.vpnProtocol, vpn.vpnPort ? `Puerto ${vpn.vpnPort}` : null].filter(Boolean).join(' · ')}</p>}</div> : 'Sin página registrada'}</td>
+            {(vpn?.vpnProvider || vpn?.vpnApp || vpn?.vpnServer) && <p className="text-[11px] text-[var(--text-tertiary)]">{[vpn.vpnProvider, vpn.vpnApp, vpn.vpnServer, vpn.vpnProfile, vpn.vpnProtocol, vpn.vpnPort ? `Puerto ${vpn.vpnPort}` : null].filter(Boolean).join(' · ')}</p>}</div> : 'Sin página registrada'}</td>
             <td className="p-4">{account.client?.name || <span className="text-[var(--theme-warning)]">Pendiente de identificar</span>}</td>
             <td className="p-4">{account.company?.name || 'Sin compañía'}</td>
             <td className="p-4"><span>{account._count.assignments}</span><AccountAssignmentManager accountId={account.id} interpreters={interpreters} today={today.toISOString().slice(0, 10)} assignments={account.assignments.map(item => ({ id: item.id, interpreterId: item.interpreterId, interpreterName: item.interpreter.name, startsAt: item.startsAt.toISOString().slice(0, 10), endsAt: item.endsAt?.toISOString().slice(0, 10) ?? null }))} /></td>
@@ -99,7 +99,7 @@ export default async function AdminAccountsPage() {
             <td className="p-4 tabular-nums">{Number(totals?.connectedHours ?? 0).toLocaleString('es-DO', { maximumFractionDigits: 2 })}</td>
           </tr>;
         })}
-        {!accounts.length && <tr><td colSpan={8} className="p-8 text-center text-slate-400">Todavía no hay cuentas registradas.</td></tr>}</tbody>
+        {!accounts.length && <tr><td colSpan={8} className="p-8 text-center text-[var(--text-secondary)]">Todavía no hay cuentas registradas.</td></tr>}</tbody>
       </table>
     </div>
   </section>;
