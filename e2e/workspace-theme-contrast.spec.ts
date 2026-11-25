@@ -194,7 +194,7 @@ test('calendar summary columns scroll without overlapping the pinned interpreter
     await expect(summary).not.toHaveCSS('position', 'sticky');
     const initialNameX = await name.evaluate(node => node.getBoundingClientRect().x);
     await region.evaluate(node => { node.scrollLeft = 250; });
-    await expect.poll(() => name.evaluate(node => Math.abs(node.getBoundingClientRect().x - initialNameX))).toBeLessThan(2);
+    await expect.poll(() => name.evaluate((node, initialX) => Math.abs(node.getBoundingClientRect().x - initialX), initialNameX)).toBeLessThan(2);
 
     await page.setViewportSize({ width: 375, height: 812 });
     await region.evaluate(node => { node.scrollLeft = 0; });
