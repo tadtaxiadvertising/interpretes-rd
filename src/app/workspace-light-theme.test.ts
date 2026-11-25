@@ -415,3 +415,34 @@ describe('semantic dashboard and payroll surfaces', () => {
     }
   });
 });
+
+describe('shared production edit and delete dialogs', () => {
+  const source = readFileSync(resolve(process.cwd(), 'src/components/admin/ProductionLogActions.tsx'), 'utf8');
+
+  it('uses the shared modal rather than forcing a light appearance or managing global scroll independently', () => {
+    expect(source).toContain('import { Modal }');
+    expect(source).toContain('<Modal isOpen={editOpen}');
+    expect(source).toContain('<Modal isOpen={deleteOpen}');
+    expect(source).not.toContain('modal-light');
+    expect(source).not.toContain('createPortal');
+    expect(source).not.toContain('document.body.style.overflow');
+    for (const token of ['--theme-control-bg', '--theme-control-text', '--theme-control-border', '--theme-danger']) {
+      expect(source).toContain('var(' + token + ')');
+    }
+    expect(source).toContain('theme-action-primary');
+    expect(source).toContain('theme-action-danger');
+  });
+
+  it('associates labels and validation errors with each editable field', () => {
+    for (const field of ['date', 'status', 'interpretedMinutes', 'callsAttended', 'adherence', 'observaciones']) {
+      expect(source).toContain('htmlFor={`production-${log.id}-' + field + '`}');
+      expect(source).toContain('id={`production-${log.id}-' + field + '`}');
+      expect(source).toContain('aria-invalid={Boolean(errors.' + field + ')}');
+      expect(source).toContain('aria-describedby={errors.' + field);
+    }
+    expect(source).toContain('disabled={isPending}');
+    expect(source).toContain('handleSubmit(onEditSubmit)');
+    expect(source).toContain('onClick={onDelete}');
+    expect(source).toContain('triggerRef.current?.focus()');
+  });
+});
