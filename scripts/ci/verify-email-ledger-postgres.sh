@@ -415,6 +415,8 @@ for parameter, value in {
     '${provider}': "'brevo'",
     '${dailyLimit}': '2',
     '${monthlyLimit}': '5',
+    '${expectedDailyLimit}': '50',
+    '${expectedMonthlyLimit}': '1000',
     '${actor}': "'fixture'",
 }.items():
     sql = sql.replace(parameter, value)
@@ -425,6 +427,8 @@ PY
 assert_equal "$(db -c "$budget_sql")" brevo budget-update
 assert_equal "$(db -c "SELECT daily_limit||':'||monthly_limit||':'||daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '2:5:3:7' budget-preserves-usage
 assert_equal "$(db -c "SELECT old_daily_limit||':'||old_monthly_limit||':'||new_daily_limit||':'||new_monthly_limit||':'||changed_by FROM private_email.provider_budget_audit WHERE provider='brevo'")" '50:1000:2:5:fixture' budget-audit
+assert_equal "$(db -c "$budget_sql")" "" stale-budget-edit-blocked
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_budget_audit WHERE provider='brevo'")" 1 stale-budget-no-extra-audit
 assert_equal "$(db -c "$quota_sql")" "" reduced-budget-blocks-reservation
 for role in anon authenticated service_role; do
   if db -c "SET ROLE $role; SELECT count(*) FROM private_email.provider_budget_audit" >/dev/null 2>&1; then

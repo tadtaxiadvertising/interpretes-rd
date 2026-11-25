@@ -10,7 +10,7 @@ import { isProviderId } from '@/lib/email/provider-catalog';
 import { sendReservedSmtpProfile } from '@/lib/email/smtp-test';
 import { sendResendEmail } from '@/lib/email/resend-transport';
 
-import { validateBudget, updateProviderBudget } from '@/lib/email/provider-budget';
+import { validateBudget, validateBudgetRevision, updateProviderBudget } from '@/lib/email/provider-budget';
 import { reserveProviderQuota, listProviderQuotas, type ProviderQuota } from '@/lib/email/provider-quota';
 
 import { providerSelectionPaused, validProfileId, recordProfileAcceptance, confirmProfileReceipt, canEditProviderPreference, changeProviderPreference } from '@/lib/email/provider-selection';
@@ -154,8 +154,9 @@ export async function saveEmailProviderBudget(input: unknown) {
     if ('error' in auth) return 'unauthorized' as const;
     if (availability() !== 'ready' || !providerSelectionPaused(process.env)) return 'disabled' as const;
     const budget = validateBudget(input);
-    if (!budget) return 'budget_invalid' as const;
-    return await updateProviderBudget(prisma, budget, auth.user.userId) ? 'budget_saved' as const : 'unavailable' as const;
+    const revision = validateBudgetRevision(input);
+    if (!budget || !revision) return 'budget_invalid' as const;
+    return await updateProviderBudget(prisma, budget, auth.user.userId, revision) ? 'budget_saved' as const : 'budget_conflict' as const;
   } catch { return 'unavailable' as const; }
 }
 
