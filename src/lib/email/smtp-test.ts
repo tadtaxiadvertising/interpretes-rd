@@ -7,7 +7,9 @@ import { readOperationalMailConfig, type OperationalMailConfig } from './operati
 
 import { sendBrevoEmail, sendBrevoEmailDetailed, type BrevoFailure } from './brevo-transport';
 
-export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited' | BrevoFailure;
+import { sendResendEmail, type ResendFailure } from './resend-transport';
+
+export type MailTestResult = 'disabled' | 'invalid' | 'incomplete' | 'accepted' | 'unconfirmed' | 'rate_limited' | BrevoFailure | ResendFailure;
 
 function quote(value: string): string {
   if (Array.from(value).some(c => c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127)) throw new Error('Invalid SMTP configuration');
@@ -124,6 +126,7 @@ export async function sendRecruitmentSmtp(message: RecruitmentMessage): Promise<
   if (result.status !== 'configured') return 'unconfirmed';
   try {
     if (result.provider === 'brevo') return await sendBrevoEmail(result.config, message);
+    if (result.provider === 'resend') return await sendResendEmail(result.config, message) === 'accepted' ? 'accepted' : 'unconfirmed';
     return await sendMime(result.config, message.recipient, recruitmentSmtpMessage(result.config, message));
   } catch {
     return 'unconfirmed';
@@ -143,6 +146,12 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
   busy = true;
   nextTestAt = Date.now() + 60000;
   try {
+    if (result.provider === 'resend') return await sendResendEmail(result.config, {
+      recipient: result.config.from,
+      subject: 'Prueba de correo | Intérpretes RD',
+      text: 'Este es un correo de prueba de Intérpretes RD. No contiene datos de postulantes.',
+      html: '<p>Este es un correo de prueba de Intérpretes RD.</p><p>No contiene datos de postulantes.</p>',
+    });
     if (result.provider === 'brevo') return await sendBrevoEmailDetailed(result.config, {
       recipient: result.config.from,
       subject: 'Prueba de correo | Intérpretes RD',
