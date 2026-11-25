@@ -315,11 +315,6 @@ html[data-theme="light"] .theme-workspace textarea:disabled {
   background-color: #edf1f7;
   color: #52627a;
 }
-html[data-theme="light"] .theme-workspace button[class*="bg-blue"] .text-white,
-html[data-theme="light"] .theme-workspace button[class*="bg-red"] .text-white,
-html[data-theme="light"] .theme-workspace a[class*="bg-blue"] .text-white {
-  color: #fff;
-}
 html[data-theme="light"] select {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2352627a' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E");
 }
@@ -793,4 +788,8 @@ html[data-theme="light"] .theme-workspace [class~="hover:text-white"]:hover { co
 html[data-theme="light"] .theme-workspace [class~="hover:text-blue-200"]:hover { color: var(--theme-link); }
 html[data-theme="light"] .theme-workspace :is([class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"], [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"], [class~="bg-emerald-500"], [class~="bg-emerald-600"], [class~="bg-emerald-700"], [class~="bg-green-500"], [class~="bg-green-600"], [class~="bg-green-700"], [class~="bg-indigo-500"], [class~="bg-indigo-600"], [class~="bg-indigo-700"], [class~="bg-violet-500"], [class~="bg-violet-600"], [class~="bg-violet-700"], [class~="bg-purple-500"], [class~="bg-purple-600"], [class~="bg-purple-700"], [class~="bg-cyan-500"], [class~="bg-cyan-600"], [class~="bg-cyan-700"], [class~="bg-teal-500"], [class~="bg-teal-600"], [class~="bg-teal-700"])[class~="hover:text-white"]:hover,
 html[data-theme="light"] .theme-workspace :is([class~="bg-blue-500"], [class~="bg-blue-600"], [class~="bg-blue-700"], [class~="bg-red-500"], [class~="bg-red-600"], [class~="bg-red-700"], [class~="bg-emerald-500"], [class~="bg-emerald-600"], [class~="bg-emerald-700"], [class~="bg-green-500"], [class~="bg-green-600"], [class~="bg-green-700"], [class~="bg-indigo-500"], [class~="bg-indigo-600"], [class~="bg-indigo-700"], [class~="bg-violet-500"], [class~="bg-violet-600"], [class~="bg-violet-700"], [class~="bg-purple-500"], [class~="bg-purple-600"], [class~="bg-purple-700"], [class~="bg-cyan-500"], [class~="bg-cyan-600"], [class~="bg-cyan-700"], [class~="bg-teal-500"], [class~="bg-teal-600"], [class~="bg-teal-700"]) [class~="hover:text-white"]:hover { color: #fff; }
-html[data-theme="light"] .theme-workspace svg.text-slate-700 { color: var(--theme-control-border); }
+/* SVG presentation colors must also follow the light timeline surface. */
+html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] .text-slate-700 { color: var(--theme-control-border); }
+html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] [class~="fill-blue-400/80"] { fill: #1554a8; }
+html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] [class~="fill-emerald-400/25"] { fill: rgba(4,120,87,.22); }
+html[data-theme="light"] .theme-workspace [data-testid="audio-studio-waveform"] .stroke-amber-300 { stroke: #92400e; }
