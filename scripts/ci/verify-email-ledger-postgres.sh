@@ -186,7 +186,7 @@ SQL
 issue_sql="$(python3 - "$root/src/lib/email/mailbox-proof.ts" <<'PY'
 import pathlib, sys
 source = pathlib.Path(sys.argv[1]).read_text()
-sql = source.split('const changed = await db.$executeRaw`', 1)[1].split('`;', 1)[0]
+sql = source.split('const write: ChallengeWrite = tx => tx.$executeRaw`', 1)[1].split('`;', 1)[0]
 for parameter, value in {
     '${binding.email}': "'candidate@example.test'",
     '${digest(token)}': "repeat('c',64)",
@@ -467,3 +467,15 @@ db -c "INSERT INTO private_email.provider_profile(id,name,provider,sender,sealed
 assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_profile WHERE provider='mailjet'")" 1 expanded-profile
 assert_equal "$(db -c "$readiness_sql")" 't|t|t|t|t' expanded-readiness
 echo 'Isolated five-provider expansion checks passed.'
+
+# When a challenge write cannot reserve quota, the challenge must roll back.
+db -c "UPDATE private_email.candidate_account_binding SET revoked_at=NULL,verified_email=NULL,mailbox_verified_at=NULL,challenge_email=NULL,challenge_hash=NULL,challenge_issued_at=NULL,challenge_expires_at=NULL WHERE candidate_id=2"
+db -c "UPDATE private_email.provider_quota SET daily_used=daily_limit WHERE provider='brevo'"
+db <<SQL
+BEGIN;
+$issue_sql
+$quota_sql
+ROLLBACK;
+SQL
+assert_equal "$(db -c "SELECT challenge_hash IS NULL FROM private_email.candidate_account_binding WHERE candidate_id=2")" t challenge-quota-rollback
+echo 'Isolated mailbox challenge rollback check passed.'
