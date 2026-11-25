@@ -15,6 +15,7 @@ interface RoleplayScenarioProps {
     studioTurn?: number | null;
     studioSpeaker?: string | null;
     studioLanguage?: string | null;
+    interpretationDirection?: 'en-es' | 'es-en';
     sourceStartSec?: number | null;
     sourceEndSec?: number | null;
   };
@@ -167,12 +168,11 @@ export function RoleplayScenario({
   };
 
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-  // Only use explicitly reviewed Studio language metadata. Never guess
-  // direction from a title, speaker name or position in the conversation.
-  const sourceLanguage = scenario.studioLanguage === 'en' ? 'Inglés'
-    : scenario.studioLanguage === 'es' ? 'Español' : null;
-  const responseLanguage = scenario.studioLanguage === 'en' ? 'Español'
-    : scenario.studioLanguage === 'es' ? 'Inglés' : null;
+  // Use only the participant-facing direction explicitly supplied by the API.
+  const sourceLanguage = scenario.interpretationDirection === 'en-es' ? 'Inglés'
+    : scenario.interpretationDirection === 'es-en' ? 'Español' : null;
+  const responseLanguage = scenario.interpretationDirection === 'en-es' ? 'Español'
+    : scenario.interpretationDirection === 'es-en' ? 'Inglés' : null;
 
   return (
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
