@@ -25,6 +25,8 @@ const messages = {
   disabled: 'Los correos operativos están desactivados.',
   incomplete: 'Faltan parámetros del proveedor.',
   invalid: 'La configuración del proveedor no es válida.',
+  local_quota_reached: 'Presupuesto local agotado o sin registro válido. No se inició el envío.',
+  local_quota_unavailable: 'No se pudo reservar el presupuesto local. No se inició el envío.',
   rate_limited: 'Ya hay una prueba en curso o reciente. Intenta más tarde.',
 } as const;
 
@@ -49,7 +51,7 @@ export default function CorporateSmtpTest({ configured, brevo = false }: { confi
   }
   return (
     <div className="space-y-2">
-      <p className="text-sm">La prueba solo se dirige al remitente corporativo configurado. No envía mensajes a postulantes.</p>
+      <p className="text-sm">La prueba solo se dirige al remitente corporativo configurado. No envía mensajes a postulantes. Las pruebas de Brevo y Resend reservan un intento del presupuesto local.</p>
       {brevo && (
         <button type="button" disabled={!configured || pending} onClick={() => run(true)} className="mr-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2">
           Comprobar conexión Brevo (sin enviar)
