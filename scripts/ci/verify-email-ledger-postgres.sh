@@ -319,3 +319,39 @@ assert_equal "$(db -c "SET ROLE email_ledger_test_runtime; $quota_sql")" brevo q
 assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='brevo'")" '1:1' quota-reset
 assert_equal "$(db -c "SELECT daily_used||':'||monthly_used FROM private_email.provider_quota WHERE provider='resend'")" '0:0' quota-provider-isolation
 echo 'Isolated provider quota and vault isolation checks passed.'
+
+# Preferred profile selection and receipt proof (no provider calls).
+db < "$root/docs/operations/proposed-email-provider-selection.sql"
+db <<'SQL'
+DO $check$
+DECLARE role_name text;
+BEGIN
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid='private_email.provider_selection'::regclass) THEN RAISE EXCEPTION 'Selection RLS missing'; END IF;
+  FOREACH role_name IN ARRAY ARRAY['anon','authenticated','service_role'] LOOP
+    IF has_table_privilege(role_name,'private_email.provider_selection','SELECT,INSERT,UPDATE,DELETE') THEN RAISE EXCEPTION 'Unexpected selection privilege'; END IF;
+  END LOOP;
+END
+$check$;
+INSERT INTO private_email.provider_profile(id,name,provider,sender,sealed_key,updated_by)
+VALUES ('123e4567-e89b-42d3-a456-426614174000','Fixture','brevo','office@example.test','v1:'||repeat('a',90),'fixture');
+SQL
+selection_sql="$(python3 - "$root/src/lib/email/provider-selection.ts" <<'PY'
+import pathlib, sys
+source = pathlib.Path(sys.argv[1]).read_text()
+sql = source.split('const rows = await db.$queryRaw', 1)[1].split('`', 2)[1]
+sql = sql.replace('${id}', "'123e4567-e89b-42d3-a456-426614174000'").replace('${actor}', "'fixture'")
+assert '${' not in sql
+print(sql+';')
+PY
+)"
+db -c "UPDATE private_email.provider_quota SET daily_limit=2,monthly_limit=3 WHERE provider='brevo'"
+assert_equal "$(db -c "$selection_sql")" "" selection-no-test
+db -c "UPDATE private_email.provider_profile SET test_accepted_at=now() WHERE name='Fixture'"
+assert_equal "$(db -c "$selection_sql")" "" selection-no-receipt
+db -c "UPDATE private_email.provider_profile SET receipt_confirmed_at=now(),receipt_confirmed_by='fixture' WHERE name='Fixture'"
+db -c "UPDATE private_email.provider_quota SET daily_used=daily_limit WHERE provider='brevo'"
+assert_equal "$(db -c "$selection_sql")" "" selection-no-quota
+db -c "UPDATE private_email.provider_quota SET daily_used=0 WHERE provider='brevo'"
+assert_equal "$(db -c "$selection_sql")" "123e4567-e89b-42d3-a456-426614174000" selection-verified
+assert_equal "$(db -c "SELECT count(*) FROM private_email.provider_selection WHERE profile_id IS NOT NULL")" 1 singleton-selected
+echo 'Isolated provider selection checks passed.'
