@@ -7,6 +7,7 @@ vi.mock('@/lib/prisma', () => ({ default: {} }));
 vi.mock('@/lib/email/provider-quota', () => ({ listProviderQuotas: m.quotas }));
 vi.mock('@/lib/email/quota-storage-readiness', () => ({ inspectQuotaStorage: m.storage }));
 import { readNotificationEmailBudget } from './notification-email-budget';
+import { expectTypeOf } from 'vitest';
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -26,6 +27,17 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('notification email budget', () => {
+  it('preserves the narrow configured provider contract for the client', async () => {
+    type Ready = Extract<Awaited<ReturnType<typeof readNotificationEmailBudget>>, { status: 'ready' }>;
+    expectTypeOf<Ready['activeApiProvider']>().toEqualTypeOf<'brevo' | 'resend' | null>();
+    for (const provider of ['brevo', 'resend', 'smtp', '__proto__', 'unknown']) {
+      vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', provider);
+      expect(await readNotificationEmailBudget()).toMatchObject({
+        status: 'ready', activeApiProvider: provider === 'brevo' || provider === 'resend' ? provider : null,
+      });
+    }
+  });
+
   it('requires administrative authorization and rate limits before querying counters', async () => {
     m.auth.mockResolvedValueOnce({ error: 'denied' });
     expect(await readNotificationEmailBudget()).toEqual({ status: 'unauthorized' });
