@@ -312,6 +312,36 @@ jobs:
       - name: Build dedicated interpreters-api backend image
         run: docker build --file Dockerfile.api --tag interpreters-api:ci .
 
+      - name: Verify existing password hash compatibility and runtime libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -i --network none --entrypoint node interpreters-api:ci --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import bcrypt from 'bcrypt';
+          import express from 'express';
+          import { z } from 'zod';
+          import { PrismaClient } from '@prisma/client';
+          import { PrismaPg } from '@prisma/adapter-pg';
+          const password = 'Synthetic-Auth-Compatibility-2026!';
+          for (const hash of [
+            '$2a$10$abcdefghijklmnopqrstuuVXbUTOOH4bACvrZgQpeM.CiieeH/v02',
+            '$2b$10$abcdefghijklmnopqrstuuVXbUTOOH4bACvrZgQpeM.CiieeH/v02',
+          ]) {
+            assert.equal(await bcrypt.compare(password, hash), true);
+            assert.equal(await bcrypt.compare('wrong-password', hash), false);
+          }
+          const generated = await bcrypt.hash(password, 10);
+          assert.equal(bcrypt.getRounds(generated), 10);
+          assert.equal(await bcrypt.compare(password, generated), true);
+          assert.equal(typeof express, 'function');
+          assert.equal(z.string().parse('synthetic'), 'synthetic');
+          assert.equal(typeof PrismaClient, 'function');
+          assert.equal(typeof PrismaPg, 'function');
+          assert.equal(process.getuid(), 1001, 'API must run as non-root');
+          console.log('API native password compatibility and runtime imports passed.');
+          JS
+
       - name: Build dedicated Roleplay audio worker image
         run: docker build --file Dockerfile.worker --tag roleplay-audio-worker:ci .
 
