@@ -58,8 +58,8 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
     if (!newAccountId || !newRateValue) { setFeedback({ kind: 'error', message: 'Selecciona una cuenta y una tarifa válida.' }); return; }
     const accountId = Number(newAccountId);
     const rate = Number(newRateValue);
-    if (!Number.isInteger(accountId) || !accounts.some(account => account.id === accountId) || !Number.isFinite(rate) || rate < 0.01 || rate > 99999) {
-      setFeedback({ kind: 'error', message: 'Selecciona una cuenta válida y una tarifa entre 0.01 y 99,999 pesos por hora.' }); return;
+    if (!Number.isInteger(accountId) || !accounts.some(account => account.id === accountId) || !/^\d+(?:\.\d{1,2})?$/.test(newRateValue) || !Number.isFinite(rate) || rate < 0.01 || rate > 99999) {
+      setFeedback({ kind: 'error', message: 'Selecciona una cuenta válida y una tarifa entre 0.01 y 99,999 pesos por hora, con hasta dos decimales.' }); return;
     }
 
     run(async () => {
@@ -77,7 +77,10 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
         setNewAccountId('');
         setNewRateValue('');
         setFeedback({ kind: 'success', message: 'Tarifa guardada correctamente.' });
-      } else setFeedback({ kind: 'error', message: 'No se pudo guardar la tarifa. Revisa los datos y el estado de la cuenta.' });
+      } else {
+        setFeedback({ kind: 'error', message: result.error || 'No se pudo guardar la tarifa. Revisa los datos y el estado de la cuenta.' });
+        if (result.code === 'CONFLICT' || result.code === 'INTERNAL_ERROR') setNeedsReview(true);
+      }
     });
   }
 
