@@ -80,7 +80,12 @@ test('GitHub API is read-only; failed context never attempts network', async () 
   assert.equal(count, 0);
   env.RUNNER_ENVIRONMENT = 'github-hosted';
   assert.deepEqual(await verifyReleaseGate(env, fetchFn), { ok: true, code: 'APPROVED' });
-  assert.equal(count, 2);
+  assert.equal(count, 3);
+  let reads = 0;
+  const moved = async (url) => ({ ok: true, json: async () => url.endsWith('/branches/main')
+    ? { commit: { sha: ++reads === 1 ? sha : 'b'.repeat(40) } }
+    : { total_count: passes.length, workflow_runs: passes } });
+  assert.deepEqual(await verifyReleaseGate(env, moved), { ok: false, code: 'MAIN_MOVED' });
 });
 
 test('builder verifies checks before Docker and publisher rechecks before registry login', () => {
