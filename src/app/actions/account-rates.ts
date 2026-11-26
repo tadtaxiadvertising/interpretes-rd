@@ -7,6 +7,7 @@ import { Prisma, type Account, type InterpreterAccountRate } from '@prisma/clien
 import { z } from 'zod';
 import { validateAction } from '@/lib/auth/actions';
 import { operationalAccountInputSchema } from '@/lib/client-validation';
+import { notifyPayrateChange } from '@/lib/notifications/notify-payrate';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 const db = prisma;
@@ -141,21 +142,22 @@ export async function setInterpreterAccountRate(
         where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
         select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
       });
-      if (oldRate && effectiveRate.equals(oldRate.tariffPerHour)) return oldRate;
+      if (oldRate && effectiveRate.equals(oldRate.tariffPerHour)) return { rate: oldRate, auditId: null };
       const rate = await tx.interpreterAccountRate.upsert({
         where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
         update: { tariffPerHour: effectiveRate },
         create: { ...parsed.data, tariffPerHour: effectiveRate },
         select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
       });
-      await tx.payrateAuditLog.create({
+      const audit = await tx.payrateAuditLog.create({
         data: { interpreterId: parsed.data.interpreterId, oldRate: oldRate?.tariffPerHour, newRate: effectiveRate, changedBy: auth.user.userId },
         select: { id: true }
       });
-      return rate;
+      return { rate, auditId: audit.id };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     refreshAccountRateViews(['/admin/payrates']);
-    return { success: true, data: result as InterpreterAccountRate };
+    if (result.auditId !== null) await notifyPayrateChange({ interpreterId: parsed.data.interpreterId, auditId: result.auditId, kind: 'special' });
+    return { success: true, data: result.rate as InterpreterAccountRate };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && ['P2034', 'P2002'].includes(String(error.code))) {
       return { success: false, error: 'Otra operación modificó las tarifas. Actualiza la página y verifica el valor antes de repetir.', code: 'CONFLICT' };
