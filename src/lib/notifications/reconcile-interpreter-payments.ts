@@ -42,7 +42,7 @@ export async function reconcileInterpreterPayments(actor: CurrentActor, nowMs = 
         profile.interpreterId !== actor.interpreterId ||
         profile.email.trim().toLowerCase() !== actor.email.trim().toLowerCase()) return;
 
-    const recent = { gte: new Date(nowMs - WINDOW_MS), lte: new Date(nowMs) };
+    const recent = { gte: new Date(nowMs - PAYMENT_NOTICE_WINDOW_MS), lte: new Date(nowMs) };
     const records = await prisma.payrollRecord.findMany({
       where: {
         interpreterId: actor.interpreterId,
