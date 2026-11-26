@@ -41,7 +41,7 @@ describe('account and payrate actions preserve committed writes and private logs
     vi.mocked(prisma.account.update).mockResolvedValue(account as never);
     vi.mocked(prisma.account.delete).mockResolvedValue({ id: 4 } as never);
     vi.mocked(prisma.account.findMany).mockResolvedValue([] as never);
-    vi.mocked(prisma.interpreterAccountRate.delete).mockResolvedValue({ interpreterId: 2 } as never);
+    vi.mocked(prisma.interpreterAccountRate.delete).mockResolvedValue({ id: 11, interpreterId: 2 } as never);
   });
 
   function failCacheWithPrivateValue() {
@@ -116,6 +116,7 @@ describe('account and payrate actions preserve committed writes and private logs
     try {
       expect((await deleteInterpreterAccountRate(2, 4)).success).toBe(true);
       expect(prisma.interpreterAccountRate.delete).toHaveBeenCalledTimes(1);
+      expect(notices.notify).toHaveBeenCalledExactlyOnceWith({ interpreterId: 2, rateId: 11, kind: 'removed' });
       expect(revalidatePath).toHaveBeenCalledTimes(1);
     } finally {
       warning.mockRestore();
