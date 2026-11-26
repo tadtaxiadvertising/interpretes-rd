@@ -37,6 +37,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const updating = useRef(false);
+  const loadingLinks = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [needsReview, setNeedsReview] = useState(false);
   const [linkLoadFailed, setLinkLoadFailed] = useState(false);
@@ -63,6 +64,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
       else setError(result.error || 'No se pudo actualizar el rol');
     } catch {
       setError('No se pudo confirmar el cambio de rol. Revisa el estado antes de reintentar.');
+      setNeedsReview(true);
     } finally {
       updating.current = false;
       setIsUpdating(false);
@@ -177,7 +179,8 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
   };
 
   const openLinkModal = async () => {
-    if (updating.current || needsReview) return;
+    if (updating.current || needsReview || loadingLinks.current) return;
+    loadingLinks.current = true;
     setActiveModal('link');
     setError(null);
     setLinkLoadFailed(false);
@@ -191,6 +194,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
       setError('No se pudo cargar la lista de intérpretes. Cierra y vuelve a abrir el formulario para reintentar.');
       setLinkLoadFailed(true);
     } finally {
+      loadingLinks.current = false;
       setIsLoadingInterpreters(false);
     }
   };
@@ -200,7 +204,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
       <button
         aria-label="Acciones del usuario"
         aria-expanded={isOpen}
-        disabled={isUpdating}
+        disabled={isUpdating || isLoadingInterpreters}
         onClick={() => { if (!isUpdating) { setError(null); setIsOpen(!isOpen); } }}
         className="p-3 hover:bg-white/10 rounded-2xl text-slate-400 hover:text-white transition-all active:scale-90"
       >
@@ -211,7 +215,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
         <>
           <div
             className="fixed inset-0 z-40"
-            onClick={() => setIsOpen(false)}
+            onClick={() => { if (!updating.current && !loadingLinks.current) setIsOpen(false); }}
           />
           <div className="absolute right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {error && !activeModal && <p role="alert" className="p-3 text-sm text-[var(--theme-danger)] break-words">{error}</p>}
@@ -222,7 +226,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                 {(['admin', 'interpreter', 'candidate'] as const).map((role) => (
                   <button
                     key={role}
-                    disabled={isUpdating || needsReview || user.role === role}
+                    disabled={isUpdating || needsReview || isLoadingInterpreters || user.role === role}
                     onClick={() => handleRoleChange(role)}
                     className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-white transition-all disabled:opacity-30"
                   >
@@ -235,7 +239,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
 
             <div className="p-2 space-y-1">
               <button
-                disabled={isUpdating || needsReview}
+                disabled={isUpdating || needsReview || isLoadingInterpreters}
                 onClick={() => { setError(null); setActiveModal('edit'); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:bg-white/5 hover:text-white transition-all"
               >
@@ -244,7 +248,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               </button>
 
               <button
-                disabled={isUpdating || needsReview}
+                disabled={isUpdating || needsReview || isLoadingInterpreters}
                 onClick={() => { setError(null); setNewPassword(''); setActiveModal('password'); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:bg-white/5 hover:text-white transition-all"
               >
@@ -253,7 +257,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               </button>
 
               <button
-                disabled={isUpdating || needsReview}
+                disabled={isUpdating || needsReview || isLoadingInterpreters}
                 onClick={openLinkModal}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-blue-400 hover:bg-blue-500/10 transition-all"
               >
@@ -272,7 +276,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               )}
 
               <button
-                disabled={isUpdating || needsReview}
+                disabled={isUpdating || needsReview || isLoadingInterpreters}
                 onClick={() => { setError(null); setActiveModal('delete'); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition-all"
               >
@@ -290,7 +294,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
           {/* Backdrop */}
           <div
             className="absolute inset-0 bg-slate-950/80 backdrop-blur-md"
-            onClick={() => !isUpdating && setActiveModal(null)}
+            onClick={() => !updating.current && !loadingLinks.current && setActiveModal(null)}
           />
 
           {/* Modal Content */}
@@ -310,7 +314,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               <button
                 onClick={() => !isUpdating && setActiveModal(null)}
                 className="p-2 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors"
-                disabled={isUpdating}
+                disabled={isUpdating || isLoadingInterpreters}
               >
                 <X size={20} />
               </button>
@@ -345,14 +349,14 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   <button
                     type="button"
                     onClick={() => setActiveModal(null)}
-                    disabled={isUpdating}
+                    disabled={isUpdating || isLoadingInterpreters}
                     className="px-5 py-3 rounded-2xl font-bold text-sm text-slate-400 hover:bg-white/5 transition-all disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    disabled={isUpdating || needsReview}
+                    disabled={isUpdating || needsReview || isLoadingInterpreters}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Guardar Cambios'}
@@ -372,7 +376,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   <input
                     type="password"
                     autoComplete="new-password"
-                    disabled={isUpdating || needsReview}
+                    disabled={isUpdating || needsReview || isLoadingInterpreters}
                     placeholder="Mínimo 6 caracteres"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -384,14 +388,14 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   <button
                     type="button"
                     onClick={() => setActiveModal(null)}
-                    disabled={isUpdating}
+                    disabled={isUpdating || isLoadingInterpreters}
                     className="px-5 py-3 rounded-2xl font-bold text-sm text-slate-400 hover:bg-white/5 transition-all disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    disabled={isUpdating || needsReview}
+                    disabled={isUpdating || needsReview || isLoadingInterpreters}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Actualizar Contraseña'}
@@ -456,7 +460,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   <button
                     type="button"
                     onClick={() => setActiveModal(null)}
-                    disabled={isUpdating}
+                    disabled={isUpdating || isLoadingInterpreters}
                     className="px-5 py-3 rounded-2xl font-bold text-sm text-slate-400 hover:bg-white/5 transition-all disabled:opacity-50"
                   >
                     Cancelar
@@ -485,14 +489,14 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   <button
                     type="button"
                     onClick={() => setActiveModal(null)}
-                    disabled={isUpdating}
+                    disabled={isUpdating || isLoadingInterpreters}
                     className="px-5 py-3 rounded-2xl font-bold text-sm text-slate-400 hover:bg-white/5 transition-all disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={handleDeleteUser}
-                    disabled={isUpdating || needsReview}
+                    disabled={isUpdating || needsReview || isLoadingInterpreters}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Revocar Supabase Auth'}
