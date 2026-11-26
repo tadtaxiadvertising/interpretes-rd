@@ -176,4 +176,44 @@ describe('recruitment SMTP adapter rollout gates', () => {
     expect(mocks.send).not.toHaveBeenCalled();
     expect(mocks.finish).not.toHaveBeenCalled();
   });
+  it.each([
+    ['in-v3.mailjet.com', 'mailjet'],
+    ['mail.smtp2go.com', 'smtp2go'],
+    ['smtp.mailersend.net', 'mailersend'],
+  ] as const)('attributes %s to its shared budget before dispatch', async (host, provider) => {
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'smtp', config: { host } });
+    const tx = {};
+    mocks.prisma.$transaction.mockImplementation(async callback => callback(tx));
+    mocks.claim.mockResolvedValue({ eventId: 'event-1', kind: 'application_received' });
+    mocks.reserveQuota.mockResolvedValue('reserved');
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
+      await deps.claim('event-1') ? 'accepted' : 'not_claimed');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('accepted');
+    expect(mocks.claim).toHaveBeenCalledExactlyOnceWith(tx, 'event-1', provider);
+    expect(mocks.reserveQuota).toHaveBeenCalledExactlyOnceWith(tx, provider);
+    expect(mocks.claim.mock.invocationCallOrder[0]).toBeLessThan(mocks.reserveQuota.mock.invocationCallOrder[0]);
+  });
+
+  it('rolls back a known SMTP claim when the shared budget is exhausted', async () => {
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'smtp', config: { host: 'in-v3.mailjet.com' } });
+    mocks.prisma.$transaction.mockImplementation(async callback => callback({}));
+    mocks.claim.mockResolvedValue({ eventId: 'event-1', kind: 'application_received' });
+    mocks.reserveQuota.mockResolvedValue('quota_reached');
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
+      await deps.claim('event-1') ? 'accepted' : 'not_claimed');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('disabled');
+    await expect(mocks.prisma.$transaction.mock.results[0].value).rejects.toThrow('Provider budget unavailable');
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+
+  it('preserves unattributed SMTP for an unrecognized host', async () => {
+    mocks.config.mockReturnValue({ status: 'configured', provider: 'smtp', config: { host: 'mail.smtp2go.com.example.test' } });
+    mocks.claim.mockResolvedValue({ eventId: 'event-1', kind: 'application_received' });
+    mocks.dispatch.mockImplementation(async (_id, _enabled, deps: DispatchDependencies) =>
+      await deps.claim('event-1') ? 'accepted' : 'not_claimed');
+    expect(await processQueuedRecruitmentEmail('event-1')).toBe('accepted');
+    expect(mocks.claim).toHaveBeenCalledExactlyOnceWith(mocks.prisma, 'event-1', 'smtp');
+    expect(mocks.reserveQuota).not.toHaveBeenCalled();
+    expect(mocks.prisma.$transaction).not.toHaveBeenCalled();
+  });
 });
