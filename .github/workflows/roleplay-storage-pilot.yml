@@ -61,6 +61,18 @@ jobs:
           supabase start -x studio,realtime,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,postgres-meta > "$pilot_dir/start.log" 2>&1
           umask 077
           supabase status -o json > "$pilot_dir/status.json" 2> "$pilot_dir/status.log"
+      - name: Record isolated Storage and SDK versions
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node -e 'const p=require("./package-lock.json").packages; for(const [name,v] of Object.entries(p)) if(/(?:^|\/)node_modules\/@supabase\/(supabase-js|storage-js)$/.test(name)) console.log(name+" "+v.version)'
+          mapfile -t storage_ids < <(docker ps --format '{{.ID}} {{.Image}}' | awk '$2 ~ /(^|\/)storage-api[:@]/ {print $1}')
+          if [ "${#storage_ids[@]}" -ne 1 ]; then
+            echo "::warning::Could not uniquely identify the local Storage image"
+          else
+            docker inspect --format 'Storage image: {{.Config.Image}} ({{.Image}})' "${storage_ids[0]}"
+          fi
       - name: Verify real local Storage API with synthetic fixtures
         if: ${{ matrix.pilot == 'provider' }}
         shell: bash
