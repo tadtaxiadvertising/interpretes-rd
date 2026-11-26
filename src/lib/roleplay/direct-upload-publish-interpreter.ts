@@ -6,6 +6,7 @@ import { blockingAssignmentStatuses, interpreterAssignmentScope } from '@/lib/ro
 import { insertOpeningRequiredSession, openingAssignmentEnabled } from './bilingual-opening-assignment';
 import { completeRoleplayUploadPublicationInTransaction } from './direct-upload-publication-receipt';
 import { loadVerifiedPublication, promoteVerifiedClinicalSlot, type FinalObjectPort } from './direct-upload-promote-slot';
+import { loadConsolidatedClinicalPublication } from './direct-upload-final-evidence';
 
 
 /**
@@ -17,6 +18,19 @@ import { loadVerifiedPublication, promoteVerifiedClinicalSlot, type FinalObjectP
  */
 export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port: FinalObjectPort,
   actor: string, requestKey: string, input: unknown, signal?: AbortSignal) {
+  return publishInterpreterRoleplay(db,port,actor,requestKey,input,signal);
+}
+
+/** Metadata-only commit from durable final evidence; never a fallback to
+ * inline consolidation. Requires the independent immutability pilot gate. */
+export async function publishConsolidatedInterpreterRoleplay(db:PrismaClient,
+  actor:string,requestKey:string,input:unknown,signal?:AbortSignal) {
+  if(process.env.ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED!=='true') throw new Error('PUBLICATION_DISABLED');
+  return publishInterpreterRoleplay(db,null,actor,requestKey,input,signal);
+}
+
+async function publishInterpreterRoleplay(db: PrismaClient, port: FinalObjectPort | null,
+  actor: string, requestKey: string, input: unknown, signal?: AbortSignal) {
   if (!openingAssignmentEnabled() || process.env.ROLEPLAY_DIRECT_UPLOAD_PUBLICATION_ENABLED !== 'true') {
     throw new Error('PUBLICATION_DISABLED');
   }
@@ -24,12 +38,18 @@ export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port:
   const recovered = await recoverPublishedInterpreterRoleplay(db, actor, requestKey, data);
   if (recovered) return recovered;
   if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
-  const initial = await loadVerifiedPublication(db, actor, requestKey);
+  const initial = port ? await loadVerifiedPublication(db, actor, requestKey) : await loadConsolidatedClinicalPublication(db,actor,requestKey);
   if (initial.plans.length !== data.scenarios.length) throw new Error('SCENARIO_COUNT_MISMATCH');
   const final: Awaited<ReturnType<typeof promoteVerifiedClinicalSlot>>[] = [];
-  for (const plan of initial.plans) {
-    if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
-    final.push(await promoteVerifiedClinicalSlot(db, port, actor, requestKey, plan.item.order));
+  if(port){
+    for (const plan of initial.plans) {
+      if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
+      final.push(await promoteVerifiedClinicalSlot(db, port, actor, requestKey, plan.item.order));
+    }
+  } else {
+    const consolidated=await loadConsolidatedClinicalPublication(db,actor,requestKey);
+    if(consolidated.reservation.batchId!==initial.reservation.batchId) throw new Error('PUBLICATION_CHANGED');
+    final.push(...consolidated.final);
   }
   if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
   // All network transfers have completed. Serialize with existing creation
@@ -38,7 +58,16 @@ export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port:
     return await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'roleplay:interpreter:' + data.interpreterId}, 0))`;
       if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
-      const current = await loadVerifiedPublication(tx, actor, requestKey);
+      if(!port){
+        const locked=await tx.$queryRaw<{id:string}[]>`
+          SELECT id::text AS id FROM public.roleplay_upload_reservations
+          WHERE id=${initial.reservation.batchId}::uuid AND actor_user_id=${actor}
+            AND request_key=${requestKey}::uuid AND status='VERIFIED' AND expires_at>clock_timestamp()
+          FOR UPDATE
+        `;
+        if(locked.length!==1 || locked[0].id!==initial.reservation.batchId) throw new Error('PUBLICATION_CHANGED');
+      }
+      const current = port ? await loadVerifiedPublication(tx, actor, requestKey) : await loadConsolidatedClinicalPublication(tx,actor,requestKey);
       if (current.reservation.batchId !== initial.reservation.batchId ||
           current.plans.length !== final.length || current.plans.some((p, i) =>
             p.reference !== final[i].reference || p.item.sha256 !== final[i].sha256 ||
