@@ -1,6 +1,7 @@
 'use client';
 
 import { createClient } from '@supabase/supabase-js';
+import { directInterpreterAssignment } from './direct-upload-interpreter-assignment';
 import { createRoleplayUploadController } from './direct-upload-browser-resume';
 import { ROLEPLAY_PRIVATE_AUDIO_BUCKET } from './private-audio-bucket-readiness';
 
@@ -20,12 +21,14 @@ async function command(path:'reserve'|'verify'|'publish'|'consolidate', body:unk
 
 /** Staged browser connection. Only public project configuration is used.
  * No persistent SDK session, service role, or token storage. */
-export function createConfiguredRoleplayUploadController(files:readonly File[]) {
+export function createConfiguredRoleplayUploadController(files:readonly File[], input:unknown) {
+  const assignment=directInterpreterAssignment.parse(input);
+  if(assignment.scenarios.length!==files.length) throw new Error('ROLEPLAY_UPLOAD_PLAN_INVALID');
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) throw new Error('ROLEPLAY_UPLOAD_CONFIG_UNAVAILABLE');
   return createRoleplayUploadController(files,{
-    reserve:(requestKey,declarations,signal)=>command('reserve',{requestKey,declarations},signal),
+    reserve:(requestKey,declarations,signal)=>command('reserve',{requestKey,declarations,assignment},signal),
     inspect:(requestKey,order,signal)=>command('verify',{requestKey,order,mode:'inspect'},signal),
     verify:(requestKey,order,signal)=>command('verify',{requestKey,order,mode:'verify'},signal),
     transfer:async(slot,file,signal)=>{
