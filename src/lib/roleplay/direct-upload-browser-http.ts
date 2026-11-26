@@ -4,8 +4,8 @@ import { createClient } from '@supabase/supabase-js';
 import { createRoleplayUploadController } from './direct-upload-browser-resume';
 import { ROLEPLAY_PRIVATE_AUDIO_BUCKET } from './private-audio-bucket-readiness';
 
-async function command(path:'reserve'|'verify', body:unknown, signal?:AbortSignal) {
-  const timeout = AbortSignal.timeout(60_000);
+async function command(path:'reserve'|'verify'|'publish', body:unknown, signal?:AbortSignal) {
+  const timeout = AbortSignal.timeout(path === 'publish' ? 110_000 : 60_000);
   const response = await fetch('/api/admin/roleplays/uploads/'+path, {
     method:'POST', credentials:'same-origin', cache:'no-store', redirect:'error',
     headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
@@ -43,4 +43,17 @@ export function createConfiguredRoleplayUploadController(files:readonly File[]) 
       return {error};
     },
   });
+}
+
+/** Pilot only; callers must retain the same verified request key and exact
+ * assignment on retry. Never automatically fall back to multipart. */
+export async function publishPreparedRoleplayPilot(requestKey:string, assignment:unknown, signal?:AbortSignal) {
+  const data = await command('publish',{requestKey,assignment},signal);
+  if (!data || typeof data !== 'object' || !('sessionId' in data) || typeof data.sessionId !== 'string' ||
+      !/^[a-zA-Z0-9_-]{5,120}$/.test(data.sessionId) || !('scenarioCount' in data) || data.scenarioCount !== 1 ||
+      !('inviteLink' in data) || typeof data.inviteLink !== 'string') throw new Error('ROLEPLAY_PUBLICATION_UNCERTAIN');
+  const url = new URL(data.inviteLink);
+  if (url.origin !== window.location.origin || url.username || url.password || url.search || url.hash ||
+      url.pathname !== '/roleplays/'+encodeURIComponent(data.sessionId)) throw new Error('ROLEPLAY_PUBLICATION_UNCERTAIN');
+  return {sessionId:data.sessionId,scenarioCount:1,inviteLink:url.href};
 }
