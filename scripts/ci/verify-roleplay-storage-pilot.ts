@@ -63,7 +63,30 @@ async function main(){
   assert(!first.error && await read(source)===digest(a),'signed staging upload failed');
   const replay=await browser.uploadToSignedUrl(source,token,b,{...opts,upsert:true});
   assert(replay.error && await read(source)===digest(a),'signed replay overwrote source');
+  // Separate sequential control from the actual race. Only log fixed
+  // categories, never provider messages, paths, tokens or object bytes.
+  const control='base/'+id+'/2.wav';
+  const classify=(error:unknown)=>{
+    if(!error) return 'accepted';
+    if(typeof error!=='object') return 'rejected-unknown';
+    const e=error as {status?:unknown;statusCode?:unknown;code?:unknown};
+    const status=String(e.statusCode??e.status??'');
+    return /^(400|401|403|404|409|413|415|422|429|500|502|503|504)$/.test(status)?'rejected-'+status:'rejected-other';
+  };
+  const baseline=await privileged.upload(control,a,opts);
+  console.log('Sequential destination control: '+classify(baseline.error));
+  assert(!baseline.error && await read(control)===digest(a),'sequential destination control failed');
+  const controlReplay=await privileged.upload(control,b,opts);
+  console.log('Sequential duplicate control: '+classify(controlReplay.error));
+  assert(controlReplay.error && await read(control)===digest(a),'sequential duplicate changed destination');
   const attempts=await Promise.all([privileged.upload(final,a,opts),privileged.upload(final,b,opts)]);
+  console.log('Concurrent destination outcomes: '+attempts.map(r=>classify(r.error)).join(', '));
+  const observed=await privileged.download(final);
+  if(observed.error || !observed.data) console.log('Concurrent object observation: '+classify(observed.error));
+  else {
+    const sha=digest(new Uint8Array(await observed.data.arrayBuffer()));
+    console.log('Concurrent object observation: '+(sha===digest(a)?'first fixture':sha===digest(b)?'second fixture':'unexpected bytes'));
+  }
   assert(attempts.filter(r=>!r.error).length===1,'concurrent destination writes did not have one winner');
   const winner=attempts[0].error?b:a, loser=attempts[0].error?a:b;
   assert(await read(final)===digest(winner),'winner digest mismatch');
