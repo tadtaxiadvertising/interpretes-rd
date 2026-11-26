@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/AppError.js';
-import type { CreateUserInput, UpdateUserInput } from './users.schemas.js';
+import { createUserSchema, updateUserSchema } from './users.schemas.js';
 
 /**
  * USERS CONTROLLER — RESTful, Stateless, Lean Queries
@@ -74,7 +74,7 @@ export async function listUsers(req: Request, res: Response): Promise<void> {
 
 /**
  * GET /api/v1/users/:id
- * Retrieve a single user by UUID. Returns 404 if not found.
+ * Retrieve a single user by CUID or UUID. Returns 404 if not found.
  */
 export async function getUserById(req: Request, res: Response): Promise<void> {
   const { id } = req.params;
@@ -98,7 +98,7 @@ export async function getUserById(req: Request, res: Response): Promise<void> {
  * (handled by globalErrorHandler via Prisma P2002).
  */
 export async function createUser(req: Request, res: Response): Promise<void> {
-  const { email, password, name, role } = req.body as CreateUserInput;
+  const { email, password, name, role } = createUserSchema.parse({ body: req.body }).body;
 
   // Hash password — bcrypt with cost factor 10 (balanced for VPS CPU)
   const hashedPassword = await bcrypt.hash(password, 10);
@@ -108,7 +108,7 @@ export async function createUser(req: Request, res: Response): Promise<void> {
       email: email.toLowerCase().trim(),
       password: hashedPassword,
       name: name.trim(),
-      role: role as any,
+      role,
     },
     select: USER_SELECT,
   });
@@ -123,8 +123,14 @@ export async function createUser(req: Request, res: Response): Promise<void> {
  * Returns 404 if user doesn't exist (Prisma P2025 → globalErrorHandler).
  */
 export async function updateUser(req: Request, res: Response): Promise<void> {
-  const { id } = req.params;
-  const updateData = req.body as UpdateUserInput;
+  const { params: { id }, body: updateData } = updateUserSchema.parse({
+    params: req.params, body: req.body,
+  });
+  // Persist only the fields explicitly supported by this operation.
+  const data = {
+    ...(updateData.name !== undefined ? { name: updateData.name } : {}),
+    ...(updateData.role !== undefined ? { role: updateData.role } : {}),
+  };
 
   // Verify user exists before update (explicit 404 vs Prisma's P2025)
   const existing = await prisma.rbacUser.findUnique({
@@ -138,7 +144,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
 
   const user = await prisma.rbacUser.update({
     where: { id },
-    data: updateData,
+    data,
     select: USER_SELECT,
   });
 
