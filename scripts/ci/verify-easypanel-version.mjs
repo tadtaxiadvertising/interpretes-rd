@@ -23,9 +23,10 @@ export function versionEndpoint(rawUrl) {
 
 /** Fail closed: a successful webhook or healthy server is not a matching release. */
 export async function verifyEasypanelVersion({
-  baseUrl, expectedSha, attempts = 18, intervalMs = 10_000,
+  baseUrl, expectedSha, component = 'frontend', attempts = 18, intervalMs = 10_000,
   fetchFn = fetch, sleepFn = ms => new Promise(resolve => setTimeout(resolve, ms)),
 }) {
+  if (!['frontend', 'api'].includes(component)) throw new Error('Unsupported runtime component.');
   const endpoint = versionEndpoint(baseUrl);
   if (!SHA_PATTERN.test(expectedSha ?? '')) {
     throw new Error('Expected release SHA must be the complete 40-character Git commit.');
@@ -49,11 +50,20 @@ export async function verifyEasypanelVersion({
         // never untrusted response bodies, URLs, or arbitrary text.
         const observed = typeof body?.buildId === 'string' && SHA_PATTERN.test(body.buildId)
           ? body.buildId.toLowerCase() : null;
-        if (observed) lastObservedSha = observed;
-        if (observed && observed === expectedSha.toLowerCase()) {
-          return { sha: expectedSha, attempt };
+        // The legacy frontend contract has no service field. An API check
+        // must never accept that response, even if the SHA happens to match.
+        const correctService = component === 'api'
+          ? body?.service === 'interpreters-api'
+          : body?.service === undefined || body.service === 'interpreters-frontend';
+        if (!correctService) {
+          lastReason = 'wrong_runtime_component';
+        } else {
+          if (observed) lastObservedSha = observed;
+          if (observed && observed === expectedSha.toLowerCase()) {
+            return { sha: expectedSha, attempt };
+          }
+          lastReason = observed ? 'running_different_sha' : 'missing_valid_provenance';
         }
-        lastReason = observed ? 'running_different_sha' : 'missing_valid_provenance';
       } else {
         lastReason = 'http_error';
       }
@@ -69,7 +79,9 @@ export async function verifyEasypanelVersion({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
+    const component = process.env.EASYPANEL_VERIFY_COMPONENT ?? 'frontend';
     const result = await verifyEasypanelVersion({
+      component,
       baseUrl: process.env.EASYPANEL_RELEASE_VERIFY_URL,
       expectedSha: process.env.EXPECTED_GIT_SHA,
       // Manual diagnostics use one GET; automated release verification keeps
@@ -77,7 +89,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       attempts: process.env.EASYPANEL_VERIFY_ATTEMPTS === undefined
         ? 18 : Number(process.env.EASYPANEL_VERIFY_ATTEMPTS),
     });
-    const message = `Verified running Easypanel frontend SHA: ${result.sha} (attempt ${result.attempt})`;
+    const message = `Verified running Easypanel ${component} SHA: ${result.sha} (attempt ${result.attempt})`;
     console.log(message);
     if (process.env.GITHUB_STEP_SUMMARY) {
       await appendFile(process.env.GITHUB_STEP_SUMMARY, `${message}\n`);
