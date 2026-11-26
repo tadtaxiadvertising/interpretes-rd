@@ -57,6 +57,12 @@ describe('npm audit release gate fails closed', () => {
     assert.ok(start >= 0 && end > start, 'required dependency audit step must exist');
     const audit = workflow.slice(start, end);
     assert.match(audit, /id: dependency_security_audit/);
+    assert.match(audit, /cd interpreters-api && npm audit --package-lock-only --json/);
+    assert.match(audit, /cd interpreters-api && npm audit --package-lock-only --omit=dev --json/);
+    for (const file of ['npm-audit.json', 'npm-audit-api.json', 'npm-audit-api-runtime.json']) {
+      assert.ok(audit.includes('node scripts/ci/evaluate-dependency-audit.mjs "$RUNNER_TEMP/' + file + '" || audit_failed=1'));
+    }
+    assert.match(audit, /exit "\$audit_failed"/);
     assert.match(audit, /node scripts\/ci\/evaluate-dependency-audit\.mjs/);
     assert.match(workflow, /- name: Verify npm audit fail-closed parser/);
     assert.match(workflow, /if: always\(\) && steps\.dependency_security_audit\.outcome == 'failure'/);
