@@ -3,6 +3,7 @@
 import prismaClient from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { validateAction } from '@/lib/auth/actions';
+import { notifyPayrollMilestone } from '@/lib/notifications/notify-payroll';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus, isValidPayrollAmount, parsePayrollMoney, parseVerifiedPayrollMinutes } from '@/lib/payroll-validation';
 
@@ -132,7 +133,8 @@ export async function verifyPayrollMinutes(_prevState: unknown, formData: FormDa
       return { success: false, error, code };
     }
 
-    revalidatePath('/payroll');
+    await notifyPayrollMilestone(id, 'approved');
+    try { revalidatePath('/payroll'); } catch (error) { console.warn('[PAYROLL] Saved but cache refresh failed:', safeServerErrorCategory(error)); }
     return { success: true, message: 'Minutos verificados y nómina aprobada' };
   } catch (error) {
     console.error('verifyPayrollMinutes failed:', safeServerErrorCategory(error));
@@ -198,7 +200,8 @@ export async function markPayrollAsPaid(_prevState: unknown, formData: FormData)
       return { success: false, error, code };
     }
 
-    revalidatePath('/payroll');
+    await notifyPayrollMilestone(id, 'paid');
+    try { revalidatePath('/payroll'); } catch (error) { console.warn('[PAYROLL] Saved but cache refresh failed:', safeServerErrorCategory(error)); }
     return { success: true, message: 'Nómina marcada como pagada' };
   } catch (error) {
     console.error('markPayrollAsPaid failed:', safeServerErrorCategory(error));
