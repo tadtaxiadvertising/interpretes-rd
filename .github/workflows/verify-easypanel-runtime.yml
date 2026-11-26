@@ -3,6 +3,14 @@ name: Verify live Easypanel runtime SHA (read only)
 on:
   workflow_dispatch:
     inputs:
+      component:
+        description: 'Public runtime to verify (one read-only GET)'
+        type: choice
+        required: true
+        default: frontend
+        options:
+          - frontend
+          - api
       expected_sha:
         description: 'Optional full 40-character expected commit SHA; defaults to selected main HEAD'
         required: false
@@ -35,12 +43,20 @@ jobs:
       - name: Read-only GET of public version endpoint
         env:
           EASYPANEL_RELEASE_VERIFY_URL: ${{ vars.EASYPANEL_RELEASE_VERIFY_URL }}
+          EASYPANEL_API_RELEASE_VERIFY_URL: ${{ vars.EASYPANEL_API_RELEASE_VERIFY_URL }}
+          EASYPANEL_VERIFY_COMPONENT: ${{ inputs.component }}
           EXPECTED_GIT_SHA: ${{ inputs.expected_sha || github.sha }}
           EASYPANEL_VERIFY_ATTEMPTS: '1'
         run: |
           set -euo pipefail
+          # Never let an empty API variable silently fall back to frontend.
+          case "$EASYPANEL_VERIFY_COMPONENT" in
+            api) export EASYPANEL_RELEASE_VERIFY_URL="$EASYPANEL_API_RELEASE_VERIFY_URL" ;;
+            frontend) ;;
+            *) echo '::error::Unsupported runtime component.'; exit 1 ;;
+          esac
           if [ -z "${EASYPANEL_RELEASE_VERIFY_URL:-}" ]; then
-            echo '::error::EASYPANEL_RELEASE_VERIFY_URL is not configured for the production environment. No deployment was attempted.'
+            echo '::error::The selected runtime verification URL is not configured for the production environment. No deployment was attempted.'
             exit 1
           fi
           node scripts/ci/verify-easypanel-version.mjs
