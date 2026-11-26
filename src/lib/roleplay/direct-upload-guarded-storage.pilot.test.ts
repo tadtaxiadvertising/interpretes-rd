@@ -128,7 +128,20 @@ describe.skipIf(!enabled)('isolated guarded Storage pilot',()=>{
       expect(attempts).toBe(1);
       const missing=await api.download('base/'+g.id+'/0.wav');
       expect(Boolean(missing.error)).toBe(true);
-      console.log('Guarded Storage pilot passed: one write, lost acknowledgement recovered, actual decode, permanent failed-attempt fence.');
+      // Simulate an unexpected object appearing after the interrupted claim.
+      // Keep a valid WAV with the same length but different PCM bytes.
+      const corrupt=bytes.slice();
+      corrupt[44]=1;
+      expect(digest(corrupt)).not.toBe(sha256);
+      const unexpectedPath='base/'+g.id+'/0.wav';
+      const unexpected=await api.upload(unexpectedPath,corrupt,{upsert:false,contentType:'audio/wav',cacheControl:'0'});
+      assert(!unexpected.error,'synthetic unexpected object upload failed');
+      for(const db of [db1,db2]) await expect(promoteVerifiedClinicalSlot(db,interrupted,g.actor,g.key,0)).rejects.toThrow();
+      expect(attempts).toBe(1);
+      expect(digest(await read(unexpectedPath))).toBe(digest(corrupt));
+      const interruptedClaims=await setup.query<{n:number}>('SELECT count(*)::int AS n FROM public.roleplay_final_write_claims WHERE reservation_id=$1::uuid',[g.id]);
+      expect(interruptedClaims.rows[0]?.n).toBe(1);
+      console.log('Guarded Storage pilot passed: one write, lost acknowledgement recovered, actual decode, permanent failed-attempt fence, unexpected object rejected.');
     }finally{
       await Promise.allSettled([db1.$disconnect(),db2.$disconnect(),setup.end()]);
     }
