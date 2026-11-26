@@ -1,6 +1,8 @@
 'use server';
 
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
+import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import type { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
 import { revalidateInterpreterProfileRecords } from '@/lib/cache/revalidate-interpreter';
@@ -24,9 +26,10 @@ export async function updatePayrate(
 
   const parsed = UpdatePayrateSchema.safeParse({ interpreterId, newRate });
   if (!parsed.success) {
-    return { success: false, error: 'Rate must be between $0.01 and $999.99', code: 'VALIDATION_ERROR' };
+    return { success: false, error: 'La tarifa por minuto debe estar entre RD$0.01 y RD$999.99.', code: 'VALIDATION_ERROR' };
   }
 
+  const effectiveRate = new Prisma.Decimal(parsed.data.newRate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
   try {
     const result = await db.$transaction(async (tx) => {
       const interpreter = await tx.interpreter.findUnique({
@@ -37,33 +40,39 @@ export async function updatePayrate(
       if (!interpreter) return null;
 
       const oldRate = Number(interpreter.tariffPerMinute);
+      const savedRate = effectiveRate.toNumber();
+      if (effectiveRate.equals(interpreter.tariffPerMinute)) return { oldRate, newRate: savedRate };
       await tx.interpreter.update({
         where: { id: parsed.data.interpreterId },
-        data: { tariffPerMinute: parsed.data.newRate },
+        data: { tariffPerMinute: effectiveRate },
         select: { id: true },
       });
       await tx.payrateAuditLog.create({
         data: {
           interpreterId: parsed.data.interpreterId,
           oldRate,
-          newRate: parsed.data.newRate,
+          newRate: effectiveRate,
           changedBy: auth.user.userId,
         },
         select: { id: true },
       });
 
-      return { oldRate, newRate: parsed.data.newRate };
-    });
+      return { oldRate, newRate: savedRate };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     if (!result) {
-      return { success: false, error: 'Interpreter not found', code: 'NOT_FOUND' };
+      return { success: false, error: 'No se encontró el intérprete.', code: 'NOT_FOUND' };
     }
 
-    revalidateInterpreterProfileRecords(parsed.data.interpreterId);
+    try { revalidateInterpreterProfileRecords(parsed.data.interpreterId); }
+    catch (error) { console.warn('[PAYRATES] Saved but cache refresh failed:', safeServerErrorCategory(error)); }
     return { success: true, data: result };
   } catch (error) {
-    console.error('Error updating payrate:', error instanceof Error ? error.message : 'Unknown error');
-    return { success: false, error: 'Unable to update payrate', code: 'SERVICE_UNAVAILABLE' };
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'P2034') {
+      return { success: false, error: 'Otra operación modificó las tarifas. Actualiza la página y verifica el valor antes de repetir.', code: 'CONFLICT' };
+    }
+    console.error('[PAYRATES] Update failed:', safeServerErrorCategory(error));
+    return { success: false, error: 'No se pudo confirmar la actualización de la tarifa. Verifica el valor registrado.', code: 'SERVICE_UNAVAILABLE' };
   }
 }
 
@@ -100,7 +109,7 @@ export async function getPayrateHistory(
 
     return { success: true, data: history ?? [] };
   } catch (error) {
-    console.error('Error fetching payrate history:', error instanceof Error ? error.message : 'Unknown error');
+    console.error('[PAYRATES] History failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Unable to load payrate history', code: 'SERVICE_UNAVAILABLE' };
   }
 }
