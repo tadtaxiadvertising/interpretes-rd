@@ -10,7 +10,7 @@ type Store = Pick<PrismaClient, 'roleplayUploadReservation'>;
 export type FinalObjectPort = {
   // A trusted adapter must refuse overwrites, including concurrent copies.
   // Existing destinations must be verified independently, never replaced.
-  copyIfAbsent(source: string, destination: string): Promise<void>;
+  copyIfAbsent(source: PreparedRoleplayUpload, destination: string): Promise<void>;
   verify(item: PreparedRoleplayUpload): Promise<{sizeBytes: number; sha256: string}>;
 };
 
@@ -44,7 +44,7 @@ export async function promoteVerifiedClinicalSlot(db: Store, port: FinalObjectPo
   const plan = Number.isSafeInteger(order) ? plans[order] : undefined;
   if (!plan) throw new Error('INVALID_FINAL_SLOT');
   try {
-    await port.copyIfAbsent(plan.item.path, plan.destination);
+    await port.copyIfAbsent(plan.item, plan.destination);
   } catch {
     // A lost acknowledgement or another worker may have created the final
     // object. Only byte verification can recover; never overwrite.
