@@ -49,7 +49,8 @@ COPY --chown=apiuser:nodejs interpreters-api/package.json interpreters-api/packa
 # not carry over. Check before npm ci can exhaust a small Easypanel host.
 COPY scripts/ci/assert-build-memory.mjs ./scripts/ci/assert-build-memory.mjs
 RUN node scripts/ci/assert-build-memory.mjs
-RUN npm ci --omit=dev && npm cache clean --force
+# Match the lockfile resolver and builder peer-dependency policy exactly.
+RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 
 # Copiar build y binarios generados de Prisma desde builder
 COPY --chown=apiuser:nodejs --from=builder /app/dist ./dist
