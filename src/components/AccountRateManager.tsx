@@ -58,7 +58,7 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
     if (!newAccountId || !newRateValue) { setFeedback({ kind: 'error', message: 'Selecciona una cuenta y una tarifa válida.' }); return; }
     const accountId = Number(newAccountId);
     const rate = Number(newRateValue);
-    if (!Number.isInteger(accountId) || !accounts.some(account => account.id === accountId) || !Number.isFinite(rate) || rate <= 0 || rate > 99999) {
+    if (!Number.isInteger(accountId) || !accounts.some(account => account.id === accountId) || !Number.isFinite(rate) || rate < 0.01 || rate > 99999) {
       setFeedback({ kind: 'error', message: 'Selecciona una cuenta válida y una tarifa entre 0.01 y 99,999 pesos por hora.' }); return;
     }
 
@@ -137,16 +137,16 @@ export function AccountRateManager({ interpreterId, initialRates }: Props) {
       </div>
       <div className="pt-4 border-t border-[var(--border)]">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
-          <select disabled={locked || loadFailed} aria-label="Cuenta para tarifa especial" value={newAccountId} onChange={e => setNewAccountId(e.target.value)} className="bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl px-3 py-2 text-sm text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)]">
+          <select disabled={locked || loadFailed} aria-label="Cuenta para tarifa especial" value={newAccountId} onChange={e => setNewAccountId(e.target.value)} className="min-h-11 min-w-0 w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl px-3 py-2 text-sm text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)]">
             <option value="">Seleccionar cuenta...</option>
             {accounts.map(acc => <option key={acc.id} value={acc.id}>{accountLabel(acc)}</option>)}
           </select>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] text-sm">RD$</span>
-            <input disabled={locked || loadFailed} aria-label="Tarifa por hora en pesos dominicanos" type="number" min="0.01" max="99999" step="0.01" placeholder="0.00/hr" value={newRateValue} onChange={e => setNewRateValue(e.target.value)} className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl pl-10 pr-3 py-2 text-sm text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)]" />
+            <input disabled={locked || loadFailed} aria-label="Tarifa por hora en pesos dominicanos" type="number" min="0.01" max="99999" step="0.01" placeholder="0.00/hr" value={newRateValue} onChange={e => setNewRateValue(e.target.value)} className="min-h-11 w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-xl pl-10 pr-3 py-2 text-sm text-[var(--theme-control-text)] focus:outline-none focus:border-[var(--theme-focus)]" />
           </div>
         </div>
-        <button type="button" onClick={handleAddRate} aria-busy={isPending} disabled={locked || loadFailed || !newAccountId || !newRateValue} className="w-full flex items-center justify-center gap-2 theme-action-primary py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+        <button type="button" onClick={handleAddRate} aria-busy={isPending} disabled={locked || loadFailed || !newAccountId || !newRateValue} className="w-full flex items-center justify-center gap-2 theme-action-primary min-h-11 py-2 rounded-xl text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed">
           {isPending ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
           {accounts.some(account => String(account.id) === newAccountId && rates.some(rate => rate.accountId === account.id)) ? "Actualizar tarifa" : "Asignar tarifa"}
         </button>
