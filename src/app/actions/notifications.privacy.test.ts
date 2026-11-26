@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   reconcileRecruitmentAdminNotifications: vi.fn(),
   reconcileCandidateNotifications: vi.fn(),
   reconcileInterpreterEvaluations: vi.fn(),
+  reconcileInterpreterPayments: vi.fn(),
   reconcileCommunications: vi.fn(),
   notificationCreate: vi.fn(),
   notificationCreateMany: vi.fn(),
@@ -17,6 +18,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/notifications/reconcile-communications', () => ({ reconcileCommunications: m.reconcileCommunications }));
+vi.mock('@/lib/notifications/reconcile-interpreter-payments', () => ({ reconcileInterpreterPayments: m.reconcileInterpreterPayments }));
 vi.mock('@/lib/notifications/reconcile-interpreter-evaluations', () => ({ reconcileInterpreterEvaluations: m.reconcileInterpreterEvaluations }));
 vi.mock('@/lib/notifications/reconcile-candidate', () => ({ reconcileCandidateNotifications: m.reconcileCandidateNotifications }));
 vi.mock('@/lib/notifications/reconcile-recruitment-admin', () => ({ reconcileRecruitmentAdminNotifications: m.reconcileRecruitmentAdminNotifications }));
@@ -353,11 +355,13 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     m.notificationCount.mockResolvedValue(0);
     expect(await getMyNotifications()).toEqual({ success: true, data: [], unreadCount: 0 });
     expect(m.reconcileInterpreterEvaluations).toHaveBeenCalledExactlyOnceWith(actor);
+    expect(m.reconcileInterpreterPayments).toHaveBeenCalledExactlyOnceWith(actor);
     for (const role of ['candidate', 'admin']) {
       m.validateAction.mockResolvedValueOnce({ user: { ...actor, role } });
       await getMyNotifications();
     }
     expect(m.reconcileInterpreterEvaluations).toHaveBeenCalledTimes(1);
+    expect(m.reconcileInterpreterPayments).toHaveBeenCalledTimes(1);
   });
   it('recovers communications only for authenticated operational actors', async () => {
     m.notificationFindMany.mockResolvedValue([]);
