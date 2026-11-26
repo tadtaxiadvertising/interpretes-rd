@@ -16,6 +16,7 @@ const { default: bcrypt } = await import('bcrypt');
 const nonce = randomUUID();
 const legacyEmail = 'legacy-' + nonce + '@example.test';
 const newEmail = 'new-' + nonce + '@example.test';
+const managedEmail = 'managed-' + nonce + '@example.test';
 const rejectedEmail = 'rejected-' + nonce + '@example.test';
 const password = 'Synthetic-Auth-Compatibility-2026!';
 let server;
@@ -30,9 +31,9 @@ try {
   server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const origin = 'http://127.0.0.1:' + server.address().port;
-  async function request(path, { body, token, status = 200 } = {}) {
+  async function request(path, { body, token, status = 200, method = body === undefined ? 'GET' : 'POST' } = {}) {
     const response = await fetch(origin + path, {
-      method: body === undefined ? 'GET' : 'POST',
+      method,
       headers: {
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: 'Bearer ' + token } : {}),
@@ -42,6 +43,7 @@ try {
       redirect: 'error',
     });
     assert.equal(response.status, status, path + ' unexpected HTTP status');
+    if (status === 204) return;
     return response.json();
   }
   const expectedBuild = process.env.EXPECTED_API_BUILD_SHA;
@@ -114,6 +116,33 @@ try {
   const admin = await request('/api/auth/login', { body: { email: newEmail, password } });
   assert.equal(admin.data.user.role, 'ADMIN');
   assert.equal((await request('/api/auth/me', { token: admin.data.token })).data.role, 'ADMIN');
+  // Exercise admin CRUD with the actual Prisma-generated identifier.
+  const managed = await request('/api/v1/users', {
+    token: admin.data.token, status: 201,
+    body: { email: managedEmail, password, name: 'Synthetic Managed' },
+  });
+  assert.equal(managed.data.role, 'INTERPRETER');
+  assert.ok(!Object.hasOwn(managed.data, 'password'));
+  const managedPath = '/api/v1/users/' + managed.data.id;
+  assert.equal((await request(managedPath, { token: admin.data.token })).data.id, managed.data.id);
+  await request(managedPath, { token: login.data.token, status: 401 });
+  const initialManaged = await prisma.rbacUser.findUniqueOrThrow({ where: { id: managed.data.id } });
+  for (const extra of [{ password: 'unhashed-value' }, { email: rejectedEmail }, { id: randomUUID() }, { createdAt: '2000-01-01T00:00:00Z' }]) {
+    await request(managedPath, {
+      method: 'PUT', token: admin.data.token, status: 400,
+      body: { name: 'Must Not Change', ...extra },
+    });
+  }
+  assert.deepEqual(await prisma.rbacUser.findUniqueOrThrow({ where: { id: managed.data.id } }), initialManaged);
+  const edited = await request(managedPath, {
+    method: 'PUT', token: admin.data.token, body: { name: 'Synthetic Updated', role: 'HOLDER' },
+  });
+  assert.equal(edited.data.name, 'Synthetic Updated');
+  assert.equal(edited.data.role, 'HOLDER');
+  assert.ok(!Object.hasOwn(edited.data, 'password'));
+  await request(managedPath, { method: 'DELETE', token: admin.data.token, status: 204 });
+  await request(managedPath, { token: admin.data.token, status: 404 });
+  console.log('API admin CRUD passed: CUID, default role, strict mutation allowlist and deletion.');
   const retired = await request(legacyProductionPath, { body: legacyProductionBody, token: admin.data.token, status: 410 });
   assert.equal(retired.code, 'LEGACY_PRODUCTION_ENTRY_DISABLED');
   // Even administrator requests with malformed input get the retired contract.
@@ -136,7 +165,7 @@ try {
     await new Promise(resolve => server.close(resolve));
   }
   try {
-    await prisma.rbacUser.deleteMany({ where: { email: { in: [legacyEmail, newEmail, rejectedEmail] } } });
+    await prisma.rbacUser.deleteMany({ where: { email: { in: [legacyEmail, newEmail, rejectedEmail, managedEmail] } } });
   } finally {
     await prisma.$disconnect();
   }
