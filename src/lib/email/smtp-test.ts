@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { environmentBudgetProvider } from './environment-budget-provider';
 import { reserveProviderQuota } from './provider-quota';
 import { spawn } from 'node:child_process';
 import { providerSource } from './provider-source';
@@ -150,9 +151,10 @@ export async function sendOperationalMailTest(): Promise<MailTestResult> {
   busy = true;
   nextTestAt = Date.now() + 60000;
   try {
-    if (result.provider === 'brevo' || result.provider === 'resend') {
+    const budgetProvider = environmentBudgetProvider(result.provider, result.provider === 'smtp' ? result.config.host : undefined);
+    if (budgetProvider) {
       try {
-        if (await reserveProviderQuota(prisma, result.provider) !== 'reserved') return 'local_quota_reached';
+        if (await reserveProviderQuota(prisma, budgetProvider) !== 'reserved') return 'local_quota_reached';
       } catch {
         return 'local_quota_unavailable';
       }
