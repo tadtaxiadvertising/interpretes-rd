@@ -7,6 +7,11 @@ on:
       - 'src/lib/roleplay/direct-upload-final-storage.ts'
       - 'src/lib/roleplay/direct-upload-signing.ts'
       - 'src/lib/roleplay/direct-upload-browser-http.ts'
+      - 'src/lib/roleplay/direct-upload-guarded-storage.pilot.test.ts'
+      - 'src/lib/roleplay/direct-upload-promote-slot.ts'
+      - 'src/lib/roleplay/direct-upload-audio-decoder.ts'
+      - 'docs/operations/staged-sql/roleplay-final-write-claims.sql'
+      - 'docs/operations/staged-sql/roleplay-upload-reservations.sql'
   workflow_dispatch:
 permissions:
   contents: read
@@ -34,6 +39,7 @@ jobs:
         with:
           version: '2.84.2'
       - name: Start fresh local Supabase only
+        id: local-start
         shell: bash
         run: |
           set -euo pipefail
@@ -53,6 +59,17 @@ jobs:
         shell: bash
         run: |
           ROLEPLAY_LOCAL_STATUS_FILE="$RUNNER_TEMP/roleplay-storage-pilot/status.json" npx tsx scripts/ci/verify-roleplay-storage-pilot.ts
+      # Raw provider race remains a failing diagnostic when its contract
+      # fails. Run the guarded service independently even in that case.
+      - name: Verify guarded writes with real Prisma and local Storage
+        if: ${{ always() && steps.local-start.outcome == 'success' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          export DIRECT_URL="$DATABASE_URL"
+          npx prisma generate
+          ROLEPLAY_LOCAL_STATUS_FILE="$RUNNER_TEMP/roleplay-storage-pilot/status.json" npx vitest run src/lib/roleplay/direct-upload-guarded-storage.pilot.test.ts
       - name: Stop disposable local stack
         if: always()
         shell: bash
