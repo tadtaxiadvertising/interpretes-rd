@@ -1,18 +1,10 @@
 import 'dotenv/config';
-import { z } from 'zod';
+import { parseApiRuntimeEnv } from './runtime-env-policy.js';
 
-const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
-  JWT_SECRET: z.string().min(8), // Relaxed for dev, though production should use 32+
-  JWT_EXPIRES_IN: z.string().default('8h'),
-  PORT: z.string().default('3000'),
-  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-});
-
-const env = envSchema.safeParse(process.env);
+const env = parseApiRuntimeEnv(process.env);
 
 if (!env.success) {
-  console.error('❌ Invalid environment variables:', env.error.format());
+  console.error('INVALID_API_RUNTIME_CONFIGURATION: ' + env.fields.join(', '));
   process.exit(1);
 }
 
