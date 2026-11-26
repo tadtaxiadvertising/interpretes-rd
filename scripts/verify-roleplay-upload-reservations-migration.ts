@@ -6,6 +6,7 @@ import { Client } from 'pg';
 import { classifyRoleplayReservationCatalog, readRoleplayReservationCatalog } from './roleplay-upload-reservation-schema-catalog';
 import { verifyFinalEvidencePostgres } from './verify-roleplay-final-evidence-postgres';
 import { readRoleplayStorageBudgetAudit } from './roleplay-storage-budget-audit';
+import { readRoleplayStorageRetentionReview } from './roleplay-storage-retention-review';
 
 // ONLY a fresh, disposable PostgreSQL database on the isolated CI service.
 // Never run against production, a shared DB or a remote hostname.
@@ -393,6 +394,33 @@ async function main(): Promise<void> {
         throw new Error('Storage aggregate audit misclassified synthetic fixtures');
     }finally{await first.query('ROLLBACK');}
     console.log('Read-only storage and budget inventory verified with synthetic metadata, orphan charges, unknown sizes and pre-budget reservations.');
+    // Only synthetic reference columns, in the disposable database.
+    if((await readRoleplayStorageRetentionReview(first)).state!=='schema-unavailable')
+      throw new Error('Retention review accepted missing reference tables');
+    await first.query(`
+      CREATE TABLE public.roleplay_sessions(base_audio_url text,base_audio_path text,recorded_audio_url text);
+      CREATE TABLE public.roleplay_scenarios(base_audio_url text);
+      CREATE TABLE public.roleplay_responses(source_audio_url text,source_audio_path text,processed_audio_url text,processed_audio_path text);
+    `);
+    const referenced=randomUUID(),missingId=randomUUID();
+    await first.query('INSERT INTO public.roleplay_scenarios VALUES($1)',['private-base/'+referenced+'/0.mp3']);
+    await first.query(`INSERT INTO storage.objects(bucket_id,name,metadata) SELECT 'roleplay-audio-private',p,'{"size":3}'::jsonb FROM unnest($1::text[]) AS p`,[[
+      'base/'+referenced+'/0.mp3',
+      'base/'+claimParent.id+'/0.mp3',
+      'base/'+missingId+'/0.mp3',
+      'base/'+winnerId+'/0.mp3',
+    ]]);
+    await first.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try{
+      const review=await readRoleplayStorageRetentionReview(first);
+      const n=(category:string)=>review.categories.find(r=>r.category===category)?.objects;
+      if(review.state!=='review-only'||review.deletionAuthorized!==false||review.refundAuthorized!==false||
+         n('referenced')!=='1'||n('pending-write-claim')!=='1'||n('missing-reservation')!=='1'||
+         n('published')!=='1'||n('unrecognized-path')!=='2')
+        throw new Error('Retention review misclassified synthetic metadata');
+    }finally{await first.query('ROLLBACK');}
+    console.log('Retention review verified: referenced, published, unresolved claim, missing reservation and unknown paths are never deletion authorizations.');
+
 
 
   } finally {
