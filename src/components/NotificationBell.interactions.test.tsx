@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 const m = vi.hoisted(() => ({ markNotificationAsRead: vi.fn(), getMyNotifications: vi.fn(), markAllNotificationsAsRead: vi.fn() }));
 vi.mock('@/app/actions/notifications', () => m);
@@ -261,5 +261,33 @@ describe('NotificationBell interactions', () => {
     expect(screen.getByText('Leída')).toBeTruthy();
     fireEvent.click(triggers[1]);
     expect(triggers[0].getAttribute('aria-controls')).not.toBe(triggers[1].getAttribute('aria-controls'));
+  });
+  it('shows the full initial unread total before the first refresh completes', () => {
+    m.getMyNotifications.mockReturnValue(new Promise(() => {}));
+    render(<NotificationBell initialNotifications={notifications} initialUnreadCount={42} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    expect(screen.getByText('42 sin leer')).toBeTruthy();
+    expect(m.getMyNotifications).toHaveBeenCalledTimes(1);
+  });
+
+  it('distinguishes an unavailable initial total from zero', () => {
+    m.getMyNotifications.mockReturnValue(new Promise(() => {}));
+    render(<NotificationBell initialNotifications={[]} initialUnreadCount={null} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    expect(screen.getByText('Total sin comprobar')).toBeTruthy();
+  });
+
+  it('does not overlap refreshes across opening, closing, focus and a new layout snapshot', async () => {
+    let finish!: (value: unknown) => void;
+    m.getMyNotifications.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+    const { rerender } = render(<NotificationBell initialNotifications={notifications} />);
+    const trigger = screen.getByRole('button', { name: 'Notificaciones' });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar', exact: true }));
+    fireEvent(window, new Event('focus'));
+    rerender(<NotificationBell initialNotifications={[...notifications]} />);
+    expect(m.getMyNotifications).toHaveBeenCalledTimes(1);
+    await act(async () => { finish({ success: true, data: [], unreadCount: 0 }); });
+    await waitFor(() => expect(m.getMyNotifications).toHaveBeenCalledTimes(2));
   });
 });
