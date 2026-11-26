@@ -7,9 +7,11 @@ import { getAdminRoleplayAudioExtension } from './admin-audio-extension';
 import { requirePrivateRoleplayAudioBucket } from './private-audio-bucket-readiness';
 import { openReservedStorageObject, verifyReservedStorageObject } from './direct-upload-storage-verifier';
 import type { FinalObjectPort } from './direct-upload-promote-slot';
+import { observeReservedObject } from './direct-upload-observe-object';
 
 type Storage = Pick<Parameters<typeof openReservedStorageObject>[0], 'getBucket'> & {
   from(bucket: string): ReturnType<Parameters<typeof openReservedStorageObject>[0]['from']> & {
+    exists(path: string): Promise<{ data: boolean; error: unknown }>;
     upload(path: string, body: Uint8Array, options: { upsert: false; contentType: string; cacheControl: string }): Promise<{ data: { path: string } | null; error: unknown }>;
   };
 };
@@ -41,6 +43,9 @@ export function createFinalClinicalStoragePort(storage: Storage, projectUrl: str
       if (busy || requestSignal?.aborted) throw new Error('FINAL_STORAGE_UNAVAILABLE');
       busy = true;
       try {
+        // A previously consolidated object may be reused, but only the
+        // caller's independent destination verification can authorize it.
+        if (await observeReservedObject(storage,destination)) return;
         const {stream,signal} = await openReservedStorageObject(storage,projectUrl,item,requestSignal);
         const buffer = new Uint8Array(item.sizeBytes);
         const reader = stream.getReader();
