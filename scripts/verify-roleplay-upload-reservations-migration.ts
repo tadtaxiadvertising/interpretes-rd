@@ -310,6 +310,33 @@ async function main(): Promise<void> {
     const stalePublish = await first.query(publish, [expired.id, expired.actor, ['ci-expired-session']]);
     if (stalePublish.rowCount !== 0) throw new Error('Expired batch was published.');
     await verifyFinalEvidencePostgres(first, second);
+    await first.query(await readFile(resolve(process.cwd(),'docs/operations/staged-sql/roleplay-final-write-claims.sql'),'utf8'));
+    const claimParent=row({status:'VERIFIED',evidence:verified});
+    claimParent.items=[{...clip[0],path:'staging/roleplay/'+claimParent.id+'/0.mp3'}];
+    claimParent.evidence=[{...verified[0],path:(claimParent.items as typeof clip)[0].path,verifiedAtMs:claimParent.created.getTime()}];
+    await first.query(insertSql,values(claimParent));
+    const claimSql=`INSERT INTO public.roleplay_final_write_claims
+      (reservation_id,slot_order,actor_user_id,request_key,reference,size_bytes,sha256)
+      VALUES($1::uuid,0,$2,$3::uuid,$4,3,$5)
+      ON CONFLICT (reservation_id,slot_order) DO NOTHING RETURNING slot_order`;
+    const claimParams=[claimParent.id,claimParent.actor,claimParent.key,'private-base/'+claimParent.id+'/0.mp3','a'.repeat(64)];
+    const claims=await Promise.all([first.query(claimSql,claimParams),second.query(claimSql,claimParams)]);
+    if(claims.filter(result=>result.rowCount===1).length!==1 || claims.filter(result=>result.rowCount===0).length!==1)
+      throw new Error('Final write claim admitted two writers');
+    if((await first.query(claimSql,claimParams)).rowCount!==0) throw new Error('Final write claim was recycled');
+    for(const statement of [
+      'DELETE FROM public.roleplay_final_write_claims WHERE reservation_id=$1::uuid',
+      'UPDATE public.roleplay_final_write_claims SET size_bytes=4 WHERE reservation_id=$1::uuid',
+    ]){
+      let code:unknown;
+      try{await first.query(statement,[claimParent.id]);}catch(error){code=(error as {code?:string})?.code;}
+      if(code!=='23514') throw new Error('Final write claim was mutable');
+    }
+    await first.query('DELETE FROM public.roleplay_upload_reservations WHERE id=$1::uuid',[claimParent.id]);
+    const retained=await first.query('SELECT 1 FROM public.roleplay_final_write_claims WHERE reservation_id=$1::uuid',[claimParent.id]);
+    if(retained.rowCount!==1) throw new Error('Final write claim was lost with reservation');
+    console.log('Durable final write claim verified: concurrent admission, no replay writes, immutable claim, retained tombstone.');
+
     // Install the optional quota layer only after the baseline fixtures.
     await first.query(await readFile(resolve(process.cwd(),'docs/operations/staged-sql/roleplay-direct-upload-budget.sql'),'utf8'));
     await first.query('BEGIN');
