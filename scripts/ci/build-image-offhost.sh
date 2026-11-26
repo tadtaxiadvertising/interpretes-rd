@@ -37,8 +37,18 @@ esac
 # verifies the selected main SHA has not been superseded.
 node scripts/ci/verify-offhost-release-gate.mjs
 
+# Verify the actual source tree's commit before attaching provenance.
+if [[ "$(git rev-parse HEAD)" != "${GITHUB_SHA,,}" ]]; then
+  echo "::error::Checked-out commit does not match the approved SHA."
+  exit 78
+fi
+# Distinguish separate builds of the same source, including rerun attempts.
+if [[ ! "${GITHUB_RUN_ID:-}" =~ ^[1-9][0-9]*$ || ! "${GITHUB_RUN_ATTEMPT:-}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "::error::Missing valid build run identity."
+  exit 78
+fi
 repo="${GITHUB_REPOSITORY,,}"
-image="ghcr.io/${repo}-${component}:sha-${GITHUB_SHA,,}"
+image="ghcr.io/${repo}-${component}:sha-${GITHUB_SHA,,}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}"
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   printf 'OFFHOST_IMAGE=%s\n' "$image" >> "$GITHUB_ENV"
 fi
