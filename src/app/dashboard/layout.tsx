@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth';
 import { getResolvedIdentity } from '@/lib/auth/actions';
 import { resolveDestination } from '@/lib/identity/resolve-user';
 import { getCurrentProfile } from '@/app/actions/auth';
+import { loadNavbarUnreadCount } from '@/lib/notifications/load-navbar-unread-count';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 import HeartbeatProvider from "@/components/HeartbeatProvider";
@@ -44,7 +45,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Match the trusted recipient IDs used by markNotificationAsRead.
   // Auth.js account UUIDs may differ from their linked profile UUIDs.
   const recipientIds = authorizedNotificationRecipientIds(userId, profile?.id);
-  const notifications = await loadNavbarNotifications(recipientIds);
+  const [notifications, notificationUnreadCount] = await Promise.all([
+    loadNavbarNotifications(recipientIds), loadNavbarUnreadCount(recipientIds),
+  ]);
 
   // Ranking removed from layout - will be fetched client-side or via API
   // This eliminates the N+1 query problem that caused build timeouts
@@ -59,6 +62,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
         interpreterId={profile?.interpreter_id}
         userEmail={profile?.email || ''}
         notifications={notifications}
+        notificationUnreadCount={notificationUnreadCount}
         notificationPreferenceScope={notificationPreferenceScope(userId, 'interpreter')}
         ranking={ranking}
       >
