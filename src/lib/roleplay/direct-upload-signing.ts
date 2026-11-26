@@ -34,14 +34,20 @@ export async function reserveAndSignDirectUpload(db: Store, storage: Storage, ac
         const stored = row.items as unknown as Array<Record<string, unknown>>;
         return !stored[i] || Object.entries(item).some(([key, value]) => stored[i][key] !== value);
       })) throw new Error('DIRECT_UPLOAD_RESERVATION_INVALID');
-  // Require a committed exact charge before issuing any capabilities.
+  // Commit irreversible signing intent before the first provider call.
+  // A lost response, partial signing or failed network call is never refundable.
   // Missing migration, missing charge, or inconsistent budget fails closed.
   const charges = await db.$queryRaw<{slots:number}[]>`
-    SELECT c.slots FROM public.roleplay_direct_upload_budget_charges c
-      JOIN public.roleplay_direct_upload_budget b ON b.singleton=true
-    WHERE c.reservation_id=${row.id}::uuid AND c.actor_user_id=${actorUserId}
-      AND c.request_key=${requestKey}::uuid
+    UPDATE public.roleplay_direct_upload_budget_charges c SET capability_state='SIGNING_STARTED'
+    FROM public.roleplay_direct_upload_budget b,public.roleplay_upload_reservations r
+    WHERE b.singleton=true AND r.id=c.reservation_id AND c.reservation_id=${row.id}::uuid
+      AND c.actor_user_id=${actorUserId} AND c.request_key=${requestKey}::uuid
+      AND r.actor_user_id=c.actor_user_id AND r.request_key=c.request_key
+      AND r.status='RESERVED' AND r.expires_at>clock_timestamp()
+      AND r.declaration_hash=${row.declarationHash} AND c.slots=${canonical.items.length}::integer
+      AND c.capability_state='UNISSUED'
       AND b.allocated_slots>=c.slots AND b.allocated_slots<=b.max_slots
+    RETURNING c.slots
   `;
   if(charges.length!==1 || charges[0].slots!==canonical.items.length)
     throw new Error('DIRECT_UPLOAD_BUDGET_UNAVAILABLE');
