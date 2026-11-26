@@ -1,13 +1,13 @@
 import prisma from '@/lib/prisma';
 import { publicNotificationCategory } from './notification-display';
-import { safeNotificationLink } from './safe-notification-link';
+import { notificationDestination } from './notification-destination';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 /**
  * Expose only presentation fields and sanitized public categories/links.
  * Never serialize recipient IDs or internal metadata.
  */
-export async function loadNavbarNotifications(userIds: readonly string[], options: { throwOnError?: boolean; candidateOnly?: boolean } = {}) {
+export async function loadNavbarNotifications(userIds: readonly string[], options: { throwOnError?: boolean; candidateOnly?: boolean; role?: string } = {}) {
   if (userIds.length === 0) return [];
 
   try {
@@ -26,7 +26,7 @@ export async function loadNavbarNotifications(userIds: readonly string[], option
       orderBy: [{ createdAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       take: 10,
     });
-    return rows.map(row => ({ ...row, category: publicNotificationCategory(row.category), link: safeNotificationLink(row.link) }));
+    return rows.map(row => ({ ...row, category: publicNotificationCategory(row.category), link: notificationDestination(row.link, options.candidateOnly ? 'candidate' : options.role, row.category) }));
   } catch (error) {
     // Database errors may contain private recipients, credentials or DSNs.
     // The notification bell is optional; do not interrupt dashboard loading.
