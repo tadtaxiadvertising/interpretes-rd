@@ -22,8 +22,17 @@ export function assessOffhostApproval({ expectedSha, branchSha, workflowRuns, to
     return { ok: false, code: 'MAIN_MOVED' };
   }
   if (!Array.isArray(workflowRuns) || !Number.isInteger(totalCount) ||
-      totalCount < 0 || totalCount > 100 || workflowRuns.length > 100) {
+      totalCount < 0 || totalCount > 100 || workflowRuns.length !== totalCount) {
     return { ok: false, code: 'INCOMPLETE_EVIDENCE' };
+  }
+  // Incomplete or malformed API evidence cannot authorize a release.
+  const ids = new Set();
+  for (const run of workflowRuns) {
+    if (!run || typeof run !== 'object' || !Number.isSafeInteger(run.id) || run.id <= 0 ||
+        ids.has(run.id) || typeof run.head_sha !== 'string' || !shaPattern.test(run.head_sha)) {
+      return { ok: false, code: 'INCOMPLETE_EVIDENCE' };
+    }
+    ids.add(run.id);
   }
   for (const path of REQUIRED_WORKFLOWS) {
     const candidates = workflowRuns.filter(run =>
