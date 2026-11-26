@@ -101,5 +101,16 @@ jobs:
         run: |
           set -euo pipefail
           : "${OFFHOST_IMAGE:?Missing image reference from previous build}"
-          docker push "$OFFHOST_IMAGE"
-          echo 'GHCR image published; no deployment, webhook, or VPS connection was attempted.'
+          push_log="$(mktemp)"
+          trap 'rm -f "$push_log"' EXIT
+          if ! docker push "$OFFHOST_IMAGE" > "$push_log" 2>&1; then
+            echo '::error::Registry publication not confirmed. Inspect the existing registry entry before any retry.'
+            exit 1
+          fi
+          remote_digest="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$OFFHOST_IMAGE")"
+          verified_ref="$(node scripts/ci/verify-published-image-digest.mjs "$OFFHOST_IMAGE" "$push_log" "$remote_digest")"
+          {
+            echo '## Verified registry image (not deployed)'
+            printf 'Immutable content reference: %s\n' "$verified_ref"
+            echo 'No deployment or VPS connection was attempted.'
+          } >> "$GITHUB_STEP_SUMMARY"
