@@ -30,6 +30,7 @@ export async function verifyRoleplayUploadByteStream(
   stream: ReadableStream<Uint8Array>,
   expected: Pick<PreparedRoleplayUpload, 'sizeBytes' | 'sha256'>,
   signal?: AbortSignal,
+  consumeChunk?: (chunk: Uint8Array) => Promise<void>,
 ): Promise<{ sizeBytes: number; sha256: string }> {
   if (!expected || !Number.isSafeInteger(expected.sizeBytes) ||
       expected.sizeBytes < 1 || expected.sizeBytes > ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES ||
@@ -67,6 +68,8 @@ export async function verifyRoleplayUploadByteStream(
       }
       sizeBytes += value.byteLength;
       hash.update(value);
+      if (consumeChunk) await consumeChunk(value);
+      if (signal?.aborted) throw new RoleplayUploadVerificationError('CANCELLED');
     }
 
     if (sizeBytes !== expected.sizeBytes) {
