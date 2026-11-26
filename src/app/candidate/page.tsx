@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { NotificationBell } from '@/components/NotificationBell';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
+import { loadNavbarUnreadCount } from '@/lib/notifications/load-navbar-unread-count';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
@@ -159,7 +160,9 @@ export default async function CandidatePortalPage() {
 
   const preferenceScope = notificationPreferenceScope(identity.userId, 'candidate');
   const recipientIds = authorizedNotificationRecipientIds(identity.userId, identity.profileId);
-  const notifications = await loadNavbarNotifications(recipientIds, { candidateOnly: true });
+  const [notifications, notificationUnreadCount] = await Promise.all([
+    loadNavbarNotifications(recipientIds, { candidateOnly: true }), loadNavbarUnreadCount(recipientIds, true),
+  ]);
   const showEmailBinding = identity.provider === 'supabase' && process.env.OPERATIONAL_EMAIL_BINDING_ENABLED === 'true';
   const mailboxState = showEmailBinding ? await getCandidateMailboxState() : 'unavailable';
 
@@ -175,7 +178,7 @@ export default async function CandidatePortalPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ThemeSwitcher />
-            {recipientIds.length > 0 && <NotificationBell key={preferenceScope} initialNotifications={notifications} preferenceScope={preferenceScope} candidateOnly /> }
+            {recipientIds.length > 0 && <NotificationBell key={preferenceScope} initialNotifications={notifications} initialUnreadCount={notificationUnreadCount} preferenceScope={preferenceScope} candidateOnly /> }
             <Link href="/postular" className="rounded-xl bg-[#002d72] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#1554a8] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
               Continuar mi postulación
             </Link>
