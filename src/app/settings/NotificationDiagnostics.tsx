@@ -147,10 +147,10 @@ export default function NotificationDiagnostics() {
   }
 
   return (
-    <section aria-labelledby="notification-diagnostics-heading" className="glass rounded-3xl border border-[var(--border)] p-6 space-y-4">
+    <section aria-labelledby="notification-diagnostics-heading" className="glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
       <div className="flex items-center gap-3">
         <Bell className="shrink-0 text-[var(--theme-link)]" aria-hidden="true" />
-        <h2 id="notification-diagnostics-heading" className="text-lg font-semibold text-[var(--foreground)]">Diagnóstico de notificaciones</h2>
+        <h3 id="notification-diagnostics-heading" className="text-lg font-semibold text-[var(--foreground)]">Diagnóstico de notificaciones</h3>
       </div>
       <p className="text-sm text-[var(--text-secondary)]">Consulta una muestra de los registros más recientes sin modificar datos ni leer conversaciones privadas.</p>
       <button type="button" onClick={check} disabled={busy || repairing} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] hover:bg-[var(--theme-hover)] disabled:opacity-60">
@@ -161,7 +161,7 @@ export default function NotificationDiagnostics() {
       {repairStatus && <p role="status" aria-live="polite" className="text-sm text-[var(--foreground)]">{repairStatus}</p>}
       {report && (
         <>
-          <p className="text-xs text-[var(--text-secondary)]">Consulta: {new Date(report.checkedAt).toLocaleString('es-DO')}. Hasta {report.sampleLimit} registros de cada tipo.</p>
+          <p className="text-xs text-[var(--text-secondary)]">Consulta: {new Date(report.checkedAt).toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' })}. Hasta {report.sampleLimit} registros de cada tipo.</p>
           {(report.messagesTruncated || report.noticesTruncated) && <p className="text-sm text-[var(--theme-warning)]">Hay más registros fuera de la muestra.</p>}
           <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] px-3">
             {METRICS.map(([key, label]) => (
@@ -173,7 +173,7 @@ export default function NotificationDiagnostics() {
           </dl>
           {report.missingMessageNotices > 0 && (
             <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
-              <h3 className="font-semibold text-[var(--foreground)]">Reparar avisos de mensajería</h3>
+              <h4 className="font-semibold text-[var(--foreground)]">Reparar avisos de mensajería</h4>
               <p className="text-sm text-[var(--text-secondary)]">Se recalculará la muestra y se crearán hasta 50 avisos internos faltantes de mensajes elegibles de las últimas 24 horas. No se enviarán correos, modificarán conversaciones ni sobrescribirán avisos existentes.</p>
               <label className="flex min-h-11 items-start gap-2 text-sm text-[var(--foreground)]">
                 <input type="checkbox" checked={confirmRepair} disabled={repairing || busy} onChange={event => setConfirmRepair(event.target.checked)} className="mt-1" />
@@ -184,7 +184,7 @@ export default function NotificationDiagnostics() {
               </button>
             </div>
           )}
-          <h3 className="font-semibold text-[var(--foreground)]">Entregas internas por módulo</h3>
+          <h4 className="font-semibold text-[var(--foreground)]">Entregas internas por módulo</h4>
           {operational ? (
             <>
               <p className="text-xs text-[var(--text-secondary)]">Últimas 24 horas; hasta {operational.sampleLimit} registros por origen y {operational.adminSampled} de un máximo de {operational.adminLimit} perfiles administrativos. Cada destinatario cuenta como una entrega.</p>
@@ -201,7 +201,7 @@ export default function NotificationDiagnostics() {
               </dl>
               {operational.modules.some(item => item.missing > 0) && (
                 <div className="space-y-3 rounded-xl border border-[var(--border)] p-4">
-                  <h3 className="font-semibold text-[var(--foreground)]">Reparar avisos por módulo</h3>
+                  <h4 className="font-semibold text-[var(--foreground)]">Reparar avisos por módulo</h4>
                   <p className="text-sm text-[var(--text-secondary)]">Selecciona un módulo. Se comprobarán de nuevo los registros y se crearán hasta 50 avisos internos elegibles. No se modificarán evaluaciones, expedientes, trabajos de audio ni avisos existentes.</p>
                   <label className="block space-y-1 text-sm text-[var(--foreground)]">
                     <span>Módulo que deseas reparar</span>

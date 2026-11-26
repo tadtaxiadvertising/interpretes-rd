@@ -30,8 +30,8 @@ export default function NotificationEmailBudget() {
   }
 
   return (
-    <section aria-labelledby="notification-email-budget" className="glass rounded-3xl border border-[var(--border)] p-6 space-y-4 text-[var(--foreground)]">
-      <h2 id="notification-email-budget" className="font-semibold">Presupuesto de correo operativo</h2>
+    <section aria-labelledby="notification-email-budget" className="glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0 text-[var(--foreground)]">
+      <h3 id="notification-email-budget" className="font-semibold">Presupuesto de correo operativo</h3>
       <p className="text-sm text-[var(--text-secondary)]">Consulta los intentos disponibles según el presupuesto local. No activa el despacho ni comprueba las credenciales del proveedor.</p>
       <button type="button" disabled={busy} onClick={check} className="min-h-11 rounded-xl border border-[var(--theme-control-border)] px-4 py-2 text-sm font-semibold hover:bg-[var(--theme-hover)] disabled:opacity-60">
         {busy ? 'Consultando…' : 'Consultar presupuesto local'}
@@ -70,7 +70,7 @@ export default function NotificationEmailBudget() {
         </>
       )}
       <p className="text-xs leading-relaxed text-[var(--text-secondary)]">El saldo local no confirma la cuota gratuita del proveedor, el plan contratado ni la entrega al buzón. No incluye envíos externos, históricos anteriores a la protección, SMTP genérico ni de autenticación. Los intentos inciertos no se reembolsan automáticamente.</p>
-      <a href="#email-settings-heading" className="inline-block min-h-11 py-2 text-sm font-medium text-[var(--theme-link)] underline">Ir a configuración de proveedores de correo</a>
+      <a href="#settings-providers" className="inline-block min-h-11 py-2 text-sm font-medium text-[var(--theme-link)] underline">Ir a configuración de proveedores de correo</a>
     </section>
   );
 }
