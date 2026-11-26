@@ -318,6 +318,7 @@ jobs:
           set -euo pipefail
           docker run --rm -i --network none --entrypoint node interpreters-api:ci --input-type=module <<'JS'
           import assert from 'node:assert/strict';
+          import { existsSync, readFileSync } from 'node:fs';
           import bcrypt from 'bcrypt';
           import express from 'express';
           import { z } from 'zod';
@@ -339,6 +340,20 @@ jobs:
           assert.equal(typeof PrismaClient, 'function');
           assert.equal(typeof PrismaPg, 'function');
           assert.equal(process.getuid(), 1001, 'API must run as non-root');
+          // Check the actual final filesystem, not just npm audit's lockfile.
+          const lock = JSON.parse(readFileSync('/app/package-lock.json', 'utf8'));
+          const prismaEntries = Object.entries(lock.packages)
+            .filter(([path]) => path.startsWith('node_modules/@prisma/'));
+          const devOnly = prismaEntries.filter(([, metadata]) => metadata.dev === true);
+          assert.ok(devOnly.length > 0, 'Expected Prisma development entries in lockfile');
+          for (const [path] of devOnly) {
+            assert.equal(existsSync('/app/' + path), false, 'Unexpected development package: ' + path);
+          }
+          for (const path of ['@prisma/client', '@prisma/adapter-pg']) {
+            assert.ok(existsSync('/app/node_modules/' + path + '/package.json'), 'Missing runtime dependency: ' + path);
+          }
+          assert.ok(existsSync('/app/node_modules/.prisma/client'), 'Missing generated Prisma client');
+          console.log('API runtime filesystem passed: ' + devOnly.length + ' Prisma dev-only package paths absent.');
           console.log('API native password compatibility and runtime imports passed.');
           JS
 
