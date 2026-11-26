@@ -9,7 +9,7 @@ const availabilityText: Readonly<Record<string, string | undefined>> = { availab
 
 const storageText = {
   ready: 'Registro instalado y permisos del servidor comprobados.',
-  not_installed: 'Falta la instalación del registro presupuestario. Los envíos API protegidos no pueden reservar intentos.',
+  not_installed: 'Falta la instalación del registro presupuestario. Los envíos de proveedores protegidos no pueden reservar intentos.',
   permission_mismatch: 'Revisa los permisos y el aislamiento del registro con el administrador de la base de datos. No concedas acceso a los roles públicos de la API.',
   unavailable: 'No se pudo comprobar el registro presupuestario.',
 } as const;
@@ -48,8 +48,8 @@ export default function NotificationEmailBudget() {
           <div><dt className="font-medium">Origen del transporte</dt><dd>{report.source === 'vault' ? 'Almacén de proveedores' : report.source === 'environment' ? 'Variables de entorno' : 'Configuración no válida'}</dd></div>
           <div><dt className="font-medium">Controles de correo</dt><dd>Correo {report.emailEnabled ? 'habilitado' : 'desactivado'} · despacho {report.dispatchEnabled ? 'habilitado' : 'desactivado'} · modo {report.mode === 'pilot' ? 'piloto' : report.mode === 'general' ? 'general' : 'desactivado'}</dd></div>
           <div><dt className="font-medium">Registro presupuestario</dt><dd>{storageText[report.storage]}</dd></div>
-          {report.activeApiProvider && <div><dt className="font-medium">Proveedor API seleccionado en entorno</dt><dd>{providerCatalog[report.activeApiProvider].label} (selección configurada, no conexión verificada)</dd></div>}
-          <div><dt className="font-medium">Cobertura de presupuesto</dt><dd>{report.source === 'vault' && report.vaultEnabled ? 'El despacho mediante el perfil del almacén reserva intentos locales; actualmente limitado al piloto.' : report.source === 'environment' ? 'El despacho de reclutamiento y las pruebas de Brevo y Resend por variables de entorno requieren reservar un intento local. SMTP genérico no está cubierto por estos contadores.' : 'El origen del transporte no está disponible o el almacén está desactivado. Estos saldos no confirman que se pueda enviar correo.'}</dd></div>
+          {report.activeEnvironmentProvider && <div><dt className="font-medium">Proveedor identificado en entorno</dt><dd>{providerCatalog[report.activeEnvironmentProvider].label} (selección configurada, no conexión verificada)</dd></div>}
+          <div><dt className="font-medium">Cobertura de presupuesto</dt><dd>{report.source === 'vault' && report.vaultEnabled ? 'El despacho mediante el perfil del almacén reserva intentos locales; actualmente limitado al piloto.' : report.source === 'environment' ? 'El despacho de reclutamiento y las pruebas de proveedores API o SMTP identificados requieren reservar un intento local. Los servidores SMTP no reconocidos quedan fuera de estos contadores.' : 'El origen del transporte no está disponible o el almacén está desactivado. Estos saldos no confirman que se pueda enviar correo.'}</dd></div>
         </dl>
       )}
       {report?.status === 'ready' && (
@@ -58,13 +58,13 @@ export default function NotificationEmailBudget() {
           <dl className="divide-y divide-[var(--border)] rounded-xl border border-[var(--border)] px-3">
             {report.providers.map(({ provider, availability }) => (
               <div key={provider} className="py-3 text-sm space-y-1">
-                <dt className="font-semibold">{providerCatalog[provider].label}{report.activeApiProvider === provider ? ' · seleccionado en entorno' : ''}</dt>
+                <dt className="font-semibold">{providerCatalog[provider].label}{report.activeEnvironmentProvider === provider ? ' · seleccionado en entorno' : ''}</dt>
                 <dd>{availability ? `${(Object.prototype.hasOwnProperty.call(availabilityText, availability.status) ? availabilityText[availability.status] : undefined) ?? 'Estado no reconocido'} · quedan ${availability.remaining} intentos en el límite más restrictivo` : 'Presupuesto no comprobado o período inválido'}</dd>
                 {availability && <dd className="text-[var(--text-secondary)]">Diario: {availability.dailyRemaining} · mensual: {availability.monthlyRemaining}</dd>}
               </div>
             ))}
           </dl>
-          {report.activeApiProvider && report.providers.some(item => item.provider === report.activeApiProvider && (!item.availability || item.availability.status === 'exhausted' || item.availability.status === 'low')) && (
+          {report.activeEnvironmentProvider && report.providers.some(item => item.provider === report.activeEnvironmentProvider && (!item.availability || item.availability.status === 'exhausted' || item.availability.status === 'low')) && (
             <p className="text-sm text-[var(--foreground)]">El presupuesto del proveedor seleccionado requiere atención. Consulta los perfiles verificados y las alternativas en el centro de proveedores. Un saldo positivo por sí solo no permite cambiar de proveedor.</p>
           )}
         </>
