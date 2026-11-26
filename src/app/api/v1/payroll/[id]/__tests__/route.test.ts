@@ -87,6 +87,13 @@ describe('private admin payroll record endpoints', () => {
     expect(prisma.payrollRecord.findUnique).not.toHaveBeenCalled();
   });
 
+  it('rejects unknown mutation fields without silently returning success', async () => {
+    const res = await PATCH(patchRequest({ unknownField: 'value' }), context);
+    expect(res.status).toBe(400);
+    expect(prisma.payrollRecord.findUnique).not.toHaveBeenCalled();
+    expect(prisma.payrollRecord.update).not.toHaveBeenCalled();
+  });
+
   it('keeps empty PATCH read-only and private', async () => {
     const res = await PATCH(patchRequest({}), context);
     expect(res.status).toBe(200);
