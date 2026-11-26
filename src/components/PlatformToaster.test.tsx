@@ -4,8 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toast } from 'react-hot-toast';
 import PlatformToaster from './PlatformToaster';
 
-beforeEach(() => { toast.remove(); });
-afterEach(() => { cleanup(); toast.remove(); vi.restoreAllMocks(); });
+beforeEach(() => {
+  vi.stubGlobal('matchMedia', vi.fn((query: string) => ({ matches: false, media: query, onchange: null, addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn() })));
+  toast.remove();
+});
+afterEach(() => { cleanup(); toast.remove(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe('platform feedback', () => {
   it('renders feedback in a single responsive container and dismisses only the selected notice', async () => {
