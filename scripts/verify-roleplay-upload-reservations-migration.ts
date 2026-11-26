@@ -310,6 +310,38 @@ async function main(): Promise<void> {
     const stalePublish = await first.query(publish, [expired.id, expired.actor, ['ci-expired-session']]);
     if (stalePublish.rowCount !== 0) throw new Error('Expired batch was published.');
     await verifyFinalEvidencePostgres(first, second);
+    // Install the optional quota layer only after the baseline fixtures.
+    await first.query(await readFile(resolve(process.cwd(),'docs/operations/staged-sql/roleplay-direct-upload-budget.sql'),'utf8'));
+    await first.query('BEGIN');
+    await expectRejected(first,row(),['23514']);
+    await first.query('ROLLBACK');
+    await first.query('UPDATE public.roleplay_direct_upload_budget SET max_slots=2 WHERE singleton=true');
+    const quotaCandidates=[row(),row(),row()];
+    const quotaRace=await Promise.allSettled([
+      first.query(insertSql,values(quotaCandidates[0])),
+      second.query(insertSql,values(quotaCandidates[1])),
+    ]);
+    if(quotaRace.some(result=>result.status!=='fulfilled')) throw new Error('Quota rejected available capacity');
+    await first.query('BEGIN');
+    await expectRejected(first,quotaCandidates[2],['23514']);
+    await expectRejected(first,quotaCandidates[0],['23505']);
+    await first.query('ROLLBACK');
+    const allocated=await first.query<{allocated_slots:number;charges:number}>(`
+      SELECT allocated_slots,(SELECT count(*)::int FROM public.roleplay_direct_upload_budget_charges) AS charges
+      FROM public.roleplay_direct_upload_budget WHERE singleton=true
+    `);
+    if(allocated.rows[0]?.allocated_slots!==2 || allocated.rows[0]?.charges!==2) throw new Error('Quota accounting mismatch');
+    await first.query('DELETE FROM public.roleplay_upload_reservations WHERE id=$1::uuid',[quotaCandidates[0].id]);
+    await first.query('BEGIN');
+    await expectRejected(first,quotaCandidates[2],['23514']);
+    await first.query('ROLLBACK');
+    // With one slot left, two independent processes must not both win.
+    await first.query('UPDATE public.roleplay_direct_upload_budget SET max_slots=3 WHERE singleton=true');
+    const last=await Promise.allSettled([first.query(insertSql,values(row())),second.query(insertSql,values(row()))]);
+    if(last.filter(result=>result.status==='fulfilled').length!==1 ||
+       last.some(result=>result.status==='rejected' && result.reason?.code!=='23514')) throw new Error('Quota race overspent');
+    console.log('Persistent upload quota: zero by default, duplicate rollback, no delete refund and concurrent admission verified.');
+
   } finally {
     await Promise.allSettled([first?.end(), second?.end()]);
     if (created && connected) {
