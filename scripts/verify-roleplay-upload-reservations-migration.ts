@@ -420,6 +420,48 @@ async function main(): Promise<void> {
         throw new Error('Retention review misclassified synthetic metadata');
     }finally{await first.query('ROLLBACK');}
     console.log('Retention review verified: referenced, published, unresolved claim, missing reservation and unknown paths are never deletion authorizations.');
+    await first.query(await readFile(resolve(process.cwd(),'docs/operations/staged-sql/roleplay-unused-upload-capacity.sql'),'utf8'));
+    await first.query('UPDATE public.roleplay_direct_upload_budget SET max_slots=5 WHERE singleton=true');
+    const unused=row(),started=row();
+    await first.query(insertSql,values(unused));
+    await first.query(insertSql,values(started));
+    const startSigning=`UPDATE public.roleplay_direct_upload_budget_charges c SET capability_state='SIGNING_STARTED'
+      FROM public.roleplay_upload_reservations r WHERE r.id=c.reservation_id AND r.status='RESERVED'
+        AND r.expires_at>clock_timestamp() AND c.capability_state='UNISSUED' AND c.reservation_id=$1::uuid RETURNING c.slots`;
+    if((await first.query(startSigning,[started.id])).rowCount!==1) throw new Error('Signing intent not acquired');
+    if((await second.query(startSigning,[started.id])).rowCount!==0) throw new Error('Signing intent recycled');
+    const expire=async(id:string)=>first.query(`UPDATE public.roleplay_upload_reservations
+      SET created_at=clock_timestamp()-interval '46 minutes',expires_at=clock_timestamp()-interval '17 minutes' WHERE id=$1::uuid`,[id]);
+    await expire(unused.id);await expire(started.id);
+    const release=(client:Client,id:string)=>client.query<{released:number}>('SELECT public.release_never_signed_roleplay_capacity($1::uuid) AS released',[id]);
+    if((await release(first,unused.id)).rows[0]?.released!==0) throw new Error('Disabled release changed capacity');
+    await first.query('UPDATE public.roleplay_direct_upload_budget SET unused_release_enabled=true WHERE singleton=true');
+    if((await release(first,started.id)).rows[0]?.released!==0) throw new Error('Started signing charge was refunded');
+    await expire(quotaCandidates[1].id);
+    if((await release(first,quotaCandidates[1].id)).rows[0]?.released!==0) throw new Error('Untracked historical charge was refunded');
+    const releaseRace=await Promise.all([release(first,unused.id),release(second,unused.id)]);
+    if(releaseRace.map(r=>r.rows[0]?.released).sort().join(',')!=='0,1') throw new Error('Unused capacity release was not exactly once');
+    if((await first.query(startSigning,[unused.id])).rowCount!==0) throw new Error('Released charge could sign');
+    const restored=await first.query<{allocated_slots:number;capability_state:string;status:string}>(`
+      SELECT b.allocated_slots,c.capability_state,r.status FROM public.roleplay_direct_upload_budget b
+      CROSS JOIN public.roleplay_direct_upload_budget_charges c JOIN public.roleplay_upload_reservations r ON r.id=c.reservation_id
+      WHERE b.singleton=true AND c.reservation_id=$1::uuid`,[unused.id]);
+    if(restored.rows[0]?.allocated_slots!==4||restored.rows[0]?.capability_state!=='RELEASED'||restored.rows[0]?.status!=='CANCELLED')
+      throw new Error('Release accounting or tombstone mismatch');
+    const observed=row();
+    await first.query(insertSql,values(observed));
+    await expire(observed.id);
+    await first.query('INSERT INTO storage.objects VALUES($1,$2,$3::jsonb)',['roleplay-audio-private','staging/roleplay/'+observed.id+'/0.mp3','{"size":3}']);
+    if((await release(first,observed.id)).rows[0]?.released!==0) throw new Error('Observed object capacity was refunded');
+    await first.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try{
+      const report=await readRoleplayStorageBudgetAudit(first);
+      if(!('releasedSlots' in report.budget)||report.budget.releasedSlots!==1||report.budget.releasedCharges!==1||
+        report.budget.allocatedSlots!==5||report.budget.chargedSlots!==5||report.budget.signingStartedCharges!==1)
+        throw new Error('Audit omitted released tombstone');
+    }finally{await first.query('ROLLBACK');}
+    console.log('Unused capacity verified: disabled default, irreversible signing intent, retained historical charges, exactly-once release and observed object protection.');
+
 
 
 
