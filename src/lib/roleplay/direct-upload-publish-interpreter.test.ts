@@ -19,7 +19,7 @@ function fixture() {
     declarationHash:fingerprintRoleplayDirectUploadDeclarations([item]),createdAt,expiresAt:new Date(createdAt.getTime()+30*60_000)};
   const findUnique = vi.fn().mockResolvedValue(row);
   const updateMany = vi.fn().mockResolvedValue({count:1});
-  const query = vi.fn().mockImplementation(async (sql:TemplateStringsArray,...values:unknown[]) =>
+  const query = vi.fn().mockImplementation(async (sql:TemplateStringsArray,...values:unknown[]):Promise<unknown[]> =>
     sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{id:values[0],updatedAt:new Date()}] : sql.join('').includes('SELECT requires_bilingual_opening') ? [{required:true}] : []);
   const update = vi.fn().mockResolvedValue({});
   const findFirst = vi.fn().mockResolvedValue(null);
