@@ -21,7 +21,7 @@ export async function requireAdminNotificationContext() {
 
   const recipientIds = authorizedNotificationRecipientIds(actor.userId, actor.profileId);
   const [notifications, notificationUnreadCount] = await Promise.all([
-    loadNavbarNotifications(recipientIds), loadNavbarUnreadCount(recipientIds),
+    loadNavbarNotifications(recipientIds, { role: 'admin' }), loadNavbarUnreadCount(recipientIds),
   ]);
   return {
     userName: profile.display_name || 'Administrador',
