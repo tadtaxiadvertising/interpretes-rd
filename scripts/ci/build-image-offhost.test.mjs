@@ -64,3 +64,10 @@ test('frontend image configuration uses public build variables and fails closed 
   assert.doesNotMatch(workflow, /secrets\.NEXT_PUBLIC_/);
   assert.match(workflow, /vars\.RELEASE_NEXT_PUBLIC_API_URL/);
 });
+
+test('off-host image identity includes checked-out SHA and unique workflow attempt', () => {
+  assert.ok(script.indexOf('git rev-parse HEAD') < script.indexOf('docker build'));
+  assert.ok(script.includes('git rev-parse HEAD'));
+  assert.ok(script.includes('sha-${GITHUB_SHA,,}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}'));
+  assert.ok(script.includes('Missing valid build run identity.'));
+});
