@@ -40,3 +40,7 @@ La propuesta `safety/fail-fast-low-memory-easypanel-builds-20261120` añade una 
 **La solución preferida a largo plazo no es elevar el heap o forzar la compilación local:** construir en un runner externo con recursos suficientes, publicar imágenes inmutables y después hacer que Easypanel **solo descargue** la imagen aprobada, con límites de CPU/RAM, rollback y comprobación SHA de ejecución. Configurar esto requiere revisar los registros, el acceso al registry y los servicios de Easypanel cuando vuelva a estar disponible. No activar un pipeline de entrega ni un cambio de Dockerfile en `main` mientras pueda existir un Auto Deploy externo.
 
 Estos controles no son un mecanismo de recuperación del SSH ni sustituyen la revisión de memoria, disco, swap, logs y procesos en el VPS.
+
+## Identidad de compilaciones externas
+
+Cada intento de compilación utiliza una etiqueta `sha-<commit>-run-<id>-attempt-<número>`. Una reconstrucción del mismo commit no reutiliza la etiqueta de un intento anterior. La etiqueta no es una garantía de inmutabilidad del registry; antes de una futura publicación aprobada, registrar y verificar el digest del manifiesto y usar la referencia por digest para la descarga y el rollback. El control de aprobación vuelve a consultar la rama principal después de leer las validaciones; esto reduce la ventana de carrera, pero no constituye un bloqueo transaccional de GitHub. No autoriza descongelar producción.
