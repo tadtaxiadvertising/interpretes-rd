@@ -2,6 +2,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { createFinalClinicalStoragePort } from './direct-upload-final-storage';
 vi.mock('server-only', () => ({}));
+vi.mock('./direct-upload-audio-decoder',async()=>{
+  const {verifyRoleplayUploadByteStream}=await import('./direct-upload-stream-verifier');
+  return {verifyDecodedClinicalAudio:vi.fn((stream,item,signal)=>verifyRoleplayUploadByteStream(stream,item,signal))};
+});
+import { verifyDecodedClinicalAudio } from './direct-upload-audio-decoder';
 const origin = 'https://project.supabase.co';
 const batch = '123e4567-e89b-42d3-a456-426614174000';
 const bytes = new Uint8Array([1,2,3,4]);
@@ -30,6 +35,7 @@ describe('final clinical Storage adapter',()=>{
     expect(f.storage.from.mock.calls).toEqual([['roleplay-audio-private'],['roleplay-audio-private'],['roleplay-audio-private']]);
     expect(await f.port.verify({...item,path:destination})).toEqual({sizeBytes:4,sha256:item.sha256});
     expect(f.sign).toHaveBeenLastCalledWith(destination,120);
+    expect(verifyDecodedClinicalAudio).toHaveBeenCalledWith(expect.anything(),{...item,path:destination},expect.any(AbortSignal),undefined);
   });
   it('refuses cross-batch destinations, malformed paths and oversized declarations before network access',async()=>{
     const f=fixture();
