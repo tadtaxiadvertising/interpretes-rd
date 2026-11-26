@@ -13,7 +13,7 @@ function fixture(){
     declarationHash:fingerprintRoleplayDirectUploadDeclarations(items),
     verifiedObjects:items.map(item=>({order:item.order,path:item.path,sizeBytes:item.sizeBytes,sha256:item.sha256,verifiedAtMs:createdAt.getTime()})),
     createdAt,expiresAt:new Date(createdAt.getTime()+30*60_000)};
-  const evidence:Array<{order:number;reference:string;sizeBytes:number;sha256:string;verifiedAt:Date}>=[];
+  const evidence:Array<{order:number;reference:string;sizeBytes:number;sha256:string;verifiedAt:Date;claimValid:boolean}>=[];
   const findUnique=vi.fn().mockResolvedValue(row);
   const claims=new Set<number>();
   const query=vi.fn(async(sql:TemplateStringsArray,...values:unknown[])=>{
@@ -27,7 +27,7 @@ function fixture(){
     if(statement.includes('FOR UPDATE')) return [{id}];
     if(statement.includes('INSERT INTO public.roleplay_final_upload_evidence')){
       const [order,reference,sizeBytes,sha256,verifiedAt]=values as [number,string,number,string,Date];
-      evidence.push({order,reference,sizeBytes,sha256,verifiedAt});
+      evidence.push({order,reference,sizeBytes,sha256,verifiedAt,claimValid:claims.has(order)});
       return [{order}];
     }
     if(statement.includes('FROM public.roleplay_final_upload_evidence')) return evidence.slice();
@@ -69,9 +69,15 @@ describe('incremental final consolidation',()=>{
     expect(f.port.copyIfAbsent).toHaveBeenCalledTimes(1);
     expect(f.transaction).not.toHaveBeenCalled();
   });
+  it('refuses old evidence without a durable write claim',async()=>{
+    const f=fixture();
+    f.evidence.push({order:0,reference:'private-base/'+id+'/0.mp3',sizeBytes:100,sha256:items[0].sha256,verifiedAt:new Date(),claimValid:false});
+    await expect(consolidateDirectUploadSlot(f.db,f.port,'admin',key,0)).rejects.toThrow('FINAL_EVIDENCE_INVALID');
+    expect(f.port.copyIfAbsent).not.toHaveBeenCalled();
+  });
   it('rejects tampered historical evidence before reuse',async()=>{
     const f=fixture();
-    f.evidence.push({order:0,reference:'private-base/foreign/0.mp3',sizeBytes:100,sha256:items[0].sha256,verifiedAt:new Date()});
+    f.evidence.push({order:0,reference:'private-base/foreign/0.mp3',sizeBytes:100,sha256:items[0].sha256,verifiedAt:new Date(),claimValid:true});
     await expect(consolidateDirectUploadSlot(f.db,f.port,'admin',key,0)).rejects.toThrow('FINAL_EVIDENCE_INVALID');
     expect(f.port.copyIfAbsent).not.toHaveBeenCalled();
   });
