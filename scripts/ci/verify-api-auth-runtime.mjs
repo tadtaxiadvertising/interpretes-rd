@@ -13,6 +13,7 @@ if (process.env.CI !== 'true' || process.env.API_AUTH_SMOKE !== 'true' ||
 const { default: app } = await import('./dist/app.js');
 const { prisma } = await import('./dist/lib/prisma.js');
 const { default: bcrypt } = await import('bcrypt');
+const { default: jwt } = await import('jsonwebtoken');
 const nonce = randomUUID();
 const legacyEmail = 'legacy-' + nonce + '@example.test';
 const newEmail = 'new-' + nonce + '@example.test';
@@ -182,9 +183,30 @@ try {
   await request('/api/v1/users', { token: admin.data.token, status: 401 });
   await request(legacyProductionPath, { body: legacyProductionBody, token: admin.data.token, status: 401 });
   console.log('Legacy Express production writer denied for anonymous, regular, admin and stale tokens.');
+  // A role restored to its original value must not resurrect the old token.
+  await request('/api/auth/me', { token: login.data.token, status: 401 });
   const renewed = await request('/api/auth/login', { body: { email: newEmail, password } });
   await request('/api/v1/users', { token: renewed.data.token, status: 403 });
+  const session = await request('/api/auth/me', { token: renewed.data.token });
+  assert.ok(!Object.hasOwn(session.data, 'password'));
+  assert.ok(!Object.hasOwn(session.data, 'revision'));
+  const oldRow = await prisma.rbacUser.findUniqueOrThrow({ where: { id: registered.data.id } });
+  const replacement = 'Synthetic-Rotated-Password-2026!';
+  // Even a password replacement preserving updatedAt invalidates the token.
+  await prisma.rbacUser.update({
+    where: { id: registered.data.id },
+    data: { password: await bcrypt.hash(replacement, 10), updatedAt: oldRow.updatedAt },
+  });
+  await request('/api/auth/me', { token: renewed.data.token, status: 401 });
+  await request('/api/auth/login', { body: { email: newEmail, password }, status: 401 });
+  const rotated = await request('/api/auth/login', { body: { email: newEmail, password: replacement } });
+  assert.equal((await request('/api/auth/me', { token: rotated.data.token })).data.id, registered.data.id);
+  const oldFormat = jwt.sign({ id: registered.data.id, email: newEmail, role: 'INTERPRETER' },
+    expectedSecret, { expiresIn: '8h' });
+  await request('/api/auth/me', { token: oldFormat, status: 401 });
   await prisma.rbacUser.delete({ where: { id: registered.data.id } });
+  await request('/api/auth/me', { token: rotated.data.token, status: 401 });
+  console.log('API session revision checks passed: role restoration, password rotation and old-format token rejection.');
   await request('/api/auth/me', { token: renewed.data.token, status: 401 });
   await request('/api/v1/users', { token: admin.data.token, status: 401 });
   console.log('API live RBAC token checks passed: promotion, demotion and account deletion.');
