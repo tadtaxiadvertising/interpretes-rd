@@ -6,6 +6,7 @@ import { AppError } from '../../lib/AppError.js';
 import type { LoginInput, RegisterInput } from './auth.schemas.js';
 import { PUBLIC_REGISTRATION_ROLE } from './auth.schemas.js';
 import { newBcryptPasswordSchema } from '../../lib/password-policy.js';
+import { sessionRevision } from '../../lib/session-revision.js';
 
 /**
  * AUTH SERVICE — Business Logic
@@ -23,6 +24,7 @@ const LOGIN_SELECT = {
   id: true,
   email: true,
   password: true,
+  updatedAt: true,
   name: true,
   role: true,
 } as const;
@@ -61,6 +63,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: user.role,
+        revision: sessionRevision(user, ENV.JWT_SECRET),
       },
       ENV.JWT_SECRET,
       { expiresIn: ENV.JWT_EXPIRES_IN as any }
