@@ -933,3 +933,51 @@ html[data-theme="light"] .theme-postular .recruitment-funnel button[class~="disa
   background-color: #e2e8f0;
   color: #43546d;
 }
+
+
+/* Notifications: shared presentation for all three portals, including the
+   candidate portal outside .theme-workspace. Read state also has a text label. */
+.notification-panel {
+  color: var(--foreground);
+  background-color: var(--theme-panel);
+}
+.notification-panel :is(button, a, input, select):focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}
+.notification-panel .notification-item {
+  border-inline-start: 3px solid transparent;
+}
+.notification-panel .notification-item[data-unread="true"] {
+  border-inline-start-color: var(--theme-link);
+  background-color: var(--theme-surface-muted);
+}
+.notification-panel .notification-item:hover {
+  background-color: var(--theme-hover);
+}
+.notification-panel .notification-filter[aria-pressed="true"] {
+  color: var(--foreground);
+  background-color: var(--theme-surface-muted);
+  border-color: var(--theme-link);
+  font-weight: 700;
+}
+.notification-panel .notification-filter[aria-pressed="false"] {
+  color: var(--text-secondary);
+  border-color: var(--theme-control-border);
+}
+.notification-panel input[type="checkbox"] {
+  accent-color: var(--theme-action-primary);
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+.notification-panel input:is([type="date"], [type="search"]), .notification-panel select {
+  color: var(--theme-control-text);
+  background-color: var(--theme-control-bg);
+  border-color: var(--theme-control-border);
+}
+.notification-panel .notification-dates {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+}
