@@ -342,6 +342,19 @@ jobs:
           console.log('API native password compatibility and runtime imports passed.');
           JS
 
+      # Reuse the disposable PostgreSQL service and the actual built API image.
+      # Host networking lets the container use loopback without changing TLS policy.
+      - name: Verify API HTTP authentication on isolated PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          timeout 90s docker run --rm --network host \
+            -e CI=true -e API_AUTH_SMOKE=true \
+            -e DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e \
+            -e JWT_SECRET=synthetic-api-auth-ci-only-not-production-2026 \
+            -v "$PWD/scripts/ci/verify-api-auth-runtime.mjs:/app/verify-api-auth-runtime.mjs:ro" \
+            --entrypoint node interpreters-api:ci /app/verify-api-auth-runtime.mjs
+
       - name: Build dedicated Roleplay audio worker image
         run: docker build --file Dockerfile.worker --tag roleplay-audio-worker:ci .
 
