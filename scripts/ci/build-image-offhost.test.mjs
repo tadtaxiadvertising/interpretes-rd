@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
+import { verifiedImageReference } from './verify-published-image-digest.mjs';
 
 const workflow = readFileSync('.github/workflows/prepare-offhost-image.yml', 'utf8');
 const script = readFileSync('scripts/ci/build-image-offhost.sh', 'utf8');
@@ -70,4 +71,23 @@ test('off-host image identity includes checked-out SHA and unique workflow attem
   assert.ok(script.includes('git rev-parse HEAD'));
   assert.ok(script.includes('sha-${GITHUB_SHA,,}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}'));
   assert.ok(script.includes('Missing valid build run identity.'));
+});
+
+test('registry digest evidence matches exactly one push receipt and the inspected manifest', () => {
+  const tag = 'sha-' + 'a'.repeat(40) + '-run-123-attempt-1';
+  const repo = 'ghcr.io/test/example-api';
+  const image = repo + ':' + tag;
+  const digest = 'sha256:' + 'b'.repeat(64);
+  const receipt = tag + ': digest: ' + digest + ' size: 1234';
+  assert.equal(verifiedImageReference(image, 'layer: Pushed\n' + receipt + '\n', digest), repo + '@' + digest);
+  for (const [ref, log, remote] of [
+    [image, receipt, 'sha256:' + 'c'.repeat(64)],
+    [image, receipt + '\n' + receipt, digest],
+    [image, 'latest: digest: ' + digest + ' size: 1234', digest],
+    [image, '', digest],
+    [repo + ':latest', receipt, digest],
+    [image, receipt, 'unverified'],
+  ]) assert.throws(() => verifiedImageReference(ref, log, remote));
+  assert.match(workflow, /docker buildx imagetools inspect/);
+  assert.match(workflow, /verify-published-image-digest\.mjs/);
 });
