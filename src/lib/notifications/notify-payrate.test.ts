@@ -30,4 +30,8 @@ describe('finance rate notices', () => {
       expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_PASSWORD');
     } finally { warn.mockRestore(); }
   });
+  it('uses a distinct event identity for an explicitly removed special-rate row', async () => {
+    await notifyPayrateChange({ interpreterId: 7, rateId: 42, kind: 'removed' });
+    expect(m.publish).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ userId: id, eventKey: 'finance.payrate.removed:42', title: 'Tarifa especial eliminada', link: '/dashboard/earnings' }));
+  });
 });
