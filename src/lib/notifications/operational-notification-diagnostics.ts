@@ -7,22 +7,23 @@ import { candidateNotificationEvent } from './notify-candidate';
 import { qaEvaluationEvent, roleplayEvaluationEvent } from './evaluation-notification-events';
 import { roleplayAssignmentEvent } from './communication-notification-events';
 import { audioFailureEventRow } from './notify-audio-job-failures';
+import { isRecentRecordedPayment, payrollMilestoneEvent } from './payroll-notification-events';
 import { ROLEPLAY_PASS_THRESHOLD } from '@/lib/roleplay/scoring';
 
 const LIMIT = 50;
 const ADMIN_LIMIT = 20;
 const WINDOW_MS = 86_400_000;
 type Row = ReturnType<typeof notificationEventRow>;
-export const operationalNotificationModules = ['recruitmentAdmin', 'candidate', 'qa', 'roleplayEvaluation', 'roleplayAssignment', 'audio'] as const;
+export const operationalNotificationModules = ['recruitmentAdmin', 'candidate', 'qa', 'roleplayEvaluation', 'roleplayAssignment', 'audio', 'financePayment'] as const;
 export type OperationalNotificationModule = typeof operationalNotificationModules[number];
 type Module = OperationalNotificationModule;
 const MODULES = operationalNotificationModules;
-type Reader = Pick<Prisma.TransactionClient, 'userProfile' | 'recruitmentApplication' | 'qAScore' | 'roleplaySession' | 'roleplayAudioJob' | 'notification'>;
+type Reader = Pick<Prisma.TransactionClient, 'userProfile' | 'recruitmentApplication' | 'qAScore' | 'roleplaySession' | 'roleplayAudioJob' | 'payrollRecord' | 'notification'>;
 
 /** Internal shared projection. Never return these rows directly to a client. */
 export async function collectOperationalNotificationRows(db: Reader, now: Date) {
   const recent = { gte: new Date(now.getTime() - WINDOW_MS), lte: now };
-  const [admins, applications, scores, assignments, jobs] = await Promise.all([
+  const [admins, applications, scores, assignments, jobs, payments] = await Promise.all([
     db.userProfile.findMany({ where: { role: { equals: 'admin', mode: 'insensitive' } }, select: { id: true }, orderBy: { id: 'asc' }, take: ADMIN_LIMIT + 1 }),
     db.recruitmentApplication.findMany({
       where: { OR: [{ status: 'APPLIED', createdAt: recent }, { lastActivityAt: recent }] },
@@ -49,13 +50,19 @@ export async function collectOperationalNotificationRows(db: Reader, now: Date) 
       where: { status: 'FAILED', updatedAt: recent }, select: { id: true, updatedAt: true },
       orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }], take: LIMIT + 1,
     }),
+    db.payrollRecord.findMany({
+      where: { interpreterId: { not: null }, status: { in: ['Paid', 'PAID'] }, paidAt: recent },
+      select: { id: true, interpreterId: true, status: true, paidAt: true },
+      orderBy: [{ paidAt: 'desc' }, { id: 'desc' }], take: LIMIT + 1,
+    }),
   ]);
+  const paymentSample = payments.slice(0, LIMIT).filter(record => isRecentRecordedPayment(record, now));
   const appSample = applications.slice(0, LIMIT);
   const scoreSample = scores.slice(0, LIMIT);
   const assignmentSample = assignments.slice(0, LIMIT);
   const adminSample = admins.slice(0, ADMIN_LIMIT);
   const emails = [...new Set(appSample.map(app => app.candidate.email))];
-  const interpreterIds = [...new Set([...scoreSample, ...assignmentSample].flatMap(item => item.interpreterId === null ? [] : [item.interpreterId]))];
+  const interpreterIds = [...new Set([...scoreSample, ...assignmentSample, ...paymentSample].flatMap(item => item.interpreterId === null ? [] : [item.interpreterId]))];
   const profiles = emails.length || interpreterIds.length ? await db.userProfile.findMany({
     where: { OR: [{ email: { in: emails } }, { interpreterId: { in: interpreterIds } }] },
     select: { id: true, role: true, email: true, interpreterId: true },
@@ -100,13 +107,17 @@ export async function collectOperationalNotificationRows(db: Reader, now: Date) 
     const recipient = assignment.interpreterId === null ? undefined : interpreterById.get(assignment.interpreterId);
     if (recipient) add('roleplayAssignment', notificationEventRow(roleplayAssignmentEvent(recipient, assignment.id)));
   }
+  for (const payment of paymentSample) {
+    const recipient = payment.interpreterId === null ? undefined : interpreterById.get(payment.interpreterId);
+    if (recipient && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(recipient)) add('financePayment', notificationEventRow(payrollMilestoneEvent(recipient, payment.id, 'paid')));
+  }
   for (const job of jobs.slice(0, LIMIT)) {
     for (const admin of adminSample) add('audio', audioFailureEventRow(admin.id, { id: job.id, failedAt: job.updatedAt }));
   }
 
   return {
     expected, adminSampled: adminSample.length, adminLimit: ADMIN_LIMIT, sampleLimit: LIMIT,
-    truncated: admins.length > ADMIN_LIMIT || [applications, scores, assignments, jobs].some(items => items.length > LIMIT),
+    truncated: admins.length > ADMIN_LIMIT || [applications, scores, assignments, jobs, payments].some(items => items.length > LIMIT),
   };
 }
 
