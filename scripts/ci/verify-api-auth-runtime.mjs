@@ -82,6 +82,12 @@ try {
   });
   // A regular account cannot list administrator-only user records.
   await request('/api/v1/users', { token: login.data.token, status: 403 });
+  // Legacy Express writer must never reach a production mutation.
+  const legacyProductionPath = '/api/v1/production/manual-entry';
+  const legacyProductionBody = { interpreterId: 2147483647, date: '2026-01-01', interpreted_minutes: 1 };
+  await request(legacyProductionPath, { body: legacyProductionBody, status: 401 });
+  await request(legacyProductionPath, { body: legacyProductionBody, token: 'invalid-token', status: 401 });
+  await request(legacyProductionPath, { body: legacyProductionBody, token: login.data.token, status: 403 });
   // Changing permissions must not silently upgrade an existing token.
   await prisma.rbacUser.update({ where: { id: registered.data.id }, data: { role: 'ADMIN' } });
   await request('/api/auth/me', { token: login.data.token, status: 401 });
@@ -89,9 +95,15 @@ try {
   const admin = await request('/api/auth/login', { body: { email: newEmail, password } });
   assert.equal(admin.data.user.role, 'ADMIN');
   assert.equal((await request('/api/auth/me', { token: admin.data.token })).data.role, 'ADMIN');
+  const retired = await request(legacyProductionPath, { body: legacyProductionBody, token: admin.data.token, status: 410 });
+  assert.equal(retired.code, 'LEGACY_PRODUCTION_ENTRY_DISABLED');
+  // Even administrator requests with malformed input get the retired contract.
+  await request(legacyProductionPath, { body: {}, token: admin.data.token, status: 410 });
   // Demotion invalidates an administrator token before protected routes execute.
   await prisma.rbacUser.update({ where: { id: registered.data.id }, data: { role: 'INTERPRETER' } });
   await request('/api/v1/users', { token: admin.data.token, status: 401 });
+  await request(legacyProductionPath, { body: legacyProductionBody, token: admin.data.token, status: 401 });
+  console.log('Legacy Express production writer denied for anonymous, regular, admin and stale tokens.');
   const renewed = await request('/api/auth/login', { body: { email: newEmail, password } });
   await request('/api/v1/users', { token: renewed.data.token, status: 403 });
   await prisma.rbacUser.delete({ where: { id: registered.data.id } });
