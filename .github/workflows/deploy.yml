@@ -48,6 +48,16 @@ jobs:
       E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/interpreters_e2e
       E2E_START_SERVER: 'true'
     steps:
+      - name: Report production deployment freeze
+        run: |
+          {
+            echo '## Production deployment frozen'
+            echo 'This pipeline validates code only. Frontend, API and worker deployment jobs are disabled in the workflow source.'
+            echo 'A successful validation is not a release or runtime SHA attestation.'
+            echo 'External Easypanel Auto Deploy and Vercel integrations are outside this freeze.'
+            echo 'Recovery checklist: docs/operations/easypanel-incident-freeze.md'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Checkout code
         uses: actions/checkout@v4
 
