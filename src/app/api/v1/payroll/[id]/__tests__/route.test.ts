@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
   default: {
-    payrollRecord: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    payrollRecord: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
+    $transaction: vi.fn(),
   },
 }));
 vi.mock('@/lib/api-auth', () => ({ guardApiAuth: vi.fn() }));
@@ -27,7 +28,8 @@ describe('private admin payroll record endpoints', () => {
       id: 'pay-7', netTotal: 125, interpreter: { name: 'Private Worker' },
     } as never);
     vi.mocked(prisma.payrollRecord.update).mockResolvedValue({ id: 'pay-7', status: 'PAID' } as never);
-    vi.mocked(prisma.payrollRecord.delete).mockResolvedValue({ id: 'pay-7' } as never);
+    vi.mocked(prisma.payrollRecord.deleteMany).mockResolvedValue({ count: 1 });
+    vi.mocked(prisma.$transaction).mockImplementation(async callback => callback(prisma as never) as never);
   });
 
   it('does not query payroll data for a denied session and returns private 403', async () => {
@@ -76,22 +78,59 @@ describe('private admin payroll record endpoints', () => {
     expect(prisma.payrollRecord.update).not.toHaveBeenCalled();
   });
 
-  it('keeps valid updates private without changing Prisma write semantics', async () => {
-    const res = await PATCH(patchRequest({ status: 'PAID' }), context);
+  it.each([{ status: 'PAID' }, { status: 'APPROVED' }, { status: 'REJECTED' }, { grossTotal: 100 }, { interpreterId: 8 }, { netTotal: 10 }])('requires the explicit workflow for generic mutations %j', async body => {
+    const res = await PATCH(patchRequest(body), context);
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ success: false, code: 'PAYROLL_WORKFLOW_REQUIRED' });
+    expect(res.headers.get('Cache-Control')).toBe('private, no-store');
+    expect(prisma.payrollRecord.update).not.toHaveBeenCalled();
+    expect(prisma.payrollRecord.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown mutation fields without silently returning success', async () => {
+    const res = await PATCH(patchRequest({ unknownField: 'value' }), context);
+    expect(res.status).toBe(400);
+    expect(prisma.payrollRecord.findUnique).not.toHaveBeenCalled();
+    expect(prisma.payrollRecord.update).not.toHaveBeenCalled();
+  });
+
+  it('keeps empty PATCH read-only and private', async () => {
+    const res = await PATCH(patchRequest({}), context);
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(prisma.payrollRecord.update).toHaveBeenCalledWith({
-      where: { id: 'pay-7' }, data: { status: 'PAID' },
-    });
+    expect(prisma.payrollRecord.findUnique).toHaveBeenCalledExactlyOnceWith({ where: { id: 'pay-7' } });
+    expect(prisma.payrollRecord.update).not.toHaveBeenCalled();
+  });
+
+  it('deletes only a draft with no payment or linked ledger records', async () => {
+    expect((await DELETE(deleteRequest(), context)).status).toBe(200);
+    expect(prisma.payrollRecord.deleteMany).toHaveBeenCalledExactlyOnceWith({ where: {
+      id: 'pay-7', status: 'Draft', paidAt: null, paymentDate: null,
+      transactionReference: null, reconciliationHash: null,
+      productionLogs: { none: {} }, callSessions: { none: {} },
+    } });
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+    expect(prisma.payrollRecord.delete).not.toHaveBeenCalled();
+  });
+
+  it('preserves a protected payroll and reports serialization conflicts', async () => {
+    vi.mocked(prisma.payrollRecord.deleteMany).mockResolvedValueOnce({ count: 0 });
+    const response = await DELETE(deleteRequest(), context);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'PAYROLL_PROTECTED' });
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce({ code: 'P2034' });
+    expect((await DELETE(deleteRequest(), context)).status).toBe(409);
+    expect(prisma.payrollRecord.delete).not.toHaveBeenCalled();
   });
 
   it('preserves not-found handling and redacts unexpected delete errors', async () => {
-    vi.mocked(prisma.payrollRecord.delete).mockRejectedValueOnce({ code: 'P2025' });
+    vi.mocked(prisma.payrollRecord.deleteMany).mockResolvedValueOnce({ count: 0 });
+    vi.mocked(prisma.payrollRecord.findUnique).mockResolvedValueOnce(null);
     const missing = await DELETE(deleteRequest(), context);
     expect(missing.status).toBe(404);
     expect(missing.headers.get('Cache-Control')).toBe('private, no-store');
 
-    vi.mocked(prisma.payrollRecord.delete).mockRejectedValueOnce(new Error('PRIVATE_DELETE_SECRET'));
+    vi.mocked(prisma.payrollRecord.deleteMany).mockRejectedValueOnce(new Error('PRIVATE_DELETE_SECRET'));
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const res = await DELETE(deleteRequest(), context);
