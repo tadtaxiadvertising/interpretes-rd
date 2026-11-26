@@ -3,6 +3,7 @@ import { PayrollPaySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { notifyPayrollMilestone } from '@/lib/notifications/notify-payroll';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 
 export async function PATCH(request: Request) {
@@ -46,6 +47,7 @@ export async function PATCH(request: Request) {
       );
     }
 
+    await notifyPayrollMilestone(payrollRecordId, 'paid');
     const updatedPayroll = await prisma.payrollRecord.findUnique({
       where: { id: payrollRecordId },
     });
