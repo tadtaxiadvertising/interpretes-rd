@@ -11,6 +11,9 @@ import { z } from 'zod';
  * ============================================================
  */
 
+// Prisma generates CUIDs; preserve UUID compatibility for imported identities.
+const userIdSchema = z.union([z.cuid(), z.uuid()], { error: 'Invalid user ID format' });
+
 // ── CREATE USER ───────────────────────────────────────────
 export const createUserSchema = z.object({
   body: z.object({
@@ -21,7 +24,7 @@ export const createUserSchema = z.object({
       .max(128, 'Password must be at most 128 characters'),
     name: z.string().min(1, 'Name is required').max(100, 'Name too long'),
     role: z.enum(['ADMIN', 'INTERPRETER', 'HOLDER']).default('INTERPRETER'),
-  }),
+  }).strict(),
 });
 
 // ── UPDATE USER ───────────────────────────────────────────
@@ -29,16 +32,16 @@ export const updateUserSchema = z.object({
   body: z.object({
     name: z.string().min(1).max(100).optional(),
     role: z.enum(['ADMIN', 'INTERPRETER', 'HOLDER']).optional(),
-  }),
+  }).strict(),
   params: z.object({
-    id: z.string().uuid('Invalid user ID format'),
+    id: userIdSchema,
   }),
 });
 
 // ── GET USER BY ID (params only) ──────────────────────────
 export const getUserByIdSchema = z.object({
   params: z.object({
-    id: z.string().uuid('Invalid user ID format'),
+    id: userIdSchema,
   }),
 });
 
