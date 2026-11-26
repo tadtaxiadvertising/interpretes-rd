@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { readFileSync } from 'node:fs';
 import cors from 'cors';
 import authRoutes from './modules/auth/auth.routes.js';
 import userRoutes from './modules/users/users.routes.js';
@@ -88,6 +89,22 @@ app.get('/ready', async (_req: Request, res: Response) => {
   });
 });
 
+
+// Read build metadata once from the compiled image, not from runtime env.
+let buildId: string | null = null;
+try {
+  const metadata: unknown = JSON.parse(readFileSync(new URL('./build-revision.json', import.meta.url), 'utf8'));
+  if (metadata && typeof metadata === 'object' && 'buildId' in metadata &&
+      typeof metadata.buildId === 'string' && /^[a-f0-9]{40}$/i.test(metadata.buildId)) {
+    buildId = metadata.buildId.toLowerCase();
+  }
+} catch {
+  // A local or legacy build may not provide provenance. Never guess.
+}
+app.get('/api/version', (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.json({ service: 'interpreters-api', buildId });
+});
 
 // ── 404 Catch-All (MUST be after all routes) ──────────────
 app.use((_req: Request, res: Response) => {

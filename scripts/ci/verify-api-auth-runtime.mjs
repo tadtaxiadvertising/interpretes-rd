@@ -44,6 +44,13 @@ try {
     assert.equal(response.status, status, path + ' unexpected HTTP status');
     return response.json();
   }
+  const expectedBuild = process.env.EXPECTED_API_BUILD_SHA;
+  assert.match(expectedBuild ?? '', /^[a-f0-9]{40}$/i);
+  const version = await fetch(origin + '/api/version', { signal: AbortSignal.timeout(10000) });
+  assert.equal(version.status, 200);
+  assert.match(version.headers.get('cache-control') ?? '', /no-store/);
+  assert.deepEqual(await version.json(), { service: 'interpreters-api', buildId: expectedBuild.toLowerCase() });
+  assert.notEqual(process.env.GIT_SHA, expectedBuild);
   assert.equal((await request('/ready')).status, 'ready');
   const legacy = await request('/api/auth/login', { body: { email: legacyEmail, password } });
   assert.equal(legacy.success, true);
