@@ -58,6 +58,21 @@ export async function readRoleplayDirectRolloutReadiness(db:Pick<Client,'query'>
       budget={configured:b.max_slots>0,remainingSlots:b.max_slots-b.allocated_slots,releaseEnabled:b.unused_release_enabled};
     }
   }
-  return {schemaMetadataReady,tableChecks,triggerChecks,columnChecks,environment,budget,
+  const storageCatalog=await db.query<{present:boolean}>("SELECT to_regclass('storage.buckets') IS NOT NULL AS present");
+  const bucketRows=storageCatalog.rows[0]?.present===true
+    ? (await db.query<{id:string;name:string;public:boolean;file_size_limit:string;allowed_mime_types:string[]}>(`
+      SELECT id,name,public,file_size_limit::text,allowed_mime_types FROM storage.buckets
+      WHERE id IN ('roleplay-audio-private','roleplay-opening-private')
+    `)).rows : [];
+  const buckets=[
+    {id:'roleplay-audio-private',types:['audio/mpeg','audio/wav','audio/webm','audio/mp4']},
+    {id:'roleplay-opening-private',types:['audio/webm','audio/mp4','audio/ogg','audio/mpeg']},
+  ].map(({id,types})=>{
+    const row=bucketRows.find(r=>r.id===id);
+    return {id,state:!row?'missing':row.name===id&&row.public===false&&row.file_size_limit==='15728640'&&
+      Array.isArray(row.allowed_mime_types)&&row.allowed_mime_types.length===types.length&&
+      types.every(type=>row.allowed_mime_types.includes(type))?'metadata-ready':'review-required'};
+  });
+  return {schemaMetadataReady,tableChecks,triggerChecks,columnChecks,environment,budget,buckets,
     deploymentAttestation:'not-verified',hostedStoragePilot:'not-verified',activationAuthorized:false as const};
 }
