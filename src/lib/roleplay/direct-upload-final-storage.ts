@@ -7,7 +7,7 @@ import { requirePrivateRoleplayAudioBucket } from './private-audio-bucket-readin
 import { openReservedStorageObject, verifyReservedStorageObject } from './direct-upload-storage-verifier';
 import type { FinalObjectPort } from './direct-upload-promote-slot';
 
-type Storage = Parameters<typeof openReservedStorageObject>[0] & {
+type Storage = Pick<Parameters<typeof openReservedStorageObject>[0], 'getBucket'> & {
   from(bucket: string): ReturnType<Parameters<typeof openReservedStorageObject>[0]['from']> & {
     upload(path: string, body: Uint8Array, options: { upsert: false; contentType: string; cacheControl: string }): Promise<{ data: { path: string } | null; error: unknown }>;
   };
