@@ -1,46 +1,54 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { RotateCw, Loader2, Check } from 'lucide-react';
 import { syncAllSupabaseUsers } from '@/app/actions/admin-users';
 
 export function SyncUsersButton() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncedCount, setSyncedCount] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const syncing = useRef(false);
 
   const handleSync = async () => {
+    if (syncing.current) return;
+    syncing.current = true;
     setIsSyncing(true);
+    setError(null);
     setSyncedCount(null);
     try {
       const res = await syncAllSupabaseUsers();
       if (res.success) {
         setSyncedCount(res.syncedCount ?? 0);
-        setTimeout(() => setSyncedCount(null), 4000);
       } else {
-        alert(res.error || 'Error al sincronizar los usuarios.');
+        setError('No se pudo completar la sincronización de usuarios. Revisa el estado antes de reintentar.');
       }
     } catch {
-      alert('Error inesperado al conectar con el servidor.');
+      setError('No se pudo confirmar la sincronización. Revisa el estado antes de reintentar.');
     } finally {
+      syncing.current = false;
       setIsSyncing(false);
     }
   };
 
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       {syncedCount !== null && (
-        <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-4 py-2 rounded-2xl animate-in fade-in slide-in-from-right-4 duration-300 flex items-center gap-1.5">
-          <Check size={14} />
+        <span role="status" className="text-sm font-semibold text-[var(--theme-success)] bg-[var(--theme-surface-muted)] border border-[var(--theme-control-border)] px-3 py-2 rounded-xl flex items-center gap-1.5">
+          <Check size={14} aria-hidden="true" />
           {syncedCount === 0 
             ? 'No hubo perfiles nuevos ni cambios de rol' 
             : `Se actualizaron ${syncedCount} perfiles correctamente`}
         </span>
       )}
 
+      {error && <p role="alert" className="w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-surface-muted)] p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
       <button
+        type="button"
+        aria-busy={isSyncing}
         onClick={handleSync}
         disabled={isSyncing}
-        className="flex items-center gap-2.5 px-6 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-2xl font-bold text-sm shadow-lg shadow-blue-500/10 hover:shadow-blue-500/20 active:scale-95 transition-all disabled:opacity-50"
+        className="theme-action-primary flex min-h-11 items-center gap-2.5 px-4 py-3 rounded-xl font-bold text-sm transition-colors disabled:opacity-50"
       >
         {isSyncing ? (
           <Loader2 className="animate-spin" size={16} />
