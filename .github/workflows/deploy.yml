@@ -310,7 +310,7 @@ jobs:
       # The Easypanel "interpreters-api" service must run the standalone
       # Express backend. Validate its actual Dockerfile, not only Next.js.
       - name: Build dedicated interpreters-api backend image
-        run: docker build --file Dockerfile.api --tag interpreters-api:ci .
+        run: docker build --file Dockerfile.api --build-arg GIT_SHA="$GITHUB_SHA" --tag interpreters-api:ci .
 
       - name: Verify existing password hash compatibility and runtime libraries
         shell: bash
@@ -349,7 +349,7 @@ jobs:
         run: |
           set -euo pipefail
           timeout 90s docker run --rm --network host \
-            -e CI=true -e API_AUTH_SMOKE=true \
+            -e CI=true -e API_AUTH_SMOKE=true -e EXPECTED_API_BUILD_SHA="$GITHUB_SHA" -e GIT_SHA=0000000000000000000000000000000000000000 \
             -e DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e \
             -e JWT_SECRET=synthetic-api-auth-ci-only-not-production-2026 \
             -v "$PWD/scripts/ci/verify-api-auth-runtime.mjs:/app/verify-api-auth-runtime.mjs:ro" \
