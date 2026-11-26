@@ -4,14 +4,15 @@ on:
     paths:
       - '.github/workflows/roleplay-storage-pilot.yml'
       - 'scripts/ci/verify-roleplay-storage-pilot.ts'
-      - 'src/lib/roleplay/direct-upload-final-storage.ts'
-      - 'src/lib/roleplay/direct-upload-signing.ts'
-      - 'src/lib/roleplay/direct-upload-browser-http.ts'
-      - 'src/lib/roleplay/direct-upload-guarded-storage.pilot.test.ts'
-      - 'src/lib/roleplay/direct-upload-promote-slot.ts'
-      - 'src/lib/roleplay/direct-upload-audio-decoder.ts'
-      - 'docs/operations/staged-sql/roleplay-final-write-claims.sql'
-      - 'docs/operations/staged-sql/roleplay-upload-reservations.sql'
+      - 'src/lib/roleplay/direct-upload-*.ts'
+      - 'src/lib/roleplay/admin-audio-extension.ts'
+      - 'src/lib/roleplay-limits.ts'
+      - 'docs/operations/staged-sql/roleplay-*.sql'
+      - 'prisma/schema.prisma'
+      - 'prisma.config.ts'
+      - 'vitest.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
   workflow_dispatch:
 permissions:
   contents: read
