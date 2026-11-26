@@ -11,18 +11,18 @@ export type VerifySlotResult =
   | { kind: 'NOT_FOUND' | 'CLOSED' | 'EXPIRED' | 'OUT_OF_ORDER' | 'RETRY' }
   | { kind: 'PROGRESS'; verifiedCount: number; total: number; complete: boolean };
 
-export async function verifyDirectUploadSlot(db: Store, actor: string, requestKey: string, order: number, verify: Verify): Promise<VerifySlotResult> {
+async function loadDirectUploadSlot(db: Store, actor: string, requestKey: string, order: number) {
   if (!actor || !isRoleplayDirectUploadRequestKey(requestKey) || !Number.isInteger(order) || order < 0 || order >= 25) throw new Error('INVALID_VERIFY_REQUEST');
   const row = await db.roleplayUploadReservation.findUnique({
     where: { actorUserId_requestKey: { actorUserId: actor, requestKey } },
     select: { id: true, actorUserId: true, requestKey: true, status: true, items: true, verifiedObjects: true,
       declarationHash: true, createdAt: true, expiresAt: true },
   });
-  if (!row || row.actorUserId !== actor || row.requestKey !== requestKey) return { kind: 'NOT_FOUND' };
-  if (row.status !== 'RESERVED' && row.status !== 'VERIFIED') return { kind: 'CLOSED' };
+  if (!row || row.actorUserId !== actor || row.requestKey !== requestKey) return { kind: 'NOT_FOUND' as const };
+  if (row.status !== 'RESERVED' && row.status !== 'VERIFIED') return { kind: 'CLOSED' as const };
   const now = Date.now(), created = row.createdAt.getTime(), expires = row.expiresAt.getTime();
   if (!Number.isSafeInteger(created) || created <= 0 || created > now || expires - created !== ROLEPLAY_UPLOAD_RESERVATION_TTL_MS) throw new Error('INVALID_RESERVATION');
-  if (now >= expires) return { kind: 'EXPIRED' };
+  if (now >= expires) return { kind: 'EXPIRED' as const };
   if (!Array.isArray(row.items) || !Array.isArray(row.verifiedObjects)) throw new Error('INVALID_RESERVATION');
   const stored = row.items as unknown as PreparedRoleplayUpload[];
   const { items } = prepareRoleplayDirectUploadBatch(row.id, stored.map(({ order, mime, sizeBytes, sha256 }) => ({ order, mime, sizeBytes, sha256 })));
@@ -37,6 +37,30 @@ export async function verifyDirectUploadSlot(db: Store, actor: string, requestKe
         !Number.isSafeInteger(proof.verifiedAtMs) || proof.verifiedAtMs < created || proof.verifiedAtMs > now ||
         proof.verifiedAtMs >= expires) throw new Error('INVALID_EVIDENCE');
   }
+  return { kind: 'READY' as const, row, items, evidence, now, created, expires };
+}
+
+export type InspectSlotResult = VerifySlotResult | { kind: 'PRESENT_UNVERIFIED' | 'NOT_OBSERVED'; verifiedCount: number; total: number };
+
+/** Read-only reconciliation; NOT_OBSERVED is not proof of absence and does
+ * not authorize another reservation, signing, deletion or overwrite. */
+export async function inspectDirectUploadSlot(db: Store, actor: string, requestKey: string, order: number,
+  observe: (item: PreparedRoleplayUpload) => Promise<boolean>): Promise<InspectSlotResult> {
+  const state = await loadDirectUploadSlot(db, actor, requestKey, order);
+  if (state.kind !== 'READY') return state;
+  const {items,evidence,expires} = state;
+  if (order < evidence.length) return {kind:'PROGRESS',verifiedCount:evidence.length,total:items.length,complete:evidence.length===items.length};
+  if (order !== evidence.length || order >= items.length) return {kind:'OUT_OF_ORDER'};
+  const present = await observe(items[order]);
+  if (typeof present !== 'boolean') throw new Error('STORAGE_OBSERVATION_UNAVAILABLE');
+  if (Date.now() >= expires) return {kind:'EXPIRED'};
+  return {kind:present?'PRESENT_UNVERIFIED':'NOT_OBSERVED',verifiedCount:evidence.length,total:items.length};
+}
+
+export async function verifyDirectUploadSlot(db: Store, actor: string, requestKey: string, order: number, verify: Verify): Promise<VerifySlotResult> {
+  const state = await loadDirectUploadSlot(db, actor, requestKey, order);
+  if (state.kind !== 'READY') return state;
+  const {row,items,evidence,now,created,expires} = state;
   const progress = (count: number): VerifySlotResult => ({ kind: 'PROGRESS', verifiedCount: count, total: items.length, complete: count === items.length });
   if (order < evidence.length) return progress(evidence.length);
   if (order !== evidence.length || order >= items.length) return { kind: 'OUT_OF_ORDER' };
