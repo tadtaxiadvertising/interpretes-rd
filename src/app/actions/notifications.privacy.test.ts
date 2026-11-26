@@ -405,4 +405,21 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     expect(m.queryRaw).not.toHaveBeenCalled();
     expect(m.notificationFindMany).not.toHaveBeenCalled();
   });
+  it('rejects invalid advanced filters and legacy offset callers before any history query', async () => {
+    expect(await getMyNotificationHistory({ page: 0, after: null, unreadOnly: false, searchFilters: { search: 'x' } })).toEqual({ success: false });
+    expect(await getMyNotificationHistory({ page: 0, after: null, unreadOnly: false, searchFilters: { userId: profileId } })).toEqual({ success: false });
+    expect(await getMyNotificationHistory({ page: 0, unreadOnly: false, searchFilters: { search: 'QA' } })).toEqual({ success: false });
+    expect(m.queryRaw).not.toHaveBeenCalled();
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
+  });
+
+  it('applies advanced search within the authenticated candidate scope', async () => {
+    m.validateAction.mockResolvedValueOnce({ user: { profileId, userId: 'candidate-1', role: 'candidate' } });
+    m.queryRaw.mockResolvedValueOnce([]);
+    expect(await getMyNotificationHistory({ page: 0, after: null, unreadOnly: true, searchFilters: { search: 'Entrevista', toDate: '2026-11-25' } })).toEqual({ success: true, data: [], hasMore: false, nextCursor: null });
+    const query = m.queryRaw.mock.calls[0][0];
+    expect(query.sql).toContain("n.category = 'recruitment' AND n.link = '/candidate'");
+    expect(query.values).toEqual([profileId, 'Entrevista', 'Entrevista', '2026-11-25']);
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
+  });
 });
