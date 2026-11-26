@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
 import { classifyRoleplayReservationCatalog, readRoleplayReservationCatalog } from './roleplay-upload-reservation-schema-catalog';
+import { verifyFinalEvidencePostgres } from './verify-roleplay-final-evidence-postgres';
 
 // ONLY a fresh, disposable PostgreSQL database on the isolated CI service.
 // Never run against production, a shared DB or a remote hostname.
@@ -308,6 +309,7 @@ async function main(): Promise<void> {
     await first.query(insertSql, values(expired));
     const stalePublish = await first.query(publish, [expired.id, expired.actor, ['ci-expired-session']]);
     if (stalePublish.rowCount !== 0) throw new Error('Expired batch was published.');
+    await verifyFinalEvidencePostgres(first, second);
   } finally {
     await Promise.allSettled([first?.end(), second?.end()]);
     if (created && connected) {
