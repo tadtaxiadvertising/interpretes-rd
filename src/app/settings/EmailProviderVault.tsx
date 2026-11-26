@@ -207,7 +207,7 @@ export default function EmailProviderVault() {
           <progress aria-label={'Consumo mensual ' + quota.provider} value={Math.min(quota.monthlyUsed, quota.monthlyLimit)} max={quota.monthlyLimit} className="w-full" />
           <p className="font-semibold">{available.status === 'exhausted' ? 'Presupuesto local agotado' : available.status === 'low' ? 'Presupuesto local próximo a agotarse' : 'Presupuesto local disponible'} · {available.remaining} intentos restantes según ambos límites.</p>
           </>}
-          <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos, de autenticación, SMTP genérico ni envíos históricos anteriores a la protección presupuestaria. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
+          <p className="text-xs">Datos de la última consulta. Aviso al quedar 20 % o menos de cualquiera de los límites. No incluye envíos externos, de autenticación, SMTP no identificado ni envíos históricos anteriores a la protección presupuestaria. Consulta su saldo real y actualiza los perfiles antes de decidir.</p>
           <ProviderBudgetEditor
             key={quota.provider + ':' + quota.dailyLimit + ':' + quota.monthlyLimit}
             quota={quota}

@@ -8,7 +8,8 @@ import { listProviderQuotas } from '@/lib/email/provider-quota';
 import { quotaAvailability } from '@/lib/email/quota-availability';
 import { providerSource } from '@/lib/email/provider-source';
 import { emailDeliveryMode } from '@/lib/email/pilot-recipient';
-import { isProviderId, providerIds } from '@/lib/email/provider-catalog';
+import { environmentBudgetProvider } from '@/lib/email/environment-budget-provider';
+import { isProviderId, providerIds, type ProviderId } from '@/lib/email/provider-catalog';
 
 export async function readNotificationEmailBudget() {
   try {
@@ -24,8 +25,9 @@ export async function readNotificationEmailBudget() {
     const vaultEnabled = process.env.EMAIL_PROVIDER_VAULT_ENABLED === 'true';
     const storage = await inspectQuotaStorage(prisma);
     const configured = process.env.OPERATIONAL_EMAIL_PROVIDER;
-    const activeApiProvider: 'brevo' | 'resend' | null = source === 'environment' && (configured === 'brevo' || configured === 'resend') ? configured : null;
-    const base = { source, mode, dispatchEnabled, emailEnabled, vaultEnabled, storage, activeApiProvider };
+    const activeEnvironmentProvider: ProviderId | null = source === 'environment'
+      ? environmentBudgetProvider(configured || 'smtp', process.env.OPERATIONAL_SMTP_HOST) : null;
+    const base = { source, mode, dispatchEnabled, emailEnabled, vaultEnabled, storage, activeEnvironmentProvider };
     if (storage !== 'ready') return { status: 'quota_unavailable' as const, ...base };
     try {
       // These counters represent locally reserved attempts, not external balance.

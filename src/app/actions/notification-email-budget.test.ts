@@ -29,11 +29,11 @@ afterEach(() => vi.unstubAllEnvs());
 describe('notification email budget', () => {
   it('preserves the narrow configured provider contract for the client', async () => {
     type Ready = Extract<Awaited<ReturnType<typeof readNotificationEmailBudget>>, { status: 'ready' }>;
-    expectTypeOf<Ready['activeApiProvider']>().toEqualTypeOf<'brevo' | 'resend' | null>();
+    expectTypeOf<Ready['activeEnvironmentProvider']>().toEqualTypeOf<'brevo' | 'resend' | null>();
     for (const provider of ['brevo', 'resend', 'smtp', '__proto__', 'unknown']) {
       vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', provider);
       expect(await readNotificationEmailBudget()).toMatchObject({
-        status: 'ready', activeApiProvider: provider === 'brevo' || provider === 'resend' ? provider : null,
+        status: 'ready', activeEnvironmentProvider: provider === 'brevo' || provider === 'resend' ? provider : null,
       });
     }
   });
@@ -55,7 +55,7 @@ describe('notification email budget', () => {
       { provider: 'resend', dailyLimit: 100, dailyUsed: 100, monthlyLimit: 3000, monthlyUsed: 200, periodValid: true },
     ]);
     const result = await readNotificationEmailBudget();
-    expect(result).toMatchObject({ status: 'ready', source: 'environment', emailEnabled: true, dispatchEnabled: false, storage: 'ready', activeApiProvider: 'brevo',
+    expect(result).toMatchObject({ status: 'ready', source: 'environment', emailEnabled: true, dispatchEnabled: false, storage: 'ready', activeEnvironmentProvider: 'brevo',
       providers: expect.arrayContaining([
         { provider: 'brevo', availability: { dailyRemaining: 60, monthlyRemaining: 10, remaining: 10, status: 'low' } },
         { provider: 'resend', availability: { dailyRemaining: 0, monthlyRemaining: 2800, remaining: 0, status: 'exhausted' } },
@@ -87,12 +87,23 @@ describe('notification email budget', () => {
     vi.stubEnv('OPERATIONAL_EMAIL_PILOT_RECIPIENT', 'private@example.test');
     m.quotas.mockRejectedValueOnce(new Error('PRIVATE_DATABASE_URL'));
     const result = await readNotificationEmailBudget();
-    expect(result).toEqual({ status: 'quota_unavailable', source: 'vault', mode: 'pilot', emailEnabled: true, dispatchEnabled: false, vaultEnabled: true, storage: 'ready', activeApiProvider: null });
+    expect(result).toEqual({ status: 'quota_unavailable', source: 'vault', mode: 'pilot', emailEnabled: true, dispatchEnabled: false, vaultEnabled: true, storage: 'ready', activeEnvironmentProvider: null });
     expect(JSON.stringify(result)).not.toContain('private@example.test');
   });
   it.each(['not_installed', 'permission_mismatch', 'unavailable'])('does not read counters when quota storage is %s', async storage => {
     m.storage.mockResolvedValueOnce(storage);
-    expect(await readNotificationEmailBudget()).toMatchObject({ status: 'quota_unavailable', storage, activeApiProvider: 'brevo' });
+    expect(await readNotificationEmailBudget()).toMatchObject({ status: 'quota_unavailable', storage, activeEnvironmentProvider: 'brevo' });
     expect(m.quotas).not.toHaveBeenCalled();
+  });
+  it('identifies a known SMTP provider without returning the configured host or login', async () => {
+    vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'smtp');
+    vi.stubEnv('OPERATIONAL_SMTP_HOST', 'MAIL.SMTP2GO.COM');
+    vi.stubEnv('OPERATIONAL_SMTP_USER', 'private-login');
+    const report = await readNotificationEmailBudget();
+    expect(report).toMatchObject({ status: 'ready', activeEnvironmentProvider: 'smtp2go' });
+    expect(JSON.stringify(report)).not.toContain('MAIL.SMTP2GO.COM');
+    expect(JSON.stringify(report)).not.toContain('private-login');
+    vi.stubEnv('OPERATIONAL_SMTP_HOST', 'mail.smtp2go.com.example.test');
+    expect(await readNotificationEmailBudget()).toMatchObject({ status: 'ready', activeEnvironmentProvider: null });
   });
 });

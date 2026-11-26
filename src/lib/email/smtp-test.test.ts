@@ -82,4 +82,19 @@ describe('environment test budget protection', () => {
     expect(quota.mock.invocationCallOrder[2]).toBeLessThan(vi.mocked(sendBrevoEmailDetailed).mock.invocationCallOrder[0]);
     expect(sendBrevoEmailDetailed).toHaveBeenCalledTimes(1);
   });
+  it('blocks known SMTP tests before any network attempt when quota is exhausted', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-26T21:00:00Z'));
+    vi.stubEnv('EMAIL_PROVIDER_SOURCE', 'environment');
+    vi.stubEnv('OPERATIONAL_EMAIL_ENABLED', 'true');
+    vi.stubEnv('OPERATIONAL_EMAIL_PROVIDER', 'smtp');
+    vi.stubEnv('OPERATIONAL_SMTP_HOST', 'in-v3.mailjet.com');
+    vi.stubEnv('OPERATIONAL_SMTP_PORT', '587');
+    vi.stubEnv('OPERATIONAL_SMTP_USER', 'fixture-user');
+    vi.stubEnv('OPERATIONAL_SMTP_PASSWORD', 'fixture-password');
+    vi.stubEnv('OPERATIONAL_EMAIL_FROM', 'fixture@example.test');
+    quota.mockResolvedValueOnce('quota_reached');
+    expect(await sendOperationalMailTest()).toBe('local_quota_reached');
+    expect(quota).toHaveBeenCalledExactlyOnceWith({}, 'mailjet');
+  });
 });

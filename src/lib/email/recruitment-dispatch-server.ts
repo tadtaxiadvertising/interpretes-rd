@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { environmentBudgetProvider } from './environment-budget-provider';
 import { reserveProviderQuota } from './provider-quota';
 import { providerSource } from './provider-source';
 import { emailDeliveryMode, pilotRecipient } from './pilot-recipient';
@@ -31,7 +32,10 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
   const selected = vault ? await readPreferredProvider(prisma, process.env) : null;
   const legacy = vault ? null : readOperationalMailConfig(process.env);
   if (vault ? !selected : legacy?.status !== 'configured') return 'disabled';
-  const provider = selected?.provider ?? (legacy?.status === 'configured' ? legacy.provider : null);
+  const environmentProvider = legacy?.status === 'configured'
+    ? environmentBudgetProvider(legacy.provider, legacy.provider === 'smtp' ? legacy.config?.host : undefined)
+    : null;
+  const provider = selected?.provider ?? (legacy?.status === 'configured' ? environmentProvider ?? legacy.provider : null);
   if (!provider) return 'disabled';
   const quotaBlocked = new Error('Provider budget unavailable');
   let blocked = false;
@@ -42,8 +46,7 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
         && (!pilot || snapshot.identity?.email.trim().toLowerCase() === pilot) ? snapshot : null;
     },
     claim: async (id) => {
-      // Generic SMTP cannot be attributed to a catalog provider. Preserve its
-      // existing behavior; known API transports share the persistent budget.
+      // Unknown SMTP hosts retain their existing unattributed behavior.
       if (!selected && provider === 'smtp') return claimRecruitmentEmail(prisma, id, provider);
       try {
         return await prisma.$transaction(async tx => {
@@ -51,7 +54,7 @@ export async function processQueuedRecruitmentEmail(eventId: string): Promise<Di
           if (!claim) return null;
           const reserved = selected
             ? await reserveSelectedProvider(tx, selected)
-            : (provider === 'brevo' || provider === 'resend') && await reserveProviderQuota(tx, provider) === 'reserved';
+            : environmentProvider !== null && await reserveProviderQuota(tx, environmentProvider) === 'reserved';
           if (!reserved) throw quotaBlocked;
           return claim;
         });
