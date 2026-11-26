@@ -27,6 +27,7 @@ const MODULE_LABELS = {
   roleplayEvaluation: 'Evaluaciones de Roleplays',
   roleplayAssignment: 'Asignaciones de Roleplays',
   audio: 'Fallos definitivos de audio',
+  financePayment: 'Finanzas: pagos registrados',
 } as const;
 type Module = keyof typeof MODULE_LABELS;
 type OperationalReport = {
