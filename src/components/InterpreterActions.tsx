@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { 
   MoreVertical, 
   Edit, 
@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Save
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { InterpreterForm } from './InterpreterForm';
@@ -38,11 +39,14 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetNeedsReview, setResetNeedsReview] = useState(false);
   const router = useRouter();
+  const deleting = useRef(false);
+  const resetting = useRef(false);
 
   const handleDelete = async () => {
     // A partial deprovisioning cannot safely be retried from this dialog:
     // the local record is gone and the external Auth result is uncertain.
-    if (isDeleting || deleteNeedsReview) return;
+    if (deleting.current || deleteNeedsReview) return;
+    deleting.current = true;
     setIsDeleting(true);
     setDeleteError(null);
     try {
@@ -55,11 +59,14 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
         return;
       }
       setShowDeleteConfirm(false);
+      toast.success('Baja del intérprete completada');
       router.refresh();
     } catch {
       // Browser errors from Server Actions may contain sensitive strings.
       setDeleteError('No se pudo confirmar la baja. Verifica el estado antes de reintentar.');
+      setDeleteNeedsReview(true);
     } finally {
+      deleting.current = false;
       setIsDeleting(false);
     }
   };
@@ -67,7 +74,8 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     // A provider operation with an uncertain result is not safe to repeat.
-    if (isResetting || resetNeedsReview) return;
+    if (resetting.current || resetNeedsReview) return;
+    resetting.current = true;
     setIsResetting(true);
     setResetError(null);
     try {
@@ -79,10 +87,12 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
       }
       setShowResetModal(false);
       setNewPassword('');
-      alert('Contraseña actualizada correctamente');
+      toast.success('Contraseña actualizada correctamente');
     } catch {
       setResetError('No se pudo confirmar el restablecimiento. Verifica el estado antes de reintentar.');
+      setResetNeedsReview(true);
     } finally {
+      resetting.current = false;
       setIsResetting(false);
     }
   };
@@ -168,6 +178,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
         isOpen={showResetModal}
         onClose={() => setShowResetModal(false)}
         title="Reset Password"
+        closeDisabled={isResetting}
         maxWidth="max-w-md"
       >
         <form onSubmit={handleResetPassword} className="space-y-6">
@@ -184,6 +195,8 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
               <input
                 required
                 type="password"
+                autoComplete="new-password"
+                disabled={isResetting || resetNeedsReview}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 className="w-full bg-[var(--theme-control-bg)] border border-[var(--theme-control-border)] rounded-2xl py-3 pl-12 pr-4 text-[var(--theme-control-text)] focus:border-[var(--theme-focus)] transition-all outline-none focus:ring-2 focus:ring-[var(--theme-focus)]"
@@ -208,6 +221,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
         title="Delete Interpreter?"
+        closeDisabled={isDeleting}
         maxWidth="max-w-sm"
       >
         <div className="text-center">
@@ -230,6 +244,7 @@ export function InterpreterActions({ interpreter }: InterpreterActionsProps) {
           <div className="flex gap-4">
             <button 
               onClick={() => setShowDeleteConfirm(false)}
+              disabled={isDeleting}
               className="flex-1 py-3 theme-action-secondary rounded-xl font-bold transition-all"
             >
               Cancel
