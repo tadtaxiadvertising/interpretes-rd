@@ -6,6 +6,9 @@ import { fingerprintRoleplayDirectUploadDeclarations } from './direct-upload-res
 import { ROLEPLAY_UPLOAD_RESERVATION_TTL_MS } from './direct-upload-reservation';
 import { requirePrivateRoleplayAudioBucket } from './private-audio-bucket-readiness';
 
+import { directInterpreterAssignment } from './direct-upload-interpreter-assignment';
+import { fingerprintDirectInterpreterAssignment,requireDirectAssignmentBinding } from './direct-upload-assignment-binding';
+
 type Store = Pick<PrismaClient, 'roleplayUploadReservation' | '$queryRaw'>;
 type Storage = Parameters<typeof requirePrivateRoleplayAudioBucket>[0] & {
   from(bucket: string): { createSignedUploadUrl(path: string, options: { upsert: false }): Promise<{ data: { path: string; token: string } | null; error: unknown }> };
@@ -14,10 +17,20 @@ type Storage = Parameters<typeof requirePrivateRoleplayAudioBucket>[0] & {
 /** No re-sign on ambiguous requests. A separate reconciliation service must
  * inspect old uploads. This grants staging uploads only, not publication. */
 export async function reserveAndSignDirectUpload(db: Store, storage: Storage, actorUserId: string,
-  requestKey: string, declarations: unknown) {
+  requestKey: string, declarations: unknown, input:unknown) {
+  const assignment=directInterpreterAssignment.parse(input);
+  const declared=prepareRoleplayDirectUploadBatch('123e4567-e89b-42d3-a456-426614174000',declarations);
+  if(assignment.scenarios.length!==declared.items.length) throw new Error('SCENARIO_COUNT_MISMATCH');
+  const assignmentHash=fingerprintDirectInterpreterAssignment(assignment);
   const bucket = await requirePrivateRoleplayAudioBucket(storage);
   const claim = await claimRoleplayDirectUploadReservation(db, actorUserId, requestKey, declarations, Date.now());
-  if (claim.kind !== 'CREATED') return claim;
+  if (claim.kind !== 'CREATED') {
+    if(claim.kind==='RECONCILE'){
+      const prior=await db.roleplayUploadReservation.findUnique({where:{actorUserId_requestKey:{actorUserId,requestKey}},select:{id:true}});
+      if(prior) await requireDirectAssignmentBinding(db,prior.id,actorUserId,requestKey,assignment);
+    }
+    return claim;
+  }
   const row = await db.roleplayUploadReservation.findUnique({
     where: { actorUserId_requestKey: { actorUserId, requestKey } },
     select: { id: true, actorUserId: true, requestKey: true, status: true, items: true,
@@ -38,7 +51,7 @@ export async function reserveAndSignDirectUpload(db: Store, storage: Storage, ac
   // A lost response, partial signing or failed network call is never refundable.
   // Missing migration, missing charge, or inconsistent budget fails closed.
   const charges = await db.$queryRaw<{slots:number}[]>`
-    UPDATE public.roleplay_direct_upload_budget_charges c SET capability_state='SIGNING_STARTED'
+    UPDATE public.roleplay_direct_upload_budget_charges c SET capability_state='SIGNING_STARTED',assignment_hash=${assignmentHash}
     FROM public.roleplay_direct_upload_budget b,public.roleplay_upload_reservations r
     WHERE b.singleton=true AND r.id=c.reservation_id AND c.reservation_id=${row.id}::uuid
       AND c.actor_user_id=${actorUserId} AND c.request_key=${requestKey}::uuid
