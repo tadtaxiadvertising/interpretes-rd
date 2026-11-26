@@ -10,6 +10,8 @@ import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
+import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
+import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
 
 interface Participant {
   id: number;
@@ -40,6 +42,7 @@ interface NewRoleplayFormProps {
   candidates: Participant[];
   initialCandidateId?: number;
   openingAssignmentEnabled?: boolean;
+  directUploadEnabled?: boolean;
   librarySource?: {
     id: string;
     fingerprint: string;
@@ -66,7 +69,7 @@ function normalizeParticipantSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
@@ -75,6 +78,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     { id: INITIAL_SCENARIO_ID, title: '', baseAudioFile: null, baseAudioPreview: '', durationLimitSec: 0, scriptPrompt: '' }
   ]);
   const [isCreating, setIsCreating] = useState(false);
+  const directAttempt = useRef<ReturnType<typeof createDirectRoleplayFormController> | null>(null);
+  const directAbort = useRef<AbortController | null>(null);
+  const [directLocked,setDirectLocked] = useState(false);
+  const [directProgress,setDirectProgress] = useState<FormProgress | null>(null);
+  useEffect(()=>()=>directAbort.current?.abort(),[]);
   // Transport failures do not tell us whether the server committed the roleplay.
   const [submissionUncertain, setSubmissionUncertain] = useState(false);
   // A state-driven disabled button updates on render; the ref also prevents
@@ -148,6 +156,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const participants = participantType === 'candidate' ? candidates : interpreters;
   const isBulk = participantType === 'all-active-interpreters';
+  const useDirectUpload = directUploadEnabled && openingAssignmentEnabled && requiresOpening && participantType === 'interpreter' && !librarySource;
   const activeInterpreterCount = interpreters.filter((participant) => participant.status === 'Activo').length;
   const selectedParticipant = participants.find((participant) => String(participant.id) === selectedParticipantId);
   const search = normalizeParticipantSearch(participantSearch);
@@ -444,7 +453,40 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const handleCreate = async () => {
-    if (createPending.current || !validateForm()) return;
+    if (createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    if (directAttempt.current || useDirectUpload) {
+      createPending.current = true;
+      setIsCreating(true);
+      setError(null);
+      try {
+        if (!directAttempt.current) {
+          const files = scenarios.map(s=>s.baseAudioFile!);
+          const upload = createConfiguredRoleplayUploadController(files);
+          directAttempt.current = createDirectRoleplayFormController({
+            interpreterId: Number(selectedParticipantId),
+            scenarios: scenarios.map(s=>({
+              title:s.title.trim(),durationLimitSec:s.durationLimitSec || null,scriptPrompt:s.scriptPrompt.trim() || null,
+              studioTurn:s.studioTurn ?? null,studioSpeaker:s.studioSpeaker ?? null,studioLanguage:s.studioLanguage ?? null,
+              sourceStartSec:s.sourceStartSec ?? null,sourceEndSec:s.sourceEndSec ?? null,
+            })),
+          },{upload:upload.run,consolidate:consolidatePreparedRoleplaySlot,publish:publishConsolidatedRoleplay});
+          setDirectLocked(true);
+        }
+        const controller=new AbortController();
+        directAbort.current=controller;
+        const result=await directAttempt.current.run({signal:controller.signal,onProgress:setDirectProgress});
+        setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete'});
+      } catch {
+        setError(directAttempt.current
+          ? 'La operación se interrumpió. Conserva esta pestaña y pulsa «Continuar creación» para recuperar el mismo intento. No vuelvas a crear el ejercicio desde otra pestaña.'
+          : 'No fue posible preparar la subida directa. Revisa los datos del ejercicio.');
+      } finally {
+        directAbort.current=null;
+        createPending.current=false;
+        setIsCreating(false);
+      }
+      return;
+    }
     // A large legacy multipart request may exhaust the small Next.js VPS.
     // Ask before constructing FormData or posting any bytes. Declining must
     // preserve all edited clips, their order and the selected participant.
@@ -623,6 +665,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   return (
     <div className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6 space-y-5">
+      <fieldset disabled={directLocked} className="min-w-0 space-y-5">
       <div>
         <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">¿A quién se asignará?</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -904,7 +947,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             Audio seleccionado: <span className="font-medium text-[var(--foreground)]">{(selectedAudioBytes / (1024 * 1024)).toFixed(1)} MiB</span>
           </p>
         )}
-        {!librarySource && selectedAudioBytes > LARGE_AUDIO_BATCH_CONFIRM_BYTES && (
+        {!useDirectUpload && !librarySource && selectedAudioBytes > LARGE_AUDIO_BATCH_CONFIRM_BYTES && (
           <div className="space-y-1 text-xs text-[var(--theme-warning)]">
             <p>
               Este lote es voluminoso. La publicación actual envía los audios al servidor;
@@ -929,6 +972,22 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         )}
       </section>
 
+      </fieldset>
+      {(useDirectUpload || directLocked) && <section aria-label="Progreso de publicación privada" className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4">
+        <p className="font-semibold text-[var(--foreground)]">Subida directa privada</p>
+        <p className="text-sm text-[var(--text-secondary)]">Los audios se transfieren de uno en uno. Conserva esta pestaña abierta durante la creación.</p>
+        {directProgress && <>
+          <p role="status" aria-live="polite" className="text-sm text-[var(--foreground)]">
+            {{hashing:'Preparando archivos',reserving:'Reservando subida',uploading:'Subiendo audio',verifying:'Verificando audio',ready:'Subida verificada',consolidating:'Preparando archivos definitivos',publishing:'Confirmando publicación',published:'Publicación confirmada',interrupted:'Operación interrumpida'}[directProgress.phase]}
+          </p>
+          <label className="block text-sm text-[var(--text-secondary)]">Verificados: {directProgress.verified} de {directProgress.total}
+            <progress className="block w-full" max={directProgress.total} value={directProgress.verified}/></label>
+          <label className="block text-sm text-[var(--text-secondary)]">Consolidados: {directProgress.consolidated} de {directProgress.total}
+            <progress className="block w-full" max={directProgress.total} value={directProgress.consolidated}/></label>
+        </>}
+        {directLocked && isCreating && <button type="button" onClick={()=>directAbort.current?.abort()} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)]">Pausar operación</button>}
+        {directLocked && !isCreating && <Link href="/admin/roleplays" className="inline-block text-sm text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>}
+      </section>}
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-[var(--theme-danger)] flex items-center gap-3">
           <AlertCircle />
@@ -954,7 +1013,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             : "theme-action-danger shadow-lg shadow-red-600/20"
         )}
       >
-        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creando...</> : <><Mic2 size={24} /> {librarySource ? 'Asignar plantilla' : isBulk ? 'Crear para todos los intérpretes activos' : 'Crear roleplay'}</>}
+        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creando...</> : <><Mic2 size={24} /> {directLocked ? 'Continuar creación' : librarySource ? 'Asignar plantilla' : isBulk ? 'Crear para todos los intérpretes activos' : 'Crear roleplay'}</>}
       </button>
     </div>
   );
