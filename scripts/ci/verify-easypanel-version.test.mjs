@@ -91,3 +91,27 @@ test('requires a complete Git SHA', async () => {
     /40-character/,
   );
 });
+
+test('backend verification requires exact service identity as well as SHA', async () => {
+  const result = await verifyEasypanelVersion({
+    baseUrl, expectedSha, component: 'api', attempts: 1,
+    fetchFn: async () => Response.json({ service: 'interpreters-api', buildId: expectedSha }),
+  });
+  assert.equal(result.sha, expectedSha);
+  for (const body of [{ buildId: expectedSha }, { service: 'interpreters-frontend', buildId: expectedSha }]) {
+    await assert.rejects(verifyEasypanelVersion({
+      baseUrl, expectedSha, component: 'api', attempts: 1,
+      fetchFn: async () => Response.json(body),
+    }), /wrong_runtime_component/);
+  }
+  await assert.rejects(verifyEasypanelVersion({
+    baseUrl, expectedSha, component: 'frontend', attempts: 1,
+    fetchFn: async () => Response.json({ service: 'interpreters-api', buildId: expectedSha }),
+  }), /wrong_runtime_component/);
+  let calls = 0;
+  await assert.rejects(verifyEasypanelVersion({
+    baseUrl, expectedSha, component: 'worker', attempts: 1,
+    fetchFn: async () => { calls++; return Response.json({ buildId: expectedSha }); },
+  }), /Unsupported runtime component/);
+  assert.equal(calls, 0);
+});
