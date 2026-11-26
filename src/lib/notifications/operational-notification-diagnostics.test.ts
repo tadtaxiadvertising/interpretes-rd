@@ -1,10 +1,10 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const m = vi.hoisted(() => ({ profiles: vi.fn(), applications: vi.fn(), scores: vi.fn(), assignments: vi.fn(), jobs: vi.fn(), notices: vi.fn() }));
+const m = vi.hoisted(() => ({ profiles: vi.fn(), applications: vi.fn(), scores: vi.fn(), assignments: vi.fn(), jobs: vi.fn(), payments: vi.fn(), notices: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({ default: {
   userProfile: { findMany: m.profiles }, recruitmentApplication: { findMany: m.applications },
   qAScore: { findMany: m.scores }, roleplaySession: { findMany: m.assignments },
-  roleplayAudioJob: { findMany: m.jobs }, notification: { findMany: m.notices },
+  roleplayAudioJob: { findMany: m.jobs }, payrollRecord: { findMany: m.payments }, notification: { findMany: m.notices },
 } }));
 import { readOperationalNotificationDiagnostics } from './operational-notification-diagnostics';
 import { audioFailureEventRow } from './notify-audio-job-failures';
@@ -45,6 +45,7 @@ describe('operational notification diagnostics', () => {
       { module: 'roleplayEvaluation', expected: 1, missing: 1 },
       { module: 'roleplayAssignment', expected: 1, missing: 1 },
       { module: 'audio', expected: 1, missing: 1 },
+      { module: 'financePayment', expected: 0, missing: 0 },
     ]);
     expect(JSON.stringify(report)).not.toContain('private-');
     expect(JSON.stringify(report)).not.toContain(admin.id);
@@ -84,5 +85,18 @@ describe('operational notification diagnostics', () => {
     expect(report.truncated).toBe(false);
     expect(m.profiles).toHaveBeenCalledTimes(1);
     expect(m.notices).not.toHaveBeenCalled();
+  });
+  it('counts only recent recorded payments with a linked interpreter, without exposing financial identifiers', async () => {
+    m.profiles.mockResolvedValueOnce([]).mockResolvedValueOnce([interpreter]);
+    m.payments.mockResolvedValueOnce([
+      { id: 'private-payment', interpreterId: 7, status: 'PAID', paidAt: now },
+      { id: 'private-old', interpreterId: 7, status: 'Paid', paidAt: new Date(now.getTime() - 86400001) },
+      { id: 'private-unpaid', interpreterId: 7, status: 'APPROVED', paidAt: now },
+      { id: 'private-other', interpreterId: 8, status: 'PAID', paidAt: now },
+    ]);
+    const report = await readOperationalNotificationDiagnostics(now);
+    expect(report.modules.find(item => item.module === 'financePayment')).toEqual({ module: 'financePayment', expected: 1, missing: 1 });
+    expect(m.payments).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ where: { interpreterId: { not: null }, status: { in: ['Paid', 'PAID'] }, paidAt: { gte: new Date(now.getTime() - 86400000), lte: now } }, take: 51 }));
+    expect(JSON.stringify(report)).not.toContain('private-');
   });
 });

@@ -8,6 +8,7 @@ import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { authorizedNotificationRecipientIds } from '@/lib/notifications/authorized-recipient-ids';
 
 import { reconcileCommunications } from '@/lib/notifications/reconcile-communications';
+import { reconcileInterpreterPayments } from '@/lib/notifications/reconcile-interpreter-payments';
 import { reconcileInterpreterEvaluations } from '@/lib/notifications/reconcile-interpreter-evaluations';
 import { reconcileCandidateNotifications } from '@/lib/notifications/reconcile-candidate';
 import { reconcileRecruitmentAdminNotifications } from '@/lib/notifications/reconcile-recruitment-admin';
@@ -39,7 +40,7 @@ export async function getMyNotifications() {
     } else if (auth.user.role === 'candidate' && auth.user.profileId && ids.includes(auth.user.profileId)) {
       await reconcileCandidateNotifications(auth.user);
     } else if (auth.user.role === 'interpreter' && auth.user.profileId && ids.includes(auth.user.profileId)) {
-      await reconcileInterpreterEvaluations(auth.user);
+      await Promise.all([reconcileInterpreterEvaluations(auth.user), reconcileInterpreterPayments(auth.user)]);
     }
     if ((auth.user.role === 'admin' || auth.user.role === 'interpreter') && auth.user.profileId && ids.includes(auth.user.profileId)) {
       await reconcileCommunications(auth.user);
