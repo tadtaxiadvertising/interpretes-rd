@@ -61,10 +61,10 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
   const current = result?.page === page && result.version === refreshVersion && result.retry === retry && result.filterKey === filterKey ? result : null;
   const items = (current?.data ?? []).filter(item => !onlyUnread || (!item.isRead && !locallyReadIds.includes(item.id)));
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-36 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] p-3">
         {!candidateOnly && <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">Categoría
-          <select value={category} onChange={e => { setCategory(e.target.value as NotificationCategory | ''); setPage(0); }} className="mt-1 block min-h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] px-2 text-xs text-[var(--foreground)]">
+          <select value={category} onChange={e => { setCategory(e.target.value as NotificationCategory | ''); setPage(0); }} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] px-2 text-xs text-[var(--foreground)]">
             <option value="">Todas las categorías</option>
             {notificationCategories.map(value => <option key={value} value={value}>{notificationCategoryLabel(value)}</option>)}
           </select>
@@ -74,7 +74,7 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
           Solo importantes
         </label>
       </div>
-      <div className="min-h-0 max-h-[400px] flex-1 overflow-y-auto overscroll-contain" aria-busy={!current}>
+      <div className="min-h-24 max-h-[400px] flex-1 overflow-y-auto overscroll-contain" aria-busy={!current}>
         {!current ? <p role="status" className="p-5 text-center text-sm text-[var(--text-secondary)]">Cargando historial…</p> :
           current.failed ? <div className="p-5 text-center text-sm"><p role="alert">No se pudo cargar el historial.</p><button type="button" className="min-h-11 text-[var(--theme-link)] underline" onClick={() => setRetry(n => n + 1)}>Reintentar historial</button></div> :
           items.length === 0 ? <p className="p-5 text-center text-sm text-[var(--text-secondary)]">{onlyUnread ? 'No hay notificaciones sin leer en esta página.' : 'No hay notificaciones en esta página.'}</p> :
@@ -87,8 +87,8 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
                 <span className="shrink-0 text-xs text-[var(--text-secondary)]">{read ? 'Leída' : 'Sin leer'}</span>
               </div>
               <p className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-[var(--text-secondary)]"><span>{notificationCategoryLabel(item.category)}</span><span className={item.type === 'error' ? 'font-semibold text-[var(--theme-danger)]' : item.type === 'warning' ? 'font-semibold text-[var(--theme-warning)]' : ''}>{notificationSeverityLabel(item.type)}</span></p>
-              <p className="mt-1 break-words text-xs text-[var(--text-secondary)]">{item.message}</p>
-              <p className="mt-1 text-xs text-[var(--text-secondary)]">{date && Number.isFinite(date.getTime()) ? date.toLocaleString('es-DO') : 'Fecha no disponible'}</p>
+              <p className="mt-1 break-words text-sm text-[var(--text-secondary)]">{item.message}</p>
+              <p className="mt-1 text-xs text-[var(--text-secondary)]">{date && Number.isFinite(date.getTime()) ? date.toLocaleString('es-DO', { timeZone: 'America/Santo_Domingo' }) : 'Fecha no disponible'}</p>
               <div className="mt-1 flex flex-wrap items-center gap-3">
                 {safeNotificationLink(item.link) && <Link href={safeNotificationLink(item.link)!} prefetch={false} onClick={onNavigate} className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--theme-link)] underline">Ir al módulo<span className="sr-only">: {item.title}</span></Link>}
                 {!read && <button type="button" disabled={bulkPending || pendingIds.includes(item.id)} onClick={() => void onRead(item.id)} aria-busy={pendingIds.includes(item.id)} className="min-h-11 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">Marcar como leída<span className="sr-only">: {item.title}</span></button>}

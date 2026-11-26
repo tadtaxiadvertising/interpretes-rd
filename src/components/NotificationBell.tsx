@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { notificationCategoryLabel, notificationSeverityLabel } from '@/lib/notifications/notification-display';
 import { defaultNotificationViewPreferences, parseNotificationViewPreferences, notificationImportance, type NotificationViewPreferences } from '@/lib/notifications/notification-view-preferences';
@@ -25,7 +25,7 @@ function formatNotificationTime(value: Date | string | null): string {
   if (value === null) return 'Fecha no disponible';
   const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
   return Number.isFinite(date.getTime())
-    ? date.toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    ? date.toLocaleString('es-DO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'America/Santo_Domingo' })
     : 'Fecha no disponible';
 }
 
@@ -45,6 +45,9 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
     setRefreshVersion(version => version + 1);
   };
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const panelId = useId();
+  const preferencesId = useId();
   useEffect(() => {
     let active = true;
     let busy = false;
@@ -129,6 +132,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
 
   useEffect(() => {
     if (!isOpen) return;
+    panelRef.current?.focus();
     const onEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') { setIsOpen(false); triggerRef.current?.focus(); }
     };
@@ -205,8 +209,8 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
         aria-label="Notificaciones"
         aria-description={`${unreadCount} sin leer`}
         aria-expanded={isOpen}
-        aria-controls="notification-panel"
-        className="group relative rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
+        aria-controls={isOpen ? panelId : undefined}
+        className="group relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
       >
         <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "text-[var(--theme-link)]")} />
         {unreadCount > 0 && (
@@ -218,36 +222,36 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
 
       {isOpen && (
         <>
-          <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => setIsOpen(false)} />
-          <div id="notification-panel" role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className={cn("fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl animate-in fade-in slide-in-from-top-2 duration-300", candidateOnly ? "sm:inset-x-auto sm:right-4 sm:w-96" : "sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96")}>
-            <div className="p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
+          <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }} />
+          <div id={panelId} ref={panelRef} tabIndex={-1} role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className={cn("fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl focus:outline-none motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300", candidateOnly ? "sm:inset-x-auto sm:right-4 sm:w-96" : "sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96")}>
+            <div className="shrink-0 p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">{showHistory ? "Historial" : "Notificaciones"}</h4>
               <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
               <div className="flex gap-1" role="group" aria-label="Filtrar notificaciones">
-                <button type="button" aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)} className={cn("min-h-9 rounded-lg px-2 text-xs", !onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Todas</button>
-                <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)} className={cn("min-h-9 rounded-lg px-2 text-xs", onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Sin leer</button>
+                <button type="button" aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)} className={cn("min-h-11 rounded-lg px-2 text-xs", !onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Todas</button>
+                <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)} className={cn("min-h-11 rounded-lg px-2 text-xs", onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Sin leer</button>
               </div>
-              <button type="button" disabled={!unreadCount || bulkPending || pendingIds.length > 0} aria-busy={bulkPending} onClick={() => void handleMarkAll()} className="min-h-9 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">{bulkPending ? 'Marcando…' : 'Marcar todas como leídas'}</button>
+              <button type="button" disabled={!unreadCount || bulkPending || pendingIds.length > 0} aria-busy={bulkPending} onClick={() => void handleMarkAll()} className="min-h-11 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">{bulkPending ? 'Marcando…' : 'Marcar todas como leídas'}</button>
             </div>
             <div className="shrink-0 border-b border-[var(--border)] px-3 py-1">
-              <button type="button" aria-expanded={showPreferences} aria-controls="notification-view-preferences" onClick={() => setShowPreferences(value => !value)} className="min-h-9 text-xs font-semibold text-[var(--theme-link)]">Preferencias de visualización</button>
+              <button type="button" aria-expanded={showPreferences} aria-controls={showPreferences ? preferencesId : undefined} onClick={() => setShowPreferences(value => !value)} className="min-h-11 text-xs font-semibold text-[var(--theme-link)]">Preferencias de visualización</button>
               {showPreferences && (
-                <div id="notification-view-preferences" className="max-h-[min(12rem,30dvh)] overflow-y-auto space-y-1 pb-2 text-xs text-[var(--foreground)]">
-                  <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={preferences.openUnread} onChange={event => updatePreferences({ ...preferences, openUnread: event.target.checked })} /> Abrir en «Sin leer»</label>
-                  <label className="flex min-h-9 items-center gap-2"><input type="checkbox" checked={preferences.prioritizeImportant} onChange={event => updatePreferences({ ...preferences, prioritizeImportant: event.target.checked })} /> Priorizar importantes en avisos recientes</label>
+                <div id={preferencesId} className="max-h-[min(12rem,30dvh)] overflow-y-auto space-y-1 pb-2 text-xs text-[var(--foreground)]">
+                  <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={preferences.openUnread} onChange={event => updatePreferences({ ...preferences, openUnread: event.target.checked })} /> Abrir en «Sin leer»</label>
+                  <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={preferences.prioritizeImportant} onChange={event => updatePreferences({ ...preferences, prioritizeImportant: event.target.checked })} /> Priorizar importantes en avisos recientes</label>
                   <p className="text-[var(--text-secondary)]">Solo cambia la vista. No desactiva avisos, correos ni el contador total.</p>
                   <p role="status" className="text-[var(--text-secondary)]">{!storageKey || storageUnavailable ? 'Preferencias temporales; no se pudieron guardar para este navegador.' : 'Preferencias de esta cuenta en este navegador.'}</p>
-                  <button type="button" onClick={() => updatePreferences({ ...defaultNotificationViewPreferences })} className="min-h-9 text-[var(--theme-link)] underline">Restablecer preferencias</button>
+                  <button type="button" onClick={() => updatePreferences({ ...defaultNotificationViewPreferences })} className="min-h-11 text-[var(--theme-link)] underline">Restablecer preferencias</button>
                 </div>
               )}
             </div>
             {refreshFailed && (
               <div role="status" className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-4 py-2 text-xs text-[var(--theme-warning)]">
                 <span>No se pudo actualizar. Se muestran los últimos datos disponibles.</span>
-                <button type="button" onClick={requestRefresh} className="min-h-9 font-semibold underline">Reintentar</button>
+                <button type="button" onClick={requestRefresh} className="min-h-11 font-semibold underline">Reintentar</button>
               </div>
             )}
             {error && (
@@ -259,7 +263,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
             {showHistory ? (
               <NotificationHistory candidateOnly={candidateOnly} key={onlyUnread ? 'unread' : 'all'} onlyUnread={onlyUnread} refreshVersion={refreshVersion} locallyReadIds={locallyReadIds} pendingIds={pendingIds} bulkPending={bulkPending} onRead={handleMarkAsRead} onNavigate={() => setIsOpen(false)} />
             ) : (
-            <div className="min-h-0 max-h-[400px] flex-1 overflow-y-auto overscroll-contain">
+            <div className="min-h-24 max-h-[400px] flex-1 overflow-y-auto overscroll-contain">
               {visibleNotifications.length === 0 ? (
                 <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
                   {onlyUnread ? 'No hay notificaciones recientes sin leer.' : 'No hay notificaciones.'}
@@ -275,12 +279,13 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
                   >
                     <div className="mt-1">{getIcon(n.type)}</div>
                     <div className="min-w-0 flex-1 space-y-1 break-words">
-                      <p className={cn("text-xs font-bold", !n.isRead ? "text-[var(--foreground)]" : "text-[var(--text-secondary)]")}>{n.title}</p>
+                      <p className={cn("text-sm font-bold", !n.isRead ? "text-[var(--foreground)]" : "text-[var(--text-secondary)]")}>{n.title}</p>
                       <p className="flex flex-wrap gap-x-2 text-[11px] text-[var(--text-secondary)]">
                         <span>{notificationCategoryLabel(n.category)}</span>
+                        <span className={!n.isRead ? "font-semibold text-[var(--foreground)]" : undefined}>{n.isRead ? "Leída" : "Sin leer"}</span>
                         <span className={cn(n.type === 'error' && 'font-semibold text-[var(--theme-danger)]', n.type === 'warning' && 'font-semibold text-[var(--theme-warning)]')}>{notificationSeverityLabel(n.type)}</span>
                       </p>
-                      <p className="text-xs text-[var(--text-secondary)] leading-relaxed">{n.message}</p>
+                      <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{n.message}</p>
                       {safeNotificationLink(n.link) && <Link href={safeNotificationLink(n.link)!} prefetch={false} onClick={() => setIsOpen(false)} className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--theme-link)] underline">Ir al módulo<span className="sr-only">: {n.title}</span></Link>}
                       <p className="text-[10px] text-[var(--text-secondary)] uppercase mt-1">
                         {formatNotificationTime(n.createdAt)}
@@ -313,7 +318,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
               <button
                 type="button"
                 onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }}
-                className="text-[10px] font-bold text-[var(--theme-link)] hover:text-[var(--foreground)] transition-colors uppercase tracking-widest"
+                className="min-h-11 min-w-11 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]"
               >
                 Cerrar
               </button>

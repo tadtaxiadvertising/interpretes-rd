@@ -239,4 +239,27 @@ describe('NotificationBell interactions', () => {
       expect(screen.getByText(/Preferencias temporales/)).toBeTruthy();
     } finally { spy.mockRestore(); }
   });
+  it('moves keyboard focus into the panel and restores it on Escape and outside dismissal', () => {
+    render(<NotificationBell initialNotifications={notifications} />);
+    const trigger = screen.getByRole('button', { name: 'Notificaciones' });
+    fireEvent.click(trigger);
+    const panel = screen.getByRole('region', { name: 'Notificaciones recientes' });
+    expect(trigger.getAttribute('aria-controls')).toBe(panel.id);
+    expect(document.activeElement).toBe(panel);
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByRole('region', { name: 'Notificaciones recientes' })).toBeNull();
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: 'Cerrar notificaciones' }));
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('uses distinct accessible panel IDs and explicit read states', () => {
+    render(<><NotificationBell initialNotifications={[notifications[0], { ...notifications[1], isRead: true }]} /><NotificationBell initialNotifications={[]} /></>);
+    const triggers = screen.getAllByRole('button', { name: 'Notificaciones' });
+    fireEvent.click(triggers[0]);
+    expect(screen.getByText('Leída')).toBeTruthy();
+    fireEvent.click(triggers[1]);
+    expect(triggers[0].getAttribute('aria-controls')).not.toBe(triggers[1].getAttribute('aria-controls'));
+  });
 });
