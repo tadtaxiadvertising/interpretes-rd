@@ -23,7 +23,7 @@ function fixture(){
       if(claims.has(order)) return [];
       claims.add(order);return [{order}];
     }
-    if(statement.includes('FROM public.roleplay_final_write_claims')) return claims.has(values[1] as number)?[{order:values[1]}]:[];
+    if(statement.trim().startsWith('SELECT slot_order AS "order" FROM public.roleplay_final_write_claims')) return claims.has(values[1] as number)?[{order:values[1]}]:[];
     if(statement.includes('FOR UPDATE')) return [{id}];
     if(statement.includes('INSERT INTO public.roleplay_final_upload_evidence')){
       const [order,reference,sizeBytes,sha256,verifiedAt]=values as [number,string,number,string,Date];
@@ -50,6 +50,22 @@ describe('incremental final consolidation',()=>{
     expect(await consolidateDirectUploadSlot(f.db,f.port,'admin',key,1)).toEqual({verifiedCount:2,total:2,complete:true});
     const complete=await loadConsolidatedClinicalPublication(f.db,'admin',key);
     expect(complete.final.map(item=>item.reference)).toEqual([0,1].map(order=>'private-base/'+id+'/'+order+'.mp3'));
+  });
+  it('does not attempt a copy if the durable claim acknowledgement fails',async()=>{
+    const f=fixture();
+    f.query.mockImplementationOnce(async()=>[]).mockRejectedValueOnce(new Error('claim reply lost'));
+    await expect(consolidateDirectUploadSlot(f.db,f.port,'admin',key,0)).rejects.toThrow();
+    expect(f.port.copyIfAbsent).not.toHaveBeenCalled();
+    expect(f.port.verify).not.toHaveBeenCalled();
+  });
+  it('recovers an uncertain copy by verification only, never writing again',async()=>{
+    const f=fixture();
+    f.port.copyIfAbsent.mockRejectedValueOnce(new Error('lost response'));
+    f.port.verify.mockRejectedValueOnce(new Error('object not yet visible'));
+    await expect(consolidateDirectUploadSlot(f.db,f.port,'admin',key,0)).rejects.toThrow();
+    expect(await consolidateDirectUploadSlot(f.db,f.port,'admin',key,0)).toMatchObject({verifiedCount:1});
+    expect(f.port.copyIfAbsent).toHaveBeenCalledTimes(1);
+    expect(f.port.verify).toHaveBeenCalledTimes(2);
   });
   it('rejects out-of-order and foreign reservations before Storage work',async()=>{
     const f=fixture();
