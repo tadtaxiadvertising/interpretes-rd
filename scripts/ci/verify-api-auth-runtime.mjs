@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { spawnSync } from 'node:child_process';
 
 const expectedDb = 'postgresql://postgres:postgres@127.0.0.1:5432/interpreters_e2e';
 const expectedSecret = 'synthetic-api-auth-ci-only-not-production-2026';
@@ -10,6 +11,30 @@ if (process.env.CI !== 'true' || process.env.API_AUTH_SMOKE !== 'true' ||
   throw new Error('Refusing API auth smoke outside disposable CI context');
 }
 
+// Validate the compiled production configuration entrypoint in isolated
+// child processes; no DB import, network request, or production credentials.
+const sentinel = 'SYNTHETIC_INVALID_PRIVATE_VALUE';
+const probe = overrides => spawnSync(process.execPath, [
+  '--input-type=module', '-e',
+  "import { ENV } from './dist/config/env.js'; console.log(ENV.JWT_EXPIRES_IN);",
+], {
+  cwd: '/app', encoding: 'utf8', timeout: 5000,
+  env: { ...process.env, NODE_ENV: 'production', JWT_EXPIRES_IN: '8h', ...overrides },
+});
+const validEnv = probe({});
+assert.equal(validEnv.status, 0);
+assert.equal(validEnv.stdout.trim(), '28800');
+for (const [key, value] of [
+  ['JWT_SECRET', 'shortkey'], ['JWT_EXPIRES_IN', '3600'],
+  ['JWT_EXPIRES_IN', '8d'], ['JWT_EXPIRES_IN', sentinel],
+]) {
+  const result = probe({ [key]: value });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /INVALID_API_RUNTIME_CONFIGURATION/);
+  assert.ok(result.stderr.includes(key));
+  assert.ok(!result.stderr.includes(value));
+}
+console.log('API runtime JWT configuration passed: explicit duration, weak-secret rejection and redacted diagnostics.');
 const { default: app } = await import('./dist/app.js');
 const { prisma } = await import('./dist/lib/prisma.js');
 const { default: bcrypt } = await import('bcrypt');
@@ -63,6 +88,8 @@ try {
   assert.equal(legacy.data.user.role, 'INTERPRETER');
   assert.ok(!Object.hasOwn(legacy.data.user, 'password'));
   assert.equal(typeof legacy.data.token, 'string');
+  const claims = jwt.decode(legacy.data.token);
+  assert.equal(claims.exp - claims.iat, 28800);
   assert.equal((await request('/api/auth/me', { token: legacy.data.token })).data.email, legacyEmail);
   await request('/api/auth/login', { body: { email: legacyEmail, password: 'incorrect' }, status: 401 });
   await request('/api/auth/me', { status: 401 });
