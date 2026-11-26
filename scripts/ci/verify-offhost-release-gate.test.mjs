@@ -47,6 +47,18 @@ test('rejects moved main, other refs and incomplete/ambiguous results', () => {
   }
 });
 
+test('rejects truncated, duplicated or malformed GitHub run evidence even with all required checks green', () => {
+  for (const overrides of [
+    { totalCount: passes.length + 1 },
+    { totalCount: passes.length - 1 },
+    { workflowRuns: [...passes, passes[0]], totalCount: passes.length + 1 },
+    { workflowRuns: [...passes, { ...passes[0], id: 999, head_sha: 123 }], totalCount: passes.length + 1 },
+    { workflowRuns: [...passes, null], totalCount: passes.length + 1 },
+  ]) {
+    assert.deepEqual(assessOffhostApproval(evidence(overrides)), { ok: false, code: 'INCOMPLETE_EVIDENCE' });
+  }
+});
+
 test('GitHub API is read-only; failed context never attempts network', async () => {
   const env = {
     GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'self-hosted',
