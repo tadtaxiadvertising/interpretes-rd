@@ -1,0 +1,65 @@
+name: Isolated roleplay Storage pilot
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/roleplay-storage-pilot.yml'
+      - 'scripts/ci/verify-roleplay-storage-pilot.ts'
+      - 'src/lib/roleplay/direct-upload-final-storage.ts'
+      - 'src/lib/roleplay/direct-upload-signing.ts'
+      - 'src/lib/roleplay/direct-upload-browser-http.ts'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: roleplay-storage-pilot-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  local-storage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      ROLEPLAY_ISOLATED_STORAGE_PILOT: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install pinned application dependencies
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+      - uses: supabase/setup-cli@v3
+        with:
+          version: '2.84.2'
+      - name: Start fresh local Supabase only
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase init --help >/dev/null
+          supabase start --help >/dev/null
+          supabase status --help >/dev/null
+          pilot_dir="$RUNNER_TEMP/roleplay-storage-pilot"
+          mkdir -m 700 "$pilot_dir"
+          cd "$pilot_dir"
+          supabase init
+          # No link, remote token, migration, project credentials or secrets.
+          supabase start -x studio,realtime,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,postgres-meta > "$pilot_dir/start.log" 2>&1
+          umask 077
+          supabase status -o json > "$pilot_dir/status.json" 2> "$pilot_dir/status.log"
+      - name: Verify real local Storage API with synthetic fixtures
+        shell: bash
+        run: |
+          ROLEPLAY_LOCAL_STATUS_FILE="$RUNNER_TEMP/roleplay-storage-pilot/status.json" npx tsx scripts/ci/verify-roleplay-storage-pilot.ts
+      - name: Stop disposable local stack
+        if: always()
+        shell: bash
+        run: |
+          pilot_dir="$RUNNER_TEMP/roleplay-storage-pilot"
+          if [ -d "$pilot_dir" ]; then
+            cd "$pilot_dir"
+            supabase stop --help >/dev/null
+            supabase stop --no-backup > "$pilot_dir/stop.log" 2>&1 || exit 1
+          fi
