@@ -79,7 +79,7 @@ The repository has separate production images: `Dockerfile` (Next.js frontend) a
 
 The Express image uses `GET /health` for process liveness; `GET /ready` checks PostgreSQL independently and may return 503 during database outages. A healthy liveness response does not prove database connectivity. Before any production change, verify the actual Easypanel build file, health override, available resources and rollback target. CI success or a successful webhook attempt does not by itself prove the deployed image revision.
 
-Deployments are triggered through GitHub Actions/Easypanel webhooks after eligible `main` workflows; the optional audio worker is separately gated. See [easypanel/README.md](./easypanel/README.md) for service-specific configuration and [GitHub Actions](./.github/workflows/) for the current deployment conditions.
+> **Production deployment freeze (November 2026):** the frontend, API and optional audio worker deployment jobs in GitHub Actions are explicitly disabled. CI builds and tests remain active; a successful pipeline does not publish a release. Independent Easypanel Auto Deploy and Vercel integrations are not controlled by this freeze. Do not initiate a production deployment or merge changes while external deployment behavior remains unverified. See the [incident freeze and recovery checklist](./docs/operations/easypanel-incident-freeze.md), [Easypanel configuration](./easypanel/README.md), and the [read-only runtime verification workflow](https://github.com/tadtaxiadvertising/interpretes-rd/actions/workflows/verify-easypanel-runtime.yml).
 
 ## Documentation
 
