@@ -36,7 +36,7 @@ describe('staged direct publication',()=>{
     const f=fixture();
     const result=await publishVerifiedInterpreterRoleplay(f.db,f.port,'admin',key,input);
     expect(result.scenarioCount).toBe(1);
-    expect(f.port.copyIfAbsent).toHaveBeenCalledWith(item.path,target);
+    expect(f.port.copyIfAbsent).toHaveBeenCalledWith(item,target);
     expect(f.port.verify).toHaveBeenCalledWith({...item,path:target});
     expect(f.port.verify.mock.invocationCallOrder[0]).toBeLessThan(f.transaction.mock.invocationCallOrder[0]);
     expect(f.update).toHaveBeenCalledWith({where:{id:result.sessionId},data:{scenarios:{create:[{...input.scenarios[0],order:0,baseAudioUrl:reference}]}}});
