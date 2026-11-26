@@ -67,7 +67,7 @@ export class AuthService {
         revision: sessionRevision(user, ENV.JWT_SECRET),
       },
       ENV.JWT_SECRET,
-      { expiresIn: ENV.JWT_EXPIRES_IN as any }
+      { algorithm: 'HS256', expiresIn: ENV.JWT_EXPIRES_IN }
     );
 
     return {
