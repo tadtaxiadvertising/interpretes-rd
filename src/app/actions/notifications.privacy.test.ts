@@ -236,6 +236,7 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
       createdAt: null, link: i === 0 ? '/dashboard/roleplays?token=secret' : '//evil.invalid',
     }));
     m.notificationFindMany.mockResolvedValueOnce(records);
+    m.validateAction.mockResolvedValueOnce({ user: { profileId, role: 'interpreter', userId: 'worker-1' } });
     const response = await getMyNotificationHistory({ page: 1, unreadOnly: true });
     expect(response).toMatchObject({ success: true, hasMore: true });
     if (response.success) {
@@ -366,5 +367,19 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
       if (role !== 'candidate') expect(m.reconcileCommunications).toHaveBeenLastCalledWith(actor);
     }
     expect(m.reconcileCommunications).toHaveBeenCalledTimes(2);
+  });
+  it('applies the same destination policy in refresh and history without rewriting records', async () => {
+    const rows = [
+      { id: 'old', title: 'Aviso', message: 'Mensaje', type: 'info', category: 'operations', isRead: false, createdAt: null, link: '/admin/accounts' },
+      { id: 'chat', title: 'Mensaje', message: 'Nuevo mensaje', type: 'info', category: 'messaging', isRead: false, createdAt: null, link: '/admin/messages?secret=private' },
+    ];
+    m.validateAction.mockResolvedValue({ user: { profileId, userId: 'worker-1', role: 'interpreter' } });
+    m.notificationFindMany.mockResolvedValue(rows);
+    m.notificationCount.mockResolvedValue(2);
+    const expected = [{ ...rows[0], link: null }, { ...rows[1], link: '/dashboard/messages' }];
+    expect(await getMyNotifications()).toEqual({ success: true, data: expected, unreadCount: 2 });
+    expect(await getMyNotificationHistory({ page: 0, unreadOnly: false })).toEqual({ success: true, data: expected, hasMore: false });
+    expect(m.notificationUpdateMany).not.toHaveBeenCalled();
+    expect(m.notificationCreate).not.toHaveBeenCalled();
   });
 });
