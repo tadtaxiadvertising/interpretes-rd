@@ -7,6 +7,7 @@ import { classifyRoleplayReservationCatalog, readRoleplayReservationCatalog } fr
 import { verifyFinalEvidencePostgres } from './verify-roleplay-final-evidence-postgres';
 import { readRoleplayStorageBudgetAudit } from './roleplay-storage-budget-audit';
 import { readRoleplayStorageRetentionReview } from './roleplay-storage-retention-review';
+import { readRoleplayDirectRolloutReadiness } from './roleplay-direct-rollout-readiness';
 
 // ONLY a fresh, disposable PostgreSQL database on the isolated CI service.
 // Never run against production, a shared DB or a remote hostname.
@@ -461,6 +462,30 @@ async function main(): Promise<void> {
         throw new Error('Audit omitted released tombstone');
     }finally{await first.query('ROLLBACK');}
     console.log('Unused capacity verified: disabled default, irreversible signing intent, retained historical charges, exactly-once release and observed object protection.');
+    // Synthetic bucket metadata, never the provider's own schema.
+    await first.query(`
+      CREATE TABLE storage.buckets(id text,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+      INSERT INTO storage.buckets VALUES
+       ('roleplay-audio-private','roleplay-audio-private',false,15728640,ARRAY['audio/mpeg','audio/wav','audio/webm','audio/mp4']),
+       ('roleplay-opening-private','roleplay-opening-private',true,15728640,ARRAY['audio/webm','audio/mp4','audio/ogg','audio/mpeg']);
+    `);
+    await first.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try{
+      const readiness=await readRoleplayDirectRolloutReadiness(first,{ROLEPLAY_DIRECT_UPLOAD_FORM_ENABLED:'true'});
+      if(readiness.schemaMetadataReady||readiness.activationAuthorized||
+        readiness.deploymentAttestation!=='not-verified'||
+        readiness.buckets.find(b=>b.id==='roleplay-audio-private')?.state!=='metadata-ready'||
+        readiness.buckets.find(b=>b.id==='roleplay-opening-private')?.state!=='review-required'||
+        readiness.tableChecks.find(t=>t.name==='roleplay_direct_upload_budget_charges')?.state!=='present-private'||
+        readiness.tableChecks.find(t=>t.name==='roleplay_bilingual_openings')?.state!=='missing'||
+        !readiness.triggerChecks.find(t=>t.name==='roleplay_upload_capability_state_guard')?.enabled||
+        readiness.triggerChecks.find(t=>t.name==='roleplay_opening_record_guard')?.enabled!==false||
+        readiness.budget.remainingSlots!==0||readiness.budget.releaseEnabled!==true||
+        readiness.environment.filter(e=>e.enabled).length!==1)
+        throw new Error('Rollout readiness misclassified incomplete staged schema');
+    }finally{await first.query('ROLLBACK');}
+    console.log('Rollout diagnostics verified: missing opening schema, public bucket, active trigger, exhausted budget and no activation authorization.');
+
 
 
 
