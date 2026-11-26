@@ -7,6 +7,7 @@ import type { LoginInput, RegisterInput } from './auth.schemas.js';
 import { PUBLIC_REGISTRATION_ROLE } from './auth.schemas.js';
 import { newBcryptPasswordSchema } from '../../lib/password-policy.js';
 import { sessionRevision } from '../../lib/session-revision.js';
+import { withPasswordWork } from '../../lib/password-work-gate.js';
 
 /**
  * AUTH SERVICE — Business Logic
@@ -49,11 +50,11 @@ export class AuthService {
     });
 
     if (!user) {
-      // Constant-time: don't reveal whether email exists
+      // Same response as an incorrect password; timing is not equalized.
       throw AppError.unauthorized('Invalid credentials');
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
+    const isPasswordValid = await withPasswordWork(() => bcrypt.compare(password, user.password));
     if (!isPasswordValid) {
       throw AppError.unauthorized('Invalid credentials');
     }
@@ -95,7 +96,7 @@ export class AuthService {
       throw AppError.conflict('Email already registered');
     }
 
-    const hashedPassword = await bcrypt.hash(validatedPassword, 10);
+    const hashedPassword = await withPasswordWork(() => bcrypt.hash(validatedPassword, 10));
 
     return prisma.rbacUser.create({
       data: {
