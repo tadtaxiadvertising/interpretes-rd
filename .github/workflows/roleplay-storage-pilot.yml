@@ -20,6 +20,11 @@ concurrency:
   cancel-in-progress: true
 jobs:
   local-storage:
+    name: ${{ matrix.pilot }} Storage pilot
+    strategy:
+      fail-fast: false
+      matrix:
+        pilot: [provider, guarded]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -56,13 +61,14 @@ jobs:
           umask 077
           supabase status -o json > "$pilot_dir/status.json" 2> "$pilot_dir/status.log"
       - name: Verify real local Storage API with synthetic fixtures
+        if: ${{ matrix.pilot == 'provider' }}
         shell: bash
         run: |
           ROLEPLAY_LOCAL_STATUS_FILE="$RUNNER_TEMP/roleplay-storage-pilot/status.json" npx tsx scripts/ci/verify-roleplay-storage-pilot.ts
-      # Raw provider race remains a failing diagnostic when its contract
-      # fails. Run the guarded service independently even in that case.
+      # Each matrix job owns a fresh local stack; neither result masks the
+      # other. The raw provider race remains a failing diagnostic.
       - name: Verify guarded writes with real Prisma and local Storage
-        if: ${{ always() && steps.local-start.outcome == 'success' }}
+        if: ${{ matrix.pilot == 'guarded' && steps.local-start.outcome == 'success' }}
         shell: bash
         run: |
           set -euo pipefail
