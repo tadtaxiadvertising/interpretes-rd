@@ -51,3 +51,16 @@ describe('public registration cannot mint privileged RBAC identities', () => {
     expect(schema).not.toContain("z.enum(['ADMIN', 'INTERPRETER', 'HOLDER']).default('INTERPRETER')");
   });
 });
+
+describe('new bcrypt credentials respect the UTF-8 byte boundary', () => {
+  it.each(['x'.repeat(72), 'é'.repeat(36), '😀'.repeat(18)])(
+    'accepts a password occupying 72 bytes', password => {
+      expect(registerSchema.safeParse({ body: { ...valid, password } }).success).toBe(true);
+    },
+  );
+  it.each(['x'.repeat(73), 'é'.repeat(37), '😀'.repeat(19)])(
+    'rejects a password exceeding 72 bytes', password => {
+      expect(registerSchema.safeParse({ body: { ...valid, password } }).success).toBe(false);
+    },
+  );
+});
