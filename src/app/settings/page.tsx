@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ArrowLeft, ClipboardList, HardDrive, LockKeyhole, Mail } from 'lucide-react';
+import SettingsSectionNavigation from './SettingsSectionNavigation';
 import SystemReadinessCheck from './SystemReadinessCheck';
 import NotificationDiagnostics from './NotificationDiagnostics';
 import NotificationEmailBudget from './NotificationEmailBudget';
@@ -47,70 +48,52 @@ export default async function SettingsPage() {
     smtp_password: 'OPERATIONAL_SMTP_PASSWORD: revisa si la contraseña contiene caracteres de control.',
   } as const;
   return (
-    <main className="max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <main className="mx-auto w-full max-w-5xl min-w-0 space-y-8">
       <header className="space-y-3">
         <Link href="/admin" className="inline-flex items-center gap-2 text-sm text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600">
           <ArrowLeft size={16} aria-hidden="true" /> Volver al administrador
         </Link>
         <h1 className="text-2xl sm:text-3xl font-bold text-[var(--foreground)]">Configuración y diagnóstico</h1>
         <p className="text-[var(--text-secondary)]">
-          Consulta el estado conocido de la plataforma sin exponer credenciales ni ejecutar cambios de infraestructura.
+          Administra las comunicaciones y comprueba el estado de la plataforma desde un solo lugar.
         </p>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <aside className="space-y-4">
-          <section className="glass rounded-3xl border border-[var(--border)] p-6 space-y-3">
-            <div className="flex items-center gap-3">
-              <LockKeyhole className="text-[var(--theme-link)]" aria-hidden="true" />
-              <h2 className="font-semibold text-[var(--foreground)]">Acceso administrativo</h2>
+      <SettingsSectionNavigation />
+
+      <section id="settings-system" aria-labelledby="settings-system-heading" className="scroll-mt-24 space-y-4">
+        <h2 id="settings-system-heading" className="text-lg font-semibold text-[var(--foreground)]">Estado del sistema</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="glass rounded-2xl border border-[var(--border)] p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <LockKeyhole size={20} className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
+              <h3 className="font-semibold text-[var(--foreground)]">Acceso administrativo</h3>
             </div>
-            <p className="text-sm text-[var(--text-secondary)]">
-              El diagnóstico requiere una sesión administradora y no devuelve credenciales ni datos de pacientes.
-            </p>
-          </section>
-          <Link
-            href="/settings/import"
-            className="glass flex items-center gap-3 rounded-2xl border border-[var(--border)] p-5 text-[var(--foreground)] hover:bg-[var(--theme-hover)]"
-          >
+            <p className="text-sm text-[var(--text-secondary)]">Las comprobaciones requieren una sesión administrativa. No muestran credenciales ni contenido de conversaciones privadas.</p>
+          </div>
+          <Link href="/settings/import" className="glass flex min-h-11 items-center gap-3 rounded-2xl border border-[var(--border)] p-4 text-[var(--foreground)] hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2">
             <ClipboardList className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
             <span className="text-sm font-semibold">Importar datos CSV</span>
           </Link>
-        </aside>
+        </div>
+        <SystemReadinessCheck />
+      </section>
 
-        <div className="lg:col-span-2 space-y-5">
-          <SystemReadinessCheck />
-          <NotificationDiagnostics />
-          <NotificationEmailBudget />
-          <section aria-labelledby="email-settings-heading" className="glass rounded-3xl border border-[var(--border)] p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <Mail className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
-              <h2 id="email-settings-heading" className="font-semibold text-[var(--foreground)]">Correos corporativos</h2>
-            </div>
-            <p className="text-sm text-[var(--foreground)]">
-              Usa el nombre Intérpretes RD y una dirección autorizada por el proveedor de correo para los mensajes de autenticación.
-            </p>
-            <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
-              <p><strong>Estado SMTP:</strong> no verificado desde esta pantalla.</p>
-              <p>Configura el remitente y las plantillas en el panel de Supabase del proyecto correspondiente. Las credenciales permanecen en ese servicio.</p>
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
-                Abrir Supabase (nueva pestaña)
-              </a>
-              <a href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/docs/AUTH_CORPORATE_EMAIL_TEMPLATES.md" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
-                Plantillas y guía (nueva pestaña)
-              </a>
-            </div>
-            <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--foreground)]">
-              <li>Selecciona el proyecto correcto y abre Authentication → Emails.</li>
-              <li>Comprueba el SMTP personalizado, el remitente y las plantillas en español.</li>
-              <li>Prueba el registro y la recuperación de contraseña con una cuenta controlada.</li>
-              <li>Revisa la bandeja de entrada, el remitente y los registros de entrega.</li>
-            </ol>
-            <p className="text-xs text-[var(--foreground)]">
-              El SMTP de autenticación se comprueba en Supabase. La prueba operativa de abajo es independiente y no activa notificaciones automáticas.
-            </p>
+      <section id="settings-notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-24 space-y-4">
+        <div className="space-y-1">
+          <h2 id="settings-notifications-heading" className="text-lg font-semibold text-[var(--foreground)]">Notificaciones y presupuesto</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Comprueba los avisos internos, recupera registros faltantes y consulta los intentos locales de correo. Las consultas se realizan bajo demanda.</p>
+        </div>
+        <NotificationDiagnostics />
+        <NotificationEmailBudget />
+      </section>
+
+      <section id="settings-providers" aria-labelledby="email-settings-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
+        <div className="flex items-center gap-3">
+          <Mail className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
+          <h2 id="email-settings-heading" className="text-lg font-semibold text-[var(--foreground)]">Proveedores de correo operativo</h2>
+        </div>
+        <p className="text-sm text-[var(--text-secondary)]">Configura el transporte, consulta perfiles y presupuestos, verifica el remitente y administra la preferencia sin activar envíos automáticamente.</p>
             <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
               <h3 className="font-semibold">Configuración de correos operativos</h3>
               <p>{operationalMessages[operationalStatus]}</p>
@@ -161,6 +144,11 @@ export default async function SettingsPage() {
             <EmailVaultPause />
             <EmailProviderVault />
             {vault ? <p className="text-sm">Usa la prueba de perfiles guardados con el despacho pausado. El transporte de entorno no se utiliza en este modo.</p> : <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />}
+      </section>
+
+      <section id="settings-delivery" aria-labelledby="settings-delivery-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
+        <h2 id="settings-delivery-heading" className="text-lg font-semibold text-[var(--foreground)]">Envíos, historial y automatización</h2>
+        <p className="text-sm text-[var(--text-secondary)]">Revisa las plantillas, los registros de entrega y los requisitos del despacho de reclutamiento.</p>
             <RecruitmentEmailPreview />
             <CorporateEmailHistory />
             <CorporateEmailPilot configured={automation.mode === 'pilot' && automation.ready} />
@@ -177,20 +165,46 @@ export default async function SettingsPage() {
                 ))}
               </dl>
               <p className="text-xs">Diagnóstico de configuración solamente. No confirma permisos de base de datos, recepción real ni la existencia de una tarea programada. No muestra secretos ni inicia envíos.</p>
-            </section>
-          </section>
-          <section className="glass rounded-3xl border border-[var(--border)] p-6 space-y-3">
+            </section>      </section>
+
+      <section id="settings-auth-email" aria-labelledby="settings-auth-email-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
+        <h2 id="settings-auth-email-heading" className="text-lg font-semibold text-[var(--foreground)]">Correo de autenticación (Supabase)</h2>
+            <p className="text-sm text-[var(--foreground)]">
+              Usa el nombre Intérpretes RD y una dirección autorizada por el proveedor de correo para los mensajes de autenticación.
+            </p>
+            <div className="rounded-xl border border-[var(--border)] p-4 space-y-2 text-sm text-[var(--foreground)]">
+              <p><strong>Estado SMTP:</strong> no verificado desde esta pantalla.</p>
+              <p>Configura el remitente y las plantillas en el panel de Supabase del proyecto correspondiente. Las credenciales permanecen en ese servicio.</p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+                Abrir Supabase (nueva pestaña)
+              </a>
+              <a href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/docs/AUTH_CORPORATE_EMAIL_TEMPLATES.md" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+                Plantillas y guía (nueva pestaña)
+              </a>
+            </div>
+            <ol className="list-decimal space-y-1 pl-5 text-sm text-[var(--foreground)]">
+              <li>Selecciona el proyecto correcto y abre Authentication → Emails.</li>
+              <li>Comprueba el SMTP personalizado, el remitente y las plantillas en español.</li>
+              <li>Prueba el registro y la recuperación de contraseña con una cuenta controlada.</li>
+              <li>Revisa la bandeja de entrada, el remitente y los registros de entrega.</li>
+            </ol>
+            <p className="text-xs text-[var(--foreground)]">
+              El SMTP de autenticación se comprueba en Supabase. La prueba operativa de la sección de proveedores es independiente y no activa notificaciones automáticas.
+            </p>
+      </section>
+
+          <section id="settings-maintenance" aria-labelledby="settings-maintenance-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-3">
             <div className="flex items-center gap-3">
               <HardDrive className="text-[var(--theme-warning)]" aria-hidden="true" />
-              <h2 className="font-semibold text-[var(--foreground)]">Mantenimiento</h2>
+              <h2 id="settings-maintenance-heading" className="text-lg font-semibold text-[var(--foreground)]">Mantenimiento</h2>
             </div>
             <p className="text-sm text-[var(--text-secondary)]">
               Las migraciones, la rotación de secretos y el reinicio de caché requieren procedimientos operativos
               autorizados. Esta pantalla no ejecuta esas operaciones.
             </p>
           </section>
-        </div>
-      </div>
     </main>
   );
 }
