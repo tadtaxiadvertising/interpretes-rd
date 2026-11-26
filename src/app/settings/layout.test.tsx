@@ -35,7 +35,7 @@ describe('settings notification identity', () => {
   it.each(layouts)('loads the same authorized recipient IDs and preference scope in %s', async Layout => {
     render(await Layout({ children: <p>Configuración</p> }));
     expect(screen.getByText('Configuración')).toBeTruthy();
-    expect(m.load).toHaveBeenCalledExactlyOnceWith([userId, profileId]);
+    expect(m.load).toHaveBeenCalledExactlyOnceWith([userId, profileId], { role: 'admin' });
     expect(m.count).toHaveBeenCalledExactlyOnceWith([userId, profileId]);
     expect(m.scope).toHaveBeenCalledExactlyOnceWith(userId, 'admin');
     expect(m.shell).toHaveBeenCalledWith(expect.objectContaining({ role: 'admin', notifications: [{ id: 'notice-1' }], notificationPreferenceScope: 'account-scope', notificationUnreadCount: 24 }));

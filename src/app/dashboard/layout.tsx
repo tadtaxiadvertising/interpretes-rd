@@ -46,7 +46,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // Auth.js account UUIDs may differ from their linked profile UUIDs.
   const recipientIds = authorizedNotificationRecipientIds(userId, profile?.id);
   const [notifications, notificationUnreadCount] = await Promise.all([
-    loadNavbarNotifications(recipientIds), loadNavbarUnreadCount(recipientIds),
+    loadNavbarNotifications(recipientIds, { role: 'interpreter' }), loadNavbarUnreadCount(recipientIds),
   ]);
 
   // Ranking removed from layout - will be fetched client-side or via API

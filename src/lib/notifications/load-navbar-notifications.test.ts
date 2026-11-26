@@ -28,7 +28,7 @@ describe('minimal notification lookup for the dashboard navbar', () => {
   });
 
   it('fetches exactly the fields used by the bell and limits records', async () => {
-    const records = await loadNavbarNotifications([id]);
+    const records = await loadNavbarNotifications([id], { role: 'interpreter' });
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({ category: 'qa', link: '/dashboard' });
     expect(m.findMany).toHaveBeenCalledWith({
@@ -75,5 +75,15 @@ describe('minimal notification lookup for the dashboard navbar', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+  it('suppresses incompatible links in the initial feed without losing the notice', async () => {
+    m.findMany.mockResolvedValueOnce([
+      { id: 'old', title: 'Aviso', message: 'Mensaje', type: 'info', isRead: false, createdAt: null, category: 'operations', link: '/admin/accounts' },
+      { id: 'chat', title: 'Mensaje', message: 'Nuevo mensaje', type: 'info', isRead: false, createdAt: null, category: 'messaging', link: '/admin/messages' },
+    ]);
+    expect(await loadNavbarNotifications([id], { role: 'interpreter' })).toEqual([
+      expect.objectContaining({ id: 'old', link: null, isRead: false }),
+      expect.objectContaining({ id: 'chat', link: '/dashboard/messages', isRead: false }),
+    ]);
   });
 });
