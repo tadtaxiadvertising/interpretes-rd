@@ -28,7 +28,8 @@ export function unwrapStagedRoleplaySql(source:string,wrapped:boolean){
     return source;
   }
   const first=lines.findIndex(line=>line.trim()&&!line.trim().startsWith('--'));
-  const last=lines.findLastIndex(line=>line.trim()!=='');
+  let last=lines.length-1;
+  while(last>=0 && lines[last].trim()==='') last--;
   if(outer.length!==2||outer[0].index!==first||outer[0].line!=='BEGIN;'||
       outer[1].index!==last||outer[1].line!=='COMMIT;') throw new Error('INVALID_TRANSACTION_WRAPPER');
   return lines.filter((_,index)=>index!==first&&index!==last).join('\n');
