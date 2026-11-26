@@ -15,6 +15,7 @@ import { publishNotificationEvent } from '@/lib/notifications/publish-notificati
 import { notificationCategories, publicNotificationCategory } from '@/lib/notifications/notification-display';
 import { notificationDestination } from '@/lib/notifications/notification-destination';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
+import { HistoryCursorSchema, readHistoryCursorPage } from '@/lib/notifications/history-cursor';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 
 const db = prisma;
@@ -191,6 +192,7 @@ export async function markAllNotificationsAsRead() {
 
 const HistoryQuerySchema = z.object({
   page: z.number().int().min(0).max(100000),
+  after: HistoryCursorSchema.nullable().optional(),
   unreadOnly: z.boolean(),
   category: z.enum(notificationCategories).optional(),
   importantOnly: z.boolean().optional(),
@@ -205,9 +207,20 @@ export async function getMyNotificationHistory(input: unknown) {
   const parsed = HistoryQuerySchema.safeParse(input);
   const ids = authorizedNotificationRecipientIds(auth.user.userId, auth.user.profileId);
   if (!parsed.success || !ids.length) return { success: false as const };
+  if (parsed.data.after !== undefined && ((parsed.data.page === 0) !== (parsed.data.after === null))) return { success: false as const };
 
   try {
-    const { page, unreadOnly, category, importantOnly } = parsed.data;
+    const { page, unreadOnly, category, importantOnly, after } = parsed.data;
+    if (after !== undefined) {
+      const result = await readHistoryCursorPage(db, ids, auth.user.role === 'candidate', { unreadOnly, category, importantOnly, after });
+      return {
+        success: true as const,
+        data: result.rows.map(row => ({ ...row, category: publicNotificationCategory(row.category), link: notificationDestination(row.link, auth.user.role, row.category) })),
+        hasMore: result.nextCursor !== null,
+        nextCursor: result.nextCursor,
+      };
+    }
+    // Legacy clients retain their previous contract during rolling deployments.
     if (auth.user.role === 'candidate' && category && category !== 'recruitment') {
       return { success: true as const, data: [], hasMore: false };
     }
