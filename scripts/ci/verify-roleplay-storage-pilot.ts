@@ -79,6 +79,22 @@ async function main(){
   const controlReplay=await privileged.upload(control,b,opts);
   console.log('Sequential duplicate control: '+classify(controlReplay.error));
   assert(controlReplay.error && await read(control)===digest(a),'sequential duplicate changed destination');
+  // Verify privacy and playback on a known-good object before exercising
+  // the raw provider race. The race must still fail the job if unsafe.
+  assert((await browser.download(control)).error,'anonymous download permitted');
+  assert((await browser.createSignedUrl(control,60)).error,'anonymous signing permitted');
+  assert((await browser.createSignedUploadUrl('base/'+id+'/1.wav',{upsert:false})).error,'anonymous upload signing permitted');
+  assert((await browser.upload('base/'+id+'/1.wav',a,opts)).error,'anonymous unsigned upload permitted');
+  const publicUrl=privileged.getPublicUrl(control).data.publicUrl;
+  assert(new URL(publicUrl).origin===origin,'unexpected public origin');
+  const publicResponse=await options.global.fetch(publicUrl);
+  assert(!publicResponse.ok,'private object public URL returned bytes');
+  await publicResponse.body?.cancel().catch(()=>{});
+  const signed=await privileged.createSignedUrl(control,60);
+  assert(!signed.error && signed.data?.signedUrl,'privileged signing failed');
+  const response=await options.global.fetch(signed.data.signedUrl);
+  assert(response.ok && digest(new Uint8Array(await response.arrayBuffer()))===digest(a),'signed playback digest mismatch');
+  console.log('Private Storage access and signed playback checks passed.');
   const attempts=await Promise.all([privileged.upload(final,a,opts),privileged.upload(final,b,opts)]);
   console.log('Concurrent destination outcomes: '+attempts.map(r=>classify(r.error)).join(', '));
   const observed=await privileged.download(final);
@@ -92,19 +108,6 @@ async function main(){
   assert(await read(final)===digest(winner),'winner digest mismatch');
   const duplicate=await privileged.upload(final,loser,opts);
   assert(duplicate.error && await read(final)===digest(winner),'destination was overwritten');
-  assert((await browser.download(final)).error,'anonymous download permitted');
-  assert((await browser.createSignedUrl(final,60)).error,'anonymous signing permitted');
-  assert((await browser.createSignedUploadUrl('base/'+id+'/1.wav',{upsert:false})).error,'anonymous upload signing permitted');
-  assert((await browser.upload('base/'+id+'/1.wav',a,opts)).error,'anonymous unsigned upload permitted');
-  const publicUrl=privileged.getPublicUrl(final).data.publicUrl;
-  assert(new URL(publicUrl).origin===origin,'unexpected public origin');
-  const publicResponse=await options.global.fetch(publicUrl);
-  assert(!publicResponse.ok,'private object public URL returned bytes');
-  await publicResponse.body?.cancel().catch(()=>{});
-  const signed=await privileged.createSignedUrl(final,60);
-  assert(!signed.error && signed.data?.signedUrl,'privileged signing failed');
-  const response=await options.global.fetch(signed.data.signedUrl);
-  assert(response.ok && digest(new Uint8Array(await response.arrayBuffer()))===digest(winner),'signed playback digest mismatch');
   console.log('Local Storage pilot passed: private metadata, scoped signed upload, replay rejection, concurrent non-overwrite, anonymous denial and signed playback digest.');
 }
 void main().catch(error=>{
