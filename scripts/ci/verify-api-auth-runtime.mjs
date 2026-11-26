@@ -88,6 +88,25 @@ try {
   await request(legacyProductionPath, { body: legacyProductionBody, status: 401 });
   await request(legacyProductionPath, { body: legacyProductionBody, token: 'invalid-token', status: 401 });
   await request(legacyProductionPath, { body: legacyProductionBody, token: login.data.token, status: 403 });
+  // This retired route cannot authenticate a legacy shared secret or mutate
+  // any call, production or ledger row, regardless of caller credentials.
+  const oldCallPath = '/api/v1/calls/manual';
+  const oldCallBody = { interpreterId: 'synthetic-' + nonce, minutes: 1 };
+  const before = await Promise.all([
+    prisma.callSession.count(), prisma.productionLog.count(), prisma.callProductionEntry.count(),
+  ]);
+  for (const token of [undefined, 'synthetic-obsolete-key', login.data.token]) {
+    const retiredCall = await request(oldCallPath, { body: oldCallBody, token, status: 410 });
+    assert.deepEqual(retiredCall, {
+      success: false, code: 'LEGACY_MANUAL_CALL_DISABLED',
+      error: 'Utiliza el flujo autorizado de registro de llamadas de la plataforma.',
+    });
+  }
+  await request(oldCallPath, { body: {}, status: 410 });
+  assert.deepEqual(await Promise.all([
+    prisma.callSession.count(), prisma.productionLog.count(), prisma.callProductionEntry.count(),
+  ]), before);
+  console.log('Legacy Express manual call writer retired without call, production or ledger writes.');
   // Changing permissions must not silently upgrade an existing token.
   await prisma.rbacUser.update({ where: { id: registered.data.id }, data: { role: 'ADMIN' } });
   await request('/api/auth/me', { token: login.data.token, status: 401 });
