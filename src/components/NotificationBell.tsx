@@ -236,7 +236,7 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
       >
         <Bell size={20} aria-hidden="true" className={cn("text-[var(--text-secondary)] group-hover:text-[var(--foreground)] transition-colors", unreadCount > 0 && "text-[var(--theme-link)]")} />
         {unreadCount > 0 && (
-          <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-4 h-4 px-0.5 bg-red-700 text-[10px] font-bold text-white flex items-center justify-center rounded-full border-2 border-[var(--theme-nav)]">
+          <span aria-hidden="true" className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-[#b91c1c] text-xs font-bold text-white flex items-center justify-center rounded-full border-2 border-[var(--theme-nav)]">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
@@ -245,23 +245,26 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
       {isOpen && (
         <>
           <button type="button" tabIndex={-1} aria-label="Cerrar notificaciones" className="fixed inset-0 z-40 cursor-default" onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }} />
-          <div id={panelId} ref={panelRef} tabIndex={-1} role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className={cn("fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl focus:outline-none motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300", candidateOnly ? "sm:inset-x-auto sm:right-4 sm:w-96" : "sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96")}>
-            <div className="shrink-0 p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
-              <h4 className="font-bold text-[var(--foreground)] text-sm">{showHistory ? "Historial" : "Notificaciones"}</h4>
-              <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadLabel}</span>
+          <div id={panelId} ref={panelRef} tabIndex={-1} role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className={cn("notification-panel fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl focus:outline-none motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300", candidateOnly ? "sm:inset-x-auto sm:right-4 sm:w-96" : "sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96")}>
+            <div className="sticky top-0 z-10 shrink-0 gap-2 px-3 py-2 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
+              <div className="min-w-0">
+                <h4 className="font-bold text-[var(--foreground)] text-base">{showHistory ? "Historial" : "Notificaciones"}</h4>
+                <span className="break-words text-xs text-[var(--text-secondary)]">{unreadLabel}</span>
+              </div>
+              <button type="button" onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }} className="min-h-11 min-w-11 shrink-0 rounded-lg px-2 text-sm font-semibold text-[var(--theme-link)] hover:bg-[var(--theme-hover)]">Cerrar</button>
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
               <div className="flex gap-1" role="group" aria-label="Filtrar notificaciones">
-                <button type="button" aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)} className={cn("min-h-11 rounded-lg px-2 text-xs", !onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Todas</button>
-                <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)} className={cn("min-h-11 rounded-lg px-2 text-xs", onlyUnread ? "bg-[var(--theme-hover)] font-bold" : "text-[var(--text-secondary)]")}>Sin leer</button>
+                <button type="button" aria-pressed={!onlyUnread} onClick={() => setOnlyUnread(false)} className="notification-filter min-h-11 rounded-lg border px-3 text-sm">Todas</button>
+                <button type="button" aria-pressed={onlyUnread} onClick={() => setOnlyUnread(true)} className="notification-filter min-h-11 rounded-lg border px-3 text-sm">Sin leer</button>
               </div>
               <button type="button" disabled={!unreadCount || bulkPending || pendingIds.length > 0} aria-busy={bulkPending} onClick={() => void handleMarkAll()} className="min-h-11 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">{bulkPending ? 'Marcando…' : 'Marcar todas como leídas'}</button>
             </div>
             <div className="shrink-0 border-b border-[var(--border)] px-3 py-1">
               <button type="button" aria-expanded={showPreferences} aria-controls={showPreferences ? preferencesId : undefined} onClick={() => setShowPreferences(value => !value)} className="min-h-11 text-xs font-semibold text-[var(--theme-link)]">Preferencias de visualización</button>
               {showPreferences && (
-                <div id={preferencesId} className="max-h-[min(12rem,30dvh)] overflow-y-auto space-y-1 pb-2 text-xs text-[var(--foreground)]">
+                <div id={preferencesId} className="space-y-1 pb-2 text-sm text-[var(--foreground)]">
                   <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={preferences.openUnread} onChange={event => updatePreferences({ ...preferences, openUnread: event.target.checked })} /> Abrir en «Sin leer»</label>
                   <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={preferences.prioritizeImportant} onChange={event => updatePreferences({ ...preferences, prioritizeImportant: event.target.checked })} /> Priorizar importantes en avisos recientes</label>
                   <p className="text-[var(--text-secondary)]">Solo cambia la vista. No desactiva avisos, correos ni el contador total.</p>
@@ -287,29 +290,27 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
             ) : (
             <div className="min-h-24 max-h-[400px] flex-1 overflow-y-auto overscroll-contain">
               {visibleNotifications.length === 0 ? (
-                <div className="p-8 text-center text-[var(--text-tertiary)] text-xs">
+                <div className="p-5 text-center text-[var(--text-secondary)] text-sm">
                   {onlyUnread ? 'No hay notificaciones recientes sin leer.' : 'No hay notificaciones.'}
                 </div>
               ) : (
                 visibleNotifications.map(n => (
                   <div
                     key={n.id}
-                    className={cn(
-                      "p-4 border-b border-[var(--border)] flex gap-3 hover:bg-[var(--theme-hover)] transition-colors relative",
-                      !n.isRead && "bg-blue-500/5",
-                    )}
+                    data-unread={!n.isRead}
+                    className="notification-item p-3 sm:p-4 border-b border-[var(--border)] flex gap-2 transition-colors relative"
                   >
                     <div className="mt-1">{getIcon(n.type)}</div>
                     <div className="min-w-0 flex-1 space-y-1 break-words">
                       <p className={cn("text-sm font-bold", !n.isRead ? "text-[var(--foreground)]" : "text-[var(--text-secondary)]")}>{n.title}</p>
-                      <p className="flex flex-wrap gap-x-2 text-[11px] text-[var(--text-secondary)]">
+                      <p className="flex flex-wrap gap-x-2 text-xs text-[var(--text-secondary)]">
                         <span>{notificationCategoryLabel(n.category)}</span>
                         <span className={!n.isRead ? "font-semibold text-[var(--foreground)]" : undefined}>{n.isRead ? "Leída" : "Sin leer"}</span>
                         <span className={cn(n.type === 'error' && 'font-semibold text-[var(--theme-danger)]', n.type === 'warning' && 'font-semibold text-[var(--theme-warning)]')}>{notificationSeverityLabel(n.type)}</span>
                       </p>
                       <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{n.message}</p>
                       {safeNotificationLink(n.link) && <Link href={safeNotificationLink(n.link)!} prefetch={false} onClick={() => setIsOpen(false)} className="inline-flex min-h-11 items-center text-xs font-semibold text-[var(--theme-link)] underline">Ir al módulo<span className="sr-only">: {n.title}</span></Link>}
-                      <p className="text-[10px] text-[var(--text-secondary)] uppercase mt-1">
+                      <p className="text-xs text-[var(--text-secondary)] mt-1">
                         {formatNotificationTime(n.createdAt)}
                       </p>
                     </div>
@@ -335,15 +336,8 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
             )}
             <div className="shrink-0 p-3 bg-[var(--theme-surface-muted)] border-t border-[var(--border)]">
               {!showHistory && <p className="mb-1 text-center text-xs text-[var(--text-secondary)]">Últimas 10 notificaciones</p>}
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center justify-center gap-2">
               <button type="button" onClick={() => setShowHistory(value => !value)} className="min-h-11 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] hover:bg-[var(--theme-hover)]">{showHistory ? 'Volver a recientes' : 'Ver historial completo'}</button>
-              <button
-                type="button"
-                onClick={() => { setIsOpen(false); triggerRef.current?.focus(); }}
-                className="min-h-11 min-w-11 rounded-lg px-2 text-xs font-semibold text-[var(--theme-link)] hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]"
-              >
-                Cerrar
-              </button>
               </div>
             </div>
           </div>

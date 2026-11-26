@@ -318,4 +318,14 @@ describe('NotificationBell interactions', () => {
     expect(m.markNotificationAsRead).not.toHaveBeenCalled();
     expect(m.markAllNotificationsAsRead).not.toHaveBeenCalled();
   });
+  it('uses shared semantic read states and a close control in the sticky panel header', () => {
+    render(<NotificationBell initialNotifications={[notifications[0], { ...notifications[1], isRead: true }]} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    const panel = screen.getByRole('region', { name: 'Notificaciones recientes' });
+    expect(panel.classList.contains('notification-panel')).toBe(true);
+    expect(screen.getByText('Auditoría QA').closest('.notification-item')?.getAttribute('data-unread')).toBe('true');
+    expect(screen.getByText('Turno nuevo').closest('.notification-item')?.getAttribute('data-unread')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Todas' }).classList.contains('notification-filter')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Cerrar', exact: true }).closest('.sticky')).not.toBeNull();
+  });
 });
