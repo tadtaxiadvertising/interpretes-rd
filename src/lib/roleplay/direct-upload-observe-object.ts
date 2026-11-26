@@ -2,7 +2,7 @@ import 'server-only';
 import { requirePrivateRoleplayAudioBucket, type RoleplayPrivateBucketReader } from './private-audio-bucket-readiness';
 
 type Storage = RoleplayPrivateBucketReader & {
-  from(bucket: string): { exists(path: string): Promise<{data: boolean; error: unknown}> };
+  from(bucket: string): { exists(path: string): Promise<{data: unknown; error: unknown}> };
 };
 
 /** Only for canonical paths reconstructed from server-owned reservations.
