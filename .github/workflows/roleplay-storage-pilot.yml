@@ -43,7 +43,8 @@ jobs:
         run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
       - uses: supabase/setup-cli@v3
         with:
-          version: '2.84.2'
+          # Candidate for #1118; baseline evidence is retained in #1120.
+          version: '2.122.0'
       - name: Start fresh local Supabase only
         id: local-start
         shell: bash
