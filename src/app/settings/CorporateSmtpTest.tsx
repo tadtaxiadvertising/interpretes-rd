@@ -51,7 +51,7 @@ export default function CorporateSmtpTest({ configured, brevo = false }: { confi
   }
   return (
     <div className="space-y-2">
-      <p className="text-sm">La prueba solo se dirige al remitente corporativo configurado. No envía mensajes a postulantes. Las pruebas de Brevo y Resend reservan un intento del presupuesto local.</p>
+      <p className="text-sm">La prueba solo se dirige al remitente corporativo configurado. No envía mensajes a postulantes. Las pruebas de proveedores API o SMTP identificados reservan un intento del presupuesto local.</p>
       {brevo && (
         <button type="button" disabled={!configured || pending} onClick={() => run(true)} className="mr-2 rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-semibold text-[var(--foreground)] disabled:opacity-50 focus-visible:outline-2 focus-visible:outline-offset-2">
           Comprobar conexión Brevo (sin enviar)
