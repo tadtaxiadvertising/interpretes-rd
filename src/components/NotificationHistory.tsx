@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { notificationCategories, notificationCategoryLabel, notificationSeverityLabel, type NotificationCategory } from '@/lib/notifications/notification-display';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
+import type { HistoryCursor } from '@/lib/notifications/history-cursor';
 import { getMyNotificationHistory } from '@/app/actions/notifications';
 
 type HistoryItem = {
@@ -29,34 +30,36 @@ interface Props {
 }
 
 export function NotificationHistory({ onlyUnread, candidateOnly = false, refreshVersion, locallyReadIds, pendingIds, bulkPending, onRead, onNavigate }: Props) {
-  const [page, setPage] = useState(0);
+  const [cursors, setCursors] = useState<(HistoryCursor | null)[]>([null]);
+  const page = cursors.length - 1;
+  const after = cursors[page];
   const [category, setCategory] = useState<NotificationCategory | ''>('');
   const [importantOnly, setImportantOnly] = useState(false);
   const filterKey = `${category}:${importantOnly}:${onlyUnread}`;
   const [retry, setRetry] = useState(0);
-  const [result, setResult] = useState<{ page: number; version: number; retry: number; filterKey: string; data: HistoryItem[]; hasMore: boolean; failed: boolean } | null>(null);
+  const [result, setResult] = useState<{ page: number; version: number; retry: number; filterKey: string; data: HistoryItem[]; nextCursor: HistoryCursor | null; failed: boolean } | null>(null);
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const response = await getMyNotificationHistory({ page, unreadOnly: onlyUnread, ...(category ? { category } : {}), ...(importantOnly ? { importantOnly: true } : {}) });
+        const response = await getMyNotificationHistory({ page, after, unreadOnly: onlyUnread, ...(category ? { category } : {}), ...(importantOnly ? { importantOnly: true } : {}) });
         if (!active) return;
         if (response.success) {
           if (page > 0 && response.data.length === 0) {
-            setPage(value => Math.max(0, value - 1));
+            setCursors(current => current.length > 1 ? current.slice(0, -1) : current);
             return;
           }
-          setResult({ page, version: refreshVersion, retry, filterKey, data: response.data, hasMore: response.hasMore, failed: false });
+          setResult({ page, version: refreshVersion, retry, filterKey, data: response.data, nextCursor: 'nextCursor' in response ? response.nextCursor ?? null : null, failed: false });
           return;
         }
       } catch {
         // Never expose provider errors.
       }
-      if (active) setResult({ page, version: refreshVersion, retry, filterKey, data: [], hasMore: false, failed: true });
+      if (active) setResult({ page, version: refreshVersion, retry, filterKey, data: [], nextCursor: null, failed: true });
     };
     void load();
     return () => { active = false; };
-  }, [page, onlyUnread, refreshVersion, retry, category, importantOnly, filterKey]);
+  }, [page, after, onlyUnread, refreshVersion, retry, category, importantOnly, filterKey]);
 
   const current = result?.page === page && result.version === refreshVersion && result.retry === retry && result.filterKey === filterKey ? result : null;
   const items = (current?.data ?? []).filter(item => !onlyUnread || (!item.isRead && !locallyReadIds.includes(item.id)));
@@ -64,13 +67,13 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
     <div className="flex min-h-36 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] p-3">
         {!candidateOnly && <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">Categoría
-          <select value={category} onChange={e => { setCategory(e.target.value as NotificationCategory | ''); setPage(0); }} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] px-2 text-xs text-[var(--foreground)]">
+          <select value={category} onChange={e => { setCategory(e.target.value as NotificationCategory | ''); setCursors([null]); }} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] px-2 text-xs text-[var(--foreground)]">
             <option value="">Todas las categorías</option>
             {notificationCategories.map(value => <option key={value} value={value}>{notificationCategoryLabel(value)}</option>)}
           </select>
         </label>}
         <label className="flex min-h-11 items-center gap-2 text-xs">
-          <input type="checkbox" checked={importantOnly} onChange={e => { setImportantOnly(e.target.checked); setPage(0); }} />
+          <input type="checkbox" checked={importantOnly} onChange={e => { setImportantOnly(e.target.checked); setCursors([null]); }} />
           Solo importantes
         </label>
       </div>
@@ -97,9 +100,9 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
           })}
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)] px-3 py-1">
-        <button type="button" disabled={!page || !current} onClick={() => setPage(n => n - 1)} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Anterior</button>
+        <button type="button" disabled={!page || !current} onClick={() => setCursors(current => current.slice(0, -1))} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Anterior</button>
         <span className="text-xs text-[var(--text-secondary)]">Página {page + 1}</span>
-        <button type="button" disabled={!current?.hasMore || current.failed} onClick={() => setPage(n => n + 1)} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Siguiente</button>
+        <button type="button" disabled={!current?.nextCursor || current.failed || page >= 100000} onClick={() => { if (current?.nextCursor) setCursors(previous => [...previous, current.nextCursor]); }} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Siguiente</button>
       </div>
     </div>
   );
