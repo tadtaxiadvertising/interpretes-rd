@@ -39,15 +39,16 @@ export async function readRoleplayDirectRolloutReadiness(db:Pick<Client,'query'>
     JOIN pg_proc p ON p.oid=t.tgfoid
     WHERE n.nspname='public' AND NOT t.tgisinternal AND t.tgname=ANY($1::text[])
   `,[triggers.map(t=>t[1])]);
-  const columns=await db.query<{opening:boolean;capability:boolean;release_gate:boolean}>(`
+  const columns=await db.query<{opening:boolean;capability:boolean;release_gate:boolean;assignment_hash:boolean}>(`
     SELECT
       EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='roleplay_sessions' AND column_name='requires_bilingual_opening' AND data_type='boolean' AND is_nullable='NO') AS opening,
       EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='roleplay_direct_upload_budget_charges' AND column_name='capability_state' AND data_type='text' AND is_nullable='NO') AS capability,
-      EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='roleplay_direct_upload_budget' AND column_name='unused_release_enabled' AND data_type='boolean' AND is_nullable='NO') AS release_gate
+      EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='roleplay_direct_upload_budget' AND column_name='unused_release_enabled' AND data_type='boolean' AND is_nullable='NO') AS release_gate,
+      EXISTS(SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='roleplay_direct_upload_budget_charges' AND column_name='assignment_hash' AND data_type='character varying' AND character_maximum_length=64) AS assignment_hash
   `);
   const tableChecks=tables.map(name=>({name,state:catalog.rows.some(r=>r.name===name&&r.private_table===true)?'present-private':catalog.rows.some(r=>r.name===name)?'review-required':'missing'}));
   const triggerChecks=triggers.map(([table,name])=>({table,name,enabled:triggerRows.rows.some(r=>r.table_name===table&&r.name===name&&r.enabled===true)}));
-  const columnChecks={opening:columns.rows[0]?.opening===true,capability:columns.rows[0]?.capability===true,releaseGate:columns.rows[0]?.release_gate===true};
+  const columnChecks={opening:columns.rows[0]?.opening===true,capability:columns.rows[0]?.capability===true,releaseGate:columns.rows[0]?.release_gate===true,assignmentHash:columns.rows[0]?.assignment_hash===true};
   const environment=flags.map(name=>({name,enabled:env[name]==='true'}));
   const schemaMetadataReady=tableChecks.every(t=>t.state==='present-private')&&triggerChecks.every(t=>t.enabled)&&Object.values(columnChecks).every(Boolean);
   let budget:{configured:boolean;remainingSlots:number|null;releaseEnabled:boolean|null}={configured:false,remainingSlots:null,releaseEnabled:null};

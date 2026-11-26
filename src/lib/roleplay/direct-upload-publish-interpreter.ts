@@ -6,6 +6,7 @@ import { blockingAssignmentStatuses, interpreterAssignmentScope } from '@/lib/ro
 import { insertOpeningRequiredSession, openingAssignmentEnabled } from './bilingual-opening-assignment';
 import { completeRoleplayUploadPublicationInTransaction } from './direct-upload-publication-receipt';
 import { loadVerifiedPublication, promoteVerifiedClinicalSlot, type FinalObjectPort } from './direct-upload-promote-slot';
+import { requireDirectAssignmentBinding } from './direct-upload-assignment-binding';
 import { loadConsolidatedClinicalPublication } from './direct-upload-final-evidence';
 
 
@@ -72,6 +73,7 @@ async function publishInterpreterRoleplay(db: PrismaClient, port: FinalObjectPor
           current.plans.length !== final.length || current.plans.some((p, i) =>
             p.reference !== final[i].reference || p.item.sha256 !== final[i].sha256 ||
             p.item.sizeBytes !== final[i].sizeBytes)) throw new Error('PUBLICATION_CHANGED');
+      await requireDirectAssignmentBinding(tx,current.reservation.batchId,actor,requestKey,data);
       const interpreter = await tx.interpreter.findFirst({
         where: { id: data.interpreterId, status: { in: ['Activo','Training','Probation'] } }, select: { id: true },
       });

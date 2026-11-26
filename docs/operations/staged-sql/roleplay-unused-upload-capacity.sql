@@ -7,7 +7,12 @@ ALTER TABLE public.roleplay_direct_upload_budget
   ADD COLUMN unused_release_enabled boolean NOT NULL DEFAULT false;
 ALTER TABLE public.roleplay_direct_upload_budget_charges
   ADD COLUMN capability_state text NOT NULL DEFAULT 'UNTRACKED'
-    CHECK(capability_state IN ('UNTRACKED','UNISSUED','SIGNING_STARTED','RELEASED'));
+    CHECK(capability_state IN ('UNTRACKED','UNISSUED','SIGNING_STARTED','RELEASED')),
+  ADD COLUMN assignment_hash varchar(64),
+  ADD CONSTRAINT roleplay_charge_assignment_hash_check CHECK (
+    (capability_state='SIGNING_STARTED' AND assignment_hash IS NOT NULL AND assignment_hash ~ '^[a-f0-9]{64}$') OR
+    (capability_state<>'SIGNING_STARTED' AND assignment_hash IS NULL)
+  );
 CREATE OR REPLACE FUNCTION public.charge_roleplay_direct_upload_budget()
 RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog,public
 AS $charge$

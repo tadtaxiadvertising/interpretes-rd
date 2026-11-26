@@ -11,10 +11,13 @@ import { prepareRoleplayDirectUploadBatch, ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES
 import { isRoleplayDirectUploadRequestKey } from '@/lib/roleplay/direct-upload-reservation-fingerprint';
 import { reserveAndSignDirectUpload } from '@/lib/roleplay/direct-upload-signing';
 
+import { directInterpreterAssignment } from '@/lib/roleplay/direct-upload-interpreter-assignment';
+
 export const runtime = 'nodejs';
-const MAX_COMMAND_BYTES = 16 * 1024;
+const MAX_COMMAND_BYTES = 1024 * 1024;
 const schema = z.object({
   requestKey: z.string().refine(isRoleplayDirectUploadRequestKey),
+  assignment: directInterpreterAssignment,
   declarations: z.array(z.object({
     order: z.number().int().min(0).max(ROLEPLAY_MAX_SCENARIOS - 1),
     mime: z.enum(['audio/mpeg','audio/wav','audio/webm','audio/mp4']),
@@ -41,7 +44,7 @@ async function readCommand(req: NextRequest) {
     }
     body += decoder.decode();
     const command = schema.safeParse(JSON.parse(body));
-    if (!command.success) return null;
+    if (!command.success || command.data.assignment.scenarios.length!==command.data.declarations.length) return null;
     // Full validation (including order) before touching Storage or database.
     prepareRoleplayDirectUploadBatch('123e4567-e89b-42d3-a456-426614174000', command.data.declarations);
     return command.data;
@@ -77,7 +80,7 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(15_000) }) },
     }).storage;
-    const result = await reserveAndSignDirectUpload(prisma, storage, auth.user.userId, command.requestKey, command.declarations);
+    const result = await reserveAndSignDirectUpload(prisma, storage, auth.user.userId, command.requestKey, command.declarations, command.assignment);
     if (result.kind === 'CONFLICT') return fail(409, 'La solicitud ya corresponde a otro lote.');
     if (result.kind === 'RECONCILE') return fail(409, 'Existe una reserva previa. Consulta su estado antes de reintentar.');
     return privateRoleplayResponse({ success: true, data: result });

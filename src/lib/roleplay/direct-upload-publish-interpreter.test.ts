@@ -20,7 +20,7 @@ function fixture() {
   const findUnique = vi.fn().mockResolvedValue(row);
   const updateMany = vi.fn().mockResolvedValue({count:1});
   const query = vi.fn().mockImplementation(async (sql:TemplateStringsArray,...values:unknown[]):Promise<unknown[]> =>
-    sql.join('').includes('INSERT INTO public.roleplay_final_write_claims') ? [{order:values[0]}] : sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{id:values[0],updatedAt:new Date()}] : sql.join('').includes('SELECT requires_bilingual_opening') ? [{required:true}] : []);
+    sql.join('').includes('SELECT true AS matched') ? [{matched:true}] : sql.join('').includes('INSERT INTO public.roleplay_final_write_claims') ? [{order:values[0]}] : sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{id:values[0],updatedAt:new Date()}] : sql.join('').includes('SELECT requires_bilingual_opening') ? [{required:true}] : []);
   const update = vi.fn().mockResolvedValue({});
   const findFirst = vi.fn().mockResolvedValue(null);
   const findSession = vi.fn().mockResolvedValue({id:'session-123',status:'INVITED',interpreterId:7,recruitmentCandidateId:null,baseAudioUrl:reference,baseAudioPath:reference,scenarios:[{...input.scenarios[0],order:0,baseAudioUrl:reference}]});
@@ -50,6 +50,11 @@ describe('staged direct publication',()=>{
     g.port.verify.mockResolvedValueOnce({sizeBytes:99,sha256:item.sha256});
     await expect(publishVerifiedInterpreterRoleplay(g.db,g.port,'admin',key,input)).rejects.toThrow('FINAL_AUDIO_UNVERIFIED');
     expect(g.transaction).not.toHaveBeenCalled();
+  });
+  it('rejects a mismatched immutable assignment before any Storage or session writes',async()=>{
+    const f=fixture();f.query.mockResolvedValueOnce([]);
+    await expect(publishVerifiedInterpreterRoleplay(f.db,f.port,'admin',key,{...input,interpreterId:8})).rejects.toThrow('PUBLICATION_REVIEW_REQUIRED');
+    expect(f.port.copyIfAbsent).not.toHaveBeenCalled();expect(f.transaction).not.toHaveBeenCalled();
   });
   it('rejects unpublished, mismatched or foreign reservations before Storage changes',async()=>{
     for(const change of [{status:'RESERVED'},{actorUserId:'other'},{verifiedObjects:[]}]){
@@ -82,7 +87,7 @@ describe('staged direct publication',()=>{
       f.findUnique.mockResolvedValue({...f.row,status:'PUBLISHED',publishedSessionIds:['session-123']});
       if(mode==='missing') f.findSession.mockResolvedValueOnce(null);
       if(mode==='path') f.findSession.mockResolvedValueOnce({id:'session-123',status:'INVITED',interpreterId:7,recruitmentCandidateId:null,baseAudioUrl:reference,baseAudioPath:'other',scenarios:[]});
-      if(mode==='opening') f.query.mockResolvedValueOnce([{required:false}]);
+      if(mode==='opening') f.query.mockResolvedValueOnce([{matched:true}]).mockResolvedValueOnce([{required:false}]);
       const command=mode==='participant'?{...input,interpreterId:8}:mode==='title'?{...input,scenarios:[{...input.scenarios[0],title:'Changed'}]}:input;
       await expect(publishVerifiedInterpreterRoleplay(f.db,f.port,'admin',key,command)).rejects.toThrow('PUBLICATION_REVIEW_REQUIRED');
       expect(f.port.copyIfAbsent).not.toHaveBeenCalled();
@@ -122,6 +127,7 @@ describe('consolidated publication',()=>{
     const evidence=items.map(i=>({order:i.order,reference:'private-base/'+batchId+'/'+i.order+'.mp3',sizeBytes:i.sizeBytes,sha256:i.sha256,verifiedAt:new Date(),claimValid:true}));
     f.query.mockImplementation(async(sql:TemplateStringsArray,...values:unknown[])=>{
       const statement=sql.join('');
+      if(statement.includes('SELECT true AS matched')) return [{matched:true}];
       if(statement.includes('INSERT INTO public.roleplay_sessions')) return [{id:values[0],updatedAt:new Date()}];
       if(statement.includes('FOR UPDATE')) return [{id:batchId}];
       if(statement.includes('FROM public.roleplay_final_upload_evidence')) return evidence;

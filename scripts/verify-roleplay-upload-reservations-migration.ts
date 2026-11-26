@@ -428,11 +428,16 @@ async function main(): Promise<void> {
     const unused=row(),started=row();
     await first.query(insertSql,values(unused));
     await first.query(insertSql,values(started));
-    const startSigning=`UPDATE public.roleplay_direct_upload_budget_charges c SET capability_state='SIGNING_STARTED'
+    const startSigning=`UPDATE public.roleplay_direct_upload_budget_charges c SET capability_state='SIGNING_STARTED',assignment_hash=repeat('a',64)
       FROM public.roleplay_upload_reservations r WHERE r.id=c.reservation_id AND r.status='RESERVED'
         AND r.expires_at>clock_timestamp() AND c.capability_state='UNISSUED' AND c.reservation_id=$1::uuid RETURNING c.slots`;
     if((await first.query(startSigning,[started.id])).rowCount!==1) throw new Error('Signing intent not acquired');
     if((await second.query(startSigning,[started.id])).rowCount!==0) throw new Error('Signing intent recycled');
+    let changedBinding:unknown;
+    try{await first.query("UPDATE public.roleplay_direct_upload_budget_charges SET assignment_hash=repeat('b',64) WHERE reservation_id=$1::uuid",[started.id]);}
+    catch(error){changedBinding=(error as {code?:string})?.code;}
+    if(changedBinding!=='23514') throw new Error('Assignment binding was mutable');
+
     const expire=async(client:Client,id:string)=>client.query(`UPDATE public.roleplay_upload_reservations
       SET created_at=clock_timestamp()-interval '46 minutes',expires_at=clock_timestamp()-interval '17 minutes' WHERE id=$1::uuid`,[id]);
     await expire(first,unused.id);await expire(first,started.id);

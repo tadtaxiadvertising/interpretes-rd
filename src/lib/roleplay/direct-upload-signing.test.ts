@@ -10,6 +10,7 @@ vi.mock('./direct-upload-reservation-ledger', () => ({ claimRoleplayDirectUpload
 const batchId = '123e4567-e89b-42d3-a456-426614174000';
 const requestKey = '123e4567-e89b-42d3-a456-426614174001';
 const declarations = [{ order: 0, mime: 'audio/mpeg', sizeBytes: 100, sha256: 'a'.repeat(64) }];
+const assignment={interpreterId:7,scenarios:[{title:'Clinical turn',durationLimitSec:60,scriptPrompt:null,studioLanguage:'en'}]};
 const items = prepareRoleplayDirectUploadBatch(batchId, declarations).items;
 function fixture() {
   const createdAt = new Date(Date.now() - 1000);
@@ -31,7 +32,7 @@ beforeEach(() => { vi.resetAllMocks(); m.claim.mockResolvedValue({ kind: 'CREATE
 describe('persisted direct upload signing', () => {
   it('signs only canonical stored slots after the reservation claim', async () => {
     const f = fixture();
-    expect(await reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations)).toMatchObject({
+    expect(await reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations, assignment)).toMatchObject({
       kind: 'CREATED', batchId, slots: [{ ...items[0], token: 'fixture-token' }],
     });
     expect(f.storage.from).toHaveBeenCalledWith('roleplay-audio-private');
@@ -43,38 +44,45 @@ describe('persisted direct upload signing', () => {
   it('fails closed when a committed budget charge is missing or inconsistent', async () => {
     for(const rows of [[],[{slots:2}]]){
       const f=fixture();f.charge.mockResolvedValueOnce(rows);
-      await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow('DIRECT_UPLOAD_BUDGET_UNAVAILABLE');
+      await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations,assignment)).rejects.toThrow('DIRECT_UPLOAD_BUDGET_UNAVAILABLE');
       expect(f.sign).not.toHaveBeenCalled();
     }
     const f=fixture();f.charge.mockRejectedValueOnce(new Error('missing table'));
-    await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow();
+    await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations,assignment)).rejects.toThrow();
     expect(f.sign).not.toHaveBeenCalled();
   });
   it('does not sign if the intent acknowledgement is lost or the charge is already released',async()=>{
     const f=fixture();
     f.charge.mockRejectedValueOnce(new Error('lost intent acknowledgement')).mockResolvedValueOnce([]);
-    for(let i=0;i<2;i++) await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow();
+    for(let i=0;i<2;i++) await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations,assignment)).rejects.toThrow();
     expect(f.sign).not.toHaveBeenCalled();
   });
   it('does not reissue capabilities for duplicate requests', async () => {
     const f = fixture();
     m.claim.mockResolvedValue({ kind: 'RECONCILE' });
-    expect(await reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations)).toEqual({ kind: 'RECONCILE' });
-    expect(f.findUnique).not.toHaveBeenCalled();
+    f.charge.mockResolvedValueOnce([{matched:true}]);
+    expect(await reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations, assignment)).toEqual({ kind: 'RECONCILE' });
+    expect(f.findUnique).toHaveBeenCalledTimes(1);
     expect(f.sign).not.toHaveBeenCalled();
   });
   it('rejects wrong owner, stale reservation and altered stored path', async () => {
     for (const changes of [{ actorUserId: 'other' }, { expiresAt: new Date(0) }, { items: [{ ...items[0], path: 'foreign' }] }]) {
       const f = fixture();
       f.findUnique.mockResolvedValue({ ...f.record, ...changes });
-      await expect(reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations)).rejects.toThrow();
+      await expect(reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations, assignment)).rejects.toThrow();
       expect(f.sign).not.toHaveBeenCalled();
     }
+  });
+  it('rejects an altered assignment on reconciliation and a mismatched scenario count',async()=>{
+    const f=fixture();m.claim.mockResolvedValue({kind:'RECONCILE'});f.charge.mockResolvedValueOnce([]);
+    await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations,{...assignment,interpreterId:8})).rejects.toThrow('PUBLICATION_REVIEW_REQUIRED');
+    await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations,{...assignment,scenarios:[...assignment.scenarios,...assignment.scenarios]})).rejects.toThrow('SCENARIO_COUNT_MISMATCH');
+    expect(f.sign).not.toHaveBeenCalled();
   });
   it('never claims a reservation when private storage is unavailable', async () => {
     const f = fixture();
     f.storage.getBucket.mockResolvedValue({ error: null, data: { public: true } });
-    await expect(reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations)).rejects.toThrow();
+    await expect(reserveAndSignDirectUpload(f.db, f.storage, 'admin', requestKey, declarations, assignment)).rejects.toThrow();
     expect(m.claim).not.toHaveBeenCalled();
   });
 });
