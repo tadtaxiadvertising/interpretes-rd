@@ -116,4 +116,29 @@ describe('notification history', () => {
     expect(m.getMyNotificationHistory).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('combobox', { name: 'Categoría' })).toBeNull();
   });
+  it('clears active search while the advanced form is collapsed', async () => {
+    m.getMyNotificationHistory.mockResolvedValue({ success: true, data: [item], hasMore: false, nextCursor: null });
+    render(<NotificationHistory {...props} />);
+    await screen.findByText('Aviso anterior');
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y filtrar por fecha' }));
+    const toggle = screen.getByRole('button', { name: 'Buscar y filtrar por fecha' });
+    expect(document.getElementById(toggle.getAttribute('aria-controls')!)).not.toBeNull();
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'QA' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, after: null, unreadOnly: false, searchFilters: { search: 'QA' } }));
+    fireEvent.click(screen.getByRole('button', { name: /Buscar y filtrar por fecha/ }));
+    expect(screen.queryByRole('searchbox')).toBeNull();
+    expect(screen.getByText(/Filtros aplicados:/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar búsqueda y fechas' }));
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, after: null, unreadOnly: false }));
+    expect(screen.queryByText(/Filtros aplicados:/)).toBeNull();
+  });
+
+  it('exposes explicit shared unread styling independently of notice severity', async () => {
+    m.getMyNotificationHistory.mockResolvedValue({ success: true, data: [item, { ...item, id: 'read', title: 'Aviso leído', isRead: true, type: 'error' }], hasMore: false, nextCursor: null });
+    render(<NotificationHistory {...props} />);
+    expect((await screen.findByText('Aviso anterior')).closest('article')?.getAttribute('data-unread')).toBe('true');
+    expect(screen.getByText('Aviso leído').closest('article')?.getAttribute('data-unread')).toBe('false');
+    expect(screen.getByText('Página 1').getAttribute('aria-live')).toBe('polite');
+  });
 });
