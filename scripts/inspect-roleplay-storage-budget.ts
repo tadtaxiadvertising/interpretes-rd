@@ -5,6 +5,7 @@ import { Client } from 'pg';
 import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
 import { readRoleplayStorageBudgetAudit } from './roleplay-storage-budget-audit';
+import { readRoleplayStorageRetentionReview } from './roleplay-storage-retention-review';
 
 async function main(){
   if(process.argv.slice(2).join(' ')!=='--check-only') throw new Error('Read-only mode required');
@@ -20,8 +21,9 @@ async function main(){
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     started=true;
     const report=await readRoleplayStorageBudgetAudit(client);
+    const retention=await readRoleplayStorageRetentionReview(client);
     await client.query('ROLLBACK');started=false;
-    console.log(JSON.stringify(report,null,2));
+    console.log(JSON.stringify({...report,retention},null,2));
     console.log('Metadata snapshot only. No refunds, deletions, quota changes or rollout approval.');
     if(report.budget.state==='incomplete' || report.budget.state==='review-required' ||
       report.inventory.unknownSizeObjects!=='0') process.exitCode=1;
