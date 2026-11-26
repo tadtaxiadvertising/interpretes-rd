@@ -33,7 +33,7 @@ export function Navbar({ email, notifications = [], notificationPreferenceScope,
   }, [isOpen]);
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-2 border-b border-[var(--border)] bg-[var(--theme-nav)] px-3 shadow-sm backdrop-blur-md sm:gap-x-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-2 border-b border-[var(--border)] bg-[var(--theme-nav)] px-3 shadow-sm sm:gap-x-4 sm:px-6 lg:px-8">
       <div className="flex min-w-0 flex-1 items-center justify-between gap-2">
         <Link href={homePath} className="flex min-w-0 items-center gap-2 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] md:hidden" aria-label="Ir al inicio del portal">
           <Image src="/interpretes-rd-logo.webp" alt="" width={32} height={32} className="shrink-0 rounded-lg bg-white p-1" />
