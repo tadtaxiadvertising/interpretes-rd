@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../../lib/prisma.js';
 import { AppError } from '../../lib/AppError.js';
 import { createUserSchema, updateUserSchema } from './users.schemas.js';
+import { withPasswordWork } from '../../lib/password-work-gate.js';
 
 /**
  * USERS CONTROLLER — RESTful, Stateless, Lean Queries
@@ -101,7 +102,7 @@ export async function createUser(req: Request, res: Response): Promise<void> {
   const { email, password, name, role } = createUserSchema.parse({ body: req.body }).body;
 
   // Hash password — bcrypt with cost factor 10 (balanced for VPS CPU)
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashedPassword = await withPasswordWork(() => bcrypt.hash(password, 10));
 
   const user = await prisma.rbacUser.create({
     data: {
