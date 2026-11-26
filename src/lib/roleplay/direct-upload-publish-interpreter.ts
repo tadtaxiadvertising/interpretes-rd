@@ -16,24 +16,28 @@ import { loadVerifiedPublication, promoteVerifiedClinicalSlot, type FinalObjectP
  * A failed/ambiguous commit never authorizes deleting copied audio.
  */
 export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port: FinalObjectPort,
-  actor: string, requestKey: string, input: unknown) {
+  actor: string, requestKey: string, input: unknown, signal?: AbortSignal) {
   if (!openingAssignmentEnabled() || process.env.ROLEPLAY_DIRECT_UPLOAD_PUBLICATION_ENABLED !== 'true') {
     throw new Error('PUBLICATION_DISABLED');
   }
   const data = directInterpreterAssignment.parse(input);
   const recovered = await recoverPublishedInterpreterRoleplay(db, actor, requestKey, data);
   if (recovered) return recovered;
+  if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
   const initial = await loadVerifiedPublication(db, actor, requestKey);
   if (initial.plans.length !== data.scenarios.length) throw new Error('SCENARIO_COUNT_MISMATCH');
   const final: Awaited<ReturnType<typeof promoteVerifiedClinicalSlot>>[] = [];
   for (const plan of initial.plans) {
+    if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
     final.push(await promoteVerifiedClinicalSlot(db, port, actor, requestKey, plan.item.order));
   }
+  if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
   // All network transfers have completed. Serialize with existing creation
   // paths and persist the session, scenarios and receipt atomically.
   try {
     return await db.$transaction(async tx => {
       await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${'roleplay:interpreter:' + data.interpreterId}, 0))`;
+      if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
       const current = await loadVerifiedPublication(tx, actor, requestKey);
       if (current.reservation.batchId !== initial.reservation.batchId ||
           current.plans.length !== final.length || current.plans.some((p, i) =>
@@ -47,6 +51,7 @@ export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port:
         where: { ...interpreterAssignmentScope(interpreter.id), status: { in: blockingAssignmentStatuses(true) } }, select: { id: true },
       });
       if (conflict) throw new Error('PARTICIPANT_HAS_SESSION');
+      if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
       const session = await insertOpeningRequiredSession(tx, {
         interpreterId: interpreter.id, recruitmentCandidateId: null, status: 'INVITED',
         baseAudioUrl: final[0].reference, baseAudioPath: final[0].reference,
@@ -57,6 +62,7 @@ export async function publishVerifiedInterpreterRoleplay(db: PrismaClient, port:
           ...scenario, order, baseAudioUrl: final[order].reference,
         })) } },
       });
+      if (signal?.aborted) throw new Error('PUBLICATION_INTERRUPTED');
       await completeRoleplayUploadPublicationInTransaction(tx, {
         actorUserId: actor, requestKey, reservation: current.reservation, verifiedObjects: current.evidence,
         sessionIds: [session.id], nowMs: Date.now(),
