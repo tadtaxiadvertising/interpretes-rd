@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - '.github/workflows/api-candidate-runtime.yml'
+      - 'Dockerfile.api'
   workflow_dispatch:
 permissions:
   contents: read
@@ -59,6 +60,7 @@ jobs:
           assert.equal(z.string().parse('synthetic'), 'synthetic');
           assert.equal(typeof PrismaClient, 'function');
           assert.equal(typeof PrismaPg, 'function');
+          assert.equal(process.getuid(), 1001, 'API must run as non-root');
           console.log('Candidate native password compatibility and runtime imports passed.');
           JS
       - name: Report isolated candidate validation
