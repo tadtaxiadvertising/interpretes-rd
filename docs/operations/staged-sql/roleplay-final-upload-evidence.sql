@@ -8,6 +8,12 @@ CREATE TABLE public.roleplay_final_upload_evidence (
   size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 15728640),
   sha256 VARCHAR(64) NOT NULL CHECK (sha256 ~ '^[0-9a-f]{64}$'),
   verified_at TIMESTAMPTZ NOT NULL,
+  CHECK (reference IN (
+    'private-base/' || reservation_id::text || '/' || slot_order::text || '.mp3',
+    'private-base/' || reservation_id::text || '/' || slot_order::text || '.wav',
+    'private-base/' || reservation_id::text || '/' || slot_order::text || '.webm',
+    'private-base/' || reservation_id::text || '/' || slot_order::text || '.mp4'
+  )),
   PRIMARY KEY (reservation_id, slot_order)
 );
 ALTER TABLE public.roleplay_final_upload_evidence ENABLE ROW LEVEL SECURITY;
