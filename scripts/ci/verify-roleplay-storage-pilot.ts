@@ -103,6 +103,43 @@ async function main(){
     const sha=digest(new Uint8Array(await observed.data.arrayBuffer()));
     console.log('Concurrent object observation: '+(sha===digest(a)?'first fixture':sha===digest(b)?'second fixture':'unexpected bytes'));
   }
+  // Independently bypass the SDK on a different synthetic path. This
+  // distinguishes an SDK result/serialization issue from an HTTP API race.
+  const httpPath='base/'+id+'/3.wav';
+  const httpUpload=async(bytes:Uint8Array)=>{
+    const reply=await options.global.fetch(origin+'/storage/v1/object/'+bucket+'/'+httpPath,{
+      method:'POST',
+      headers:{
+        apikey:status.SERVICE_ROLE_KEY as string,
+        Authorization:'Bearer '+status.SERVICE_ROLE_KEY,
+        'Content-Type':'audio/wav',
+        'Cache-Control':'no-cache',
+        'x-upsert':'false',
+      },
+      body:new Uint8Array(bytes),
+    });
+    const result={ok:reply.ok,status:reply.status};
+    await reply.body?.cancel().catch(()=>{});
+    return result;
+  };
+  const httpAttempts=await Promise.all([httpUpload(a),httpUpload(b)]);
+  console.log('Direct HTTP concurrent statuses: '+httpAttempts.map(r=>r.status).join(', '));
+  const httpObserved=await privileged.download(httpPath);
+  const httpDigest=!httpObserved.error && httpObserved.data
+    ? digest(new Uint8Array(await httpObserved.data.arrayBuffer())) : null;
+  console.log('Direct HTTP object observation: '+(httpDigest===digest(a)?'first fixture':httpDigest===digest(b)?'second fixture':'missing or unexpected bytes'));
+  // Keep both diagnostics observable before enforcing either race invariant.
+  const httpOneWinner=httpAttempts.filter(r=>r.ok).length===1;
+  if(httpOneWinner){
+    const httpWinner=httpAttempts[0].ok?a:b, httpLoser=httpAttempts[0].ok?b:a;
+    const rejected=httpAttempts.find(r=>!r.ok);
+    assert(rejected?.status===409 || rejected?.status===400,'direct HTTP duplicate status mismatch');
+    assert(httpDigest===digest(httpWinner),'direct HTTP winner digest mismatch');
+    const httpReplay=await httpUpload(httpLoser);
+    assert(!httpReplay.ok && (httpReplay.status===409 || httpReplay.status===400) &&
+      await read(httpPath)===digest(httpWinner),'direct HTTP duplicate changed destination');
+  }
+  assert(httpOneWinner,'direct HTTP concurrent writes did not have one winner');
   assert(attempts.filter(r=>!r.error).length===1,'concurrent destination writes did not have one winner');
   const winner=attempts[0].error?b:a, loser=attempts[0].error?a:b;
   assert(await read(final)===digest(winner),'winner digest mismatch');
