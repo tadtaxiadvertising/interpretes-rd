@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { publishVerifiedInterpreterRoleplay } from './direct-upload-publish-interpreter';
+import { publishVerifiedInterpreterRoleplay, publishConsolidatedInterpreterRoleplay } from './direct-upload-publish-interpreter';
 import { prepareRoleplayDirectUploadBatch } from './direct-upload-contract';
 import { fingerprintRoleplayDirectUploadDeclarations } from './direct-upload-reservation-fingerprint';
 
@@ -19,7 +19,7 @@ function fixture() {
     declarationHash:fingerprintRoleplayDirectUploadDeclarations([item]),createdAt,expiresAt:new Date(createdAt.getTime()+30*60_000)};
   const findUnique = vi.fn().mockResolvedValue(row);
   const updateMany = vi.fn().mockResolvedValue({count:1});
-  const query = vi.fn().mockImplementation(async (sql:TemplateStringsArray,...values:unknown[]) =>
+  const query = vi.fn().mockImplementation(async (sql:TemplateStringsArray,...values:unknown[]):Promise<unknown[]> =>
     sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{id:values[0],updatedAt:new Date()}] : sql.join('').includes('SELECT requires_bilingual_opening') ? [{required:true}] : []);
   const update = vi.fn().mockResolvedValue({});
   const findFirst = vi.fn().mockResolvedValue(null);
@@ -107,6 +107,40 @@ describe('staged direct publication',()=>{
     const f=fixture();f.findFirst.mockResolvedValueOnce({id:'old'});
     await expect(publishVerifiedInterpreterRoleplay(f.db,f.port,'admin',key,input)).rejects.toThrow('PARTICIPANT_HAS_SESSION');
     expect(f.update).not.toHaveBeenCalled();
+    expect(f.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('consolidated publication',()=>{
+  it('commits two scenarios from complete trusted evidence and preserves source metadata',async()=>{
+    const f=fixture();
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED','true');
+    const items=prepareRoleplayDirectUploadBatch(batchId,[0,1].map(order=>({order,mime:'audio/mpeg',sizeBytes:100,sha256:'a'.repeat(64)}))).items;
+    const row={...f.row,items,declarationHash:fingerprintRoleplayDirectUploadDeclarations(items),
+      verifiedObjects:items.map(i=>({order:i.order,path:i.path,sizeBytes:i.sizeBytes,sha256:i.sha256,verifiedAtMs:f.row.createdAt.getTime()}))};
+    f.findUnique.mockResolvedValue(row);
+    const evidence=items.map(i=>({order:i.order,reference:'private-base/'+batchId+'/'+i.order+'.mp3',sizeBytes:i.sizeBytes,sha256:i.sha256,verifiedAt:new Date()}));
+    f.query.mockImplementation(async(sql:TemplateStringsArray,...values:unknown[])=>{
+      const statement=sql.join('');
+      if(statement.includes('INSERT INTO public.roleplay_sessions')) return [{id:values[0],updatedAt:new Date()}];
+      if(statement.includes('FOR UPDATE')) return [{id:batchId}];
+      if(statement.includes('FROM public.roleplay_final_upload_evidence')) return evidence;
+      return [];
+    });
+    const scenarios=[0,1].map(i=>({...input.scenarios[0],studioTurn:i+1,studioSpeaker:i===0?'speaker_1':'speaker_2',sourceStartSec:i*10,sourceEndSec:(i+1)*10}));
+    const result=await publishConsolidatedInterpreterRoleplay(f.db,'admin',key,{interpreterId:7,scenarios});
+    expect(result.scenarioCount).toBe(2);
+    expect(f.update).toHaveBeenCalledWith({where:{id:result.sessionId},data:{scenarios:{create:scenarios.map((scenario,order)=>({...scenario,order,baseAudioUrl:evidence[order].reference}))}}});
+    expect(f.updateMany).toHaveBeenCalledTimes(1);
+    expect(f.port.copyIfAbsent).not.toHaveBeenCalled();
+    expect(f.port.verify).not.toHaveBeenCalled();
+  });
+  it('refuses incomplete consolidation and invalid source ranges without starting writes',async()=>{
+    const f=fixture();
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED','true');
+    await expect(publishConsolidatedInterpreterRoleplay(f.db,'admin',key,input)).rejects.toThrow('FINAL_CONSOLIDATION_INCOMPLETE');
+    await expect(publishConsolidatedInterpreterRoleplay(f.db,'admin',key,{...input,scenarios:[{...input.scenarios[0],sourceStartSec:4,sourceEndSec:2}]})).rejects.toThrow();
+    expect(f.transaction).not.toHaveBeenCalled();
     expect(f.updateMany).not.toHaveBeenCalled();
   });
 });

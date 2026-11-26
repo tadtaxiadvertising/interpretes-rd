@@ -44,7 +44,7 @@ export async function recoverPublishedInterpreterRoleplay(db: Store, actor: stri
   const session = await db.roleplaySession.findUnique({
     where: {id:sessionId},
     select: {id:true, status:true, interpreterId:true, recruitmentCandidateId:true, baseAudioUrl:true, baseAudioPath:true,
-      scenarios:{orderBy:{order:'asc'},select:{order:true,title:true,baseAudioUrl:true,durationLimitSec:true,scriptPrompt:true,studioLanguage:true}}},
+      scenarios:{orderBy:{order:'asc'},select:{order:true,title:true,baseAudioUrl:true,durationLimitSec:true,scriptPrompt:true,studioLanguage:true,studioTurn:true,studioSpeaker:true,sourceStartSec:true,sourceEndSec:true}}},
   });
   if (!session || session.id !== sessionId || session.status === 'DRAFT' ||
       session.interpreterId !== data.interpreterId || session.recruitmentCandidateId !== null ||
@@ -54,7 +54,11 @@ export async function recoverPublishedInterpreterRoleplay(db: Store, actor: stri
         const expected = data.scenarios[i];
         return scenario.order !== i || scenario.baseAudioUrl !== plans[i].reference ||
           scenario.title !== expected.title || scenario.durationLimitSec !== expected.durationLimitSec ||
-          scenario.scriptPrompt !== expected.scriptPrompt || scenario.studioLanguage !== expected.studioLanguage;
+          scenario.scriptPrompt !== expected.scriptPrompt || scenario.studioLanguage !== expected.studioLanguage ||
+          (scenario.studioTurn ?? null) !== (expected.studioTurn ?? null) ||
+          (scenario.studioSpeaker ?? null) !== (expected.studioSpeaker ?? null) ||
+          (scenario.sourceStartSec ?? null) !== (expected.sourceStartSec ?? null) ||
+          (scenario.sourceEndSec ?? null) !== (expected.sourceEndSec ?? null);
       }) || !(await readOpeningRequirement(db,sessionId))) throw new Error('PUBLICATION_REVIEW_REQUIRED');
   return {sessionId,scenarioCount:plans.length};
 }

@@ -13,16 +13,17 @@ import { isRoleplayDirectUploadRequestKey } from '@/lib/roleplay/direct-upload-r
 import { directInterpreterAssignment } from '@/lib/roleplay/direct-upload-interpreter-assignment';
 import { recoverPublishedInterpreterRoleplay } from '@/lib/roleplay/direct-upload-interpreter-recovery';
 import { createFinalClinicalStoragePort } from '@/lib/roleplay/direct-upload-final-storage';
-import { publishVerifiedInterpreterRoleplay } from '@/lib/roleplay/direct-upload-publish-interpreter';
+import { publishVerifiedInterpreterRoleplay, publishConsolidatedInterpreterRoleplay } from '@/lib/roleplay/direct-upload-publish-interpreter';
 import { notifyRoleplayAssignments } from '@/lib/notifications/notify-roleplay';
 import { revalidateCommittedRoleplayViews } from '@/lib/roleplay/admin-revalidation';
 
 export const runtime = 'nodejs';
-const MAX_COMMAND_BYTES = 32 * 1024;
+const MAX_COMMAND_BYTES = 1024 * 1024;
 let active = false;
 const schema = z.object({
   requestKey: z.string().refine(isRoleplayDirectUploadRequestKey),
   assignment: directInterpreterAssignment,
+  mode: z.literal('consolidated').optional(),
 }).strict();
 
 function fail(status:number,error:string,headers?:HeadersInit) {
@@ -46,7 +47,7 @@ async function readCommand(req:NextRequest) {
       const {done,value}=await reader.read();
       if(done) break;
       bytes+=value.byteLength;
-      if(bytes>MAX_COMMAND_BYTES) return null;
+      if(bytes>(process.env.ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED==='true'?MAX_COMMAND_BYTES:32*1024)) return null;
       body+=decoder.decode(value,{stream:true});
     }
     const parsed=schema.safeParse(JSON.parse(body+decoder.decode()));
@@ -80,7 +81,9 @@ export async function POST(req:NextRequest) {
     if(!command) return fail(400,'Datos de publicación inválidos.');
     // A deliberately narrow pilot: never hold an HTTP request open for a
     // sequence of up to 25 consolidation transfers.
-    if(command.assignment.scenarios.length!==1) return fail(409,'El piloto admite exactamente un escenario.');
+    const consolidated=command.mode==='consolidated';
+    if(consolidated && process.env.ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED!=='true') return fail(404,'No disponible.');
+    if(!consolidated && command.assignment.scenarios.length!==1) return fail(409,'El piloto admite exactamente un escenario.');
     const origin=canonicalOrigin();
     const actor=auth.user.userId;
     const {requestKey,assignment}=command;
@@ -96,7 +99,9 @@ export async function POST(req:NextRequest) {
       }).storage;
       await requireBilingualOpeningBucket(storage);
       if(signal.aborted) return fail(503,'Publicación interrumpida. Conserva la reserva.');
-      result=await publishVerifiedInterpreterRoleplay(prisma,createFinalClinicalStoragePort(storage,url,signal),actor,requestKey,assignment,signal);
+      result=consolidated
+        ? await publishConsolidatedInterpreterRoleplay(prisma,actor,requestKey,assignment,signal)
+        : await publishVerifiedInterpreterRoleplay(prisma,createFinalClinicalStoragePort(storage,url,signal),actor,requestKey,assignment,signal);
     }
     // Replayed receipts may refer to a progressed/cancelled session. Notify
     // only when still invited; deterministic event key prevents duplicates.
