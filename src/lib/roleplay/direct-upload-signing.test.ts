@@ -36,7 +36,9 @@ describe('persisted direct upload signing', () => {
     });
     expect(f.storage.from).toHaveBeenCalledWith('roleplay-audio-private');
     expect(f.sign).toHaveBeenCalledWith(items[0].path, { upsert: false });
-    expect(m.claim.mock.invocationCallOrder[0]).toBeLessThan(f.sign.mock.invocationCallOrder[0]);
+    expect(m.claim.mock.invocationCallOrder[0]).toBeLessThan(f.charge.mock.invocationCallOrder[0]);
+    expect(f.charge.mock.invocationCallOrder[0]).toBeLessThan(f.sign.mock.invocationCallOrder[0]);
+    expect((f.charge.mock.calls[0][0] as TemplateStringsArray).join('')).toContain("SET capability_state='SIGNING_STARTED'");
   });
   it('fails closed when a committed budget charge is missing or inconsistent', async () => {
     for(const rows of [[],[{slots:2}]]){
@@ -46,6 +48,12 @@ describe('persisted direct upload signing', () => {
     }
     const f=fixture();f.charge.mockRejectedValueOnce(new Error('missing table'));
     await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow();
+    expect(f.sign).not.toHaveBeenCalled();
+  });
+  it('does not sign if the intent acknowledgement is lost or the charge is already released',async()=>{
+    const f=fixture();
+    f.charge.mockRejectedValueOnce(new Error('lost intent acknowledgement')).mockResolvedValueOnce([]);
+    for(let i=0;i<2;i++) await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow();
     expect(f.sign).not.toHaveBeenCalled();
   });
   it('does not reissue capabilities for duplicate requests', async () => {
