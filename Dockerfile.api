@@ -32,6 +32,9 @@ RUN npx prisma generate
 # Re-check before the TypeScript build, after Prisma tooling has run.
 RUN node scripts/ci/assert-build-memory.mjs
 RUN npm run build
+# Embed only validated source metadata in the compiled image. Runtime env
+# overrides must not change the revision reported by this container.
+RUN node --input-type=module -e "import {writeFileSync} from 'node:fs'; const raw=(process.env.GIT_SHA||'').trim(); writeFileSync('dist/build-revision.json',JSON.stringify({buildId:/^[a-f0-9]{40}$/i.test(raw)?raw.toLowerCase():null}));"
 
 # --- STAGE 2: Runner ---
 FROM node:22-alpine AS runner
