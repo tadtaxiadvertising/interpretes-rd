@@ -17,6 +17,8 @@ const nonce = randomUUID();
 const legacyEmail = 'legacy-' + nonce + '@example.test';
 const newEmail = 'new-' + nonce + '@example.test';
 const managedEmail = 'managed-' + nonce + '@example.test';
+const boundaryEmail = 'boundary-' + nonce + '@example.test';
+const longLegacyEmail = 'long-legacy-' + nonce + '@example.test';
 const rejectedEmail = 'rejected-' + nonce + '@example.test';
 const password = 'Synthetic-Auth-Compatibility-2026!';
 let server;
@@ -67,6 +69,26 @@ try {
     body: { email: rejectedEmail, password, name: 'Synthetic Rejected', role: 'ADMIN' }, status: 400,
   });
   assert.equal(await prisma.rbacUser.count({ where: { email: rejectedEmail } }), 0);
+  // UTF-8 byte boundary: 36 accented characters = 72 bytes.
+  const boundaryPassword = 'é'.repeat(36);
+  for (const overLimit of ['x'.repeat(73), 'é'.repeat(37), '😀'.repeat(19)]) {
+    await request('/api/auth/register', {
+      body: { email: boundaryEmail, password: overLimit, name: 'Synthetic Boundary' }, status: 400,
+    });
+  }
+  assert.equal(await prisma.rbacUser.count({ where: { email: boundaryEmail } }), 0);
+  await request('/api/auth/register', {
+    body: { email: boundaryEmail, password: boundaryPassword, name: 'Synthetic Boundary' }, status: 201,
+  });
+  await request('/api/auth/login', { body: { email: boundaryEmail, password: boundaryPassword } });
+  // Existing credentials may have been created under the former 128-character
+  // policy. Do not invalidate them during this new-account-only hardening.
+  const historicalPassword = 'x'.repeat(72) + 'legacy-suffix';
+  await prisma.rbacUser.create({ data: {
+    email: longLegacyEmail, name: 'Synthetic Historical', role: 'INTERPRETER',
+    password: await bcrypt.hash(historicalPassword, 10),
+  } });
+  await request('/api/auth/login', { body: { email: longLegacyEmail, password: historicalPassword } });
   const registered = await request('/api/auth/register', {
     body: { email: newEmail, password, name: 'Synthetic New' }, status: 201,
   });
@@ -117,6 +139,14 @@ try {
   assert.equal(admin.data.user.role, 'ADMIN');
   assert.equal((await request('/api/auth/me', { token: admin.data.token })).data.role, 'ADMIN');
   // Exercise admin CRUD with the actual Prisma-generated identifier.
+  for (const overLimit of ['x'.repeat(73), 'é'.repeat(37)]) {
+    await request('/api/v1/users', {
+      token: admin.data.token, status: 400,
+      body: { email: managedEmail, password: overLimit, name: 'Synthetic Managed' },
+    });
+  }
+  assert.equal(await prisma.rbacUser.count({ where: { email: managedEmail } }), 0);
+  console.log('API new bcrypt password UTF-8 boundary and legacy login passed.');
   const managed = await request('/api/v1/users', {
     token: admin.data.token, status: 201,
     body: { email: managedEmail, password, name: 'Synthetic Managed' },
@@ -165,7 +195,7 @@ try {
     await new Promise(resolve => server.close(resolve));
   }
   try {
-    await prisma.rbacUser.deleteMany({ where: { email: { in: [legacyEmail, newEmail, rejectedEmail, managedEmail] } } });
+    await prisma.rbacUser.deleteMany({ where: { email: { in: [legacyEmail, newEmail, rejectedEmail, managedEmail, boundaryEmail, longLegacyEmail] } } });
   } finally {
     await prisma.$disconnect();
   }
