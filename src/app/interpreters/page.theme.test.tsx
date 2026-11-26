@@ -1,7 +1,9 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ listInterpreters: vi.fn() }));
+const m = vi.hoisted(() => ({ listInterpreters: vi.fn(), actor: vi.fn() }));
+vi.mock('@/lib/auth/current-actor', () => ({ getCurrentActor: m.actor }));
+vi.mock('next/navigation', () => ({ redirect: (path: string) => { throw new Error('REDIRECT:' + path); } }));
 vi.mock('@/lib/prisma', () => ({
   default: { interpreter: { findMany: m.listInterpreters } },
 }));
@@ -20,7 +22,10 @@ vi.mock('@/components/admin/BankingInfoCard', () => ({
 import InterpretersPage from './page';
 
 describe('Interpreter directory themes', () => {
-  beforeEach(() => m.listInterpreters.mockReset());
+  beforeEach(() => {
+    vi.resetAllMocks();
+    m.actor.mockResolvedValue({ userId: 'admin-account', profileId: 'profile-1', role: 'admin' });
+  });
 
   it('retains visible semantic surfaces and search labels when empty', async () => {
     m.listInterpreters.mockResolvedValue([]);
@@ -42,5 +47,10 @@ describe('Interpreter directory themes', () => {
     expect(markup).toContain('sm:group-focus-within:opacity-100');
     expect(markup).toContain('opacity-100');
     expect(markup).toContain('text-[var(--theme-success)]');
+  });
+  it.each([null, { role: 'interpreter', profileId: 'profile-1' }, { role: 'candidate', profileId: 'profile-1' }, { role: 'admin', profileId: null }])('denies direct directory reads for invalid actor %j', async actor => {
+    m.actor.mockResolvedValueOnce(actor);
+    await expect(InterpretersPage()).rejects.toThrow(actor && actor.role !== 'admin' ? 'REDIRECT:/dashboard' : 'REDIRECT:/login');
+    expect(m.listInterpreters).not.toHaveBeenCalled();
   });
 });
