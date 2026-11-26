@@ -196,8 +196,19 @@ jobs:
           # npm audit exits nonzero when it finds vulnerabilities; its JSON is
           # still parsed. Network errors/malformed JSON have no valid report
           # and therefore block deployment (never fall back to zero counts).
+          audit_failed=0
+          echo 'Audit scope: root application (all dependencies)'
           npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
-          node scripts/ci/evaluate-dependency-audit.mjs "$RUNNER_TEMP/npm-audit.json"
+          node scripts/ci/evaluate-dependency-audit.mjs "$RUNNER_TEMP/npm-audit.json" || audit_failed=1
+          # Dockerfile.api installs its own lockfile, not the root graph.
+          # Inspect that exact graph without installing or executing packages.
+          echo 'Audit scope: Express API (all dependencies)'
+          (cd interpreters-api && npm audit --package-lock-only --json) > "$RUNNER_TEMP/npm-audit-api.json" || true
+          node scripts/ci/evaluate-dependency-audit.mjs "$RUNNER_TEMP/npm-audit-api.json" || audit_failed=1
+          echo 'Audit scope: Express API (production dependencies)'
+          (cd interpreters-api && npm audit --package-lock-only --omit=dev --json) > "$RUNNER_TEMP/npm-audit-api-runtime.json" || true
+          node scripts/ci/evaluate-dependency-audit.mjs "$RUNNER_TEMP/npm-audit-api-runtime.json" || audit_failed=1
+          exit "$audit_failed"
 
       - name: Prisma Validate
         run: npx prisma validate
