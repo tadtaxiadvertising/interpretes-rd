@@ -80,6 +80,24 @@ try {
   await request('/api/auth/register', {
     body: { email: newEmail, password, name: 'Synthetic Duplicate' }, status: 409,
   });
+  // A regular account cannot list administrator-only user records.
+  await request('/api/v1/users', { token: login.data.token, status: 403 });
+  // Changing permissions must not silently upgrade an existing token.
+  await prisma.rbacUser.update({ where: { id: registered.data.id }, data: { role: 'ADMIN' } });
+  await request('/api/auth/me', { token: login.data.token, status: 401 });
+  await request('/api/v1/users', { token: login.data.token, status: 401 });
+  const admin = await request('/api/auth/login', { body: { email: newEmail, password } });
+  assert.equal(admin.data.user.role, 'ADMIN');
+  assert.equal((await request('/api/auth/me', { token: admin.data.token })).data.role, 'ADMIN');
+  // Demotion invalidates an administrator token before protected routes execute.
+  await prisma.rbacUser.update({ where: { id: registered.data.id }, data: { role: 'INTERPRETER' } });
+  await request('/api/v1/users', { token: admin.data.token, status: 401 });
+  const renewed = await request('/api/auth/login', { body: { email: newEmail, password } });
+  await request('/api/v1/users', { token: renewed.data.token, status: 403 });
+  await prisma.rbacUser.delete({ where: { id: registered.data.id } });
+  await request('/api/auth/me', { token: renewed.data.token, status: 401 });
+  await request('/api/v1/users', { token: admin.data.token, status: 401 });
+  console.log('API live RBAC token checks passed: promotion, demotion and account deletion.');
   console.log('API HTTP auth smoke passed: legacy and new login, JWT, registration, RBAC, duplicate and bad credentials.');
 } finally {
   if (server) {
