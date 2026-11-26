@@ -10,6 +10,7 @@ const m = vi.hoisted(() => ({
   notificationCreate: vi.fn(),
   notificationCreateMany: vi.fn(),
   notificationCount: vi.fn(),
+  queryRaw: vi.fn(),
   notificationFindMany: vi.fn(),
   notificationUpdateMany: vi.fn(),
   revalidatePath: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('@/lib/notifications/reconcile-recruitment-admin', () => ({ reconcileRec
 vi.mock('@/lib/auth/actions', () => ({ validateAction: m.validateAction }));
 vi.mock('@/lib/prisma', () => ({
   default: {
+    $queryRaw: m.queryRaw,
     notification: {
       create: m.notificationCreate,
       createMany: m.notificationCreateMany,
@@ -381,5 +383,26 @@ describe('notification actions: privacy, ownership and post-commit safety', () =
     expect(await getMyNotificationHistory({ page: 0, unreadOnly: false })).toEqual({ success: true, data: expected, hasMore: false });
     expect(m.notificationUpdateMany).not.toHaveBeenCalled();
     expect(m.notificationCreate).not.toHaveBeenCalled();
+  });
+  it('applies authenticated recipient scope to keyset history and sanitizes returned links', async () => {
+    const after = { id: 'old-boundary', createdAt: '2026-11-25T20:30:00.123456Z' };
+    m.validateAction.mockResolvedValueOnce({ user: { profileId, userId: 'legacy-user', role: 'interpreter' } });
+    m.queryRaw.mockResolvedValueOnce([{ id: 'n1', title: 'Aviso', message: 'Mensaje', type: 'info', category: 'qa', isRead: false, createdAt: null, cursorTime: null, link: '/dashboard?secret=private' }]);
+    expect(await getMyNotificationHistory({ page: 1, after, unreadOnly: true })).toEqual({ success: true, data: [{ id: 'n1', title: 'Aviso', message: 'Mensaje', type: 'info', category: 'qa', isRead: false, createdAt: null, link: '/dashboard' }], hasMore: false, nextCursor: null });
+    const query = m.queryRaw.mock.calls[0][0];
+    expect(query.values).toContain(profileId);
+    expect(query.values).toContain(after.createdAt);
+    expect(query.values).toContain(after.id);
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed or inconsistent cursor pagination before querying', async () => {
+    expect(await getMyNotificationHistory({ page: 1, after: null, unreadOnly: false })).toEqual({ success: false });
+    expect(await getMyNotificationHistory({ page: 0, after: { id: 'n1', createdAt: null }, unreadOnly: false })).toEqual({ success: false });
+    expect(await getMyNotificationHistory({ page: 1, after: { id: 'n1', createdAt: 'bad' }, unreadOnly: false })).toEqual({ success: false });
+    m.validateAction.mockResolvedValueOnce({ error: 'Unauthorized' });
+    expect(await getMyNotificationHistory({ page: 0, after: null, unreadOnly: false })).toEqual({ success: false });
+    expect(m.queryRaw).not.toHaveBeenCalled();
+    expect(m.notificationFindMany).not.toHaveBeenCalled();
   });
 });
