@@ -6,7 +6,7 @@ type InventoryRow={category:Category;objects:string;known_bytes:string;unknown_s
 type BudgetRow={max_slots:number;allocated_slots:number;charged_slots:number;charge_count:number;
   orphan_charges:number;inconsistent_charges:number;uncharged_reservations:number;
   expired_charges:number;published_charges:number;active_charges:number;closed_charges:number};
-const SLOT_BYTES=30n*1024n*1024n;
+const SLOT_BYTES=BigInt(30)*BigInt(1024)*BigInt(1024);
 
 export const ROLEPLAY_STORAGE_INVENTORY_SQL=`
 WITH inventory AS (
@@ -37,11 +37,11 @@ function count(value:unknown):number{
 export async function readRoleplayStorageBudgetAudit(db:Pick<Client,'query'>){
   const inventory=await db.query<InventoryRow>(ROLEPLAY_STORAGE_INVENTORY_SQL);
   const observed=new Map<Category,InventoryRow>();
-  let known=0n,unknown=0n,objects=0n;
+  let known=BigInt(0),unknown=BigInt(0),objects=BigInt(0);
   for(const row of inventory.rows){
     if(!categories.includes(row.category) || observed.has(row.category)) throw new Error('INVALID_INVENTORY');
     const n=unsigned(row.objects),b=unsigned(row.known_bytes),u=unsigned(row.unknown_size_objects);
-    if(u>n || n===0n) throw new Error('INVALID_INVENTORY');
+    if(u>n || n===BigInt(0)) throw new Error('INVALID_INVENTORY');
     observed.set(row.category,row);objects+=n;known+=b;unknown+=u;
   }
   const totals={
