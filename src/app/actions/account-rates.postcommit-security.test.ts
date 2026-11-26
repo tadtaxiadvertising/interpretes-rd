@@ -145,4 +145,23 @@ describe('account and payrate actions preserve committed writes and private logs
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
   });
+  it('skips a repeated effective special rate without writing another audit', async () => {
+    const existing = { id: 11, interpreterId: 2, accountId: 4, tariffPerHour: 32 };
+    const upsert = vi.fn();
+    const audit = vi.fn();
+    vi.mocked(prisma.$transaction).mockImplementationOnce(async callback =>
+      callback({ interpreterAccountRate: { findUnique: vi.fn().mockResolvedValue(existing), upsert }, payrateAuditLog: { create: audit } } as never) as never,
+    );
+    expect(await setInterpreterAccountRate(2, 4, 32.004)).toEqual({ success: true, data: existing });
+    expect(upsert).not.toHaveBeenCalled();
+    expect(audit).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
+  });
+
+  it('reports concurrent special-rate conflicts without automatic retry', async () => {
+    vi.mocked(prisma.$transaction).mockRejectedValueOnce({ code: 'P2034' });
+    expect(await setInterpreterAccountRate(2, 4, 32)).toEqual(expect.objectContaining({ success: false, code: 'CONFLICT' }));
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
 });

@@ -3,7 +3,7 @@
 import prisma from '@/lib/prisma';
 import { revalidatePath } from 'next/cache';
 import { ActionResult } from '@/lib/types';
-import { Account, InterpreterAccountRate } from '@prisma/client';
+import { Prisma, type Account, type InterpreterAccountRate } from '@prisma/client';
 import { z } from 'zod';
 import { validateAction } from '@/lib/auth/actions';
 import { operationalAccountInputSchema } from '@/lib/client-validation';
@@ -26,7 +26,7 @@ function refreshAccountRateViews(paths: readonly string[]) {
 const accountRateInputSchema = z.object({
   interpreterId: z.number().int().positive(),
   accountId: z.number().int().positive(),
-  tariffPerHour: z.number().finite().positive().max(99999),
+  tariffPerHour: z.number().finite().min(0.01).max(99999),
 });
 type ManagedAccount = Pick<Account, 'id' | 'name' | 'description' | 'clientId'> & { clientName: string | null };
 export type AccountOption = Pick<Account, 'id' | 'name'> & {
@@ -134,27 +134,32 @@ export async function setInterpreterAccountRate(
   const parsed = accountRateInputSchema.safeParse({ interpreterId, accountId, tariffPerHour });
   if (!parsed.success) return { success: false, error: 'Revisa el intérprete, la cuenta y la tarifa.', code: 'VALIDATION_ERROR' };
 
+  const effectiveRate = new Prisma.Decimal(parsed.data.tariffPerHour).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
   try {
     const result = await db.$transaction(async (tx) => {
       const oldRate = await tx.interpreterAccountRate.findUnique({
         where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
-        select: { tariffPerHour: true }
+        select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
       });
+      if (oldRate && effectiveRate.equals(oldRate.tariffPerHour)) return oldRate;
       const rate = await tx.interpreterAccountRate.upsert({
         where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
-        update: { tariffPerHour: parsed.data.tariffPerHour },
-        create: parsed.data,
+        update: { tariffPerHour: effectiveRate },
+        create: { ...parsed.data, tariffPerHour: effectiveRate },
         select: { id: true, interpreterId: true, accountId: true, tariffPerHour: true, createdAt: true, updatedAt: true }
       });
       await tx.payrateAuditLog.create({
-        data: { interpreterId: parsed.data.interpreterId, oldRate: oldRate?.tariffPerHour, newRate: parsed.data.tariffPerHour, changedBy: auth.user.userId },
+        data: { interpreterId: parsed.data.interpreterId, oldRate: oldRate?.tariffPerHour, newRate: effectiveRate, changedBy: auth.user.userId },
         select: { id: true }
       });
       return rate;
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     refreshAccountRateViews(['/admin/payrates']);
     return { success: true, data: result as InterpreterAccountRate };
   } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && ['P2034', 'P2002'].includes(String(error.code))) {
+      return { success: false, error: 'Otra operación modificó las tarifas. Actualiza la página y verifica el valor antes de repetir.', code: 'CONFLICT' };
+    }
     console.error('[ACCOUNT_RATES] Rate update failed:', safeServerErrorCategory(error));
     return { success: false, error: 'Error setting account rate', code: 'INTERNAL_ERROR' };
   }
