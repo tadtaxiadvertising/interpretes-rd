@@ -74,6 +74,11 @@ export async function verifyReleaseGate(env = process.env, fetchFn = fetch) {
   const branch = await githubJson('/repos/' + name + '/branches/main', env.GITHUB_TOKEN, fetchFn);
   const runs = await githubJson('/repos/' + name + '/actions/runs?head_sha=' +
     encodeURIComponent(env.GITHUB_SHA) + '&event=push&per_page=100', env.GITHUB_TOKEN, fetchFn);
+  // The branch may advance while GitHub returns workflow evidence.
+  const current = await githubJson('/repos/' + name + '/branches/main', env.GITHUB_TOKEN, fetchFn);
+  if (current?.commit?.sha?.toLowerCase() !== branch?.commit?.sha?.toLowerCase()) {
+    return { ok: false, code: 'MAIN_MOVED' };
+  }
   return assessOffhostApproval({
     expectedSha: env.GITHUB_SHA,
     branchSha: branch?.commit?.sha,
