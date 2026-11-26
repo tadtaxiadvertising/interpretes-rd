@@ -124,7 +124,15 @@ export default async function NewRoleplayPage({
         ) : (
           <NewRoleplayForm interpreters={interpreters} candidates={candidates}
             initialCandidateId={initialCandidateId} librarySource={librarySource}
-            openingAssignmentEnabled={openingAssignmentEnabled()} />
+            openingAssignmentEnabled={openingAssignmentEnabled()}
+            directUploadEnabled={openingAssignmentEnabled() && [
+              'ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED',
+              'ROLEPLAY_DIRECT_UPLOAD_VERIFICATION_API_ENABLED',
+              'ROLEPLAY_DIRECT_UPLOAD_PUBLICATION_ENABLED',
+              'ROLEPLAY_DIRECT_UPLOAD_PUBLICATION_PILOT_API_ENABLED',
+              'ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED',
+              'ROLEPLAY_DIRECT_UPLOAD_FORM_ENABLED',
+            ].every(flag=>process.env[flag]==='true')} />
         )}
       </div>
     </div>
