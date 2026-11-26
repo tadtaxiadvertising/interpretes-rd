@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const m = vi.hoisted(() => ({
   getCurrentProfile: vi.fn(),
+  actor: vi.fn(),
+  loadNotices: vi.fn(),
   redirect: vi.fn((destination: string): never => { throw new Error('REDIRECT:' + destination); }),
   interpreters: vi.fn(),
   scores: vi.fn(),
@@ -11,6 +13,8 @@ const m = vi.hoisted(() => ({
   profileLookup: vi.fn(),
 }));
 
+vi.mock('@/lib/auth/current-actor', () => ({ getCurrentActor: m.actor }));
+vi.mock('@/lib/notifications/load-navbar-notifications', () => ({ loadNavbarNotifications: m.loadNotices }));
 vi.mock('@/app/actions/auth', () => ({ getCurrentProfile: m.getCurrentProfile }));
 vi.mock('next/navigation', () => ({ redirect: m.redirect }));
 vi.mock('@/lib/prisma', () => ({
@@ -37,6 +41,8 @@ const pageArgs = () => ({ params: Promise.resolve({}), searchParams: Promise.res
 describe('QA routes: consistent administrative identity authorization', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    m.actor.mockResolvedValue({ userId: '123e4567-e89b-42d3-a456-426614174000', profileId: 'profile-1', role: 'admin' });
+    m.loadNotices.mockResolvedValue([]);
     m.getCurrentProfile.mockResolvedValue({ id: 'profile-1', role: 'admin', display_name: 'Admin' });
     m.interpreters.mockResolvedValue([]);
     m.scores.mockResolvedValue([]);
@@ -44,14 +50,14 @@ describe('QA routes: consistent administrative identity authorization', () => {
   });
 
   it('rejects anonymous visitors in the layout before rendering the admin shell', async () => {
-    m.getCurrentProfile.mockResolvedValueOnce(null);
+    m.actor.mockResolvedValueOnce(null);
     await expect(QALayout({ children: React.createElement('div') }))
       .rejects.toThrow('REDIRECT:/login');
     expect(m.redirect).toHaveBeenCalledWith('/login');
   });
 
   it('rejects non-admin users in the layout', async () => {
-    m.getCurrentProfile.mockResolvedValueOnce({ role: 'interpreter', display_name: 'User' });
+    m.actor.mockResolvedValueOnce({ userId: 'user', profileId: 'profile-1', role: 'interpreter' });
     await expect(QALayout({ children: React.createElement('div') }))
       .rejects.toThrow('REDIRECT:/dashboard');
     expect(m.redirect).toHaveBeenCalledWith('/dashboard');
