@@ -6,6 +6,7 @@ const m = vi.hoisted(() => ({
   getCurrentProfile: vi.fn(),
   actor: vi.fn(),
   loadNotices: vi.fn(),
+  count: vi.fn(),
   redirect: vi.fn((destination: string): never => { throw new Error('REDIRECT:' + destination); }),
   interpreters: vi.fn(),
   scores: vi.fn(),
@@ -14,6 +15,7 @@ const m = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/auth/current-actor', () => ({ getCurrentActor: m.actor }));
+vi.mock('@/lib/notifications/load-navbar-unread-count', () => ({ loadNavbarUnreadCount: m.count }));
 vi.mock('@/lib/notifications/load-navbar-notifications', () => ({ loadNavbarNotifications: m.loadNotices }));
 vi.mock('@/app/actions/auth', () => ({ getCurrentProfile: m.getCurrentProfile }));
 vi.mock('next/navigation', () => ({ redirect: m.redirect }));
@@ -43,6 +45,7 @@ describe('QA routes: consistent administrative identity authorization', () => {
     vi.clearAllMocks();
     m.actor.mockResolvedValue({ userId: '123e4567-e89b-42d3-a456-426614174000', profileId: 'profile-1', role: 'admin' });
     m.loadNotices.mockResolvedValue([]);
+    m.count.mockResolvedValue(0);
     m.getCurrentProfile.mockResolvedValue({ id: 'profile-1', role: 'admin', display_name: 'Admin' });
     m.interpreters.mockResolvedValue([]);
     m.scores.mockResolvedValue([]);
