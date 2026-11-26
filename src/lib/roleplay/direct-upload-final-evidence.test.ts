@@ -15,8 +15,15 @@ function fixture(){
     createdAt,expiresAt:new Date(createdAt.getTime()+30*60_000)};
   const evidence:Array<{order:number;reference:string;sizeBytes:number;sha256:string;verifiedAt:Date}>=[];
   const findUnique=vi.fn().mockResolvedValue(row);
+  const claims=new Set<number>();
   const query=vi.fn(async(sql:TemplateStringsArray,...values:unknown[])=>{
     const statement=sql.join('');
+    if(statement.includes('INSERT INTO public.roleplay_final_write_claims')){
+      const order=values[0] as number;
+      if(claims.has(order)) return [];
+      claims.add(order);return [{order}];
+    }
+    if(statement.includes('FROM public.roleplay_final_write_claims')) return claims.has(values[1] as number)?[{order:values[1]}]:[];
     if(statement.includes('FOR UPDATE')) return [{id}];
     if(statement.includes('INSERT INTO public.roleplay_final_upload_evidence')){
       const [order,reference,sizeBytes,sha256,verifiedAt]=values as [number,string,number,string,Date];
@@ -59,6 +66,7 @@ describe('incremental final consolidation',()=>{
     f.port.verify.mockImplementationOnce(async()=>{abort.abort();return {sizeBytes:100,sha256:items[0].sha256};});
     await expect(consolidateDirectUploadSlot(f.db,f.port,'admin',key,0,abort.signal)).rejects.toThrow('PUBLICATION_INTERRUPTED');
     expect(f.evidence).toHaveLength(0);
+    expect(f.port.copyIfAbsent).toHaveBeenCalledTimes(1);
     expect(f.transaction).not.toHaveBeenCalled();
   });
   it('rejects tampered historical evidence before reuse',async()=>{
