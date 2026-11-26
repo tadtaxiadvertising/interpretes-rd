@@ -13,6 +13,7 @@ import { reconcileCandidateNotifications } from '@/lib/notifications/reconcile-c
 import { reconcileRecruitmentAdminNotifications } from '@/lib/notifications/reconcile-recruitment-admin';
 import { publishNotificationEvent } from '@/lib/notifications/publish-notification-event';
 import { notificationCategories, publicNotificationCategory } from '@/lib/notifications/notification-display';
+import { notificationDestination } from '@/lib/notifications/notification-destination';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { loadNavbarNotifications } from '@/lib/notifications/load-navbar-notifications';
 
@@ -42,7 +43,7 @@ export async function getMyNotifications() {
       await reconcileCommunications(auth.user);
     }
     const [data, unreadCount] = await Promise.all([
-      loadNavbarNotifications(ids, { throwOnError: true, candidateOnly: auth.user.role === 'candidate' }),
+      loadNavbarNotifications(ids, { throwOnError: true, candidateOnly: auth.user.role === 'candidate', role: auth.user.role }),
       db.notification.count({ where: { userId: { in: ids }, ...candidateNotificationScope(auth.user.role), OR: [{ isRead: false }, { isRead: null }] } }),
     ]);
     return { success: true as const, data, unreadCount };
@@ -225,7 +226,7 @@ export async function getMyNotificationHistory(input: unknown) {
     });
     return {
       success: true as const,
-      data: rows.slice(0, HISTORY_PAGE_SIZE).map(row => ({ ...row, category: publicNotificationCategory(row.category), link: safeNotificationLink(row.link) })),
+      data: rows.slice(0, HISTORY_PAGE_SIZE).map(row => ({ ...row, category: publicNotificationCategory(row.category), link: notificationDestination(row.link, auth.user.role, row.category) })),
       hasMore: rows.length > HISTORY_PAGE_SIZE,
     };
   } catch (error) {
