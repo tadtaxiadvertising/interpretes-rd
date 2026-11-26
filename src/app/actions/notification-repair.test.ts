@@ -4,7 +4,7 @@ const m = vi.hoisted(() => ({ auth: vi.fn(), limit: vi.fn(), repair: vi.fn(), op
 vi.mock('@/lib/auth/actions', () => ({ validateAction: m.auth }));
 vi.mock('@/lib/security/rate-limit', () => ({ rateLimit: m.limit }));
 vi.mock('@/lib/notifications/repair-message-notifications', () => ({ repairMessageNotifications: m.repair }));
-vi.mock('@/lib/notifications/operational-notification-diagnostics', () => ({ operationalNotificationModules: ['recruitmentAdmin', 'candidate', 'qa', 'roleplayEvaluation', 'roleplayAssignment', 'audio'] }));
+vi.mock('@/lib/notifications/operational-notification-diagnostics', () => ({ operationalNotificationModules: ['recruitmentAdmin', 'candidate', 'qa', 'roleplayEvaluation', 'roleplayAssignment', 'audio', 'financePayment'] }));
 vi.mock('@/lib/notifications/repair-operational-notifications', () => ({ repairOperationalNotifications: m.operational }));
 import { repairMissingMessageNotices, repairMissingOperationalNotices } from './notification-repair';
 const report = { sampled: 10, created: 2, conflicts: 0, deferred: 0, skipped: 0 };
@@ -72,5 +72,12 @@ describe('administrative notification repair', () => {
     m.limit.mockReturnValueOnce({ success: false });
     expect(await repairMissingMessageNotices(true)).toEqual({ success: false, code: 'RATE_LIMITED' });
     expect(m.repair).not.toHaveBeenCalled();
+  });
+  it('allows the authorized confirmed payment-notice repair under the same quota', async () => {
+    const result = { ...report, module: 'financePayment', eligible: 10 };
+    m.operational.mockResolvedValueOnce(result);
+    expect(await repairMissingOperationalNotices('financePayment', true)).toEqual({ success: true, report: result });
+    expect(m.operational).toHaveBeenCalledExactlyOnceWith('financePayment');
+    expect(m.limit).toHaveBeenCalledWith('verified-admin', { maxRequests: 1, windowMs: 60000, keyPrefix: 'notification-repair' });
   });
 });
