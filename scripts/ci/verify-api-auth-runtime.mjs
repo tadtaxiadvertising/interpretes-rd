@@ -14,6 +14,7 @@ const { default: app } = await import('./dist/app.js');
 const { prisma } = await import('./dist/lib/prisma.js');
 const { default: bcrypt } = await import('bcrypt');
 const { default: jwt } = await import('jsonwebtoken');
+const { withPasswordWork } = await import('./dist/lib/password-work-gate.js');
 const nonce = randomUUID();
 const legacyEmail = 'legacy-' + nonce + '@example.test';
 const newEmail = 'new-' + nonce + '@example.test';
@@ -139,6 +140,28 @@ try {
   const admin = await request('/api/auth/login', { body: { email: newEmail, password } });
   assert.equal(admin.data.user.role, 'ADMIN');
   assert.equal((await request('/api/auth/me', { token: admin.data.token })).data.role, 'ADMIN');
+  // Occupy both real gate slots deterministically, without CPU stress or timers.
+  // Every password path shares this process-local budget.
+  let releasePasswordWork;
+  const pendingWork = new Promise(resolve => { releasePasswordWork = resolve; });
+  const busy = [withPasswordWork(() => pendingWork), withPasswordWork(() => pendingWork)];
+  try {
+    await request('/api/auth/login', { body: { email: newEmail, password }, status: 503 });
+    await request('/api/auth/register', {
+      body: { email: rejectedEmail, password, name: 'Synthetic Busy' }, status: 503,
+    });
+    await request('/api/v1/users', {
+      token: admin.data.token, status: 503,
+      body: { email: managedEmail, password, name: 'Synthetic Busy' },
+    });
+    assert.equal(await prisma.rbacUser.count({ where: { email: { in: [rejectedEmail, managedEmail] } } }), 0);
+    assert.equal((await request('/health')).status, 'ok');
+  } finally {
+    releasePasswordWork();
+    await Promise.all(busy);
+  }
+  await request('/api/auth/login', { body: { email: newEmail, password } });
+  console.log('API password work saturation passed: shared limit, no rejected writes, recovery and liveness.');
   // Exercise admin CRUD with the actual Prisma-generated identifier.
   for (const overLimit of ['x'.repeat(73), 'é'.repeat(37)]) {
     await request('/api/v1/users', {
