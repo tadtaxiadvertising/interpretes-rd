@@ -17,7 +17,7 @@ export default function PlatformToaster() {
       toastOptions={{
         duration: 5000,
         success: { duration: 3500 },
-        error: { duration: 8000, ariaProps: { role: 'alert', 'aria-live': 'assertive' } },
+        error: { duration: 8000 },
         style: {
           background: 'var(--theme-panel)',
           color: 'var(--foreground)',
@@ -30,7 +30,7 @@ export default function PlatformToaster() {
       }}
     >
       {current => (
-        <ToastBar toast={current}>
+        <ToastBar toast={current.type === 'error' ? { ...current, ariaProps: { role: 'alert', 'aria-live': 'assertive' } } : current}>
           {({ icon, message }) => (
             <>
               {icon}
