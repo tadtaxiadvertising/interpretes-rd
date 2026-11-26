@@ -26,7 +26,7 @@ describe('final clinical Storage adapter',()=>{
     await f.port.copyIfAbsent(item,destination);
     expect(f.upload).toHaveBeenCalledExactlyOnceWith(destination,bytes,{upsert:false,contentType:'audio/mpeg',cacheControl:'0'});
     expect(f.sign).toHaveBeenCalledWith(item.path,120);
-    expect(f.storage.from.mock.calls).toEqual([[],[]].map(()=>['roleplay-audio-private']));
+    expect(f.storage.from.mock.calls).toEqual([['roleplay-audio-private'],['roleplay-audio-private']]);
     expect(await f.port.verify({...item,path:destination})).toEqual({sizeBytes:4,sha256:item.sha256});
     expect(f.sign).toHaveBeenLastCalledWith(destination,120);
   });
