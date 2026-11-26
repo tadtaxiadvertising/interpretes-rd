@@ -51,7 +51,7 @@ export async function PATCH(
 
     const { id } = stringIdParamSchema.parse(await params);
 
-    const body = await parseJsonBody(request, PayrollRecordPatchSchema);
+    const body = await parseJsonBody(request, PayrollRecordPatchSchema.strict());
     
     // Generic edits bypass the calculation, approval and payment guards.
     // Retain the route for old clients, but never silently mutate financial data.
