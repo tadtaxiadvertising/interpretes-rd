@@ -59,7 +59,9 @@ RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 COPY --chown=apiuser:nodejs --from=builder /app/dist ./dist
 COPY --chown=apiuser:nodejs --from=builder /app/prisma ./prisma
 COPY --chown=apiuser:nodejs --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --chown=apiuser:nodejs --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+# Keep the runner's audited production-only @prisma packages from npm ci.
+# Only the generated client above is needed from the builder; copying the
+# entire scope would reintroduce Prisma CLI and development dependencies.
 # Runtime TLS verification needs the same pinned trust anchor as Next.js.
 COPY --chown=apiuser:nodejs certs/prod-ca-2021.crt ./certs/prod-ca-2021.crt
 
