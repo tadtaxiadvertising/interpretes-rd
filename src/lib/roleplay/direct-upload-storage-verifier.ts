@@ -10,8 +10,8 @@ type Storage = Parameters<typeof requirePrivateRoleplayAudioBucket>[0] & {
 /** Only call with a canonical item reconstructed from a persisted reservation.
  * The private signed URL never leaves the server; no redirects or full buffers.
  */
-export async function verifyReservedStorageObject(storage: Storage, projectUrl: string, item: PreparedRoleplayUpload,
-  requestSignal?: AbortSignal) {
+export async function openReservedStorageObject(storage: Storage, projectUrl: string, item: PreparedRoleplayUpload,
+  requestSignal?: AbortSignal): Promise<{ stream: ReadableStream<Uint8Array>; signal: AbortSignal }> {
   try {
     const bucket = await requirePrivateRoleplayAudioBucket(storage);
     const signed = await storage.from(bucket).createSignedUrl(item.path, 120);
@@ -31,7 +31,17 @@ export async function verifyReservedStorageObject(storage: Storage, projectUrl: 
       await response.body?.cancel().catch(() => {});
       throw new Error();
     }
-    return await verifyRoleplayUploadByteStream(response.body, item, signal);
+    return { stream: response.body, signal };
+  } catch {
+    throw new Error('DIRECT_UPLOAD_OBJECT_UNVERIFIED');
+  }
+}
+
+export async function verifyReservedStorageObject(storage: Storage, projectUrl: string, item: PreparedRoleplayUpload,
+  requestSignal?: AbortSignal) {
+  try {
+    const { stream, signal } = await openReservedStorageObject(storage, projectUrl, item, requestSignal);
+    return await verifyRoleplayUploadByteStream(stream, item, signal);
   } catch {
     throw new Error('DIRECT_UPLOAD_OBJECT_UNVERIFIED');
   }
