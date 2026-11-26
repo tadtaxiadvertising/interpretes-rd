@@ -14,10 +14,11 @@ function fixture() {
     id:'roleplay-audio-private',name:'roleplay-audio-private',public:false,file_size_limit:15*1024*1024,
     allowed_mime_types:['audio/mpeg','audio/wav','audio/webm','audio/mp4'],
   }});
-  const storage = {getBucket,from:vi.fn(()=>({createSignedUrl:sign,upload}))};
+  const exists = vi.fn().mockResolvedValue({data:false,error:null});
+  const storage = {getBucket,from:vi.fn(()=>({createSignedUrl:sign,upload,exists}))};
   const fetcher = vi.fn(async()=>new Response(bytes));
   vi.stubGlobal('fetch',fetcher);
-  return {port:createFinalClinicalStoragePort(storage,origin),sign,upload,getBucket,fetcher,storage};
+  return {port:createFinalClinicalStoragePort(storage,origin),sign,upload,getBucket,fetcher,storage,exists};
 }
 afterEach(()=>vi.unstubAllGlobals());
 describe('final clinical Storage adapter',()=>{
@@ -26,7 +27,7 @@ describe('final clinical Storage adapter',()=>{
     await f.port.copyIfAbsent(item,destination);
     expect(f.upload).toHaveBeenCalledExactlyOnceWith(destination,bytes,{upsert:false,contentType:'audio/mpeg',cacheControl:'0'});
     expect(f.sign).toHaveBeenCalledWith(item.path,120);
-    expect(f.storage.from.mock.calls).toEqual([['roleplay-audio-private'],['roleplay-audio-private']]);
+    expect(f.storage.from.mock.calls).toEqual([['roleplay-audio-private'],['roleplay-audio-private'],['roleplay-audio-private']]);
     expect(await f.port.verify({...item,path:destination})).toEqual({sizeBytes:4,sha256:item.sha256});
     expect(f.sign).toHaveBeenLastCalledWith(destination,120);
   });
@@ -44,6 +45,23 @@ describe('final clinical Storage adapter',()=>{
       f.fetcher.mockResolvedValueOnce(new Response(bad));
       await expect(f.port.copyIfAbsent(item,destination)).rejects.toThrow('FINAL_STORAGE_UNAVAILABLE');
     }
+    expect(f.upload).not.toHaveBeenCalled();
+  });
+  it('skips the source transfer for an observed final object and still permits independent verification',async()=>{
+    const f=fixture();
+    f.exists.mockResolvedValueOnce({data:true,error:null});
+    await f.port.copyIfAbsent(item,destination);
+    expect(f.exists).toHaveBeenCalledWith(destination);
+    expect(f.upload).not.toHaveBeenCalled();
+    expect(f.sign).not.toHaveBeenCalled();
+    expect(await f.port.verify({...item,path:destination})).toEqual({sizeBytes:4,sha256:item.sha256});
+    expect(f.sign).toHaveBeenCalledExactlyOnceWith(destination,120);
+  });
+  it('does not treat a provider failure as a missing destination',async()=>{
+    const f=fixture();
+    f.exists.mockResolvedValueOnce({data:false,error:{message:'denied'}});
+    await expect(f.port.copyIfAbsent(item,destination)).rejects.toThrow('FINAL_STORAGE_UNAVAILABLE');
+    expect(f.sign).not.toHaveBeenCalled();
     expect(f.upload).not.toHaveBeenCalled();
   });
   it('does not overwrite an existing destination or retry an uncertain upload',async()=>{
