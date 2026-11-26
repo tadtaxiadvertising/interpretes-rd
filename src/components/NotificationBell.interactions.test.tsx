@@ -290,4 +290,32 @@ describe('NotificationBell interactions', () => {
     await act(async () => { finish({ success: true, data: [], unreadCount: 0 }); });
     await waitFor(() => expect(m.getMyNotifications).toHaveBeenCalledTimes(2));
   });
+  it('publishes a scoped invalidation only after a successful read or bulk write', async () => {
+    const spy = vi.spyOn(Storage.prototype, 'setItem');
+    try {
+      m.markNotificationAsRead.mockResolvedValueOnce({ success: false });
+      render(<NotificationBell initialNotifications={notifications} preferenceScope="account-admin" />);
+      fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Marcar como leída: Auditoría QA' }));
+      await screen.findByRole('alert');
+      expect(spy).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Marcar como leída: Auditoría QA' }));
+      await waitFor(() => expect(spy).toHaveBeenCalledExactlyOnceWith('notification-refresh:account-admin', 'changed:v1'));
+      fireEvent.click(screen.getByRole('button', { name: 'Marcar todas como leídas' }));
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    } finally { spy.mockRestore(); }
+  });
+
+  it('refreshes authoritative data after a sibling-tab signal without repeating a write', async () => {
+    render(<NotificationBell initialNotifications={notifications} preferenceScope="account-admin" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Notificaciones' }));
+    await screen.findByText(/No se pudo actualizar/);
+    m.getMyNotifications.mockResolvedValue({ success: true, data: notifications.map(n => ({ ...n, isRead: true })), unreadCount: 0 });
+    fireEvent(window, new StorageEvent('storage', {
+      key: 'notification-refresh:account-admin', newValue: 'changed:v1', storageArea: window.localStorage,
+    }));
+    await waitFor(() => expect(screen.getByText('0 sin leer')).toBeTruthy(), { timeout: 2000 });
+    expect(m.markNotificationAsRead).not.toHaveBeenCalled();
+    expect(m.markAllNotificationsAsRead).not.toHaveBeenCalled();
+  });
 });

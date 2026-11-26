@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { notificationCategoryLabel, notificationSeverityLabel } from '@/lib/notifications/notification-display';
 import { defaultNotificationViewPreferences, parseNotificationViewPreferences, notificationImportance, type NotificationViewPreferences } from '@/lib/notifications/notification-view-preferences';
+import { notifyNotificationTabs, subscribeNotificationTabs } from '@/lib/notifications/notification-tab-sync';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import { Bell, X, Check, Info, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -42,10 +43,11 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
   const generation = useRef(0);
   const inFlight = useRef<Promise<void> | null>(null);
   const refreshNow = useRef<(() => void) | null>(null);
-  const requestRefresh = () => {
+  const requestRefresh = useCallback(() => {
     generation.current += 1;
     setRefreshVersion(version => version + 1);
-  };
+  }, []);
+  useEffect(() => subscribeNotificationTabs(preferenceScope, requestRefresh), [preferenceScope, requestRefresh]);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
@@ -173,6 +175,7 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
         setLocallyReadIds(current =>
           current.includes(id) ? current : [...current, id]
         );
+        notifyNotificationTabs(preferenceScope);
         requestRefresh();
       } else {
         setError('No se pudo marcar la notificación como leída. Inténtalo de nuevo.');
@@ -200,6 +203,7 @@ export function NotificationBell({ initialNotifications, initialUnreadCount, can
       }
       setLocallyReadIds(current => [...new Set([...current, ...rawNotifications.map(n => n.id)])]);
       setFeed({ source: initialNotifications, unreadCount: 0, data: rawNotifications.map(n => ({ ...n, isRead: true })) });
+      notifyNotificationTabs(preferenceScope);
     } catch {
       setError('No se pudieron marcar todas las notificaciones. Inténtalo de nuevo.');
     } finally {
