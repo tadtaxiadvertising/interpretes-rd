@@ -16,6 +16,9 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }));
 
+const notices = vi.hoisted(() => ({ notify: vi.fn() }));
+vi.mock('@/lib/notifications/notify-payrate', () => ({ notifyPayrateChange: notices.notify }));
+
 import prisma from '@/lib/prisma';
 import { validateAction } from '@/lib/auth/actions';
 import { revalidatePath } from 'next/cache';
@@ -100,6 +103,7 @@ describe('account and payrate actions preserve committed writes and private logs
       expect((await setInterpreterAccountRate(2, 4, 32)).success).toBe(true);
       expect(upsert).toHaveBeenCalledTimes(1);
       expect(auditCreate).toHaveBeenCalledTimes(1);
+      expect(notices.notify).toHaveBeenCalledExactlyOnceWith({ interpreterId: 2, auditId: 20, kind: 'special' });
       expect(revalidatePath).toHaveBeenCalledWith('/admin/payrates');
       expect(JSON.stringify(warning.mock.calls)).not.toContain('PRIVATE_PASSWORD');
     } finally {
@@ -155,6 +159,7 @@ describe('account and payrate actions preserve committed writes and private logs
     expect(await setInterpreterAccountRate(2, 4, 32.004)).toEqual({ success: true, data: existing });
     expect(upsert).not.toHaveBeenCalled();
     expect(audit).not.toHaveBeenCalled();
+    expect(notices.notify).not.toHaveBeenCalled();
     expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
   });
 

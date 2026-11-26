@@ -1,15 +1,17 @@
 // @vitest-environment node
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { Prisma } from '@prisma/client';
-const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), validate: vi.fn(), refresh: vi.fn() }));
+const m = vi.hoisted(() => ({ transaction: vi.fn(), find: vi.fn(), update: vi.fn(), audit: vi.fn(), validate: vi.fn(), refresh: vi.fn(), notify: vi.fn() }));
 vi.mock('@/lib/prisma', () => ({ default: { $transaction: m.transaction } }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: m.validate }));
 vi.mock('@/lib/cache/revalidate-interpreter', () => ({ revalidateInterpreterProfileRecords: m.refresh }));
+vi.mock('@/lib/notifications/notify-payrate', () => ({ notifyPayrateChange: m.notify }));
 import { updatePayrate } from './payrates';
 
 beforeEach(() => {
   vi.resetAllMocks();
   m.validate.mockResolvedValue({ user: { userId: 'admin-user' } });
+  m.audit.mockResolvedValue({ id: 42 });
   m.find.mockResolvedValue({ tariffPerMinute: new Prisma.Decimal('2.00') });
   m.transaction.mockImplementation(callback => callback({ interpreter: { findUnique: m.find, update: m.update }, payrateAuditLog: { create: m.audit } }));
 });
@@ -20,6 +22,7 @@ describe('general rate integrity', () => {
     expect(await updatePayrate(7, 2.004)).toEqual({ success: true, data: { oldRate: 2, newRate: 2 } });
     expect(m.update).not.toHaveBeenCalled();
     expect(m.audit).not.toHaveBeenCalled();
+    expect(m.notify).not.toHaveBeenCalled();
     expect(m.transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: 'Serializable' });
   });
   it('writes and returns the same effective decimal in the rate and audit', async () => {
@@ -27,6 +30,7 @@ describe('general rate integrity', () => {
     expect(m.update.mock.calls[0][0].data.tariffPerMinute.toString()).toBe('2.13');
     expect(m.audit.mock.calls[0][0].data.newRate.toString()).toBe('2.13');
     expect(m.audit).toHaveBeenCalledTimes(1);
+    expect(m.notify).toHaveBeenCalledExactlyOnceWith({ interpreterId: 7, auditId: 42, kind: 'general' });
   });
   it('reports a committed change despite cache failure without logging credentials', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -40,6 +44,7 @@ describe('general rate integrity', () => {
     expect(await updatePayrate(7, 3)).toEqual(expect.objectContaining({ success: false, code: 'CONFLICT' }));
     expect(m.transaction).toHaveBeenCalledTimes(1);
     expect(m.refresh).not.toHaveBeenCalled();
+    expect(m.notify).not.toHaveBeenCalled();
   });
   it('rejects unauthorized and invalid inputs before accessing financial records', async () => {
     m.validate.mockResolvedValueOnce({ error: 'Forbidden', code: 'FORBIDDEN' });

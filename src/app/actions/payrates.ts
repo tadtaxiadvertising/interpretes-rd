@@ -2,6 +2,7 @@
 
 import prisma from '@/lib/prisma';
 import { Prisma } from '@prisma/client';
+import { notifyPayrateChange } from '@/lib/notifications/notify-payrate';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import type { ActionResult } from '@/lib/types';
 import { validateAction } from '@/lib/auth/actions';
@@ -41,13 +42,13 @@ export async function updatePayrate(
 
       const oldRate = Number(interpreter.tariffPerMinute);
       const savedRate = effectiveRate.toNumber();
-      if (effectiveRate.equals(interpreter.tariffPerMinute)) return { oldRate, newRate: savedRate };
+      if (effectiveRate.equals(interpreter.tariffPerMinute)) return { oldRate, newRate: savedRate, auditId: null };
       await tx.interpreter.update({
         where: { id: parsed.data.interpreterId },
         data: { tariffPerMinute: effectiveRate },
         select: { id: true },
       });
-      await tx.payrateAuditLog.create({
+      const audit = await tx.payrateAuditLog.create({
         data: {
           interpreterId: parsed.data.interpreterId,
           oldRate,
@@ -57,7 +58,7 @@ export async function updatePayrate(
         select: { id: true },
       });
 
-      return { oldRate, newRate: savedRate };
+      return { oldRate, newRate: savedRate, auditId: audit.id };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     if (!result) {
@@ -66,7 +67,8 @@ export async function updatePayrate(
 
     try { revalidateInterpreterProfileRecords(parsed.data.interpreterId); }
     catch (error) { console.warn('[PAYRATES] Saved but cache refresh failed:', safeServerErrorCategory(error)); }
-    return { success: true, data: result };
+    if (result.auditId !== null) await notifyPayrateChange({ interpreterId: parsed.data.interpreterId, auditId: result.auditId, kind: 'general' });
+    return { success: true, data: { oldRate: result.oldRate, newRate: result.newRate } };
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2034') {
       return { success: false, error: 'Otra operación modificó las tarifas. Actualiza la página y verifica el valor antes de repetir.', code: 'CONFLICT' };
