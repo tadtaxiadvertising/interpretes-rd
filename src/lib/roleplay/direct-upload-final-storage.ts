@@ -1,5 +1,6 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
 import { prepareRoleplayDirectUploadBatch, ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES, type PreparedRoleplayUpload } from './direct-upload-contract';
 import { privateClinicalObjectPath, makePrivateClinicalReference } from './private-clinical-reference';
 import { getAdminRoleplayAudioExtension } from './admin-audio-extension';
@@ -73,4 +74,22 @@ export function createFinalClinicalStoragePort(storage: Storage, projectUrl: str
     },
     verify: (item) => verifyReservedStorageObject(storage,projectUrl,item,requestSignal),
   };
+}
+
+/** Server credentials never leave this factory. Still not connected to HTTP.
+ * Each SDK request is bounded, including the final non-overwriting upload. */
+export function createConfiguredFinalClinicalStoragePort(requestSignal?: AbortSignal): FinalObjectPort {
+  const projectUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!projectUrl || !key) throw new Error('FINAL_STORAGE_UNAVAILABLE');
+  const storage = createClient(projectUrl, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: (input, init) => {
+      const signals = [AbortSignal.timeout(60_000)];
+      if (requestSignal) signals.push(requestSignal);
+      if (init?.signal) signals.push(init.signal);
+      return fetch(input, { ...init, signal: AbortSignal.any(signals), redirect: 'error' });
+    } },
+  }).storage;
+  return createFinalClinicalStoragePort(storage, projectUrl, requestSignal);
 }
