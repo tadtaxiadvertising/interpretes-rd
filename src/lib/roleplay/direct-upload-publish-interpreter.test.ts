@@ -20,7 +20,7 @@ function fixture() {
   const findUnique = vi.fn().mockResolvedValue(row);
   const updateMany = vi.fn().mockResolvedValue({count:1});
   const query = vi.fn().mockImplementation(async (sql:TemplateStringsArray,...values:unknown[]):Promise<unknown[]> =>
-    sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{id:values[0],updatedAt:new Date()}] : sql.join('').includes('SELECT requires_bilingual_opening') ? [{required:true}] : []);
+    sql.join('').includes('INSERT INTO public.roleplay_final_write_claims') ? [{order:values[0]}] : sql.join('').includes('INSERT INTO public.roleplay_sessions') ? [{id:values[0],updatedAt:new Date()}] : sql.join('').includes('SELECT requires_bilingual_opening') ? [{required:true}] : []);
   const update = vi.fn().mockResolvedValue({});
   const findFirst = vi.fn().mockResolvedValue(null);
   const findSession = vi.fn().mockResolvedValue({id:'session-123',status:'INVITED',interpreterId:7,recruitmentCandidateId:null,baseAudioUrl:reference,baseAudioPath:reference,scenarios:[{...input.scenarios[0],order:0,baseAudioUrl:reference}]});
