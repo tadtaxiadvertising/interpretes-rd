@@ -461,15 +461,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       try {
         if (!directAttempt.current) {
           const files = scenarios.map(s=>s.baseAudioFile!);
-          const upload = createConfiguredRoleplayUploadController(files);
-          directAttempt.current = createDirectRoleplayFormController({
+          const assignment = {
             interpreterId: Number(selectedParticipantId),
             scenarios: scenarios.map(s=>({
               title:s.title.trim(),durationLimitSec:s.durationLimitSec || null,scriptPrompt:s.scriptPrompt.trim() || null,
               studioTurn:s.studioTurn ?? null,studioSpeaker:s.studioSpeaker ?? null,studioLanguage:s.studioLanguage ?? null,
               sourceStartSec:s.sourceStartSec ?? null,sourceEndSec:s.sourceEndSec ?? null,
             })),
-          },{upload:upload.run,consolidate:consolidatePreparedRoleplaySlot,publish:publishConsolidatedRoleplay});
+          };
+          const upload = createConfiguredRoleplayUploadController(files,assignment);
+          directAttempt.current = createDirectRoleplayFormController(assignment,{upload:upload.run,consolidate:consolidatePreparedRoleplaySlot,publish:publishConsolidatedRoleplay});
           setDirectLocked(true);
         }
         const controller=new AbortController();
