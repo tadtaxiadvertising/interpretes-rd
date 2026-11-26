@@ -61,7 +61,7 @@ export default async function SettingsPage() {
 
       <SettingsSectionNavigation />
 
-      <section id="settings-system" aria-labelledby="settings-system-heading" className="scroll-mt-24 space-y-4">
+      <section id="settings-system" tabIndex={-1} aria-labelledby="settings-system-heading" className="scroll-mt-24 space-y-4">
         <h2 id="settings-system-heading" className="text-lg font-semibold text-[var(--foreground)]">Estado del sistema</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="glass rounded-2xl border border-[var(--border)] p-4 space-y-2">
@@ -79,7 +79,7 @@ export default async function SettingsPage() {
         <SystemReadinessCheck />
       </section>
 
-      <section id="settings-notifications" aria-labelledby="settings-notifications-heading" className="scroll-mt-24 space-y-4">
+      <section id="settings-notifications" tabIndex={-1} aria-labelledby="settings-notifications-heading" className="scroll-mt-24 space-y-4">
         <div className="space-y-1">
           <h2 id="settings-notifications-heading" className="text-lg font-semibold text-[var(--foreground)]">Notificaciones y presupuesto</h2>
           <p className="text-sm text-[var(--text-secondary)]">Comprueba los avisos internos, recupera registros faltantes y consulta los intentos locales de correo. Las consultas se realizan bajo demanda.</p>
@@ -88,7 +88,7 @@ export default async function SettingsPage() {
         <NotificationEmailBudget />
       </section>
 
-      <section id="settings-providers" aria-labelledby="email-settings-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
+      <section id="settings-providers" tabIndex={-1} aria-labelledby="email-settings-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
         <div className="flex items-center gap-3">
           <Mail className="text-[var(--theme-link)] shrink-0" aria-hidden="true" />
           <h2 id="email-settings-heading" className="text-lg font-semibold text-[var(--foreground)]">Proveedores de correo operativo</h2>
@@ -118,7 +118,7 @@ export default async function SettingsPage() {
                   <ul className="list-disc pl-5 space-y-1 break-words">
                     {mailDiagnostic.issues.map(issue => <li key={issue}>{issueMessages[issue]}</li>)}
                   </ul>
-                  <p className="text-xs">El diagnóstico solo muestra nombres de variables y tipos de error; no lee ni muestra el valor de una clave en el navegador.</p>
+                  <p className="text-xs">El diagnóstico solo muestra nombres de variables y tipos de error; no envía al navegador el valor de una clave.</p>
                 </div>
               )}
               {!vault && operationalStatus !== 'configured' && (
@@ -133,7 +133,7 @@ export default async function SettingsPage() {
                   <pre className="overflow-x-auto rounded-lg border border-[var(--border)] p-3 text-xs">{'OPERATIONAL_EMAIL_ENABLED=true\nOPERATIONAL_EMAIL_DISPATCH_ENABLED=false\nOPERATIONAL_EMAIL_BATCH_ENABLED=false\nOPERATIONAL_EMAIL_BINDING_ENABLED=false\nOPERATIONAL_EMAIL_GENERAL_ENABLED=false\nOPERATIONAL_EMAIL_SCHEDULER_ENABLED=false'}</pre>
                   <p>Aplica los cambios en el servicio correcto según el procedimiento de despliegue. Vuelve a esta pantalla y envía la prueba al remitente configurado; comprueba su recepción antes de preparar el piloto.</p>
                   <a href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/docs/operations/recruitment-email-ledger.md#procedimiento-de-puesta-en-servicio" target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl border border-[var(--border)] px-4 py-2 font-semibold text-[var(--theme-link)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">Guía de configuración operativa (nueva pestaña)</a>
-                  <p className="text-xs">No introduzcas contraseñas en esta pantalla, en GitHub ni en el chat. No es necesario modificar Supabase, migrar la base de datos o cambiar AUTH_SECRET para esta prueba.</p>
+                  <p className="text-xs">No introduzcas contraseñas en esta pantalla, en GitHub ni en el chat. Para proveedores identificados, comprueba antes que el registro presupuestario esté instalado y disponible en Notificaciones y presupuesto. No cambies AUTH_SECRET ni las credenciales de autenticación de Supabase para esta prueba.</p>
                 </div>
               )}
               <p className="text-xs">Este remitente pertenece a los correos operativos de Next.js, no certifica el remitente de autenticación configurado en Supabase.</p>
@@ -146,7 +146,7 @@ export default async function SettingsPage() {
             {vault ? <p className="text-sm">Usa la prueba de perfiles guardados con el despacho pausado. El transporte de entorno no se utiliza en este modo.</p> : <CorporateSmtpTest configured={operationalStatus === 'configured'} brevo={mailDiagnostic.provider === 'brevo'} />}
       </section>
 
-      <section id="settings-delivery" aria-labelledby="settings-delivery-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
+      <section id="settings-delivery" tabIndex={-1} aria-labelledby="settings-delivery-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
         <h2 id="settings-delivery-heading" className="text-lg font-semibold text-[var(--foreground)]">Envíos, historial y automatización</h2>
         <p className="text-sm text-[var(--text-secondary)]">Revisa las plantillas, los registros de entrega y los requisitos del despacho de reclutamiento.</p>
             <RecruitmentEmailPreview />
@@ -165,9 +165,10 @@ export default async function SettingsPage() {
                 ))}
               </dl>
               <p className="text-xs">Diagnóstico de configuración solamente. No confirma permisos de base de datos, recepción real ni la existencia de una tarea programada. No muestra secretos ni inicia envíos.</p>
-            </section>      </section>
+            </section>
+      </section>
 
-      <section id="settings-auth-email" aria-labelledby="settings-auth-email-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
+      <section id="settings-auth-email" tabIndex={-1} aria-labelledby="settings-auth-email-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-4 min-w-0">
         <h2 id="settings-auth-email-heading" className="text-lg font-semibold text-[var(--foreground)]">Correo de autenticación (Supabase)</h2>
             <p className="text-sm text-[var(--foreground)]">
               Usa el nombre Intérpretes RD y una dirección autorizada por el proveedor de correo para los mensajes de autenticación.
@@ -195,7 +196,7 @@ export default async function SettingsPage() {
             </p>
       </section>
 
-          <section id="settings-maintenance" aria-labelledby="settings-maintenance-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-3">
+          <section id="settings-maintenance" tabIndex={-1} aria-labelledby="settings-maintenance-heading" className="scroll-mt-24 glass rounded-2xl border border-[var(--border)] p-4 sm:p-6 space-y-3">
             <div className="flex items-center gap-3">
               <HardDrive className="text-[var(--theme-warning)]" aria-hidden="true" />
               <h2 id="settings-maintenance-heading" className="text-lg font-semibold text-[var(--foreground)]">Mantenimiento</h2>
