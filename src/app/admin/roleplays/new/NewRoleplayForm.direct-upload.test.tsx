@@ -1,0 +1,44 @@
+// @vitest-environment jsdom
+import type { ReactNode } from 'react';
+import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { afterEach,describe,expect,it,vi } from 'vitest';
+const m=vi.hoisted(()=>({create:vi.fn(),upload:vi.fn(),consolidate:vi.fn(),publish:vi.fn()}));
+vi.mock('@/lib/roleplay/direct-upload-browser-http',()=>({
+  createConfiguredRoleplayUploadController:m.create,
+  consolidatePreparedRoleplaySlot:m.consolidate,
+  publishConsolidatedRoleplay:m.publish,
+}));
+vi.mock('next/link',()=>({default:({href,children}:{href:string;children:ReactNode})=><a href={href}>{children}</a>}));
+vi.mock('./ScenarioCard',()=>({
+  ScenarioCard:({scenario,onUpdate}:{scenario:{id:string};onUpdate:(id:string,updates:Record<string,unknown>)=>void})=>
+    <button type="button" onClick={()=>onUpdate(scenario.id,{title:'Consulta de prueba',baseAudioFile:new File(['ID3'],'synthetic.mp3',{type:'audio/mpeg'}),studioTurn:1,studioLanguage:'en'})}>Preparar escenario</button>,
+}));
+import NewRoleplayForm from './NewRoleplayForm';
+afterEach(()=>{cleanup();vi.resetAllMocks();vi.unstubAllGlobals();});
+describe('gated private roleplay form',()=>{
+  it('keeps one controller and one reservation after uncertain publication',async()=>{
+    const fetcher=vi.fn();
+    vi.stubGlobal('fetch',fetcher);
+    const key='123e4567-e89b-42d3-a456-426614174000';
+    m.create.mockReturnValue({run:m.upload});
+    m.upload.mockResolvedValue({requestKey:key,verifiedCount:1,total:1});
+    m.consolidate.mockResolvedValue({verifiedCount:1,total:1,complete:true});
+    m.publish.mockRejectedValueOnce(new Error('private provider detail')).mockResolvedValueOnce({sessionId:'session-123',scenarioCount:1,inviteLink:window.location.origin+'/roleplays/session-123'});
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} openingAssignmentEnabled directUploadEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/),{target:{value:'11'}});
+    fireEvent.click(screen.getByRole('button',{name:'Preparar escenario'}));
+    fireEvent.click(screen.getByRole('button',{name:'Crear roleplay'}));
+    await waitFor(()=>expect(screen.getByText(/La operación se interrumpió/)).toBeTruthy());
+    expect(screen.getByLabelText(/Destinatario ·/).closest('fieldset')?.disabled).toBe(true);
+    expect(screen.getByText('Consolidados: 1 de 1')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('private provider detail');
+    fireEvent.click(screen.getByRole('button',{name:'Continuar creación'}));
+    await waitFor(()=>expect(screen.getByText('¡Roleplay creado correctamente!')).toBeTruthy());
+    expect(m.create).toHaveBeenCalledTimes(1);
+    expect(m.upload).toHaveBeenCalledTimes(1);
+    expect(m.consolidate).toHaveBeenCalledTimes(1);
+    expect(m.publish).toHaveBeenCalledTimes(2);
+    expect(m.publish.mock.calls[0].slice(0,3)).toEqual(m.publish.mock.calls[1].slice(0,3));
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+});
