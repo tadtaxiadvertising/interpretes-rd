@@ -3,6 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { ENV } from '../config/env.js';
 import { prisma } from '../lib/prisma.js';
 import { asyncHandler } from '../lib/asyncHandler.js';
+import { matchesSessionRevision } from '../lib/session-revision.js';
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -36,11 +37,12 @@ export const authGuard = asyncHandler(async (req, res, next) => {
   // Do not grant permissions using a stale token if the DB cannot be read.
   const user = await prisma.rbacUser.findUnique({
     where: { id: decoded.id },
-    select: { id: true, email: true, role: true },
+    select: { id: true, email: true, role: true, password: true, updatedAt: true },
   });
   // A changed role invalidates existing tokens in either direction; a new
   // login is required before a promotion can grant additional privileges.
-  if (!user || user.role !== decoded.role || user.email !== decoded.email) {
+  if (!user || user.role !== decoded.role || user.email !== decoded.email ||
+      !matchesSessionRevision(decoded.revision, user, ENV.JWT_SECRET)) {
     res.status(401).json({ success: false, error: 'Acceso denegado: Token inválido o expirado' });
     return;
   }
