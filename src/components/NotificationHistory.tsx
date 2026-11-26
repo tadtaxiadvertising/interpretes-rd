@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { notificationCategories, notificationCategoryLabel, notificationSeverityLabel, type NotificationCategory } from '@/lib/notifications/notification-display';
 import { safeNotificationLink } from '@/lib/notifications/safe-notification-link';
 import type { HistoryCursor } from '@/lib/notifications/history-cursor';
+import { HistorySearchFiltersSchema, type HistorySearchFilters } from '@/lib/notifications/history-search-filters';
 import { getMyNotificationHistory } from '@/app/actions/notifications';
 
 type HistoryItem = {
@@ -35,14 +36,19 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
   const after = cursors[page];
   const [category, setCategory] = useState<NotificationCategory | ''>('');
   const [importantOnly, setImportantOnly] = useState(false);
-  const filterKey = `${category}:${importantOnly}:${onlyUnread}`;
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [draft, setDraft] = useState({ search: '', fromDate: '', toDate: '' });
+  const [searchFilters, setSearchFilters] = useState<HistorySearchFilters>({});
+  const [filterError, setFilterError] = useState(false);
+  const hasSearch = Boolean(searchFilters.search || searchFilters.fromDate || searchFilters.toDate);
+  const filterKey = JSON.stringify([category, importantOnly, onlyUnread, searchFilters]);
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<{ page: number; version: number; retry: number; filterKey: string; data: HistoryItem[]; nextCursor: HistoryCursor | null; failed: boolean } | null>(null);
   useEffect(() => {
     let active = true;
     const load = async () => {
       try {
-        const response = await getMyNotificationHistory({ page, after, unreadOnly: onlyUnread, ...(category ? { category } : {}), ...(importantOnly ? { importantOnly: true } : {}) });
+        const response = await getMyNotificationHistory({ page, after, unreadOnly: onlyUnread, ...(category ? { category } : {}), ...(importantOnly ? { importantOnly: true } : {}), ...(hasSearch ? { searchFilters } : {}) });
         if (!active) return;
         if (response.success) {
           if (page > 0 && response.data.length === 0) {
@@ -59,7 +65,7 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
     };
     void load();
     return () => { active = false; };
-  }, [page, after, onlyUnread, refreshVersion, retry, category, importantOnly, filterKey]);
+  }, [page, after, onlyUnread, refreshVersion, retry, category, importantOnly, filterKey, hasSearch, searchFilters]);
 
   const current = result?.page === page && result.version === refreshVersion && result.retry === retry && result.filterKey === filterKey ? result : null;
   const items = (current?.data ?? []).filter(item => !onlyUnread || (!item.isRead && !locallyReadIds.includes(item.id)));
@@ -76,6 +82,36 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
           <input type="checkbox" checked={importantOnly} onChange={e => { setImportantOnly(e.target.checked); setCursors([null]); }} />
           Solo importantes
         </label>
+      </div>
+      <div className="shrink-0 border-b border-[var(--border)] px-3 py-1">
+        <button type="button" aria-expanded={searchOpen} onClick={() => setSearchOpen(open => !open)} className="min-h-11 text-sm font-semibold text-[var(--theme-link)] focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]">Buscar y filtrar por fecha{hasSearch ? ' · activos' : ''}</button>
+        {searchOpen && <form className="max-h-[min(19rem,45dvh)] overflow-y-auto space-y-2 pb-3" onSubmit={event => {
+          event.preventDefault();
+          const parsed = HistorySearchFiltersSchema.safeParse({ ...(draft.search.trim() ? { search: draft.search.trim() } : {}), ...(draft.fromDate ? { fromDate: draft.fromDate } : {}), ...(draft.toDate ? { toDate: draft.toDate } : {}) });
+          setFilterError(!parsed.success);
+          if (!parsed.success) return;
+          setSearchFilters(parsed.data);
+          setCursors([null]);
+        }}>
+          <label className="block text-xs text-[var(--text-secondary)]">Buscar por título o contenido
+            <input type="search" value={draft.search} maxLength={80} onChange={event => { setDraft(current => ({ ...current, search: event.target.value })); setFilterError(false); }} className="mt-1 block min-h-11 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 text-sm text-[var(--foreground)]" />
+          </label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label className="min-w-0 text-xs text-[var(--text-secondary)]">Desde
+              <input type="date" value={draft.fromDate} min="1900-01-01" max="9999-12-31" onChange={event => { setDraft(current => ({ ...current, fromDate: event.target.value })); setFilterError(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 text-sm text-[var(--foreground)]" />
+            </label>
+            <label className="min-w-0 text-xs text-[var(--text-secondary)]">Hasta
+              <input type="date" value={draft.toDate} min="1900-01-01" max="9999-12-31" onChange={event => { setDraft(current => ({ ...current, toDate: event.target.value })); setFilterError(false); }} className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 text-sm text-[var(--foreground)]" />
+            </label>
+          </div>
+          <p className="text-xs text-[var(--text-secondary)]">Escribe entre 2 y 80 caracteres. Fechas inclusivas, hora de República Dominicana. Los avisos sin fecha no coinciden con un filtro de fecha.</p>
+          {filterError && <p role="alert" className="text-xs text-[var(--theme-danger)]">Comprueba el texto y las fechas: la fecha inicial no puede ser posterior a la final.</p>}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className="min-h-11 rounded-lg border border-[var(--theme-control-border)] px-3 text-xs font-semibold text-[var(--theme-link)]">Aplicar filtros</button>
+            <button type="button" onClick={() => { setDraft({ search: '', fromDate: '', toDate: '' }); setFilterError(false); if (hasSearch) { setSearchFilters({}); setCursors([null]); } }} className="min-h-11 px-3 text-xs text-[var(--theme-link)]">Limpiar búsqueda y fechas</button>
+          </div>
+        </form>}
+        {hasSearch && <p className="pb-2 break-words text-xs text-[var(--text-secondary)]">Filtros aplicados: {searchFilters.search ? '«' + searchFilters.search + '» ' : ''}{searchFilters.fromDate ? 'Desde ' + searchFilters.fromDate + ' ' : ''}{searchFilters.toDate ? 'Hasta ' + searchFilters.toDate : ''}</p>}
       </div>
       <div className="min-h-24 max-h-[400px] flex-1 overflow-y-auto overscroll-contain" aria-busy={!current}>
         {!current ? <p role="status" className="p-5 text-center text-sm text-[var(--text-secondary)]">Cargando historial…</p> :
