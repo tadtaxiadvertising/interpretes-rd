@@ -17,14 +17,15 @@ function fixture() {
     declarationHash: fingerprintRoleplayDirectUploadDeclarations(items),
     createdAt, expiresAt: new Date(createdAt.getTime() + 30 * 60_000) };
   const findUnique = vi.fn().mockResolvedValue(record);
-  const db = { roleplayUploadReservation: { findUnique } } as unknown as Pick<PrismaClient,'roleplayUploadReservation'>;
+  const charge = vi.fn().mockResolvedValue([{slots:1}]);
+  const db = { roleplayUploadReservation: { findUnique }, $queryRaw:charge } as unknown as Pick<PrismaClient,'roleplayUploadReservation'|'$queryRaw'>;
   const sign = vi.fn().mockResolvedValue({ data: { path: items[0].path, token: 'fixture-token' }, error: null });
   const storage = {
     getBucket: vi.fn().mockResolvedValue({ error: null, data: { id: 'roleplay-audio-private', name: 'roleplay-audio-private',
       public: false, file_size_limit: 15 * 1024 * 1024, allowed_mime_types: ['audio/mpeg','audio/wav','audio/webm','audio/mp4'] } }),
     from: vi.fn(() => ({ createSignedUploadUrl: sign })),
   };
-  return { db, findUnique, sign, storage, record };
+  return { db, findUnique, sign, storage, record, charge };
 }
 beforeEach(() => { vi.resetAllMocks(); m.claim.mockResolvedValue({ kind: 'CREATED', batchId }); });
 describe('persisted direct upload signing', () => {
@@ -36,6 +37,16 @@ describe('persisted direct upload signing', () => {
     expect(f.storage.from).toHaveBeenCalledWith('roleplay-audio-private');
     expect(f.sign).toHaveBeenCalledWith(items[0].path, { upsert: false });
     expect(m.claim.mock.invocationCallOrder[0]).toBeLessThan(f.sign.mock.invocationCallOrder[0]);
+  });
+  it('fails closed when a committed budget charge is missing or inconsistent', async () => {
+    for(const rows of [[],[{slots:2}]]){
+      const f=fixture();f.charge.mockResolvedValueOnce(rows);
+      await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow('DIRECT_UPLOAD_BUDGET_UNAVAILABLE');
+      expect(f.sign).not.toHaveBeenCalled();
+    }
+    const f=fixture();f.charge.mockRejectedValueOnce(new Error('missing table'));
+    await expect(reserveAndSignDirectUpload(f.db,f.storage,'admin',requestKey,declarations)).rejects.toThrow();
+    expect(f.sign).not.toHaveBeenCalled();
   });
   it('does not reissue capabilities for duplicate requests', async () => {
     const f = fixture();
