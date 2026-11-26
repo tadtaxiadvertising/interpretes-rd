@@ -8,7 +8,8 @@ import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, rateLimit, createRateLimitHeaders } from '@/lib/security/rate-limit';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { isRoleplayDirectUploadRequestKey } from '@/lib/roleplay/direct-upload-reservation-fingerprint';
-import { verifyDirectUploadSlot } from '@/lib/roleplay/direct-upload-verify-slot';
+import { verifyDirectUploadSlot, inspectDirectUploadSlot } from '@/lib/roleplay/direct-upload-verify-slot';
+import { observeReservedObject } from '@/lib/roleplay/direct-upload-observe-object';
 import { verifyReservedStorageObject } from '@/lib/roleplay/direct-upload-storage-verifier';
 
 export const runtime = 'nodejs';
@@ -17,6 +18,7 @@ let activeVerification = false;
 const schema = z.object({
   requestKey: z.string().refine(isRoleplayDirectUploadRequestKey),
   order: z.number().int().min(0).max(ROLEPLAY_MAX_SCENARIOS - 1),
+  mode: z.enum(['inspect', 'verify']).optional(),
 }).strict();
 
 function fail(status: number, error: string, headers?: HeadersInit) {
@@ -74,10 +76,13 @@ export async function POST(req: NextRequest) {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.timeout(15_000) }) },
     }).storage;
-    const result = await verifyDirectUploadSlot(prisma, auth.user.userId, command.requestKey, command.order,
-      item => verifyReservedStorageObject(storage, url, item, req.signal));
+    const result = command.mode === 'inspect'
+      ? await inspectDirectUploadSlot(prisma, auth.user.userId, command.requestKey, command.order,
+          item => observeReservedObject(storage, item.path))
+      : await verifyDirectUploadSlot(prisma, auth.user.userId, command.requestKey, command.order,
+          item => verifyReservedStorageObject(storage, url, item, req.signal));
     if (result.kind === 'NOT_FOUND') return fail(404, 'Reserva no disponible.');
-    if (result.kind !== 'PROGRESS') return fail(409, 'La reserva no permite verificar este archivo. Consulta su estado.');
+    if (result.kind !== 'PROGRESS' && result.kind !== 'PRESENT_UNVERIFIED' && result.kind !== 'NOT_OBSERVED') return fail(409, 'La reserva no permite verificar este archivo. Consulta su estado.');
     return privateRoleplayResponse({ success: true, data: result });
   } catch {
     return fail(503, 'No se pudo verificar el archivo. Conserva la reserva y reintenta la verificación.');
