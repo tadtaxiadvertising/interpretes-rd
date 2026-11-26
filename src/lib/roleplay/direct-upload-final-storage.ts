@@ -5,7 +5,8 @@ import { prepareRoleplayDirectUploadBatch, ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES
 import { privateClinicalObjectPath, makePrivateClinicalReference } from './private-clinical-reference';
 import { getAdminRoleplayAudioExtension } from './admin-audio-extension';
 import { requirePrivateRoleplayAudioBucket } from './private-audio-bucket-readiness';
-import { openReservedStorageObject, verifyReservedStorageObject } from './direct-upload-storage-verifier';
+import { openReservedStorageObject } from './direct-upload-storage-verifier';
+import { verifyDecodedClinicalAudio } from './direct-upload-audio-decoder';
 import type { FinalObjectPort } from './direct-upload-promote-slot';
 import { observeReservedObject } from './direct-upload-observe-object';
 
@@ -77,7 +78,10 @@ export function createFinalClinicalStoragePort(storage: Storage, projectUrl: str
         busy = false;
       }
     },
-    verify: (item) => verifyReservedStorageObject(storage,projectUrl,item,requestSignal),
+    async verify(item) {
+      const {stream,signal}=await openReservedStorageObject(storage,projectUrl,item,requestSignal);
+      return verifyDecodedClinicalAudio(stream,item,signal,requestSignal);
+    },
   };
 }
 
