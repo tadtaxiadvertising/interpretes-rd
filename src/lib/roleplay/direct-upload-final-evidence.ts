@@ -6,21 +6,27 @@ import { isRoleplayDirectUploadRequestKey } from './direct-upload-reservation-fi
 
 type Store = Pick<Prisma.TransactionClient, '$queryRaw' | 'roleplayUploadReservation'>;
 type Publication = Awaited<ReturnType<typeof loadVerifiedPublication>>;
-type Evidence = {order:number; reference:string; sizeBytes:number; sha256:string; verifiedAt:Date};
+type Evidence = {order:number; reference:string; sizeBytes:number; sha256:string; verifiedAt:Date; claimValid:boolean};
 
 async function readEvidence(db:Store, publication:Publication, now:number) {
   const {reservation,plans,evidence} = publication;
   const rows = await db.$queryRaw<Evidence[]>`
-    SELECT slot_order AS "order", reference, size_bytes AS "sizeBytes", sha256, verified_at AS "verifiedAt"
-    FROM public.roleplay_final_upload_evidence
-    WHERE reservation_id = ${reservation.batchId}::uuid
-    ORDER BY slot_order
+    SELECT e.slot_order AS "order", e.reference, e.size_bytes AS "sizeBytes", e.sha256, e.verified_at AS "verifiedAt",
+      EXISTS (SELECT 1 FROM public.roleplay_final_write_claims c
+        WHERE c.reservation_id=e.reservation_id AND c.slot_order=e.slot_order
+          AND c.actor_user_id=${reservation.ownerUserId} AND c.reference=e.reference
+          AND c.size_bytes=e.size_bytes AND c.sha256=e.sha256 AND c.claimed_at<=e.verified_at
+          AND c.request_key=(SELECT request_key FROM public.roleplay_upload_reservations WHERE id=e.reservation_id)
+      ) AS "claimValid"
+    FROM public.roleplay_final_upload_evidence e
+    WHERE e.reservation_id = ${reservation.batchId}::uuid
+    ORDER BY e.slot_order
     LIMIT ${ROLEPLAY_MAX_SCENARIOS + 1}
   `;
   if (!Array.isArray(rows) || rows.length>plans.length || rows.some((row,i)=>{
     const p=plans[i];
     const at=row.verifiedAt instanceof Date ? row.verifiedAt.getTime():NaN;
-    return row.order!==i || row.reference!==p.reference || row.sizeBytes!==p.item.sizeBytes ||
+    return row.claimValid!==true || row.order!==i || row.reference!==p.reference || row.sizeBytes!==p.item.sizeBytes ||
       row.sha256!==p.item.sha256 || !Number.isSafeInteger(at) ||
       at<evidence[i].verifiedAtMs || at>=reservation.expiresAtMs || at>now;
   })) throw new Error('FINAL_EVIDENCE_INVALID');
