@@ -11,7 +11,7 @@ import { observeReservedObject } from './direct-upload-observe-object';
 
 type Storage = Pick<Parameters<typeof openReservedStorageObject>[0], 'getBucket'> & {
   from(bucket: string): ReturnType<Parameters<typeof openReservedStorageObject>[0]['from']> & {
-    exists(path: string): Promise<{ data: boolean; error: unknown }>;
+    exists(path: string): Promise<{ data: unknown; error: unknown }>;
     upload(path: string, body: Uint8Array, options: { upsert: false; contentType: string; cacheControl: string }): Promise<{ data: { path: string } | null; error: unknown }>;
   };
 };
