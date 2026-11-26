@@ -430,14 +430,14 @@ async function main(): Promise<void> {
         AND r.expires_at>clock_timestamp() AND c.capability_state='UNISSUED' AND c.reservation_id=$1::uuid RETURNING c.slots`;
     if((await first.query(startSigning,[started.id])).rowCount!==1) throw new Error('Signing intent not acquired');
     if((await second.query(startSigning,[started.id])).rowCount!==0) throw new Error('Signing intent recycled');
-    const expire=async(id:string)=>first.query(`UPDATE public.roleplay_upload_reservations
+    const expire=async(client:Client,id:string)=>client.query(`UPDATE public.roleplay_upload_reservations
       SET created_at=clock_timestamp()-interval '46 minutes',expires_at=clock_timestamp()-interval '17 minutes' WHERE id=$1::uuid`,[id]);
-    await expire(unused.id);await expire(started.id);
+    await expire(first,unused.id);await expire(first,started.id);
     const release=(client:Client,id:string)=>client.query<{released:number}>('SELECT public.release_never_signed_roleplay_capacity($1::uuid) AS released',[id]);
     if((await release(first,unused.id)).rows[0]?.released!==0) throw new Error('Disabled release changed capacity');
     await first.query('UPDATE public.roleplay_direct_upload_budget SET unused_release_enabled=true WHERE singleton=true');
     if((await release(first,started.id)).rows[0]?.released!==0) throw new Error('Started signing charge was refunded');
-    await expire(quotaCandidates[1].id);
+    await expire(first,quotaCandidates[1].id);
     if((await release(first,quotaCandidates[1].id)).rows[0]?.released!==0) throw new Error('Untracked historical charge was refunded');
     const releaseRace=await Promise.all([release(first,unused.id),release(second,unused.id)]);
     if(releaseRace.map(r=>r.rows[0]?.released).sort().join(',')!=='0,1') throw new Error('Unused capacity release was not exactly once');
@@ -450,7 +450,7 @@ async function main(): Promise<void> {
       throw new Error('Release accounting or tombstone mismatch');
     const observed=row();
     await first.query(insertSql,values(observed));
-    await expire(observed.id);
+    await expire(first,observed.id);
     await first.query('INSERT INTO storage.objects VALUES($1,$2,$3::jsonb)',['roleplay-audio-private','staging/roleplay/'+observed.id+'/0.mp3','{"size":3}']);
     if((await release(first,observed.id)).rows[0]?.released!==0) throw new Error('Observed object capacity was refunded');
     await first.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
