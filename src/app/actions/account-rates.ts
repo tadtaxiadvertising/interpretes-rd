@@ -177,11 +177,12 @@ export async function deleteInterpreterAccountRate(
   if (!parsed.success) return { success: false, error: 'Selecciona un intérprete y una cuenta válidos.', code: 'VALIDATION_ERROR' };
 
   try {
-    await db.interpreterAccountRate.delete({
+    const removed = await db.interpreterAccountRate.delete({
       where: { interpreterId_accountId: { interpreterId: parsed.data.interpreterId, accountId: parsed.data.accountId } },
-      select: { interpreterId: true }
+      select: { id: true, interpreterId: true }
     });
     refreshAccountRateViews(['/admin/payrates']);
+    if (removed.interpreterId !== null) await notifyPayrateChange({ interpreterId: removed.interpreterId, rateId: removed.id, kind: 'removed' });
     return { success: true };
   } catch (error) {
     console.error('[ACCOUNT_RATES] Rate delete failed:', safeServerErrorCategory(error));

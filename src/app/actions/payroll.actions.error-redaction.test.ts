@@ -4,6 +4,7 @@ const m = vi.hoisted(() => ({
   validateAction: vi.fn(),
   transaction: vi.fn(),
   revalidatePath: vi.fn(),
+  notify: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/actions', () => ({
@@ -15,6 +16,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('next/cache', () => ({
   revalidatePath: m.revalidatePath,
 }));
+
+vi.mock('@/lib/notifications/notify-payroll', () => ({ notifyPayrollMilestone: m.notify }));
 
 import {
   markPayrollAsPaid,
@@ -97,5 +100,23 @@ describe('admin payroll Server Actions: safe provider errors', () => {
     } finally {
       log.mockRestore();
     }
+  });
+  it('notifies a committed payment once and preserves success when cache refresh fails', async () => {
+    m.transaction.mockResolvedValueOnce('PAID');
+    m.revalidatePath.mockImplementationOnce(() => { throw new Error('PRIVATE_PASSWORD'); });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await markPayrollAsPaid(undefined, formData(actions[2].entries));
+      expect(result.success).toBe(true);
+      expect(m.notify).toHaveBeenCalledExactlyOnceWith('payroll-1', 'paid');
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('PRIVATE_PASSWORD');
+    } finally { warn.mockRestore(); }
+  });
+
+  it('notifies a committed approval but never a concurrent failure', async () => {
+    m.transaction.mockResolvedValueOnce('UPDATED').mockResolvedValueOnce('CONFLICT');
+    expect((await verifyPayrollMinutes(undefined, formData(actions[1].entries))).success).toBe(true);
+    expect((await verifyPayrollMinutes(undefined, formData(actions[1].entries))).success).toBe(false);
+    expect(m.notify).toHaveBeenCalledExactlyOnceWith('payroll-1', 'approved');
   });
 });

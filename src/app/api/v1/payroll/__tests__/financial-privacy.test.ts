@@ -5,7 +5,7 @@ vi.mock('@/lib/prisma', () => ({
   default: {
     interpreter: { findFirst: vi.fn(), findMany: vi.fn() },
     productionLog: { findMany: vi.fn() },
-    payrollRecord: { findUnique: vi.fn() },
+    payrollRecord: { findUnique: vi.fn(), updateMany: vi.fn() },
     systemConfig: { findMany: vi.fn(), upsert: vi.fn() },
     $transaction: vi.fn(),
   },
@@ -15,6 +15,9 @@ vi.mock('@/services/PayrollService', () => ({
   calculateFullPayroll: vi.fn(),
   recalculateWithVerifiedMinutes: vi.fn(),
 }));
+
+const notices = vi.hoisted(() => ({ notify: vi.fn() }));
+vi.mock('@/lib/notifications/notify-payroll', () => ({ notifyPayrollMilestone: notices.notify }));
 
 import prisma from '@/lib/prisma';
 import { guardApiAuth } from '@/lib/api-auth';
@@ -135,5 +138,20 @@ describe('financial administrative API private error boundaries', () => {
     expect(response.status).toBe(200);
     assertPrivate(response);
     expect((await response.json()).success).toBe(true);
+  });
+  it('publishes the same payment milestone after successful conditional writes across both API routes', async () => {
+    vi.mocked(prisma.payrollRecord.findUnique).mockResolvedValue({ id: 'pay-1', status: 'APPROVED', paidAt: null } as never);
+    vi.mocked(prisma.payrollRecord.updateMany).mockResolvedValue({ count: 1 });
+    expect((await pay()).status).toBe(200);
+    expect((await verify()).status).toBe(200);
+    expect(notices.notify.mock.calls).toEqual([['pay-1', 'paid'], ['pay-1', 'paid']]);
+  });
+
+  it('does not emit a payment notice if a concurrent modification prevents the write', async () => {
+    vi.mocked(prisma.payrollRecord.findUnique).mockResolvedValue({ id: 'pay-1', status: 'APPROVED', paidAt: null } as never);
+    vi.mocked(prisma.payrollRecord.updateMany).mockResolvedValue({ count: 0 });
+    expect((await pay()).status).toBe(409);
+    expect((await verify()).status).toBe(409);
+    expect(notices.notify).not.toHaveBeenCalled();
   });
 });

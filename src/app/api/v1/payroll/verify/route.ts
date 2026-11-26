@@ -4,6 +4,7 @@ import { PayrollVerifySchema } from '@/lib/api-schemas';
 import { apiError, parseJsonBody } from '@/lib/api-responses';
 import { guardApiAuth } from '@/lib/api-auth';
 import { privateAdminJson, privateAdminResponse } from '@/lib/security/private-admin-response';
+import { notifyPayrollMilestone } from '@/lib/notifications/notify-payroll';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { isApprovedPayrollStatus, isEditablePayrollStatus, isPaidPayrollStatus } from '@/lib/payroll-validation';
 
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
         return privateAdminJson({ success: false, error: 'Payroll changed during verification; reload and retry' }, { status: 409 });
       }
 
+      await notifyPayrollMilestone(payrollRecordId, 'approved');
       const updated = await db.payrollRecord.findUnique({
         where: { id: payrollRecordId },
         include: { interpreter: { select: { name: true, externalId: true } } },
@@ -124,6 +126,7 @@ export async function POST(request: Request) {
         );
       }
 
+      await notifyPayrollMilestone(payrollRecordId, 'paid');
       const updated = await db.payrollRecord.findUnique({
         where: { id: payrollRecordId },
         include: {
@@ -189,6 +192,7 @@ export async function POST(request: Request) {
         );
       }
 
+      await notifyPayrollMilestone(payrollRecordId, status === 'PAID' ? 'paid' : status === 'APPROVED' ? 'approved' : 'rejected');
       const updated = await db.payrollRecord.findUnique({
         where: { id: payrollRecordId },
         include: {
