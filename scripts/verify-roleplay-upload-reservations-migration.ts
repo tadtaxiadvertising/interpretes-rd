@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { Client } from 'pg';
 import { classifyRoleplayReservationCatalog, readRoleplayReservationCatalog } from './roleplay-upload-reservation-schema-catalog';
 import { verifyFinalEvidencePostgres } from './verify-roleplay-final-evidence-postgres';
+import { readRoleplayStorageBudgetAudit } from './roleplay-storage-budget-audit';
 
 // ONLY a fresh, disposable PostgreSQL database on the isolated CI service.
 // Never run against production, a shared DB or a remote hostname.
@@ -368,6 +369,31 @@ async function main(): Promise<void> {
     if(last.filter(result=>result.status==='fulfilled').length!==1 ||
        last.some(result=>result.status==='rejected' && result.reason?.code!=='23514')) throw new Error('Quota race overspent');
     console.log('Persistent upload quota: zero by default, duplicate rollback, no delete refund and concurrent admission verified.');
+    // Synthetic metadata table ONLY in this randomly named disposable DB.
+    // Never create/modify the provider's actual storage schema.
+    await first.query(`
+      CREATE SCHEMA storage;
+      CREATE TABLE storage.objects(bucket_id text,name text,metadata jsonb);
+      INSERT INTO storage.objects VALUES
+        ('roleplay-audio','synthetic-legacy','{"size":10}'),
+        ('roleplay-audio-private','staging/roleplay/synthetic','{"size":20}'),
+        ('roleplay-audio-private','base/synthetic','{"size":30}'),
+        ('roleplay-opening-private','synthetic-opening','{"size":"invalid"}'),
+        ('other-synthetic','synthetic-other','{}');
+    `);
+    await first.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try{
+      const report=await readRoleplayStorageBudgetAudit(first);
+      if(report.inventory.objects!=='5' || report.inventory.knownBytes!=='60' ||
+         report.inventory.unknownSizeObjects!=='2' || report.refundAuthorized!==false ||
+         report.budget.state!=='review-required' ||
+         !('allocatedSlots' in report.budget) || report.budget.allocatedSlots!==3 ||
+         report.budget.orphanCharges!==1 || report.budget.remainingSlots!==null ||
+         report.inventory.byCategory.find(r=>r.category==='final')?.knownBytes!=='30')
+        throw new Error('Storage aggregate audit misclassified synthetic fixtures');
+    }finally{await first.query('ROLLBACK');}
+    console.log('Read-only storage and budget inventory verified with synthetic metadata, orphan charges, unknown sizes and pre-budget reservations.');
+
 
   } finally {
     await Promise.allSettled([first?.end(), second?.end()]);
