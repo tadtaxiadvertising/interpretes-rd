@@ -5,6 +5,7 @@ import { ENV } from '../../config/env.js';
 import { AppError } from '../../lib/AppError.js';
 import type { LoginInput, RegisterInput } from './auth.schemas.js';
 import { PUBLIC_REGISTRATION_ROLE } from './auth.schemas.js';
+import { newBcryptPasswordSchema } from '../../lib/password-policy.js';
 
 /**
  * AUTH SERVICE — Business Logic
@@ -78,6 +79,8 @@ export class AuthService {
 
   static async register(data: RegisterInput) {
     const { email, password, name } = data;
+    // Keep the invariant even if a future caller bypasses HTTP validation.
+    const validatedPassword = newBcryptPasswordSchema.parse(password);
 
     // Check for existing user before hashing (save CPU on duplicate)
     const existing = await prisma.rbacUser.findUnique({
@@ -89,7 +92,7 @@ export class AuthService {
       throw AppError.conflict('Email already registered');
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(validatedPassword, 10);
 
     return prisma.rbacUser.create({
       data: {
