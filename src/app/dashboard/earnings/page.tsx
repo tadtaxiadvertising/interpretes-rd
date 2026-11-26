@@ -1,5 +1,5 @@
 import React from 'react';
-import { getCurrentUser } from '@/lib/auth/actions';
+import { getCurrentActor } from '@/lib/auth/current-actor';
 import { redirect } from 'next/navigation';
 import { 
   DollarSign, 
@@ -19,27 +19,30 @@ function maskAccount(account: string | null | undefined): string {
 }
 
 export default async function EarningsPage() {
-  const userData = await getCurrentUser();
+  const actor = await getCurrentActor();
+  if (!actor) redirect('/login');
+  if (actor.role !== 'interpreter') redirect(actor.role === 'admin' ? '/admin' : '/candidate');
 
-  if (!userData) redirect('/login');
-
-  const user = userData;
-
-  // Fetch the interpreter profile linked to this user
-  const interpreter = await prisma.interpreter.findFirst({
-    where: { emailCorporativo: user.email },
+  // Financial records follow the resolved interpreter identity, not an email search.
+  const interpreter = actor.interpreterId && Number.isSafeInteger(actor.interpreterId) && actor.interpreterId > 0 ? await prisma.interpreter.findUnique({
+    where: { id: actor.interpreterId },
     select: {
       id: true,
       name: true,
       tariffPerMinute: true,
       metodoPago: true,
       cuentaPago: true,
+      accountRates: {
+        where: { accountId: { not: null } },
+        orderBy: { id: 'asc' },
+        select: { id: true, tariffPerHour: true, account: { select: { name: true } } },
+      },
       payrollRecords: {
         orderBy: { periodStart: 'desc' },
         take: 12
       }
     }
-  });
+  }) : null;
 
   if (!interpreter) {
     return (
@@ -90,6 +93,20 @@ export default async function EarningsPage() {
           <div className="mt-4 text-xs text-[var(--text-tertiary)] truncate">{maskAccount(interpreter.cuentaPago)}</div>
         </div>
       </div>
+
+      <section aria-labelledby="special-rate-heading" className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6">
+        <h3 id="special-rate-heading" className="text-xl font-bold text-[var(--foreground)]">Tarifas especiales por cuenta</h3>
+        <p className="mt-2 text-sm text-[var(--text-secondary)]">Importes vigentes por hora para tus cuentas con tarifa especial.</p>
+        <div className="mt-4 space-y-2">
+          {interpreter.accountRates.filter(rate => rate.account !== null).map(rate => (
+            <div key={rate.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+              <span className="min-w-0 break-words text-sm text-[var(--foreground)]">{rate.account?.name}</span>
+              <span className="font-semibold text-[var(--foreground)]">RD${Number(rate.tariffPerHour).toFixed(2)}/hora</span>
+            </div>
+          ))}
+          {!interpreter.accountRates.some(rate => rate.account !== null) && <p className="text-sm text-[var(--text-secondary)]">No tienes tarifas especiales asignadas.</p>}
+        </div>
+      </section>
 
       {/* Historial de pagos */}
       <div className="glass rounded-3xl overflow-hidden border border-[var(--border)]">
