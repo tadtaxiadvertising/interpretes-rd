@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getCurrentActor } from '@/lib/auth/current-actor';
 import { getCurrentProfile } from '@/app/actions/auth';
 import { authorizedNotificationRecipientIds } from './authorized-recipient-ids';
+import { loadNavbarUnreadCount } from './load-navbar-unread-count';
 import { loadNavbarNotifications } from './load-navbar-notifications';
 import { notificationPreferenceScope } from './notification-preference-scope';
 
@@ -19,10 +20,13 @@ export async function requireAdminNotificationContext() {
   if (profile.role !== 'admin') redirect('/dashboard');
 
   const recipientIds = authorizedNotificationRecipientIds(actor.userId, actor.profileId);
-  const notifications = await loadNavbarNotifications(recipientIds);
+  const [notifications, notificationUnreadCount] = await Promise.all([
+    loadNavbarNotifications(recipientIds), loadNavbarUnreadCount(recipientIds),
+  ]);
   return {
     userName: profile.display_name || 'Administrador',
     notifications,
+    notificationUnreadCount,
     notificationPreferenceScope: notificationPreferenceScope(actor.userId, 'admin'),
   };
 }

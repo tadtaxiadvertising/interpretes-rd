@@ -22,11 +22,12 @@ interface DashboardShellProps {
   interpreterId?: number | null;
   userEmail?: string;
   notifications?: unknown[];
+  notificationUnreadCount?: number | null;
   notificationPreferenceScope?: string;
   ranking?: RankingData | null;
 }
 
-export function DashboardShell({ children, role, userName, interpreterId, userEmail = '', notifications = [], notificationPreferenceScope, ranking = null }: DashboardShellProps) {
+export function DashboardShell({ children, role, userName, interpreterId, userEmail = '', notifications = [], notificationUnreadCount, notificationPreferenceScope, ranking = null }: DashboardShellProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
 
   const presenceState = usePresence({
@@ -65,7 +66,7 @@ export function DashboardShell({ children, role, userName, interpreterId, userEm
         />
 
         <div className="flex min-w-0 flex-col flex-1 h-dvh overflow-hidden">
-          <Navbar email={userName} notifications={notifications} notificationPreferenceScope={notificationPreferenceScope} role={role} />
+          <Navbar email={userName} notifications={notifications} notificationUnreadCount={notificationUnreadCount} notificationPreferenceScope={notificationPreferenceScope} role={role} />
 
           <main className="min-h-0 flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar transition-all duration-500 relative">
             <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-20">

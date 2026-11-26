@@ -29,7 +29,7 @@ function formatNotificationTime(value: Date | string | null): string {
     : 'Fecha no disponible';
 }
 
-export function NotificationBell({ initialNotifications, candidateOnly = false, preferenceScope }: { initialNotifications: Notification[]; candidateOnly?: boolean; preferenceScope?: string }) {
+export function NotificationBell({ initialNotifications, initialUnreadCount, candidateOnly = false, preferenceScope }: { initialNotifications: Notification[]; initialUnreadCount?: number | null; candidateOnly?: boolean; preferenceScope?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   // Keep local read acknowledgments, not a frozen copy of server props.
   // New notifications supplied by a refreshed layout must appear immediately.
@@ -40,6 +40,8 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
   const [bulkPending, setBulkPending] = useState(false);
   const bulkRef = useRef(false);
   const generation = useRef(0);
+  const inFlight = useRef<Promise<void> | null>(null);
+  const refreshNow = useRef<(() => void) | null>(null);
   const requestRefresh = () => {
     generation.current += 1;
     setRefreshVersion(version => version + 1);
@@ -50,32 +52,45 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
   const preferencesId = useId();
   useEffect(() => {
     let active = true;
-    let busy = false;
-    const refresh = async () => {
-      if (busy || bulkRef.current || document.visibilityState === 'hidden') return;
-      busy = true;
+    const refresh = () => {
+      if (!active || inFlight.current || bulkRef.current || document.visibilityState === 'hidden') return;
       const currentGeneration = generation.current;
-      try {
-        const result = await getMyNotifications();
-        if (!active || currentGeneration !== generation.current) return;
-        if (result.success) {
-          setFeed({ data: result.data, unreadCount: result.unreadCount, source: initialNotifications });
-          setRefreshFailed(false);
-        } else setRefreshFailed(true);
-      } catch {
-        // Keep the last successful snapshot during transient failures.
-        if (active && currentGeneration === generation.current) setRefreshFailed(true);
-      } finally { busy = false; }
+      const run = async () => {
+        try {
+          const result = await getMyNotifications();
+          if (!active || currentGeneration !== generation.current) return;
+          if (result.success) {
+            setFeed({ data: result.data, unreadCount: result.unreadCount, source: initialNotifications });
+            setRefreshFailed(false);
+          } else setRefreshFailed(true);
+        } catch {
+          if (active && currentGeneration === generation.current) setRefreshFailed(true);
+        }
+      };
+      const operation = run();
+      inFlight.current = operation;
+      void operation.finally(() => {
+        if (inFlight.current === operation) inFlight.current = null;
+      });
     };
-    void refresh();
+    refreshNow.current = refresh;
+    // A newer generation may invalidate a running request, but it must wait
+    // for that request to settle before starting another one.
+    const previous = inFlight.current;
+    if (previous) void previous.then(refresh);
+    else refresh();
     const timer = window.setInterval(refresh, 60000);
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh(); };
     window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       active = false;
+      if (refreshNow.current === refresh) refreshNow.current = null;
       window.clearInterval(timer);
       window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [isOpen, initialNotifications, refreshVersion]);
+  }, [initialNotifications, refreshVersion]);
   const snapshot = feed?.source === initialNotifications ? feed : null;
   const rawNotifications = snapshot?.data ?? initialNotifications;
   const notifications = rawNotifications.map(n =>
@@ -86,7 +101,9 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
   const [error, setError] = useState<string | null>(null);
 
   const acknowledged = rawNotifications.filter(n => !n.isRead && locallyReadIds.includes(n.id)).length;
-  const unreadCount = Math.max(0, (snapshot?.unreadCount ?? rawNotifications.filter(n => !n.isRead).length) - acknowledged);
+  const unreadCount = Math.max(0, (snapshot?.unreadCount ?? initialUnreadCount ?? rawNotifications.filter(n => !n.isRead).length) - acknowledged);
+  const countUnknown = !snapshot && initialUnreadCount === null;
+  const unreadLabel = countUnknown ? (unreadCount > 0 ? `Al menos ${unreadCount} sin leer` : 'Total sin comprobar') : `${unreadCount} sin leer`;
   const [onlyUnread, setOnlyUnread] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [showPreferences, setShowPreferences] = useState(false);
@@ -100,6 +117,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
 
   function togglePanel() {
     if (!isOpen) {
+      refreshNow.current?.();
       let next = preferences;
       if (storageKey && !storageUnavailable) {
         try {
@@ -181,7 +199,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
         return;
       }
       setLocallyReadIds(current => [...new Set([...current, ...rawNotifications.map(n => n.id)])]);
-      setFeed(current => current ? { ...current, unreadCount: 0, data: current.data.map(n => ({ ...n, isRead: true })) } : current);
+      setFeed({ source: initialNotifications, unreadCount: 0, data: rawNotifications.map(n => ({ ...n, isRead: true })) });
     } catch {
       setError('No se pudieron marcar todas las notificaciones. Inténtalo de nuevo.');
     } finally {
@@ -207,7 +225,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
         onClick={togglePanel}
         ref={triggerRef}
         aria-label="Notificaciones"
-        aria-description={`${unreadCount} sin leer`}
+        aria-description={unreadLabel}
         aria-expanded={isOpen}
         aria-controls={isOpen ? panelId : undefined}
         className="group relative inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-2 transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"
@@ -226,7 +244,7 @@ export function NotificationBell({ initialNotifications, candidateOnly = false, 
           <div id={panelId} ref={panelRef} tabIndex={-1} role="region" aria-label={showHistory ? "Historial de notificaciones" : "Notificaciones recientes"} className={cn("fixed inset-x-3 top-[4.5rem] z-50 flex max-h-[calc(100dvh-10rem-env(safe-area-inset-bottom))] flex-col overflow-y-auto overscroll-contain rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] text-[var(--foreground)] shadow-2xl focus:outline-none motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-2 motion-safe:duration-300", candidateOnly ? "sm:inset-x-auto sm:right-4 sm:w-96" : "sm:absolute sm:inset-x-auto sm:top-full sm:right-0 sm:mt-2 sm:w-96")}>
             <div className="shrink-0 p-4 border-b border-[var(--border)] flex justify-between items-center bg-[var(--theme-surface-muted)]">
               <h4 className="font-bold text-[var(--foreground)] text-sm">{showHistory ? "Historial" : "Notificaciones"}</h4>
-              <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadCount} sin leer</span>
+              <span className="text-[10px] text-[var(--text-tertiary)] uppercase tracking-widest">{unreadLabel}</span>
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">

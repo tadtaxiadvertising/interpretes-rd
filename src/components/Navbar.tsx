@@ -12,12 +12,13 @@ import type { UserRole } from '@/lib/types';
 interface NavbarProps {
   email?: string;
   notifications?: unknown[];
+  notificationUnreadCount?: number | null;
   notificationPreferenceScope?: string;
   onSignOut?: () => void;
   role?: UserRole | string;
 }
 
-export function Navbar({ email, notifications = [], notificationPreferenceScope, onSignOut, role }: NavbarProps) {
+export function Navbar({ email, notifications = [], notificationUnreadCount, notificationPreferenceScope, onSignOut, role }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false);
   const initials = email ? email[0].toUpperCase() : 'U';
   const settingsPath = role === 'admin' ? '/settings' : '/dashboard/settings';
@@ -42,7 +43,7 @@ export function Navbar({ email, notifications = [], notificationPreferenceScope,
         <div className="hidden flex-1 md:block" aria-hidden="true" />
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           <ThemeSwitcher />
-          <NotificationBell key={notificationPreferenceScope} preferenceScope={notificationPreferenceScope} initialNotifications={notifications as any} />
+          <NotificationBell key={notificationPreferenceScope} preferenceScope={notificationPreferenceScope} initialNotifications={notifications as any} initialUnreadCount={notificationUnreadCount} />
           <div className="hidden h-6 w-px bg-[var(--border)] lg:block" aria-hidden="true" />
 
           <div className="relative">

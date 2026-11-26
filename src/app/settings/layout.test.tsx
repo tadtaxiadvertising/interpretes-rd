@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
-const m = vi.hoisted(() => ({ profile: vi.fn(), actor: vi.fn(), load: vi.fn(), scope: vi.fn(), shell: vi.fn(), redirect: vi.fn((path: string) => { throw new Error('redirect:' + path); }) }));
+const m = vi.hoisted(() => ({ profile: vi.fn(), actor: vi.fn(), load: vi.fn(), count: vi.fn(), scope: vi.fn(), shell: vi.fn(), redirect: vi.fn((path: string) => { throw new Error('redirect:' + path); }) }));
 vi.mock('@/app/actions/auth', () => ({ getCurrentProfile: m.profile }));
 vi.mock('@/lib/auth/current-actor', () => ({ getCurrentActor: m.actor }));
+vi.mock('@/lib/notifications/load-navbar-unread-count', () => ({ loadNavbarUnreadCount: m.count }));
 vi.mock('@/lib/notifications/load-navbar-notifications', () => ({ loadNavbarNotifications: m.load }));
 vi.mock('@/lib/notifications/notification-preference-scope', () => ({ notificationPreferenceScope: m.scope }));
 vi.mock('next/navigation', () => ({ redirect: m.redirect }));
@@ -25,6 +26,7 @@ beforeEach(() => {
   m.profile.mockResolvedValue({ id: profileId, role: 'admin', display_name: 'Admin' });
   m.actor.mockResolvedValue({ userId, profileId, role: 'admin' });
   m.load.mockResolvedValue([{ id: 'notice-1' }]);
+  m.count.mockResolvedValue(24);
   m.scope.mockReturnValue('account-scope');
 });
 afterEach(cleanup);
@@ -34,8 +36,9 @@ describe('settings notification identity', () => {
     render(await Layout({ children: <p>Configuración</p> }));
     expect(screen.getByText('Configuración')).toBeTruthy();
     expect(m.load).toHaveBeenCalledExactlyOnceWith([userId, profileId]);
+    expect(m.count).toHaveBeenCalledExactlyOnceWith([userId, profileId]);
     expect(m.scope).toHaveBeenCalledExactlyOnceWith(userId, 'admin');
-    expect(m.shell).toHaveBeenCalledWith(expect.objectContaining({ role: 'admin', notifications: [{ id: 'notice-1' }], notificationPreferenceScope: 'account-scope' }));
+    expect(m.shell).toHaveBeenCalledWith(expect.objectContaining({ role: 'admin', notifications: [{ id: 'notice-1' }], notificationPreferenceScope: 'account-scope', notificationUnreadCount: 24 }));
   });
   it.each(layouts)('does not load notifications for unauthenticated or nonadministrator actors in %s', async Layout => {
     m.actor.mockResolvedValueOnce(null).mockResolvedValueOnce({ userId, profileId, role: 'interpreter' });
@@ -43,11 +46,13 @@ describe('settings notification identity', () => {
     await expect(Layout({ children: null })).rejects.toThrow('redirect:/dashboard');
     expect(m.profile).not.toHaveBeenCalled();
     expect(m.load).not.toHaveBeenCalled();
+    expect(m.count).not.toHaveBeenCalled();
   });
   it('fails closed if the profile lookup resolves to a different identity', async () => {
     m.profile.mockResolvedValueOnce({ id: userId, role: 'admin' });
     await expect(SettingsLayout({ children: null })).rejects.toThrow('redirect:/login');
     expect(m.load).not.toHaveBeenCalled();
+    expect(m.count).not.toHaveBeenCalled();
     expect(m.scope).not.toHaveBeenCalled();
   });
   it('does not use an administrator-looking profile for a candidate actor', async () => {
@@ -55,5 +60,6 @@ describe('settings notification identity', () => {
     await expect(InterpretersLayout({ children: null })).rejects.toThrow('redirect:/dashboard');
     expect(m.profile).not.toHaveBeenCalled();
     expect(m.load).not.toHaveBeenCalled();
+    expect(m.count).not.toHaveBeenCalled();
   });
 });
