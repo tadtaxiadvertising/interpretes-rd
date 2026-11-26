@@ -119,7 +119,7 @@ describe('consolidated publication',()=>{
     const row={...f.row,items,declarationHash:fingerprintRoleplayDirectUploadDeclarations(items),
       verifiedObjects:items.map(i=>({order:i.order,path:i.path,sizeBytes:i.sizeBytes,sha256:i.sha256,verifiedAtMs:f.row.createdAt.getTime()}))};
     f.findUnique.mockResolvedValue(row);
-    const evidence=items.map(i=>({order:i.order,reference:'private-base/'+batchId+'/'+i.order+'.mp3',sizeBytes:i.sizeBytes,sha256:i.sha256,verifiedAt:new Date()}));
+    const evidence=items.map(i=>({order:i.order,reference:'private-base/'+batchId+'/'+i.order+'.mp3',sizeBytes:i.sizeBytes,sha256:i.sha256,verifiedAt:new Date(),claimValid:true}));
     f.query.mockImplementation(async(sql:TemplateStringsArray,...values:unknown[])=>{
       const statement=sql.join('');
       if(statement.includes('INSERT INTO public.roleplay_sessions')) return [{id:values[0],updatedAt:new Date()}];
