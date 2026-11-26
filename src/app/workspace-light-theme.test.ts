@@ -118,11 +118,23 @@ describe('semantic monitoring palette', () => {
   });
 
   it('keeps portal-specific compatibility rules within the light theme', () => {
-    const portal = css.split('/* Light portal controls:')[1];
+    const portal = css.split('/* Light portal controls:')[1]?.split('/* Notifications: shared presentation')[0];
     expect(portal).toBeDefined();
     postcss.parse('/* Light portal controls:' + portal).walkRules(rule => {
       for (const selector of rule.selectors) {
         expect(selector.trim()).toMatch(/^html\[data-theme="light"\] \.theme-(workspace|login|candidate|postular)\b/);
+      }
+    });
+  });
+});
+
+describe('shared notification styles', () => {
+  it('keeps new notification rules scoped to the panel across both appearances', () => {
+    const rules = css.split('/* Notifications: shared presentation')[1];
+    expect(rules).toBeDefined();
+    postcss.parse('/* Notifications: shared presentation' + rules).walkRules(rule => {
+      for (const selector of rule.selectors) {
+        expect(selector.trim()).toMatch(/^\.notification-panel(?:\s|$)/);
       }
     });
   });
@@ -243,7 +255,10 @@ describe('semantic operations and notification colors', () => {
     for (const token of ['--theme-success', '--theme-warning', '--theme-danger', '--theme-link']) {
       expect(source).toContain('text-[var(' + token + ')]');
     }
-    expect(source).toContain('bg-red-700 text-[10px] font-bold text-white');
+    expect(source).toContain('bg-[#b91c1c] text-xs font-bold text-white');
+    expect(contrast('#b91c1c', '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(source).toContain('data-unread={!n.isRead}');
+    expect(source).toContain('aria-description={unreadLabel}');
   });
 });
 
