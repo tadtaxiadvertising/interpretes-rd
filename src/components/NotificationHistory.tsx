@@ -100,9 +100,9 @@ export function NotificationHistory({ onlyUnread, candidateOnly = false, refresh
           })}
       </div>
       <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[var(--border)] px-3 py-1">
-        <button type="button" disabled={!page || !current} onClick={() => setCursors(current => current.slice(0, -1))} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Anterior</button>
+        <button type="button" disabled={!page || !current} onClick={() => setCursors(previous => previous.length === page + 1 && previous.length > 1 ? previous.slice(0, -1) : previous)} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Anterior</button>
         <span className="text-xs text-[var(--text-secondary)]">Página {page + 1}</span>
-        <button type="button" disabled={!current?.nextCursor || current.failed || page >= 100000} onClick={() => { if (current?.nextCursor) setCursors(previous => [...previous, current.nextCursor]); }} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Siguiente</button>
+        <button type="button" disabled={!current?.nextCursor || current.failed || page >= 100000} onClick={() => { if (current?.nextCursor) setCursors(previous => previous.length === page + 1 ? [...previous, current.nextCursor] : previous); }} className="min-h-11 px-2 text-xs text-[var(--theme-link)] disabled:opacity-50">Siguiente</button>
       </div>
     </div>
   );
