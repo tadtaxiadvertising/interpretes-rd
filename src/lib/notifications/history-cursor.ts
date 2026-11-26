@@ -1,6 +1,7 @@
 import 'server-only';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
+import type { HistorySearchFilters } from './history-search-filters';
 import { notificationCategories, type NotificationCategory } from './notification-display';
 
 export const HistoryCursorSchema = z.object({
@@ -18,7 +19,7 @@ type Reader = Pick<Prisma.TransactionClient, '$queryRaw'>;
 
 export async function readHistoryCursorPage(db: Reader, recipientIds: readonly string[], candidateOnly: boolean, filters: {
   unreadOnly: boolean; category?: NotificationCategory; importantOnly?: boolean; after: HistoryCursor | null;
-}) {
+} & HistorySearchFilters) {
   if (!recipientIds.length || (candidateOnly && filters.category && filters.category !== 'recruitment')) {
     return { rows: [] as Omit<HistoryRow, 'cursorTime'>[], nextCursor: null };
   }
@@ -31,6 +32,11 @@ export async function readHistoryCursorPage(db: Reader, recipientIds: readonly s
     conditions.push(Prisma.sql`(n.category = 'system' OR n.category IS NULL OR n.category NOT IN (${Prisma.join([...notificationCategories])}))`);
   } else if (filters.category) conditions.push(Prisma.sql`n.category = ${filters.category}`);
   if (filters.importantOnly) conditions.push(Prisma.sql`n.type IN ('warning', 'error')`);
+  // Literal substring matching: % and _ are not wildcard operators.
+  if (filters.search) conditions.push(Prisma.sql`(strpos(lower(n.title), lower(${filters.search}::text)) > 0 OR strpos(lower(n.message), lower(${filters.search}::text)) > 0)`);
+  // Calendar-day boundaries in the same timezone used for history display.
+  if (filters.fromDate) conditions.push(Prisma.sql`n.created_at >= (${filters.fromDate}::date::timestamp AT TIME ZONE 'America/Santo_Domingo')`);
+  if (filters.toDate) conditions.push(Prisma.sql`n.created_at < ((${filters.toDate}::date + 1)::timestamp AT TIME ZONE 'America/Santo_Domingo')`);
   const after = filters.after;
   if (after) {
     conditions.push(after.createdAt === null

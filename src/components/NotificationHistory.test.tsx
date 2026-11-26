@@ -85,4 +85,35 @@ describe('notification history', () => {
     expect(await screen.findByText('Aviso anterior')).toBeTruthy();
     expect(screen.getByText('Página 1')).toBeTruthy();
   });
+  it('applies search and date filters only on explicit submission and resets the cursor', async () => {
+    m.getMyNotificationHistory.mockResolvedValue({ success: true, data: [item], hasMore: true, nextCursor });
+    render(<NotificationHistory {...props} />);
+    await screen.findByText('Aviso anterior');
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente' }));
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenCalledTimes(2));
+    await screen.findByText('Aviso anterior');
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y filtrar por fecha' }));
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar por título o contenido' }), { target: { value: '  QA  ' } });
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-11-01' } });
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-11-25' } });
+    expect(m.getMyNotificationHistory).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, after: null, unreadOnly: false, searchFilters: { search: 'QA', fromDate: '2026-11-01', toDate: '2026-11-25' } }));
+    expect(screen.getByText('Página 1')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar búsqueda y fechas' }));
+    await waitFor(() => expect(m.getMyNotificationHistory).toHaveBeenLastCalledWith({ page: 0, after: null, unreadOnly: false }));
+  });
+
+  it('keeps invalid date ranges from triggering a history query', async () => {
+    m.getMyNotificationHistory.mockResolvedValue({ success: true, data: [item], hasMore: false, nextCursor: null });
+    render(<NotificationHistory {...props} candidateOnly />);
+    await screen.findByText('Aviso anterior');
+    fireEvent.click(screen.getByRole('button', { name: 'Buscar y filtrar por fecha' }));
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-12-01' } });
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-11-25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar filtros' }));
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(m.getMyNotificationHistory).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('combobox', { name: 'Categoría' })).toBeNull();
+  });
 });

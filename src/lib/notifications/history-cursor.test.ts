@@ -60,4 +60,17 @@ describe('notification history cursor', () => {
     expect(HistoryCursorSchema.safeParse({ id: 'n1', createdAt: precise, userId: recipient }).success).toBe(false);
     expect(HistoryCursorSchema.safeParse({ id: '', createdAt: precise }).success).toBe(false);
   });
+  it('binds literal search and inclusive local date filters without expanding recipient scope', async () => {
+    const f = fixture();
+    const search = "QA %_' OR 1=1";
+    await readHistoryCursorPage(f.db, [recipient], true, { unreadOnly: true, after: null, search, fromDate: '2026-11-01', toDate: '2026-11-25' });
+    expect(f.sql().sql).toContain('n.user_id IN (?::uuid)');
+    expect(f.sql().sql).toContain("n.category = 'recruitment' AND n.link = '/candidate'");
+    expect(f.sql().sql).toContain('strpos(lower(n.title), lower(?::text))');
+    expect(f.sql().sql).toContain('strpos(lower(n.message), lower(?::text))');
+    expect(f.sql().sql).toContain("n.created_at >= (?::date::timestamp AT TIME ZONE 'America/Santo_Domingo')");
+    expect(f.sql().sql).toContain("n.created_at < ((?::date + 1)::timestamp AT TIME ZONE 'America/Santo_Domingo')");
+    expect(f.sql().sql).not.toContain(search);
+    expect(f.sql().values).toEqual([recipient, search, search, '2026-11-01', '2026-11-25']);
+  });
 });
