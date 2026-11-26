@@ -10,6 +10,8 @@ import { InterpreterActions } from '@/components/InterpreterActions';
 import { ExportInterpretersButton } from '@/components/ExportInterpretersButton';
 import { BankingInfoCard } from '@/components/admin/BankingInfoCard';
 import prisma from '@/lib/prisma';
+import { getCurrentActor } from '@/lib/auth/current-actor';
+import { redirect } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +57,11 @@ async function getInterpreters() {
 }
 
 export default async function InterpretersPage() {
+  // Layouts and pages may render in parallel; authorize before querying sensitive directory fields.
+  const actor = await getCurrentActor();
+  if (!actor) redirect('/login');
+  if (actor.role !== 'admin') redirect('/dashboard');
+  if (!actor.profileId) redirect('/login');
   const interpreters = await getInterpreters();
 
   return (
