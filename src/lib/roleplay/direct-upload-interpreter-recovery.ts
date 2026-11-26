@@ -9,6 +9,8 @@ import { validRoleplayPublicationSessionIds } from './direct-upload-publication-
 import { readOpeningRequirement } from './bilingual-opening-assignment';
 import type { DirectInterpreterAssignment } from './direct-upload-interpreter-assignment';
 
+import { requireDirectAssignmentBinding } from './direct-upload-assignment-binding';
+
 type Store = Pick<PrismaClient, 'roleplayUploadReservation' | 'roleplaySession' | '$queryRaw'>;
 
 /** Read-only recovery of the receipt committed by the individual publication
@@ -24,6 +26,7 @@ export async function recoverPublishedInterpreterRoleplay(db: Store, actor: stri
       declarationHash:true, createdAt:true, expiresAt:true, publishedSessionIds:true },
   });
   if (!row || row.actorUserId !== actor || row.requestKey !== requestKey) throw new Error('PUBLICATION_NOT_READY');
+  await requireDirectAssignmentBinding(db,row.id,actor,requestKey,data);
   if (row.status === 'VERIFIED' && Array.isArray(row.publishedSessionIds) && row.publishedSessionIds.length === 0) return null;
   if (row.status !== 'PUBLISHED' || !validRoleplayPublicationSessionIds(row.publishedSessionIds) ||
       row.publishedSessionIds.length !== 1 || !Array.isArray(row.items) || !Array.isArray(row.verifiedObjects)) {
