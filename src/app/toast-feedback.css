@@ -1,0 +1,36 @@
+/* Shared by public, candidate and workspace routes; no overlay blocks the page
+   outside the actual toast. The navigation marker is present only in workspaces. */
+.platform-toaster {
+  --platform-toast-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+@media (max-width: 767px) {
+  body:has([data-mobile-bottom-nav]) .platform-toaster {
+    --platform-toast-bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+.platform-toast-message {
+  max-height: min(12rem, 35dvh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  overflow-wrap: anywhere;
+}
+.platform-toast-close {
+  display: inline-flex;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--theme-control-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: var(--theme-panel);
+}
+.platform-toast-close:hover {
+  color: var(--foreground);
+  background: var(--theme-hover);
+}
+.platform-toast-close:focus-visible {
+  outline: 2px solid var(--theme-focus);
+  outline-offset: 2px;
+}

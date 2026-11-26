@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { Toaster } from "react-hot-toast";
+import PlatformToaster from "@/components/PlatformToaster";
 import "./globals.css";
+import "./toast-feedback.css";
 import VersionGuard from "@/components/VersionGuard";
 import { themeBootstrapScript } from "@/lib/theme-bootstrap";
 
@@ -38,23 +39,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased font-sans selection:bg-primary selection:text-white">
         <VersionGuard />
-        <Toaster
-          position="bottom-right"
-          containerStyle={{ bottom: "calc(5rem + env(safe-area-inset-bottom))", left: 12, right: 12 }}
-          toastOptions={{
-            duration: 5000,
-            success: { duration: 3500 },
-            error: { duration: 8000 },
-            style: {
-              background: "var(--theme-panel)",
-              color: "var(--foreground)",
-              maxWidth: "min(420px, calc(100vw - 24px))",
-              overflowWrap: "anywhere",
-              border: "1px solid var(--border)",
-              borderRadius: "12px",
-            },
-          }}
-        />
+        <PlatformToaster />
         <main className="relative min-h-screen">{children}</main>
       </body>
     </html>
