@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { NextRequest } from 'next/server';
 import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
-const m=vi.hoisted(()=>({auth:vi.fn(),bearer:vi.fn(),limit:vi.fn(),recover:vi.fn(),publish:vi.fn(),client:vi.fn(),opening:vi.fn(),port:vi.fn(),notify:vi.fn(),find:vi.fn(),revalidate:vi.fn()}));
+const m=vi.hoisted(()=>({auth:vi.fn(),bearer:vi.fn(),limit:vi.fn(),recover:vi.fn(),publish:vi.fn(),consolidated:vi.fn(),consolidate:vi.fn(),client:vi.fn(),opening:vi.fn(),port:vi.fn(),notify:vi.fn(),find:vi.fn(),revalidate:vi.fn()}));
 vi.mock('@/lib/prisma',()=>({default:{roleplaySession:{findUnique:m.find}}}));
 vi.mock('@/lib/auth/actions',()=>({validateAction:m.auth}));
 vi.mock('@/lib/api-auth',()=>({actorFromBearer:m.bearer}));
@@ -10,11 +10,13 @@ vi.mock('@supabase/supabase-js',()=>({createClient:m.client}));
 vi.mock('@/lib/roleplay/bilingual-opening-bucket',()=>({requireBilingualOpeningBucket:m.opening}));
 vi.mock('@/lib/roleplay/direct-upload-final-storage',()=>({createFinalClinicalStoragePort:m.port}));
 vi.mock('@/lib/roleplay/direct-upload-interpreter-recovery',()=>({recoverPublishedInterpreterRoleplay:m.recover}));
-vi.mock('@/lib/roleplay/direct-upload-publish-interpreter',()=>({publishVerifiedInterpreterRoleplay:m.publish}));
+vi.mock('@/lib/roleplay/direct-upload-publish-interpreter',()=>({publishVerifiedInterpreterRoleplay:m.publish,publishConsolidatedInterpreterRoleplay:m.consolidated}));
 vi.mock('@/lib/notifications/notify-roleplay',()=>({notifyRoleplayAssignments:m.notify}));
 vi.mock('next/cache',()=>({revalidatePath:m.revalidate}));
 vi.mock('server-only',()=>({}));
+vi.mock('@/lib/roleplay/direct-upload-final-evidence',()=>({consolidateDirectUploadSlot:m.consolidate}));
 import { POST } from './route';
+import { POST as consolidate } from '../consolidate/route';
 const key='123e4567-e89b-42d3-a456-426614174000';
 const scenario={title:'Medical turn',durationLimitSec:60,scriptPrompt:null,studioLanguage:'en'};
 const assignment={interpreterId:7,scenarios:[scenario]};
@@ -79,6 +81,31 @@ describe('staged individual publication API',()=>{
     vi.stubEnv('FRONTEND_ORIGIN','https://app.example.test/other');
     expect((await POST(request())).status).toBe(503);
     expect(m.publish).not.toHaveBeenCalled();
+    expect(m.notify).not.toHaveBeenCalled();
+  });
+});
+
+describe('staged incremental publication API',()=>{
+  it('requires separate incremental gate and delegates full publication without inline promotion',async()=>{
+    const body={...payload,mode:'consolidated',assignment:{...assignment,scenarios:[scenario,scenario]}};
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED','');
+    expect((await POST(request(body))).status).toBe(404);
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED','true');
+    m.consolidated.mockResolvedValue({...receipt,scenarioCount:2});
+    expect((await POST(request(body))).status).toBe(200);
+    expect(m.consolidated).toHaveBeenCalledWith(expect.anything(),'admin',key,body.assignment,expect.any(AbortSignal));
+    expect(m.publish).not.toHaveBeenCalled();
+    expect(m.port).not.toHaveBeenCalled();
+  });
+  it('consolidates only one canonical position and rejects injected paths',async()=>{
+    vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED','true');
+    m.consolidate.mockResolvedValue({verifiedCount:1,total:2,complete:false});
+    const response=await consolidate(request({requestKey:key,order:0}));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({success:true,data:{verifiedCount:1,total:2,complete:false}});
+    expect(m.consolidate).toHaveBeenCalledWith(expect.anything(),expect.anything(),'admin',key,0,expect.any(AbortSignal));
+    expect((await consolidate(request({requestKey:key,order:0,path:'foreign'}))).status).toBe(400);
+    expect(m.consolidate).toHaveBeenCalledTimes(1);
     expect(m.notify).not.toHaveBeenCalled();
   });
 });
