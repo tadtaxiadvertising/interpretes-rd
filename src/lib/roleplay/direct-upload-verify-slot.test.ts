@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
-import { verifyDirectUploadSlot } from './direct-upload-verify-slot';
+import { verifyDirectUploadSlot, inspectDirectUploadSlot } from './direct-upload-verify-slot';
 import { prepareRoleplayDirectUploadBatch } from './direct-upload-contract';
 import { fingerprintRoleplayDirectUploadDeclarations } from './direct-upload-reservation-fingerprint';
 
@@ -58,5 +58,30 @@ describe('direct upload verification progress', () => {
     f.findUnique.mockResolvedValue({...f.row,items:[{...items[0],path:'foreign'},items[1]]});
     await expect(verifyDirectUploadSlot(f.db,'admin',key,0,f.verify)).rejects.toThrow();
     expect(f.verify).not.toHaveBeenCalled();
+  });
+});
+
+describe('read-only partial upload inspection',()=>{
+  it('reports only observed presence or non-observation of the next slot',async()=>{
+    const f=fixture(), observe=vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    expect(await inspectDirectUploadSlot(f.db,'admin',key,0,observe)).toEqual({kind:'PRESENT_UNVERIFIED',verifiedCount:0,total:2});
+    expect(await inspectDirectUploadSlot(f.db,'admin',key,0,observe)).toEqual({kind:'NOT_OBSERVED',verifiedCount:0,total:2});
+    expect(observe).toHaveBeenCalledWith(items[0]);
+    expect(f.updateMany).not.toHaveBeenCalled();
+  });
+  it('reports recorded progress without probing already verified objects',async()=>{
+    const f=fixture(), observe=vi.fn();
+    f.row.verifiedObjects=[{order:0,path:items[0].path,sizeBytes:100,sha256:items[0].sha256,verifiedAtMs:f.row.createdAt.getTime()}];
+    expect(await inspectDirectUploadSlot(f.db,'admin',key,0,observe)).toEqual({kind:'PROGRESS',verifiedCount:1,total:2,complete:false});
+    expect(observe).not.toHaveBeenCalled();
+    expect(f.updateMany).not.toHaveBeenCalled();
+  });
+  it('rejects foreign, out-of-order and unavailable observations without writes',async()=>{
+    const f=fixture(), observe=vi.fn().mockRejectedValue(new Error('unavailable'));
+    expect(await inspectDirectUploadSlot(f.db,'other',key,0,observe)).toEqual({kind:'NOT_FOUND'});
+    expect(await inspectDirectUploadSlot(f.db,'admin',key,1,observe)).toEqual({kind:'OUT_OF_ORDER'});
+    expect(observe).not.toHaveBeenCalled();
+    await expect(inspectDirectUploadSlot(f.db,'admin',key,0,observe)).rejects.toThrow();
+    expect(f.updateMany).not.toHaveBeenCalled();
   });
 });
