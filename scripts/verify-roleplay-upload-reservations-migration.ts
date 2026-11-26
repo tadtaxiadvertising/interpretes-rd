@@ -8,6 +8,7 @@ import { verifyFinalEvidencePostgres } from './verify-roleplay-final-evidence-po
 import { readRoleplayStorageBudgetAudit } from './roleplay-storage-budget-audit';
 import { readRoleplayStorageRetentionReview } from './roleplay-storage-retention-review';
 import { readRoleplayDirectRolloutReadiness } from './roleplay-direct-rollout-readiness';
+import { verifyRoleplayAtomicRollout } from './verify-roleplay-atomic-rollout';
 
 // ONLY a fresh, disposable PostgreSQL database on the isolated CI service.
 // Never run against production, a shared DB or a remote hostname.
@@ -95,6 +96,7 @@ async function main(): Promise<void> {
     second = new Client({ connectionString: temp.toString() });
     await first.connect();
     await second.connect();
+    await verifyRoleplayAtomicRollout(first);
 
     const sql = await readFile(resolve(
       process.cwd(), 'docs/operations/staged-sql/roleplay-upload-reservations.sql',
