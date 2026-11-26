@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   MoreVertical,
   Shield,
@@ -14,6 +14,7 @@ import {
   Loader2,
   ClipboardCheck
 } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import type { AdminUserSummary } from '@/lib/admin-user-summary';
 import type { UserRole } from '@/lib/types';
 import {
@@ -35,6 +36,10 @@ interface InterpreterItem {
 export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary; onViewOnboarding?: () => void }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const updating = useRef(false);
+  const [error, setError] = useState<string | null>(null);
+  const [needsReview, setNeedsReview] = useState(false);
+  const [linkLoadFailed, setLinkLoadFailed] = useState(false);
   const [activeModal, setActiveModal] = useState<'edit' | 'password' | 'link' | 'delete' | null>(null);
 
   // Form states
@@ -48,14 +53,18 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
   const [isLoadingInterpreters, setIsLoadingInterpreters] = useState(false);
 
   const handleRoleChange = async (newRole: string) => {
+    if (updating.current || needsReview) return;
+    updating.current = true;
+    setError(null);
     setIsUpdating(true);
     try {
       const result = await updateUserRole(user.id, newRole as UserRole);
-      if (result.success) setIsOpen(false);
-      else alert(result.error || 'No se pudo actualizar el rol');
+      if (result.success) { setIsOpen(false); toast.success('Rol actualizado correctamente'); }
+      else setError(result.error || 'No se pudo actualizar el rol');
     } catch {
-      alert('Error al actualizar el rol');
+      setError('No se pudo confirmar el cambio de rol. Revisa el estado antes de reintentar.');
     } finally {
+      updating.current = false;
       setIsUpdating(false);
     }
   };
@@ -63,18 +72,25 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!displayName.trim() || !email.trim()) return;
+    if (updating.current || needsReview) return;
+    updating.current = true;
+    setError(null);
     setIsUpdating(true);
     try {
       const res = await updateUserProfile(user.id, { displayName, email });
       if (res.success) {
         setActiveModal(null);
         setIsOpen(false);
+        toast.success('Perfil actualizado correctamente');
       } else {
-        alert(res.error || 'Error al actualizar el perfil');
+        setError(res.error || 'Error al actualizar el perfil');
+        if ('partial' in res && res.partial === true) setNeedsReview(true);
       }
     } catch {
-      alert('Ocurrió un error inesperado');
+      setError('No se pudo confirmar la operación. Revisa el estado antes de reintentar.');
+      setNeedsReview(true);
     } finally {
+      updating.current = false;
       setIsUpdating(false);
     }
   };
@@ -82,73 +98,98 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
   const handleSavePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      alert('La contraseña debe tener al menos 6 caracteres');
+      setError('La contraseña debe tener al menos 6 caracteres');
       return;
     }
+    if (updating.current || needsReview) return;
+    updating.current = true;
+    setError(null);
     setIsUpdating(true);
     try {
       const res = await updateUserPassword(user.id, newPassword);
       if (res.success) {
-        alert('Contraseña actualizada con éxito');
+        toast.success('Contraseña actualizada con éxito');
         setNewPassword('');
         setActiveModal(null);
         setIsOpen(false);
       } else {
-        alert(res.error || 'Error al actualizar la contraseña');
+        setError(res.error || 'Error al actualizar la contraseña');
       }
     } catch {
-      alert('Ocurrió un error inesperado');
+      setError('No se pudo confirmar la operación. Revisa el estado antes de reintentar.');
+      setNeedsReview(true);
     } finally {
+      updating.current = false;
       setIsUpdating(false);
     }
   };
 
   const handleLinkInterpreter = async () => {
+    if (isLoadingInterpreters || linkLoadFailed) return;
+    if (updating.current || needsReview) return;
+    updating.current = true;
+    setError(null);
     setIsUpdating(true);
     try {
       const res = await linkUserToInterpreter(user.id, selectedInterpreterId);
       if (res.success) {
         setActiveModal(null);
         setIsOpen(false);
+        toast.success('Vínculo actualizado correctamente');
       } else {
-        alert(res.error || 'Error al vincular el intérprete');
+        setError(res.error || 'Error al vincular el intérprete');
       }
     } catch {
-      alert('Ocurrió un error inesperado');
+      setError('No se pudo confirmar la operación. Revisa el estado antes de reintentar.');
+      setNeedsReview(true);
     } finally {
+      updating.current = false;
       setIsUpdating(false);
     }
   };
 
   const handleDeleteUser = async () => {
+    if (updating.current || needsReview) return;
     if (!confirm('¿Confirmas la revocación de Supabase Auth y la eliminación del perfil local? Es irreversible. Las cuentas o sesiones heredadas de NextAuth requieren comprobación independiente.')) {
       return;
     }
+    if (updating.current || needsReview) return;
+    updating.current = true;
+    setError(null);
     setIsUpdating(true);
     try {
       const res = await deleteUserAccess(user.id);
       if (res.success) {
         setActiveModal(null);
         setIsOpen(false);
-        alert('Acceso de Supabase Auth revocado y perfil local eliminado. Verifica por separado las credenciales o sesiones heredadas de NextAuth.');
+        toast.success('Acceso de Supabase Auth revocado y perfil local eliminado. Verifica por separado las credenciales o sesiones heredadas de NextAuth.', { duration: 12000 });
       } else {
-        alert(res.error || 'Error al revocar el acceso en Supabase Auth');
+        setError(res.error || 'Error al revocar el acceso en Supabase Auth');
+        if ('partial' in res && res.partial === true) setNeedsReview(true);
       }
     } catch {
-      alert('Ocurrió un error inesperado');
+      setError('No se pudo confirmar la operación. Revisa el estado antes de reintentar.');
+      setNeedsReview(true);
     } finally {
+      updating.current = false;
       setIsUpdating(false);
     }
   };
 
   const openLinkModal = async () => {
+    if (updating.current || needsReview) return;
     setActiveModal('link');
+    setError(null);
+    setLinkLoadFailed(false);
+    setInterpreters([]);
+    setSelectedInterpreterId(user.interpreterId);
     setIsLoadingInterpreters(true);
     try {
       const list = await getAllInterpretersList();
       setInterpreters(list);
     } catch {
-      alert('Error al cargar la lista de intérpretes');
+      setError('No se pudo cargar la lista de intérpretes. Cierra y vuelve a abrir el formulario para reintentar.');
+      setLinkLoadFailed(true);
     } finally {
       setIsLoadingInterpreters(false);
     }
@@ -157,7 +198,10 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
   return (
     <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        aria-label="Acciones del usuario"
+        aria-expanded={isOpen}
+        disabled={isUpdating}
+        onClick={() => { if (!isUpdating) { setError(null); setIsOpen(!isOpen); } }}
         className="p-3 hover:bg-white/10 rounded-2xl text-slate-400 hover:text-white transition-all active:scale-90"
       >
         <MoreVertical size={20} />
@@ -170,13 +214,15 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
             onClick={() => setIsOpen(false)}
           />
           <div className="absolute right-0 mt-2 w-64 bg-slate-900/95 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            {error && !activeModal && <p role="alert" className="p-3 text-sm text-[var(--theme-danger)] break-words">{error}</p>}
+            {needsReview && !activeModal && <p className="p-3 text-sm text-[var(--theme-warning)]">Revisión necesaria antes de repetir operaciones.</p>}
             <div className="p-3 border-b border-white/5 bg-white/5">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-3 mb-2">Cambiar Rol</p>
               <div className="grid grid-cols-1 gap-1">
                 {(['admin', 'interpreter', 'candidate'] as const).map((role) => (
                   <button
                     key={role}
-                    disabled={isUpdating || user.role === role}
+                    disabled={isUpdating || needsReview || user.role === role}
                     onClick={() => handleRoleChange(role)}
                     className="flex items-center gap-3 w-full px-3 py-2 rounded-xl text-sm font-medium text-slate-300 hover:bg-white/5 hover:text-white transition-all disabled:opacity-30"
                   >
@@ -189,7 +235,8 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
 
             <div className="p-2 space-y-1">
               <button
-                onClick={() => setActiveModal('edit')}
+                disabled={isUpdating || needsReview}
+                onClick={() => { setError(null); setActiveModal('edit'); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:bg-white/5 hover:text-white transition-all"
               >
                 <Edit3 size={16} className="text-slate-400" />
@@ -197,7 +244,8 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               </button>
 
               <button
-                onClick={() => setActiveModal('password')}
+                disabled={isUpdating || needsReview}
+                onClick={() => { setError(null); setNewPassword(''); setActiveModal('password'); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-slate-300 hover:bg-white/5 hover:text-white transition-all"
               >
                 <Key size={16} className="text-amber-400" />
@@ -205,6 +253,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               </button>
 
               <button
+                disabled={isUpdating || needsReview}
                 onClick={openLinkModal}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-blue-400 hover:bg-blue-500/10 transition-all"
               >
@@ -223,7 +272,8 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               )}
 
               <button
-                onClick={() => setActiveModal('delete')}
+                disabled={isUpdating || needsReview}
+                onClick={() => { setError(null); setActiveModal('delete'); }}
                 className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition-all"
               >
                 <Trash2 size={16} />
@@ -266,6 +316,8 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
               </button>
             </div>
 
+            {error && <p role="alert" className="mx-6 mt-4 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-surface-muted)] p-3 text-sm text-[var(--theme-danger)] break-words">{error}</p>}
+            {needsReview && <p className="mx-6 mt-2 text-sm text-[var(--theme-warning)]">Revisión administrativa necesaria antes de repetir la operación.</p>}
             {/* --- MODAL EDITAR PERFIL --- */}
             {activeModal === 'edit' && (
               <form onSubmit={handleSaveProfile} className="p-6 space-y-4">
@@ -300,7 +352,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   </button>
                   <button
                     type="submit"
-                    disabled={isUpdating}
+                    disabled={isUpdating || needsReview}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Guardar Cambios'}
@@ -319,6 +371,8 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Nueva Contraseña</label>
                   <input
                     type="password"
+                    autoComplete="new-password"
+                    disabled={isUpdating || needsReview}
                     placeholder="Mínimo 6 caracteres"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -337,7 +391,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   </button>
                   <button
                     type="submit"
-                    disabled={isUpdating}
+                    disabled={isUpdating || needsReview}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Actualizar Contraseña'}
@@ -409,7 +463,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   </button>
                   <button
                     onClick={handleLinkInterpreter}
-                    disabled={isUpdating || isLoadingInterpreters}
+                    disabled={isUpdating || needsReview || isLoadingInterpreters || linkLoadFailed}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Guardar Enlace'}
@@ -438,7 +492,7 @@ export function UserActions({ user, onViewOnboarding }: { user: AdminUserSummary
                   </button>
                   <button
                     onClick={handleDeleteUser}
-                    disabled={isUpdating}
+                    disabled={isUpdating || needsReview}
                     className="px-6 py-3 rounded-2xl font-bold text-sm bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
                   >
                     {isUpdating ? <Loader2 className="animate-spin" size={16} /> : 'Revocar Supabase Auth'}
