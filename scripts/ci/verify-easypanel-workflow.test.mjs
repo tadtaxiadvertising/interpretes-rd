@@ -110,3 +110,13 @@ test('the checked-in Dockerfiles and runbooks keep Next.js and Express build tar
   assert.match(rootReadme, /\`Dockerfile\.api\` \(Express API\)/);
   assert.match(rootReadme, /build contexts must be the repository root/);
 });
+
+test('manual API verification selects its own URL without frontend fallback', () => {
+  const manual = readFileSync(new URL('../../.github/workflows/verify-easypanel-runtime.yml', import.meta.url), 'utf8');
+  assert.match(manual, /component:\s*\n\s*description:/);
+  assert.match(manual, /EASYPANEL_API_RELEASE_VERIFY_URL: \$\{\{ vars\.EASYPANEL_API_RELEASE_VERIFY_URL \}\}/);
+  assert.match(manual, /EASYPANEL_VERIFY_COMPONENT: \$\{\{ inputs\.component \}\}/);
+  assert.match(manual, /api\) export EASYPANEL_RELEASE_VERIFY_URL="\$EASYPANEL_API_RELEASE_VERIFY_URL"/);
+  assert.match(manual, /EASYPANEL_VERIFY_ATTEMPTS: '1'/);
+  assert.doesNotMatch(manual, /^  (push|pull_request|schedule):/m);
+});
