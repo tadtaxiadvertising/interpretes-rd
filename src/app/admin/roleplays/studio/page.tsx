@@ -199,6 +199,12 @@ export default function RoleplayStudioPage() {
     useState<'doctor' | 'patient' | 'nurse' | 'operator'>('doctor');
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [immersiveMode, setImmersiveMode] = useState(false);
+  const [workspaceTab, setWorkspaceTab] = useState<'edit' | 'finish'>('edit');
+  const workspaceContent = useRef<HTMLDivElement>(null);
+  const workspaceExit = useRef<HTMLButtonElement>(null);
+  const workspaceEnter = useRef<HTMLButtonElement>(null);
+  const wasWorkspaceActive = useRef(false);
   const preferenceEdits = useRef({ exclude: false, compact: false, protocolLanguage: false });
   useEffect(() => {
     let active = true;
@@ -1483,6 +1489,7 @@ export default function RoleplayStudioPage() {
       setSegmentSearch('');
       setShowPendingReview(false);
       setExpandedSegmentId(segment.id);
+      setWorkspaceTab('edit');
       setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
       setTurnActionFeedback({ id: segment.id, message: reason, error: true });
       setError(`Intervención ${index + 1}: ${reason}`);
@@ -1945,6 +1952,16 @@ export default function RoleplayStudioPage() {
   };
 
   const sourceReady = Boolean(audio && duration > 0);
+  const workspaceActive = immersiveMode && focusMode && sourceReady;
+  const workspaceTurnId = focusedTurn?.segment.id;
+  useEffect(() => {
+    if (workspaceActive && workspaceContent.current) workspaceContent.current.scrollTop = 0;
+  }, [workspaceActive, workspaceTab, workspaceTurnId]);
+  useEffect(() => {
+    if (workspaceActive && !wasWorkspaceActive.current) workspaceExit.current?.focus({ preventScroll: true });
+    if (!workspaceActive && wasWorkspaceActive.current) workspaceEnter.current?.focus({ preventScroll: true });
+    wasWorkspaceActive.current = workspaceActive;
+  }, [workspaceActive]);
   const studioSteps = [
     { id: 'studio-source', title: '1. Grabación', detail: sourceReady ? 'Grabación lista' : 'Selecciona audio o video', available: true, done: sourceReady },
     { id: reviewCues.length ? 'studio-transcript-review' : 'studio-subtitles', title: '2. Transcripción', detail: reviewCues.length ? 'Turnos para seleccionar' : 'Importa subtítulos o usa cortes manuales', available: sourceReady, done: segments.length > 0 && reviewCues.length === 0 },
@@ -1953,7 +1970,8 @@ export default function RoleplayStudioPage() {
   ];
 
   return (
-    <main className="space-y-4">
+    <main data-studio-workspace={workspaceActive ? "active" : undefined} className={workspaceActive ? undefined : "space-y-4"}>
+      <div hidden={workspaceActive} className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/roleplays" onClick={event => {
@@ -2566,9 +2584,22 @@ export default function RoleplayStudioPage() {
           </div>
         </section>
       )}
+      </div>
       {audio && duration > 0 && (
-        <section id="studio-turns" className="scroll-mt-6 space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <section id="studio-turns" className={`scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 ${workspaceActive ? 'space-y-2 lg:flex lg:h-[calc(100dvh-9rem)] lg:min-h-0 lg:flex-col lg:overflow-hidden' : 'space-y-3'}`}>
+          {workspaceActive && (
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
+              <h1 className="text-base font-bold text-[var(--foreground)]">Escritorio de Audio Studio</h1>
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Etapas del escritorio">
+                <button type="button" aria-pressed={workspaceTab === 'edit'} onClick={() => setWorkspaceTab('edit')}
+                  className={`rounded-lg px-3 py-2 text-xs font-semibold ${workspaceTab === 'edit' ? 'theme-action-primary' : 'theme-action-secondary'}`}>Editar</button>
+                <button type="button" aria-pressed={workspaceTab === 'finish'} onClick={() => setWorkspaceTab('finish')}
+                  className={`rounded-lg px-3 py-2 text-xs font-semibold ${workspaceTab === 'finish' ? 'theme-action-primary' : 'theme-action-secondary'}`}>Finalizar</button>
+                <button ref={workspaceExit} type="button" onClick={() => setImmersiveMode(false)} className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Salir del escritorio</button>
+              </div>
+            </div>
+          )}
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{ROLEPLAY_MAX_SCENARIOS})</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input type="search" aria-label="Buscar intervenciones" value={segmentSearch}
@@ -2598,11 +2629,22 @@ export default function RoleplayStudioPage() {
               <button type="button" onClick={() => {
                 if (!focusMode && focusedTurn) setExpandedSegmentId(focusedTurn.segment.id);
                 setFocusMode(previous => !previous);
+                if (focusMode) setImmersiveMode(false);
               }}
                 aria-pressed={focusMode}
                 className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)]">
                 {focusMode ? 'Volver a lista' : 'Modo enfoque'}
               </button>
+              {!workspaceActive && (
+                <button ref={workspaceEnter} type="button" onClick={() => {
+                  if (focusedTurn) setExpandedSegmentId(focusedTurn.segment.id);
+                  setFocusMode(true);
+                  setWorkspaceTab('edit');
+                  setImmersiveMode(true);
+                }} className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold">
+                  Abrir escritorio de edición
+                </button>
+              )}
               {!focusMode && (
                 <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
                   aria-pressed={compactRows}
@@ -2648,6 +2690,62 @@ export default function RoleplayStudioPage() {
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
           )}
+          {focusMode && focusedTurn && (!workspaceActive || workspaceTab === 'edit') && (
+            <nav aria-label="Navegador de intervenciones" className={`flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 ${workspaceActive ? '' : 'md:sticky md:top-0 md:z-10'}`}>
+              <button type="button" disabled={focusIndex === 0}
+                onClick={() => selectFocusedTurn(visibleSegments[focusIndex - 1].segment.id)}
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
+                Anterior intervención
+              </button>
+              <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+                Ir a intervención
+                <select value={focusedTurn.segment.id} onChange={event => selectFocusedTurn(event.currentTarget.value)}
+                  className="mt-1 block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
+                  {visibleSegments.map(({ segment, index }) => (
+                    <option key={segment.id} value={segment.id}>#{index + 1} · {segment.title}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" disabled={focusIndex === visibleSegments.length - 1}
+                onClick={() => selectFocusedTurn(visibleSegments[focusIndex + 1].segment.id)}
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">
+                Siguiente intervención
+              </button>
+              <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
+                Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
+              </p>
+              <div role="group" aria-label="Reproducción en modo enfoque" className="flex basis-full flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
+                <button type="button" onClick={() => previewSegment(focusedTurn.segment)}
+                  aria-pressed={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
+                  className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
+                  {previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id
+                    ? 'Detener fragmento activo' : 'Escuchar intervención activa'}
+                </button>
+                <button type="button" onClick={() => { stopPreview(); stopPairPreview(); }}
+                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">
+                  Pausar audio
+                </button>
+                <button type="button" aria-label="Retroceder audio 5 segundos"
+                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) - 5)}
+                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">−5 s</button>
+                <button type="button" aria-label="Avanzar audio 5 segundos"
+                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) + 5)}
+                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">+5 s</button>
+                <label className="flex min-w-32 flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  <span className="shrink-0 tabular-nums">{formatTime(playhead)}</span>
+                  <input type="range" aria-label="Posición de grabación en modo enfoque" min={0} max={duration}
+                    step={0.1} value={Math.min(duration, Math.max(0, playhead))}
+                    onChange={event => seekAudio(event.currentTarget.valueAsNumber)}
+                    className="min-w-0 flex-1 accent-blue-500"/>
+                  <span className="shrink-0 tabular-nums">{formatTime(duration)}</span>
+                </label>
+              </div>
+            </nav>
+          )}
+          <div ref={workspaceContent} className={workspaceActive ? 'min-h-0 space-y-3 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-1' : 'space-y-3'}>
+          {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
+          {workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
+          <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
           <details open={!focusMode} className="space-y-3 rounded-lg border border-[var(--border)] p-2">
             <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Herramientas de clasificación y protocolos</summary>
           <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
@@ -2782,58 +2880,6 @@ export default function RoleplayStudioPage() {
               {visibleSegments.length} de {segments.length} turnos. Identifica hablante e idioma
               en la fila compacta; abre «Editar» para ajustar tiempos e instrucciones.
             </p>
-          )}
-          {focusMode && focusedTurn && (
-            <nav aria-label="Navegador de intervenciones" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 md:sticky md:top-0 md:z-10">
-              <button type="button" disabled={focusIndex === 0}
-                onClick={() => selectFocusedTurn(visibleSegments[focusIndex - 1].segment.id)}
-                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
-                Anterior intervención
-              </button>
-              <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
-                Ir a intervención
-                <select value={focusedTurn.segment.id} onChange={event => selectFocusedTurn(event.currentTarget.value)}
-                  className="mt-1 block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
-                  {visibleSegments.map(({ segment, index }) => (
-                    <option key={segment.id} value={segment.id}>#{index + 1} · {segment.title}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" disabled={focusIndex === visibleSegments.length - 1}
-                onClick={() => selectFocusedTurn(visibleSegments[focusIndex + 1].segment.id)}
-                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">
-                Siguiente intervención
-              </button>
-              <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
-                Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
-              </p>
-              <div role="group" aria-label="Reproducción en modo enfoque" className="flex basis-full flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
-                <button type="button" onClick={() => previewSegment(focusedTurn.segment)}
-                  aria-pressed={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
-                  className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
-                  {previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id
-                    ? 'Detener fragmento activo' : 'Escuchar intervención activa'}
-                </button>
-                <button type="button" onClick={() => { stopPreview(); stopPairPreview(); }}
-                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">
-                  Pausar audio
-                </button>
-                <button type="button" aria-label="Retroceder audio 5 segundos"
-                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) - 5)}
-                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">−5 s</button>
-                <button type="button" aria-label="Avanzar audio 5 segundos"
-                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) + 5)}
-                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">+5 s</button>
-                <label className="flex min-w-32 flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
-                  <span className="shrink-0 tabular-nums">{formatTime(playhead)}</span>
-                  <input type="range" aria-label="Posición de grabación en modo enfoque" min={0} max={duration}
-                    step={0.1} value={Math.min(duration, Math.max(0, playhead))}
-                    onChange={event => seekAudio(event.currentTarget.valueAsNumber)}
-                    className="min-w-0 flex-1 accent-blue-500"/>
-                  <span className="shrink-0 tabular-nums">{formatTime(duration)}</span>
-                </label>
-              </div>
-            </nav>
           )}
           {renderedSegments.map(({ segment, index }) => (
             <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
@@ -3086,6 +3132,8 @@ export default function RoleplayStudioPage() {
               )}
             </article>
           ))}
+          </div>
+          <div hidden={workspaceActive && workspaceTab !== 'finish'} className="space-y-3">
           {segments.length > 0 && !sourceRequiresLocal && !hasCompound && (
             <StudioConsecutivePreview
               sourceUrl={url}
@@ -3101,8 +3149,8 @@ export default function RoleplayStudioPage() {
               Utiliza «Escuchar unido» para revisar cada unión física antes de generar el ZIP local.
             </p>
           )}
-          {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
-          {notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
+          {!workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
+          {!workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
           <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos antes de exportar. Después podrás importar el paquete y asignar el roleplay.</p>
             {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
@@ -3193,6 +3241,8 @@ export default function RoleplayStudioPage() {
               : draftBusy ? 'Verificando proyecto…'
                 : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
           </button>
+          </div>
+          </div>
         </section>
       )}
       {error && (!audio || !duration) && <p role="alert" className="text-sm text-[var(--theme-danger)]">{error}</p>}
@@ -3201,7 +3251,7 @@ export default function RoleplayStudioPage() {
           {notice}
         </p>
       )}
-      <p className="text-xs leading-5 text-[var(--text-tertiary)]">
+      <p hidden={workspaceActive} className="text-xs leading-5 text-[var(--text-tertiary)]">
         Solo administración · Los archivos originales locales no se guardan en la biblioteca.
         Verifica consentimiento y ausencia de datos médicos identificables antes de publicar.
       </p>
