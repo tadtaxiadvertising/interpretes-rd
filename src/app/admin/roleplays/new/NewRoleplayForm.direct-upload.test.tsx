@@ -58,6 +58,7 @@ describe('gated creation receipt recovery form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
     fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
     const check = await screen.findByRole('button', { name: 'Consultar resultado sin reenviar audios' });
+    expect(screen.getByLabelText('Referencia del intento')).toHaveProperty('value', 'rp1:' + key + ':1');
     expect(screen.getByLabelText(/Destinatario ·/).closest('fieldset')?.disabled).toBe(true);
     expect(fetcher.mock.calls[0][0]).toBe('/api/admin/roleplays');
     expect(fetcher.mock.calls[0][1].headers).toEqual({ 'Idempotency-Key': key });
@@ -75,4 +76,24 @@ describe('gated creation receipt recovery form', () => {
     expect(screen.queryByRole('button', { name: 'Consultar resultado sin reenviar audios' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
   });
+  it('restores a saved reference after remount without posting any audio or linking the new draft', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    fireEvent.click(screen.getByText('Recuperar una creación anterior'));
+    const input = screen.getByLabelText('Referencia de recuperación');
+    fireEvent.change(input, { target: { value: 'invalid' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
+    expect(screen.getByRole('alert').textContent).toContain('referencia de recuperación válida');
+    expect(fetcher).not.toHaveBeenCalled();
+    fireEvent.change(input, { target: { value: 'rp1:' + key + ':1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store',
+    });
+    expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+    expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+  });
+
 });
