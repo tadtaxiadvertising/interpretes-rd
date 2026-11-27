@@ -1,0 +1,36 @@
+name: Audio Studio performance (isolated)
+
+on:
+  pull_request:
+    paths:
+      - 'benchmarks/audio-studio/**'
+      - '.github/workflows/audio-studio-performance.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm_config_onnxruntime_node_install=skip npm ci --legacy-peer-deps
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run local component benchmark
+        run: npx playwright test --config benchmarks/audio-studio/playwright.config.ts
+      - name: Preserve benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-studio-chromium-performance
+          path: test-results/audio-studio-benchmark/
+          if-no-files-found: warn
+          retention-days: 7
