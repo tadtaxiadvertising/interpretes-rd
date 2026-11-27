@@ -5,12 +5,24 @@ import { Client } from 'pg';
 import { normalizeDirectDatabaseUrl } from './normalize-direct-database-url';
 import { createDatabasePoolConfig } from '../src/lib/database-pool-config';
 import { classifyCreationLedgerCatalog, readCreationLedgerCatalog } from './roleplay-creation-ledger-catalog';
+import { readCreationPilotConfig } from '../src/lib/roleplay/creation-pilot-config';
 
 /** Optional operator diagnostic; never automatically called by the runtime. */
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
-  if (args.length !== 1 || !['--check-only', '--require-hardened'].includes(args[0])) {
-    throw new Error('Choose --check-only or --require-hardened.');
+  if (args.length !== 1 || !['--config-only', '--check-only', '--require-hardened'].includes(args[0])) {
+    throw new Error('Choose --config-only, --check-only or --require-hardened.');
+  }
+  const pilot = readCreationPilotConfig(process.env);
+  console.log('Roleplay creation pilot configuration: ' + pilot.mode + '.');
+  if (pilot.mode === 'blocked-missing-receipts') {
+    console.log('Keyed creation is blocked because receipt recovery is disabled.');
+    process.exitCode = 1;
+  }
+  // Configuration diagnosis must work even when no database is available.
+  if (args[0] === '--config-only') {
+    console.log('Configuration only; database readiness not checked.');
+    return;
   }
   const direct = normalizeDirectDatabaseUrl(process.env.DIRECT_URL);
   const ca = readFileSync(join(process.cwd(), 'certs', 'prod-ca-2021.crt'), 'utf8');
