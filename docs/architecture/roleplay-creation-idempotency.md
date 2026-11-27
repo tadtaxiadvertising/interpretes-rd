@@ -41,6 +41,14 @@ El recibo indica `NOT_FOUND`, `IN_PROGRESS`, `REVIEW_REQUIRED` o `COMPLETED`. Lo
 
 **No activar la bandera como sustituto del backend:** el piloto de creación está deshabilitado por defecto, de modo que `NOT_FOUND` hoy no demuestra que una publicación haya fallado. Hasta que se complete la integración transaccional, el procedimiento seguro ante respuesta incierta sigue siendo revisar las sesiones existentes.
 
+## Diagnóstico de catálogo previo a activación
+
+Desde un entorno autorizado, con `DIRECT_URL` verificada para el proyecto correcto y TLS configurado, ejecutar `npx tsx scripts/inspect-roleplay-creation-ledger.ts --check-only`. La variante `--require-hardened` devuelve error si el estado no es hardened-catalog. No imprimir la URL ni las credenciales.
+
+El diagnóstico solo consulta metadatos PostgreSQL en una transacción de solo lectura. Distingue absent (tabla ausente), historical (estructura histórica reconocida), incomplete (desviaciones o permisos inseguros) y hardened-catalog (estructura reforzada reconocida). Comprueba columnas, tipos, defaults, restricciones, unicidad, RLS y accesos PUBLIC/anon/authenticated. No lee filas de solicitudes ni aplica SQL staged.
+
+El estado hardened-catalog **no certifica equivalencia semántica de restricciones, historial de migraciones, permisos del usuario runtime ni autorización de despliegue**. Revisar estos puntos y el SHA real antes de activar. La prueba aislada verifica el clasificador contra las dos definiciones SQL y simula pérdida de unicidad, política permisiva y grant de columna, revirtiendo estos cambios en la base temporal.
+
 ## Reconciliación y rollback
 
 - **Consulta read-only tras migrar** (con usuario de administración, en el proyecto autorizado): `SELECT status, count(*) FROM public.roleplay_creation_requests GROUP BY status;`. No consultar nombres, secretos, URLs ni contenido de audio.
