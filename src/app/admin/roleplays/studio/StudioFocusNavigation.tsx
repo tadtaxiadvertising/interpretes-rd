@@ -1,6 +1,6 @@
 'use client';
 
-import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
+import { formatStudioTime as formatTime, formatStudioAccessibleTime } from '@/lib/roleplay-studio/format-time';
 
 type VisibleTurn = { segment: { id: string; title: string; sourceSpeakerGroup?: string }; index: number };
 type Props = {
@@ -98,6 +98,7 @@ export default function StudioFocusNavigation({
           <span className="shrink-0 tabular-nums">{formatTime(playhead)}</span>
           <input type="range" aria-label="Posición de grabación en modo enfoque" min={0} max={duration}
             step={0.1} value={Math.min(duration, Math.max(0, playhead))}
+            aria-valuetext={formatStudioAccessibleTime(Math.min(duration, Math.max(0, playhead)), 1)}
             onChange={event => onSeek(event.currentTarget.valueAsNumber)}
             className="min-w-0 flex-1 accent-blue-500"/>
           <span className="shrink-0 tabular-nums">{formatTime(duration)}</span>
