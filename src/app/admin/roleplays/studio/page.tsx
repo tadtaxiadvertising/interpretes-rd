@@ -13,6 +13,7 @@ import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentative
 import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
+import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
 import { STUDIO_RECOVERY_KEY, createStudioRecovery, openStudioRecovery } from '@/lib/roleplay-studio/recovery';
 import { studioReviewIssue, nextUnconfirmedTurn } from '@/lib/roleplay-studio/quick-review';
 import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
@@ -67,6 +68,8 @@ export default function RoleplayStudioPage() {
   const [playhead, setPlayhead] = useState(0);
   const [editorPlaybackRevision, setEditorPlaybackRevision] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [excludedTurns, setExcludedTurns] = useState<Array<{ turn: Segment; caption?: string }>>([]);
+  const [trashOpen, setTrashOpen] = useState(false);
   // Confirmation belongs to this editing session, not to the published payload.
   const [confirmedTurns, setConfirmedTurns] = useState<ReadonlyMap<string, Segment>>(() => new Map());
   const [recoveryEnabled, setRecoveryEnabled] = useState(false);
@@ -173,14 +176,14 @@ export default function RoleplayStudioPage() {
       (edit.previousSuggestions?.clips.length ?? 0) > 0 ||
       (edit.previousSuggestions?.silences.length ?? 0) > 0));
   const audioReplacementEdits = useRef({
-    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit,
+    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit, excludedTurns,
   });
   audioReplacementEdits.current = {
-    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit,
+    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit, excludedTurns,
   };
   const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales, incluidas las ediciones recuperables con «Deshacer». Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
   const hasReplacementWork = (edits: typeof audioReplacementEdits.current) =>
-    edits.segments.length > 0 || edits.reviewCues.length > 0 ||
+    edits.segments.length > 0 || edits.excludedTurns.length > 0 || edits.reviewCues.length > 0 ||
     edits.suggestedClips.length > 0 || Object.keys(edits.captionTexts).length > 0 ||
     hasRecoverableUndo(edits.lastStructuralEdit);
   const sameEditorEdits = (snapshot: typeof audioReplacementEdits.current) => {
@@ -188,7 +191,7 @@ export default function RoleplayStudioPage() {
     return live.segments === snapshot.segments && live.reviewCues === snapshot.reviewCues &&
       live.suggestedClips === snapshot.suggestedClips &&
       live.captionTexts === snapshot.captionTexts &&
-      live.lastStructuralEdit === snapshot.lastStructuralEdit;
+      live.lastStructuralEdit === snapshot.lastStructuralEdit && live.excludedTurns === snapshot.excludedTurns;
   };
   // The JSON project omits the original audio and private transcript context.
   // Guard the in-memory editor even after an export: leaving can discard
@@ -199,7 +202,7 @@ export default function RoleplayStudioPage() {
   // unapplied silence suggestions are part of the portable JSON schema.
   const hasUnstoredDraftContext = reviewCues.length > 0 ||
     suggestedClips.length > 0 || Object.keys(captionTexts).length > 0 ||
-    hasRecoverableUndo(lastStructuralEdit);
+    hasRecoverableUndo(lastStructuralEdit) || excludedTurns.length > 0;
   const leaveEditorPrompt = 'Salir de Audio Studio descartará los cortes y las selecciones de esta pestaña. Comprueba que guardaste tu proyecto y conservas el audio original. ¿Continuar?';
   useEffect(() => {
     if (!hasActiveEditorWork) return;
@@ -440,6 +443,8 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     subtitleImportRevision.current += 1;
     setSegments(lastStructuralEdit.segments);
+    const restoredIds = new Set(lastStructuralEdit.segments.map(turn => turn.id));
+    setExcludedTurns(previous => previous.filter(entry => !restoredIds.has(entry.turn.id)));
     setCaptionTexts(lastStructuralEdit.captions);
     setExpandedSegmentId(lastStructuralEdit.expandedId);
     // Revoking consent clears server-derived pause metadata; undo must not
@@ -527,7 +532,7 @@ export default function RoleplayStudioPage() {
       approved?.edits.reviewCues === editsNow.reviewCues &&
       approved?.edits.suggestedClips === editsNow.suggestedClips &&
       approved?.edits.captionTexts === editsNow.captionTexts &&
-      approved?.edits.lastStructuralEdit === editsNow.lastStructuralEdit;
+      approved?.edits.lastStructuralEdit === editsNow.lastStructuralEdit && approved?.edits.excludedTurns === editsNow.excludedTurns;
     if (activeAudioFile.current && hasReplacementWork(editsNow) &&
         !approvedStillValid && !window.confirm(replacementPrompt)) {
       return;
@@ -567,6 +572,8 @@ export default function RoleplayStudioPage() {
     setRecoveryFingerprint(null);
     setRecoveryStatus('');
     setSegments([]);
+    setExcludedTurns([]);
+    setTrashOpen(false);
     setAdvancedTurnId(null);
     setConfirmedTurns(new Map());
     setCaptionTexts({});
@@ -1150,6 +1157,7 @@ export default function RoleplayStudioPage() {
     const excludedIds = new Set(segments.filter(item => item.speakerRole === 'interpreter')
       .map(item => item.id));
     if (!excludedIds.size) return;
+    if (!archiveTurns(segments.filter(turn => excludedIds.has(turn.id)))) return;
     // This is an undoable bulk action; no remote export or upload is involved.
     subtitleImportRevision.current += 1;
     stopPreview();
@@ -1165,7 +1173,7 @@ export default function RoleplayStudioPage() {
     setExpandedSegmentId(previous => previous && excludedIds.has(previous) ? null : previous);
     setTurnActionFeedback(null);
     setError('');
-    setNotice('Intervenciones del intérprete original excluidas. Puedes deshacer antes de seguir editando.');
+    setNotice('Intervenciones del intérprete original excluidas. Puedes recuperarlas desde la papelera editorial.');
   };
 
   const setLanguageForPendingTurns = (language: 'en' | 'es', visibleIds: readonly string[]) => {
@@ -1982,8 +1990,48 @@ export default function RoleplayStudioPage() {
     if (next) selectFocusedTurn(next.id);
   };
 
+  const archiveTurns = (turns: Segment[]) => {
+    const incoming = turns.filter(turn => !excludedTurns.some(entry => entry.turn.id === turn.id));
+    if (excludedTurns.length + incoming.length > STUDIO_MAX_EXCLUDED_TURNS) {
+      setError('La papelera está llena. Recupera o elimina definitivamente cortes antes de excluir más.');
+      return false;
+    }
+    setExcludedTurns(previous => [...previous, ...incoming.map(turn => ({ turn, caption: captionTexts[turn.id] }))]);
+    return true;
+  };
+  const restoreExcluded = (id: string) => {
+    const entry = excludedTurns.find(item => item.turn.id === id);
+    if (!entry || busy || draftBusy || analyzingSilences) return;
+    const issue = restoreExcludedIssue(entry.turn, segments, duration, editorLimit);
+    if (issue) { setError(issue); return; }
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    const restored = { ...entry.turn };
+    setSegments(previous => [...previous, restored]);
+    if (entry.caption) setCaptionTexts(previous => ({ ...previous, [id]: entry.caption! }));
+    setExcludedTurns(previous => previous.filter(item => item.turn.id !== id));
+    setConfirmedTurns(previous => { const next = new Map(previous); next.delete(id); return next; });
+    setLastStructuralEdit(null);
+    setSegmentSearch('');
+    setShowPendingReview(false);
+    setFocusMode(true);
+    setWorkspaceTab('edit');
+    selectFocusedTurn(id);
+    setError('');
+    setNotice('Intervención recuperada. Revisa el corte antes de confirmar.');
+  };
+  const discardExcluded = (id: string) => {
+    if (!window.confirm('¿Eliminar definitivamente este corte de la papelera? La grabación original permanece intacta.')) return;
+    subtitleImportRevision.current += 1;
+    setExcludedTurns(previous => previous.filter(item => item.turn.id !== id));
+    setLastStructuralEdit(null);
+    setError('');
+    setNotice('Corte retirado de la papelera.');
+  };
   const removeIntervention = (id: string, advance = false) => {
-    if (!segments.some(turn => turn.id === id)) return;
+    const turn = segments.find(item => item.id === id);
+    if (!turn || !archiveTurns([turn])) return;
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
@@ -2003,8 +2051,8 @@ export default function RoleplayStudioPage() {
     setTurnActionFeedback(null);
     setError('');
     setNotice(advance
-      ? 'Intervención excluida. Puedes recuperarla con «Deshacer eliminación» antes de realizar otra edición.'
-      : 'Intervención eliminada. Usa «Deshacer eliminación» si necesitas recuperarla.');
+      ? 'Intervención excluida. Puedes recuperarla desde la papelera editorial.'
+      : 'Intervención movida a la papelera editorial.');
     if (advance) {
       const visible = visibleSegments.map(({ segment }) => segment);
       const next = nextUnconfirmedTurn(visible, id, confirmedIds)
@@ -2121,6 +2169,8 @@ export default function RoleplayStudioPage() {
         stopPreview();
         stopPairPreview();
         setSegments(restored);
+        setExcludedTurns(saved.excluded.map(turn => ({ turn: { ...turn, id: crypto.randomUUID() } })));
+        setTrashOpen(false);
         setConfirmedTurns(new Map(restored.filter((turn, index) => saved.confirmed.has(index) &&
           !studioReviewIssue(turn, restored, duration)).map(turn => [turn.id, turn])));
         setCaptionTexts({});
@@ -2180,7 +2230,7 @@ export default function RoleplayStudioPage() {
           return;
         }
         const raw = createStudioRecovery(audio.size, recoveryFingerprint.hash, duration, segments,
-          confirmedIds, workspaceTurnId, player.current?.currentTime ?? 0);
+          confirmedIds, workspaceTurnId, player.current?.currentTime ?? 0, excludedTurns.map(entry => entry.turn));
         localStorage.setItem(STUDIO_RECOVERY_KEY, raw);
         recoveryExpected.current = raw;
         setRecoveryAvailable(true);
@@ -2198,7 +2248,7 @@ export default function RoleplayStudioPage() {
       document.removeEventListener('visibilitychange', flush);
       window.removeEventListener('pagehide', write);
     };
-  }, [recoveryEnabled, recoveryFingerprint, audio, duration, segments, confirmedIds, workspaceTurnId]);
+  }, [recoveryEnabled, recoveryFingerprint, audio, duration, segments, confirmedIds, workspaceTurnId, excludedTurns]);
 
   useEffect(() => {
     if (workspaceActive && workspaceContent.current) workspaceContent.current.scrollTop = 0;
@@ -2968,8 +3018,9 @@ export default function RoleplayStudioPage() {
             </p>
           )}
           {workspaceActive && recoveryStatus && <p role="status" className="shrink-0 text-xs text-[var(--text-secondary)]">{recoveryStatus}</p>}
-          {focusMode && lastStructuralEdit?.kind === 'eliminación' && (!workspaceActive || workspaceTab === 'edit') && (
-            <p className="shrink-0 text-xs text-[var(--text-secondary)]">Puedes deshacer la última exclusión antes de realizar otra edición.</p>
+          {excludedTurns.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
+            <button type="button" aria-expanded={trashOpen} aria-controls="studio-editorial-trash" onClick={() => setTrashOpen(previous => !previous)}
+              className="shrink-0 self-start rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">Papelera editorial ({excludedTurns.length})</button>
           )}
           {focusMode && segments.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
             <p role="status" aria-label="Confirmaciones editoriales" className="shrink-0 text-xs text-[var(--text-secondary)]">
@@ -3051,6 +3102,26 @@ export default function RoleplayStudioPage() {
           {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
+          {trashOpen && excludedTurns.length > 0 && <section id="studio-editorial-trash" aria-label="Intervenciones excluidas" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+            <h3 className="text-sm font-semibold text-[var(--foreground)]">Intervenciones excluidas</h3>
+            <p className="text-xs text-[var(--text-secondary)]">No forman parte del roleplay publicable. Recupera un corte si es compatible con los tiempos actuales. El respaldo local opcional conserva los cortes válidos, sin sus referencias privadas.</p>
+            <div className="max-h-64 space-y-2 overflow-y-auto">
+              {excludedTurns.map(({ turn }) => {
+                const issue = restoreExcludedIssue(turn, segments, duration, editorLimit);
+                return <div key={turn.id} className="rounded-md border border-[var(--border)] p-2">
+                  <p className="break-words text-sm font-medium text-[var(--foreground)]">{turn.title}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{formatTime(turn.start)}–{formatTime(turn.end)} · {turn.language.toUpperCase()}</p>
+                  {issue && <p className="text-xs text-[var(--theme-warning)]">{issue}</p>}
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button type="button" disabled={Boolean(issue) || busy || draftBusy || analyzingSilences} onClick={() => restoreExcluded(turn.id)}
+                      aria-label={'Recuperar ' + turn.title} className="theme-action-secondary rounded-lg px-3 py-2 text-xs disabled:opacity-50">Recuperar</button>
+                    <button type="button" disabled={busy || draftBusy || analyzingSilences} onClick={() => discardExcluded(turn.id)}
+                      aria-label={'Eliminar definitivamente ' + turn.title} className="rounded-lg px-3 py-2 text-xs text-[var(--theme-danger)]">Eliminar definitivamente</button>
+                  </div>
+                </div>;
+              })}
+            </div>
+          </section>}
           <details open={!focusMode} className="space-y-3 rounded-lg border border-[var(--border)] p-2">
             <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Herramientas de clasificación y protocolos</summary>
           <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
