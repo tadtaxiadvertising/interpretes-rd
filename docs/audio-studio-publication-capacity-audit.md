@@ -33,3 +33,14 @@ La ruta de creación por plantilla conserva el límite de sesión. La ruta multi
 El SQL staged `docs/operations/staged-sql/roleplay-upload-reservations.sql` limita los arrays items y verified_objects a 25. La reserva y la publicación requieren correspondencia completa de archivos y escenarios. El formulario de creación activa actualmente el flujo directo únicamente para asignación individual a intérprete con apertura habilitada, sin plantilla. No basta elevar la constante de sesión ni el contador de la interfaz.
 
 Siguiente cambio coordinado: auditar constraints instaladas y presupuesto de slots en modo lectura, preparar SQL staged y verificaciones de 26/50 archivos para una sesión con presupuesto total fijo, comprobar promoción/publicación y reproducción/evaluación. No ejecutar migraciones ni ampliar capacidad en producción antes de las pruebas. Mantener multipart y ZIP en sus límites históricos. Pendientes: inventario de consumidores de la constante compartida, interfaz de creación por ruta, formatos portables y validación real del despliegue.
+
+
+## Ensayo ampliado de capacidad (entrega 15)
+El inspector offline comparte las validaciones de declaraciones de producción, pero permite analizar hasta 50 archivos sintéticos sin devolver rutas ni permisos. Conserva 15 MiB/archivo y 375 MiB/lote; el validador de producción sigue rechazando 26 y 50.
+
+La prueba SQL se ejecuta exclusivamente dentro del ensayo atómico de CI en la base desechable rp_upload_ci_<hex>. Reemplaza temporalmente los CHECK de reservas, evidencia, índices de escritura final y cargos de cuota; verifica 26 y 50 elementos, cuota agotada, rechazo de verificación incompleta, correspondencia y persistencia de evidencia por posición e inmutabilidad. Revierte todos los cambios y vuelve a comprobar el límite anterior y la cuota inicial cero. No se agrega ningún SQL al manifiesto de instalación.
+
+### Presupuesto y restricciones pendientes
+La cuota actual reserva conservadoramente dos objetos de hasta 15 MiB por slot (staging + final). 25 slots implican 750 MiB; 26, 780 MiB; 50, 1500 MiB de capacidad potencial, aunque los bytes declarados sean menores. El techo de 375 MiB por declaración no acredita ese ahorro en el proveedor ni restringe por sí solo las capacidades firmadas. No autorizar una cuota mayor sin verificar inventario, aislamiento, tamaño real de objetos, vigencia de capacidades y margen del proveedor.
+
+Además de los CHECK SQL, private-clinical-reference.ts y el diagnóstico de cuota actual limitan posiciones/capacidad a 25. Faltan cambios coordinados de estos consumidores, reserva, firma, promoción, publicación, recuperación y reproductor. La prueba es SQL/metadatos sintéticos, no una publicación real de 50 escenarios ni una certificación del almacenamiento hospedado. Mantener todas las banderas de activación existentes; no aplicar la variante experimental en producción.

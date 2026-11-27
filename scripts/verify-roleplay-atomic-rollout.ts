@@ -1,6 +1,7 @@
 import type { Client } from 'pg';
 import { loadRoleplayStagedInstallPlan, unwrapStagedRoleplaySql } from './roleplay-staged-install-plan';
 import { readRoleplayDirectRolloutReadiness } from './roleplay-direct-rollout-readiness';
+import { verifyExpandedRoleplayCapacityPilot } from './verify-roleplay-expanded-capacity-pilot';
 
 function check(condition:unknown,message:string):asserts condition{
   if(!condition) throw new Error(message);
@@ -61,6 +62,7 @@ export async function verifyRoleplayAtomicRollout(db:Client){
       'Combined staged schema did not pass catalog checks');
     check(ready.budget.remainingSlots===0&&ready.budget.releaseEnabled===false&&!ready.activationAuthorized,
       'New installation must remain disabled');
+    await verifyExpandedRoleplayCapacityPilot(db);
     const legacy=await db.query<{required:boolean}>("SELECT requires_bilingual_opening AS required FROM public.roleplay_sessions WHERE id='ci-legacy'");
     check(legacy.rows[0]?.required===false,'Historical session became required');
     await db.query("INSERT INTO public.roleplay_responses VALUES ('ci-legacy-response','ci-legacy-turn'); UPDATE public.roleplay_sessions SET current_scenario_index=1,status='SUBMITTED' WHERE id='ci-legacy'");
