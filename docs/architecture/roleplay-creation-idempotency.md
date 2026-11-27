@@ -49,6 +49,12 @@ El diagnóstico solo consulta metadatos PostgreSQL en una transacción de solo l
 
 El estado hardened-catalog **no certifica equivalencia semántica de restricciones, historial de migraciones, permisos del usuario runtime ni autorización de despliegue**. Revisar estos puntos y el SHA real antes de activar. La prueba aislada verifica el clasificador contra las dos definiciones SQL y simula pérdida de unicidad, política permisiva y grant de columna, revirtiendo estos cambios en la base temporal.
 
+## Control de disponibilidad en el runtime
+
+Una creación con clave requiere, además de la bandera explícita, un catálogo reconocido como hardened-catalog y permisos efectivos SELECT/INSERT/UPDATE, USAGE del esquema y acceso sin filtrado RLS para la conexión Prisma que realizará la publicación. El control consulta solo metadatos, usa una transacción con snapshot consistente y timeout acotado, y no reutiliza un resultado positivo entre solicitudes. Si falta alguna condición o falla la conexión, devuelve 503 antes de leer multipart, reservar o subir archivos. Las solicitudes sin clave y las consultas read-only de recibos conservan su comportamiento independiente. No concede permisos ni ejecuta migraciones.
+
+Este control es una condición necesaria, no una certificación semántica del SQL ni una garantía contra cambios concurrentes de permisos/esquema después de la inspección. La propuesta de endurecimiento sigue fuera de migraciones automáticas; no activar el piloto hasta validar esquema, identidad del proyecto, permisos y versión real del servicio.
+
 ## Reconciliación y rollback
 
 - **Consulta read-only tras migrar** (con usuario de administración, en el proyecto autorizado): `SELECT status, count(*) FROM public.roleplay_creation_requests GROUP BY status;`. No consultar nombres, secretos, URLs ni contenido de audio.
