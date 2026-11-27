@@ -18,7 +18,7 @@ const scenario = { title: 'Consulta sintética', durationLimitSec: 120, scriptPr
 
 function input(count = 1): RoleplayCreationFingerprintInput {
   return {
-    participantType: 'interpreter', participantId: 12, libraryFingerprint: null,
+    participantType: 'interpreter', participantId: 12, requiresBilingualOpening: false, libraryFingerprint: null,
     scenarios: Array.from({ length: count }, (_, i) => ({
       ...scenario, title: scenario.title + ' ' + i,
     })),
@@ -72,6 +72,25 @@ describe('future Roleplay creation: content fingerprint without PII logging', ()
     expect(fingerprintRoleplayCreation(changedTarget)).not.toBe(original);
     expect(fingerprintRoleplayCreation(changedBytes)).not.toBe(original);
     expect(fingerprintRoleplayCreation(changedOrder)).not.toBe(original);
+  });
+
+  it('distinguishes the effective opening requirement for uploaded and reused audio', () => {
+    const uploaded = input();
+    const library = { ...uploaded, libraryFingerprint: 'b'.repeat(64), audios: [] };
+    for (const request of [uploaded, library]) {
+      expect(fingerprintRoleplayCreation(request))
+        .not.toBe(fingerprintRoleplayCreation({ ...request, requiresBilingualOpening: true }));
+      expect(fingerprintRoleplayCreation({ ...request, requiresBilingualOpening: true }))
+        .toBe(fingerprintRoleplayCreation({ ...structuredClone(request), requiresBilingualOpening: true }));
+    }
+  });
+
+  it('rejects an absent or non-boolean effective opening requirement', () => {
+    for (const invalid of [undefined, null, 'true', 0, 1]) {
+      expect(() => fingerprintRoleplayCreation({
+        ...input(), requiresBilingualOpening: invalid as unknown as boolean,
+      })).toThrow(InvalidRoleplayCreationKeyError);
+    }
   });
 
   it('supports library reuse without reading audio bytes', () => {
@@ -273,7 +292,8 @@ describe('durable Roleplay idempotency ledger: unique key claim', () => {
     });
     expect(fingerprint).toBe(createHash('sha256').update(
       JSON.stringify({
-        version: 1, participantType: 'interpreter', participantId: 12,
+        version: 2, participantType: 'interpreter', participantId: 12,
+        requiresBilingualOpening: false,
         libraryFingerprint: null,
         scenarios: [{
           title: 'PRIVATE_HEALTH_CONTEXT_NOT_IN_LOG',

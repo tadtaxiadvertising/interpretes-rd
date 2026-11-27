@@ -21,6 +21,8 @@ export type RoleplayCreationAudioDigest = {
 export type RoleplayCreationFingerprintInput = {
   participantType: 'interpreter' | 'candidate' | 'all-active-interpreters';
   participantId: number | null;
+  /** Effective opening requirement after resolving server-side library policy. */
+  requiresBilingualOpening: boolean;
   /** Hash of the immutable server-verified library snapshot, if used. */
   libraryFingerprint: string | null;
   /** Validated, normalized scenario payload (ordered). */
@@ -64,7 +66,8 @@ function validCreationIdentity(actorUserId: string, requestKey: string, payloadH
 export function fingerprintRoleplayCreation(
   input: RoleplayCreationFingerprintInput,
 ): string {
-  if (!input || !['interpreter', 'candidate', 'all-active-interpreters'].includes(input.participantType) ||
+  if (!input || typeof input.requiresBilingualOpening !== 'boolean' ||
+      !['interpreter', 'candidate', 'all-active-interpreters'].includes(input.participantType) ||
       (input.participantType === 'all-active-interpreters'
         ? input.participantId !== null
         : !Number.isSafeInteger(input.participantId) || (input.participantId ?? 0) <= 0) ||
@@ -127,9 +130,10 @@ export function fingerprintRoleplayCreation(
   // Construct fields in a canonical order. The future runtime must pass
   // normalized scenarios, not raw FormData or File object metadata/names.
   const canonical = {
-    version: 1,
+    version: 2,
     participantType: input.participantType,
     participantId: input.participantId,
+    requiresBilingualOpening: input.requiresBilingualOpening,
     libraryFingerprint: input.libraryFingerprint,
     scenarios: input.scenarios.map(scenario => ({
       title: scenario.title.trim(),
@@ -171,7 +175,8 @@ export type RoleplayCreationClaim =
  * This function is not wired to POST yet. An activation must first:
  * 1) deploy and verify the migration;
  * 2) authenticate the admin and its optional Bearer identity;
- * 3) hash trusted actual audio bytes for a canonical fingerprint;
+ * 3) hash trusted actual audio bytes and the effective opening requirement for a canonical fingerprint;
+ *    never reuse a version-1 fingerprint for a version-2 claim;
  * 4) finalize this row INSIDE the same transaction as session publishing;
  * 5) reconcile ambiguous IN_PROGRESS rows before considering any retry.
  */
