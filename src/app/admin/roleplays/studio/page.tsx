@@ -30,6 +30,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import { stageStudioHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import LocalVadAssistant from './LocalVadAssistant';
@@ -94,6 +95,7 @@ export default function RoleplayStudioPage() {
   const [analyzingSilences, setAnalyzingSilences] = useState(false);
   const [serverConsent, setServerConsent] = useState(false);
   const [allowServerZipExport, setAllowServerZipExport] = useState(false);
+  const [assignmentPackage, setAssignmentPackage] = useState<{ token: string; file: File; revision: number; source: File; cuts: Segment[] } | null>(null);
   const [localVadSnapshot, setLocalVadSnapshot] = useState<LocalVadSnapshot | null>(null);
   const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
   const [suggestedClips, setSuggestedClips] = useState<StudioSuggestedClip[]>([]);
@@ -1566,11 +1568,12 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const exportPackage = async (part?: StudioPublicationPart<Segment>) => {
+  const exportPackage = async (part?: StudioPublicationPart<Segment>, purpose: 'download' | 'assignment' = 'download') => {
     if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
     setTurnActionFeedback(null);
+    if (purpose === 'assignment') setAssignmentPackage(null);
     const masterOrder = [...segments].sort((a, b) => a.start - b.start);
     const ordered = part ? part.turns : masterOrder;
     const revealInvalidTurn = (segment: Segment, index: number, reason: string) => {
@@ -1635,6 +1638,10 @@ export default function RoleplayStudioPage() {
     if (part || usesLocalLongMode(audio, duration) ||
         ordered.some(segment => segment.ranges !== undefined) ||
         !allowServerZipExport) {
+      if (purpose === 'assignment') {
+        setError('La preparación directa requiere una grabación MP3 compatible, cortes simples y autorización del procesamiento en el servidor. Usa el plan local para otros proyectos.');
+        return;
+      }
       await saveDraft(part);
       return;
     }
@@ -1663,6 +1670,13 @@ export default function RoleplayStudioPage() {
       }
       const blob = await response.blob();
       if (!isCurrent()) return;
+      if (purpose === 'assignment') {
+        if (blob.size < 22 || blob.size > STUDIO_HANDOFF_MAX_BYTES) throw new Error('El paquete supera el límite de importación temporal. Usa la exportación habitual.');
+        const file = new File([blob], 'roleplay-studio.zip', { type: 'application/zip' });
+        setAssignmentPackage({ token: crypto.randomUUID(), file, revision: editorRevision, source: audio, cuts: segments });
+        setNotice('Paquete listo para asignar. Continúa al formulario de creación; no se ha publicado ninguna sesión.');
+        return;
+      }
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
@@ -1878,6 +1892,12 @@ export default function RoleplayStudioPage() {
   const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
   const hasCompound = segments.some(segment => segment.ranges !== undefined);
   const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
+  const readyAssignment = assignmentPackage && assignmentPackage.source === audio &&
+    assignmentPackage.cuts === segments && assignmentPackage.revision === subtitleImportRevision.current && !localOnly
+    ? assignmentPackage : null;
+  useEffect(() => {
+    if (assignmentPackage && !readyAssignment) setAssignmentPackage(null);
+  }, [assignmentPackage, readyAssignment]);
   const videoSource = audio !== null && mediaKind(audio) === 'video';
   const overlappingSelectedCues = useMemo(
     () => overlappingSelectedTimedCueIndices(reviewCues, chosenCueIndices),
@@ -3791,6 +3811,29 @@ export default function RoleplayStudioPage() {
                 </details>
               </div>
             )}
+          {!localOnly && (
+            <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+              <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
+              <p className="text-xs text-[var(--text-secondary)]">Se procesará el MP3 en el servidor según la opción autorizada. El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
+              {readyAssignment ? (
+                <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
+                  prefetch={false}
+                  onClick={event => {
+                    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) {
+                      event.preventDefault(); setError('Continúa en esta misma pestaña para conservar el paquete temporal.'); return;
+                    }
+                    if (readyAssignment.revision !== subtitleImportRevision.current || busy || draftBusy || !confirmEditorNavigation()) {
+                      event.preventDefault(); return;
+                    }
+                    try { stageStudioHandoff(readyAssignment.token, readyAssignment.file); }
+                    catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : 'No se pudo transferir el paquete.'); }
+                  }}
+                  className="inline-flex rounded-xl theme-action-primary px-4 py-2 font-semibold">Continuar a asignación</Link>
+              ) : <button type="button" onClick={() => void exportPackage(undefined, 'assignment')}
+                  disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
+                  className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar para asignación</button>}
+            </div>
+          )}
           <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
             className="inline-flex items-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold">
             <Download size={18} /> {busy
