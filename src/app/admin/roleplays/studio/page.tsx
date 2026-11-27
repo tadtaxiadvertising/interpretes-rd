@@ -636,6 +636,7 @@ export default function RoleplayStudioPage() {
       // Only dismiss the transcript review after the operator accepts the
       // replacement. A declined confirmation must preserve the selection.
       if (!loadSelectedCues(selected, 0)) return;
+      if (expandedEditor) setFocusMode(true);
       setReviewCues([]);
       setChosenCueIndices([]);
       setCuePage(0);
@@ -1453,7 +1454,10 @@ export default function RoleplayStudioPage() {
           segmentSearch, pendingOnly: showPendingReview,
         },
       });
-      if (restored.length > ROLEPLAY_MAX_SCENARIOS) setExpandedEditor(true);
+      if (restored.length > ROLEPLAY_MAX_SCENARIOS) {
+        setExpandedEditor(true);
+        setFocusMode(true);
+      }
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
@@ -2401,7 +2405,7 @@ export default function RoleplayStudioPage() {
           <h2 className="text-lg font-bold text-[var(--foreground)]">Seleccionar turnos de la transcripción</h2>
           <p className="text-sm text-[var(--text-secondary)]">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
-            (máximo editorial {editorLimit}). La propuesta abarca distintos momentos de la grabación.
+            (máximo {editorLimit}{expandedEditor ? ' en edición' : ''}). La propuesta abarca distintos momentos de la grabación.
             Escucha y ajusta los turnos; después pulsa «Aplicar» para revisar hablantes e idiomas.
             Tus cortes actuales no se reemplazan sin confirmación.
           </p>
