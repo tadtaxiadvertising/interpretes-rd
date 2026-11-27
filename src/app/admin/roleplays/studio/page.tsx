@@ -1967,35 +1967,43 @@ export default function RoleplayStudioPage() {
       segments.flatMap(segment => validStudioRanges(segment, duration) ?? [])),
     [duration, segments],
   );
-  const largestGaps = coverage.gaps
+  const largestGaps = useMemo(() => coverage.gaps
     .filter(gap => gap.duration >= 5)
     .sort((a, b) => b.duration - a.duration)
-    .slice(0, 8);
+    .slice(0, 8), [coverage]);
 
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = !focusMode && (compactPreference ?? (sourceRequiresLocal || segments.length >= 6));
   const query = segmentSearch.trim().toLocaleLowerCase();
-  const pendingReviewCount = segments.filter(needsReview).length;
-  const reviewedCount = segments.length - pendingReviewCount;
-  const unidentifiedSpeakerCount = segments.filter(
-    segment => segment.speakerRole === 'unknown',
-  ).length;
-  const unreviewedLanguageCount = segments.filter(
-    segment => segment.language === 'unknown' && segment.speakerRole !== 'interpreter',
-  ).length;
-  const originalInterpreterCount = segments.filter(
-    segment => segment.speakerRole === 'interpreter',
-  ).length;
+  // Editorial counts are independent of the playback cursor.
+  const { pendingReviewCount, reviewedCount, unidentifiedSpeakerCount,
+    unreviewedLanguageCount, originalInterpreterCount } = useMemo(() => {
+    let pendingReviewCount = 0;
+    let unidentifiedSpeakerCount = 0;
+    let unreviewedLanguageCount = 0;
+    let originalInterpreterCount = 0;
+    for (const segment of segments) {
+      if (needsReview(segment)) pendingReviewCount++;
+      if (segment.speakerRole === 'unknown') unidentifiedSpeakerCount++;
+      if (segment.language === 'unknown' && segment.speakerRole !== 'interpreter') unreviewedLanguageCount++;
+      if (segment.speakerRole === 'interpreter') originalInterpreterCount++;
+    }
+    return { pendingReviewCount, reviewedCount: segments.length - pendingReviewCount,
+      unidentifiedSpeakerCount, unreviewedLanguageCount, originalInterpreterCount };
+  }, [segments]);
   const orderedSegments = useMemo(() => [...segments].sort((a, b) => a.start - b.start), [segments]);
   const reviewInspection = useMemo(() => inspectStudioReview(segments, duration), [segments, duration]);
   const confirmedIds = useMemo(() => new Set(reviewInspection.filter(({ turn, findings }) =>
     confirmedTurns.get(turn.id) === turn && findings.length === 0,
   ).map(({ turn }) => turn.id)), [reviewInspection, confirmedTurns]);
-  const issueTurns = reviewInspection.filter(item => item.findings.length > 0);
-  const reviewEntries = reviewCategory === 'unconfirmed'
-    ? reviewInspection.filter(item => !confirmedIds.has(item.turn.id) && item.findings.length === 0)
-    : issueTurns.filter(item => reviewCategory === 'all' || item.findings.some(finding => finding.code === reviewCategory));
-  const readyUnconfirmedCount = reviewInspection.filter(item => !confirmedIds.has(item.turn.id) && !item.findings.length).length;
+  const issueTurns = useMemo(() => reviewInspection.filter(item => item.findings.length > 0), [reviewInspection]);
+  const readyUnconfirmed = useMemo(() => reviewInspection.filter(item =>
+    !confirmedIds.has(item.turn.id) && item.findings.length === 0), [reviewInspection, confirmedIds]);
+  const reviewEntries = useMemo(() => reviewCategory === 'unconfirmed'
+    ? readyUnconfirmed
+    : issueTurns.filter(item => reviewCategory === 'all' || item.findings.some(finding => finding.code === reviewCategory)),
+  [reviewCategory, readyUnconfirmed, issueTurns]);
+  const readyUnconfirmedCount = readyUnconfirmed.length;
   const reviewCategories: Array<{ code: StudioReviewCode; label: string }> = [
     { code: 'interpreter', label: 'Intérprete original' },
     { code: 'speaker', label: 'Hablante pendiente' },
@@ -2175,15 +2183,19 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
-    segment.language === 'unknown' && segment.speakerRole !== 'interpreter')
-    .map(({ segment }) => segment.id);
-  const medicalLanguagePendingIds = visibleSegments.filter(({ segment }) =>
-    segment.language === 'unknown' && (segment.speakerRole === 'doctor' || segment.speakerRole === 'patient'))
-    .map(({ segment }) => segment.id);
-  const pendingSpeakerIds = visibleSegments.filter(({ segment }) =>
-    segment.speakerRole === 'unknown').map(({ segment }) => segment.id);
-  const visiblePendingTurns = visibleSegments.filter(({ segment }) => focusMode ? !confirmedIds.has(segment.id) : needsReview(segment));
+  const { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds } = useMemo(() => {
+    const pendingLanguageIds: string[] = [];
+    const medicalLanguagePendingIds: string[] = [];
+    const pendingSpeakerIds: string[] = [];
+    for (const { segment } of visibleSegments) {
+      if (segment.language === 'unknown' && segment.speakerRole !== 'interpreter') pendingLanguageIds.push(segment.id);
+      if (segment.language === 'unknown' && (segment.speakerRole === 'doctor' || segment.speakerRole === 'patient')) medicalLanguagePendingIds.push(segment.id);
+      if (segment.speakerRole === 'unknown') pendingSpeakerIds.push(segment.id);
+    }
+    return { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds };
+  }, [visibleSegments]);
+  const visiblePendingTurns = useMemo(() => visibleSegments.filter(({ segment }) =>
+    focusMode ? !confirmedIds.has(segment.id) : needsReview(segment)), [visibleSegments, focusMode, confirmedIds]);
   const focusPendingTurn = (direction: -1 | 1) => {
     if (!visiblePendingTurns.length) return;
     const currentIndex = visiblePendingTurns.findIndex(({ segment }) =>
