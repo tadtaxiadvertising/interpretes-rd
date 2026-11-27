@@ -98,6 +98,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importedTransfer, setImportedTransfer] = useState<string | null>(null);
   const trackedImportRevision = useRef<number | null>(null);
+  const [productionBackupWarning, setProductionBackupWarning] = useState(false);
+  const recordProductionAttempt = (token: string | null, status: 'unconfirmed' | 'created') => {
+    if (token && advanceProductionTransfer(token, status) === 'backup-changed') setProductionBackupWarning(true);
+  };
   const [validationFocus, setValidationFocus] = useState<{
     scenarioId: string; field: 'title' | 'audio'; requestId: number;
   } | null>(null);
@@ -512,9 +516,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         }
         const controller=new AbortController();
         directAbort.current=controller;
-        if (trackedToken) advanceProductionTransfer(trackedToken, 'unconfirmed');
+        recordProductionAttempt(trackedToken, 'unconfirmed');
         const result=await directAttempt.current.run({signal:controller.signal,onProgress:setDirectProgress});
-        if (trackedToken) advanceProductionTransfer(trackedToken, 'created');
+        recordProductionAttempt(trackedToken, 'created');
         setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete'});
       } catch {
         setError(directAttempt.current
@@ -573,7 +577,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const unknownResultMessage = 'No se pudo confirmar el resultado de la creación.';
       let res: Response;
       try {
-        if (trackedToken) advanceProductionTransfer(trackedToken, 'unconfirmed');
+        recordProductionAttempt(trackedToken, 'unconfirmed');
         res = await fetch('/api/admin/roleplays', {
           method: 'POST',
           body: formData,
@@ -643,7 +647,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
-      if (trackedToken) advanceProductionTransfer(trackedToken, 'created');
+      recordProductionAttempt(trackedToken, 'created');
       if (payload.bulk) {
         setSuccess({
           link: `${window.location.origin}/admin/roleplays`,
@@ -679,6 +683,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </p>
         <p className="text-[var(--text-secondary)] mb-6">{librarySource?.scenarios.length ?? scenarios.length} escenarios configurados</p>
         {success.summary && <p className="text-sm text-[var(--text-secondary)] mb-6">{success.summary}</p>}
+        {productionBackupWarning && <p role="status" className="mb-4 text-sm text-[var(--theme-warning)]">La creación está confirmada, pero el respaldo local cambió o no se pudo actualizar. Consulta las sesiones existentes antes de repetirla.</p>}
         <div className="mb-6 p-4 bg-[var(--theme-surface-muted)] rounded-xl">
           <input 
             type="text" 
@@ -708,6 +713,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   return (
     <div className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6 space-y-5">
+      {productionBackupWarning && <p role="status" className="text-sm text-[var(--theme-warning)]">No se pudo actualizar el respaldo local del intento de producción. Conserva esta pestaña y consulta las sesiones existentes antes de repetir.</p>}
       <fieldset disabled={directLocked} className="min-w-0 space-y-5">
       <div>
         <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">¿A quién se asignará?</h3>
