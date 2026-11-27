@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Client } from 'pg';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { isCreationLedgerReady } from '../src/lib/roleplay/creation-ledger-readiness';
+import { verifyPrismaCreationLifecycle } from './roleplay-creation-prisma-pilot';
 import { classifyCreationLedgerCatalog, readCreationLedgerCatalog, hasCreationLedgerRuntimeAccess } from './roleplay-creation-ledger-catalog';
 
 async function main() {
@@ -21,12 +25,22 @@ async function main() {
   const first = new Client({ connectionString: url.toString() });
   const second = new Client({ connectionString: url.toString() });
   let created = false;
+  const prismaClients: PrismaClient[] = [];
   try {
     await admin.connect();
     await admin.query('CREATE DATABASE "' + name + '" TEMPLATE template0');
     created = true;
     await first.connect();
     await second.connect();
+    // Explicit adapter URL derived only from the guarded, newly created DB.
+    // Never instantiate the application's environment-driven singleton.
+    for (let i = 0; i < 2; i++) {
+      prismaClients.push(new PrismaClient({
+        adapter: new PrismaPg({ connectionString: url.toString(), max: 2, connectionTimeoutMillis: 5000 }),
+      }));
+    }
+    const [prismaFirst, prismaSecond] = prismaClients;
+    assert.equal(await isCreationLedgerReady(prismaFirst), false);
     const inspect = async () => {
       await first!.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
       try { return classifyCreationLedgerCatalog(await readCreationLedgerCatalog(first!)); }
@@ -38,10 +52,12 @@ async function main() {
     const historical = await readFile('prisma/migrations/20261121210000_roleplay_creation_idempotency_ledger/migration.sql', 'utf8');
     await first.query(historical);
     assert.equal(await inspect(), 'historical');
+    assert.equal(await isCreationLedgerReady(prismaFirst), false);
     const sql = await readFile('docs/operations/staged-sql/roleplay-creation-requests.sql', 'utf8');
     assert.ok(sql.includes('STAGED DESIGN ONLY'));
     await first.query(sql);
     assert.equal(await inspect(), 'hardened-catalog');
+    assert.equal(await isCreationLedgerReady(prismaFirst), true);
     // Exercise effective role access in the isolated database, without
     // creating any cluster-wide roles or granting privileges.
     await first.query('BEGIN READ ONLY');
@@ -139,7 +155,12 @@ async function main() {
     );
     assert.equal(other.rows[0]?.status, 'IN_PROGRESS');
     console.log('Isolated creation ledger: uniqueness, actor scope, rollback and receipt integrity passed.');
+    // Minimal synthetic projection for the actual Prisma receipt reader.
+    // This does not pretend to reproduce the full RoleplaySession model.
+    await first.query('CREATE TABLE public.roleplay_sessions (id TEXT PRIMARY KEY)');
+    await verifyPrismaCreationLifecycle(prismaFirst, prismaSecond);
   } finally {
+    await Promise.allSettled(prismaClients.map(client => client.$disconnect()));
     await Promise.allSettled([first.end(), second.end()]);
     try {
       if (created) await admin.query('DROP DATABASE "' + name + '"');

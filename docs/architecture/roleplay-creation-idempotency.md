@@ -55,6 +55,12 @@ Una creación con clave requiere, además de la bandera explícita, un catálogo
 
 Este control es una condición necesaria, no una certificación semántica del SQL ni una garantía contra cambios concurrentes de permisos/esquema después de la inspección. La propuesta de endurecimiento sigue fuera de migraciones automáticas; no activar el piloto hasta validar esquema, identidad del proyecto, permisos y versión real del servicio.
 
+## Verificación integrada de Prisma (CI aislado)
+
+El verificador PostgreSQL existente crea una base temporal, aplica el SQL histórico y el endurecimiento propuesto, y conecta dos clientes Prisma mediante adaptadores explícitos a esa base. Comprueba disponibilidad real antes/después del endurecimiento, huellas de archivos sintéticos, reserva concurrente por actor, conflicto de contenido, publicación/recibo en una transacción, rollback del duplicado, replay, aislamiento por administrador y revisión de un recibo cuya sesión ya no existe. El contrato de recuperación del navegador consume el recibo real mediante un transporte en memoria. Los clientes se desconectan antes de eliminar la base temporal.
+
+La tabla de sesiones es una proyección sintética mínima de id; no equivale al modelo completo ni al endpoint HTTP. No se ejercitan autenticación real, escenarios, Storage, notificaciones ni red del navegador. No sustituye una prueba integral de despliegue en entorno controlado.
+
 ## Reconciliación y rollback
 
 - **Consulta read-only tras migrar** (con usuario de administración, en el proyecto autorizado): `SELECT status, count(*) FROM public.roleplay_creation_requests GROUP BY status;`. No consultar nombres, secretos, URLs ni contenido de audio.
