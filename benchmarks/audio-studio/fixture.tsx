@@ -28,6 +28,8 @@ const count = STUDIO_MAX_EDITOR_SEGMENTS;
 let intervalReads = 0;
 let mediaReads = 0;
 let position = duration / 2;
+const contrastScenario = new URLSearchParams(location.search).has('contrast');
+const speakerRoles: Turn['speakerRole'][] = ['doctor', 'patient', 'nurse', 'operator', 'interpreter', 'unknown'];
 const active: Turn[] = Array.from({ length: count }, (_, index) => {
   const start = 10 + index * Math.floor(duration / count);
   return {
@@ -35,10 +37,10 @@ const active: Turn[] = Array.from({ length: count }, (_, index) => {
     title: 'Intervención ' + (index + 1),
     get start() { intervalReads++; return start; },
     end: start + 5,
-    speakerRole: index % 2 === 0 ? 'doctor' : 'patient',
+    speakerRole: contrastScenario ? speakerRoles[index % speakerRoles.length] : index % 2 === 0 ? 'doctor' : 'patient',
   };
 });
-const excluded: Turn[] = [];
+const excluded: Turn[] = contrastScenario ? [{ id: 'excluded-test', start: 60, end: 65, title: 'Corte excluido de prueba', speakerRole: 'interpreter' }] : [];
 const file = new File(['synthetic metadata fixture'], 'long.mp4', { type: 'video/mp4' });
 Object.defineProperty(file, 'arrayBuffer', {
   value: async () => { mediaReads++; return new ArrayBuffer(0); },

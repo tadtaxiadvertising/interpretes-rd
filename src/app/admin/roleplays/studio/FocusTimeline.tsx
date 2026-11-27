@@ -16,12 +16,12 @@ type Props = {
   onSeek: (seconds: number) => void;
 };
 const roles: { role: StudioSpeakerRole; label: string; color: string }[] = [
-  { role: 'doctor', label: 'Médico', color: 'bg-blue-600' },
-  { role: 'patient', label: 'Paciente', color: 'bg-emerald-600' },
-  { role: 'nurse', label: 'Enfermería', color: 'bg-violet-600' },
-  { role: 'operator', label: 'Operador', color: 'bg-cyan-700' },
-  { role: 'interpreter', label: 'Intérprete original', color: 'bg-orange-600' },
-  { role: 'unknown', label: 'Sin identificar', color: 'bg-slate-500' },
+  { role: 'doctor', label: 'Médico', color: '#1554a8' },
+  { role: 'patient', label: 'Paciente', color: '#047857' },
+  { role: 'nurse', label: 'Enfermería', color: '#6d28d9' },
+  { role: 'operator', label: 'Operador', color: '#0e7490' },
+  { role: 'interpreter', label: 'Intérprete original', color: '#c2410c' },
+  { role: 'unknown', label: 'Sin identificar', color: '#475569' },
 ];
 
 const labelTime = (seconds: number) => {
@@ -42,7 +42,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
   const ordered = useMemo(() => [...active].sort((a, b) => a.start - b.start), [active]);
   const lanes = useMemo(() => [
     ...roles.map(role => ({ ...role, excluded: false, turns: ordered.filter(turn => turn.speakerRole === role.role) })),
-    { role: 'excluded', label: 'Excluidas', color: 'bg-slate-500', excluded: true, turns: [...excluded].sort((a, b) => a.start - b.start) },
+    { role: 'excluded', label: 'Excluidas', color: '#475569', excluded: true, turns: [...excluded].sort((a, b) => a.start - b.start) },
   ].filter(lane => lane.turns.length > 0), [ordered, excluded]);
 
   // Keep event handlers current without rebuilding all the visible cuts on
@@ -68,8 +68,8 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
         return <button key={turn.id + ':' + index} type="button" aria-label={name} title={name}
           aria-pressed={!lane.excluded && selectedId === turn.id}
           onClick={() => select(turn.id, lane.excluded)}
-          className={'absolute inset-y-0 rounded-sm border border-white/40 text-xs text-white focus-visible:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)] ' + lane.color + (lane.excluded ? ' opacity-60 border-dashed' : '') + (!lane.excluded && selectedId === turn.id ? ' z-10 ring-2 ring-inset ring-white' : '')}
-          style={{ left: geometry.left + '%', width: geometry.width + '%' }}>
+          className={'studio-timeline-cut absolute inset-y-0 rounded-sm border text-xs' + (lane.excluded ? ' border-dashed' : '') + (!lane.excluded && selectedId === turn.id ? ' z-10' : '')}
+          style={{ left: geometry.left + '%', width: geometry.width + '%', backgroundColor: lane.color }}>
           <span aria-hidden="true" className="block truncate px-0.5">{turn.title}</span>
         </button>;
       });
@@ -104,7 +104,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
           value={Math.max(window.start, Math.min(window.end, playhead))}
           aria-valuetext={formatStudioAccessibleTime(Math.max(window.start, Math.min(window.end, playhead)))}
           onChange={event => { setAnchor((window.start + window.end) / 2); onSeek(event.currentTarget.valueAsNumber); }}
-          className="min-w-0 flex-1 accent-blue-500"/>
+          className="min-w-0 flex-1 accent-[var(--theme-link)]"/>
       </label>
       <div className="max-h-40 space-y-1 overflow-y-auto">
         {laneLayers.map(lane => (
@@ -112,7 +112,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
             <span className="truncate text-xs text-[var(--text-secondary)]" title={lane.label}>{lane.label}</span>
             <div className="relative h-7 overflow-hidden rounded border border-[var(--border)] bg-[var(--theme-surface-muted)]">
               {lane.buttons}
-              {cursor >= 0 && cursor <= 100 && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[var(--foreground)]" style={{ left: cursor + '%' }}/>}
+              {cursor >= 0 && cursor <= 100 && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-30 w-px bg-white shadow-[0_0_0_1px_#111827]" style={{ left: cursor + '%' }}/>}
             </div>
           </div>
         ))}
