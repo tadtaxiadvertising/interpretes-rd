@@ -15,7 +15,7 @@ import { availableStudioInterval } from '@/lib/roleplay-studio/available-interva
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
 import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
-import { STUDIO_RECOVERY_KEY, createStudioRecovery, openStudioRecovery } from '@/lib/roleplay-studio/recovery';
+import { STUDIO_RECOVERY_KEY, createStudioRecovery, openStudioRecovery, mergeProductionReceipts, type RecoveryProductionReceipt } from '@/lib/roleplay-studio/recovery';
 import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
 import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
@@ -32,7 +32,7 @@ import {
 import StudioWaveform from './StudioWaveform';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
-import { studioProductionKey, productionStatus, trackProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
+import { studioProductionKey, productionStatus, trackProductionTransfer, productionReceipts, restoreProductionReceipts } from '@/lib/roleplay-studio/production-tracking';
 import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
@@ -87,6 +87,8 @@ export default function RoleplayStudioPage() {
   const [recoveryFingerprint, setRecoveryFingerprint] = useState<{ file: File; hash: string } | null>(null);
   const recoveryExpected = useRef<string | null>(null);
   const recoveryOperation = useRef(0);
+  const recoveryReceipts = useRef<RecoveryProductionReceipt[]>([]);
+  const flushRecovery = useRef<(() => string | undefined) | null>(null);
   const [expandedEditor, setExpandedEditor] = useState(false);
   const [publicationPartKey, setPublicationPartKey] = useState('');
   const genericPublicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
@@ -609,6 +611,7 @@ export default function RoleplayStudioPage() {
     recoveryOperation.current += 1;
     setRecoveryEnabled(false);
     setRecoveryFingerprint(null);
+    recoveryReceipts.current = [];
     setRecoveryStatus('');
     setSegments([]);
     setExcludedTurns([]);
@@ -2375,6 +2378,8 @@ export default function RoleplayStudioPage() {
       if (localStorage.getItem(STUDIO_RECOVERY_KEY) !== raw) throw new Error('El respaldo cambió en otra pestaña. Inténtalo de nuevo.');
       if (restore && raw) {
         const saved = openStudioRecovery(raw, source.size, hash, duration);
+        recoveryReceipts.current = saved.production;
+        restoreProductionReceipts(saved.production);
         const restored = saved.segments.map(segment => ({ ...segment, id: crypto.randomUUID() }));
         subtitleImportRevision.current += 1;
         stopPreview();
@@ -2405,6 +2410,7 @@ export default function RoleplayStudioPage() {
         seekAudio(saved.playhead);
         setNotice('Progreso recuperado. La transcripción privada y las sugerencias sin aplicar no forman parte del respaldo.');
       }
+      if (!restore) recoveryReceipts.current = [];
       recoveryExpected.current = raw;
       setRecoveryFingerprint({ file: source, hash });
       setRecoveryEnabled(true);
@@ -2421,6 +2427,7 @@ export default function RoleplayStudioPage() {
     try {
       localStorage.removeItem(STUDIO_RECOVERY_KEY);
       recoveryExpected.current = null;
+      recoveryReceipts.current = [];
       setRecoveryAvailable(false);
       setRecoveryStatus('Respaldo local eliminado.');
     } catch { setRecoveryStatus('No se pudo eliminar el respaldo local.'); }
@@ -2440,26 +2447,31 @@ export default function RoleplayStudioPage() {
           setRecoveryStatus('Guardado detenido: el respaldo cambió en otra pestaña.');
           return;
         }
+        const receipts = mergeProductionReceipts(recoveryReceipts.current, productionReceipts(activeProductionKeys?.values() ?? []));
         const raw = createStudioRecovery(audio.size, recoveryFingerprint.hash, duration, segments,
-          confirmedIds, workspaceTurnId, player.current?.currentTime ?? 0, excludedTurns.map(entry => entry.turn));
+          confirmedIds, workspaceTurnId, player.current?.currentTime ?? 0, excludedTurns.map(entry => entry.turn), receipts);
         localStorage.setItem(STUDIO_RECOVERY_KEY, raw);
         recoveryExpected.current = raw;
+        recoveryReceipts.current = receipts;
         setRecoveryAvailable(true);
         setRecoveryStatus('Respaldo local actualizado.');
+        return raw;
       } catch {
         setRecoveryStatus('Cambios sin respaldar: revisa cortes, títulos, tamaño del proyecto o almacenamiento. Se conserva el último respaldo válido.');
       }
     };
+    flushRecovery.current = write;
     const timer = window.setTimeout(write, 650);
     const flush = () => { if (document.visibilityState === 'hidden') write(); };
     document.addEventListener('visibilitychange', flush);
     window.addEventListener('pagehide', write);
     return () => {
+      if (flushRecovery.current === write) flushRecovery.current = null;
       window.clearTimeout(timer);
       document.removeEventListener('visibilitychange', flush);
       window.removeEventListener('pagehide', write);
     };
-  }, [recoveryEnabled, recoveryFingerprint, audio, duration, segments, confirmedIds, workspaceTurnId, excludedTurns]);
+  }, [recoveryEnabled, recoveryFingerprint, audio, duration, segments, confirmedIds, workspaceTurnId, excludedTurns, activeProductionKeys]);
 
   useEffect(() => {
     if (workspaceActive && workspaceContent.current) workspaceContent.current.scrollTop = 0;
@@ -2548,7 +2560,7 @@ export default function RoleplayStudioPage() {
           }} />
         <div className="mt-3 space-y-2 rounded-lg border border-[var(--border)] p-3">
           <h3 className="text-sm font-semibold text-[var(--foreground)]">Recuperación local del proyecto</h3>
-          <p className="text-xs text-[var(--text-secondary)]">Opcional, solo en este navegador y equipo de confianza. Guarda cortes, títulos, instrucciones y confirmaciones sin audio ni transcripción privada. Para recuperar, selecciona la misma grabación. Otros usuarios de este navegador podrían acceder al respaldo; elimínalo al terminar.</p>
+          <p className="text-xs text-[var(--text-secondary)]">Opcional, solo en este navegador y equipo de confianza. Guarda cortes, títulos, instrucciones, confirmaciones y huellas de intentos de producción sin audio, destinatarios, enlaces privados ni transcripción privada. Para recuperar, selecciona la misma grabación. Otros usuarios de este navegador podrían acceder al respaldo; elimínalo al terminar.</p>
           <div className="flex flex-wrap gap-2">
             {!recoveryEnabled && !recoveryAvailable && <button type="button" disabled={!sourceReady || busy || draftBusy || analyzingSilences}
               onClick={() => void startRecovery(false)} className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Activar guardado local</button>}
@@ -3948,7 +3960,7 @@ export default function RoleplayStudioPage() {
               {activeProductionKeys && activeProductionKeys.size > 0 && (
                 <section aria-label="Seguimiento de producción" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
                   <h4 className="text-sm font-semibold text-[var(--foreground)]">Seguimiento de producción</h4>
-                  <p className="text-xs text-[var(--text-secondary)]">Registro orientativo de esta pestaña. Una creación confirmada significa al menos una asignación, no que todos los destinatarios la hayan recibido. Al recargar se pierde; consulta las sesiones existentes antes de repetir una creación.</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Registro orientativo. Una creación confirmada significa al menos una asignación, no que todos los destinatarios la hayan recibido. Con respaldo local activo se conservan los intentos y creaciones confirmadas; los archivos preparados no sobreviven a una recarga. Consulta las sesiones existentes antes de repetir.</p>
                   <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
                     {publicationPlan.parts.filter(part => activeProductionKeys.has(part.key)).map(part => {
                       const status = productionStatus(activeProductionKeys.get(part.key)!);
@@ -3989,9 +4001,13 @@ export default function RoleplayStudioPage() {
                       event.preventDefault(); return;
                     }
                     try {
+                      const backup = recoveryEnabled ? flushRecovery.current?.() : undefined;
+                      if (recoveryEnabled && !backup && !window.confirm('No se pudo actualizar el respaldo local. La producción quedará registrada solo en esta pestaña. ¿Continuar?')) {
+                        event.preventDefault(); return;
+                      }
                       if (readyAssignment.files) stageLocalWavHandoff(readyAssignment.token, readyAssignment.files);
                       else stageStudioHandoff(readyAssignment.token, readyAssignment.file);
-                      if (key) trackProductionTransfer(readyAssignment.token, key);
+                      if (key) trackProductionTransfer(readyAssignment.token, key, backup);
                     }
                     catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : 'No se pudo transferir el paquete.'); }
                   }}
