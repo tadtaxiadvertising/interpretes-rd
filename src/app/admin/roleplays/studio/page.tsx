@@ -2168,10 +2168,14 @@ export default function RoleplayStudioPage() {
   // transcript references, provider labels, or uncommitted suggestions.
   useEffect(() => {
     if (!recoveryEnabled || !audio || recoveryFingerprint?.file !== audio || !duration) return;
+    const operation = recoveryOperation.current;
     const write = () => {
+      if (operation !== recoveryOperation.current || activeAudioFile.current !== audio) return;
       try {
         if (localStorage.getItem(STUDIO_RECOVERY_KEY) !== recoveryExpected.current) {
+          recoveryOperation.current += 1;
           setRecoveryEnabled(false);
+          setRecoveryAvailable(localStorage.getItem(STUDIO_RECOVERY_KEY) !== null);
           setRecoveryStatus('Guardado detenido: el respaldo cambió en otra pestaña.');
           return;
         }
