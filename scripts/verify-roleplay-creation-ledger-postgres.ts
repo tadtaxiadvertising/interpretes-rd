@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Client } from 'pg';
+import { classifyCreationLedgerCatalog, readCreationLedgerCatalog } from './roleplay-creation-ledger-catalog';
 
 async function main() {
   const raw = process.env.DATABASE_URL;
@@ -26,13 +27,36 @@ async function main() {
     created = true;
     await first.connect();
     await second.connect();
+    const inspect = async () => {
+      await first!.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+      try { return classifyCreationLedgerCatalog(await readCreationLedgerCatalog(first!)); }
+      finally { await first!.query('ROLLBACK'); }
+    };
+    assert.equal(await inspect(), 'absent');
     // Apply the unchanged historical migration first, then the proposed
     // constraint hardening. Both execute only in this newly created DB.
     const historical = await readFile('prisma/migrations/20261121210000_roleplay_creation_idempotency_ledger/migration.sql', 'utf8');
     await first.query(historical);
+    assert.equal(await inspect(), 'historical');
     const sql = await readFile('docs/operations/staged-sql/roleplay-creation-requests.sql', 'utf8');
     assert.ok(sql.includes('STAGED DESIGN ONLY'));
     await first.query(sql);
+    assert.equal(await inspect(), 'hardened-catalog');
+    // Mutations occur only in the disposable database, never in the inspector.
+    await first.query('BEGIN');
+    try {
+      await first.query('SAVEPOINT unsafe_grant');
+      await first.query('GRANT SELECT (id) ON public.roleplay_creation_requests TO PUBLIC');
+      assert.equal(classifyCreationLedgerCatalog(await readCreationLedgerCatalog(first)), 'incomplete');
+      await first.query('ROLLBACK TO SAVEPOINT unsafe_grant');
+      await first.query('SAVEPOINT unsafe_policy');
+      await first.query('CREATE POLICY ci_unsafe_read ON public.roleplay_creation_requests FOR SELECT USING (true)');
+      assert.equal(classifyCreationLedgerCatalog(await readCreationLedgerCatalog(first)), 'incomplete');
+      await first.query('ROLLBACK TO SAVEPOINT unsafe_policy');
+      await first.query('ALTER TABLE public.roleplay_creation_requests DROP CONSTRAINT roleplay_creation_requests_actor_key');
+      assert.equal(classifyCreationLedgerCatalog(await readCreationLedgerCatalog(first)), 'incomplete');
+    } finally { await first.query('ROLLBACK'); }
+    assert.equal(await inspect(), 'hardened-catalog');
     const meta = await first.query(
       "SELECT relrowsecurity FROM pg_class WHERE oid = 'public.roleplay_creation_requests'::regclass",
     );
