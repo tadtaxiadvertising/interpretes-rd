@@ -62,6 +62,8 @@ vi.mock('@supabase/supabase-js', () => ({
 vi.mock('@/lib/roleplay/creation-ledger-readiness', () => ({ isCreationLedgerReady: vi.fn() }));
 import { isCreationLedgerReady } from '@/lib/roleplay/creation-ledger-readiness';
 import { POST, GET } from '../route';
+import { POST as readCreationReceipt } from '../creation-receipt/route';
+import { recoverSingleRoleplayCreation } from '@/lib/roleplay/creation-receipt-browser';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
@@ -118,7 +120,8 @@ describe('POST /api/admin/roleplays', () => {
     process.env.FRONTEND_ORIGIN = 'https://front.test';
     delete process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED;
     vi.mocked(isCreationLedgerReady).mockResolvedValue(true);
-    vi.mocked(prisma.roleplayCreationRequest.create).mockResolvedValue({ id: 'claim' } as never);
+    vi.mocked(prisma.roleplayCreationRequest.create).mockReset().mockResolvedValue({ id: 'claim' } as never);
+    vi.mocked(prisma.roleplayCreationRequest.findUnique).mockReset().mockResolvedValue(null);
     vi.mocked(prisma.roleplayCreationRequest.updateMany).mockResolvedValue({ count: 1 });
 
     (validateAction as any).mockResolvedValue(adminAuth);
@@ -356,6 +359,68 @@ describe('POST /api/admin/roleplays', () => {
       expect(mockUpload).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+
+    it('recovers a committed creation after a post-commit error across both real route handlers', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
+
+      // Persist the simulated ledger only through the actual claim/completion
+      // helpers. The production route handlers and browser parser are real;
+      // this test intentionally substitutes DB, auth, Storage and notifications.
+      let row: Record<string, unknown> | null = null;
+      vi.mocked(prisma.roleplayCreationRequest.create).mockImplementation(async args => {
+        if (row) throw { code: 'P2002' };
+        row = { ...args.data };
+        return { id: 'claim' } as never;
+      });
+      vi.mocked(prisma.roleplayCreationRequest.updateMany).mockImplementationOnce(async args => {
+        expect(args.where).toEqual({
+          actorUserId: 'a1', requestKey, payloadHash: row?.payloadHash, status: 'IN_PROGRESS',
+        });
+        row = { ...row, ...args.data };
+        return { count: 1 };
+      });
+      vi.mocked(prisma.roleplayCreationRequest.findUnique).mockImplementation(async args => {
+        const scope = args.where.actorUserId_requestKey;
+        return (row && scope?.actorUserId === row.actorUserId && scope.requestKey === row.requestKey
+          ? row : null) as never;
+      });
+      notificationMocks.notifyRoleplayAssignments.mockRejectedValueOnce(new Error('synthetic post-commit notification failure'));
+
+      const initial = await POST(keyed() as any);
+      expect(initial.status).toBe(500);
+      expect(mockUpload).toHaveBeenCalledOnce();
+      expect(mockRemove).not.toHaveBeenCalled();
+      expect(prisma.roleplayCreationRequest.updateMany).toHaveBeenCalledOnce();
+
+      vi.mocked(prisma.roleplaySession.findMany).mockResolvedValue([{ id: 'sess-1' }] as never);
+      const transport: typeof fetch = async (url, init) => {
+        expect(url).toBe('/api/admin/roleplays/creation-receipt');
+        expect(init?.body).toBe(JSON.stringify({ requestKey }));
+        const response = await readCreationReceipt(new Request('http://localhost' + url, init));
+        expect(response.headers.get('Cache-Control')).toBe('private, no-store');
+        return response;
+      };
+      expect(await recoverSingleRoleplayCreation(requestKey, 1, transport)).toEqual({ status: 'COMPLETED' });
+
+      // Same UUID cannot expose a receipt belonging to another administrator.
+      vi.mocked(validateAction).mockResolvedValueOnce({
+        ...adminAuth, user: { ...adminAuth.user, userId: 'other-admin' },
+      } as never);
+      expect(await recoverSingleRoleplayCreation(requestKey, 1, transport)).toEqual({ status: 'NOT_FOUND' });
+
+      vi.mocked(prisma.roleplaySession.findFirst).mockResolvedValueOnce({ id: 'sess-1' } as never);
+      const replay = await POST(keyed() as any);
+      expect(replay.status).toBe(200);
+      expect((await replay.json()).data).toEqual({
+        sessionId: 'sess-1', inviteLink: 'https://front.test/roleplays/sess-1', scenarioCount: 1,
+      });
+      expect(mockUpload).toHaveBeenCalledOnce();
+      expect(mockRemove).not.toHaveBeenCalled();
+      expect(prisma.roleplaySession.create).toHaveBeenCalledOnce();
+      expect(prisma.roleplayCreationRequest.updateMany).toHaveBeenCalledOnce();
+      expect(notificationMocks.notifyRoleplayAssignments).toHaveBeenCalledOnce();
     });
 
     it('leaves unkeyed requests unchanged even when the pilot flag is enabled', async () => {

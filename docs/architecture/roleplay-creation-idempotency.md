@@ -61,6 +61,10 @@ El verificador PostgreSQL existente crea una base temporal, aplica el SQL histó
 
 La tabla de sesiones es una proyección sintética mínima de id; no equivale al modelo completo ni al endpoint HTTP. No se ejercitan autenticación real, escenarios, Storage, notificaciones ni red del navegador. No sustituye una prueba integral de despliegue en entorno controlado.
 
+## Contrato entre creación y recuperación tras un error posterior al commit
+
+La prueba de rutas ejecuta los handlers reales de creación y consulta de recibos, además del parser de recuperación del navegador, con autenticación, persistencia, Storage y notificaciones simulados. Fuerza un error de notificación después de completar el recibo, verifica que no se eliminen los audios, consulta la clave original desde la misma identidad y comprueba que otra identidad no reciba ese resultado. Un replay de la solicitud original debe devolver la misma sesión sin volver a subir ni notificar. Esta prueba complementa la verificación de transacciones Prisma/PostgreSQL aislada, pero no demuestra un despliegue HTTP completo ni una entrega real de notificaciones.
+
 ## Reconciliación y rollback
 
 - **Consulta read-only tras migrar** (con usuario de administración, en el proyecto autorizado): `SELECT status, count(*) FROM public.roleplay_creation_requests GROUP BY status;`. No consultar nombres, secretos, URLs ni contenido de audio.
