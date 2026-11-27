@@ -40,7 +40,10 @@ export function detectLocalSpeech(
   const threshold=Number.isFinite(options.thresholdRms) && (options.thresholdRms??0)>0
     ? clamp(options.thresholdRms!,0.001,0.2) : (max<=0.005?0.005:adaptive);
   const minSilence=Math.max(1,Math.ceil(clamp(options.minSilenceDurationSec??0.4,0.1,3)*sampleRate/frame));
-  const minSpeech=Math.max(1,Math.ceil(clamp(options.minSpeechDurationSec??0.5,0.1,10)*sampleRate/frame));
+  const minSpeechSamples=Math.max(1,Math.ceil(clamp(options.minSpeechDurationSec??0.5,0.1,10)*sampleRate));
+  // The last frame can be partial; count real samples before padding.
+  const meetsMinSpeech=(startFrame:number,endFrame:number) =>
+    Math.min(length,endFrame*frame)-startFrame*frame>=minSpeechSamples;
   const pre=Math.round(clamp(options.preRollSec??0.15,0,1)*sampleRate);
   const post=Math.round(clamp(options.postRollSec??0.2,0,1)*sampleRate);
   const ranges:Array<{start:number;end:number}>=[];
@@ -53,14 +56,14 @@ export function detectLocalSpeech(
       silence++;
       if(silence>=minSilence) {
         const end=f-silence+1;
-        if(end-start>=minSpeech) ranges.push({start,end});
+        if(meetsMinSpeech(start,end)) ranges.push({start,end});
         start=-1; silence=0;
       }
     }
   }
   if(start>=0) {
     const end=frameCount-silence;
-    if(end-start>=minSpeech) ranges.push({start,end});
+    if(meetsMinSpeech(start,end)) ranges.push({start,end});
   }
   const totalSeconds=length/sampleRate;
   return ranges.slice(0,100).map((range,index)=>{
