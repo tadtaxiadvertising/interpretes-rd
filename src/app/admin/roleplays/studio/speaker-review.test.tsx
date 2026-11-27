@@ -243,6 +243,31 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
   });
 
+  it('navigates active and excluded cuts from the optional timeline without replaying or restoring them', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const starts = screen.getAllByLabelText('Inicio (segundos)').map(input => Number((input as HTMLInputElement).value));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[1].value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir y avanzar' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar línea de tiempo' }));
+    const timeline = screen.getByLabelText('Localizar corte en línea de tiempo') as HTMLSelectElement;
+    const first = Array.from(timeline.options).find(option => option.textContent?.includes('Intervención 1'))!;
+    const excluded = Array.from(timeline.options).find(option => option.value.startsWith('x:'))!;
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), { target: { value: 'Intervención 3' } });
+    fireEvent.change(timeline, { target: { value: first.value } });
+    expect(player.currentTime).toBe(starts[0]);
+    expect(screen.getByRole('searchbox', { name: 'Buscar intervenciones' })).toHaveProperty('value', '');
+    fireEvent.change(timeline, { target: { value: excluded.value } });
+    expect(player.currentTime).toBe(starts[1]);
+    expect(screen.getByRole('region', { name: 'Intervenciones excluidas' })).toBeTruthy();
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar línea de tiempo' }));
+    expect(screen.queryByRole('region', { name: 'Línea de tiempo de intervenciones' })).toBeNull();
+  });
+
   it('previews a proposed overlap correction without editing either cut, then applies and undoes it', () => {
     const player = selectAudio();
     for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));

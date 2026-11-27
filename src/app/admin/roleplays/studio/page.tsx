@@ -30,6 +30,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import LocalVadAssistant from './LocalVadAssistant';
 import StudioConsecutivePreview from './StudioConsecutivePreview';
@@ -71,6 +72,7 @@ export default function RoleplayStudioPage() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [excludedTurns, setExcludedTurns] = useState<Array<{ turn: Segment; caption?: string }>>([]);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [timelineOpen, setTimelineOpen] = useState(false);
   const [reviewCenterOpen, setReviewCenterOpen] = useState(false);
   const [reviewCategory, setReviewCategory] = useState<'all' | 'unconfirmed' | StudioReviewCode>('all');
   // Confirmation belongs to this editing session, not to the published payload.
@@ -577,6 +579,7 @@ export default function RoleplayStudioPage() {
     setSegments([]);
     setExcludedTurns([]);
     setTrashOpen(false);
+    setTimelineOpen(false);
     setReviewCenterOpen(false);
     setReviewCategory('all');
     setAdvancedTurnId(null);
@@ -3102,6 +3105,13 @@ export default function RoleplayStudioPage() {
                 className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Ir a primera incidencia</button>}
             </div>
           )}
+          {focusMode && (segments.length > 0 || excludedTurns.length > 0) && (!workspaceActive || workspaceTab === 'edit') && (
+            <button type="button" aria-expanded={timelineOpen} aria-controls="studio-focused-timeline"
+              onClick={() => setTimelineOpen(previous => !previous)}
+              className="shrink-0 self-start rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">
+              {timelineOpen ? 'Ocultar línea de tiempo' : 'Mostrar línea de tiempo'}
+            </button>
+          )}
           {workspaceActive && recoveryStatus && <p role="status" className="shrink-0 text-xs text-[var(--text-secondary)]">{recoveryStatus}</p>}
           {excludedTurns.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
             <button type="button" aria-expanded={trashOpen} aria-controls="studio-editorial-trash" onClick={() => { setTrashOpen(previous => !previous); setReviewCenterOpen(false); }}
@@ -3187,6 +3197,26 @@ export default function RoleplayStudioPage() {
           {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
+          {focusMode && timelineOpen && (segments.length > 0 || excludedTurns.length > 0) && (
+            <div id="studio-focused-timeline">
+              <FocusTimeline duration={duration} playhead={playhead} active={segments}
+                excluded={excludedTurns.map(entry => entry.turn)} selectedId={focusedTurn?.segment.id}
+                onSeek={seconds => { stopPreview(); stopPairPreview(); seekAudio(seconds); }}
+                onSelect={(id, excluded) => {
+                  if (excluded) {
+                    setTrashOpen(true);
+                    setReviewCenterOpen(false);
+                    setNotice('Corte excluido localizado. Continúa en la papelera para recuperarlo si lo necesitas.');
+                  } else {
+                    setTrashOpen(false);
+                    setReviewCenterOpen(false);
+                    setSegmentSearch('');
+                    setShowPendingReview(false);
+                    selectFocusedTurn(id);
+                  }
+                }}/>
+            </div>
+          )}
           {reviewCenterOpen && segments.length > 0 && (
             <section id="studio-review-center" aria-label="Centro de revisión editorial" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="text-sm font-semibold text-[var(--foreground)]">Incidencias de todo el proyecto</h3>
