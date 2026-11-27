@@ -3853,7 +3853,7 @@ export default function RoleplayStudioPage() {
             allowServerZipExport={allowServerZipExport} localOnly={localOnly} wavSource={wavSource}
             localMp3Eligible={localMp3Eligible} convertedMp3Bytes={convertedMp3 && convertedMp3.original === audio ? convertedMp3.wav.size : null}
             busy={busy} draftBusy={draftBusy} analyzingSilences={analyzingSilences}
-            activeProductionKeys={activeProductionKeys} readyAssignment={readyAssignment}
+            activeProductionKeys={activeProductionKeys} readyAssignment={readyAssignment ? { token: readyAssignment.token, partKey: readyAssignment.partKey } : null}
             onSelectPart={setPublicationPartKey} onSaveDraft={() => void saveDraft()}
             onDownloadPart={() => { if (selectedPublicationPart) void exportPackage(selectedPublicationPart); }}
             onChangeMode={mode => {
