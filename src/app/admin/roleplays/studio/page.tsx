@@ -15,7 +15,7 @@ import { availableStudioInterval } from '@/lib/roleplay-studio/available-interva
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
 import { STUDIO_RECOVERY_KEY, createStudioRecovery, openStudioRecovery } from '@/lib/roleplay-studio/recovery';
-import { studioReviewIssue, nextUnconfirmedTurn } from '@/lib/roleplay-studio/quick-review';
+import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
 import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -70,6 +70,8 @@ export default function RoleplayStudioPage() {
   const [segments, setSegments] = useState<Segment[]>([]);
   const [excludedTurns, setExcludedTurns] = useState<Array<{ turn: Segment; caption?: string }>>([]);
   const [trashOpen, setTrashOpen] = useState(false);
+  const [reviewCenterOpen, setReviewCenterOpen] = useState(false);
+  const [reviewCategory, setReviewCategory] = useState<'all' | 'unconfirmed' | StudioReviewCode>('all');
   // Confirmation belongs to this editing session, not to the published payload.
   const [confirmedTurns, setConfirmedTurns] = useState<ReadonlyMap<string, Segment>>(() => new Map());
   const [recoveryEnabled, setRecoveryEnabled] = useState(false);
@@ -574,6 +576,8 @@ export default function RoleplayStudioPage() {
     setSegments([]);
     setExcludedTurns([]);
     setTrashOpen(false);
+    setReviewCenterOpen(false);
+    setReviewCategory('all');
     setAdvancedTurnId(null);
     setConfirmedTurns(new Map());
     setCaptionTexts({});
@@ -1413,7 +1417,7 @@ export default function RoleplayStudioPage() {
         ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
         : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.') +
         (hasUnstoredDraftContext
-          ? ' Atención: el JSON no guarda la papelera editorial, referencias privadas de transcripción, turnos SRT sin aplicar ni sugerencias sin confirmar. Conserva los SRT/VTT originales para volver a importarlos.'
+          ? ' Atención: el JSON no guarda referencias privadas de transcripción, turnos SRT sin aplicar, sugerencias sin confirmar ni la papelera editorial. Conserva los SRT/VTT originales para volver a importarlos.'
           : ''));
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
@@ -1947,9 +1951,25 @@ export default function RoleplayStudioPage() {
     segment => segment.speakerRole === 'interpreter',
   ).length;
   const orderedSegments = [...segments].sort((a, b) => a.start - b.start);
-  const confirmedIds = useMemo(() => new Set(segments.filter(segment =>
-    confirmedTurns.get(segment.id) === segment && !studioReviewIssue(segment, segments, duration),
-  ).map(segment => segment.id)), [segments, confirmedTurns, duration]);
+  const reviewInspection = useMemo(() => inspectStudioReview(segments, duration), [segments, duration]);
+  const confirmedIds = useMemo(() => new Set(reviewInspection.filter(({ turn, findings }) =>
+    confirmedTurns.get(turn.id) === turn && findings.length === 0,
+  ).map(({ turn }) => turn.id)), [reviewInspection, confirmedTurns]);
+  const issueTurns = reviewInspection.filter(item => item.findings.length > 0);
+  const reviewEntries = reviewCategory === 'unconfirmed'
+    ? reviewInspection.filter(item => !confirmedIds.has(item.turn.id) && item.findings.length === 0)
+    : issueTurns.filter(item => reviewCategory === 'all' || item.findings.some(finding => finding.code === reviewCategory));
+  const readyUnconfirmedCount = reviewInspection.filter(item => !confirmedIds.has(item.turn.id) && !item.findings.length).length;
+  const reviewCategories: Array<{ code: StudioReviewCode; label: string }> = [
+    { code: 'interpreter', label: 'Intérprete original' },
+    { code: 'speaker', label: 'Hablante pendiente' },
+    { code: 'language', label: 'Idioma pendiente' },
+    { code: 'range', label: 'Límites de audio' },
+    { code: 'overlap', label: 'Solapamientos' },
+    { code: 'title', label: 'Títulos' },
+    { code: 'instructions', label: 'Instrucciones' },
+    { code: 'response', label: 'Tiempo de respuesta' },
+  ];
   const visibleSegments = orderedSegments
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => (!showPendingReview || (focusMode ? !confirmedIds.has(segment.id) : needsReview(segment))) &&
@@ -1970,7 +1990,21 @@ export default function RoleplayStudioPage() {
     setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
   };
 
-  const focusedReviewIssue = focusedTurn ? studioReviewIssue(focusedTurn.segment, segments, duration) : null;
+  const focusedReviewIssue = reviewInspection.find(item => item.turn.id === focusedTurn?.segment.id)?.findings[0]?.message ?? null;
+  const openReviewEntry = (id: string) => {
+    const entry = reviewInspection.find(item => item.turn.id === id);
+    if (!entry) return;
+    setSegmentSearch('');
+    setShowPendingReview(false);
+    setFocusMode(true);
+    setWorkspaceTab('edit');
+    setTrashOpen(false);
+    setReviewCenterOpen(false);
+    selectFocusedTurn(id);
+    if (entry.findings.some(finding => ['range', 'overlap', 'title', 'instructions', 'response'].includes(finding.code))) {
+      setAdvancedTurnId(id);
+    }
+  };
   const canConfirmFocused = Boolean(focusedTurn && !focusedReviewIssue && !busy && !draftBusy && !analyzingSilences);
   const confirmAndAdvance = () => {
     if (!focusedTurn || !canConfirmFocused) return;
@@ -3017,9 +3051,21 @@ export default function RoleplayStudioPage() {
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
           )}
+          {segments.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <button type="button" aria-expanded={reviewCenterOpen} aria-controls="studio-review-center"
+                onClick={() => { setReviewCenterOpen(previous => !previous); setTrashOpen(false); }}
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">
+                Centro de revisión ({issueTurns.length})
+              </button>
+              <span className="text-xs text-[var(--text-secondary)]">{issueTurns.length} con incidencias · {readyUnconfirmedCount} listas para confirmar</span>
+              {issueTurns.length > 0 && <button type="button" onClick={() => openReviewEntry(issueTurns[0].turn.id)}
+                className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Ir a primera incidencia</button>}
+            </div>
+          )}
           {workspaceActive && recoveryStatus && <p role="status" className="shrink-0 text-xs text-[var(--text-secondary)]">{recoveryStatus}</p>}
           {excludedTurns.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
-            <button type="button" aria-expanded={trashOpen} aria-controls="studio-editorial-trash" onClick={() => setTrashOpen(previous => !previous)}
+            <button type="button" aria-expanded={trashOpen} aria-controls="studio-editorial-trash" onClick={() => { setTrashOpen(previous => !previous); setReviewCenterOpen(false); }}
               className="shrink-0 self-start rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">Papelera editorial ({excludedTurns.length})</button>
           )}
           {focusMode && segments.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
@@ -3102,6 +3148,34 @@ export default function RoleplayStudioPage() {
           {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
+          {reviewCenterOpen && segments.length > 0 && (
+            <section id="studio-review-center" aria-label="Centro de revisión editorial" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">Incidencias de todo el proyecto</h3>
+              <p className="text-xs text-[var(--text-secondary)]">Incluye intervenciones ocultas por búsqueda o filtros. No modifica los cortes ni confirma automáticamente las voces.</p>
+              <label className="block text-xs text-[var(--text-secondary)]">Tipo de incidencia
+                <select value={reviewCategory} onChange={event => setReviewCategory(event.currentTarget.value as typeof reviewCategory)}
+                  className="mt-1 block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
+                  <option value="all">Todas las incidencias ({issueTurns.length})</option>
+                  {reviewCategories.map(category => <option key={category.code} value={category.code}>{category.label} ({issueTurns.filter(item => item.findings.some(finding => finding.code === category.code)).length})</option>)}
+                  <option value="unconfirmed">Listas para confirmar ({readyUnconfirmedCount})</option>
+                </select>
+              </label>
+              <div className="max-h-64 space-y-2 overflow-y-auto">
+                {reviewEntries.length === 0 && <p className="text-xs text-[var(--text-secondary)]">No hay intervenciones en esta categoría.</p>}
+                {reviewEntries.map(entry => <div key={entry.turn.id} className="rounded-md border border-[var(--border)] p-2">
+                  <button type="button" onClick={() => openReviewEntry(entry.turn.id)}
+                    aria-label={'Revisar intervención ' + entry.number}
+                    className="w-full break-words text-left text-sm font-semibold text-[var(--theme-link)]">
+                    #{entry.number} · {entry.turn.title}
+                  </button>
+                  <p className="text-xs text-[var(--text-secondary)]">{formatTime(entry.turn.start)}–{formatTime(entry.turn.end)}</p>
+                  {entry.findings.length ? <ul className="list-disc pl-4 text-xs text-[var(--theme-warning)]">
+                    {entry.findings.map(finding => <li key={finding.code}>{finding.message}</li>)}
+                  </ul> : <p className="text-xs text-[var(--text-secondary)]">Sin incidencias detectadas; requiere revisión humana.</p>}
+                </div>)}
+              </div>
+            </section>
+          )}
           {trashOpen && excludedTurns.length > 0 && <section id="studio-editorial-trash" aria-label="Intervenciones excluidas" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">Intervenciones excluidas</h3>
             <p className="text-xs text-[var(--text-secondary)]">No forman parte del roleplay publicable. Recupera un corte si es compatible con los tiempos actuales. El respaldo local opcional conserva la papelera (hasta 100 cortes) sin referencias privadas. Si un corte es inválido o el respaldo supera su tamaño máximo, se conserva el último respaldo válido.</p>
