@@ -10,6 +10,7 @@ import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
+import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guard';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
@@ -494,6 +495,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const handleCreate = async () => {
     if (createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    if (!confirmRoleplayCreationRetry(submissionUncertain, Boolean(directAttempt.current), message => window.confirm(message))) return;
     const trackedToken = importedTransfer && trackedImportRevision.current === importRevision.current ? importedTransfer : null;
     if (directAttempt.current || useDirectUpload) {
       createPending.current = true;
@@ -518,6 +520,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         directAbort.current=controller;
         recordProductionAttempt(trackedToken, 'unconfirmed');
         const result=await directAttempt.current.run({signal:controller.signal,onProgress:setDirectProgress});
+        setSubmissionUncertain(false);
         recordProductionAttempt(trackedToken, 'created');
         setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete'});
       } catch {
@@ -545,7 +548,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
     setIsCreating(true);
     setError(null);
-    setSubmissionUncertain(false);
+    // Preserve an earlier uncertain result until a successful creation.
+    // A later rejection does not establish that the previous request rolled back.
 
     try {
       const formData = new FormData();
@@ -647,6 +651,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
+      setSubmissionUncertain(false);
       recordProductionAttempt(trackedToken, 'created');
       if (payload.bulk) {
         setSuccess({
