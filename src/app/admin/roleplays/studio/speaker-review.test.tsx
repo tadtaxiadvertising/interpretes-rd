@@ -284,6 +284,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.play).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Sin confirmar (1)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Anterior intervención' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustes avanzados' }));
     fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Título modificado' } });
     expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('0/2');
     fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Enter', ctrlKey: true });
@@ -291,6 +292,62 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.keyDown(confirm(), { key: 'Enter', ctrlKey: true });
     expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/2');
     expect(screen.getByText('Intervención 2 de 2 · 2 de 2 visibles')).toBeTruthy();
+  });
+
+  it('prioritizes private captions and classification, with advanced controls collapsed per turn', async () => {
+    const player = selectAudio();
+    const subtitle = new File(['mock'], 'review.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitle, 'text', { value: async () => [
+      '1', '00:00:00,000 --> 00:00:02,000', 'Doctor: Hello', '',
+      '2', '00:00:02,000 --> 00:00:04,000', 'Paciente: Hola',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitle] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    const profile = screen.getByLabelText('Perfil del hablante');
+    expect(profile.closest('[hidden]')).toBeNull();
+    expect(screen.getByText('Doctor: Hello').compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Marcar inicio actual' })).toBeNull();
+    expect(screen.getByLabelText('Título').closest('[hidden]')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ajustes avanzados' }));
+    expect(screen.getByRole('button', { name: 'Marcar inicio actual' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Dividir intervención 1/ })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente intervención' }));
+    expect(screen.getByRole('button', { name: 'Ajustes avanzados' }).getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('button', { name: 'Marcar inicio actual' })).toBeNull();
+    expect(player.play).not.toHaveBeenCalled();
+  });
+
+  it('excludes the active turn, advances chronologically and restores its private reference on undo', async () => {
+    const player = selectAudio();
+    const subtitle = new File(['mock'], 'exclude.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitle, 'text', { value: async () => [
+      '1', '00:00:00,000 --> 00:00:02,000', 'Doctor: First', '',
+      '2', '00:00:02,000 --> 00:00:04,000', 'Paciente: Second', '',
+      '3', '00:00:04,000 --> 00:00:06,000', 'Doctor: Third',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitle] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[1].value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir y avanzar' }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Doctor: Third')).toBeTruthy();
+    expect(screen.queryByText('Paciente: Second')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer eliminación de intervención' }));
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    expect(screen.getByText('Paciente: Second')).toBeTruthy();
+    expect(player.isConnected).toBe(true);
+    expect(player.play).not.toHaveBeenCalled();
   });
 
   it('edits one intervention at a time in focus mode and preserves edits on navigation', () => {
