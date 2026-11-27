@@ -68,7 +68,8 @@ export function detectLocalSpeech(
     const endSample=Math.min(length,range.end*frame+post);
     return {
       start:Number((startSample/sampleRate).toFixed(3)),
-      end:Number((endSample/sampleRate).toFixed(3)),
+      // Millisecond rounding must not push a valid final segment past EOF.
+      end:Math.min(totalSeconds,Number((endSample/sampleRate).toFixed(3))),
       signalLevel:Number(clamp(rms.slice(range.start,range.end).reduce((a,b)=>a+b,0)/
         Math.max(1,range.end-range.start)/(threshold*2),0,1).toFixed(3)),
     };
