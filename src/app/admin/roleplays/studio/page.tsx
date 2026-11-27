@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStudioPlayback } from './useStudioPlayback';
+import { focusStudioIntervention, isStudioShortcutTarget } from './studio-editor-focus';
 import Link from 'next/link';
 import { readAudioStudioEditorPreferences } from '@/app/actions/audio-studio-settings';
 import { ArrowLeft, AudioLines, Plus } from 'lucide-react';
@@ -263,17 +264,13 @@ export default function RoleplayStudioPage() {
   // has been rendered again. No media file is read or uploaded by this action.
   useEffect(() => {
     if (!invalidExportTurn) return;
-    const article = document.getElementById(`studio-intervention-${invalidExportTurn.id}`);
-    article?.focus({ preventScroll: true });
-    if (!focusMode) article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    focusStudioIntervention(invalidExportTurn.id, !focusMode);
   }, [invalidExportTurn]);
   // Navigating the review queue changes only focus and the open editor.
   // It never seeks, plays, uploads, or alters intervention content.
   useEffect(() => {
     if (!reviewFocusRequest) return;
-    const article = document.getElementById(`studio-intervention-${reviewFocusRequest.id}`);
-    article?.focus({ preventScroll: true });
-    if (!focusMode) article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    focusStudioIntervention(reviewFocusRequest.id, !focusMode);
   }, [reviewFocusRequest]);
   const [turnActionFeedback, setTurnActionFeedback] = useState<{
     id: string; message: string; error: boolean;
@@ -2208,6 +2205,9 @@ export default function RoleplayStudioPage() {
       ? direction === 1 ? 0 : visiblePendingTurns.length - 1
       : (currentIndex + direction + visiblePendingTurns.length) % visiblePendingTurns.length;
     const next = visiblePendingTurns[index].segment;
+    // Pending navigation is available in the finalization header too.
+    // Reveal the editor before the review-focus effect runs.
+    setWorkspaceTab('edit');
     setExpandedSegmentId(next.id);
     setReviewFocusRequest({ id: next.id, attempt: ++reviewFocusAttempt.current });
   };
@@ -2282,7 +2282,7 @@ export default function RoleplayStudioPage() {
     <main data-studio-workspace={workspaceActive ? "active" : undefined} className={workspaceActive ? undefined : "space-y-4"}
       onKeyDown={event => {
         if (!focusMode || (workspaceActive && workspaceTab !== 'edit') || event.defaultPrevented || event.repeat || event.nativeEvent.isComposing ||
-            !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+            !isStudioShortcutTarget(event.target)) return;
         if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
           const redo = event.shiftKey || event.key.toLowerCase() === 'y';
           if (redo ? nextStructuralEdit : lastStructuralEdit) { event.preventDefault(); applyEditorialHistory(redo ? 'redo' : 'undo'); }
