@@ -246,14 +246,18 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     rerender(<StudioWaveform
       file={second} duration={3} currentTime={0} segments={[]}
       onSeek={vi.fn()} onLocalVadResult={notify}/>);
-    await waitFor(() => {
-      expect(notify).toHaveBeenCalledWith(second, { status: 'unavailable', segments: [] });
-    });
+    expect(notify).toHaveBeenCalledWith(second, { status: 'loading', segments: [] });
+    expect(decode).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
     release?.({
       duration: 3, sampleRate: 16000, numberOfChannels: 1,
       getChannelData: () => new Float32Array(16000 * 3),
     });
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(second, { status: 'unavailable', segments: [] });
+      expect(close).toHaveBeenCalledTimes(2);
+    });
+    expect(decode).toHaveBeenCalledTimes(2);
     expect(notify.mock.calls.some(([source, result]) =>
       source === first && result.status === 'ready')).toBe(false);
   });
