@@ -2227,6 +2227,7 @@ export default function RoleplayStudioPage() {
   const canConfirmFocused = Boolean(focusedTurn && !focusedReviewIssue && !busy && !draftBusy && !analyzingSilences);
   const confirmAndAdvance = () => {
     if (!focusedTurn || !canConfirmFocused) return;
+    editGroup.current = null;
     const current = focusedTurn.segment;
     const confirmed = new Set(confirmedIds);
     confirmed.add(current.id);
@@ -2275,7 +2276,7 @@ export default function RoleplayStudioPage() {
     setNotice('Intervención recuperada. Revisa el corte antes de confirmar.');
   };
   const discardExcluded = (id: string) => {
-    if (!window.confirm('¿Eliminar definitivamente este corte de la papelera? La grabación original permanece intacta.')) return;
+    if (!window.confirm('¿Eliminar definitivamente este corte de la papelera? También se limpiará el historial de deshacer y rehacer. La grabación original permanece intacta.')) return;
     subtitleImportRevision.current += 1;
     setExcludedTurns(previous => previous.filter(item => item.turn.id !== id));
     clearEditorialHistory();
