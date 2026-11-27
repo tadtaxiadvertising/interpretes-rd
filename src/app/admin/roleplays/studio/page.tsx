@@ -1413,7 +1413,7 @@ export default function RoleplayStudioPage() {
         ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
         : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.') +
         (hasUnstoredDraftContext
-          ? ' Atención: el JSON no guarda referencias privadas de transcripción, turnos SRT sin aplicar ni sugerencias sin confirmar. Conserva los SRT/VTT originales para volver a importarlos.'
+          ? ' Atención: el JSON no guarda la papelera editorial, referencias privadas de transcripción, turnos SRT sin aplicar ni sugerencias sin confirmar. Conserva los SRT/VTT originales para volver a importarlos.'
           : ''));
     } catch (cause) {
       if (revision === subtitleImportRevision.current) {
@@ -3104,7 +3104,7 @@ export default function RoleplayStudioPage() {
           <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
           {trashOpen && excludedTurns.length > 0 && <section id="studio-editorial-trash" aria-label="Intervenciones excluidas" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
             <h3 className="text-sm font-semibold text-[var(--foreground)]">Intervenciones excluidas</h3>
-            <p className="text-xs text-[var(--text-secondary)]">No forman parte del roleplay publicable. Recupera un corte si es compatible con los tiempos actuales. El respaldo local opcional conserva los cortes válidos, sin sus referencias privadas.</p>
+            <p className="text-xs text-[var(--text-secondary)]">No forman parte del roleplay publicable. Recupera un corte si es compatible con los tiempos actuales. El respaldo local opcional conserva la papelera (hasta 100 cortes) sin referencias privadas. Si un corte es inválido o el respaldo supera su tamaño máximo, se conserva el último respaldo válido.</p>
             <div className="max-h-64 space-y-2 overflow-y-auto">
               {excludedTurns.map(({ turn }) => {
                 const issue = restoreExcludedIssue(turn, segments, duration, editorLimit);
