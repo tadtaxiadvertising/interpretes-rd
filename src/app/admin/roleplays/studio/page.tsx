@@ -2017,6 +2017,8 @@ export default function RoleplayStudioPage() {
       setError('El audio original solo está disponible para transcripciones completadas con el estado automatic_done.');
       return;
     }
+    const expiry = happyScribeProofExpiry(item.importProof);
+    if (expiry !== null && expiry <= Date.now()) { setError('La autorización de esta transcripción caducó. Pulsa «Renovar selección» antes de importar.'); return; }
     const previousAudio = activeAudioFile.current;
     const revisionAtRequest = subtitleImportRevision.current;
     // Ask BEFORE transferring up to 250 MiB, not after the bandwidth is spent.
@@ -2684,6 +2686,43 @@ export default function RoleplayStudioPage() {
             </div>
           )}
           {happyScribeItems.length > 0 && (
+            <section aria-label="Buscar en biblioteca de HappyScribe" className="mt-3 space-y-2">
+              <p className="text-xs text-[var(--text-secondary)]">Busca entre las transcripciones cargadas por nombre, carpeta o idioma. Para buscar en otras páginas del espacio, pulsa «Cargar más transcripciones (50)». Los filtros no consultan al proveedor.</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <label className="space-y-1 text-xs text-[var(--text-secondary)]">Buscar transcripciones
+                  <input type="search" value={happyScribeQuery} maxLength={240} onChange={event => { setHappyScribeQuery(event.currentTarget.value); setHappyScribeResultIndex(0); }}
+                    placeholder="Nombre, carpeta o idioma" className="block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]"/>
+                </label>
+                <label className="space-y-1 text-xs text-[var(--text-secondary)]">Idioma de HappyScribe
+                  <select value={happyScribeLanguage} onChange={event => { setHappyScribeLanguage(event.currentTarget.value); setHappyScribeResultIndex(0); }}
+                    className="block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]">
+                    <option value="">Todos los idiomas</option>
+                    {happyScribeLanguages.map(language => <option key={language}>{language}</option>)}
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs text-[var(--text-secondary)]">Carpeta de HappyScribe
+                  <select value={happyScribeFolder} onChange={event => { setHappyScribeFolder(event.currentTarget.value); setHappyScribeResultIndex(0); }}
+                    className="block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]">
+                    <option value="">Todas las carpetas</option>
+                    {happyScribeFolders.map(folder => <option key={folder}>{folder}</option>)}
+                  </select>
+                </label>
+                <label className="flex items-center gap-2 text-sm text-[var(--foreground)]">
+                  <input type="checkbox" checked={happyScribeReadyOnly} onChange={event => { setHappyScribeReadyOnly(event.currentTarget.checked); setHappyScribeResultIndex(0); }}/>
+                  Solo transcripciones completadas
+                </label>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span aria-live="polite">{happyScribeFiltered.length} coincidencias · página de resultados {happyScribeResults.index+1}/{happyScribeResults.pages}</span>
+                <button type="button" className="theme-action-secondary rounded px-2 py-1 disabled:opacity-50" disabled={happyScribeResults.index===0} onClick={() => setHappyScribeResultIndex(happyScribeResults.index-1)}>Resultados anteriores</button>
+                <button type="button" className="theme-action-secondary rounded px-2 py-1 disabled:opacity-50" disabled={happyScribeResults.index+1>=happyScribeResults.pages} onClick={() => setHappyScribeResultIndex(happyScribeResults.index+1)}>Resultados siguientes</button>
+                <button type="button" onClick={resetHappyScribeFilters} className="theme-action-secondary rounded px-2 py-1">Limpiar filtros</button>
+              </div>
+              {happyScribeFiltered.length===0 && <p className="text-xs text-[var(--text-secondary)]">{happyScribeHasMore ? 'Sin coincidencias en las páginas cargadas. Puedes cargar otra página sin perder los filtros.' : 'Sin coincidencias. Prueba otros filtros.'}</p>}
+              {happyScribeResults.pinned && <p className="text-xs text-[var(--theme-warning)]">La selección actual está fuera de estos resultados. Se conserva para evitar cambiar de grabación accidentalmente.</p>}
+            </section>
+          )}
+          {happyScribeItems.length > 0 && (
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
               <select aria-label="Transcripción de HappyScribe"
                 disabled={happyScribeImporting || happyScribeLoading}
@@ -2700,8 +2739,9 @@ export default function RoleplayStudioPage() {
                 }}
                 className="min-w-0 flex-1 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]">
                 <option value="">Selecciona una transcripción</option>
-                {happyScribeItems.map(item => (
-                  <option key={item.id} value={item.id} disabled={!['automatic_done', 'done'].includes(item.state)}>
+                {happyScribeResults.pinned && <option value={happyScribeResults.pinned.id}>Selección actual: {happyScribeResults.pinned.name}</option>}
+                {happyScribeResults.results.map(item => (
+                  <option key={item.id} value={item.id} disabled={!happyScribeReady(item)}>
                     {item.name} · {item.state} · {item.language || 'Idioma desconocido'}
                   </option>
                 ))}
@@ -2742,6 +2782,15 @@ export default function RoleplayStudioPage() {
                   Cancelar transcripción
                 </button>
               )}
+            </div>
+          )}
+          {happyScribeSelection && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] p-2 text-xs text-[var(--text-secondary)]">
+              <span className="font-medium text-[var(--foreground)]">{happyScribeSelection.name}</span>
+              <span>{happyScribeSelection.folder || 'Sin carpeta'} · {happyScribeSelection.language || 'Idioma desconocido'} · {happyScribeSelection.durationSeconds === null ? 'Duración desconocida' : formatTime(happyScribeSelection.durationSeconds)}</span>
+              <button type="button" disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
+                onClick={() => { const page = happyScribeOrigins.current.get(happyScribeSelection.id); if (page !== undefined) void loadHappyScribeItems(page, happyScribeSelection.id); }}
+                className="theme-action-secondary rounded px-2 py-1 font-semibold disabled:opacity-50">Renovar selección</button>
             </div>
           )}
           {happyScribeItems.length > 0 && (
