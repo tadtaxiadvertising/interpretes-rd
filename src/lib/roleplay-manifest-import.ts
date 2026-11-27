@@ -1,4 +1,4 @@
-import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { adaptExternalAudioStudioManifest } from '@/lib/roleplay-external-studio-manifest';
 
 export interface ImportedRoleplayScenario {
@@ -102,8 +102,8 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
   if (!isRecord(raw) || !Array.isArray(raw.segments)) {
     throw new Error('El manifiesto no contiene un arreglo de segmentos.');
   }
-  if (raw.segments.length < 1 || raw.segments.length > ROLEPLAY_MAX_SCENARIOS) {
-    throw new Error(`El manifiesto debe contener entre 1 y ${ROLEPLAY_MAX_SCENARIOS} segmentos.`);
+  if (raw.segments.length < 1 || raw.segments.length > ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS) {
+    throw new Error(`El manifiesto debe contener entre 1 y ${ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS} segmentos.`);
   }
   if (!raw.segments.every(isValidSegment)) {
     throw new Error('El manifiesto contiene campos inválidos de título, audio, orden o duración.');
