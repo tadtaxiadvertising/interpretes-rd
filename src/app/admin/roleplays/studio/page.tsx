@@ -33,6 +33,7 @@ import {
 import StudioWaveform from './StudioWaveform';
 import HappyScribeLibraryPanel from './HappyScribeLibraryPanel';
 import StudioFinalizationPanel from './StudioFinalizationPanel';
+import StudioFocusNavigation from './StudioFocusNavigation';
 import { emptyStudioHistory, rememberStudioEdit, stepStudioHistory, mapStudioHistory, STUDIO_HISTORY_LIMIT, type StudioHistory } from '@/lib/roleplay-studio/editorial-history';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
@@ -3284,75 +3285,21 @@ export default function RoleplayStudioPage() {
             </p>
           )}
           {focusMode && focusedTurn && (!workspaceActive || workspaceTab === 'edit') && (
-            <nav aria-label="Navegador de intervenciones" className={`flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 ${workspaceActive ? '' : 'md:sticky md:top-0 md:z-10'}`}>
-              <button type="button" disabled={focusIndex === 0}
-                onClick={() => selectFocusedTurn(visibleSegments[focusIndex - 1].segment.id)}
-                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
-                Anterior intervención
-              </button>
-              <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
-                Ir a intervención
-                <select value={focusedTurn.segment.id} onChange={event => selectFocusedTurn(event.currentTarget.value)}
-                  className="mt-1 block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
-                  {visibleSegments.map(({ segment, index }) => (
-                    <option key={segment.id} value={segment.id}>#{index + 1} · {segment.title}</option>
-                  ))}
-                </select>
-              </label>
-              <button type="button" disabled={focusIndex === visibleSegments.length - 1}
-                onClick={() => selectFocusedTurn(visibleSegments[focusIndex + 1].segment.id)}
-                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">
-                Siguiente intervención
-              </button>
-              <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
-                Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
-              </p>
-              <div className="flex basis-full flex-wrap items-center gap-2">
-                <button type="button" disabled={!canConfirmFocused} onClick={confirmAndAdvance}
-                  aria-keyshortcuts="Control+Enter Meta+Enter"
-                  className="rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Confirmar y avanzar</button>
-                <button type="button" onClick={() => removeIntervention(focusedTurn.segment.id, true)}
-                  disabled={busy || draftBusy || analyzingSilences}
-                  className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--theme-danger)] disabled:opacity-50">Excluir y avanzar</button>
-                <span className="text-xs text-[var(--text-secondary)]">
-                  {focusedReviewIssue ?? (confirmedIds.has(focusedTurn.segment.id) ? 'Confirmada' : 'Lista para revisión')} · Ctrl/⌘ + Enter
-                </span>
-              </div>
-              {focusedTurn.segment.sourceSpeakerGroup && <p className="text-xs text-[var(--text-secondary)]">Etiqueta de origen: {focusedTurn.segment.sourceSpeakerGroup}. Escucha y confirma la voz antes de aplicar el perfil a otros turnos.</p>}
-              {sourceProfileCount > 0 && (
-                <button type="button" onClick={() => applySourceSpeakerProfile(focusedTurn.segment.id)}
-                  disabled={busy || draftBusy || analyzingSilences}
-                  className="rounded-lg theme-action-secondary px-3 py-2 text-xs font-semibold">
-                  Aplicar perfil a {sourceProfileCount} turnos de la misma etiqueta
-                </button>
-              )}
-              <div role="group" aria-label="Reproducción en modo enfoque" className="flex basis-full flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
-                <button type="button" onClick={() => previewSegment(focusedTurn.segment)}
-                  aria-pressed={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
-                  className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
-                  {previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id
-                    ? 'Detener fragmento activo' : 'Escuchar intervención activa'}
-                </button>
-                <button type="button" onClick={() => { stopPreview(); stopPairPreview(); }}
-                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">
-                  Pausar audio
-                </button>
-                <button type="button" aria-label="Retroceder audio 5 segundos"
-                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) - 5)}
-                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">−5 s</button>
-                <button type="button" aria-label="Avanzar audio 5 segundos"
-                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) + 5)}
-                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">+5 s</button>
-                <label className="flex min-w-32 flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
-                  <span className="shrink-0 tabular-nums">{formatTime(playhead)}</span>
-                  <input type="range" aria-label="Posición de grabación en modo enfoque" min={0} max={duration}
-                    step={0.1} value={Math.min(duration, Math.max(0, playhead))}
-                    onChange={event => seekAudio(event.currentTarget.valueAsNumber)}
-                    className="min-w-0 flex-1 accent-blue-500"/>
-                  <span className="shrink-0 tabular-nums">{formatTime(duration)}</span>
-                </label>
-              </div>
-            </nav>
+            <StudioFocusNavigation visibleSegments={visibleSegments} focusedTurn={focusedTurn}
+              focusIndex={focusIndex} totalTurns={segments.length} workspaceActive={workspaceActive}
+              canConfirmFocused={canConfirmFocused} editingDisabled={busy || draftBusy || analyzingSilences}
+              confirmed={confirmedIds.has(focusedTurn.segment.id)} focusedReviewIssue={focusedReviewIssue}
+              sourceProfileCount={sourceProfileCount}
+              previewActive={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
+              playhead={playhead} duration={duration}
+              onSelect={selectFocusedTurn} onConfirm={confirmAndAdvance}
+              onExclude={() => removeIntervention(focusedTurn.segment.id, true)}
+              onApplyProfile={() => applySourceSpeakerProfile(focusedTurn.segment.id)}
+              onPreview={() => previewSegment(focusedTurn.segment)}
+              onPause={() => { stopPreview(); stopPairPreview(); }}
+              onSkip={seconds => seekAudio((player.current?.currentTime ?? playhead) + seconds)}
+              onSeek={seekAudio}
+            />
           )}
           <div ref={workspaceContent} className={workspaceActive ? 'min-h-0 space-y-3 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-1' : 'space-y-3'}>
           {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
