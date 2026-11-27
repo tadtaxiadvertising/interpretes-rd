@@ -523,6 +523,8 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByText(/Actividad de voz en este equipo/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Detectar pausas en servidor/i })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    expect(screen.getByRole('button', { name: /Habilitar procesamiento local MP3/i })).toBeTruthy();
+    expect(screen.getByText('Alternativa: guardar JSON y usar el exportador de escritorio').closest('details')?.open).toBe(false);
     const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: /Descargar plan local de cortes/i }));
