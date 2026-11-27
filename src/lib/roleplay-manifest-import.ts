@@ -35,11 +35,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isValidSegment(value: unknown): value is ManifestSegment {
+function isValidSegment(value: unknown, localWav: boolean): value is ManifestSegment {
   if (!isRecord(value)) return false;
   if (typeof value.order !== 'number' || !Number.isSafeInteger(value.order) || value.order < 0) return false;
   if (typeof value.title !== 'string' || !value.title.trim() || value.title.length > 200) return false;
-  if (typeof value.file !== 'string' || !/^[a-zA-Z0-9_.-]+\.mp3$/i.test(value.file)) return false;
+  if (typeof value.file !== 'string' || !(localWav ? /^segment-\d{2}\.wav$/ : /^[a-zA-Z0-9_.-]+\.mp3$/i).test(value.file)) return false;
   if (value.size_bytes !== undefined && (typeof value.size_bytes !== 'number' || !Number.isSafeInteger(value.size_bytes) || value.size_bytes <= 0)) return false;
   if (value.sha256 !== undefined && (typeof value.sha256 !== 'string' || !/^[0-9a-f]{64}$/i.test(value.sha256))) return false;
   if (value.duration_limit_sec !== undefined && (typeof value.duration_limit_sec !== 'number' || !Number.isSafeInteger(value.duration_limit_sec) || value.duration_limit_sec < 0 || value.duration_limit_sec > ROLEPLAY_RESPONSE_MAX_DURATION_SEC)) return false;
@@ -63,7 +63,8 @@ function bytesToHex(buffer: ArrayBuffer): string {
  * state until every file, order, checksum and title has passed validation.
  * A checksum mismatch fails closed; publication is never attempted here.
  */
-export async function prepareRoleplayManifestImport(files: File[]): Promise<ImportedRoleplayScenario[]> {
+export async function prepareRoleplayManifestImport(files: File[], options?: { localWav: true }): Promise<ImportedRoleplayScenario[]> {
+  const localWav = options?.localWav === true;
   // A provider transcript is not a roleplay package. Reject it without reading
   // private Markdown content or attempting to infer missing audio/timestamps.
   if (files.some(file => /\.md$/i.test(file.name))) {
@@ -94,7 +95,9 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
   // its individual MP3 clips become scenarios; speaker tracks/master audio
   // are ignored and texts/notes/names never enter candidate-visible fields.
   let audioFiles = files.filter((file) => file !== manifests[0]);
-  if (isRecord(raw) && Object.prototype.hasOwnProperty.call(raw, 'roleplayAudioStudioVersion')) {
+  if (localWav && (!isRecord(raw) || raw.version !== 1 || raw.generator !== 'interpretes-rd-local-wav' ||
+      files.reduce((sum,file)=>sum+file.size,0)>16*1024*1024)) throw new Error('Paquete WAV local inválido.');
+  if (!localWav && isRecord(raw) && Object.prototype.hasOwnProperty.call(raw, 'roleplayAudioStudioVersion')) {
     const translated = adaptExternalAudioStudioManifest(raw, audioFiles);
     raw = { segments: translated.segments };
     audioFiles = translated.audioFiles;
@@ -105,7 +108,7 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
   if (raw.segments.length < 1 || raw.segments.length > ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS) {
     throw new Error(`El manifiesto debe contener entre 1 y ${ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS} segmentos.`);
   }
-  if (!raw.segments.every(isValidSegment)) {
+  if (!raw.segments.every(segment => isValidSegment(segment, localWav) && (!localWav || (segment.sha256 !== undefined && segment.size_bytes !== undefined)))) {
     throw new Error('El manifiesto contiene campos inválidos de título, audio, orden o duración.');
   }
 
@@ -116,7 +119,7 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
 
   const byName = new Map<string, File>();
   for (const audio of audioFiles) {
-    if (!/\.mp3$/i.test(audio.name) || !['', 'audio/mpeg', 'audio/mp3'].includes(audio.type)) {
+    if (localWav ? (!/^segment-\d{2}\.wav$/.test(audio.name) || audio.type !== 'audio/wav') : (!/\.mp3$/i.test(audio.name) || !['', 'audio/mpeg', 'audio/mp3'].includes(audio.type))) {
       throw new Error(`Archivo no permitido: ${audio.name}. Solo se admiten MP3.`);
     }
     if (audio.size < 1 || audio.size > MAX_AUDIO_SIZE) {
@@ -153,7 +156,7 @@ export async function prepareRoleplayManifestImport(files: File[]): Promise<Impo
     }
     result.push({
       title: segment.title.trim(),
-      baseAudioFile: audio.type === 'audio/mpeg' ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
+      baseAudioFile: localWav || audio.type === 'audio/mpeg' ? audio : new File([audio], audio.name, { type: 'audio/mpeg' }),
       durationLimitSec: segment.duration_limit_sec ?? 0,
       scriptPrompt: segment.script_prompt ?? '',
       ...(segment.studio_turn !== undefined ? { studioTurn: segment.studio_turn } : {}),
