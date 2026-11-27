@@ -166,3 +166,21 @@ test('historical roleplay creation ledger stays immutable and hardening stays st
   assert.match(workflow, /npx tsx scripts\/verify-roleplay-creation-ledger-postgres\.ts/);
   assert.doesNotMatch(workflow, /(?:npm run migrate|prisma migrate deploy)[^\n]*roleplay.creation.requests/i);
 });
+
+
+test('creation ledger operator inspection is read-only and never runs in production deployment', () => {
+  const inspector = readFileSync(resolve(root, 'scripts/inspect-roleplay-creation-ledger.ts'), 'utf8');
+  const catalog = readFileSync(resolve(root, 'scripts/roleplay-creation-ledger-catalog.ts'), 'utf8');
+  assert.match(inspector, /BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/);
+  assert.match(inspector, /ROLLBACK/);
+  assert.match(inspector, /--check-only/);
+  assert.match(inspector, /--require-hardened/);
+  assert.match(inspector, /normalizeDirectDatabaseUrl/);
+  assert.match(inspector, /createDatabasePoolConfig/);
+  for (const script of [inspector, catalog]) {
+    assert.doesNotMatch(script, /(?:INSERT INTO|DELETE FROM|UPDATE public\.|ALTER TABLE|CREATE TABLE|DROP TABLE)\s*public\./i);
+    assert.doesNotMatch(script, /FROM\s+public\.roleplay_creation_requests\b/i);
+  }
+  const workflow = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
+  assert.doesNotMatch(workflow, /inspect-roleplay-creation-ledger\.ts/);
+});
