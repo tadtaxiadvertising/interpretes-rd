@@ -52,7 +52,8 @@ export async function prepareLocalWavAssignment(
   const entries=[];
   for(const [index,{turn,slices,bytes}] of plans.entries()){
     signal.throwIfAborted();
-    const header=view.buffer.slice(0);
+    const header=new ArrayBuffer(HEADER);
+    new Uint8Array(header).set(new Uint8Array(view.buffer,view.byteOffset,HEADER));
     const out=new DataView(header);
     out.setUint32(4,bytes+36,true);out.setUint32(40,bytes,true);
     const pieces=slices.map(r=>source.slice(HEADER+r.start*alignment,HEADER+r.end*alignment));
