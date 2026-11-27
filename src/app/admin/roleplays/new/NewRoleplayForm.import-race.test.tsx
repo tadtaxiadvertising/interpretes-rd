@@ -6,7 +6,7 @@ import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import NewRoleplayForm from './NewRoleplayForm';
-import { stageStudioHandoff, peekStudioHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
+import { stageStudioHandoff, peekStudioHandoff, stageLocalWavHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
@@ -67,6 +67,25 @@ describe('Admin roleplay import concurrency', () => {
     expect(screen.getByText('Desde Studio')).toBeTruthy();
     expect(screen.getByText(/Paquete de Audio Studio verificado/)).toBeTruthy();
     expect(peekStudioHandoff('test-transfer')).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('imports local WAV cuts without a ZIP reader or automatic publication', async () => {
+    const manifest = new File(['{}'], 'manifest.json', { type: 'application/json' });
+    const audio = new File(['x'.repeat(48)], 'segment-01.wav', { type: 'audio/wav' });
+    stageLocalWavHandoff('local-wav', [manifest, audio]);
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce([{
+      title: 'Corte local', baseAudioFile: audio, durationLimitSec: 120,
+      scriptPrompt: '', studioLanguage: 'en', studioTurn: 1, sha256: 'a'.repeat(64),
+    }]);
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await act(async () => { render(<NewRoleplayForm interpreters={[]} candidates={[]} studioTransfer="local-wav" />); });
+    expect(prepareRoleplayManifestImport).toHaveBeenCalledWith([manifest, audio], { localWav: true });
+    expect(extractStudioZip).not.toHaveBeenCalled();
+    expect(extractExternalStudioZip).not.toHaveBeenCalled();
+    expect(screen.getByText('Corte local')).toBeTruthy();
+    expect(peekLocalWavHandoff('local-wav')).toBeNull();
     expect(fetcher).not.toHaveBeenCalled();
   });
 
