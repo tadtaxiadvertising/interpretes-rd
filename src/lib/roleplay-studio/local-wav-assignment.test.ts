@@ -86,6 +86,25 @@ describe('local PCM assignment',()=>{
     expect(parts.flatMap(p=>p.turns.map(t=>t.id))).toEqual(Array.from({length:100},(_,i)=>String(i)));
     await expect(planLocalWavParts(wave(100,48000,2),[{...turn,id:'large',start:0,end:90}],signal())).rejects.toThrow(/Intervención 1.*15 MiB/);
   });
+  it('skips padded auxiliary RIFF chunks and exports identical selected samples',async()=>{
+    const original=await wave().arrayBuffer();
+    const data=new Uint8Array(original.byteLength+12);
+    data.set(new Uint8Array(original,0,36));
+    data.set(new TextEncoder().encode('JUNK'),36);
+    const view=new DataView(data.buffer);
+    view.setUint32(40,3,true);
+    data.set([9,8,7,0],44);
+    data.set(new Uint8Array(original,36),48);
+    view.setUint32(4,data.length-8,true);
+    const source=new File([data],'metadata.wav',{type:'audio/wav'});
+    const expected=await prepareLocalWavAssignment(wave(),[turn],signal());
+    const actual=await prepareLocalWavAssignment(source,[turn],signal());
+    expect(new Uint8Array(await actual[1].arrayBuffer())).toEqual(new Uint8Array(await expected[1].arrayBuffer()));
+    const parts=await planLocalWavParts(source,[{...turn,id:'a'}],signal());
+    expect(parts[0].bytes).toBe(actual.reduce((sum,file)=>sum+file.size,0));
+    view.setUint32(40,0xffffffff,true);
+    await expect(prepareLocalWavAssignment(new File([data],'invalid.wav'),[turn],signal())).rejects.toThrow(/RIFF/);
+  });
   it('rejects tampered audio during manifest import',async()=>{
     const files=await prepareLocalWavAssignment(wave(),[turn],signal());
     const changed=await files[1].arrayBuffer();new Uint8Array(changed)[45]^=1;

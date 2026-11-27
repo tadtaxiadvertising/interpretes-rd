@@ -6,27 +6,41 @@ import type { StudioPublicationPart } from './publication-parts';
 
 const HEADER = 44;
 const tag = (view: DataView, offset: number) => String.fromCharCode(...Array.from({length:4}, (_, i) => view.getUint8(offset+i)));
-function readHeader(bytes: ArrayBuffer, size: number) {
-  if (bytes.byteLength !== HEADER) throw new Error('WAV incompleto.');
-  const view = new DataView(bytes);
-  const channels = view.getUint16(22,true), rate = view.getUint32(24,true), alignment = view.getUint16(32,true);
-  const dataBytes = view.getUint32(40,true);
-  if (tag(view,0)!=='RIFF' || tag(view,8)!=='WAVE' || tag(view,12)!=='fmt ' || tag(view,36)!=='data' ||
-      view.getUint32(16,true)!==16 || view.getUint16(20,true)!==1 || view.getUint16(34,true)!==16 ||
-      ![1,2].includes(channels) || rate<8000 || rate>48000 || alignment!==channels*2 ||
-      view.getUint32(28,true)!==rate*alignment || dataBytes===0 || dataBytes%alignment!==0 ||
-      dataBytes+HEADER!==size || view.getUint32(4,true)!==size-8) {
-    throw new Error('Se requiere WAV PCM de 16 bits, mono o estéreo, 8–48 kHz y cabecera estándar. Usa el exportador local para otros formatos.');
-  }
-  return { view, rate, alignment, frames: dataBytes/alignment };
-}
+type WavHeader = { view: DataView; rate: number; alignment: number; frames: number; dataOffset: number };
+const invalidWav = () => new Error('Se requiere WAV RIFF PCM de 16 bits, mono o estéreo, 8–48 kHz, con bloques válidos. Usa el exportador local para otros formatos.');
 
-type WavHeader = ReturnType<typeof readHeader>;
+/** Skip auxiliary chunks without reading their contents, including odd-byte padding.
+ * Bound metadata traversal; reject duplicate fmt/data, truncated or ambiguous RIFF. */
 async function inspectSource(source: File): Promise<WavHeader> {
-  if (!/\.wav$/i.test(source.name) || source.size < HEADER || source.size > 0xffffffff+8) {
-    throw new Error('Selecciona un WAV PCM compatible.');
+  if (!/\.wav$/i.test(source.name) || source.size < HEADER || source.size > 0xffffffff+8) throw invalidWav();
+  const root=new DataView(await source.slice(0,12).arrayBuffer());
+  if(tag(root,0)!=='RIFF'||tag(root,8)!=='WAVE'||root.getUint32(4,true)!==source.size-8)throw invalidWav();
+  let offset=12, count=0, format:DataView|null=null, dataOffset=-1, dataBytes=0;
+  while(offset<source.size){
+    if(++count>128 || offset+8>source.size)throw invalidWav();
+    const chunk=new DataView(await source.slice(offset,offset+8).arrayBuffer());
+    const name=tag(chunk,0), size=chunk.getUint32(4,true), body=offset+8, next=body+size+(size%2);
+    if(next>source.size)throw invalidWav();
+    if(name==='fmt '){
+      if(format||size!==16)throw invalidWav();
+      format=new DataView(await source.slice(body,body+16).arrayBuffer());
+    }else if(name==='data'){
+      if(!format||dataOffset!==-1||size===0)throw invalidWav();
+      dataOffset=body;dataBytes=size;
+    }
+    offset=next;
   }
-  return readHeader(await source.slice(0,HEADER).arrayBuffer(),source.size);
+  if(!format||dataOffset<0||offset!==source.size)throw invalidWav();
+  const channels=format.getUint16(2,true),rate=format.getUint32(4,true),alignment=format.getUint16(12,true);
+  if(format.getUint16(0,true)!==1||format.getUint16(14,true)!==16||![1,2].includes(channels)||
+      rate<8000||rate>48000||alignment!==channels*2||format.getUint32(8,true)!==rate*alignment||
+      dataBytes%alignment!==0)throw invalidWav();
+  const header=new ArrayBuffer(HEADER),view=new DataView(header);
+  for(const [at,word] of [[0,'RIFF'],[8,'WAVE'],[12,'fmt '],[36,'data']] as const)
+    for(let i=0;i<4;i++)view.setUint8(at+i,word.charCodeAt(i));
+  view.setUint32(16,16,true);
+  new Uint8Array(header,20,16).set(new Uint8Array(format.buffer,format.byteOffset,16));
+  return {view,rate,alignment,frames:dataBytes/alignment,dataOffset};
 }
 function manifestEntry(turn: StudioDraftSegment, index: number, size: number, sha256: string) {
   return {
@@ -58,7 +72,7 @@ function inspectTurn(turn: StudioDraftSegment, source: WavHeader, lastEnd: numbe
   return {slices,count,bytes};
 }
 export type LocalWavPart<T> = StudioPublicationPart<T> & { bytes: number };
-/** Reads only 44 bytes; sizes include WAV headers and exact UTF-8 manifest
+/** Reads bounded RIFF chunk headers; sizes include WAV headers and exact UTF-8 manifest
  * size (SHA-256 is always 64 ASCII characters). Never creates audio files. */
 export async function planLocalWavParts<T extends StudioDraftSegment & {id:string}>(
   source: File, turns: readonly T[], signal: AbortSignal,
@@ -105,7 +119,7 @@ export async function prepareLocalWavAssignment(
   if (!/\.wav$/i.test(source.name) || source.size<HEADER || source.size>0xffffffff+8 ||
       turns.length<1 || turns.length>ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS) throw new Error('Selecciona un WAV y una parte de hasta 25 intervenciones.');
   const info=await inspectSource(source);
-  const {view,rate,alignment}=info;
+  const {view,rate,alignment,dataOffset}=info;
   signal.throwIfAborted();
   let lastEnd=0, totalFrames=0, totalBytes=0;
   const plans = [...turns].sort((a,b)=>a.start-b.start).map(turn=>{
@@ -125,7 +139,7 @@ export async function prepareLocalWavAssignment(
     new Uint8Array(header).set(new Uint8Array(view.buffer,view.byteOffset,HEADER));
     const out=new DataView(header);
     out.setUint32(4,bytes+36,true);out.setUint32(40,bytes,true);
-    const pieces=slices.map(r=>source.slice(HEADER+r.start*alignment,HEADER+r.end*alignment));
+    const pieces=slices.map(r=>source.slice(dataOffset+r.start*alignment,dataOffset+r.end*alignment));
     const file=new File([header,...pieces], 'segment-'+String(index+1).padStart(2,'0')+'.wav',{type:'audio/wav'});
     const digest=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());
     signal.throwIfAborted();
