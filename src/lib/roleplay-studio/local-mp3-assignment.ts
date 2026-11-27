@@ -39,15 +39,15 @@ export async function decodeLocalMp3ForAssignment(source: File, duration: number
   if(!canPrepareLocalMp3(source,duration))throw new Error('MP3 local: máximo 2 minutos y 8 MiB.');
   if(typeof OfflineAudioContext!=='function')throw new Error('Este navegador no admite la conversión local. Usa el exportador habitual.');
   return withStudioDecodeSlot(signal, async () => {
-  const context=new OfflineAudioContext(2,1,LOCAL_MP3_PCM_RATE);
-  const bytes=await source.arrayBuffer();
-  signal.throwIfAborted();
-  const decoded=await context.decodeAudioData(bytes);
-  signal.throwIfAborted();
-  if(!Number.isFinite(decoded.duration)||Math.abs(decoded.duration-duration)>0.25)
-    throw new Error('La duración decodificada no coincide con la grabación. No se ajustarán los cortes automáticamente.');
-  const wav=encodeStudioPcm16(decoded);
-  signal.throwIfAborted();
-  return new File([wav],'studio-local-converted.wav',{type:'audio/wav'});
+    const context=new OfflineAudioContext(2,1,LOCAL_MP3_PCM_RATE);
+    const bytes=await source.arrayBuffer();
+    signal.throwIfAborted();
+    const decoded=await context.decodeAudioData(bytes);
+    signal.throwIfAborted();
+    if(!Number.isFinite(decoded.duration)||Math.abs(decoded.duration-duration)>0.25)
+      throw new Error('La duración decodificada no coincide con la grabación. No se ajustarán los cortes automáticamente.');
+    const wav=encodeStudioPcm16(decoded);
+    signal.throwIfAborted();
+    return new File([wav],'studio-local-converted.wav',{type:'audio/wav'});
   });
 }
