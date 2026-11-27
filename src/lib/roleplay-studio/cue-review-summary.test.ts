@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from './cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -83,6 +83,27 @@ describe('pre-apply SRT quality summary', () => {
     ];
     expect(overlappingSelectedTimedCueIndices(cues, [0, 2, 3])).toEqual([]);
     expect(overlappingSelectedTimedCueIndices(cues, [0, 1])).toEqual([0, 1]);
+  });
+
+  it('lists only selected conflicts for the chosen turn, including nested intervals', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    const cues = [cue(1, 5), cue(0, 2), cue(2, 3), cue(5, 7), cue(4, 6), cue(8, 9)];
+    const selected = [0, 1, 2, 3, 5, 2, -1, 99];
+    const conflicts = conflictingSelectedTimedCueIndices(cues, selected, 0);
+    expect(conflicts).toEqual([1, 2]);
+    expect(selected.filter(index => !new Set(conflicts).has(index))).toEqual([0, 3, 5, -1, 99]);
+    expect(selected).toEqual([0, 1, 2, 3, 5, 2, -1, 99]);
+    expect(cues[0]).toEqual(cue(1, 5));
+    expect(conflictingSelectedTimedCueIndices(cues, [0, 1, 2, 3, 4, 5], 3)).toEqual([4]);
+  });
+
+  it('rejects invalid candidate times and ignores invalid selected intervals', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    const cues = [cue(0, 4), cue(1, 2), cue(-1, 3), cue(NaN, 3), cue(2, 2), cue(4, 5)];
+    expect(conflictingSelectedTimedCueIndices(cues, [0, 1, 2, 3, 4, 5, 0.5], 0)).toEqual([1]);
+    for (const index of [-1, 2, 3, 4, 6, 0.5]) {
+      expect(conflictingSelectedTimedCueIndices(cues, [0, 1], index)).toEqual([]);
+    }
   });
 
   it('ignores invalid source times and indexes while providing review hints', () => {
