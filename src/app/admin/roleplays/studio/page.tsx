@@ -30,7 +30,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
-import { prepareLocalWavAssignment } from '@/lib/roleplay-studio/local-wav-assignment';
+import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
 import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
@@ -87,7 +87,30 @@ export default function RoleplayStudioPage() {
   const recoveryOperation = useRef(0);
   const [expandedEditor, setExpandedEditor] = useState(false);
   const [publicationPartKey, setPublicationPartKey] = useState('');
-  const publicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
+  const genericPublicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
+  const [wavPlan, setWavPlan] = useState<{ source: File; cuts: Segment[]; parts: LocalWavPart<Segment>[]; issue: string | null } | null>(null);
+  const wavSource = audio !== null && /\.wav$/i.test(audio.name);
+  const currentWavPlan = wavPlan && wavPlan.source === audio && wavPlan.cuts === segments ? wavPlan : null;
+  useEffect(() => {
+    if (!audio || !wavSource || !duration || !segments.length) { setWavPlan(null); return; }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void planLocalWavParts(audio, segments, controller.signal).then(parts => {
+        if (!controller.signal.aborted) setWavPlan({ source: audio, cuts: segments, parts, issue: null });
+      }).catch(cause => {
+        if (!controller.signal.aborted) setWavPlan({ source: audio, cuts: segments, parts: [],
+          issue: cause instanceof Error ? cause.message : 'No se pudo calcular el tamaño WAV.' });
+      });
+    }, 150);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [audio, wavSource, duration, segments]);
+  const publicationPlan = currentWavPlan && !currentWavPlan.issue ? currentWavPlan : genericPublicationPlan;
+  useEffect(() => {
+    if (currentWavPlan && !currentWavPlan.issue && currentWavPlan.parts.length > 1 &&
+        !currentWavPlan.parts.some(part => part.key === publicationPartKey)) {
+      setPublicationPartKey(currentWavPlan.parts[0].key);
+    }
+  }, [currentWavPlan, publicationPartKey]);
   const selectedPublicationPart = publicationPlan.parts.find(part => part.key === publicationPartKey);
   const editorLimit = expandedEditor ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
   const selectionPurpose = expandedEditor ? 'editor' : 'package';
@@ -1572,6 +1595,7 @@ export default function RoleplayStudioPage() {
   const prepareLocalAssignment = async (part?: StudioPublicationPart<Segment>) => {
     if (!audio || !duration || busy || draftBusy || analyzingSilences || exportAbort.current) return;
     const selected = part?.turns ?? segments;
+    if (!currentWavPlan || currentWavPlan.issue || (part ? !currentWavPlan.parts.some(item => item.key === part.key) : currentWavPlan.parts.length !== 1)) return;
     setAssignmentPackage(null);
     setError('');
     setNotice('');
@@ -1686,9 +1710,10 @@ export default function RoleplayStudioPage() {
     try {
       const form = new FormData();
       form.append('audio', audio);
-      form.append('segments', JSON.stringify(ordered.map(segment => ({
+      form.append('segments', JSON.stringify(ordered.map((segment, index) => ({
         title: segment.title, start: segment.start, end: segment.end,
         scriptPrompt: segment.scriptPrompt, responseLimit: segment.responseLimit,
+        studioTurn: index + 1, ...(segment.language === 'en' || segment.language === 'es' ? { studioLanguage: segment.language } : {}),
       }))));
       const response = await fetch('/api/admin/roleplays/studio/export', {
         method: 'POST', credentials: 'same-origin', body: form, signal: controller.signal,
@@ -3745,14 +3770,17 @@ export default function RoleplayStudioPage() {
           {segments.length > 0 && (expandedEditor || publicationPlan.parts.length > 1) && (
             <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
               <h4 className="text-sm font-semibold text-[var(--foreground)]">Preparar roleplays por partes</h4>
-              <p className="text-xs text-[var(--text-secondary)]">Se proponen partes cronológicas de hasta {ROLEPLAY_MAX_SCENARIOS} intervenciones y 15 minutos de audio cada una. Descarga solo la parte elegida, en formato local compatible; el proyecto completo no se modifica.</p>
+              <p className="text-xs text-[var(--text-secondary)]">Se proponen partes cronológicas de hasta {ROLEPLAY_MAX_SCENARIOS} intervenciones y 15 minutos de audio cada una. {currentWavPlan && !currentWavPlan.issue ? 'Para WAV también se aplica el máximo de 16 MiB por transferencia, incluido el manifiesto.' : 'Descarga solo la parte elegida, en formato local compatible.'} El proyecto completo no se modifica.</p>
               {publicationPlan.issue ? <p role="alert" className="text-xs text-[var(--theme-warning)]">{publicationPlan.issue}</p> : <>
                 <label className="block text-sm text-[var(--foreground)]">Parte del roleplay
                   <select value={selectedPublicationPart?.key ?? ''} disabled={busy || draftBusy || analyzingSilences}
                     onChange={event => setPublicationPartKey(event.currentTarget.value)}
                     className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                     <option value="">Selecciona una parte ({publicationPlan.parts.length} disponibles)</option>
-                    {publicationPlan.parts.map(part => <option key={part.key} value={part.key}>Parte {part.number} · intervenciones {part.first}–{part.last} · {formatTime(part.seconds)}</option>)}
+                    {publicationPlan.parts.map(part => {
+                      const wavPart = currentWavPlan?.parts.find(item => item.key === part.key);
+                      return <option key={part.key} value={part.key}>Parte {part.number} · intervenciones {part.first}–{part.last} · {formatTime(part.seconds)}{wavPart ? ' · ' + (wavPart.bytes/(1024*1024)).toFixed(2) + ' MiB' : ''}</option>;
+                    })}
                   </select>
                 </label>
                 <button type="button" disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}
@@ -3847,6 +3875,9 @@ export default function RoleplayStudioPage() {
             <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
               <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM estándar de 16 bits: se preparan los cortes en este equipo sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
+              {wavSource && segments.length > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
+              {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
+              {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
               {readyAssignment ? (
                 <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
                   prefetch={false}
@@ -3867,9 +3898,9 @@ export default function RoleplayStudioPage() {
               ) : localOnly ? (
                 <div className="flex flex-wrap gap-2">
                   <button type="button" onClick={() => void prepareLocalAssignment()}
-                    disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
+                    disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || currentWavPlan.parts.length !== 1}
                     className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar WAV local para asignación</button>
-                  {selectedPublicationPart && publicationPlan.parts.length > 1 && <button type="button" onClick={() => void prepareLocalAssignment(selectedPublicationPart)}
+                  {currentWavPlan && !currentWavPlan.issue && selectedPublicationPart && currentWavPlan.parts.length > 1 && <button type="button" onClick={() => void prepareLocalAssignment(selectedPublicationPart)}
                     disabled={busy || draftBusy || analyzingSilences}
                     className="rounded-xl theme-action-secondary px-4 py-2 font-semibold disabled:opacity-50">Preparar parte {selectedPublicationPart.number} en WAV local</button>}
                 </div>

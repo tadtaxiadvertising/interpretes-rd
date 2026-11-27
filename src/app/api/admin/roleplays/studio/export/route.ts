@@ -25,7 +25,7 @@ const MAX_EXPORT_TIME_MS = 105_000;
 const MAX_SEGMENT_TIME_MS = 15_000;
 let activeExports = 0;
 
-type Segment = { title: string; start: number; end: number; scriptPrompt: string; responseLimit: number };
+type Segment = { title: string; start: number; end: number; scriptPrompt: string; responseLimit: number; studioTurn?: number; studioLanguage?: 'en' | 'es' };
 type ZipEntry = { name: string; data: Buffer };
 
 function parseSegments(value: string | null): Segment[] | null {
@@ -39,7 +39,7 @@ function parseSegments(value: string | null): Segment[] | null {
   for (const entry of raw) {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
     const item = entry as Record<string, unknown>;
-    const { title, start, end, scriptPrompt, responseLimit } = item;
+    const { title, start, end, scriptPrompt, responseLimit, studioTurn, studioLanguage } = item;
     // Compound scenes require local v2 FFmpeg exporters. Reject instead of
     // silently rendering the encompassing interval and restoring its silence.
     if (Object.prototype.hasOwnProperty.call(item, 'ranges')) return null;
@@ -50,10 +50,15 @@ function parseSegments(value: string | null): Segment[] | null {
       start < lastEnd || end > 7200 ||
       typeof scriptPrompt !== 'string' || scriptPrompt.length > 5000 ||
       typeof responseLimit !== 'number' || !Number.isSafeInteger(responseLimit) ||
-      responseLimit < 0 || responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) return null;
+      responseLimit < 0 || responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC ||
+      (studioTurn !== undefined && studioTurn !== result.length + 1) ||
+      (studioLanguage !== undefined && studioLanguage !== 'en' && studioLanguage !== 'es')) return null;
     total += end - start;
     lastEnd = end;
-    result.push({ title: title.trim(), start, end, scriptPrompt, responseLimit });
+    result.push({ title: title.trim(), start, end, scriptPrompt, responseLimit,
+      ...(studioTurn !== undefined ? { studioTurn: studioTurn as number } : {}),
+      ...(studioLanguage === 'en' || studioLanguage === 'es' ? { studioLanguage } : {}),
+    });
   }
   return total <= MAX_TOTAL_SECONDS ? result : null;
 }
@@ -210,6 +215,8 @@ export async function POST(req: NextRequest) {
         order: index, title: segment.title, file, size_bytes: data.length,
         sha256: createHash('sha256').update(data).digest('hex'),
         duration_limit_sec: segment.responseLimit, script_prompt: segment.scriptPrompt,
+        ...(segment.studioTurn !== undefined ? { studio_turn: segment.studioTurn, source_start_sec: segment.start, source_end_sec: segment.end } : {}),
+        ...(segment.studioLanguage !== undefined ? { studio_language: segment.studioLanguage } : {}),
       });
     }
     entries.unshift({ name: 'manifest.json', data: Buffer.from(JSON.stringify(manifest, null, 2)) });
