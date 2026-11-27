@@ -63,6 +63,42 @@ describe('studio playback coordinator',()=>{
     expect(result.current.pairPreviewId).toBeNull();
     expect(failed).not.toHaveBeenCalled();
   });
+  it('stops the compound preview when the primary native controls resume playback',async()=>{
+    const {result,primary,pairPlay,pairPause}=setup();
+    const plan={first:{start:1,end:4},second:{start:10,end:13},skippedSeconds:6,selectedSeconds:6};
+    const failed=vi.fn();
+    let reject!: (reason: Error)=>void;
+    pairPlay.mockReturnValueOnce(new Promise<void>((_,fail)=>{reject=fail;}));
+    act(()=>result.current.startPairPreview('a',plan,vi.fn(),failed));
+    vi.spyOn(primary,'paused','get').mockReturnValue(false);
+    act(()=>result.current.mediaHandlers.onPlay(event(primary)));
+    expect(pairPause).toHaveBeenCalledOnce();
+    expect(result.current.pairPreviewId).toBeNull();
+    await act(async()=>{reject(new Error('retired pair'));await Promise.resolve();});
+    expect(failed).not.toHaveBeenCalled();
+  });
+  it('does not stop a new compound preview for an obsolete primary play event',()=>{
+    const {result,primary,pairPause}=setup();
+    const plan={first:{start:1,end:4},second:{start:10,end:13},skippedSeconds:6,selectedSeconds:6};
+    act(()=>result.current.startPairPreview('a',plan,vi.fn(),vi.fn()));
+    const revision=result.current.editorPlaybackRevision;
+    vi.spyOn(primary,'paused','get').mockReturnValue(true);
+    act(()=>result.current.mediaHandlers.onPlay(event(primary)));
+    const detached=document.createElement('audio');
+    vi.spyOn(detached,'paused','get').mockReturnValue(false);
+    act(()=>result.current.mediaHandlers.onPlay(event(detached)));
+    expect(result.current.pairPreviewId).toBe('a');
+    expect(result.current.editorPlaybackRevision).toBe(revision);
+    expect(pairPause).not.toHaveBeenCalled();
+  });
+  it('does not pause an idle auxiliary player during ordinary native playback',()=>{
+    const {result,primary,pairPause}=setup();
+    vi.spyOn(primary,'paused','get').mockReturnValue(false);
+    const revision=result.current.editorPlaybackRevision;
+    act(()=>result.current.mediaHandlers.onPlay(event(primary)));
+    expect(result.current.editorPlaybackRevision).toBe(revision+1);
+    expect(pairPause).not.toHaveBeenCalled();
+  });
   it('invalidates a pending rejection on unmount',async()=>{
     const {result,primaryPlay,setError,unmount}=setup();
     let reject!: (reason: Error)=>void;
