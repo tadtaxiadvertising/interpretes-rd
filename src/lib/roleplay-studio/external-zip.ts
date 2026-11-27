@@ -6,14 +6,14 @@
  * never unpacks paths, and only materializes declared individual MP3 clips.
  * It does not trust central-directory sizes, CRCs, or manifest names alone.
  */
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 import { adaptExternalAudioStudioManifest } from '@/lib/roleplay-external-studio-manifest';
 
 const MAX_ZIP_BYTES = 96 * 1024 * 1024;
 const MAX_CLIP_BYTES = 15 * 1024 * 1024;
 const MAX_CLIPS_TOTAL_BYTES = 64 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
-const MAX_ENTRIES = ROLEPLAY_MAX_SCENARIOS + 8;
+const MAX_ENTRIES = ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS + 8;
 const MAX_CENTRAL_NAME_BYTES = 180;
 const LOCAL = 0x04034b50;
 const CENTRAL = 0x02014b50;
@@ -234,7 +234,7 @@ export async function extractExternalStudioZip(archive: File): Promise<File[]> {
       !/^1\.\d+\.\d+$/.test(raw.roleplayAudioStudioVersion) ||
       !record(raw.files) || !Array.isArray(raw.files.clips) ||
       !Array.isArray(raw.files.speakerTracks) ||
-      raw.files.clips.length < 1 || raw.files.clips.length > ROLEPLAY_MAX_SCENARIOS ||
+      raw.files.clips.length < 1 || raw.files.clips.length > ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS ||
       raw.files.speakerTracks.length > 3) invalid();
 
   const allowed = new Set<string>(['manifest.json']);

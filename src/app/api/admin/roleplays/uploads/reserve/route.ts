@@ -6,7 +6,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { applyRateLimit, rateLimit, createRateLimitHeaders } from '@/lib/security/rate-limit';
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS } from '@/lib/roleplay-limits';
 import { prepareRoleplayDirectUploadBatch, ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES } from '@/lib/roleplay/direct-upload-contract';
 import { isRoleplayDirectUploadRequestKey } from '@/lib/roleplay/direct-upload-reservation-fingerprint';
 import { reserveAndSignDirectUpload } from '@/lib/roleplay/direct-upload-signing';
@@ -19,11 +19,11 @@ const schema = z.object({
   requestKey: z.string().refine(isRoleplayDirectUploadRequestKey),
   assignment: directInterpreterAssignment,
   declarations: z.array(z.object({
-    order: z.number().int().min(0).max(ROLEPLAY_MAX_SCENARIOS - 1),
+    order: z.number().int().min(0).max(ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS - 1),
     mime: z.enum(['audio/mpeg','audio/wav','audio/webm','audio/mp4']),
     sizeBytes: z.number().int().positive().max(ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
-  }).strict()).min(1).max(ROLEPLAY_MAX_SCENARIOS),
+  }).strict()).min(1).max(ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS),
 }).strict();
 
 function fail(status: number, error: string, headers?: HeadersInit) {

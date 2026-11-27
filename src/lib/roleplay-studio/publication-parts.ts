@@ -1,7 +1,7 @@
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS, ROLEPLAY_STUDIO_PACKAGE_MAX_AUDIO_SECONDS } from '@/lib/roleplay-limits';
 import { studioSelectedSeconds, validStudioRanges } from './compound-cuts';
 
-export const STUDIO_PACKAGE_AUDIO_SECONDS = 900;
+export const STUDIO_PACKAGE_AUDIO_SECONDS = ROLEPLAY_STUDIO_PACKAGE_MAX_AUDIO_SECONDS;
 
 type PartTurn = { id: string; start: number; end: number; ranges?: unknown };
 export type StudioPublicationPart<T> = {
@@ -37,7 +37,7 @@ export function planStudioPublicationParts<T extends PartTurn>(
       return { parts: [], issue: `Corrige los tiempos o solapamientos de la intervención ${index + 1} antes de preparar las partes.` };
     }
     const length = studioSelectedSeconds(ranges);
-    if (turns.length >= ROLEPLAY_MAX_SCENARIOS || seconds + length > STUDIO_PACKAGE_AUDIO_SECONDS) flush();
+    if (turns.length >= ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS || seconds + length > STUDIO_PACKAGE_AUDIO_SECONDS) flush();
     turns.push(turn);
     seconds += length;
     end = turn.end;

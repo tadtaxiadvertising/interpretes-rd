@@ -8,7 +8,7 @@ import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'crypto';
-import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC, ROLEPLAY_MULTIPART_MAX_SCENARIOS, ROLEPLAY_ADMIN_AUDIO_MAX_BYTES, ROLEPLAY_MULTIPART_MAX_BYTES } from '@/lib/roleplay-limits';
 import { getReusableBaseAudioPath, getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
@@ -47,11 +47,11 @@ async function guardRoleplayAdmin(req: NextRequest): Promise<NextResponse | null
   return null;
 }
 
-const MAX_AUDIO_SIZE = 15 * 1024 * 1024;
+const MAX_AUDIO_SIZE = ROLEPLAY_ADMIN_AUDIO_MAX_BYTES;
 // Legacy multipart accepts 25 x 15 MiB plus generous metadata/boundary headroom.
 // This is a hard upper bound, NOT a safe memory budget for the small VPS:
 // direct uploads to Storage are still required to solve issue #290.
-const MAX_ROLEPLAY_MULTIPART_BYTES = ROLEPLAY_MAX_SCENARIOS * MAX_AUDIO_SIZE + 2 * 1024 * 1024;
+const MAX_ROLEPLAY_MULTIPART_BYTES = ROLEPLAY_MULTIPART_MAX_BYTES;
 // Memory amplification occurs while formData() buffers audio and during Storage
 // uploads. Admit only one create request per Next.js process at a time.
 // This is not a distributed quota or a substitute for direct-to-Storage upload.
@@ -89,7 +89,7 @@ const scenarioPayloadSchema = z.array(z.object({
   if (hasStart !== hasEnd || (hasStart && hasEnd && item.sourceEndSec! <= item.sourceStartSec!)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Invalid source time range' });
   }
-})).min(1).max(ROLEPLAY_MAX_SCENARIOS);
+})).min(1).max(ROLEPLAY_MULTIPART_MAX_SCENARIOS);
 
 function parseScenarios(raw: string): ScenarioInput[] | null {
   let parsed: unknown;
@@ -350,7 +350,7 @@ export async function POST(req: NextRequest) {
     }
     if (!scenarios) {
       return privateRoleplayJson(
-        { success: false, error: `Invalid scenarios: expected 1-${ROLEPLAY_MAX_SCENARIOS} entries with a non-empty title` },
+        { success: false, error: `Invalid scenarios: expected 1-${ROLEPLAY_MULTIPART_MAX_SCENARIOS} entries with a non-empty title` },
         { status: 400 }
       );
     }
