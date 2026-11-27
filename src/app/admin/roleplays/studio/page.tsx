@@ -13,6 +13,7 @@ import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentative
 import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
+import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
@@ -51,6 +52,8 @@ type Segment = {
   speakerRole: StudioSpeakerRole;
   language: StudioLanguage;
   ranges?: StudioCutRange[];
+  // Private, in-memory provider label; never serialized into projects or packages.
+  sourceSpeakerGroup?: string;
 };
 
 
@@ -578,6 +581,7 @@ export default function RoleplayStudioPage() {
       ...segment,
       id: crypto.randomUUID(),
       speakerRole: classifySpeakerRole(selected[index].speaker),
+      sourceSpeakerGroup: sourceSpeakerGroup(selected[index].speaker),
       language: 'unknown',
     }));
     // Importing a valid SRT/VTT can replace all existing edited cuts. Prompt
@@ -1075,6 +1079,7 @@ export default function RoleplayStudioPage() {
     setSegments(previous => previous.filter(item => item.id !== second.id)
       .map(item => item.id === first.id
         ? { ...item, end: second.end, scriptPrompt: mergedPrompt,
+            sourceSpeakerGroup: first.sourceSpeakerGroup === second.sourceSpeakerGroup ? first.sourceSpeakerGroup : undefined,
             ...(compound ? { ranges: [compound.first, compound.second] } : {}) } : item));
     setCaptionTexts(previous => {
       const next = { ...previous };
@@ -1253,6 +1258,22 @@ export default function RoleplayStudioPage() {
     setNotice(`Perfil ${role} asignado a ${pendingIds.size} intervenciones visibles sin hablante. Revisa cada audio; puedes deshacer esta asignación.`);
   };
 
+  const applySourceSpeakerProfile = (id: string) => {
+    const result = propagateSpeakerProfile(segments, id);
+    if (!result.changed) return;
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'hablantes', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: expandedSegmentId,
+    });
+    setSegments(result.turns);
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice(`Perfil aplicado a ${result.changed} intervenciones de la misma etiqueta de origen. Se conservaron los perfiles e idiomas ya revisados. Escucha las voces; puedes deshacer la asignación.`);
+  };
+
   const addSegment = () => {
     if (segments.length >= editorLimit) {
       setError(`Se alcanzó el límite de ${editorLimit} intervenciones del editor.`);
@@ -1304,6 +1325,9 @@ export default function RoleplayStudioPage() {
       return prev.map(segment => {
         if (segment.id !== id) return segment;
         const next = { ...segment, ...patch };
+        // A changed cut may include other voices; discard the source grouping.
+        if ((patch.start !== undefined && patch.start !== segment.start) ||
+            (patch.end !== undefined && patch.end !== segment.end)) next.sourceSpeakerGroup = undefined;
         if (index >= 0 && patch.title === undefined &&
             (patch.speakerRole !== undefined || patch.language !== undefined)) {
           next.title = titleAfterProfileChange(
@@ -1910,6 +1934,7 @@ export default function RoleplayStudioPage() {
     segment.id === expandedSegmentId));
   const focusedTurn = visibleSegments[focusIndex];
   const renderedSegments = focusMode ? (focusedTurn ? [focusedTurn] : []) : visibleSegments;
+  const sourceProfileCount = focusedTurn ? propagateSpeakerProfile(segments, focusedTurn.segment.id).changed : 0;
   const selectFocusedTurn = (id: string) => {
     setExpandedSegmentId(id);
     setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
@@ -2757,6 +2782,14 @@ export default function RoleplayStudioPage() {
               <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
                 Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
               </p>
+              {focusedTurn.segment.sourceSpeakerGroup && <p className="text-xs text-[var(--text-secondary)]">Etiqueta de origen: {focusedTurn.segment.sourceSpeakerGroup}. Escucha y confirma la voz antes de aplicar el perfil a otros turnos.</p>}
+              {sourceProfileCount > 0 && (
+                <button type="button" onClick={() => applySourceSpeakerProfile(focusedTurn.segment.id)}
+                  disabled={busy || draftBusy || analyzingSilences}
+                  className="rounded-lg theme-action-secondary px-3 py-2 text-xs font-semibold">
+                  Aplicar perfil a {sourceProfileCount} turnos de la misma etiqueta
+                </button>
+              )}
               <div role="group" aria-label="Reproducción en modo enfoque" className="flex basis-full flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
                 <button type="button" onClick={() => previewSegment(focusedTurn.segment)}
                   aria-pressed={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
