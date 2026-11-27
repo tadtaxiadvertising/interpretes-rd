@@ -87,6 +87,17 @@ describe('HappyScribe library on-demand pagination', () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it('requires renewal for expired import proof without requesting a media export',async()=>{
+    const expired={...item(a,'Expired recording'),state:'automatic_done',importProof:String(Date.now()-1000)+'.'+'a'.repeat(64)};
+    const fetcher=vi.fn().mockResolvedValueOnce(Response.json({success:true,data:[expired],hasMore:false,mediaImportEnabled:true}));
+    vi.stubGlobal('fetch',fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async()=>{fireEvent.click(screen.getByText('Actualizar biblioteca'));});
+    fireEvent.click(screen.getByRole('button',{name:'Importar audio original'}));
+    expect(screen.getByText(/autorización de esta transcripción caducó/)).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
   it('renews only the selected source page without losing loaded pages or replacing a missing item',async()=>{
     const fetcher=vi.fn()
       .mockResolvedValueOnce(page([item(a,'First')],true))
