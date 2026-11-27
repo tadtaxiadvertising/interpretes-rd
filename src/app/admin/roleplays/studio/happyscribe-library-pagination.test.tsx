@@ -138,6 +138,28 @@ describe('HappyScribe library on-demand pagination', () => {
     expect(fetcher.mock.calls.every(([,init])=>init?.method!=='POST')).toBe(true);
   });
 
+  it('keeps local search on additional pages and renewal, but clears filters after full refresh', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(page([item(a, 'Consulta inicial')], true))
+      .mockResolvedValueOnce(page([item(b, 'Evaluación médica')], false))
+      .mockResolvedValueOnce(page([item(b, 'Evaluación médica actualizada')], false))
+      .mockResolvedValueOnce(page([item(c, 'Nueva biblioteca')], false));
+    vi.stubGlobal('fetch', fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async () => { fireEvent.click(screen.getByText('Actualizar biblioteca')); });
+    const query = () => screen.getByLabelText('Buscar transcripciones') as HTMLInputElement;
+    fireEvent.change(query(), {target:{value:'evaluacion'}});
+    await act(async () => { fireEvent.click(screen.getByText('Cargar más transcripciones (50)')); });
+    expect(query().value).toBe('evaluacion');
+    fireEvent.change(screen.getByLabelText('Transcripción de HappyScribe'),{target:{value:b}});
+    await act(async () => { fireEvent.click(screen.getByText('Renovar selección')); });
+    expect(query().value).toBe('evaluacion');
+    await act(async () => { fireEvent.click(screen.getByText('Actualizar biblioteca')); });
+    expect(query().value).toBe('');
+    expect((screen.getByLabelText('Transcripción de HappyScribe') as HTMLSelectElement).value).toBe(c);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+
   it('refreshes only on demand, resets pages and replaces stale library items', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(page([item(a, 'First')], true))
