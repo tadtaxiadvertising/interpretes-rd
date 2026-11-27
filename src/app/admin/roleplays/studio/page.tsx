@@ -1975,7 +1975,7 @@ export default function RoleplayStudioPage() {
     .map(({ segment }) => segment.id);
   const pendingSpeakerIds = visibleSegments.filter(({ segment }) =>
     segment.speakerRole === 'unknown').map(({ segment }) => segment.id);
-  const visiblePendingTurns = visibleSegments.filter(({ segment }) => needsReview(segment));
+  const visiblePendingTurns = visibleSegments.filter(({ segment }) => focusMode ? !confirmedIds.has(segment.id) : needsReview(segment));
   const focusPendingTurn = (direction: -1 | 1) => {
     if (!visiblePendingTurns.length) return;
     const currentIndex = visiblePendingTurns.findIndex(({ segment }) =>
@@ -2990,9 +2990,11 @@ export default function RoleplayStudioPage() {
           {segments.length === 0 && <p className="text-sm text-[var(--text-secondary)]">Añade una intervención, define inicio y final en segundos y comprueba su título.</p>}
           {segments.length > 0 && visibleSegments.length === 0 && (
             <div className="flex flex-wrap items-center gap-2 text-sm text-[var(--text-secondary)]">
-              <span>{showPendingReview && pendingReviewCount === 0
-                ? 'Todas las intervenciones tienen hablante e idioma revisados.'
-                : 'No hay intervenciones que coincidan con los filtros.'}</span>
+              <span>{showPendingReview && focusMode && confirmedIds.size === segments.length
+                ? 'Todas las intervenciones están confirmadas en esta sesión.'
+                : showPendingReview && !focusMode && pendingReviewCount === 0
+                  ? 'Todas las intervenciones tienen hablante e idioma revisados.'
+                  : 'No hay intervenciones que coincidan con los filtros.'}</span>
               {(showPendingReview || segmentSearch) && (
                 <button type="button" onClick={() => { setShowPendingReview(false); setSegmentSearch(''); }}
                   className="rounded-md border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">Limpiar filtros</button>
