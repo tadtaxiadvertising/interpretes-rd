@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 
 export const directInterpreterAssignment = z.object({
   interpreterId: z.number().int().positive().safe(),
@@ -16,7 +16,7 @@ export const directInterpreterAssignment = z.object({
     const start=item.sourceStartSec, end=item.sourceEndSec;
     if ((start != null)!==(end != null) || (start != null && end != null && end<=start))
       ctx.addIssue({code:z.ZodIssueCode.custom,message:'Invalid source time range'});
-  })).min(1).max(ROLEPLAY_MAX_SCENARIOS),
+  })).min(1).max(ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS),
 }).strict();
 
 export type DirectInterpreterAssignment = z.infer<typeof directInterpreterAssignment>;
