@@ -463,6 +463,29 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(apply.disabled).toBe(false);
   });
 
+  it('expands a transcript beyond 25 turns without allowing an oversized package', async () => {
+    selectAudio();
+    const file = new File(['srt'], 'expanded.srt', { type: 'text/plain' });
+    const content = Array.from({ length: 30 }, (_, index) => {
+      const start = String(index * 2).padStart(2, '0');
+      const end = String(index * 2 + 1).padStart(2, '0');
+      return `${index + 1}\n00:00:${start},000 --> 00:00:${end},000\nDoctor: Turn ${index}`;
+    }).join('\n\n');
+    Object.defineProperty(file, 'text', { value: async () => content });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Ampliar selección compatible (hasta 100)' }));
+    expect(screen.getByText(/30 turnos disponibles y 30 seleccionados/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar selección al editor (30)' }));
+    expect(screen.getByText(/Intervenciones \(30\/100\)/)).toBeTruthy();
+    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Descargar plan local de cortes (JSON)' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Guardar borrador ampliado' })).toBeTruthy();
+  });
+
   it('keeps a pending 26-turn SRT review when another transcript import is declined', async () => {
     selectAudio();
     const first = new File(['srt'], 'first.srt', { type: 'text/plain' });
