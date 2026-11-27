@@ -36,6 +36,7 @@ import StudioWaveform from './StudioWaveform';
 import HappyScribeLibraryPanel from './HappyScribeLibraryPanel';
 import StudioFinalizationPanel from './StudioFinalizationPanel';
 import StudioFocusNavigation from './StudioFocusNavigation';
+import StudioWorkspaceHeader from './StudioWorkspaceHeader';
 import StudioInterventionCard, { type StudioIntervention as Segment } from './StudioInterventionCard';
 import { useStudioCardActions } from './useStudioCardActions';
 import { STUDIO_HISTORY_LIMIT } from '@/lib/roleplay-studio/editorial-history';
@@ -2834,43 +2835,35 @@ export default function RoleplayStudioPage() {
       )}
       </div>
       {audio && duration > 0 && (
-        <section id="studio-turns" className={`scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4 ${workspaceActive ? 'space-y-2 lg:flex lg:h-[calc(100dvh-9rem)] lg:min-h-0 lg:flex-col lg:overflow-hidden' : 'space-y-3'}`}>
+        <section id="studio-turns" className={`min-w-0 scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-3 sm:p-4 ${workspaceActive ? 'space-y-2 lg:flex lg:h-[calc(100dvh-9rem)] lg:min-h-0 lg:flex-col lg:overflow-hidden' : 'space-y-3'}`}>
           {workspaceActive && (
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] pb-2">
-              <h1 className="text-base font-bold text-[var(--foreground)]">Escritorio de Audio Studio</h1>
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Etapas del escritorio">
-                <button type="button" aria-pressed={workspaceTab === 'edit'} onClick={() => setWorkspaceTab('edit')}
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold ${workspaceTab === 'edit' ? 'theme-action-primary' : 'theme-action-secondary'}`}>Editar</button>
-                <button type="button" aria-pressed={workspaceTab === 'finish'} onClick={() => setWorkspaceTab('finish')}
-                  className={`rounded-lg px-3 py-2 text-xs font-semibold ${workspaceTab === 'finish' ? 'theme-action-primary' : 'theme-action-secondary'}`}>Finalizar</button>
-                <button ref={workspaceExit} type="button" onClick={() => setImmersiveMode(false)} className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Salir del escritorio</button>
-              </div>
-            </div>
+            <StudioWorkspaceHeader stage={workspaceTab} onStageChange={setWorkspaceTab}
+              onExit={() => setImmersiveMode(false)} exitRef={workspaceExit}/>
           )}
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
             <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{editorLimit})</h2>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
               <input type="search" aria-label="Buscar intervenciones" value={segmentSearch}
                 onChange={event => setSegmentSearch(event.currentTarget.value)}
                 placeholder="Buscar turno, hablante o nota…"
-                className="w-48 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]"/>
-              <label className="inline-flex cursor-pointer items-center gap-1.5 text-xs text-[var(--foreground)]">
+                className="min-h-11 w-full min-w-0 rounded-lg sm:min-h-0 sm:w-48 border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]"/>
+              <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 sm:min-h-0 text-xs text-[var(--foreground)]">
                 <input type="checkbox" checked={showPendingReview}
                   onChange={event => setShowPendingReview(event.currentTarget.checked)}
-                  className="accent-blue-500"/>
+                  className="size-5 shrink-0 accent-[var(--theme-link)] sm:size-auto"/>
                 {focusMode ? `Sin confirmar (${segments.length - confirmedIds.size})` : `Pendientes (${pendingReviewCount})`}
               </label>
               {visiblePendingTurns.length > 1 && (
                 <button type="button" onClick={() => focusPendingTurn(-1)}
                   aria-label="Ir al pendiente anterior"
-                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-info)] hover:bg-cyan-500/10">
+                  className="min-h-11 min-w-11 rounded-lg border sm:min-h-0 sm:min-w-0 border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-info)] hover:bg-cyan-500/10">
                   Anterior pendiente
                 </button>
               )}
               {visiblePendingTurns.length > 0 && (
                 <button type="button" onClick={() => focusPendingTurn(1)}
                   aria-label="Ir al siguiente pendiente"
-                  className="rounded-lg border border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-info)] hover:bg-cyan-500/10">
+                  className="min-h-11 min-w-11 rounded-lg border sm:min-h-0 sm:min-w-0 border-cyan-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-info)] hover:bg-cyan-500/10">
                   Siguiente pendiente
                 </button>
               )}
@@ -2880,7 +2873,7 @@ export default function RoleplayStudioPage() {
                 if (focusMode) setImmersiveMode(false);
               }}
                 aria-pressed={focusMode}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)]">
+                className="min-h-11 min-w-11 rounded-lg border sm:min-h-0 sm:min-w-0 border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)]">
                 {focusMode ? 'Volver a lista' : 'Modo enfoque'}
               </button>
               {!workspaceActive && (
@@ -2889,14 +2882,14 @@ export default function RoleplayStudioPage() {
                   setFocusMode(true);
                   setWorkspaceTab('edit');
                   setImmersiveMode(true);
-                }} className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold">
+                }} className="theme-action-secondary min-h-11 min-w-11 rounded-lg sm:min-h-0 sm:min-w-0 px-3 py-1.5 text-xs font-semibold">
                   Abrir escritorio de edición
                 </button>
               )}
               {!focusMode && (
                 <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
                   aria-pressed={compactRows}
-                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--foreground)]">
+                  className="min-h-11 min-w-11 rounded-lg border sm:min-h-0 sm:min-w-0 border-[var(--border)] px-3 py-1.5 text-xs text-[var(--foreground)]">
                   {compactRows ? 'Vista detallada' : 'Vista compacta'}
                 </button>
               )}
@@ -2925,19 +2918,19 @@ export default function RoleplayStudioPage() {
                                   : lastStructuralEdit.kind === 'edición de intervención' ? 'Deshacer edición de intervención'
                                    : lastStructuralEdit.kind === 'recuperación de papelera' ? 'Deshacer recuperación de papelera'
                                    : 'Deshacer última división o unión'}
-                  className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
+                  className="min-h-11 min-w-11 rounded-lg border sm:min-h-0 sm:min-w-0 border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
               )}
               {nextStructuralEdit && <button type="button" onClick={redoLastStructuralEdit}
                 disabled={busy || draftBusy || analyzingSilences} aria-label="Rehacer último cambio"
-                className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Rehacer {nextStructuralEdit.kind}</button>}
+                className="theme-action-secondary min-h-11 min-w-11 rounded-lg sm:min-h-0 sm:min-w-0 px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Rehacer {nextStructuralEdit.kind}</button>}
               {(history.past.length > 0 || history.future.length > 0) && <span className="text-xs text-[var(--text-secondary)]" title="Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z fuera de campos de texto">Historial: {history.past.length}/{STUDIO_HISTORY_LIMIT} · {history.future.length} para rehacer</span>}
               {!expandedEditor && <button type="button" onClick={() => { setExpandedEditor(true); setFocusMode(true); }}
-                className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold">Ampliar editor a {STUDIO_MAX_EDITOR_SEGMENTS}</button>}
+                className="theme-action-secondary min-h-11 min-w-11 rounded-lg sm:min-h-0 sm:min-w-0 px-3 py-1.5 text-xs font-semibold">Ampliar editor a {STUDIO_MAX_EDITOR_SEGMENTS}</button>}
               {expandedEditor && <span className="text-xs text-[var(--text-secondary)]">Edición ampliada · publicación: {ROLEPLAY_MAX_SCENARIOS}</span>}
               <button type="button" onClick={addSegment} disabled={segments.length >= editorLimit}
-                className="inline-flex items-center gap-2 rounded-lg theme-action-primary px-3 py-1.5 text-sm font-semibold"><Plus size={16}/> Añadir fragmento</button>
+                className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg theme-action-primary sm:min-h-0 sm:w-auto px-3 py-1.5 text-sm font-semibold"><Plus size={16}/> Añadir fragmento</button>
             </div>
           </div>
           {segments.length > 0 && (
