@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Client } from 'pg';
+import { readRoleplayCreationCiTarget } from './roleplay-creation-ci-target.mjs';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { isCreationLedgerReady } from '../src/lib/roleplay/creation-ledger-readiness';
@@ -9,21 +10,12 @@ import { verifyPrismaCreationLifecycle } from './roleplay-creation-prisma-pilot'
 import { classifyCreationLedgerCatalog, readCreationLedgerCatalog, hasCreationLedgerRuntimeAccess } from './roleplay-creation-ledger-catalog';
 
 async function main() {
-  const raw = process.env.DATABASE_URL;
-  if (!raw || process.env.CI !== 'true' || process.env.NODE_ENV === 'production') {
-    throw new Error('Disposable PostgreSQL CI required.');
-  }
-  const url = new URL(raw);
-  if (!['postgres:', 'postgresql:'].includes(url.protocol) ||
-      !['localhost', '127.0.0.1'].includes(url.hostname) ||
-      url.pathname !== '/interpreters_e2e' || url.username !== 'postgres' || url.port !== '5432') {
-    throw new Error('Non-isolated PostgreSQL target rejected.');
-  }
+  const target = readRoleplayCreationCiTarget(process.env);
   const name = 'rp_creation_ci_' + randomBytes(6).toString('hex');
-  const admin = new Client({ connectionString: url.toString() });
-  url.pathname = '/' + name;
-  const first = new Client({ connectionString: url.toString() });
-  const second = new Client({ connectionString: url.toString() });
+  const admin = new Client(target);
+  const isolatedTarget = { ...target, database: name };
+  const first = new Client(isolatedTarget);
+  const second = new Client(isolatedTarget);
   let created = false;
   const prismaClients: PrismaClient[] = [];
   try {
@@ -32,11 +24,11 @@ async function main() {
     created = true;
     await first.connect();
     await second.connect();
-    // Explicit adapter URL derived only from the guarded, newly created DB.
+    // Explicit adapter configuration derived only from the guarded, newly created DB.
     // Never instantiate the application's environment-driven singleton.
     for (let i = 0; i < 2; i++) {
       prismaClients.push(new PrismaClient({
-        adapter: new PrismaPg({ connectionString: url.toString(), max: 2, connectionTimeoutMillis: 5000 }),
+        adapter: new PrismaPg({ ...isolatedTarget, max: 2 }),
       }));
     }
     const [prismaFirst, prismaSecond] = prismaClients;
@@ -128,8 +120,9 @@ async function main() {
         throw error;
       }
     };
-    const results = await Promise.all([publish(first, 'synthetic-a'), publish(second, 'synthetic-b')]);
-    assert.equal(results.filter(Boolean).length, 1);
+    const results = await Promise.allSettled([publish(first, 'synthetic-a'), publish(second, 'synthetic-b')]);
+    assert.ok(results.every(result => result.status === 'fulfilled'));
+    assert.equal(results.filter(result => result.status === 'fulfilled' && result.value).length, 1);
     const sessions = await first.query('SELECT id FROM ci_creation_sessions');
     assert.equal(sessions.rowCount, 1);
     const receipt = await first.query(
