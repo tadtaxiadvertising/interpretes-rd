@@ -66,3 +66,35 @@ describe('Studio finalization presentation',()=>{
     expect(props.onDownload).not.toHaveBeenCalled();
   });
 });
+
+
+describe('next preparation step', () => {
+  const hint = () => screen.getByRole('status', { name: 'Siguiente paso de preparación' }).textContent;
+  it('explains the missing selection without preparing anything', () => {
+    const { props, rerender } = setup();
+    expect(hint()).toContain('Selecciona una parte');
+    rerender(<StudioFinalizationPanel {...props} selectedPublicationPart={parts[1]}/>);
+    expect(hint()).toContain('Prepara los cortes WAV locales');
+    expect(props.onPrepareLocal).not.toHaveBeenCalled();
+    expect(props.onPrepareServer).not.toHaveBeenCalled();
+  });
+  it.each([
+    [{ hasAudio: false }, 'Selecciona una grabación válida'],
+    [{ segmentCount: 0 }, 'Añade al menos una intervención'],
+    [{ busy: true }, 'preparación en curso'],
+    [{ draftBusy: true }, 'verificando el proyecto'],
+    [{ analyzingSilences: true }, 'análisis de pausas'],
+    [{ currentWavPlan: null }, 'Calculando la compatibilidad'],
+    [{ currentWavPlan: { parts: [], issue: 'WAV incompatible' } }, 'exportador de escritorio'],
+    [{ wavSource: false, localMp3Eligible: true }, 'Habilita el procesamiento local MP3'],
+    [{ wavSource: false, localMp3Eligible: false, segmentCount: 1 }, 'Descarga el plan local JSON'],
+    [{ localOnly: false, segmentCount: 1 }, 'El original se enviará al servidor'],
+    [{ readyAssignment: { token: 'opaque', partKey: 'a' } }, 'Continúa a asignación'],
+  ] satisfies [Partial<ComponentProps<typeof StudioFinalizationPanel>>, string][])('guides the next action for %j', (overrides, expected) => {
+    const { props } = setup(overrides);
+    expect(hint()).toContain(expected);
+    expect(props.onPrepareLocal).not.toHaveBeenCalled();
+    expect(props.onPrepareServer).not.toHaveBeenCalled();
+    expect(props.onDownload).not.toHaveBeenCalled();
+  });
+});
