@@ -95,6 +95,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importedTransfer, setImportedTransfer] = useState<string | null>(null);
   const [validationFocus, setValidationFocus] = useState<{
     scenarioId: string; field: 'title' | 'audio'; requestId: number;
   } | null>(null);
@@ -363,7 +364,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             (current.sourceEndSec ?? null) === (incoming.sourceEndSec ?? null);
         });
       if (identicalPackage) {
-        if (transferToken) clearStudioHandoff(transferToken);
+        if (transferToken) { clearStudioHandoff(transferToken); setImportedTransfer(transferToken); }
         setImportNotice('Este paquete ya está importado y no tiene cambios. Conservamos los escenarios existentes.');
         return;
       }
@@ -395,6 +396,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       setScenarios(prev => revision === importRevision.current ? next : [...prev]);
       if (transferToken) {
         clearStudioHandoff(transferToken);
+        setImportedTransfer(transferToken);
         setImportNotice('Paquete de Audio Studio verificado. Selecciona el destinatario y revisa los escenarios antes de crear.');
       }
     } catch (cause) {
@@ -410,7 +412,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const importStudioTransfer = () => {
-    if (!studioTransfer || librarySource || importPending.current || createPending.current || directAttempt.current) return;
+    if (!studioTransfer || importedTransfer === studioTransfer || librarySource || importPending.current || createPending.current || directAttempt.current) return;
     const file = peekStudioHandoff(studioTransfer);
     if (!file) {
       setError('El paquete temporal ya no está disponible. Vuelve a Audio Studio o importa un ZIP guardado.');
@@ -842,7 +844,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       ) : (
       <div>
         <div className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
-          {studioTransfer && !importNotice && <div className="mb-3 rounded-lg border border-[var(--border)] p-3 text-sm">
+          {studioTransfer && importedTransfer !== studioTransfer && <div className="mb-3 rounded-lg border border-[var(--border)] p-3 text-sm">
             <p className="text-[var(--text-secondary)]">Transferencia temporal de Audio Studio en esta pestaña. Si la verificación se interrumpe, puedes volver a intentarlo antes de que caduque.</p>
             <button type="button" disabled={isImporting || isCreating || directLocked || submissionUncertain} onClick={importStudioTransfer}
               className="mt-2 rounded-lg theme-action-secondary px-3 py-2 font-semibold disabled:opacity-50">Cargar paquete de Audio Studio</button>
