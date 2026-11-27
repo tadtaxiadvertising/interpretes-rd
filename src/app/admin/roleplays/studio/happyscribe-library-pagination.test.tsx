@@ -63,6 +63,64 @@ describe('HappyScribe library on-demand pagination', () => {
     expect(screen.queryByRole('button', { name: 'Cargar más transcripciones (50)' })).toBeNull();
   });
 
+  it('filters loaded metadata without requests and pins the current selection across result pages', async () => {
+    const rows = Array.from({length: 25}, (_,i) => ({
+      ...item(i.toString(16).padStart(32,'0'), i===24 ? 'Evaluación médica' : 'Consulta '+i),
+      folder: i===24 ? 'Clínica' : 'General',
+      language: i===24 ? 'es' : 'en',
+    }));
+    const fetcher = vi.fn().mockResolvedValueOnce(page(rows,true));
+    vi.stubGlobal('fetch',fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async()=>{fireEvent.click(screen.getByText('Actualizar biblioteca'));});
+    const select=screen.getByLabelText('Transcripción de HappyScribe') as HTMLSelectElement;
+    expect(select.options).toHaveLength(21);
+    fireEvent.click(screen.getByRole('button',{name:'Resultados siguientes'}));
+    expect(select.options).toHaveLength(7);
+    expect(select.value).toBe(rows[0].id);
+    fireEvent.change(screen.getByLabelText('Buscar transcripciones'),{target:{value:'evaluacion clinica'}});
+    expect(select.options).toHaveLength(3);
+    expect(select.value).toBe(rows[0].id);
+    fireEvent.change(select,{target:{value:rows[24].id}});
+    expect(select.value).toBe(rows[24].id);
+    expect(screen.getByText(/1 coincidencias/)).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('requires renewal for expired import proof without requesting a media export',async()=>{
+    const expired={...item(a,'Expired recording'),state:'automatic_done',importProof:String(Date.now()-1000)+'.'+'a'.repeat(64)};
+    const fetcher=vi.fn().mockResolvedValueOnce(Response.json({success:true,data:[expired],hasMore:false,mediaImportEnabled:true}));
+    vi.stubGlobal('fetch',fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async()=>{fireEvent.click(screen.getByText('Actualizar biblioteca'));});
+    fireEvent.click(screen.getByRole('button',{name:'Importar audio original'}));
+    expect(screen.getByText(/autorización de esta transcripción caducó/)).toBeTruthy();
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
+
+  it('renews only the selected source page without losing loaded pages or replacing a missing item',async()=>{
+    const fetcher=vi.fn()
+      .mockResolvedValueOnce(page([item(a,'First')],true))
+      .mockResolvedValueOnce(page([item(b,'Second')],false))
+      .mockResolvedValueOnce(page([{...item(b,'Updated second'),importProof:'1800000000000.'+'a'.repeat(64)}],false))
+      .mockResolvedValueOnce(page([item(c,'Different item')],false));
+    vi.stubGlobal('fetch',fetcher);
+    render(<RoleplayStudioPage />);
+    await act(async()=>{fireEvent.click(screen.getByText('Actualizar biblioteca'));});
+    await act(async()=>{fireEvent.click(screen.getByText('Cargar más transcripciones (50)'));});
+    const select=screen.getByLabelText('Transcripción de HappyScribe') as HTMLSelectElement;
+    fireEvent.change(select,{target:{value:b}});
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Renovar selección'}));});
+    expect(select.value).toBe(b);
+    expect(Array.from(select.options).map(o=>o.value)).toEqual(['',a,b]);
+    expect(fetcher.mock.calls[2][0]).toBe('/api/admin/happyscribe/transcriptions?page=1');
+    await act(async()=>{fireEvent.click(screen.getByRole('button',{name:'Renovar selección'}));});
+    expect(select.value).toBe('');
+    expect(Array.from(select.options).map(o=>o.value)).toEqual(['',a]);
+    expect(screen.getByText(/ya no aparece en su página original/)).toBeTruthy();
+    expect(fetcher.mock.calls.every(([,init])=>init?.method!=='POST')).toBe(true);
+  });
+
   it('refreshes only on demand, resets pages and replaces stale library items', async () => {
     const fetcher = vi.fn()
       .mockResolvedValueOnce(page([item(a, 'First')], true))
