@@ -8,7 +8,7 @@ import { readAudioStudioEditorPreferences } from '@/app/actions/audio-studio-set
 import { ArrowLeft, AudioLines, Plus } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import {
-  parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments,
+  parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments, boundTimedCuesToMedia,
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
@@ -858,20 +858,18 @@ export default function RoleplayStudioPage() {
       if (revision !== subtitleImportRevision.current ||
           (approval && !sameEditorEdits(approval.edits))) return;
       const { cues, diagnostics } = parseTimedTranscriptForReviewWithDiagnostics(transcript, usesLocalLongMode(audio, duration));
-      const { selected, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
-      if (!selected.length) {
+      const { selected: filtered, excludedCount } = filterInterpreterCues(cues, excludeInterpreter);
+      if (!filtered.length) {
         throw new Error('No quedan intervenciones del médico o paciente después de excluir las del intérprete.');
       }
-      if (selected.some(cue => cue.end > duration + 0.1)) {
-        throw new Error('Los subtítulos contienen intervalos posteriores al final de la grabación.');
-      }
+      const { cues: selected, adjustedCount } = boundTimedCuesToMedia(filtered, duration);
       // The long source transcript is only browser-side reference material.
       // A 500-cue recording cannot be published as an unreviewed 500-scene task.
       const allIndices = selected.map((_, index) => index);
       // Never silently convert repaired provider timings into a published
       // roleplay. Show them as candidate turns for explicit approval instead.
       const timingWasRepaired = diagnostics.reordered > 0 ||
-        diagnostics.overlapping > 0 || diagnostics.divided > 0 || diagnostics.skipped > 0;
+        diagnostics.overlapping > 0 || diagnostics.divided > 0 || diagnostics.skipped > 0 || adjustedCount > 0;
       let canApplyAll = !timingWasRepaired && selected.length <= ROLEPLAY_MAX_SCENARIOS;
       if (canApplyAll) {
         try { selectTimedCues(selected, allIndices); }
@@ -895,7 +893,7 @@ export default function RoleplayStudioPage() {
         const compatible = suggestRepresentativeTimedCueSelection(selected, allIndices);
         setChosenCueIndices(compatible);
         const repairedNotice = timingWasRepaired
-          ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras), y ${diagnostics.skipped} intervalos invertidos o inferiores a 0,1 s omitidos. `
+          ? `Correcciones de tiempos para revisión: ${diagnostics.reordered} fuera de orden, ${diagnostics.overlapping} solapamientos y ${diagnostics.divided} intervenciones largas divididas en ventanas aproximadas (sin alineación de palabras), y ${diagnostics.skipped} intervalos invertidos o inferiores a 0,1 s omitidos; ${adjustedCount} finales ajustados a la duración real del audio. `
           : '';
         setNotice(`${repairedNotice}${selected.length} intervenciones disponibles; ${excludedCount} del intérprete original omitidas. Se sugirieron ${compatible.length} turnos compatibles de distintos momentos de la grabación, sin voz etiquetada del intérprete. Escucha los cortes y confirma hablantes antes de aplicar; el borrador no se reemplazó.`);
       }
