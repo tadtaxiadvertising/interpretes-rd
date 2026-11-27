@@ -258,6 +258,45 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(3);
   });
 
+  it('switches between immersive editing and finalization without remounting media or losing edits', () => {
+    const player = selectAudio();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir escritorio de edición' }));
+    expect(screen.getByRole('heading', { name: 'Escritorio de Audio Studio' })).toBeTruthy();
+    expect(player.closest('[hidden]')).not.toBeNull();
+    expect(player.isConnected).toBe(true);
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Salir del escritorio' }));
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar', exact: true }));
+    expect(screen.getByRole('heading', { name: 'Preparar paquete del roleplay' })).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Navegador de intervenciones' })).toBeNull();
+    expect(screen.getByLabelText('Perfil del hablante').closest('[hidden]')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Editar', exact: true }));
+    expect(screen.queryByRole('heading', { name: 'Preparar paquete del roleplay' })).toBeNull();
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
+    expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+    expect(player.isConnected).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Salir del escritorio' }));
+    expect(player.closest('[hidden]')).toBeNull();
+    expect(screen.queryByRole('heading', { name: 'Escritorio de Audio Studio' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Abrir escritorio de edición' }));
+    expect(player.play).not.toHaveBeenCalled();
+  });
+
+  it('returns from immersive finalization to the invalid intervention before exporting', () => {
+    selectAudio();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir escritorio de edición' }));
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'interpreter' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Descargar plan local de cortes (JSON)' }));
+    expect(screen.getByRole('navigation', { name: 'Navegador de intervenciones' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Editar', exact: true }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('alert').textContent).toContain('intérprete original');
+    expect(document.activeElement?.id).toBe('studio-intervention-studio-1');
+  });
+
   it('controls the existing media player from focus mode without moving to the source panel', () => {
     const player = selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
