@@ -78,6 +78,10 @@ La tabla de sesiones es una proyección sintética mínima de id; no equivale al
 
 La prueba de rutas ejecuta los handlers reales de creación y consulta de recibos, además del parser de recuperación del navegador, con autenticación, persistencia, Storage y notificaciones simulados. Fuerza un error de notificación después de completar el recibo, verifica que no se eliminen los audios, consulta la clave original desde la misma identidad y comprueba que otra identidad no reciba ese resultado. Un replay de la solicitud original debe devolver la misma sesión sin volver a subir ni notificar. Esta prueba complementa la verificación de transacciones Prisma/PostgreSQL aislada, pero no demuestra un despliegue HTTP completo ni una entrega real de notificaciones.
 
+## Diagnóstico del servicio desde administración
+
+En Gestión de roleplays, abrir «Diagnóstico de creación». Esta pantalla exige una sesión administrativa, muestra el modo de configuración del servicio Next.js y el SHA de build si está disponible y es válido. El botón «Comprobar disponibilidad» ejecuta el mismo control acotado de catálogo y permisos que usa la creación con clave, con la conexión Prisma real del servicio. No consulta el catálogo al abrir la pantalla inicialmente ni al precargar el enlace. No instala herramientas, ejecuta migraciones, lee recibos individuales, concede permisos, activa banderas ni muestra credenciales. El resultado es una condición necesaria, no aprobación de activación; si falta SHA, verificar procedencia mediante el procedimiento de Easypanel.
+
 ## Reconciliación y rollback
 
 - **Consulta read-only tras migrar** (con usuario de administración, en el proyecto autorizado): `SELECT status, count(*) FROM public.roleplay_creation_requests GROUP BY status;`. No consultar nombres, secretos, URLs ni contenido de audio.
