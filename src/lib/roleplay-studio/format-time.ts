@@ -16,3 +16,18 @@ export function formatStudioTime(value: number): string {
     ? String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0') + ':' + seconds
     : String(Math.floor(tenths / 600)).padStart(2, '0') + ':' + seconds;
 }
+
+/** Spoken Spanish timestamp for native range controls; never changes the media position. */
+export function formatStudioAccessibleTime(value: number, precision: 1 | 2 = 2): string {
+  const safe = Number.isFinite(value) ? Math.max(0, value) : 0;
+  const scale = 10 ** precision;
+  const ticks = Math.round(safe * scale);
+  const hours = Math.floor(ticks / (3600 * scale));
+  const minutes = Math.floor(ticks / (60 * scale)) % 60;
+  const seconds = (ticks % (60 * scale)) / scale;
+  const parts: string[] = [];
+  if (hours) parts.push(hours + (hours === 1 ? ' hora' : ' horas'));
+  if (minutes) parts.push(minutes + (minutes === 1 ? ' minuto' : ' minutos'));
+  parts.push(String(seconds).replace('.', ',') + (seconds === 1 ? ' segundo' : ' segundos'));
+  return parts.join(', ');
+}
