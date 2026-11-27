@@ -3963,9 +3963,16 @@ export default function RoleplayStudioPage() {
                       </li>;
                     })}
                   </ul>
+                  {localOnly && publicationPlan.parts.length > 1 && (() => {
+                    const next = publicationPlan.parts.find(part => activeProductionKeys.has(part.key) && !productionStatus(activeProductionKeys.get(part.key)!));
+                    return next ? <button type="button" disabled={busy || draftBusy || analyzingSilences}
+                      onClick={() => setPublicationPartKey(next.key)}
+                      className="theme-action-secondary rounded px-3 py-2 text-xs font-semibold disabled:opacity-50">Elegir siguiente parte pendiente ({next.number})</button> : null;
+                  })()}
                   <Link href="/admin/roleplays" className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
                 </section>
               )}
+              {readyAssignment && (!activeProductionKeys || !activeProductionKeys.has(readyAssignment.partKey ?? publicationPlan.parts[0]?.key ?? '')) && <p className="text-xs text-[var(--theme-warning)]">Seguimiento no disponible para este paquete. Puedes continuar, pero verifica las sesiones existentes para evitar duplicados.</p>}
               {readyAssignment ? (
                 <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
                   prefetch={false}
