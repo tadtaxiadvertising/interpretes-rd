@@ -11,6 +11,8 @@ let transfer: { token: string; key: string; expectedBackup?: string; backupUnava
 /** Advisory identity only: sampled source fingerprint plus ordered editorial fields.
  * Never used as authentication, integrity verification or server idempotency. */
 export async function studioProductionKey(source: File, turns: readonly StudioDraftSegment[], mode: 'wav' | 'mp3') {
+  // Fail before reading media if the browser cannot compute the package digest.
+  if (typeof crypto === 'undefined' || !crypto.subtle) throw new Error('Seguimiento local requiere HTTPS o localhost.');
   let fingerprint = fingerprints.get(source);
   if (!fingerprint) {
     fingerprint = fingerprintLocalMedia(source);
