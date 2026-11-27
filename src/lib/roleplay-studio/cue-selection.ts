@@ -1,9 +1,9 @@
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS, ROLEPLAY_STUDIO_PACKAGE_MAX_AUDIO_SECONDS } from '@/lib/roleplay-limits';
 import { STUDIO_MAX_EDITOR_SEGMENTS } from './draft';
 import type { TimedTranscriptCue } from './transcript';
 import { classifySpeakerRole } from './speaker-profiles';
 
-const MAX_PACKAGE_AUDIO_SECONDS = 900;
+const MAX_PACKAGE_AUDIO_SECONDS = ROLEPLAY_STUDIO_PACKAGE_MAX_AUDIO_SECONDS;
 type SelectionPurpose = 'package' | 'editor';
 
 /**
@@ -15,7 +15,7 @@ export function selectTimedCues(
   available: readonly TimedTranscriptCue[], chosenIndices: readonly number[],
   purpose: SelectionPurpose = 'package',
 ): TimedTranscriptCue[] {
-  const max = purpose === 'editor' ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
+  const max = purpose === 'editor' ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS;
   if (chosenIndices.length < 1 || chosenIndices.length > max) {
     throw new Error(`Selecciona entre 1 y ${max} intervenciones.`);
   }
@@ -62,7 +62,7 @@ export function fillCompatibleTimedCueSelection(
   candidateIndices: readonly number[],
   purpose: SelectionPurpose = 'package',
 ): number[] {
-  const max = purpose === 'editor' ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
+  const max = purpose === 'editor' ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS;
   // A malformed manual selection must be corrected explicitly, not silently
   // thrown away or turned into an apparently valid different selection.
   if (chosenIndices.length) selectTimedCues(available, chosenIndices, purpose);
@@ -117,7 +117,7 @@ export function suggestRepresentativeTimedCueSelection(
       return Number.isFinite(cue.start) && Number.isFinite(cue.end) &&
         cue.start >= 0 && cue.end > cue.start && cue.end - cue.start <= 300;
     });
-  if (indices.length <= ROLEPLAY_MAX_SCENARIOS) {
+  if (indices.length <= ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS) {
     return fillCompatibleTimedCueSelection(available, [], indices);
   }
 
@@ -125,7 +125,7 @@ export function suggestRepresentativeTimedCueSelection(
     available[a].start - available[b].start || available[a].end - available[b].end || a - b);
   const first = available[sorted[0]].start;
   const last = sorted.reduce((end, index) => Math.max(end, available[index].end), first);
-  const numberOfBuckets = ROLEPLAY_MAX_SCENARIOS;
+  const numberOfBuckets = ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS;
   const windowSeconds = Math.max((last - first) / numberOfBuckets, 0.001);
   const buckets: number[][] = Array.from({ length: numberOfBuckets }, () => []);
 
@@ -137,7 +137,7 @@ export function suggestRepresentativeTimedCueSelection(
 
   const chosen: number[] = [];
   for (let bucket = 0; bucket < numberOfBuckets; bucket++) {
-    if (chosen.length >= ROLEPLAY_MAX_SCENARIOS) break;
+    if (chosen.length >= ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS) break;
     const targetTime = first + (bucket + 0.5) * windowSeconds;
     const score = (index: number) => {
       const cue = available[index];
