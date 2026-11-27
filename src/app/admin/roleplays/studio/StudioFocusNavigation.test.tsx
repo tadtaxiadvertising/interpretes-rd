@@ -54,6 +54,7 @@ describe('focused intervention navigation',()=>{
     expect(props.onExclude).toHaveBeenCalledOnce();
     expect(props.onApplyProfile).toHaveBeenCalledOnce();
     const group=within(screen.getByRole('group',{name:'Reproducción en modo enfoque'}));
+    expect(group.getByRole('slider').getAttribute('aria-valuetext')).toBe('10 segundos');
     fireEvent.click(group.getByRole('button',{name:'Retroceder audio 5 segundos'}));
     fireEvent.click(group.getByRole('button',{name:'Avanzar audio 5 segundos'}));
     fireEvent.change(group.getByRole('slider'),{target:{value:'30'}});
