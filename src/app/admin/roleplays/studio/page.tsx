@@ -22,6 +22,7 @@ import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPu
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
 import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
+import { filterHappyScribeLibrary, happyScribeResultPage, happyScribeProofExpiry, happyScribeReady, type HappyScribeLibraryItem } from '@/lib/roleplay-studio/happyscribe-library';
 import { happyScribeImportFilename } from '@/lib/roleplay-studio/happyscribe-filename';
 import {
   addStudioProtocol, type StudioProtocolKind, type StudioProtocolLanguage,
@@ -171,10 +172,13 @@ export default function RoleplayStudioPage() {
   const [cueSearch, setCueSearch] = useState('');
   const [showOnlySelectedCues, setShowOnlySelectedCues] = useState(false);
   const [showCueReviewAlertsOnly, setShowCueReviewAlertsOnly] = useState(false);
-  const [happyScribeItems, setHappyScribeItems] = useState<Array<{
-    id: string; importProof: string; name: string; state: string; language: string | null;
-    durationSeconds: number | null; createdAt: string | null; folder: string | null;
-  }>>([]);
+  const [happyScribeItems, setHappyScribeItems] = useState<HappyScribeLibraryItem[]>([]);
+  const [happyScribeQuery, setHappyScribeQuery] = useState('');
+  const [happyScribeReadyOnly, setHappyScribeReadyOnly] = useState(false);
+  const [happyScribeLanguage, setHappyScribeLanguage] = useState('');
+  const [happyScribeFolder, setHappyScribeFolder] = useState('');
+  const [happyScribeResultIndex, setHappyScribeResultIndex] = useState(0);
+  const happyScribeOrigins = useRef(new Map<string,number>());
   const [happyScribeSelectedId, setHappyScribeSelectedId] = useState('');
   const [happyScribeLoading, setHappyScribeLoading] = useState(false);
   const [happyScribePage, setHappyScribePage] = useState(0);
@@ -183,6 +187,16 @@ export default function RoleplayStudioPage() {
   const [happyScribeImporting, setHappyScribeImporting] = useState(false);
   const [happyScribeMediaImporting, setHappyScribeMediaImporting] = useState(false);
   const [happyScribeMediaEnabled, setHappyScribeMediaEnabled] = useState(false);
+  const happyScribeSelection = happyScribeItems.find(item => item.id === happyScribeSelectedId);
+  const happyScribeFiltered = useMemo(() => filterHappyScribeLibrary(happyScribeItems, {
+    query: happyScribeQuery, readyOnly: happyScribeReadyOnly, language: happyScribeLanguage, folder: happyScribeFolder,
+  }), [happyScribeItems, happyScribeQuery, happyScribeReadyOnly, happyScribeLanguage, happyScribeFolder]);
+  const happyScribeResults = happyScribeResultPage(happyScribeFiltered, happyScribeResultIndex, happyScribeSelection);
+  const happyScribeLanguages = useMemo(() => [...new Set(happyScribeItems.flatMap(item => item.language ? [item.language] : []))].sort(), [happyScribeItems]);
+  const happyScribeFolders = useMemo(() => [...new Set(happyScribeItems.flatMap(item => item.folder ? [item.folder] : []))].sort(), [happyScribeItems]);
+  const resetHappyScribeFilters = () => {
+    setHappyScribeQuery(''); setHappyScribeReadyOnly(false); setHappyScribeLanguage(''); setHappyScribeFolder(''); setHappyScribeResultIndex(0);
+  };
   const CUES_PER_PAGE = 60;
   const player = useRef<HTMLMediaElement | null>(null);
   const pairPlayer = useRef<HTMLAudioElement | null>(null);
@@ -1840,11 +1854,12 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const loadHappyScribeItems = async (page = 0) => {
+  const loadHappyScribeItems = async (page = 0, refreshId?: string) => {
     // Page 0 is a manual refresh. Other pages load only on explicit request.
     // The ref closes the rapid-click race before React rerenders disabled buttons.
-    if (page !== 0 && (!happyScribeHasMore || happyScribeListAbort.current ||
-        page !== happyScribePage + 1 || page > 1000)) return;
+    if (happyScribeListAbort.current || happyScribeTranscriptAbort.current || happyScribeMediaAbort.current) return;
+    if (refreshId ? happyScribeOrigins.current.get(refreshId) !== page :
+      (page !== 0 && (!happyScribeHasMore || page !== happyScribePage + 1 || page > 1000))) return;
     happyScribeListAbort.current?.abort();
     const controller = new AbortController();
     happyScribeListAbort.current = controller;
@@ -1864,6 +1879,8 @@ export default function RoleplayStudioPage() {
           setHappyScribeConfigUnavailable(true);
           // A disabled/unreadable provider configuration invalidates the
           // prior catalog selection and import proofs in this browser view.
+          happyScribeOrigins.current.clear();
+          resetHappyScribeFilters();
           setHappyScribeItems([]);
           setHappyScribeSelectedId('');
           setHappyScribeHasMore(false);
@@ -1873,7 +1890,26 @@ export default function RoleplayStudioPage() {
       }
       const items = body.data as typeof happyScribeItems;
       setHappyScribeMediaEnabled(body.mediaImportEnabled === true);
+      if (refreshId) {
+        const refreshed = items.find(item => item.id === refreshId);
+        if (!refreshed) {
+          // The provider's catalog order may have changed. Never substitute
+          // a different item or leave an old authorization ready for import.
+          happyScribeOrigins.current.delete(refreshId);
+          setHappyScribeItems(current => current.filter(item => item.id !== refreshId));
+          setHappyScribeSelectedId(current => current === refreshId ? '' : current);
+          setError('La selección ya no aparece en su página original. Actualiza la biblioteca y localízala nuevamente.');
+          return;
+        }
+        setHappyScribeItems(current => current.map(item => item.id === refreshId ? refreshed : item));
+        if (!happyScribeReady(refreshed)) setHappyScribeSelectedId(current => current === refreshId ? '' : current);
+        setNotice('Selección de HappyScribe renovada. No se ha descargado ningún archivo.');
+        return;
+      }
       if (page === 0) {
+        happyScribeOrigins.current.clear();
+        resetHappyScribeFilters();
+        for (const item of items) happyScribeOrigins.current.set(item.id, page);
         setHappyScribeItems(items);
         setHappyScribeSelectedId(current =>
           items.some(item => item.id === current) ? current : items.find(item =>
@@ -1881,6 +1917,7 @@ export default function RoleplayStudioPage() {
         );
       } else {
         // Provider pages may overlap. Keep the first occurrence and selection.
+        for (const item of items) if (!happyScribeOrigins.current.has(item.id)) happyScribeOrigins.current.set(item.id, page);
         setHappyScribeItems(current => {
           const seen = new Set(current.map(item => item.id));
           const newItems = items.filter(item => {
@@ -1921,6 +1958,8 @@ export default function RoleplayStudioPage() {
       setError('Selecciona una transcripción completada en HappyScribe.');
       return;
     }
+    const expiry = happyScribeProofExpiry(item.importProof);
+    if (expiry !== null && expiry <= Date.now()) { setError('La autorización de esta transcripción caducó. Pulsa «Renovar selección» antes de importar.'); return; }
     // Ask before a remote SRT export consumes provider bandwidth. Cancelled
     // edits remain untouched and no POST is sent to the frontend VPS.
     if (!confirmPendingSrtReviewReplacement(item.durationSeconds, true)) return;
