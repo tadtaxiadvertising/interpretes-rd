@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseTimedTranscript, parseTimedTranscriptForReview, parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments } from './transcript';
+import { boundTimedCuesToMedia, parseTimedTranscript, parseTimedTranscriptForReview, parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments } from './transcript';
 
 describe('Audio Studio offline subtitle import', () => {
   it('imports SRT cues in order and extracts speaker labels', () => {
@@ -228,5 +228,36 @@ describe('Provider zero-length and inverted subtitles', () => {
       '00:00:01,000 --> 00:00:01,000\nDoctor: Invalid cue',
     ).join('\n\n');
     expect(() => parseTimedTranscriptForReviewWithDiagnostics(raw)).toThrow(/10000/);
+  });
+});
+
+
+describe('Subtitle boundaries against the actual recording', () => {
+  const cue = (start: number, end: number) => ({ start, end, text: 'Reference', speaker: 'Doctor' });
+
+  it('preserves valid cues and clamps only the tolerated tail without mutating input', () => {
+    const original = [cue(0, 1), cue(1, 2.05)];
+    expect(boundTimedCuesToMedia(original, 2.0039)).toEqual({
+      cues: [cue(0, 1), cue(1, 2.003)], adjustedCount: 1,
+    });
+    expect(original[1].end).toBe(2.05);
+    expect(boundTimedCuesToMedia([cue(0, 2)], 2)).toEqual({
+      cues: [cue(0, 2)], adjustedCount: 0,
+    });
+    expect(boundTimedCuesToMedia([cue(0, 2.1)], 2).cues[0].end).toBe(2);
+  });
+
+  it('rejects larger discrepancies and a tail too short to remain valid', () => {
+    expect(() => boundTimedCuesToMedia([cue(0, 2.101)], 2)).toThrow(/posteriores/);
+    expect(() => boundTimedCuesToMedia([cue(1.901, 2.05)], 2)).toThrow(/0,1 segundos/);
+    expect(() => boundTimedCuesToMedia([cue(2.01, 2.09)], 2)).toThrow(/0,1 segundos/);
+    expect(() => boundTimedCuesToMedia([cue(0, 2)], NaN)).toThrow(/duración/);
+    expect(() => boundTimedCuesToMedia([cue(0, Infinity)], 2)).toThrow(/inválidos/);
+  });
+
+  it('preserves a tail of exactly 100 milliseconds after adjustment', () => {
+    expect(boundTimedCuesToMedia([cue(10, 10.15)], 10.1)).toEqual({
+      cues: [cue(10, 10.1)], adjustedCount: 1,
+    });
   });
 });
