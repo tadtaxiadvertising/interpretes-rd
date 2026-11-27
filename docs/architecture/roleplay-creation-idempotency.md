@@ -82,6 +82,8 @@ La prueba de rutas ejecuta los handlers reales de creación y consulta de recibo
 
 En Gestión de roleplays, abrir «Diagnóstico de creación». Esta pantalla exige una sesión administrativa, muestra el modo de configuración del servicio Next.js y el SHA de build si está disponible y es válido. El botón «Comprobar disponibilidad» ejecuta el mismo control acotado de catálogo y permisos que usa la creación con clave, con la conexión Prisma real del servicio. No consulta el catálogo al abrir la pantalla inicialmente ni al precargar el enlace. No instala herramientas, ejecuta migraciones, lee recibos individuales, concede permisos, activa banderas ni muestra credenciales. El resultado es una condición necesaria, no aprobación de activación; si falta SHA, verificar procedencia mediante el procedimiento de Easypanel.
 
+Tras una comprobación explícita, la pantalla ofrece un resumen seleccionable para registrar fecha UTC de finalización, SHA validado o no informado, modo y resultado puntual. No contiene datos de usuarios, credenciales ni recibos. No es una certificación de identidad del proyecto, de la versión esperada ni una aprobación de activación. No se genera evidencia antes de comprobar la disponibilidad.
+
 ## Reconciliación y rollback
 
 - **Consulta read-only tras migrar** (con usuario de administración, en el proyecto autorizado): `SELECT status, count(*) FROM public.roleplay_creation_requests GROUP BY status;`. No consultar nombres, secretos, URLs ni contenido de audio.

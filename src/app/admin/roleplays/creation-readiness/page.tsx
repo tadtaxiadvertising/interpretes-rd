@@ -38,6 +38,17 @@ export default async function CreationReadinessPage({
   const requested = (await searchParams).check === '1';
   const ready = requested ? await isCreationLedgerReady(prisma) : null;
 
+  // Record when this check finished, not a build timestamp or an approval.
+  // Only fixed labels and validated build metadata enter the evidence.
+  const evidence = ready === null ? null : [
+    'Diagnóstico de creación segura — Intérpretes RD',
+    'Fecha de comprobación (UTC): ' + new Date().toISOString(),
+    'SHA del servicio: ' + (buildId ?? 'No informado'),
+    'Modo: ' + pilot.mode,
+    'Registro de idempotencia: ' + (ready ? 'Disponible según comprobación' : 'No disponible según comprobación'),
+    'Resultado puntual; no autoriza activar el piloto.',
+  ].join('\n');
+
   return (
     <main className="mx-auto max-w-3xl space-y-6">
       <Link href="/admin/roleplays" className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--theme-link)] underline">Volver a roleplays</Link>
@@ -73,6 +84,13 @@ export default async function CreationReadinessPage({
           <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{requested ? 'Volver a comprobar' : 'Comprobar disponibilidad'}</button>
         </form>
       </section>
+      {evidence !== null && (
+        <section aria-label="Evidencia de comprobación" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
+          <h2 className="font-semibold text-[var(--foreground)]">Evidencia de comprobación</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Selecciona y copia este resumen para registrar el resultado. Refleja la comprobación realizada, no el estado futuro ni la identidad verificada del proyecto.</p>
+          <pre className="select-all whitespace-pre-wrap break-words rounded-xl border border-[var(--border)] p-3 font-mono text-xs text-[var(--foreground)]">{evidence}</pre>
+        </section>
+      )}
       <p className="text-sm text-[var(--text-secondary)]">Un resultado favorable no autoriza activar el piloto. Aún se debe verificar el proyecto, el SHA esperado, las restricciones y el procedimiento de recuperación. Esta pantalla no aplica migraciones ni modifica banderas.</p>
     </main>
   );
