@@ -76,6 +76,33 @@ describe('Roleplay Studio accessible waveform timeline', () => {
     expect(screen.getByText('02:00:00')).toBeTruthy();
   });
 
+  it('reuses static interval geometry for cursor updates and refreshes it after editing or zooming', () => {
+    const file = audio();
+    const seek = vi.fn();
+    const interval = { id: 'clip', get start() { return 10; }, end: 30 };
+    const readStart = vi.spyOn(interval, 'start', 'get');
+    const segments = [interval];
+    const { rerender } = render(<StudioWaveform
+      file={file} duration={720} currentTime={15} segments={segments} onSeek={seek}/>);
+    const marker = screen.getByTestId('studio-window-segment');
+    expect(marker.getAttribute('x')).toBe('10');
+    expect(readStart).toHaveBeenCalled();
+    readStart.mockClear();
+    rerender(<StudioWaveform
+      file={file} duration={720} currentTime={25.25} segments={segments} onSeek={seek}/>);
+    expect(readStart).not.toHaveBeenCalled();
+    expect(screen.getByTestId('studio-window-segment')).toBe(marker);
+    expect(screen.getByLabelText('Tiempo exacto del cursor').textContent).toBe('00:25.25');
+    const edited = [{ id: 'clip', start: 20, end: 30 }];
+    rerender(<StudioWaveform
+      file={file} duration={720} currentTime={25.25} segments={edited} onSeek={seek}/>);
+    expect(screen.getByTestId('studio-window-segment').getAttribute('x')).toBe('20');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Zoom de la línea de tiempo' }), {
+      target: { value: '4' },
+    });
+    expect(screen.getByTestId('studio-window-segment').getAttribute('x')).toBe('80');
+  });
+
   it('keeps navigation available for long recordings without allocating decoded PCM', () => {
     const file = audio();
     const seek = vi.fn();
