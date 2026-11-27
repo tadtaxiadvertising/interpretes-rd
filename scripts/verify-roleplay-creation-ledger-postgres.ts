@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Client } from 'pg';
-import { classifyCreationLedgerCatalog, readCreationLedgerCatalog } from './roleplay-creation-ledger-catalog';
+import { classifyCreationLedgerCatalog, readCreationLedgerCatalog, hasCreationLedgerRuntimeAccess } from './roleplay-creation-ledger-catalog';
 
 async function main() {
   const raw = process.env.DATABASE_URL;
@@ -42,6 +42,14 @@ async function main() {
     assert.ok(sql.includes('STAGED DESIGN ONLY'));
     await first.query(sql);
     assert.equal(await inspect(), 'hardened-catalog');
+    // Exercise effective role access in the isolated database, without
+    // creating any cluster-wide roles or granting privileges.
+    await first.query('BEGIN READ ONLY');
+    try {
+      assert.equal(await hasCreationLedgerRuntimeAccess(first), true);
+      await first.query('SET LOCAL ROLE pg_read_all_data');
+      assert.equal(await hasCreationLedgerRuntimeAccess(first), false);
+    } finally { await first.query('ROLLBACK'); }
     // Mutations occur only in the disposable database, never in the inspector.
     await first.query('BEGIN');
     try {
