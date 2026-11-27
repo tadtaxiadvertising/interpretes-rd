@@ -1,6 +1,7 @@
 // @vitest-environment node
 import type { Prisma, PrismaClient } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { MAX_RECEIPT_SESSIONS } from './creation-receipt';
 import { describe, expect, it, vi } from 'vitest';
 import {
   claimRoleplayCreation,
@@ -344,6 +345,26 @@ describe('Roleplay ledger: conditional completion in the publisher transaction',
     const { tx } = mockTx(0);
     await expect(completeRoleplayCreationInTransaction(tx, result))
       .rejects.toBeInstanceOf(InvalidRoleplayCreationKeyError);
+  });
+
+  it('accepts the shared receipt limit and rejects larger results before writing', async () => {
+    const sessionIds = Array.from({ length: MAX_RECEIPT_SESSIONS }, (_, index) => 'synthetic-' + index);
+    const { tx, updateMany } = mockTx(1);
+    await expect(completeRoleplayCreationInTransaction(tx, { ...result, sessionIds })).resolves.toBeUndefined();
+    expect(updateMany).toHaveBeenCalledOnce();
+    const receipt = ledger(row({
+      status: 'COMPLETED', sessionIds, createdCount: sessionIds.length,
+      skippedCount: result.skippedCount, scenarioCount: result.scenarioCount,
+    }), { code: 'P2002' });
+    await expect(claimRoleplayCreation(receipt.db, actor, key, digest)).resolves.toEqual({
+      kind: 'REPLAY', sessionIds, createdCount: sessionIds.length,
+      skippedCount: result.skippedCount, scenarioCount: result.scenarioCount,
+    });
+    updateMany.mockClear();
+    await expect(completeRoleplayCreationInTransaction(tx, {
+      ...result, sessionIds: [...sessionIds, 'one-too-many'],
+    })).rejects.toBeInstanceOf(InvalidRoleplayCreationKeyError);
+    expect(updateMany).not.toHaveBeenCalled();
   });
 
   it('never updates a ledger with no sessions, repeated IDs or bad counters', async () => {
