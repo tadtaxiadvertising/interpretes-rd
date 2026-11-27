@@ -2828,6 +2828,9 @@ export default function RoleplayStudioPage() {
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
           )}
+          {focusMode && lastStructuralEdit?.kind === 'eliminación' && (!workspaceActive || workspaceTab === 'edit') && (
+            <p className="shrink-0 text-xs text-[var(--text-secondary)]">Puedes deshacer la última exclusión antes de realizar otra edición.</p>
+          )}
           {focusMode && segments.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
             <p role="status" aria-label="Confirmaciones editoriales" className="shrink-0 text-xs text-[var(--text-secondary)]">
               {confirmedIds.size}/{segments.length} intervenciones confirmadas en esta sesión. Los cambios requieren nueva revisión.
@@ -3045,26 +3048,8 @@ export default function RoleplayStudioPage() {
               en la fila compacta; abre «Editar» para ajustar tiempos e instrucciones.
             </p>
           )}
-          {renderedSegments.map(({ segment, index }) => (
-            <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
-              className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]">
-              <div className="flex flex-wrap items-center gap-2">
-                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--foreground)]">
-                  #{index + 1} · {segment.title}
-                  <span className="ml-2 text-xs font-normal text-[var(--text-secondary)]">
-                    {segment.ranges
-                      ? segment.ranges.map(range => formatTime(range.start) + '–' + formatTime(range.end)).join(' + ')
-                      : formatTime(segment.start) + '–' + formatTime(segment.end)}
-                    {' · '}{segment.speakerRole} · {segment.language.toUpperCase()}
-                  </span>
-                  {captionTexts[segment.id] && compactRows && (
-                    <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-[var(--theme-warning)]">
-                      {captionTexts[segment.id]}
-                    </span>
-                  )}
-                </h3>
-                <div hidden={focusMode && advancedTurnId !== segment.id}
-                  className={focusMode && advancedTurnId !== segment.id ? 'hidden' : 'flex flex-wrap items-center gap-2'}>
+          {renderedSegments.map(({ segment, index }) => {
+            const turnTools = (<div className="flex flex-wrap items-center gap-2">
                   <button type="button" onClick={() => seekAudio(segment.start)}
                   aria-label={'Ir al inicio de intervención ' + (index + 1)}
                   className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)]">
@@ -3125,7 +3110,26 @@ export default function RoleplayStudioPage() {
                 )}
                 <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => removeIntervention(segment.id)}
                   className="rounded-lg p-2 text-[var(--theme-danger)] hover:bg-red-500/10"><Trash2 size={16}/></button>
-              </div>
+              </div>);
+            return (
+            <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
+              className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--foreground)]">
+                  #{index + 1} · {segment.title}
+                  <span className="ml-2 text-xs font-normal text-[var(--text-secondary)]">
+                    {segment.ranges
+                      ? segment.ranges.map(range => formatTime(range.start) + '–' + formatTime(range.end)).join(' + ')
+                      : formatTime(segment.start) + '–' + formatTime(segment.end)}
+                    {' · '}{segment.speakerRole} · {segment.language.toUpperCase()}
+                  </span>
+                  {captionTexts[segment.id] && compactRows && (
+                    <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-[var(--theme-warning)]">
+                      {captionTexts[segment.id]}
+                    </span>
+                  )}
+                </h3>
+                {!focusMode && turnTools}
               </div>
               {orderedSegments[index + 1] &&
                 visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
@@ -3228,6 +3232,7 @@ export default function RoleplayStudioPage() {
               )}
               <div id={`studio-advanced-${segment.id}`} hidden={focusMode && advancedTurnId !== segment.id}
                 className={focusMode && advancedTurnId !== segment.id ? 'hidden' : 'space-y-2'}>
+                {focusMode && turnTools}
                 <label className="block text-sm text-[var(--text-secondary)]">Título
                 <input value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
                   className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
@@ -3289,7 +3294,8 @@ export default function RoleplayStudioPage() {
               </div>
               )}
             </article>
-          ))}
+            );
+          })}
           </div>
           <div hidden={workspaceActive && workspaceTab !== 'finish'} className="space-y-3">
           {segments.length > 0 && !sourceRequiresLocal && !hasCompound && (
