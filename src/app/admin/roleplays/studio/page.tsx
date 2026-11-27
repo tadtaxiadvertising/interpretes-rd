@@ -198,6 +198,7 @@ export default function RoleplayStudioPage() {
   const [bulkSpeakerRole, setBulkSpeakerRole] =
     useState<'doctor' | 'patient' | 'nurse' | 'operator'>('doctor');
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
   const preferenceEdits = useRef({ exclude: false, compact: false, protocolLanguage: false });
   useEffect(() => {
     let active = true;
@@ -227,7 +228,7 @@ export default function RoleplayStudioPage() {
     if (!invalidExportTurn) return;
     const article = document.getElementById(`studio-intervention-${invalidExportTurn.id}`);
     article?.focus({ preventScroll: true });
-    article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    if (!focusMode) article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   }, [invalidExportTurn]);
   // Navigating the review queue changes only focus and the open editor.
   // It never seeks, plays, uploads, or alters intervention content.
@@ -235,7 +236,7 @@ export default function RoleplayStudioPage() {
     if (!reviewFocusRequest) return;
     const article = document.getElementById(`studio-intervention-${reviewFocusRequest.id}`);
     article?.focus({ preventScroll: true });
-    article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    if (!focusMode) article?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
   }, [reviewFocusRequest]);
   const [turnActionFeedback, setTurnActionFeedback] = useState<{
     id: string; message: string; error: boolean;
@@ -1834,7 +1835,7 @@ export default function RoleplayStudioPage() {
     .slice(0, 8);
 
   // Only the selected row expands when reviewing a longer recording.
-  const compactRows = compactPreference ?? (sourceRequiresLocal || segments.length >= 6);
+  const compactRows = !focusMode && (compactPreference ?? (sourceRequiresLocal || segments.length >= 6));
   const query = segmentSearch.trim().toLocaleLowerCase();
   // Original-interpreter turns are not exportable, even when their speaker is
   // identified and their language is known; keep them in the pending queue.
@@ -1860,6 +1861,17 @@ export default function RoleplayStudioPage() {
         segment.speakerRole, segment.language]
         .some(value => value.toLocaleLowerCase().includes(query))));
 
+  // Keep a single editor in the same place. The full filtered collection is
+  // still used for bulk actions, validation and gapless preview eligibility.
+  const focusIndex = Math.max(0, visibleSegments.findIndex(({ segment }) =>
+    segment.id === expandedSegmentId));
+  const focusedTurn = visibleSegments[focusIndex];
+  const renderedSegments = focusMode ? (focusedTurn ? [focusedTurn] : []) : visibleSegments;
+  const selectFocusedTurn = (id: string) => {
+    setExpandedSegmentId(id);
+    setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
+  };
+
   const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
     segment.language === 'unknown' && segment.speakerRole !== 'interpreter')
     .map(({ segment }) => segment.id);
@@ -1872,7 +1884,7 @@ export default function RoleplayStudioPage() {
   const focusPendingTurn = (direction: -1 | 1) => {
     if (!visiblePendingTurns.length) return;
     const currentIndex = visiblePendingTurns.findIndex(({ segment }) =>
-      segment.id === reviewFocusRequest?.id);
+      segment.id === (focusMode ? focusedTurn?.segment.id : reviewFocusRequest?.id));
     // If filtering hid the previously selected turn, start from the first
     // pending in the chosen direction rather than navigating a hidden row.
     const index = currentIndex < 0
@@ -2582,11 +2594,21 @@ export default function RoleplayStudioPage() {
                   Siguiente pendiente
                 </button>
               )}
-              <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
-                aria-pressed={compactRows}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--foreground)]">
-                {compactRows ? 'Vista detallada' : 'Vista compacta'}
+              <button type="button" onClick={() => {
+                if (!focusMode && focusedTurn) setExpandedSegmentId(focusedTurn.segment.id);
+                setFocusMode(previous => !previous);
+              }}
+                aria-pressed={focusMode}
+                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)]">
+                {focusMode ? 'Volver a lista' : 'Modo enfoque'}
               </button>
+              {!focusMode && (
+                <button type="button" onClick={() => { preferenceEdits.current.compact = true; setCompactPreference(!compactRows); }}
+                  aria-pressed={compactRows}
+                  className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs text-[var(--foreground)]">
+                  {compactRows ? 'Vista detallada' : 'Vista compacta'}
+                </button>
+              )}
               {lastStructuralEdit && (
                 <button type="button" onClick={undoLastStructuralEdit}
                   aria-label={lastStructuralEdit.kind === 'exclusión'
@@ -2751,13 +2773,39 @@ export default function RoleplayStudioPage() {
               )}
             </div>
           )}
-          {segments.length >= 6 && (
+          {!focusMode && segments.length >= 6 && (
             <p className="text-xs text-[var(--text-secondary)]">
               {visibleSegments.length} de {segments.length} turnos. Identifica hablante e idioma
               en la fila compacta; abre «Editar» para ajustar tiempos e instrucciones.
             </p>
           )}
-          {visibleSegments.map(({ segment, index }) => (
+          {focusMode && focusedTurn && (
+            <nav aria-label="Navegador de intervenciones" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
+              <button type="button" disabled={focusIndex === 0}
+                onClick={() => selectFocusedTurn(visibleSegments[focusIndex - 1].segment.id)}
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
+                Anterior intervención
+              </button>
+              <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+                Ir a intervención
+                <select value={focusedTurn.segment.id} onChange={event => selectFocusedTurn(event.currentTarget.value)}
+                  className="mt-1 block w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
+                  {visibleSegments.map(({ segment, index }) => (
+                    <option key={segment.id} value={segment.id}>#{index + 1} · {segment.title}</option>
+                  ))}
+                </select>
+              </label>
+              <button type="button" disabled={focusIndex === visibleSegments.length - 1}
+                onClick={() => selectFocusedTurn(visibleSegments[focusIndex + 1].segment.id)}
+                className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">
+                Siguiente intervención
+              </button>
+              <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
+                Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
+              </p>
+            </nav>
+          )}
+          {renderedSegments.map(({ segment, index }) => (
             <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={-1}
               className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-2.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--theme-focus)]">
               <div className="flex flex-wrap items-center gap-2">
