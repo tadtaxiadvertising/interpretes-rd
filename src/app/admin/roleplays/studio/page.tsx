@@ -2745,8 +2745,8 @@ export default function RoleplayStudioPage() {
           <div ref={workspaceContent} className={workspaceActive ? 'min-h-0 space-y-3 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-1' : 'space-y-3'}>
           {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
-          <div hidden={workspaceActive && workspaceTab !== 'edit'} className={workspaceActive && workspaceTab === 'edit' ? 'flex flex-col gap-3' : 'space-y-3'}>
-          <details open={!focusMode} className={`space-y-3 rounded-lg border border-[var(--border)] p-2 ${workspaceActive ? 'order-last' : ''}`}>
+          <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
+          <details open={!focusMode} className="space-y-3 rounded-lg border border-[var(--border)] p-2">
             <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Herramientas de clasificación y protocolos</summary>
           <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             <div>
