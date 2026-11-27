@@ -265,6 +265,34 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'unknown']);
   });
 
+  it('confirms a classified turn and advances without losing it while filtering unconfirmed turns', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sin confirmar (2)' }));
+    const confirm = () => screen.getByRole('button', { name: 'Confirmar y avanzar' });
+    expect(confirm()).toHaveProperty('disabled', true);
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    expect(confirm()).toHaveProperty('disabled', false);
+    expect(screen.getByText('Intervención 1 de 2 · 1 de 2 visibles')).toBeTruthy();
+    fireEvent.click(confirm());
+    expect(screen.getByText('Intervención 2 de 2 · 1 de 1 visibles')).toBeTruthy();
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/2');
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Sin confirmar (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior intervención' }));
+    fireEvent.change(screen.getByLabelText('Título'), { target: { value: 'Título modificado' } });
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('0/2');
+    fireEvent.keyDown(screen.getByLabelText('Título'), { key: 'Enter', ctrlKey: true });
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('0/2');
+    fireEvent.keyDown(confirm(), { key: 'Enter', ctrlKey: true });
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/2');
+    expect(screen.getByText('Intervención 2 de 2 · 2 de 2 visibles')).toBeTruthy();
+  });
+
   it('edits one intervention at a time in focus mode and preserves edits on navigation', () => {
     const player = selectAudio();
     for (let i = 0; i < 3; i++) {
