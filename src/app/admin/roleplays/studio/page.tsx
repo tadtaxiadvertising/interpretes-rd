@@ -13,6 +13,7 @@ import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentative
 import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
+import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
 import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
 import { STUDIO_RECOVERY_KEY, createStudioRecovery, openStudioRecovery } from '@/lib/roleplay-studio/recovery';
 import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
@@ -125,7 +126,7 @@ export default function RoleplayStudioPage() {
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición manual' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
+    kind: 'ajuste de tiempos' | 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición manual' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
     segments: Segment[];
     captions: Record<string, string>;
     expandedId: string | null;
@@ -1985,6 +1986,7 @@ export default function RoleplayStudioPage() {
   const renderedSegments = focusMode ? (focusedTurn ? [focusedTurn] : []) : visibleSegments;
   const sourceProfileCount = focusedTurn ? propagateSpeakerProfile(segments, focusedTurn.segment.id).changed : 0;
   const selectFocusedTurn = (id: string) => {
+    if (previewingId?.startsWith('boundary-proposal:')) stopPreview();
     setAdvancedTurnId(null);
     setExpandedSegmentId(id);
     setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
@@ -2004,6 +2006,31 @@ export default function RoleplayStudioPage() {
     if (entry.findings.some(finding => ['range', 'overlap', 'title', 'instructions', 'response'].includes(finding.code))) {
       setAdvancedTurnId(id);
     }
+  };
+  const boundaryProposal = useMemo(() => {
+    const active = segments.find(turn => turn.id === focusedTurn?.segment.id);
+    return active ? proposeStudioBoundaries(active, segments, duration, serverConsent ? detectedSilences : []) : null;
+  }, [segments, focusedTurn?.segment.id, duration, serverConsent, detectedSilences]);
+  const proposalPreviewId = focusedTurn ? 'boundary-proposal:' + focusedTurn.segment.id : '';
+  const canUseBoundaryProposal = Boolean(focusedTurn && boundaryProposal && !busy && !draftBusy && !analyzingSilences);
+  const applyBoundaryProposal = () => {
+    if (!focusedTurn || !boundaryProposal || !canUseBoundaryProposal) return;
+    const current = focusedTurn.segment;
+    // Recompute against the latest edit; no application of stale suggestions.
+    const proposal = proposeStudioBoundaries(current, segments, duration, serverConsent ? detectedSilences : []);
+    if (!proposal || proposal.start !== boundaryProposal.start || proposal.end !== boundaryProposal.end) return;
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'ajuste de tiempos', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: current.id,
+    });
+    setSegments(previous => previous.map(turn => turn.id === current.id
+      ? { ...turn, start: proposal.start, end: proposal.end, sourceSpeakerGroup: undefined } : turn));
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice('Tiempos ajustados. Escucha el corte completo y confirma de nuevo; puedes deshacer el ajuste.');
   };
   const canConfirmFocused = Boolean(focusedTurn && !focusedReviewIssue && !busy && !draftBusy && !analyzingSilences);
   const confirmAndAdvance = () => {
@@ -3030,7 +3057,9 @@ export default function RoleplayStudioPage() {
                               ? 'Deshacer aplicación de pausas'
                               : lastStructuralEdit.kind === 'apertura de proyecto'
                                 ? 'Deshacer apertura de proyecto JSON'
-                                : 'Deshacer última división o unión'}
+                                : lastStructuralEdit.kind === 'ajuste de tiempos'
+                                  ? 'Deshacer ajuste de tiempos'
+                                  : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
@@ -3507,6 +3536,22 @@ export default function RoleplayStudioPage() {
                   </select>
                 </label>
               </div>
+              {focusMode && boundaryProposal && focusedTurn?.segment.id === segment.id && (
+                <section aria-label="Propuesta de ajuste de tiempos" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+                  <h4 className="text-sm font-semibold text-[var(--foreground)]">{boundaryProposal.reason === 'overlap' ? 'Propuesta: corregir solapamiento breve' : 'Propuesta: reducir silencio en los bordes'}</h4>
+                  <p className="text-xs text-[var(--text-secondary)]">Actual: {segment.start.toFixed(3)}–{segment.end.toFixed(3)} s · Propuesto: {boundaryProposal.start.toFixed(3)}–{boundaryProposal.end.toFixed(3)} s</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Escucha ambos cortes antes de aplicar. La sugerencia no garantiza que se preserve toda la voz.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" disabled={!canUseBoundaryProposal} onClick={() => previewSegment({ ...segment, id: proposalPreviewId, start: boundaryProposal.start, end: boundaryProposal.end })}
+                      aria-pressed={previewingId === proposalPreviewId}
+                      className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">
+                      {previewingId === proposalPreviewId ? 'Detener propuesta' : 'Escuchar propuesta'}
+                    </button>
+                    <button type="button" disabled={!canUseBoundaryProposal} onClick={applyBoundaryProposal}
+                      className="theme-action-primary rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">Aplicar ajuste de tiempos</button>
+                  </div>
+                </section>
+              )}
               {focusMode && (
                 <button type="button" aria-expanded={advancedTurnId === segment.id}
                   aria-controls={`studio-advanced-${segment.id}`}
