@@ -12,8 +12,8 @@ export function validateProductionReceipts(value: unknown): RecoveryProductionRe
   if (!Array.isArray(value) || value.length > MAX_RECEIPTS) throw new Error('Progreso de producción incompatible.');
   const seen = new Set<string>();
   return value.map(entry => {
-    if (!entry || typeof entry !== 'object' || !/^[a-f0-9]{64}$/.test(entry.key) ||
-        typeof entry.key !== 'string' || seen.has(entry.key) ||
+    if (!entry || typeof entry !== 'object' || typeof entry.key !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(entry.key) || seen.has(entry.key) ||
         (entry.status !== 'unconfirmed' && entry.status !== 'created'))
       throw new Error('Progreso de producción incompatible.');
     seen.add(entry.key);
