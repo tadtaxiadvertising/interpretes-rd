@@ -13,6 +13,7 @@ import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentative
 import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
+import { studioReviewIssue, nextUnconfirmedTurn } from '@/lib/roleplay-studio/quick-review';
 import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -65,6 +66,8 @@ export default function RoleplayStudioPage() {
   const [playhead, setPlayhead] = useState(0);
   const [editorPlaybackRevision, setEditorPlaybackRevision] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
+  // Confirmation belongs to this editing session, not to the published payload.
+  const [confirmedTurns, setConfirmedTurns] = useState<ReadonlyMap<string, Segment>>(() => new Map());
   const [expandedEditor, setExpandedEditor] = useState(false);
   const [publicationPartKey, setPublicationPartKey] = useState('');
   const publicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
@@ -552,6 +555,7 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     setSegments([]);
+    setConfirmedTurns(new Map());
     setCaptionTexts({});
     setReviewCues([]);
     setChosenCueIndices([]);
@@ -1035,7 +1039,7 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'Para unir nuevos cortes, separa antes la intervención compuesta. El formato v2 admite dos tramos.', true);
       return;
     }
-    if ((showPendingReview && !needsReview(second)) ||
+    if ((showPendingReview && (focusMode ? confirmedIds.has(second.id) : !needsReview(second))) ||
         (segmentSearch.trim() && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
           second.speakerRole, second.language].some(value =>
           value.toLocaleLowerCase().includes(segmentSearch.trim().toLocaleLowerCase())))) {
@@ -1921,9 +1925,12 @@ export default function RoleplayStudioPage() {
     segment => segment.speakerRole === 'interpreter',
   ).length;
   const orderedSegments = [...segments].sort((a, b) => a.start - b.start);
+  const confirmedIds = useMemo(() => new Set(segments.filter(segment =>
+    confirmedTurns.get(segment.id) === segment && !studioReviewIssue(segment, segments, duration),
+  ).map(segment => segment.id)), [segments, confirmedTurns, duration]);
   const visibleSegments = orderedSegments
     .map((segment, index) => ({ segment, index }))
-    .filter(({ segment }) => (!showPendingReview || needsReview(segment)) &&
+    .filter(({ segment }) => (!showPendingReview || (focusMode ? !confirmedIds.has(segment.id) : needsReview(segment))) &&
       (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language]
         .some(value => value.toLocaleLowerCase().includes(query))));
@@ -1938,6 +1945,26 @@ export default function RoleplayStudioPage() {
   const selectFocusedTurn = (id: string) => {
     setExpandedSegmentId(id);
     setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
+  };
+
+  const focusedReviewIssue = focusedTurn ? studioReviewIssue(focusedTurn.segment, segments, duration) : null;
+  const canConfirmFocused = Boolean(focusedTurn && !focusedReviewIssue && !busy && !draftBusy && !analyzingSilences);
+  const confirmAndAdvance = () => {
+    if (!focusedTurn || !canConfirmFocused) return;
+    const current = focusedTurn.segment;
+    const confirmed = new Set(confirmedIds);
+    confirmed.add(current.id);
+    // Drop stale snapshots and never confirm a different turn by index.
+    setConfirmedTurns(new Map(segments.filter(turn => confirmed.has(turn.id)).map(turn => [turn.id, turn])));
+    stopPreview();
+    stopPairPreview();
+    setError('');
+    setTurnActionFeedback(null);
+    const next = nextUnconfirmedTurn(visibleSegments.map(({ segment }) => segment), current.id, confirmed);
+    setNotice(next
+      ? 'Intervención confirmada. Continúa con el siguiente turno sin confirmar.'
+      : 'Intervención confirmada. No quedan turnos sin confirmar en esta selección.');
+    if (next) selectFocusedTurn(next.id);
   };
 
   const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
@@ -2030,7 +2057,15 @@ export default function RoleplayStudioPage() {
   ];
 
   return (
-    <main data-studio-workspace={workspaceActive ? "active" : undefined} className={workspaceActive ? undefined : "space-y-4"}>
+    <main data-studio-workspace={workspaceActive ? "active" : undefined} className={workspaceActive ? undefined : "space-y-4"}
+      onKeyDown={event => {
+        if (!focusMode || (workspaceActive && workspaceTab !== 'edit') || event.defaultPrevented || event.repeat || event.nativeEvent.isComposing ||
+            !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && canConfirmFocused) {
+          event.preventDefault();
+          confirmAndAdvance();
+        }
+      }}>
       <div hidden={workspaceActive} className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2675,7 +2710,7 @@ export default function RoleplayStudioPage() {
                 <input type="checkbox" checked={showPendingReview}
                   onChange={event => setShowPendingReview(event.currentTarget.checked)}
                   className="accent-blue-500"/>
-                Pendientes ({pendingReviewCount})
+                {focusMode ? `Sin confirmar (${segments.length - confirmedIds.size})` : `Pendientes (${pendingReviewCount})`}
               </label>
               {visiblePendingTurns.length > 1 && (
                 <button type="button" onClick={() => focusPendingTurn(-1)}
@@ -2758,6 +2793,11 @@ export default function RoleplayStudioPage() {
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
           )}
+          {focusMode && segments.length > 0 && (!workspaceActive || workspaceTab === 'edit') && (
+            <p role="status" aria-label="Confirmaciones editoriales" className="shrink-0 text-xs text-[var(--text-secondary)]">
+              {confirmedIds.size}/{segments.length} intervenciones confirmadas en esta sesión. Los cambios requieren nueva revisión.
+            </p>
+          )}
           {focusMode && focusedTurn && (!workspaceActive || workspaceTab === 'edit') && (
             <nav aria-label="Navegador de intervenciones" className={`flex shrink-0 flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 ${workspaceActive ? '' : 'md:sticky md:top-0 md:z-10'}`}>
               <button type="button" disabled={focusIndex === 0}
@@ -2782,6 +2822,14 @@ export default function RoleplayStudioPage() {
               <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
                 Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
               </p>
+              <div className="flex basis-full flex-wrap items-center gap-2">
+                <button type="button" disabled={!canConfirmFocused} onClick={confirmAndAdvance}
+                  aria-keyshortcuts="Control+Enter Meta+Enter"
+                  className="rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Confirmar y avanzar</button>
+                <span className="text-xs text-[var(--text-secondary)]">
+                  {focusedReviewIssue ?? (confirmedIds.has(focusedTurn.segment.id) ? 'Confirmada' : 'Lista para revisión')} · Ctrl/⌘ + Enter
+                </span>
+              </div>
               {focusedTurn.segment.sourceSpeakerGroup && <p className="text-xs text-[var(--text-secondary)]">Etiqueta de origen: {focusedTurn.segment.sourceSpeakerGroup}. Escucha y confirma la voz antes de aplicar el perfil a otros turnos.</p>}
               {sourceProfileCount > 0 && (
                 <button type="button" onClick={() => applySourceSpeakerProfile(focusedTurn.segment.id)}
