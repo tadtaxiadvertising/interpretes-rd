@@ -7,7 +7,7 @@ import ffmpegPath from 'ffmpeg-static';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
-import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS, ROLEPLAY_STUDIO_PACKAGE_MAX_AUDIO_SECONDS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { parseFinalFfmpegOutputSeconds } from '@/lib/roleplay-studio/ffmpeg-progress';
 import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 
@@ -18,7 +18,7 @@ const MAX_INPUT_BYTES = 15 * 1024 * 1024;
 // Preserve the established 100 KB multipart allowance, but also enforce it
 // on the streamed body when clients omit or falsify Content-Length.
 const MAX_MULTIPART_BYTES = MAX_INPUT_BYTES + 100_000;
-const MAX_TOTAL_SECONDS = 900;
+const MAX_TOTAL_SECONDS = ROLEPLAY_STUDIO_PACKAGE_MAX_AUDIO_SECONDS;
 const MAX_METADATA_CHARS = 150_000;
 const MAX_CONCURRENT_EXPORTS = 2; // Process-local admission control. Not a distributed quota.
 const MAX_EXPORT_TIME_MS = 105_000;
