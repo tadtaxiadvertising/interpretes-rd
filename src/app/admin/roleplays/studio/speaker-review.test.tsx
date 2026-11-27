@@ -235,6 +235,47 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'unknown']);
   });
 
+  it('edits one intervention at a time in focus mode and preserves edits on navigation', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Anterior intervención' })).toHaveProperty('disabled', true);
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente intervención' }));
+    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+    fireEvent.click(screen.getByRole('button', { name: 'Anterior intervención' }));
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
+    expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a lista' }));
+    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(3);
+  });
+
+  it('keeps focus navigation within filtered interventions and allows direct selection', () => {
+    selectAudio();
+    for (let i = 0; i < 3; i++) {
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[2].value } });
+    expect(screen.getByText('Intervención 3 de 3 · 3 de 3 visibles')).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 2' },
+    });
+    expect(screen.getByText('Intervención 2 de 3 · 1 de 1 visibles')).toBeTruthy();
+    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Siguiente intervención' })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Anterior intervención' })).toHaveProperty('disabled', true);
+  });
+
   it('navigates backwards through pending turns and returns forwards without media playback', () => {
     const player = selectAudio();
     for (let i = 0; i < 3; i++) {
