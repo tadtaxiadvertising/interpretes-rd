@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { STUDIO_RECOVERY_KEY } from '@/lib/roleplay-studio/recovery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RoleplayStudioPage from './page';
 import * as longMedia from '@/lib/roleplay-studio/long-media';
@@ -38,6 +39,43 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.loadedMetadata(player);
     return player;
   }
+
+  it('opts in to local recovery and restores confirmed cuts on the original recording', async () => {
+    localStorage.removeItem(STUDIO_RECOVERY_KEY);
+    const fingerprint = vi.spyOn(longMedia, 'fingerprintLocalMedia').mockResolvedValue('ab'.repeat(32));
+    try {
+      selectAudio();
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+      fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+      fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
+      expect(localStorage.getItem(STUDIO_RECOVERY_KEY)).toBeNull();
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Activar guardado local' }));
+      });
+      await waitFor(() => expect(localStorage.getItem(STUDIO_RECOVERY_KEY)).not.toBeNull(), { timeout: 2000 });
+      expect(JSON.parse(localStorage.getItem(STUDIO_RECOVERY_KEY)!).confirmed).toEqual([0]);
+      cleanup();
+      selectAudio();
+      fingerprint.mockResolvedValue('cd'.repeat(32));
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Recuperar respaldo local' })); });
+      expect(screen.getByRole('status', { name: 'Estado del respaldo local' }).textContent).toContain('otra grabación');
+      expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+      fingerprint.mockResolvedValue('ab'.repeat(32));
+      await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Recuperar respaldo local' })); });
+      expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/1');
+      expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
+      expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Eliminar respaldo local' }));
+      expect(localStorage.getItem(STUDIO_RECOVERY_KEY)).toBeNull();
+      expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    } finally {
+      cleanup();
+      localStorage.removeItem(STUDIO_RECOVERY_KEY);
+    }
+  });
 
   it('seeks with the waveform slider and marks a precise segment boundary', () => {
     const player = selectAudio();
