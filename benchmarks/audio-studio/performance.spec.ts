@@ -1,4 +1,6 @@
 import { expect, test } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { BenchmarkSample } from './fixture';
 
 function summarize(samples: number[]) {
@@ -49,7 +51,10 @@ test('profiles real Chromium timeline commits with a synthetic maximum-size proj
       blockedExternalRequests: blocked.length,
       rawSamples: { commitMs: result.commitMs, frameIntervalMs: result.frameIntervalMs },
     };
-    await testInfo.attach('audio-studio-performance.json', { body: JSON.stringify(report, null, 2), contentType: 'application/json' });
+    const reportPath = testInfo.outputPath('audio-studio-performance.json');
+    await mkdir(dirname(reportPath), { recursive: true });
+    await writeFile(reportPath, JSON.stringify(report, null, 2), 'utf8');
+    await testInfo.attach('audio-studio-performance.json', { path: reportPath, contentType: 'application/json' });
     expect(result.intervalReads).toBe(0);
     expect(result.mediaReads).toBe(0);
     expect(blocked).toHaveLength(0);
