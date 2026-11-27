@@ -12,6 +12,7 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC, ROLEPLAY_MU
 import { getReusableBaseAudioPath, getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
 import { prepareRoleplayCreationClaim } from '@/lib/roleplay/prepare-creation-claim';
+import { isCreationLedgerReady } from '@/lib/roleplay/creation-ledger-readiness';
 import { completeRoleplayCreationInTransaction, InvalidRoleplayCreationKeyError } from '@/lib/roleplay/creation-idempotency-ledger';
 import { parseRoleplayReceiptRequest, InvalidRoleplayReceiptRequestError } from '@/lib/roleplay/creation-receipt';
 import { InvalidCreationAudioError } from '@/lib/roleplay/creation-audio-digests';
@@ -181,6 +182,12 @@ export async function POST(req: NextRequest) {
       // even if an upstream transport refuses to cancel its request stream.
       try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
       return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
+    }
+    // Only keyed creations require the hardened ledger. Check the actual
+    // runtime DB connection before buffering audio or reserving any claim.
+    if (creationRequestKey && !await isCreationLedgerReady(db)) {
+      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
+      return privateRoleplayJson({ success: false, error: 'El registro seguro de creación todavía no está disponible.' }, { status: 503 });
     }
     const formData = await readBoundedMultipartFormData(req, MAX_ROLEPLAY_MULTIPART_BYTES);
     const participantType = formData.get('participantType');

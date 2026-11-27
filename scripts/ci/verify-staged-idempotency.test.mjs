@@ -170,7 +170,7 @@ test('historical roleplay creation ledger stays immutable and hardening stays st
 
 test('creation ledger operator inspection is read-only and never runs in production deployment', () => {
   const inspector = readFileSync(resolve(root, 'scripts/inspect-roleplay-creation-ledger.ts'), 'utf8');
-  const catalog = readFileSync(resolve(root, 'scripts/roleplay-creation-ledger-catalog.ts'), 'utf8');
+  const catalog = readFileSync(resolve(root, 'src/lib/roleplay/creation-ledger-catalog.ts'), 'utf8');
   assert.match(inspector, /BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/);
   assert.match(inspector, /ROLLBACK/);
   assert.match(inspector, /--check-only/);

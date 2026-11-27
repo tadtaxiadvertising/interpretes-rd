@@ -59,6 +59,8 @@ vi.mock('@supabase/supabase-js', () => ({
   })),
 }));
 
+vi.mock('@/lib/roleplay/creation-ledger-readiness', () => ({ isCreationLedgerReady: vi.fn() }));
+import { isCreationLedgerReady } from '@/lib/roleplay/creation-ledger-readiness';
 import { POST, GET } from '../route';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
@@ -115,6 +117,7 @@ describe('POST /api/admin/roleplays', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
     process.env.FRONTEND_ORIGIN = 'https://front.test';
     delete process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED;
+    vi.mocked(isCreationLedgerReady).mockResolvedValue(true);
     vi.mocked(prisma.roleplayCreationRequest.create).mockResolvedValue({ id: 'claim' } as never);
     vi.mocked(prisma.roleplayCreationRequest.updateMany).mockResolvedValue({ count: 1 });
 
@@ -276,6 +279,18 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
     });
+    it('rejects a keyed request when the actual database is not ready', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      vi.mocked(isCreationLedgerReady).mockResolvedValueOnce(false);
+      expect((await POST(keyed() as any)).status).toBe(503);
+      expect(isCreationLedgerReady).toHaveBeenCalledExactlyOnceWith(prisma);
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+      // The admission slot must be released, and readiness checked afresh.
+      expect((await POST(keyed() as any)).status).toBe(200);
+      expect(isCreationLedgerReady).toHaveBeenCalledTimes(2);
+    });
     it('rejects a malformed key before parsing multipart', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
       const request = keyed('interpreter', 'not-a-uuid');
@@ -348,6 +363,7 @@ describe('POST /api/admin/roleplays', () => {
       expect((await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any)).status).toBe(200);
       expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
       expect(prisma.roleplayCreationRequest.updateMany).not.toHaveBeenCalled();
+      expect(isCreationLedgerReady).not.toHaveBeenCalled();
     });
   });
 
