@@ -201,6 +201,10 @@ export default function RoleplayStudioPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<'edit' | 'finish'>('edit');
+  const workspaceContent = useRef<HTMLDivElement>(null);
+  const workspaceExit = useRef<HTMLButtonElement>(null);
+  const workspaceEnter = useRef<HTMLButtonElement>(null);
+  const wasWorkspaceActive = useRef(false);
   const preferenceEdits = useRef({ exclude: false, compact: false, protocolLanguage: false });
   useEffect(() => {
     let active = true;
@@ -1949,6 +1953,15 @@ export default function RoleplayStudioPage() {
 
   const sourceReady = Boolean(audio && duration > 0);
   const workspaceActive = immersiveMode && focusMode && sourceReady;
+  const workspaceTurnId = focusedTurn?.segment.id;
+  useEffect(() => {
+    if (workspaceActive && workspaceContent.current) workspaceContent.current.scrollTop = 0;
+  }, [workspaceActive, workspaceTab, workspaceTurnId]);
+  useEffect(() => {
+    if (workspaceActive && !wasWorkspaceActive.current) workspaceExit.current?.focus({ preventScroll: true });
+    if (!workspaceActive && wasWorkspaceActive.current) workspaceEnter.current?.focus({ preventScroll: true });
+    wasWorkspaceActive.current = workspaceActive;
+  }, [workspaceActive]);
   const studioSteps = [
     { id: 'studio-source', title: '1. Grabación', detail: sourceReady ? 'Grabación lista' : 'Selecciona audio o video', available: true, done: sourceReady },
     { id: reviewCues.length ? 'studio-transcript-review' : 'studio-subtitles', title: '2. Transcripción', detail: reviewCues.length ? 'Turnos para seleccionar' : 'Importa subtítulos o usa cortes manuales', available: sourceReady, done: segments.length > 0 && reviewCues.length === 0 },
@@ -1957,7 +1970,7 @@ export default function RoleplayStudioPage() {
   ];
 
   return (
-    <main className="space-y-4">
+    <main data-studio-workspace={workspaceActive ? "active" : undefined} className={workspaceActive ? undefined : "space-y-4"}>
       <div hidden={workspaceActive} className="space-y-4">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -2582,7 +2595,7 @@ export default function RoleplayStudioPage() {
                   className={`rounded-lg px-3 py-2 text-xs font-semibold ${workspaceTab === 'edit' ? 'theme-action-primary' : 'theme-action-secondary'}`}>Editar</button>
                 <button type="button" aria-pressed={workspaceTab === 'finish'} onClick={() => setWorkspaceTab('finish')}
                   className={`rounded-lg px-3 py-2 text-xs font-semibold ${workspaceTab === 'finish' ? 'theme-action-primary' : 'theme-action-secondary'}`}>Finalizar</button>
-                <button type="button" onClick={() => setImmersiveMode(false)} className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Salir del escritorio</button>
+                <button ref={workspaceExit} type="button" onClick={() => setImmersiveMode(false)} className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Salir del escritorio</button>
               </div>
             </div>
           )}
@@ -2623,7 +2636,7 @@ export default function RoleplayStudioPage() {
                 {focusMode ? 'Volver a lista' : 'Modo enfoque'}
               </button>
               {!workspaceActive && (
-                <button type="button" onClick={() => {
+                <button ref={workspaceEnter} type="button" onClick={() => {
                   if (focusedTurn) setExpandedSegmentId(focusedTurn.segment.id);
                   setFocusMode(true);
                   setWorkspaceTab('edit');
@@ -2729,11 +2742,11 @@ export default function RoleplayStudioPage() {
               </div>
             </nav>
           )}
-          <div className={workspaceActive ? 'min-h-0 space-y-3 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-1' : 'space-y-3'} aria-label={workspaceActive ? 'Contenido del escritorio' : undefined}>
+          <div ref={workspaceContent} className={workspaceActive ? 'min-h-0 space-y-3 lg:flex-1 lg:overflow-y-auto lg:overscroll-contain lg:pr-1' : 'space-y-3'}>
           {workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
-          <div hidden={workspaceActive && workspaceTab !== 'edit'} className="space-y-3">
-          <details open={!focusMode} className="space-y-3 rounded-lg border border-[var(--border)] p-2">
+          <div hidden={workspaceActive && workspaceTab !== 'edit'} className={workspaceActive && workspaceTab === 'edit' ? 'flex flex-col gap-3' : 'space-y-3'}>
+          <details open={!focusMode} className={`space-y-3 rounded-lg border border-[var(--border)] p-2 ${workspaceActive ? 'order-last' : ''}`}>
             <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Herramientas de clasificación y protocolos</summary>
           <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             <div>
