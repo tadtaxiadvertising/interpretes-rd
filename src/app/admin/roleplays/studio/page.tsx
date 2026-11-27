@@ -13,6 +13,7 @@ import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentative
 import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
+import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
 import { validStudioRanges, studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
 import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
@@ -62,6 +63,9 @@ export default function RoleplayStudioPage() {
   const [editorPlaybackRevision, setEditorPlaybackRevision] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [expandedEditor, setExpandedEditor] = useState(false);
+  const [publicationPartKey, setPublicationPartKey] = useState('');
+  const publicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
+  const selectedPublicationPart = publicationPlan.parts.find(part => part.key === publicationPartKey);
   const editorLimit = expandedEditor ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
   const selectionPurpose = expandedEditor ? 'editor' : 'package';
   const [busy, setBusy] = useState(false);
@@ -1312,7 +1316,7 @@ export default function RoleplayStudioPage() {
     });
   };
 
-  const saveDraft = useCallback(async () => {
+  const saveDraft = useCallback(async (part?: StudioPublicationPart<Segment>) => {
     // Keyboard and button activations can occur before React updates draftBusy.
     // Only one local download may be hashing the same source at a time.
     if (!audio || !duration || busy || draftBusy || savingDraft.current) return;
@@ -1327,12 +1331,12 @@ export default function RoleplayStudioPage() {
     const revision = subtitleImportRevision.current;
     const operation = ++draftOperationRevision.current;
     // Persist in timeline order even if a new gap was filled after later clips.
-    const snapshot = [...segments].sort((a, b) => a.start - b.start);
+    const snapshot = [...(part?.turns ?? segments)].sort((a, b) => a.start - b.start);
     setDraftBusy(true);
     setError('');
     setNotice('');
     try {
-      const localOnly = usesLocalLongMode(audio, duration) ||
+      const localOnly = Boolean(part) || usesLocalLongMode(audio, duration) ||
         snapshot.some(segment => segment.ranges !== undefined) || !allowServerZipExport;
       const digest = localOnly ? await fingerprintLocalMedia(audio) : await sha256StudioAudio(audio);
       if (revision !== subtitleImportRevision.current) return;
@@ -1346,13 +1350,15 @@ export default function RoleplayStudioPage() {
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = localOnly
+      link.download = part ? `roleplay-studio-parte-${part.number}.json` : localOnly
         ? 'roleplay-studio-proyecto-largo.json' : 'roleplay-studio-proyecto.json';
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice((snapshot.length > ROLEPLAY_MAX_SCENARIOS
+      setNotice((part
+        ? `Parte ${part.number} descargada (${snapshot.length} intervenciones). Genera su ZIP con la grabación original en el exportador local. El proyecto maestro sigue intacto.`
+        : snapshot.length > ROLEPLAY_MAX_SCENARIOS
         ? 'Borrador editorial ampliado v3 guardado. Vuelve a abrirlo en Audio Studio; no es compatible con el exportador de paquetes actual hasta reducirlo al límite publicable.'
         : localOnly
         ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
@@ -1502,12 +1508,13 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const exportPackage = async () => {
+  const exportPackage = async (part?: StudioPublicationPart<Segment>) => {
     if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
     setNotice('');
     setTurnActionFeedback(null);
-    const ordered = [...segments].sort((a, b) => a.start - b.start);
+    const masterOrder = [...segments].sort((a, b) => a.start - b.start);
+    const ordered = part ? part.turns : masterOrder;
     const revealInvalidTurn = (segment: Segment, index: number, reason: string) => {
       // Export is blocked before saving or uploading anything. Surface the
       // exact turn, even if a search or pending-only filter was hiding it.
@@ -1517,7 +1524,7 @@ export default function RoleplayStudioPage() {
       setWorkspaceTab('edit');
       setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
       setTurnActionFeedback({ id: segment.id, message: reason, error: true });
-      setError(`Intervención ${index + 1}: ${reason}`);
+      setError(`Intervención ${part ? masterOrder.findIndex(item => item.id === segment.id) + 1 : index + 1}: ${reason}`);
     };
     if (ordered.length > ROLEPLAY_MAX_SCENARIOS) {
       setError(`El proyecto tiene ${ordered.length} intervenciones. La exportación admite ${ROLEPLAY_MAX_SCENARIOS} por roleplay. Guarda el proyecto ampliado antes de preparar una selección más pequeña.`);
@@ -1557,7 +1564,7 @@ export default function RoleplayStudioPage() {
       if (!ranges) return;
       end = segment.end;
       total += studioSelectedSeconds(ranges);
-      if (total > 900) {
+      if (total > STUDIO_PACKAGE_AUDIO_SECONDS) {
         revealInvalidTurn(segment, index,
           'la selección acumulada supera 15 minutos. Reduce este corte o alguno de los anteriores antes de exportar.');
         return;
@@ -1566,10 +1573,10 @@ export default function RoleplayStudioPage() {
     // Long recordings create only a local JSON draft. Do not allocate a
     // remote ZIP AbortController for this branch: otherwise the early return
     // locks all subsequent downloads until an edit resets exportAbort.
-    if (usesLocalLongMode(audio, duration) ||
+    if (part || usesLocalLongMode(audio, duration) ||
         ordered.some(segment => segment.ranges !== undefined) ||
         !allowServerZipExport) {
-      await saveDraft();
+      await saveDraft(part);
       return;
     }
     const operation = ++exportRevision.current;
@@ -3189,9 +3196,28 @@ export default function RoleplayStudioPage() {
           {!workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
           {segments.length > ROLEPLAY_MAX_SCENARIOS && <div role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--theme-warning)]">
-            Este proyecto supera el máximo publicable de {ROLEPLAY_MAX_SCENARIOS} intervenciones. Guarda el borrador completo antes de reducir la selección.
+            Este proyecto supera el máximo publicable de {ROLEPLAY_MAX_SCENARIOS} intervenciones. Puedes preparar partes independientes sin borrar intervenciones.
             <button type="button" disabled={busy || draftBusy} onClick={() => void saveDraft()} className="ml-2 rounded-lg theme-action-secondary px-3 py-2">Guardar borrador ampliado</button>
           </div>}
+          {segments.length > 0 && (expandedEditor || publicationPlan.parts.length > 1) && (
+            <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+              <h4 className="text-sm font-semibold text-[var(--foreground)]">Preparar roleplays por partes</h4>
+              <p className="text-xs text-[var(--text-secondary)]">Se proponen partes cronológicas de hasta {ROLEPLAY_MAX_SCENARIOS} intervenciones y 15 minutos de audio cada una. Descarga solo la parte elegida, en formato local compatible; el proyecto completo no se modifica.</p>
+              {publicationPlan.issue ? <p role="alert" className="text-xs text-[var(--theme-warning)]">{publicationPlan.issue}</p> : <>
+                <label className="block text-sm text-[var(--foreground)]">Parte del roleplay
+                  <select value={selectedPublicationPart?.key ?? ''} disabled={busy || draftBusy || analyzingSilences}
+                    onChange={event => setPublicationPartKey(event.currentTarget.value)}
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
+                    <option value="">Selecciona una parte ({publicationPlan.parts.length} disponibles)</option>
+                    {publicationPlan.parts.map(part => <option key={part.key} value={part.key}>Parte {part.number} · intervenciones {part.first}–{part.last} · {formatTime(part.seconds)}</option>)}
+                  </select>
+                </label>
+                <button type="button" disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}
+                  onClick={() => { if (selectedPublicationPart) void exportPackage(selectedPublicationPart); }}
+                  className="rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Descargar parte seleccionada (JSON local)</button>
+              </>}
+            </div>
+          )}
           <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos antes de exportar. Después podrás importar el paquete y asignar el roleplay.</p>
             {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
               <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
