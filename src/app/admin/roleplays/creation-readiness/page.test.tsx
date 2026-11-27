@@ -33,6 +33,8 @@ describe('admin runtime diagnostic', () => {
     const html = await view('1');
     expect(html).toContain('Acceso restringido');
     expect(html).not.toContain('Solo consulta de recibos');
+    expect(html).not.toContain('Conserva la recuperación');
+    expect(html).not.toContain('Contrasta el SHA');
     expect(html).not.toContain('a'.repeat(40));
     expect(mocks.readiness).not.toHaveBeenCalled();
     expect(mocks.validate).toHaveBeenCalledWith('admin');
@@ -43,12 +45,26 @@ describe('admin runtime diagnostic', () => {
     expect(html).toContain('Solo consulta de recibos');
     expect(mocks.readiness).not.toHaveBeenCalled();
   });
+  it.each([
+    ['false', 'false', 'Mantén el flujo tradicional'],
+    ['false', 'true', 'Conserva la recuperación de solicitudes anteriores'],
+    ['true', 'false', 'No uses la creación con clave'],
+    ['true', 'true', 'La configuración por sí sola no confirma'],
+  ])('explains the safe next step for creation=%s receipts=%s', async (creation, receipts, guidance) => {
+    vi.stubEnv('ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED', creation);
+    vi.stubEnv('ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED', receipts);
+    const html = await view();
+    expect(html).toContain(guidance);
+    expect(html).toContain('Ejecuta la comprobación');
+    expect(mocks.readiness).not.toHaveBeenCalled();
+  });
   it('reads the runtime connection on explicit request, even when keyed creation is paused', async () => {
     const html = await view('1');
     expect(html).toContain('Catálogo reforzado y permisos efectivos reconocidos');
     expect(html).toContain('Solo consulta de recibos');
     expect(html).toContain('a'.repeat(40));
     expect(html).toContain('no autoriza activar el piloto');
+    expect(html).toContain('Contrasta el SHA y la identidad del proyecto');
     expect(mocks.readiness).toHaveBeenCalledExactlyOnceWith(mocks.db);
   });
   it('reports unavailable state and suppresses malformed build metadata', async () => {
@@ -56,6 +72,8 @@ describe('admin runtime diagnostic', () => {
     mocks.readiness.mockResolvedValue(false);
     const html = await view('1');
     expect(html).toContain('No disponible');
+    expect(html).toContain('No actives el piloto');
+    expect(html).toContain('no repitas creaciones inciertas');
     expect(html).toContain('No informado por el despliegue');
     expect(html).not.toContain('synthetic-secret-not-a-sha');
   });
