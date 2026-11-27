@@ -34,11 +34,28 @@ export function prepareRoleplayDirectUploadBatch(
   batchId: string,
   declarations: unknown,
 ): { items: PreparedRoleplayUpload[]; totalBytes: number } {
+  return prepareBatch(batchId, declarations, ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS);
+}
+
+/** Offline pilot only: no paths, tokens or permissions returned. Never use as
+ * the reservation/publication gate. The production wrapper above stays at 25. */
+export function inspectExpandedRoleplayCapacityPilot(declarations: unknown) {
+  const prepared = prepareBatch('00000000-0000-4000-8000-000000000001', declarations, 50);
+  return {
+    slots: prepared.items.length,
+    declaredBytes: prepared.totalBytes,
+    worstCaseReservedBytes: prepared.items.length * 2 * ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES,
+    activationAuthorized: false as const,
+  };
+}
+
+function prepareBatch(batchId: string, declarations: unknown, maxSlots: number):
+  { items: PreparedRoleplayUpload[]; totalBytes: number } {
   if (typeof batchId !== 'string' || !UUID_V4_OR_V7.test(batchId)) {
     throw new Error('INVALID_ROLEPLAY_UPLOAD_BATCH_ID');
   }
   if (!Array.isArray(declarations) ||
-      declarations.length < 1 || declarations.length > ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS) {
+      declarations.length < 1 || declarations.length > maxSlots) {
     throw new Error('INVALID_ROLEPLAY_UPLOAD_COUNT');
   }
 
