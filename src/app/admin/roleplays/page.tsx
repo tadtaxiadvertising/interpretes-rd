@@ -133,6 +133,7 @@ export default async function AdminRoleplaysPage({
           <p className="text-[var(--text-secondary)]">Control de sesiones, participantes y evaluaciones</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Link href="/admin/roleplays/creation-readiness" prefetch={false} className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] px-4 py-3 font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"><CheckCircle2 size={18} /> Diagnóstico de creación</Link>
           <Link href="/admin/roleplays/settings" className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] px-4 py-3 font-semibold text-[var(--foreground)] transition-colors hover:bg-[var(--theme-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)]"><Settings size={18} /> Configuración Audio Studio</Link>
           <Link
             href="/admin/roleplays/studio"
