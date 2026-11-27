@@ -1860,7 +1860,6 @@ export default function RoleplayStudioPage() {
     if (happyScribeListAbort.current || happyScribeTranscriptAbort.current || happyScribeMediaAbort.current) return;
     if (refreshId ? happyScribeOrigins.current.get(refreshId) !== page :
       (page !== 0 && (!happyScribeHasMore || page !== happyScribePage + 1 || page > 1000))) return;
-    happyScribeListAbort.current?.abort();
     const controller = new AbortController();
     happyScribeListAbort.current = controller;
     setHappyScribeLoading(true);
@@ -3999,10 +3998,10 @@ export default function RoleplayStudioPage() {
               </>}
             </div>
           )}
-          <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos antes de exportar. Después podrás importar el paquete y asignar el roleplay.</p>
+          <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos. Prepara los cortes y continúa a asignación, o guarda un paquete para utilizarlo después.</p>
             {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
               <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
-                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar el ZIP</legend>
+                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar los cortes</legend>
                 <label className="flex items-start gap-2 text-sm text-[var(--theme-info)]">
                   <input type="radio" name="studio-export-location"
                     checked={!allowServerZipExport}
@@ -4016,10 +4015,10 @@ export default function RoleplayStudioPage() {
                       setDraftBusy(false);
                       setAllowServerZipExport(false);
                       setError('');
-                      setNotice('Modo local: descarga el JSON y genera el ZIP en tu equipo con el exportador de escritorio.');
+                      setNotice('Modo local: prepara los cortes en el navegador si el formato es compatible o guarda el JSON para usar el exportador de escritorio.');
                     }}
                     className="mt-1 accent-cyan-400"/>
-                  Local (predeterminado): no subir el MP3. Descarga el proyecto JSON y genera el ZIP en tu equipo.
+                  Local (predeterminado): no subir el MP3. Prepara cortes compatibles en el navegador o usa el exportador de escritorio.
                 </label>
                 <label className="mt-2 flex items-start gap-2 text-sm text-[var(--foreground)]">
                   <input type="radio" name="studio-export-location"
@@ -4051,12 +4050,10 @@ export default function RoleplayStudioPage() {
                 )}
                 <strong>Preparación local:</strong> la grabación no se sube al servidor.
                 Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
-                El JSON no contiene audio ni video. Para generar el ZIP, extrae los clips con
-                FFmpeg en tu equipo; esta opción no convierte audio en el navegador.
-                <p className="mt-2 font-medium text-[var(--foreground)]">
-                  Paso 1: descarga el proyecto JSON. Paso 2: genera el ZIP junto a tu grabación
-                  original en el exportador local. Paso 3: importa el ZIP desde «Crear roleplay».
-                </p>
+                {wavSource || localMp3Eligible ? ' Puedes preparar cortes compatibles directamente en este navegador y continuar a asignación sin ZIP.' : ' Para este formato o duración, utiliza el exportador de escritorio.'}
+                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
+                  <summary className="cursor-pointer font-semibold">Alternativa: guardar JSON y usar el exportador de escritorio</summary>
+                  <p className="mt-2">El JSON no contiene audio ni video. Paso 1: guarda el proyecto JSON. Paso 2: genera el ZIP junto a la grabación original. Paso 3: importa el ZIP desde «Crear roleplay».</p>
                 <a
                   href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
                   target="_blank" rel="noopener noreferrer"
@@ -4078,6 +4075,7 @@ export default function RoleplayStudioPage() {
                       node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
                     </code>
                   </details>
+                </details>
                 </details>
               </div>
             )}
@@ -4119,7 +4117,7 @@ export default function RoleplayStudioPage() {
                       onClick={() => setPublicationPartKey(next.key)}
                       className="theme-action-secondary rounded px-3 py-2 text-xs font-semibold disabled:opacity-50">Elegir siguiente parte pendiente ({next.number})</button> : null;
                   })()}
-                  <Link href="/admin/roleplays" className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
+                  <Link href="/admin/roleplays" onClick={event => { if (!confirmEditorNavigation()) event.preventDefault(); }} className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
                 </section>
               )}
               {readyAssignment && (!activeProductionKeys || !activeProductionKeys.has(readyAssignment.partKey ?? publicationPlan.parts[0]?.key ?? '')) && <p className="text-xs text-[var(--theme-warning)]">Seguimiento no disponible para este paquete. Puedes continuar, pero verifica las sesiones existentes para evitar duplicados.</p>}
@@ -4154,12 +4152,9 @@ export default function RoleplayStudioPage() {
                 <div className="flex flex-wrap gap-2">
                   {localMp3Eligible && !wavSource && <button type="button" disabled={busy || draftBusy || analyzingSilences} onClick={() => void enableLocalMp3()}
                     className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Habilitar procesamiento local MP3 (WAV 24 kHz)</button>}
-                  {wavSource && <button type="button" onClick={() => void prepareLocalAssignment()}
-                    disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || currentWavPlan.parts.length !== 1}
-                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar WAV local para asignación</button>}
-                  {currentWavPlan && !currentWavPlan.issue && selectedPublicationPart && currentWavPlan.parts.length > 1 && <button type="button" onClick={() => void prepareLocalAssignment(selectedPublicationPart)}
-                    disabled={busy || draftBusy || analyzingSilences}
-                    className="rounded-xl theme-action-secondary px-4 py-2 font-semibold disabled:opacity-50">Preparar parte {selectedPublicationPart.number} en WAV local</button>}
+                  {wavSource && <button type="button" onClick={() => void prepareLocalAssignment(currentWavPlan && currentWavPlan.parts.length > 1 ? selectedPublicationPart : undefined)}
+                    disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || !currentWavPlan.parts.length || (currentWavPlan.parts.length > 1 && !selectedPublicationPart)}
+                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">{currentWavPlan && currentWavPlan.parts.length > 1 && selectedPublicationPart ? `Preparar parte ${selectedPublicationPart.number} en WAV local` : 'Preparar WAV local para asignación'}</button>}
                 </div>
               ) : <button type="button" onClick={() => void exportPackage(undefined, 'assignment')}
                   disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}

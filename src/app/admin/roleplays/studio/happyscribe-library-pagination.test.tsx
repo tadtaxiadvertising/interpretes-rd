@@ -29,6 +29,23 @@ describe('HappyScribe library on-demand pagination', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps a single catalog request in flight during repeated refresh clicks', async () => {
+    let resolvePage!: (value: Response) => void;
+    const pending = new Promise<Response>(resolve => { resolvePage = resolve; });
+    const fetcher = vi.fn().mockReturnValue(pending);
+    vi.stubGlobal('fetch', fetcher);
+    render(<RoleplayStudioPage />);
+    const refresh = screen.getByRole('button', {name:'Actualizar biblioteca'});
+    act(() => {
+      fireEvent.click(refresh);
+      fireEvent.click(refresh);
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect((fetcher.mock.calls[0][1] as RequestInit).signal?.aborted).toBe(false);
+    await act(async () => { resolvePage(page([item(a,'First')],false)); await pending; });
+    expect((screen.getByLabelText('Transcripción de HappyScribe') as HTMLSelectElement).value).toBe(a);
+  });
+
   it('fetches additional pages only on click, deduplicates, and preserves selection', async () => {
     const fetcher = vi.fn((_url: string, _init?: RequestInit) => {
       if (_url.endsWith('?page=0')) return Promise.resolve(page([item(a, 'First')], true));
