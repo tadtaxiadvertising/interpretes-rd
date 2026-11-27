@@ -120,9 +120,9 @@ export async function prepareRoleplayManifestImport(files: File[], options?: { l
   const byName = new Map<string, File>();
   for (const audio of audioFiles) {
     if (localWav ? (!/^segment-\d{2}\.wav$/.test(audio.name) || audio.type !== 'audio/wav') : (!/\.mp3$/i.test(audio.name) || !['', 'audio/mpeg', 'audio/mp3'].includes(audio.type))) {
-      throw new Error(`Archivo no permitido: ${audio.name}. Solo se admiten MP3.`);
+      throw new Error(`Archivo no permitido: ${audio.name}. ${localWav ? 'Se requieren los WAV PCM generados por Studio.' : 'Solo se admiten MP3.'}`);
     }
-    if (audio.size < 1 || audio.size > MAX_AUDIO_SIZE) {
+    if (audio.size < (localWav ? 45 : 1) || audio.size > MAX_AUDIO_SIZE) {
       throw new Error(`Tamaño de audio inválido (máximo 15 MiB): ${audio.name}.`);
     }
     const normalizedName = audio.name.toLowerCase();
@@ -133,7 +133,7 @@ export async function prepareRoleplayManifestImport(files: File[], options?: { l
   }
 
   if (byName.size !== ordered.length) {
-    throw new Error('La cantidad de MP3 debe coincidir exactamente con los segmentos del manifiesto.');
+    throw new Error(localWav ? 'La cantidad de WAV debe coincidir exactamente con los segmentos del manifiesto.' : 'La cantidad de MP3 debe coincidir exactamente con los segmentos del manifiesto.');
   }
   const usedNames = new Set<string>();
   const result: ImportedRoleplayScenario[] = [];
