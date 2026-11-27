@@ -79,6 +79,35 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .toBe('Doctor · 1 (EN)');
   });
 
+  it('applies the active profile only to the same numbered source speaker and supports undo', async () => {
+    selectAudio();
+    const subtitle = new File(['mock'], 'speakers.srt', { type: 'text/plain' });
+    Object.defineProperty(subtitle, 'text', { value: async () => [
+      '1', '00:00:00,000 --> 00:00:02,000', 'Speaker 1: Hello', '',
+      '2', '00:00:02,000 --> 00:00:04,000', 'Speaker 2: Hola', '',
+      '3', '00:00:04,000 --> 00:00:06,000', 'Speaker 1: How are you?',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [subtitle] },
+      });
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil a 1 turnos de la misma etiqueta' }));
+    fireEvent.change(selector, { target: { value: selector.options[2].value } });
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
+    expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+    fireEvent.change(selector, { target: { value: selector.options[1].value } });
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+    fireEvent.click(screen.getByRole('button', { name: /Deshacer.*hablantes/i }));
+    fireEvent.change(selector, { target: { value: selector.options[2].value } });
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+  });
+
   it('excludes all recognized interpreter turns at once and restores private references on undo', async () => {
     selectAudio();
     fireEvent.click(screen.getByLabelText(/Excluir intervenciones del intérprete original al importar/i));
