@@ -304,7 +304,10 @@ describe('shared Audio Studio actions', () => {
     expect(studio).toContain('expandedEditor ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS');
     expect(studio).toContain('disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}');
     expect(studio).toContain('disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}');
-    expect(studio).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
+    const library = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/HappyScribeLibraryPanel.tsx'), 'utf8');
+    expect(library).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
+    expect(library).toContain('bg-[var(--theme-control-bg)]');
+    expect(library).toContain('text-[var(--theme-control-text)]');
   });
 });
 
