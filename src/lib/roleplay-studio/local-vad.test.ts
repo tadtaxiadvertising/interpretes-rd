@@ -65,6 +65,18 @@ describe('local VAD',()=>{
     expect(result[0].end).toBeLessThanOrEqual(1);
     expect(result[0].end).toBe(1);
   });
+  it.each([16000, 44100, 48000])('preserves the last segment when rounding EOF up at %i Hz', sr=>{
+    // End is slightly past 1.0005s, so rounding to milliseconds would
+    // otherwise place the segment outside the source and discard it.
+    const data=new Float32Array(sr+Math.ceil(sr*0.0006));
+    for(let i=Math.floor(sr*0.2);i<data.length;i++) {
+      data[i]=0.18*Math.sin(2*Math.PI*220*i/sr);
+    }
+    const result=detectLocalSpeech([data],sr,{postRollSec:1});
+    expect(result).toHaveLength(1);
+    expect(result[0].end).toBe(data.length/sr);
+    expect(result[0].start).toBeLessThan(result[0].end);
+  });
   it('does not count pre/post-roll as detected speech duration',()=>{
     const data=signal(16000,1,[[0.7,1]]);
     // Padding must not make a sub-threshold acoustic interval eligible.
