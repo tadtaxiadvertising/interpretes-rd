@@ -11,6 +11,10 @@ import { createHash, randomUUID } from 'crypto';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC, ROLEPLAY_MULTIPART_MAX_SCENARIOS, ROLEPLAY_ADMIN_AUDIO_MAX_BYTES, ROLEPLAY_MULTIPART_MAX_BYTES } from '@/lib/roleplay-limits';
 import { getReusableBaseAudioPath, getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
+import { prepareRoleplayCreationClaim } from '@/lib/roleplay/prepare-creation-claim';
+import { completeRoleplayCreationInTransaction, InvalidRoleplayCreationKeyError } from '@/lib/roleplay/creation-idempotency-ledger';
+import { parseRoleplayReceiptRequest, InvalidRoleplayReceiptRequestError } from '@/lib/roleplay/creation-receipt';
+import { InvalidCreationAudioError } from '@/lib/roleplay/creation-audio-digests';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 import { isParsedMultipartFile } from '@/lib/roleplay/parsed-multipart-file';
 import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
@@ -139,10 +143,22 @@ export async function POST(req: NextRequest) {
   // might have persisted its URL. A failed/ambiguous commit must preserve it.
   let audioCommitMayHaveStarted = false;
   let processingSlotAcquired = false;
+  let creationClaim: { actorUserId: string; requestKey: string; payloadHash: string } | null = null;
 
   try {
     const forbidden = await guardRoleplayAdmin(req);
     if (forbidden) return forbidden;
+
+    // Explicit opt-in only. A keyed request must never silently downgrade
+    // into a legacy creation if the pilot is disabled.
+    const requestKeyHeader = req.headers.get('Idempotency-Key');
+    let creationRequestKey: string | null = null;
+    if (requestKeyHeader !== null) {
+      if (process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED !== 'true') {
+        return privateRoleplayJson({ success: false, error: 'La creación con clave de idempotencia no está habilitada.' }, { status: 503 });
+      }
+      creationRequestKey = parseRoleplayReceiptRequest({ requestKey: requestKeyHeader });
+    }
 
     // Reject additional uploads before reading multipart bytes. A second
     // request would multiply the temporary memory footprint on a small VPS.
@@ -201,6 +217,10 @@ export async function POST(req: NextRequest) {
     const isBulk = participantType === 'all-active-interpreters';
     if (participantType !== 'interpreter' && participantType !== 'candidate' && !isBulk) {
       return privateRoleplayJson({ success: false, error: 'Invalid participant type' }, { status: 400 });
+    }
+
+    if (creationRequestKey && participantType !== 'interpreter') {
+      return privateRoleplayJson({ success: false, error: 'El piloto solo admite asignaciones individuales de intérpretes.' }, { status: 400 });
     }
 
     // Participant invitations must use the configured canonical application
@@ -410,7 +430,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (!useLibrary && expectedAudioChecksums) {
+    // The keyed path verifies all bytes once in the claim preparation helper.
+    if (!creationRequestKey && !useLibrary && expectedAudioChecksums) {
       for (let index = 0; index < scenarioAudios.length; index++) {
         const expected = expectedAudioChecksums[index];
         if (!expected) continue;
@@ -429,6 +450,35 @@ export async function POST(req: NextRequest) {
     } else if (!isBulk) {
       const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
       if (!candidate) return privateRoleplayJson({ success: false, error: 'Candidate not found' }, { status: 404 });
+    }
+
+    if (creationRequestKey && participantType === 'interpreter') {
+      const claim = await prepareRoleplayCreationClaim(db, req, creationRequestKey, {
+        participantType, participantId: parsedParticipantId, requiresBilingualOpening: requiresOpening, scenarios,
+      }, useLibrary
+        ? { kind: 'library', verifiedFingerprint: rawLibraryFingerprint as string }
+        : { kind: 'upload', files: scenarioAudios, checksums: expectedAudioChecksums });
+      if (claim.kind === 'FORBIDDEN') {
+        return privateRoleplayJson({ success: false, error: 'Forbidden' }, { status: 403 });
+      }
+      if (claim.kind === 'CONFLICT' || claim.kind === 'IN_PROGRESS') {
+        return privateRoleplayJson({ success: false, error: 'La solicitud requiere revisión. Consulta el recibo o las sesiones existentes antes de repetir.' }, { status: 409 });
+      }
+      if (claim.kind === 'REPLAY') {
+        // Only return an existing interpreter session owned by the same
+        // destination. Never reconstruct candidate invitation secrets.
+        const session = claim.sessionIds.length === 1 && await db.roleplaySession.findFirst({
+          where: { ...interpreterAssignmentScope(parsedParticipantId!), id: claim.sessionIds[0], status: { notIn: ['DRAFT', 'CANCELLED'] } },
+          select: { id: true },
+        });
+        if (!session || claim.createdCount !== 1 || claim.skippedCount !== 0 || claim.scenarioCount !== scenarios.length) {
+          return privateRoleplayJson({ success: false, error: 'El recibo requiere revisión antes de continuar.' }, { status: 409 });
+        }
+        return privateRoleplayJson({ success: true, data: {
+          sessionId: session.id, inviteLink: `${frontendOrigin}/roleplays/${session.id}`, scenarioCount: claim.scenarioCount,
+        } });
+      }
+      creationClaim = claim.context;
     }
 
     // Create-or-resume invariant: never create a second live/evaluated
@@ -803,6 +853,11 @@ export async function POST(req: NextRequest) {
           data: { sessionId: session.id, ...candidateAccess },
         });
       }
+      if (creationClaim) {
+        await completeRoleplayCreationInTransaction(tx, {
+          ...creationClaim, sessionIds: [session.id], skippedCount: 0, scenarioCount: scenarios.length,
+        });
+      }
     });
 
     if (participantType === 'interpreter') {
@@ -814,6 +869,10 @@ export async function POST(req: NextRequest) {
       data: { sessionId: session.id, inviteLink, scenarioCount: scenarios.length },
     }, { headers: { 'Cache-Control': 'private, no-store', Vary: 'Cookie' } });
   } catch (error: unknown) {
+    if (error instanceof InvalidRoleplayReceiptRequestError || error instanceof InvalidCreationAudioError ||
+        (error instanceof InvalidRoleplayCreationKeyError && !creationClaim)) {
+      return privateRoleplayJson({ success: false, error: 'Clave de creación o contenido del paquete inválido.' }, { status: 400 });
+    }
     if (error instanceof MultipartBodyTooLargeError) {
       return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
     }
