@@ -60,7 +60,9 @@ export default function StudioFinalizationPanel({
         : analyzingSilences ? 'Finaliza el análisis de pausas antes de preparar el paquete.'
           : !segmentCount ? 'Añade al menos una intervención y revisa sus cortes.'
             : readyAssignment ? 'El paquete está preparado. Continúa a asignación para elegir el destinatario.'
-              : !localOnly ? (segmentCount > ROLEPLAY_MAX_SCENARIOS
+              : publicationPlan.issue && segmentCount > ROLEPLAY_MAX_SCENARIOS
+                ? 'Guarda el borrador ampliado y revisa la incidencia del plan de publicación antes de preparar las partes.'
+                : !localOnly ? (segmentCount > ROLEPLAY_MAX_SCENARIOS
                 ? 'El proyecto supera el límite de publicación. Guarda el plan local de una parte para exportarla por separado.'
                 : 'Revisa los cortes y pulsa «Preparar para asignación». El original se enviará al servidor.')
                 : wavSource ? (!currentWavPlan
