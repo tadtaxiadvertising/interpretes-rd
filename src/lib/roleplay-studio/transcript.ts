@@ -257,6 +257,34 @@ export function parseTimedTranscriptForReview(raw: string, longLocalSource = fal
   return parseTimedTranscriptForReviewWithDiagnostics(raw, longLocalSource).cues;
 }
 
+/**
+ * Allow only the existing 100 ms media-duration tolerance. A corrected cue
+ * must still be at least 100 ms long and remain within the real recording.
+ * The caller must send adjusted timings to editorial review, not auto-apply.
+ */
+export function boundTimedCuesToMedia(
+  cues: readonly TimedTranscriptCue[], duration: number,
+): { cues: TimedTranscriptCue[]; adjustedCount: number } {
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error('No se pudo verificar la duración de la grabación.');
+  }
+  let adjustedCount = 0;
+  const bounded = cues.map((cue, index) => {
+    if (!Number.isFinite(cue.start) || !Number.isFinite(cue.end) ||
+        cue.start < 0 || cue.end <= cue.start || cue.end > duration + 0.1 + 1e-9) {
+      throw new Error(`El subtítulo ${index + 1} contiene tiempos inválidos o posteriores al final de la grabación.`);
+    }
+    if (cue.end <= duration) return cue;
+    const end = Math.floor(duration * 1000) / 1000;
+    if (end <= cue.start || cueDurationMs(cue.start, end) < 100) {
+      throw new Error(`El subtítulo ${index + 1} no conserva 0,1 segundos dentro de la grabación. Corrige sus tiempos antes de importar.`);
+    }
+    adjustedCount += 1;
+    return { ...cue, end };
+  });
+  return { cues: bounded, adjustedCount };
+}
+
 /** Build publishable metadata without copying personal names or transcript text. */
 export function toPublishableStudioSegments(cues: TimedTranscriptCue[]) {
   return cues.map((cue, index) => {
