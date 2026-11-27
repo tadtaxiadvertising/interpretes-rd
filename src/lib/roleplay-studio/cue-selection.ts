@@ -1,8 +1,10 @@
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { STUDIO_MAX_EDITOR_SEGMENTS } from './draft';
 import type { TimedTranscriptCue } from './transcript';
 import { classifySpeakerRole } from './speaker-profiles';
 
 const MAX_PACKAGE_AUDIO_SECONDS = 900;
+type SelectionPurpose = 'package' | 'editor';
 
 /**
  * Only an explicit, ordered selection can become the 25-scene roleplay.
@@ -11,9 +13,11 @@ const MAX_PACKAGE_AUDIO_SECONDS = 900;
  */
 export function selectTimedCues(
   available: readonly TimedTranscriptCue[], chosenIndices: readonly number[],
+  purpose: SelectionPurpose = 'package',
 ): TimedTranscriptCue[] {
-  if (chosenIndices.length < 1 || chosenIndices.length > ROLEPLAY_MAX_SCENARIOS) {
-    throw new Error(`Selecciona entre 1 y ${ROLEPLAY_MAX_SCENARIOS} intervenciones.`);
+  const max = purpose === 'editor' ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
+  if (chosenIndices.length < 1 || chosenIndices.length > max) {
+    throw new Error(`Selecciona entre 1 y ${max} intervenciones.`);
   }
   const unique = new Set(chosenIndices);
   if (unique.size !== chosenIndices.length) {
@@ -34,7 +38,7 @@ export function selectTimedCues(
       throw new Error('La selección contiene intervenciones solapadas o tiempos inválidos.');
     }
     total += cue.end - cue.start;
-    if (total > MAX_PACKAGE_AUDIO_SECONDS) {
+    if (purpose === 'package' && total > MAX_PACKAGE_AUDIO_SECONDS) {
       throw new Error('La selección excede los 15 minutos máximos de audio del paquete.');
     }
     lastEnd = cue.end;
@@ -56,10 +60,12 @@ export function fillCompatibleTimedCueSelection(
   available: readonly TimedTranscriptCue[],
   chosenIndices: readonly number[],
   candidateIndices: readonly number[],
+  purpose: SelectionPurpose = 'package',
 ): number[] {
+  const max = purpose === 'editor' ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
   // A malformed manual selection must be corrected explicitly, not silently
   // thrown away or turned into an apparently valid different selection.
-  if (chosenIndices.length) selectTimedCues(available, chosenIndices);
+  if (chosenIndices.length) selectTimedCues(available, chosenIndices, purpose);
   const selection = new Set(chosenIndices);
   // SRT exports sometimes contain a long background caption spanning many
   // separate utterances. Prefer the next cue that finishes first rather than
@@ -72,13 +78,13 @@ export function fillCompatibleTimedCueSelection(
     .sort((left, right) => available[left].end - available[right].end ||
       available[left].start - available[right].start || left - right);
   for (const index of candidates) {
-    if (selection.size >= ROLEPLAY_MAX_SCENARIOS) break;
+    if (selection.size >= max) break;
     if (!Number.isSafeInteger(index) || index < 0 || index >= available.length) continue;
     if (selection.has(index) ||
         classifySpeakerRole(available[index].speaker) === 'interpreter') continue;
     const proposed = [...selection, index].sort((a, b) => a - b);
     try {
-      selectTimedCues(available, proposed);
+      selectTimedCues(available, proposed, purpose);
       selection.add(index);
     } catch {
       // Do not select overlaps, excessive durations, or invalid timestamps.

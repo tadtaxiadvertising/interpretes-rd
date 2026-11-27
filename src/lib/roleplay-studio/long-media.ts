@@ -1,6 +1,6 @@
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import type { StudioLanguage, StudioSpeakerRole } from './speaker-profiles';
-import type { StudioDraftSegment } from './draft';
+import { STUDIO_MAX_EDITOR_SEGMENTS, type StudioDraftSegment } from './draft';
 import { validStudioRanges } from './compound-cuts';
 
 export const MAX_LOCAL_MEDIA_BYTES = 8 * 1024 * 1024 * 1024;
@@ -19,7 +19,7 @@ export type LocalMediaKind = 'audio' | 'video';
 
 interface LocalDraft {
   format: typeof LOCAL_DRAFT_FORMAT;
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   sourceSizeBytes: number;
   sourceSampleSha256: string;
   sourceDurationSeconds: number;
@@ -54,13 +54,13 @@ export function usesLocalLongMode(file: File, duration: number): boolean {
     file.size > DIRECT_ZIP_MAX_BYTES || duration > DIRECT_ZIP_MAX_SECONDS;
 }
 
-function isStudioSegment(value: unknown, duration: number, version: 1 | 2): value is StudioDraftSegment {
+function isStudioSegment(value: unknown, duration: number, version: 1 | 2 | 3): value is StudioDraftSegment {
   if (!isRecord(value)) return false;
   return typeof value.title === 'string' && value.title.trim().length > 0 &&
     value.title.length <= 200 &&
     typeof value.start === 'number' && Number.isFinite(value.start) && value.start >= 0 &&
     typeof value.end === 'number' && Number.isFinite(value.end) &&
-    (version === 2 || !('ranges' in value)) &&
+    (version !== 1 || !('ranges' in value)) &&
     validStudioRanges({ start: value.start, end: value.end, ranges: value.ranges }, duration) !== null &&
     typeof value.scriptPrompt === 'string' && value.scriptPrompt.length <= 5000 &&
     typeof value.responseLimit === 'number' && Number.isSafeInteger(value.responseLimit) &&
@@ -125,8 +125,8 @@ export function createLongMediaDraft(
   sourceDurationSeconds: number,
 ): LocalDraft {
   checkedSource(sourceSizeBytes, sourceDurationSeconds, sourceSampleSha256);
-  const version = segments.some(segment => segment.ranges !== undefined) ? 2 : 1;
-  if (segments.length > ROLEPLAY_MAX_SCENARIOS ||
+  const version = segments.length > ROLEPLAY_MAX_SCENARIOS ? 3 : segments.some(segment => segment.ranges !== undefined) ? 2 : 1;
+  if (segments.length > STUDIO_MAX_EDITOR_SEGMENTS ||
       !segments.every(segment => isStudioSegment(segment, sourceDurationSeconds, version))) {
     throw new Error('El proyecto contiene intervenciones fuera de los límites permitidos.');
   }
@@ -150,14 +150,15 @@ export function openLongMediaDraft(
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { throw new Error('El proyecto no contiene JSON válido.'); }
   if (!isRecord(parsed) || parsed.format !== LOCAL_DRAFT_FORMAT ||
-    (parsed.version !== 1 && parsed.version !== 2) ||
+    (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) ||
     !Number.isSafeInteger(parsed.sourceSizeBytes) ||
     typeof parsed.sourceSampleSha256 !== 'string' ||
     typeof parsed.sourceDurationSeconds !== 'number' ||
     !Number.isFinite(parsed.sourceDurationSeconds) ||
     !Array.isArray(parsed.segments) ||
-    parsed.segments.length > ROLEPLAY_MAX_SCENARIOS ||
-    !parsed.segments.every(segment => isStudioSegment(segment, sourceDurationSeconds, parsed.version as 1 | 2)) ||
+    parsed.segments.length > (parsed.version === 3 ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS) ||
+    (parsed.version === 3 && parsed.segments.length <= ROLEPLAY_MAX_SCENARIOS) ||
+    !parsed.segments.every(segment => isStudioSegment(segment, sourceDurationSeconds, parsed.version as 1 | 2 | 3)) ||
     (parsed.version === 2 && !parsed.segments.some((segment: StudioDraftSegment) => segment.ranges !== undefined))) {
     throw new Error('El proyecto local está incompleto o contiene intervenciones no válidas.');
   }

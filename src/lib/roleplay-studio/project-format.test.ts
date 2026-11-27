@@ -16,12 +16,17 @@ describe('Audio Studio project format preflight', () => {
     }))).toBe('sampled-local');
   });
 
+  it('recognizes v3 editorial formats before strict source verification', () => {
+    expect(detectStudioProjectFormat(JSON.stringify({ format: STUDIO_DRAFT_FORMAT, version: 3 }))).toBe('complete-sha256');
+    expect(detectStudioProjectFormat(JSON.stringify({ format: LOCAL_DRAFT_FORMAT, version: 3 }))).toBe('sampled-local');
+  });
+
   it.each([
     'not a JSON document',
     'null',
     '[]',
     '{}',
-    JSON.stringify({ format: STUDIO_DRAFT_FORMAT, version: 3 }),
+    JSON.stringify({ format: STUDIO_DRAFT_FORMAT, version: 4 }),
     JSON.stringify({ format: LOCAL_DRAFT_FORMAT, version: 0 }),
     JSON.stringify({ format: 'unsupported', version: 1 }),
     JSON.stringify({ format: LOCAL_DRAFT_FORMAT, version: '1' }),

@@ -31,6 +31,15 @@ describe('Roleplay Studio resumable, SHA-256-bound project drafts', () => {
       .toEqual([segment]);
   });
 
+  it('roundtrips an expanded v3 editorial draft without expanding legacy versions', () => {
+    const turns = Array.from({ length: 100 }, (_, i) => ({ ...segment, start: i * 6, end: i * 6 + 5 }));
+    const saved = createStudioDraft(sourceSize, hash, turns, 700);
+    expect(saved.version).toBe(3);
+    expect(openStudioDraft(JSON.stringify(saved), sourceSize, hash, 700)).toEqual(turns);
+    expect(() => openStudioDraft(JSON.stringify({ ...saved, version: 1 }), sourceSize, hash, 700)).toThrow();
+    expect(() => createStudioDraft(sourceSize, hash, [...turns, segment], 700)).toThrow();
+  });
+
   it('preserves an empty editing project so an admin can return later', () => {
     const saved = createStudioDraft(sourceSize, hash, [], length);
     expect(openStudioDraft(JSON.stringify(saved), sourceSize, hash, length)).toEqual([]);

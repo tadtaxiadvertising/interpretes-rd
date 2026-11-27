@@ -15,12 +15,14 @@ export interface StudioDraftSegment {
 
 interface StudioDraft {
   format: 'interpretes-rd-audio-studio-draft';
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   sourceSizeBytes: number;
   sourceSha256: string;
   segments: StudioDraftSegment[];
 }
 
+// Editorial capacity is independent of assigned sessions and ZIP limits.
+export const STUDIO_MAX_EDITOR_SEGMENTS = 100;
 export const MAX_STUDIO_DRAFT_CHARS = 180_000;
 const MAX_ORIGINAL_AUDIO_BYTES = 15 * 1024 * 1024;
 const MAX_ORIGINAL_AUDIO_SECONDS = 7200;
@@ -37,13 +39,13 @@ function validHash(value: string): boolean {
   return /^[0-9a-f]{64}$/i.test(value);
 }
 
-function isDraftSegment(value: unknown, audioDuration: number, version: 1 | 2): value is StudioDraftSegment {
+function isDraftSegment(value: unknown, audioDuration: number, version: 1 | 2 | 3): value is StudioDraftSegment {
   if (!isRecord(value)) return false;
   return typeof value.title === 'string' && value.title.trim().length > 0 &&
     value.title.length <= 200 &&
     typeof value.start === 'number' && Number.isFinite(value.start) && value.start >= 0 &&
     typeof value.end === 'number' && Number.isFinite(value.end) && value.end > value.start &&
-    (version === 2 || !('ranges' in value)) &&
+    (version !== 1 || !('ranges' in value)) &&
     validStudioRanges({ start: value.start, end: value.end, ranges: value.ranges }, audioDuration) !== null &&
     typeof value.responseLimit === 'number' && Number.isSafeInteger(value.responseLimit) &&
     value.responseLimit >= 0 && value.responseLimit <= ROLEPLAY_RESPONSE_MAX_DURATION_SEC &&
@@ -70,11 +72,11 @@ export function createStudioDraft(
   sourceSizeBytes: number, sourceSha256: string, segments: readonly StudioDraftSegment[],
   audioDuration: number,
 ): StudioDraft {
-  const version = segments.some(segment => segment.ranges !== undefined) ? 2 : 1;
+  const version = segments.length > ROLEPLAY_MAX_SCENARIOS ? 3 : segments.some(segment => segment.ranges !== undefined) ? 2 : 1;
   if (!Number.isSafeInteger(sourceSizeBytes) || sourceSizeBytes < 1 ||
       sourceSizeBytes > MAX_ORIGINAL_AUDIO_BYTES || !validHash(sourceSha256) ||
       !Number.isFinite(audioDuration) || audioDuration <= 0 || audioDuration > MAX_ORIGINAL_AUDIO_SECONDS ||
-      segments.length > ROLEPLAY_MAX_SCENARIOS ||
+      segments.length > STUDIO_MAX_EDITOR_SEGMENTS ||
       !segments.every(segment => isDraftSegment(segment, audioDuration, version))) {
     throw new Error('El borrador contiene intervenciones incompletas o límites inválidos.');
   }
@@ -101,12 +103,13 @@ export function openStudioDraft(
   catch { throw new Error('El archivo de proyecto no contiene JSON válido.'); }
 
   if (!isRecord(parsed) || parsed.format !== FORMAT ||
-      (parsed.version !== 1 && parsed.version !== 2) ||
+      (parsed.version !== 1 && parsed.version !== 2 && parsed.version !== 3) ||
       !Number.isSafeInteger(parsed.sourceSizeBytes) ||
       typeof parsed.sourceSha256 !== 'string' || !validHash(parsed.sourceSha256) ||
       !Array.isArray(parsed.segments) ||
-      parsed.segments.length > ROLEPLAY_MAX_SCENARIOS ||
-      !parsed.segments.every((segment: unknown) => isDraftSegment(segment, audioDuration, parsed.version as 1 | 2)) ||
+      parsed.segments.length > (parsed.version === 3 ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS) ||
+    (parsed.version === 3 && parsed.segments.length <= ROLEPLAY_MAX_SCENARIOS) ||
+      !parsed.segments.every((segment: unknown) => isDraftSegment(segment, audioDuration, parsed.version as 1 | 2 | 3)) ||
       (parsed.version === 2 && !parsed.segments.some((segment: StudioDraftSegment) => segment.ranges !== undefined))) {
     throw new Error('Proyecto incompatible, dañado o con límites de intervención inválidos.');
   }

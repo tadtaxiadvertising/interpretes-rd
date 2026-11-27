@@ -37,6 +37,17 @@ describe('local-only long media projects', () => {
       [{ ...segments[0], end: 44000 }], 43200)).toThrow(/límites/);
   });
 
+  it('roundtrips expanded v3 local projects including compound cuts', () => {
+    const turns = Array.from({ length: 100 }, (_, i) => ({ ...segments[0], start: i * 40, end: i * 40 + 30 }));
+    const compound = { ...turns[0], ranges: [{ start: 0, end: 10 }, { start: 20, end: 30 }] };
+    const expanded = [compound, ...turns.slice(1)];
+    const saved = createLongMediaDraft(222, hash, expanded, 21600);
+    expect(saved.version).toBe(3);
+    expect(openLongMediaDraft(JSON.stringify(saved), 222, hash, 21600)).toEqual(expanded);
+    expect(() => openLongMediaDraft(JSON.stringify({ ...saved, version: 2 }), 222, hash, 21600)).toThrow();
+    expect(() => createLongMediaDraft(222, hash, [...expanded, turns[0]], 21600)).toThrow();
+  });
+
   it('persists v2 disjoint cuts and fails closed on forged ranges', () => {
     const compound = { ...segments[0], start: 14000, end: 14450,
       ranges: [{ start: 14000, end: 14010 }, { start: 14400, end: 14450 }] };

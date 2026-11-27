@@ -28,6 +28,20 @@ describe('Long transcript selection for verified roleplay packages', () => {
     expect(() => selectTimedCues(cues, Array.from({ length: 26 }, (_, i) => i))).toThrow(/25/);
   });
 
+  it('separates expanded editorial selection from the unchanged package limits', () => {
+    const cues = Array.from({ length: 101 }, (_, i) => ({
+      start: i * 20, end: i * 20 + 19, text: 'Cue', speaker: 'Doctor',
+    }));
+    const indices = cues.map((_, i) => i);
+    const expanded = fillCompatibleTimedCueSelection(cues, [0], indices, 'editor');
+    expect(expanded).toHaveLength(100);
+    expect(selectTimedCues(cues, expanded, 'editor')).toHaveLength(100);
+    expect(() => selectTimedCues(cues, expanded)).toThrow(/25/);
+    expect(() => selectTimedCues(cues, indices, 'editor')).toThrow(/100/);
+    const overlapping = [cues[0], { ...cues[1], start: 10 }];
+    expect(() => selectTimedCues(overlapping, [0, 1], 'editor')).toThrow(/solapadas/);
+  });
+
   it('accepts overlapping source captions for review but never exports overlapping selected clips', () => {
     const input = `WEBVTT
 
