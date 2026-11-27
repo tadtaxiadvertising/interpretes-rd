@@ -102,6 +102,13 @@ describe('local VAD',()=>{
     expect(result[0].end).toBe(data.length/sr);
     expect(result[0].start).toBeLessThan(result[0].end);
   });
+  it.each([16000, 44100, 48000])('counts actual samples at the minimum speech boundary at %i Hz', sr=>{
+    for(const delta of [-1, 0, 1]) {
+      const data=new Float32Array(sr/2+delta).fill(0.18);
+      const result=detectLocalSpeech([data],sr,{ preRollSec:1, postRollSec:1 });
+      expect(result).toHaveLength(delta<0?0:1);
+    }
+  });
   it('does not count pre/post-roll as detected speech duration',()=>{
     const data=signal(16000,1,[[0.7,1]]);
     // Padding must not make a sub-threshold acoustic interval eligible.
