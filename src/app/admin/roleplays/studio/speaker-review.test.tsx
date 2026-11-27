@@ -243,6 +243,26 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
   });
 
+  it('shows issues outside active filters and jumps directly to a technical issue without playing audio', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const titles = screen.getAllByLabelText('Título');
+    fireEvent.change(titles[2], { target: { value: '' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Centro de revisión (3)' }));
+    fireEvent.change(screen.getByLabelText('Tipo de incidencia'), { target: { value: 'title' } });
+    expect(screen.queryByRole('button', { name: 'Revisar intervención 1' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Revisar intervención 3' }));
+    expect(screen.queryByRole('region', { name: 'Centro de revisión editorial' })).toBeNull();
+    expect(screen.getByText('Intervención 3 de 3 · 3 de 3 visibles')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Ocultar ajustes avanzados' }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('searchbox', { name: 'Buscar intervenciones' })).toHaveProperty('value', '');
+    expect(screen.getByRole('button', { name: 'Confirmar y avanzar' })).toHaveProperty('disabled', true);
+    expect(player.play).not.toHaveBeenCalled();
+  });
+
   it('shows global review progress independent of search filters and updates after edits', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
