@@ -9,6 +9,7 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/li
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
+import { peekStudioHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
 import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
@@ -43,6 +44,7 @@ interface NewRoleplayFormProps {
   initialCandidateId?: number;
   openingAssignmentEnabled?: boolean;
   directUploadEnabled?: boolean;
+  studioTransfer?: string;
   librarySource?: {
     id: string;
     fingerprint: string;
@@ -69,7 +71,7 @@ function normalizeParticipantSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, studioTransfer }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
@@ -307,7 +309,12 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const handleManifestImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = '';
+    await importManifestFiles(selected);
+  };
+
+  const importManifestFiles = async (selected: File[], transferToken?: string) => {
     if (selected.length === 0) return;
+    if (createPending.current || directAttempt.current) return;
     const revision = ++importRevision.current;
     importPending.current = true;
     setIsImporting(true);
@@ -323,6 +330,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         try {
           files = await extractStudioZip(selected[0]);
         } catch (nativeError) {
+          if (transferToken) throw nativeError;
           try {
             files = await extractExternalStudioZip(selected[0]);
           } catch (externalError) {
@@ -355,6 +363,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             (current.sourceEndSec ?? null) === (incoming.sourceEndSec ?? null);
         });
       if (identicalPackage) {
+        if (transferToken) clearStudioHandoff(transferToken);
         setImportNotice('Este paquete ya está importado y no tiene cambios. Conservamos los escenarios existentes.');
         return;
       }
@@ -384,6 +393,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       // replayed. Even when an import becomes stale while React is batching,
       // return a new unchanged array to schedule orphan preview cleanup.
       setScenarios(prev => revision === importRevision.current ? next : [...prev]);
+      if (transferToken) {
+        clearStudioHandoff(transferToken);
+        setImportNotice('Paquete de Audio Studio verificado. Selecciona el destinatario y revisa los escenarios antes de crear.');
+      }
     } catch (cause) {
       if (revision === importRevision.current) {
         setError(cause instanceof Error ? cause.message : 'No se pudo importar el manifiesto.');
@@ -395,6 +408,21 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       }
     }
   };
+
+  const importStudioTransfer = () => {
+    if (!studioTransfer || librarySource || importPending.current || createPending.current || directAttempt.current) return;
+    const file = peekStudioHandoff(studioTransfer);
+    if (!file) {
+      setError('El paquete temporal ya no está disponible. Vuelve a Audio Studio o importa un ZIP guardado.');
+      return;
+    }
+    void importManifestFiles([file], studioTransfer);
+  };
+  const studioTransferAction = useRef(importStudioTransfer);
+  studioTransferAction.current = importStudioTransfer;
+  useEffect(() => {
+    if (studioTransfer && !librarySource) studioTransferAction.current();
+  }, [studioTransfer, librarySource]);
 
   const validateForm = () => {
     if (!isBulk && !selectedParticipantId) {
@@ -814,6 +842,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       ) : (
       <div>
         <div className="mb-5 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          {studioTransfer && !importNotice && <div className="mb-3 rounded-lg border border-[var(--border)] p-3 text-sm">
+            <p className="text-[var(--text-secondary)]">Transferencia temporal de Audio Studio en esta pestaña. Si la verificación se interrumpe, puedes volver a intentarlo antes de que caduque.</p>
+            <button type="button" disabled={isImporting || isCreating || directLocked || submissionUncertain} onClick={importStudioTransfer}
+              className="mt-2 rounded-lg theme-action-secondary px-3 py-2 font-semibold disabled:opacity-50">Cargar paquete de Audio Studio</button>
+          </div>}
           <label htmlFor="manifest-roleplay-upload" className="block text-sm font-semibold text-[var(--theme-link)]">
             Importar roleplay preparado (ZIP de Audio Studio o manifest.json + MP3)
           </label>
