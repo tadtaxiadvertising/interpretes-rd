@@ -243,6 +243,28 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
   });
 
+  it('previews a proposed overlap correction without editing either cut, then applies and undoes it', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    const boundary = Number((screen.getAllByLabelText('Inicio (segundos)')[1] as HTMLInputElement).value);
+    const originalEnd = boundary + 0.2;
+    fireEvent.change(screen.getAllByLabelText('Final (segundos)')[0], { target: { value: String(originalEnd) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    expect(screen.getByRole('region', { name: 'Propuesta de ajuste de tiempos' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar propuesta' }));
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(Number((screen.getByLabelText('Final (segundos)') as HTMLInputElement).value)).toBeCloseTo(originalEnd);
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar ajuste de tiempos' }));
+    expect(Number((screen.getByLabelText('Final (segundos)') as HTMLInputElement).value)).toBeCloseTo(boundary);
+    expect(screen.queryByRole('region', { name: 'Propuesta de ajuste de tiempos' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer ajuste de tiempos' }));
+    expect(Number((screen.getByLabelText('Final (segundos)') as HTMLInputElement).value)).toBeCloseTo(originalEnd);
+    fireEvent.click(screen.getByRole('button', { name: 'Siguiente intervención' }));
+    expect(Number((screen.getByLabelText('Inicio (segundos)') as HTMLInputElement).value)).toBeCloseTo(boundary);
+  });
+
   it('shows issues outside active filters and jumps directly to a technical issue without playing audio', () => {
     const player = selectAudio();
     for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
