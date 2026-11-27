@@ -28,6 +28,9 @@ function decodeTimestamp(value: string): number | null {
   return Math.round((hours * 3600 + minutes * 60 + seconds) * 1000) / 1000;
 }
 
+// SRT/VTT timestamps have millisecond precision; subtract integer ticks.
+const cueDurationMs = (start: number, end: number) => Math.round(end * 1000) - Math.round(start * 1000);
+
 const CUE_TIMING = /^((?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3})\s*-->\s*((?:\d{2}:)?\d{2}:\d{2}[.,]\d{1,3})(?:\s+.*)?$/;
 
 /**
@@ -105,7 +108,7 @@ export function parseTimedTranscript(
   const blocks = raw.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n').trim()
     .split(/\n\s*\n/).flatMap(unpackAdjacentTimedCues);
   const cues: TimedTranscriptCue[] = [];
-  let sum = 0;
+  let sumMs = 0;
   let previousEnd = 0;
   let previousStart = 0;
   let originalCueCount = 0;
@@ -132,17 +135,17 @@ export function parseTimedTranscript(
     // valid neighbors available for manual review without fabricating timing.
     // In strict/publish mode, the existing rejection behavior remains intact.
     if (limits.skipUnusableTiming && start !== null && end !== null &&
-        end - start < 0.1) {
+        cueDurationMs(start, end) < 100) {
       limits.skipUnusableTiming(end <= start ? 'reversed' : 'tiny');
       continue;
     }
-    if (start === null || end === null || end - start < 0.1 ||
+    if (start === null || end === null || cueDurationMs(start, end) < 100 ||
         (!limits.sortOutOfOrder && start < previousStart) ||
         (!limits.allowOverlaps && start < previousEnd) ||
-        (!limits.splitLongCues && end - start > MAX_CLIP_DURATION) || end > maxSourceSeconds) {
+        (!limits.splitLongCues && cueDurationMs(start, end) > MAX_CLIP_DURATION * 1000) || end > maxSourceSeconds) {
       const reason = start === null || end === null ? 'marca de tiempo inválida'
         : end > maxSourceSeconds ? 'tiempo posterior al límite de la grabación'
-          : end - start < 0.1 ? 'duración inferior a 0,1 segundos o intervalo invertido'
+          : cueDurationMs(start, end) < 100 ? 'duración inferior a 0,1 segundos o intervalo invertido'
             : !limits.sortOutOfOrder && start < previousStart ? 'intervalo fuera de orden'
               : !limits.allowOverlaps && start < previousEnd ? 'intervalo superpuesto'
                 : 'duración superior a 5 minutos';
@@ -160,7 +163,7 @@ export function parseTimedTranscript(
     // Long SRT cues are reference windows, not automatically published clips.
     // Divide their timing into bounded windows without guessing word alignments.
     // Repeating the original reference text is preferable to inventing dialogue.
-    const parts = limits.splitLongCues ? Math.ceil((end - start) / MAX_CLIP_DURATION) : 1;
+    const parts = limits.splitLongCues ? Math.ceil(cueDurationMs(start, end) / (MAX_CLIP_DURATION * 1000)) : 1;
     if (cues.length + parts > maxCues) {
       throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
     }
@@ -173,8 +176,8 @@ export function parseTimedTranscript(
     if (cues.length > maxCues) {
       throw new Error(`El archivo supera ${maxCues} intervenciones. Divide la transcripción en archivos más pequeños.`);
     }
-    sum += end - start;
-    if (!limits.useSourceTimelineBudget && sum > maxTotalSeconds) {
+    sumMs += cueDurationMs(start, end);
+    if (!limits.useSourceTimelineBudget && sumMs > maxTotalSeconds * 1000) {
       throw new Error('La duración acumulada de los subtítulos supera el límite permitido.');
     }
     previousStart = start;
@@ -234,7 +237,7 @@ export function parseTimedTranscriptForReviewWithDiagnostics(
     skipUnusableTiming: () => { diagnostics.skipped += 1; },
     onOriginalCue: (start, end) => {
       if (start < lastOriginalStart) diagnostics.reordered += 1;
-      if (end - start > MAX_CLIP_DURATION) diagnostics.divided += 1;
+      if (cueDurationMs(start, end) > MAX_CLIP_DURATION * 1000) diagnostics.divided += 1;
       lastOriginalStart = start;
     },
   });
