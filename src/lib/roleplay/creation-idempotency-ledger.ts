@@ -3,7 +3,7 @@ import type { Prisma, PrismaClient } from '@prisma/client';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES } from '@/lib/roleplay/direct-upload-contract';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
-import { lookupRoleplayCreationReceipt } from '@/lib/roleplay/creation-receipt';
+import { lookupRoleplayCreationReceipt, MAX_RECEIPT_SESSIONS } from '@/lib/roleplay/creation-receipt';
 
 /**
  * A UUID identifies a retry, it is NOT an authorization capability.
@@ -258,7 +258,7 @@ export async function completeRoleplayCreationInTransaction(
 ): Promise<void> {
   if (!result || !validCreationIdentity(result.actorUserId, result.requestKey, result.payloadHash) ||
       !Array.isArray(result.sessionIds) || result.sessionIds.length < 1 ||
-      result.sessionIds.length > 100000 ||
+      result.sessionIds.length > MAX_RECEIPT_SESSIONS ||
       result.sessionIds.some(id => typeof id !== 'string' || !id.trim()) ||
       new Set(result.sessionIds).size !== result.sessionIds.length ||
       !Number.isSafeInteger(result.skippedCount) || result.skippedCount < 0 ||
