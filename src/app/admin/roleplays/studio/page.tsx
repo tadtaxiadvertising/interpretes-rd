@@ -35,7 +35,8 @@ import HappyScribeLibraryPanel from './HappyScribeLibraryPanel';
 import StudioFinalizationPanel from './StudioFinalizationPanel';
 import StudioFocusNavigation from './StudioFocusNavigation';
 import StudioInterventionCard, { type StudioIntervention as Segment } from './StudioInterventionCard';
-import { emptyStudioHistory, rememberStudioEdit, stepStudioHistory, mapStudioHistory, STUDIO_HISTORY_LIMIT, type StudioHistory } from '@/lib/roleplay-studio/editorial-history';
+import { STUDIO_HISTORY_LIMIT } from '@/lib/roleplay-studio/editorial-history';
+import { useStudioEditorialHistory, hasRecoverableUndo, type EditorialSnapshot } from './useStudioEditorialHistory';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
 import { studioProductionKey, productionStatus, trackProductionTransfer, productionReceipts, restoreProductionReceipts } from '@/lib/roleplay-studio/production-tracking';
@@ -61,29 +62,7 @@ import {
 
 
 
-type EditorialSnapshot = {
-    kind: 'edición de intervención' | 'recuperación de papelera' | 'ajuste de tiempos' | 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición manual' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
-    segments: Segment[];
-    captions: Record<string, string>;
-    expandedId: string | null;
-    previousSuggestions?: {
-      silences: StudioSilence[];
-      clips: StudioSuggestedClip[];
-      omittedCount: number;
-    };
-    previousReview?: {
-      cues: TimedTranscriptCue[];
-      selected: number[];
-      page: number;
-      search: string;
-      selectedOnly: boolean;
-      alertsOnly: boolean;
-      segmentSearch: string;
-      pendingOnly: boolean;
-    };
-    excluded?: Array<{ turn: Segment; caption?: string }>;
-    confirmations?: ReadonlyMap<string, Segment>;
-};
+
 
 export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
@@ -182,19 +161,10 @@ export default function RoleplayStudioPage() {
   const pairPlayer = useRef<HTMLAudioElement | null>(null);
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
-  const [history, setHistory] = useState<StudioHistory<EditorialSnapshot>>(() => emptyStudioHistory());
-  const lastStructuralEdit = history.past.at(-1) ?? null;
-  const nextStructuralEdit = history.future.at(-1) ?? null;
-  const editGroup = useRef<{ key: string; at: number } | null>(null);
-  const clearEditorialHistory = () => {
-    editGroup.current = null;
-    setHistory(emptyStudioHistory());
-  };
-  const rememberEdit = (snapshot: EditorialSnapshot) => {
-    editGroup.current = null;
-    const before = { ...snapshot, excluded: excludedTurns, confirmations: confirmedTurns };
-    setHistory(previous => rememberStudioEdit(previous, before));
-  };
+  const {
+    history, lastStructuralEdit, nextStructuralEdit, clearEditorialHistory, rememberEdit,
+    rememberGroupedEdit, endEditGroup, stepHistory, forgetServerSuggestions,
+  } = useStudioEditorialHistory(excludedTurns, confirmedTurns);
   // Source identity prevents a delayed decode from updating a replacement MP3.
   const activeAudioFile = useRef<File | null>(null);
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
@@ -218,15 +188,9 @@ export default function RoleplayStudioPage() {
   // Keep an up-to-date snapshot for transfers that may resolve after edits.
   // A preflight approval only covers the source and work that existed then.
   // A restored empty JSON or a deletion can leave no visible cuts while the
-  // previous edits still exist in the one-step undo snapshot. Protect that
+  // previous edits still exist in the undo or redo history. Protect that
   // recoverable work before switching audio, navigating away or transferring
   // a HappyScribe source.
-  const hasRecoverableUndo = (edit: EditorialSnapshot | null) =>
-    Boolean(edit && (edit.segments.length > 0 ||
-      Object.keys(edit.captions).length > 0 || (edit.excluded?.length ?? 0) > 0 ||
-      (edit.previousReview?.cues.length ?? 0) > 0 ||
-      (edit.previousSuggestions?.clips.length ?? 0) > 0 ||
-      (edit.previousSuggestions?.silences.length ?? 0) > 0));
   const audioReplacementEdits = useRef({
     segments, reviewCues, suggestedClips, captionTexts, history, excludedTurns,
   });
@@ -492,7 +456,6 @@ export default function RoleplayStudioPage() {
   const applyEditorialHistory = (direction: 'undo' | 'redo') => {
     const snapshot = direction === 'undo' ? lastStructuralEdit : nextStructuralEdit;
     if (!snapshot || busy || draftBusy || analyzingSilences || happyScribeImporting || happyScribeMediaImporting) return;
-    editGroup.current = null;
     const current: EditorialSnapshot = {
       kind: snapshot.kind, segments, captions: captionTexts, expandedId: expandedSegmentId,
       excluded: excludedTurns, confirmations: confirmedTurns,
@@ -500,7 +463,7 @@ export default function RoleplayStudioPage() {
       ...(snapshot.previousReview ? { previousReview: { cues: reviewCues, selected: chosenCueIndices, page: cuePage, search: cueSearch,
         selectedOnly: showOnlySelectedCues, alertsOnly: showCueReviewAlertsOnly, segmentSearch, pendingOnly: showPendingReview } } : {}),
     };
-    setHistory(previous => stepStudioHistory(previous, current, direction));
+    stepHistory(current, direction);
     stopPreview();
     stopPairPreview();
     subtitleImportRevision.current += 1;
@@ -1414,11 +1377,7 @@ export default function RoleplayStudioPage() {
     const current = segments.find(segment => segment.id === id);
     if (!current || Object.entries(patch).every(([key,value]) => current[key as keyof Segment] === value)) return;
     const groupKey = id + ':' + Object.keys(patch).sort().join(',');
-    const at = Date.now();
-    if (!editGroup.current || editGroup.current.key !== groupKey || at - editGroup.current.at > 750) {
-      rememberEdit({ kind: 'edición de intervención', segments, captions: captionTexts, expandedId: expandedSegmentId });
-    }
-    editGroup.current = { key: groupKey, at };
+    rememberGroupedEdit(groupKey, { kind: 'edición de intervención', segments, captions: captionTexts, expandedId: expandedSegmentId });
     if (previewingId?.startsWith('boundary-proposal:')) stopPreview();
     stopPairPreview();
     setTurnActionFeedback(null);
@@ -2247,7 +2206,7 @@ export default function RoleplayStudioPage() {
   const canConfirmFocused = Boolean(focusedTurn && !focusedReviewIssue && !busy && !draftBusy && !analyzingSilences);
   const confirmAndAdvance = () => {
     if (!focusedTurn || !canConfirmFocused) return;
-    editGroup.current = null;
+    endEditGroup();
     const current = focusedTurn.segment;
     const confirmed = new Set(confirmedIds);
     confirmed.add(current.id);
@@ -2851,9 +2810,8 @@ export default function RoleplayStudioPage() {
                     setServerConsent(allowed);
                     if (!allowed) {
                       // Revocation also releases server-derived pause metadata
-                      // held in a one-step undo snapshot; keep the older cuts.
-                      setHistory(previous => mapStudioHistory(previous, snapshot => snapshot.previousSuggestions
-                         ? { ...snapshot, previousSuggestions: undefined } : snapshot));
+                      // held in undo and redo history; keep the older cuts.
+                      forgetServerSuggestions();
                       silenceRevision.current += 1;
                       silenceAbort.current?.abort();
                       silenceAbort.current = null;
