@@ -258,6 +258,28 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(3);
   });
 
+  it('controls the existing media player from focus mode without moving to the source panel', () => {
+    const player = selectAudio();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const cursor = screen.getByRole('slider', { name: 'Posición de grabación en modo enfoque' }) as HTMLInputElement;
+    fireEvent.change(cursor, { target: { value: '20' } });
+    expect(player.currentTime).toBe(20);
+    fireEvent.click(screen.getByRole('button', { name: 'Retroceder audio 5 segundos' }));
+    expect(player.currentTime).toBe(15);
+    fireEvent.click(screen.getByRole('button', { name: 'Avanzar audio 5 segundos' }));
+    expect(player.currentTime).toBe(20);
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar intervención activa' }));
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(cursor.value).toBe(String(player.currentTime));
+    expect(screen.getByRole('button', { name: 'Detener fragmento activo' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Pausar audio' }));
+    expect(player.pause).toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Escuchar intervención activa' })).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a lista' }));
+    expect(screen.queryByRole('slider', { name: 'Posición de grabación en modo enfoque' })).toBeNull();
+  });
+
   it('keeps focus navigation within filtered interventions and allows direct selection', () => {
     selectAudio();
     for (let i = 0; i < 3; i++) {
