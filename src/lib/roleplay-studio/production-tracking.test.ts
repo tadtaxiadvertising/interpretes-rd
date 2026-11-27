@@ -10,6 +10,15 @@ const turn={title:'Consulta',start:0,end:1,scriptPrompt:'Interpreta',responseLim
 const source=()=>new File(['synthetic audio'],'source.wav',{type:'audio/wav'});
 
 describe('advisory same-tab production tracking',()=>{
+  it('does not read a source without Web Crypto digest support',async()=>{
+    const file=source();
+    const read=vi.spyOn(file,'slice');
+    vi.stubGlobal('crypto',{});
+    try {
+      await expect(studioProductionKey(file,[turn],'wav')).rejects.toThrow(/HTTPS/);
+      expect(read).not.toHaveBeenCalled();
+    } finally { vi.stubGlobal('crypto',webcrypto); }
+  });
   it('uses stable editorial identities across reselected sources, independent of internal IDs',async()=>{
     const first={...turn,id:'one'};
     const second={...turn,id:'two'};
