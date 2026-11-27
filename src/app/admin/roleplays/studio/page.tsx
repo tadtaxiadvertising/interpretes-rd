@@ -3777,7 +3777,10 @@ export default function RoleplayStudioPage() {
                     onChange={event => setPublicationPartKey(event.currentTarget.value)}
                     className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
                     <option value="">Selecciona una parte ({publicationPlan.parts.length} disponibles)</option>
-                    {publicationPlan.parts.map(part => <option key={part.key} value={part.key}>Parte {part.number} · intervenciones {part.first}–{part.last} · {formatTime(part.seconds)}{currentWavPlan?.parts.find(item => item.key === part.key) ? ' · ' + ((currentWavPlan.parts.find(item => item.key === part.key)!.bytes)/(1024*1024)).toFixed(2) + ' MiB' : ''}</option>)}
+                    {publicationPlan.parts.map(part => {
+                      const wavPart = currentWavPlan?.parts.find(item => item.key === part.key);
+                      return <option key={part.key} value={part.key}>Parte {part.number} · intervenciones {part.first}–{part.last} · {formatTime(part.seconds)}{wavPart ? ' · ' + (wavPart.bytes/(1024*1024)).toFixed(2) + ' MiB' : ''}</option>;
+                    })}
                   </select>
                 </label>
                 <button type="button" disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}
@@ -3873,6 +3876,7 @@ export default function RoleplayStudioPage() {
               <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
               <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM estándar de 16 bits: se preparan los cortes en este equipo sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
               {wavSource && segments.length > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
+              {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
               {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
               {readyAssignment ? (
                 <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
