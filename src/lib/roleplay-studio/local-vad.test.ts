@@ -47,6 +47,31 @@ describe('local VAD',()=>{
     expect(result).toHaveLength(2);
   });
 
+  it.each([16000, 44100, 48000])('keeps short-pause padding disjoint without trimming acoustic intervals at %i Hz', sr=>{
+    const data=signal(sr,4,[[0.5,1.2],[1.4,2.3]]);
+    const raw=detectLocalSpeech([data],sr,{ minSilenceDurationSec: 0.1, preRollSec: 0, postRollSec: 0 });
+    expect(raw).toHaveLength(2);
+    for (const padding of [{}, { preRollSec: 1, postRollSec: 0 }, { preRollSec: 0, postRollSec: 1 }, { preRollSec: 1, postRollSec: 1 }]) {
+      const result=detectLocalSpeech([data],sr,{ minSilenceDurationSec: 0.1, ...padding });
+      expect(result).toHaveLength(2);
+      expect(result[0].end).toBeLessThanOrEqual(result[1].start);
+      for (let i=0;i<2;i++) {
+        expect(result[i].start).toBeLessThanOrEqual(raw[i].start);
+        expect(result[i].end).toBeGreaterThanOrEqual(raw[i].end);
+        expect(result[i].signalLevel).toBe(raw[i].signalLevel);
+      }
+    }
+  });
+
+  it.each([16000, 44100, 48000])('keeps existing padding when the silence is long enough at %i Hz', sr=>{
+    const result=detectLocalSpeech([signal(sr,5,[[1,2],[3,4]])],sr);
+    expect(result).toHaveLength(2);
+    expect(result[0].start).toBeCloseTo(0.85,1);
+    expect(result[0].end).toBeCloseTo(2.2,1);
+    expect(result[1].start).toBeCloseTo(2.85,1);
+    expect(result[1].end).toBeCloseTo(4.2,1);
+  });
+
   it('honors an explicit RMS threshold and minimum speech duration',()=>{
     const short=signal(16000,2,[[0.5,0.8]]);
     expect(detectLocalSpeech([short],16000,{ thresholdRms: 0.05, minSpeechDurationSec: 0.5 })).toEqual([]);
