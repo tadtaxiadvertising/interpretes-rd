@@ -35,6 +35,29 @@ describe('local VAD proposals for existing roleplay edits', () => {
     expect(result.omittedCount).toBe(1);
   });
 
+  it('preserves adjacent regions even when input is out of order', () => {
+    expect(proposeLocalVadCuts([activity(3, 5), activity(1, 3)], 6, [])).toEqual({
+      clips: [{ start: 1, end: 3 }, { start: 3, end: 5 }],
+      omittedCount: 0,
+    });
+  });
+
+  it('keeps a valid adjacent region when its neighbor overlaps an editorial cut', () => {
+    expect(proposeLocalVadCuts([activity(1, 3), activity(3, 5)], 6, [{ start: 0, end: 3 }])).toEqual({
+      clips: [{ start: 3, end: 5 }], omittedCount: 1,
+    });
+  });
+
+  it('bounds the end to the actual media duration before accepting a proposal', () => {
+    expect(proposeLocalVadCuts([activity(1, 4.01)], 4.003, [])).toEqual({
+      clips: [{ start: 1, end: 4 }], omittedCount: 0,
+    });
+    expect(proposeLocalVadCuts([activity(1, 4.02)], 4.003, []).clips).toEqual([]);
+    expect(proposeLocalVadCuts([activity(1, 2.25)], 2.249, [])).toEqual({
+      clips: [], omittedCount: 1,
+    });
+  });
+
   it('reports no cuts for silence and rejects unsafe metadata', () => {
     expect(proposeLocalVadCuts([], 60, [])).toEqual({ clips: [], omittedCount: 0 });
     expect(proposeLocalVadCuts([activity(0, 10)], 241, []).clips).toEqual([]);
