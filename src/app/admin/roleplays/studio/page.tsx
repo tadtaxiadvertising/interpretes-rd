@@ -1346,6 +1346,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     setLastStructuralEdit(null);
+    if (previewingId?.startsWith('boundary-proposal:')) stopPreview();
     stopPairPreview();
     setTurnActionFeedback(null);
     subtitleImportRevision.current += 1;
@@ -2013,6 +2014,15 @@ export default function RoleplayStudioPage() {
   }, [segments, focusedTurn?.segment.id, duration, serverConsent, detectedSilences]);
   const proposalPreviewId = focusedTurn ? 'boundary-proposal:' + focusedTurn.segment.id : '';
   const canUseBoundaryProposal = Boolean(focusedTurn && boundaryProposal && !busy && !draftBusy && !analyzingSilences);
+  useEffect(() => {
+    if (!previewingId?.startsWith('boundary-proposal:')) return;
+    if (focusMode && (!immersiveMode || workspaceTab === 'edit') &&
+        previewingId === proposalPreviewId && boundaryProposal) return;
+    primaryPlaybackRevision.current += 1;
+    previewEnd.current = null;
+    setPreviewingId(null);
+    player.current?.pause();
+  }, [previewingId, focusMode, immersiveMode, workspaceTab, proposalPreviewId, boundaryProposal]);
   const applyBoundaryProposal = () => {
     if (!focusedTurn || !boundaryProposal || !canUseBoundaryProposal) return;
     const current = focusedTurn.segment;
