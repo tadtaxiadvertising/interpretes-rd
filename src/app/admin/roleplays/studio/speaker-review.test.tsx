@@ -272,10 +272,10 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Escuchar intervención activa' }));
     expect(player.play).toHaveBeenCalledTimes(1);
     expect(cursor.value).toBe(String(player.currentTime));
-    expect(screen.getByRole('button', { name: 'Detener fragmento activo' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Detener fragmento activo' }).getAttribute('aria-pressed')).toBe('true');
     fireEvent.click(screen.getByRole('button', { name: 'Pausar audio' }));
     expect(player.pause).toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: 'Escuchar intervención activa' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Escuchar intervención activa' }).getAttribute('aria-pressed')).toBe('false');
     fireEvent.click(screen.getByRole('button', { name: 'Volver a lista' }));
     expect(screen.queryByRole('slider', { name: 'Posición de grabación en modo enfoque' })).toBeNull();
   });
