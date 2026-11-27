@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { resolve } from 'node:path';
+import { readRoleplayCreationCiTarget } from '../roleplay-creation-ci-target.mjs';
 
 const root = process.cwd();
 const stagedDir = resolve(root, 'docs/operations/staged-sql');
@@ -151,8 +152,8 @@ test('historical roleplay creation ledger stays immutable and hardening stays st
     assert.doesNotMatch(readFileSync(resolve(migrationDir, relative), 'utf8'), /roleplay_creation_requests/i);
   }
   const verifier = readFileSync(resolve(root, 'scripts/verify-roleplay-creation-ledger-postgres.ts'), 'utf8');
-  assert.match(verifier, /process\.env\.CI !== 'true'/);
-  assert.match(verifier, /url\.pathname !== '\/interpreters_e2e'/);
+  assert.match(verifier, /readRoleplayCreationCiTarget\(process.env\)/);
+  assert.ok(verifier.indexOf('readRoleplayCreationCiTarget(process.env)') < verifier.indexOf('new Client(target)'));
   assert.match(verifier, /randomBytes\(6\)/);
   assert.match(verifier, /CREATE DATABASE/);
   assert.match(verifier, /DROP DATABASE/);
@@ -192,8 +193,9 @@ test('creation ledger operator inspection is read-only and never runs in product
 test('real Prisma creation lifecycle uses only the guarded disposable database', () => {
   const verifier = readFileSync(resolve(root, 'scripts/verify-roleplay-creation-ledger-postgres.ts'), 'utf8');
   const lifecycle = readFileSync(resolve(root, 'scripts/roleplay-creation-prisma-pilot.ts'), 'utf8');
-  assert.match(verifier, /new PrismaPg\(\{ connectionString: url\.toString\(\)/);
-  assert.ok(verifier.indexOf('url.pathname = \'/\' + name') < verifier.indexOf('new PrismaPg('));
+  assert.match(verifier, /new PrismaPg\(\{ \.\.\.isolatedTarget, max: 2 \}\)/);
+  assert.ok(verifier.indexOf('const isolatedTarget = { ...target, database: name }') < verifier.indexOf('new PrismaPg('));
+  assert.doesNotMatch(verifier, /connectionString:/);
   assert.ok(verifier.indexOf('created = true') < verifier.indexOf('new PrismaPg('));
   assert.match(verifier, /verifyPrismaCreationLifecycle\(prismaFirst, prismaSecond\)/);
   assert.ok(verifier.indexOf('client.$disconnect()') < verifier.indexOf('DROP DATABASE'));
@@ -201,4 +203,43 @@ test('real Prisma creation lifecycle uses only the guarded disposable database',
   assert.match(lifecycle, /Promise\.allSettled/);
   assert.match(lifecycle, /recoverSingleRoleplayCreation/);
   assert.doesNotMatch(lifecycle, /process\.env|new PrismaClient|@\/lib\/prisma|supabaseAdmin|createClient\(/);
+});
+
+
+test('creation CI target accepts only explicit loopback and allowed parameters', () => {
+  for (const host of ['localhost', '127.0.0.1']) {
+    const target = readRoleplayCreationCiTarget({
+      CI: 'true', DATABASE_URL: 'postgresql://postgres:synthetic%40password@' + host + ':5432/interpreters_e2e?schema=public&sslmode=disable',
+    });
+    assert.deepEqual(target, {
+      host: '127.0.0.1', port: 5432, user: 'postgres', password: 'synthetic@password',
+      database: 'interpreters_e2e', ssl: false,
+      connectionTimeoutMillis: 5000, statement_timeout: 15000, query_timeout: 20000,
+    });
+  }
+});
+
+test('creation CI target rejects overrides, duplicate parameters and non-CI execution', () => {
+  const base = 'postgresql://postgres:synthetic@localhost:5432/interpreters_e2e';
+  for (const suffix of [
+    '?host=remote.invalid', '?hostaddr=192.0.2.1', '?port=6543', '?dbname=production',
+    '?database=production', '?user=other', '?password=other', '?options=override',
+    '?sslmode=require', '?sslmode=disable&sslmode=disable', '?schema=other',
+    '?schema=public&schema=public', '?statement_timeout=0', '?%68ost=remote.invalid',
+    '?sslrootcert=other', '?application_name=other', '#fragment',
+  ]) {
+    assert.throws(() => readRoleplayCreationCiTarget({ CI: 'true', DATABASE_URL: base + suffix }),
+      { message: 'Non-isolated PostgreSQL target rejected.' });
+  }
+  for (const url of [
+    base.replace('localhost', 'remote.invalid'), base.replace('5432', '6543'),
+    base.replace('interpreters_e2e', 'production'), base.replace('postgres:synthetic', 'other:synthetic'),
+    base.replace(':synthetic@', '@'), base.replace('synthetic', '%00'), 'invalid',
+  ]) {
+    assert.throws(() => readRoleplayCreationCiTarget({ CI: 'true', DATABASE_URL: url }),
+      { message: 'Non-isolated PostgreSQL target rejected.' });
+  }
+  for (const env of [{ DATABASE_URL: base }, { CI: 'false', DATABASE_URL: base }, { CI: 'true', NODE_ENV: 'production', DATABASE_URL: base }]) {
+    assert.throws(() => readRoleplayCreationCiTarget(env), { message: 'Disposable PostgreSQL CI required.' });
+  }
 });
