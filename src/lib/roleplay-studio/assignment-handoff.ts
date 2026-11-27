@@ -2,7 +2,7 @@
 // persistence, a URL, or a server cache. A full reload intentionally loses it.
 export const STUDIO_HANDOFF_MAX_BYTES = 16 * 1024 * 1024;
 const HANDOFF_TTL_MS = 5 * 60 * 1000;
-let pending: { token: string; file: File; expiresAt: number } | null = null;
+let pending: { token: string; files: File[]; kind: 'zip' | 'wav'; expiresAt: number } | null = null;
 let timer: ReturnType<typeof setTimeout> | undefined;
 
 export function clearStudioHandoff(token?: string) {
@@ -17,12 +17,32 @@ export function stageStudioHandoff(token: string, file: File) {
       file.size > STUDIO_HANDOFF_MAX_BYTES || file.name !== 'roleplay-studio.zip') {
     throw new Error('Paquete temporal no válido o demasiado grande.');
   }
+  stage(token, [file], 'zip');
+}
+
+export function stageLocalWavHandoff(token: string, files: File[]) {
+  if (!/^[a-zA-Z0-9-]{1,80}$/.test(token) || files.length < 2 || files.length > 26 ||
+      files[0].name !== 'manifest.json' || files[0].size < 1 || files[0].size > 1024 * 1024 ||
+      files.slice(1).some((file, index) => file.name !== 'segment-' + String(index + 1).padStart(2, '0') + '.wav' ||
+        file.type !== 'audio/wav' || file.size <= 44 || file.size > 15 * 1024 * 1024) ||
+      files.reduce((sum, file) => sum + file.size, 0) > STUDIO_HANDOFF_MAX_BYTES) {
+    throw new Error('Paquete WAV temporal no válido o demasiado grande.');
+  }
+  stage(token, files, 'wav');
+}
+
+function stage(token: string, files: File[], kind: 'zip' | 'wav') {
   clearStudioHandoff();
-  pending = { token, file, expiresAt: Date.now() + HANDOFF_TTL_MS };
+  pending = { token, files: [...files], kind, expiresAt: Date.now() + HANDOFF_TTL_MS };
   timer = setTimeout(() => clearStudioHandoff(token), HANDOFF_TTL_MS);
 }
 
 export function peekStudioHandoff(token: string): File | null {
   if (pending && pending.expiresAt <= Date.now()) clearStudioHandoff();
-  return pending?.token === token ? pending.file : null;
+  return pending?.token === token && pending.kind === 'zip' ? pending.files[0] : null;
+}
+
+export function peekLocalWavHandoff(token: string): File[] | null {
+  if (pending && pending.expiresAt <= Date.now()) clearStudioHandoff();
+  return pending?.token === token && pending.kind === 'wav' ? [...pending.files] : null;
 }
