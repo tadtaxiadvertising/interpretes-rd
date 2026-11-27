@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatStudioTime } from './format-time';
+import { formatStudioTime, formatStudioAccessibleTime } from './format-time';
 
 describe('Audio Studio time labels', () => {
   it.each([
@@ -27,5 +27,25 @@ describe('Audio Studio time labels', () => {
     const source = { start: 59.96, end: 60.14 };
     expect(formatStudioTime(source.start)).toBe('01:00.0');
     expect(source).toEqual({ start: 59.96, end: 60.14 });
+  });
+});
+
+describe('spoken Spanish Studio time labels', () => {
+  it.each([
+    [0, '0 segundos'],
+    [1, '1 segundo'],
+    [61.25, '1 minuto, 1,25 segundos'],
+    [3599.999, '1 hora, 0 segundos'],
+    [3661, '1 hora, 1 minuto, 1 segundo'],
+    [43200, '12 horas, 0 segundos'],
+    [-10, '0 segundos'],
+    [Infinity, '0 segundos'],
+    [NaN, '0 segundos'],
+  ])('formats %s seconds as %s', (value, expected) => {
+    expect(formatStudioAccessibleTime(value)).toBe(expected);
+  });
+  it('respects the focus control tenth-second precision', () => {
+    expect(formatStudioAccessibleTime(59.96, 1)).toBe('1 minuto, 0 segundos');
+    expect(formatStudioAccessibleTime(12.34, 1)).toBe('12,3 segundos');
   });
 });

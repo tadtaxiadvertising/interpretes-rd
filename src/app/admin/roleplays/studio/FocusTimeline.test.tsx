@@ -26,6 +26,7 @@ describe('speaker timeline rendering', () => {
     expect(readStart).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Intervención: Respuesta' })).toBe(button);
     expect(screen.getByRole('slider')).toHaveProperty('value', '12.5');
+    expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('12,5 segundos');
     fireEvent.click(button);
     expect(onSelect).toHaveBeenCalledWith('b', false);
     expect(onSeek).toHaveBeenCalledWith(20);

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { formatStudioAccessibleTime } from '@/lib/roleplay-studio/format-time';
 import { withStudioDecodeSlot } from '@/lib/roleplay-studio/decode-slot';
 import { detectLocalSpeech, type LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import {
@@ -297,6 +298,7 @@ export default function StudioWaveform({
         max={windowEnd}
         step={0.01}
         value={Math.min(windowEnd, Math.max(windowStart, safeTime))}
+        aria-valuetext={formatStudioAccessibleTime(Math.min(windowEnd, Math.max(windowStart, safeTime)))}
         onChange={event => {
           const value = event.currentTarget.valueAsNumber;
           if (Number.isFinite(value)) onSeek(Math.min(safeDuration, Math.max(0, value)));
