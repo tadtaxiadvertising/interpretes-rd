@@ -212,6 +212,7 @@ export default function RoleplayStudioPage() {
     useState<'doctor' | 'patient' | 'nurse' | 'operator'>('doctor');
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [focusMode, setFocusMode] = useState(false);
+  const [advancedTurnId, setAdvancedTurnId] = useState<string | null>(null);
   const [immersiveMode, setImmersiveMode] = useState(false);
   const [workspaceTab, setWorkspaceTab] = useState<'edit' | 'finish'>('edit');
   const workspaceContent = useRef<HTMLDivElement>(null);
@@ -555,6 +556,7 @@ export default function RoleplayStudioPage() {
     setError('');
     setNotice('');
     setSegments([]);
+    setAdvancedTurnId(null);
     setConfirmedTurns(new Map());
     setCaptionTexts({});
     setReviewCues([]);
@@ -1550,6 +1552,7 @@ export default function RoleplayStudioPage() {
       setShowPendingReview(false);
       setExpandedSegmentId(segment.id);
       setWorkspaceTab('edit');
+      setAdvancedTurnId(segment.id);
       setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
       setTurnActionFeedback({ id: segment.id, message: reason, error: true });
       setError(`Intervención ${part ? masterOrder.findIndex(item => item.id === segment.id) + 1 : index + 1}: ${reason}`);
@@ -1943,6 +1946,7 @@ export default function RoleplayStudioPage() {
   const renderedSegments = focusMode ? (focusedTurn ? [focusedTurn] : []) : visibleSegments;
   const sourceProfileCount = focusedTurn ? propagateSpeakerProfile(segments, focusedTurn.segment.id).changed : 0;
   const selectFocusedTurn = (id: string) => {
+    setAdvancedTurnId(null);
     setExpandedSegmentId(id);
     setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
   };
@@ -1965,6 +1969,37 @@ export default function RoleplayStudioPage() {
       ? 'Intervención confirmada. Continúa con el siguiente turno sin confirmar.'
       : 'Intervención confirmada. No quedan turnos sin confirmar en esta selección.');
     if (next) selectFocusedTurn(next.id);
+  };
+
+  const removeIntervention = (id: string, advance = false) => {
+    if (!segments.some(turn => turn.id === id)) return;
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setLastStructuralEdit({
+      kind: 'eliminación', segments: [...segments],
+      captions: { ...captionTexts }, expandedId: advance ? id : expandedSegmentId,
+    });
+    setSegments(prev => prev.filter(turn => turn.id !== id));
+    setCaptionTexts(prev => {
+      if (!Object.prototype.hasOwnProperty.call(prev, id)) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    setExpandedSegmentId(prev => prev === id ? null : prev);
+    setAdvancedTurnId(null);
+    setTurnActionFeedback(null);
+    setError('');
+    setNotice(advance
+      ? 'Intervención excluida. Puedes recuperarla con «Deshacer eliminación» antes de realizar otra edición.'
+      : 'Intervención eliminada. Usa «Deshacer eliminación» si necesitas recuperarla.');
+    if (advance) {
+      const visible = visibleSegments.map(({ segment }) => segment);
+      const next = nextUnconfirmedTurn(visible, id, confirmedIds)
+        ?? visible[focusIndex + 1] ?? visible[focusIndex - 1];
+      if (next) selectFocusedTurn(next.id);
+    }
   };
 
   const pendingLanguageIds = visibleSegments.filter(({ segment }) =>
@@ -2826,6 +2861,9 @@ export default function RoleplayStudioPage() {
                 <button type="button" disabled={!canConfirmFocused} onClick={confirmAndAdvance}
                   aria-keyshortcuts="Control+Enter Meta+Enter"
                   className="rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Confirmar y avanzar</button>
+                <button type="button" onClick={() => removeIntervention(focusedTurn.segment.id, true)}
+                  disabled={busy || draftBusy || analyzingSilences}
+                  className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--theme-danger)] disabled:opacity-50">Excluir y avanzar</button>
                 <span className="text-xs text-[var(--text-secondary)]">
                   {focusedReviewIssue ?? (confirmedIds.has(focusedTurn.segment.id) ? 'Confirmada' : 'Lista para revisión')} · Ctrl/⌘ + Enter
                 </span>
@@ -3025,7 +3063,9 @@ export default function RoleplayStudioPage() {
                     </span>
                   )}
                 </h3>
-                <button type="button" onClick={() => seekAudio(segment.start)}
+                <div hidden={focusMode && advancedTurnId !== segment.id}
+                  className={focusMode && advancedTurnId !== segment.id ? 'hidden' : 'flex flex-wrap items-center gap-2'}>
+                  <button type="button" onClick={() => seekAudio(segment.start)}
                   aria-label={'Ir al inicio de intervención ' + (index + 1)}
                   className="rounded-md border border-[var(--border)] px-2 py-1 text-xs text-[var(--text-secondary)]">
                   Ir al inicio
@@ -3083,28 +3123,9 @@ export default function RoleplayStudioPage() {
                     </button>
                   </>
                 )}
-                <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => {
-                  subtitleImportRevision.current += 1;
-                  stopPreview();
-                  stopPairPreview();
-                  setLastStructuralEdit({
-                    kind: 'eliminación', segments: [...segments],
-                    captions: { ...captionTexts }, expandedId: expandedSegmentId,
-                  });
-                  setSegments(prev => prev.filter(s => s.id !== segment.id));
-                  // Discard the deleted turn's private transcript reference.
-                  setCaptionTexts(prev => {
-                    if (!Object.prototype.hasOwnProperty.call(prev, segment.id)) return prev;
-                    const next = { ...prev };
-                    delete next[segment.id];
-                    return next;
-                  });
-                  setExpandedSegmentId(prev => prev === segment.id ? null : prev);
-                  setTurnActionFeedback(null);
-                  setError('');
-                  setNotice('Intervención eliminada. Usa «Deshacer eliminación» si necesitas recuperarla.');
-                }}
+                <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => removeIntervention(segment.id)}
                   className="rounded-lg p-2 text-[var(--theme-danger)] hover:bg-red-500/10"><Trash2 size={16}/></button>
+              </div>
               </div>
               {orderedSegments[index + 1] &&
                 visibleSegments.some(item => item.segment.id === orderedSegments[index + 1].id) &&
@@ -3166,29 +3187,6 @@ export default function RoleplayStudioPage() {
               )}
               {(!compactRows || expandedSegmentId === segment.id) && (
               <div className="space-y-2 border-t border-[var(--border)] pt-2">
-              <label className="block text-sm text-[var(--text-secondary)]">Título
-                <input value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
-                  className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
-              </label>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <label className="text-sm text-[var(--text-secondary)]">Inicio (segundos)
-                  <input type="number" min={0} max={duration} step="0.1" value={segment.start}
-                    disabled={Boolean(segment.ranges)}
-                    onChange={event => update(segment.id, {start: event.target.valueAsNumber})}
-                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
-                </label>
-                <label className="text-sm text-[var(--text-secondary)]">Final (segundos)
-                  <input type="number" min={0} max={duration} step="0.1" value={segment.end}
-                    disabled={Boolean(segment.ranges)}
-                    onChange={event => update(segment.id, {end: event.target.valueAsNumber})}
-                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
-                </label>
-                <label className="text-sm text-[var(--text-secondary)]">Límite de respuesta (segundos)
-                  <input type="number" min={0} max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC} step={1} value={segment.responseLimit}
-                    onChange={event => update(segment.id, {responseLimit: event.target.valueAsNumber})}
-                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
-                </label>
-              </div>
               {captionTexts[segment.id] && (
                 <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
                   <p className="text-xs font-bold text-[var(--theme-warning)]">Transcripción de referencia · solo editor</p>
@@ -3218,6 +3216,39 @@ export default function RoleplayStudioPage() {
                     <option value="en">Inglés (EN)</option>
                     <option value="es">Español (ES)</option>
                   </select>
+                </label>
+              </div>
+              {focusMode && (
+                <button type="button" aria-expanded={advancedTurnId === segment.id}
+                  aria-controls={`studio-advanced-${segment.id}`}
+                  onClick={() => setAdvancedTurnId(previous => previous === segment.id ? null : segment.id)}
+                  className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">
+                  {advancedTurnId === segment.id ? 'Ocultar ajustes avanzados' : 'Ajustes avanzados'}
+                </button>
+              )}
+              <div id={`studio-advanced-${segment.id}`} hidden={focusMode && advancedTurnId !== segment.id}
+                className={focusMode && advancedTurnId !== segment.id ? 'hidden' : 'space-y-2'}>
+                <label className="block text-sm text-[var(--text-secondary)]">Título
+                <input value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
+                  className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
+              </label>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="text-sm text-[var(--text-secondary)]">Inicio (segundos)
+                  <input type="number" min={0} max={duration} step="0.1" value={segment.start}
+                    disabled={Boolean(segment.ranges)}
+                    onChange={event => update(segment.id, {start: event.target.valueAsNumber})}
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
+                </label>
+                <label className="text-sm text-[var(--text-secondary)]">Final (segundos)
+                  <input type="number" min={0} max={duration} step="0.1" value={segment.end}
+                    disabled={Boolean(segment.ranges)}
+                    onChange={event => update(segment.id, {end: event.target.valueAsNumber})}
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
+                </label>
+                <label className="text-sm text-[var(--text-secondary)]">Límite de respuesta (segundos)
+                  <input type="number" min={0} max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC} step={1} value={segment.responseLimit}
+                    onChange={event => update(segment.id, {responseLimit: event.target.valueAsNumber})}
+                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
                 </label>
               </div>
               <button type="button" className="text-sm text-[var(--theme-link)] hover:underline"
@@ -3253,6 +3284,7 @@ export default function RoleplayStudioPage() {
                       : previewingId === segment.id ? 'Detener fragmento' : `Escuchar fragmento (${formatTime(segment.start)}–${formatTime(segment.end)})`}
                   </button>
                 )}
+              </div>
               </div>
               </div>
               )}
