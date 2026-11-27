@@ -30,7 +30,8 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
-import { stageStudioHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
+import { prepareLocalWavAssignment } from '@/lib/roleplay-studio/local-wav-assignment';
+import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import LocalVadAssistant from './LocalVadAssistant';
@@ -95,7 +96,7 @@ export default function RoleplayStudioPage() {
   const [analyzingSilences, setAnalyzingSilences] = useState(false);
   const [serverConsent, setServerConsent] = useState(false);
   const [allowServerZipExport, setAllowServerZipExport] = useState(false);
-  const [assignmentPackage, setAssignmentPackage] = useState<{ token: string; file: File; revision: number; source: File; cuts: Segment[] } | null>(null);
+  const [assignmentPackage, setAssignmentPackage] = useState<({ token: string; revision: number; source: File; cuts: Segment[]; partKey?: string } & ({ file: File; files?: never } | { files: File[]; file?: never })) | null>(null);
   const [localVadSnapshot, setLocalVadSnapshot] = useState<LocalVadSnapshot | null>(null);
   const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
   const [suggestedClips, setSuggestedClips] = useState<StudioSuggestedClip[]>([]);
@@ -1568,6 +1569,36 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const prepareLocalAssignment = async (part?: StudioPublicationPart<Segment>) => {
+    if (!audio || !duration || busy || draftBusy || analyzingSilences || exportAbort.current) return;
+    const selected = part?.turns ?? segments;
+    setAssignmentPackage(null);
+    setError('');
+    setNotice('');
+    const operation = ++exportRevision.current;
+    const editorRevision = subtitleImportRevision.current;
+    const controller = new AbortController();
+    exportAbort.current = controller;
+    const current = () => operation === exportRevision.current &&
+      editorRevision === subtitleImportRevision.current && !controller.signal.aborted;
+    setBusy(true);
+    try {
+      const files = await prepareLocalWavAssignment(audio, selected, controller.signal,
+        (done,total) => { if (current()) setNotice(`Preparando audio local: ${done}/${total}.`); });
+      if (!current()) return;
+      setAssignmentPackage({ token: crypto.randomUUID(), files, revision: editorRevision, source: audio,
+        cuts: segments, partKey: part?.key });
+      setNotice('Cortes WAV listos. El original no se ha enviado al servidor. Guarda el proyecto antes de continuar a asignación.');
+    } catch (cause) {
+      if (current()) setError(cause instanceof Error ? cause.message : 'No se pudo preparar el audio local.');
+    } finally {
+      if (operation === exportRevision.current) {
+        exportAbort.current = null;
+        setBusy(false);
+      }
+    }
+  };
+
   const exportPackage = async (part?: StudioPublicationPart<Segment>, purpose: 'download' | 'assignment' = 'download') => {
     if (!audio || !duration || !segments.length || busy || draftBusy || exportAbort.current) return;
     setError('');
@@ -1893,7 +1924,8 @@ export default function RoleplayStudioPage() {
   const hasCompound = segments.some(segment => segment.ranges !== undefined);
   const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
   const readyAssignment = assignmentPackage && assignmentPackage.source === audio &&
-    assignmentPackage.cuts === segments && assignmentPackage.revision === subtitleImportRevision.current && !localOnly
+    assignmentPackage.cuts === segments && assignmentPackage.revision === subtitleImportRevision.current &&
+    (assignmentPackage.files ? (!assignmentPackage.partKey || assignmentPackage.partKey === publicationPartKey) : !localOnly)
     ? assignmentPackage : null;
   useEffect(() => {
     if (assignmentPackage && !readyAssignment) setAssignmentPackage(null);
@@ -3811,10 +3843,10 @@ export default function RoleplayStudioPage() {
                 </details>
               </div>
             )}
-          {!localOnly && (
+          {(!localOnly || (audio && /\.wav$/i.test(audio.name))) && (
             <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
-              <p className="text-xs text-[var(--text-secondary)]">Se procesará el MP3 en el servidor según la opción autorizada. El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
+              <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM estándar de 16 bits: se preparan los cortes en este equipo sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
               {readyAssignment ? (
                 <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
                   prefetch={false}
@@ -3825,10 +3857,22 @@ export default function RoleplayStudioPage() {
                     if (readyAssignment.revision !== subtitleImportRevision.current || busy || draftBusy || !confirmEditorNavigation()) {
                       event.preventDefault(); return;
                     }
-                    try { stageStudioHandoff(readyAssignment.token, readyAssignment.file); }
+                    try {
+                      if (readyAssignment.files) stageLocalWavHandoff(readyAssignment.token, readyAssignment.files);
+                      else stageStudioHandoff(readyAssignment.token, readyAssignment.file);
+                    }
                     catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : 'No se pudo transferir el paquete.'); }
                   }}
                   className="inline-flex rounded-xl theme-action-primary px-4 py-2 font-semibold">Continuar a asignación</Link>
+              ) : localOnly ? (
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => void prepareLocalAssignment()}
+                    disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
+                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar WAV local para asignación</button>
+                  {selectedPublicationPart && publicationPlan.parts.length > 1 && <button type="button" onClick={() => void prepareLocalAssignment(selectedPublicationPart)}
+                    disabled={busy || draftBusy || analyzingSilences}
+                    className="rounded-xl theme-action-secondary px-4 py-2 font-semibold disabled:opacity-50">Preparar parte {selectedPublicationPart.number} en WAV local</button>}
+                </div>
               ) : <button type="button" onClick={() => void exportPackage(undefined, 'assignment')}
                   disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
                   className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar para asignación</button>}

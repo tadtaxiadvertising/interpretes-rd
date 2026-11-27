@@ -9,7 +9,7 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/li
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
-import { peekStudioHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
+import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
 import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
@@ -313,7 +313,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     await importManifestFiles(selected);
   };
 
-  const importManifestFiles = async (selected: File[], transferToken?: string) => {
+  const importManifestFiles = async (selected: File[], transferToken?: string, localWav = false) => {
     if (selected.length === 0) return;
     if (createPending.current || directAttempt.current) return;
     const revision = ++importRevision.current;
@@ -341,7 +341,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           }
         }
       }
-      const prepared = await prepareRoleplayManifestImport(files);
+      const prepared = localWav ? await prepareRoleplayManifestImport(files, { localWav: true }) : await prepareRoleplayManifestImport(files);
       // Never overwrite a newer ZIP import or edits made during validation.
       if (revision !== importRevision.current) return;
       // A validated package already loaded with identical editorial metadata
@@ -413,6 +413,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const importStudioTransfer = () => {
     if (!studioTransfer || importedTransfer === studioTransfer || librarySource || importPending.current || createPending.current || directAttempt.current) return;
+    const localFiles = peekLocalWavHandoff(studioTransfer);
+    if (localFiles) { void importManifestFiles(localFiles, studioTransfer, true); return; }
     const file = peekStudioHandoff(studioTransfer);
     if (!file) {
       setError('El paquete temporal ya no está disponible. Vuelve a Audio Studio o importa un ZIP guardado.');
