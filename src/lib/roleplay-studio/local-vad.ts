@@ -63,9 +63,19 @@ export function detectLocalSpeech(
     if(end-start>=minSpeech) ranges.push({start,end});
   }
   const totalSeconds=length/sampleRate;
-  return ranges.slice(0,100).map(range=>{
-    const startSample=Math.max(0,range.start*frame-pre);
-    const endSample=Math.min(length,range.end*frame+post);
+  return ranges.slice(0,100).map((range,index)=>{
+    let startSample=Math.max(0,range.start*frame-pre);
+    let endSample=Math.min(length,range.end*frame+post);
+    // If padding would overlap, split the silent gap at one shared sample.
+    // The detected acoustic intervals themselves are never trimmed.
+    const previous=ranges[index-1];
+    if(previous && (range.start-previous.end)*frame<pre+post) {
+      startSample=Math.max(startSample,Math.floor((previous.end+range.start)*frame/2));
+    }
+    const next=ranges[index+1];
+    if(next && (next.start-range.end)*frame<pre+post) {
+      endSample=Math.min(endSample,Math.floor((range.end+next.start)*frame/2));
+    }
     return {
       start:Number((startSample/sampleRate).toFixed(3)),
       // Millisecond rounding must not push a valid final segment past EOF.
