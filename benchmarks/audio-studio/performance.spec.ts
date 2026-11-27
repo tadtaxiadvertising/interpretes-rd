@@ -65,3 +65,48 @@ test('profiles real Chromium timeline commits with a synthetic maximum-size proj
     await cdp.detach();
   }
 });
+
+
+test('speaker cut labels and keyboard focus remain legible in both workspace themes', async ({ page }) => {
+  await page.goto('/?contrast');
+  await page.getByRole('combobox', { name: 'Escala de intervenciones' }).selectOption('0');
+  await expect(page.getByRole('button', { name: /^Intervención: Intervención / })).toHaveCount(100);
+  const excluded = page.getByRole('button', { name: 'Excluida: Corte excluido de prueba' });
+  await expect(excluded).toBeVisible();
+  for (const theme of ['light', 'dark']) {
+    await page.evaluate(value => {
+      document.documentElement.dataset.theme = value;
+      document.getElementById('root')?.classList.add('theme-workspace');
+    }, theme);
+    const colors = await page.locator('.studio-timeline-cut').evaluateAll(nodes => {
+      const luminance = (rgb: string) => {
+        const channels = rgb.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(channel => {
+          const value = channel / 255;
+          return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
+        });
+        return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+      };
+      return nodes.map(node => {
+        const css = getComputedStyle(node);
+        const a = luminance(css.color);
+        const b = luminance(css.backgroundColor);
+        return { ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), opacity: css.opacity, fill: css.backgroundColor };
+      });
+    });
+    expect(colors).toHaveLength(101);
+    expect(new Set(colors.map(color => color.fill)).size).toBe(6);
+    for (const color of colors) {
+      expect(color.ratio, theme).toBeGreaterThanOrEqual(4.5);
+      expect(color.opacity, theme).toBe('1');
+    }
+    await expect(excluded).toHaveCSS('border-top-style', 'dashed');
+    const selected = page.locator('.studio-timeline-cut[aria-pressed="true"]');
+    await expect(selected).toHaveCount(1);
+    await expect(selected).toHaveCSS('box-shadow', /inset/);
+    await page.keyboard.press('Tab');
+    await selected.focus();
+    await expect(selected).toBeFocused();
+    await expect(selected).toHaveCSS('outline-style', 'dashed');
+    await expect(selected).toHaveCSS('outline-offset', '-4px');
+  }
+});
