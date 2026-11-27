@@ -1,9 +1,9 @@
-import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+import { ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS, ROLEPLAY_ADMIN_AUDIO_MAX_BYTES, ROLEPLAY_DIRECT_UPLOAD_BATCH_MAX_BYTES } from '@/lib/roleplay-limits';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 
-export const ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES = 15 * 1024 * 1024;
+export const ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES = ROLEPLAY_ADMIN_AUDIO_MAX_BYTES;
 export const ROLEPLAY_DIRECT_UPLOAD_MAX_TOTAL_BYTES =
-  ROLEPLAY_MAX_SCENARIOS * ROLEPLAY_DIRECT_UPLOAD_MAX_FILE_BYTES;
+  ROLEPLAY_DIRECT_UPLOAD_BATCH_MAX_BYTES;
 
 export interface RoleplayDirectUploadDeclaration {
   order: number;
@@ -38,7 +38,7 @@ export function prepareRoleplayDirectUploadBatch(
     throw new Error('INVALID_ROLEPLAY_UPLOAD_BATCH_ID');
   }
   if (!Array.isArray(declarations) ||
-      declarations.length < 1 || declarations.length > ROLEPLAY_MAX_SCENARIOS) {
+      declarations.length < 1 || declarations.length > ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS) {
     throw new Error('INVALID_ROLEPLAY_UPLOAD_COUNT');
   }
 
