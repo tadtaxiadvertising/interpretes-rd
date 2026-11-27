@@ -1,8 +1,7 @@
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { InvalidRoleplayReceiptRequestError, lookupRoleplayCreationReceipt, parseRoleplayReceiptRequest } from '@/lib/roleplay/creation-receipt';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
-import { validateAction } from '@/lib/auth/actions';
-import { actorFromBearer } from '@/lib/api-auth';
+import { resolveRoleplayCreationActor } from '@/lib/roleplay/creation-actor';
 import prisma from '@/lib/prisma';
 
 const MAX_RECEIPT_JSON_BYTES = 512;
@@ -59,16 +58,9 @@ export async function POST(req: Request) {
   }
 
   try {
-    const auth = await validateAction('admin');
-    if ('error' in auth || !auth.user?.userId) {
+    const actorId = await resolveRoleplayCreationActor(req);
+    if (!actorId) {
       return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
-    }
-    // An explicit Bearer may not override an unrelated privileged cookie.
-    if (req.headers.has('authorization')) {
-      const bearer = await actorFromBearer(req);
-      if (!bearer || bearer.role !== 'admin' || bearer.userId !== auth.user.userId) {
-        return privateRoleplayResponse({ success: false, error: 'Forbidden' }, { status: 403 });
-      }
     }
     if (req.headers.get('content-type')?.split(';', 1)[0]?.trim().toLowerCase() !== 'application/json') {
       return privateRoleplayResponse({ success: false, error: 'Expected JSON' }, { status: 415 });
@@ -87,7 +79,7 @@ export async function POST(req: Request) {
       throw error;
     }
 
-    const receipt = await lookupRoleplayCreationReceipt(prisma, auth.user.userId, requestKey);
+    const receipt = await lookupRoleplayCreationReceipt(prisma, actorId, requestKey);
     return privateRoleplayResponse({ success: true, data: receipt });
   } catch (error) {
     // Drivers may include credentials, endpoints and personal identifiers.
