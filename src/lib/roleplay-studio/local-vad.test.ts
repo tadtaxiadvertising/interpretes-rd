@@ -109,6 +109,15 @@ describe('local VAD',()=>{
       expect(result).toHaveLength(delta<0?0:1);
     }
   });
+  it.each([16000, 44100, 48000])('uses default settings for non-finite numeric options at %i Hz', sr=>{
+    const data=signal(sr,4,[[0.5,1.5],[2,3]]);
+    const expected=detectLocalSpeech([data],sr);
+    expect(expected).toHaveLength(2);
+    const keys=['minSilenceDurationSec','minSpeechDurationSec','preRollSec','postRollSec','thresholdRms'] as const;
+    for(const key of keys) for(const value of [NaN,Infinity,-Infinity]) {
+      expect(detectLocalSpeech([data],sr,{[key]:value})).toEqual(expected);
+    }
+  });
   it('does not count pre/post-roll as detected speech duration',()=>{
     const data=signal(16000,1,[[0.7,1]]);
     // Padding must not make a sub-threshold acoustic interval eligible.
