@@ -1,5 +1,6 @@
 'use client';
 
+import { memo } from 'react';
 import { Trash2 } from 'lucide-react';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
@@ -49,12 +50,17 @@ type Props = {
   insertProtocol: (segment: Segment) => void;
   markAtPlayhead: (id: string, boundary: 'start' | 'end') => void;
   applyBoundaryProposal: () => void;
-  onToggleExpanded: () => void;
-  onToggleAdvanced: () => void;
+  onToggleExpanded: (id: string) => void;
+  onToggleAdvanced: (id: string) => void;
 };
 
+export type StudioCardActions = Pick<Props,
+  'seekAudio' | 'splitAtPlayhead' | 'mergeWithNext' | 'separateCompound' |
+  'previewPairWithoutGap' | 'previewSegment' | 'removeIntervention' | 'update' |
+  'insertProtocol' | 'markAtPlayhead' | 'applyBoundaryProposal' | 'onToggleExpanded' | 'onToggleAdvanced'>;
+
 /** Controlled editorial card. The parent owns validation, snapshots and audio. */
-export default function StudioInterventionCard({
+function StudioInterventionCard({
   segment,index,nextTurn,canPreviewPair,caption,compactRows,focusMode,expandedSegmentId,
   advancedTurnId,turnActionFeedback,boundaryProposal,canUseBoundaryProposal,proposalPreviewId,
   previewingId,pairPreviewId,duration,seekAudio,splitAtPlayhead,mergeWithNext,separateCompound,
@@ -111,7 +117,7 @@ export default function StudioInterventionCard({
               : previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
           </button>
           <button type="button" onClick={() =>
-            onToggleExpanded()}
+            onToggleExpanded(segment.id)}
             aria-expanded={expandedSegmentId === segment.id}
             className="rounded-md border border-blue-400/25 px-2 py-1 text-xs text-[var(--theme-link)]">
             {expandedSegmentId === segment.id ? 'Contraer' : 'Editar'}
@@ -249,7 +255,7 @@ export default function StudioInterventionCard({
     {focusMode && (
       <button type="button" aria-expanded={advancedTurnId === segment.id}
         aria-controls={`studio-advanced-${segment.id}`}
-        onClick={() => onToggleAdvanced()}
+        onClick={() => onToggleAdvanced(segment.id)}
         className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">
         {advancedTurnId === segment.id ? 'Ocultar ajustes avanzados' : 'Ajustes avanzados'}
       </button>
@@ -320,3 +326,6 @@ export default function StudioInterventionCard({
   </article>
   );
 }
+
+// Compare all props, including callbacks; never ignore changes to action identity.
+export default memo(StudioInterventionCard);
