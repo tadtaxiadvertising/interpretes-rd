@@ -135,14 +135,19 @@ test('staged Roleplay verifier targets a new disposable CI database only', () =>
 });
 
 
-test('roleplay creation ledger remains staged and only runs against disposable CI PostgreSQL', () => {
+test('historical roleplay creation ledger stays immutable and hardening stays staged', () => {
+  const historicalPath = '20261121210000_roleplay_creation_idempotency_ledger/migration.sql';
+  const historical = readFileSync(resolve(migrationDir, historicalPath), 'utf8');
+  assert.match(historical, /roleplay_creation_requests_actor_key UNIQUE/);
+  assert.match(historical, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(historical, /REVOKE ALL ON TABLE/);
   const staged = readFileSync(resolve(stagedDir, 'roleplay-creation-requests.sql'), 'utf8');
   assert.match(staged, /STAGED DESIGN ONLY/);
-  assert.match(staged, /roleplay_creation_requests_actor_key UNIQUE/);
-  assert.match(staged, /ENABLE ROW LEVEL SECURITY/);
-  assert.match(staged, /REVOKE ALL ON TABLE/);
+  assert.match(staged, /DROP CONSTRAINT roleplay_creation_requests_result_check/);
+  assert.match(staged, /created_count IS NOT NULL AND created_count BETWEEN 1 AND 1000/);
+  assert.doesNotMatch(staged, /CREATE TABLE/i);
   for (const relative of readdirSync(migrationDir, { recursive: true }).map(String)) {
-    if (!relative.endsWith('migration.sql')) continue;
+    if (!relative.endsWith('migration.sql') || relative === historicalPath) continue;
     assert.doesNotMatch(readFileSync(resolve(migrationDir, relative), 'utf8'), /roleplay_creation_requests/i);
   }
   const verifier = readFileSync(resolve(root, 'scripts/verify-roleplay-creation-ledger-postgres.ts'), 'utf8');
@@ -153,6 +158,9 @@ test('roleplay creation ledger remains staged and only runs against disposable C
   assert.match(verifier, /DROP DATABASE/);
   assert.match(verifier, /Promise\.allSettled/);
   assert.match(verifier, /ROLLBACK/);
+  assert.ok(verifier.includes('prisma/migrations/' + historicalPath));
+  assert.ok(verifier.includes('docs/operations/staged-sql/roleplay-creation-requests.sql'));
+  assert.ok(verifier.indexOf('await first.query(historical)') < verifier.indexOf('await first.query(sql)'));
   const workflow = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
   assert.match(workflow, /Verify staged Roleplay creation ledger \(isolated PostgreSQL only\)/);
   assert.match(workflow, /npx tsx scripts\/verify-roleplay-creation-ledger-postgres\.ts/);
