@@ -99,3 +99,20 @@ describe('next preparation step', () => {
     expect(props.onDownload).not.toHaveBeenCalled();
   });
 });
+
+describe('finalization action guards', () => {
+  it.each(['busy', 'draftBusy', 'analyzingSilences'] as const)('blocks export and preparation while %s', pending => {
+    const { props } = setup({ selectedPublicationPart: parts[1], [pending]: true });
+    const actions = [
+      screen.getByRole('button', { name: 'Descargar parte seleccionada (JSON local)' }),
+      screen.getByRole('button', { name: 'Preparar parte 2 en WAV local' }),
+    ];
+    for (const action of actions) {
+      expect(action).toHaveProperty('disabled', true);
+      fireEvent.click(action);
+    }
+    expect(screen.getByRole('combobox', { name: 'Parte del roleplay' })).toHaveProperty('disabled', true);
+    expect(props.onPrepareLocal).not.toHaveBeenCalled();
+    expect(props.onDownloadPart).not.toHaveBeenCalled();
+  });
+});
