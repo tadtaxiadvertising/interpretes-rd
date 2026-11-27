@@ -1,3 +1,24 @@
+import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
+
+const RECOVERY_REFERENCE = /^rp1:([a-f0-9]{8}-[a-f0-9]{4}-[47][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}):([1-9][0-9]?)$/;
+
+export type CreationRecoveryReference = { key: string; scenarioCount: number };
+
+/** A correlation reference, NOT an authorization credential or invitation. */
+export function parseCreationRecoveryReference(value: string): CreationRecoveryReference | null {
+  const match = RECOVERY_REFERENCE.exec(value.trim());
+  if (!match) return null;
+  const scenarioCount = Number(match[2]);
+  if (scenarioCount > ROLEPLAY_MAX_SCENARIOS) return null;
+  return { key: match[1], scenarioCount };
+}
+
+export function formatCreationRecoveryReference(reference: CreationRecoveryReference): string {
+  const value = `rp1:${reference.key}:${reference.scenarioCount}`;
+  if (!parseCreationRecoveryReference(value)) throw new Error('Invalid recovery reference');
+  return value;
+}
+
 export type SingleCreationRecovery =
   | { status: 'COMPLETED' }
   | { status: 'NOT_FOUND' | 'IN_PROGRESS' | 'REVIEW_REQUIRED' | 'UNAVAILABLE' };
