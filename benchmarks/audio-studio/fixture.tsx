@@ -4,6 +4,7 @@ import type { ComponentProps } from 'react';
 import '@/app/globals.css';
 import FocusTimeline from '@/app/admin/roleplays/studio/FocusTimeline';
 import StudioWaveform from '@/app/admin/roleplays/studio/StudioWaveform';
+import StudioFocusNavigation from '@/app/admin/roleplays/studio/StudioFocusNavigation';
 import { STUDIO_MAX_EDITOR_SEGMENTS } from '@/lib/roleplay-studio/draft';
 import { MAX_LOCAL_MEDIA_SECONDS } from '@/lib/roleplay-studio/long-media';
 
@@ -48,9 +49,31 @@ Object.defineProperty(file, 'arrayBuffer', {
 const onSelect = () => {};
 const onSeek = () => {};
 const root = createRoot(document.getElementById('root')!);
+const focusScenario = new URLSearchParams(location.search).has('focus');
+const visibleSegments = active.map((segment, index) => ({ segment, index }));
+let focusIndex = 1;
+let previewActive = false;
+const selectFocus = (id: string) => {
+  const index = visibleSegments.findIndex(item => item.segment.id === id);
+  if (index >= 0) { focusIndex = index; previewActive = false; renderProject(); }
+};
+const advanceFocus = () => {
+  const next = visibleSegments[focusIndex + 1];
+  if (next) selectFocus(next.segment.id);
+};
+const togglePreview = () => { previewActive = !previewActive; renderProject(); };
+const pausePreview = () => { previewActive = false; renderProject(); };
+const seekFocus = (value: number) => { position = Math.max(0, Math.min(duration, value)); renderProject(); };
 
 function renderProject() {
   flushSync(() => root.render(<>
+    {focusScenario && <StudioFocusNavigation visibleSegments={visibleSegments} focusedTurn={visibleSegments[focusIndex]}
+      focusIndex={focusIndex} totalTurns={count} workspaceActive canConfirmFocused editingDisabled={false}
+      confirmed={false} focusedReviewIssue={null} sourceProfileCount={2} previewActive={previewActive}
+      playhead={position} duration={duration} onSelect={selectFocus} onConfirm={advanceFocus}
+      onExclude={advanceFocus} onApplyProfile={onSelect} onPreview={togglePreview} onPause={pausePreview}
+      onSkip={seconds => seekFocus(position + seconds)} onSeek={seekFocus}/>}
+
     <StudioWaveform file={file} duration={duration} currentTime={position} segments={active} onSeek={onSeek}/>
     <FocusTimeline duration={duration} playhead={position} active={active} excluded={excluded}
       selectedId={active[0].id} onSelect={onSelect} onSeek={onSeek}/>
