@@ -8,11 +8,14 @@ type RecoveryTurn = StudioDraftSegment & { id: string };
 export function createStudioRecovery(
   size: number, fingerprint: string, duration: number, turns: readonly RecoveryTurn[],
   confirmed: ReadonlySet<string>, activeId: string | undefined, playhead: number,
+  excluded: readonly StudioDraftSegment[] = [],
 ): string {
   const draft = createLongMediaDraft(size, fingerprint, turns, duration);
   if (JSON.stringify(draft).length > MAX_STUDIO_DRAFT_CHARS) throw new Error('El borrador supera el tamaño permitido.');
   const raw = JSON.stringify({
-    version: 1, draft, confirmed: turns.flatMap((turn, index) => confirmed.has(turn.id) ? [index] : []),
+    version: 1, draft,
+    ...(excluded.length ? { excluded: createLongMediaDraft(size, fingerprint, excluded, duration) } : {}),
+    confirmed: turns.flatMap((turn, index) => confirmed.has(turn.id) ? [index] : []),
     active: turns.findIndex(turn => turn.id === activeId),
     playhead: Number.isFinite(playhead) ? Math.max(0, Math.min(duration, playhead)) : 0,
   });
@@ -34,6 +37,7 @@ export function openStudioRecovery(raw: string, size: number, fingerprint: strin
     saved.playhead < 0 || saved.playhead > duration + 0.5) {
     throw new Error('Progreso editorial incompatible.');
   }
-  return { segments, confirmed: new Set<number>(saved.confirmed), active: saved.active as number,
+  const excluded = saved.excluded === undefined ? [] : openLongMediaDraft(JSON.stringify(saved.excluded), size, fingerprint, duration);
+  return { segments, excluded, confirmed: new Set<number>(saved.confirmed), active: saved.active as number,
     playhead: Math.min(duration, saved.playhead as number) };
 }
