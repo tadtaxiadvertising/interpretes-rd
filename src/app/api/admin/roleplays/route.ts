@@ -1,3 +1,4 @@
+import { readCreationPilotConfig } from '@/lib/roleplay/creation-pilot-config';
 import { NextRequest, NextResponse } from 'next/server';
 import { privateRoleplayResponse as privateRoleplayJson } from '@/lib/roleplay/private-response';
 import { revalidatePath } from 'next/cache';
@@ -155,7 +156,7 @@ export async function POST(req: NextRequest) {
     const requestKeyHeader = req.headers.get('Idempotency-Key');
     let creationRequestKey: string | null = null;
     if (requestKeyHeader !== null) {
-      if (process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED !== 'true') {
+      if (!readCreationPilotConfig(process.env).keyedCreationEnabled) {
         return privateRoleplayJson({ success: false, error: 'La creación con clave de idempotencia no está habilitada.' }, { status: 503 });
       }
       creationRequestKey = parseRoleplayReceiptRequest({ requestKey: requestKeyHeader });

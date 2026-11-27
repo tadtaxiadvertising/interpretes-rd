@@ -175,6 +175,9 @@ test('creation ledger operator inspection is read-only and never runs in product
   assert.match(inspector, /ROLLBACK/);
   assert.match(inspector, /--check-only/);
   assert.match(inspector, /--require-hardened/);
+  assert.match(inspector, /--config-only/);
+  assert.ok(inspector.indexOf("if (args[0] === '--config-only')") < inspector.indexOf('const direct = normalizeDirectDatabaseUrl('));
+  assert.match(inspector, /readCreationPilotConfig\(process.env\)/);
   assert.match(inspector, /normalizeDirectDatabaseUrl/);
   assert.match(inspector, /createDatabasePoolConfig/);
   for (const script of [inspector, catalog]) {

@@ -8,7 +8,7 @@ La migración es aditiva, sin modificación ni eliminación de sesiones/escenari
 
 ## Piloto de publicación individual (apagado por defecto)
 
-- Solo con `ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED=true` y encabezado `Idempotency-Key` UUID v4/v7. Una solicitud con clave cuando el piloto está deshabilitado devuelve 503; nunca pasa silenciosamente a la ruta antigua.
+- Solo con `ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED=true`, `ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED=true` y encabezado `Idempotency-Key` UUID v4/v7. Una solicitud con clave cuando el piloto está deshabilitado devuelve 503; nunca pasa silenciosamente a la ruta antigua.
 - Admite únicamente el destino `interpreter` individual, con audio multipart validado o snapshot de biblioteca verificado. El formulario emite una clave solo si ambas banderas de creación y recibos están activas y el flujo no es de subida directa. Candidatos, asignaciones masivas y subida directa quedan fuera de esta fase.
 - Reserva después de validar el destino y el paquete, antes de reservar la sesión o subir archivos; completa el recibo en la misma transacción que publica los escenarios y la sesión. Un fallo de escritura del recibo impide confirmar la publicación.
 - Una clave repetida con resultado completo puede devolver el mismo identificador, únicamente si la sesión corresponde al intérprete y no está en DRAFT/CANCELLED. No vuelve a subir audio, publicar ni notificar. Un resultado incierto o conflicto devuelve 409 y requiere revisión.
@@ -40,6 +40,19 @@ La ruta `POST /api/admin/roleplays/creation-receipt` acepta exclusivamente JSON 
 El recibo indica `NOT_FOUND`, `IN_PROGRESS`, `REVIEW_REQUIRED` o `COMPLETED`. Los completados se devuelven solo si los contadores son coherentes y todos los ID de sesión del ledger aún existen; de lo contrario requieren revisión manual. Las respuestas de todos los estados son `private, no-store` y no contienen nombres, correos, URLs de audio, tokens ni enlaces firmados. La consulta no libera `IN_PROGRESS` por antigüedad.
 
 **No activar la bandera como sustituto del backend:** el piloto de creación está deshabilitado por defecto, de modo que `NOT_FOUND` hoy no demuestra que una publicación haya fallado. Hasta que se complete la integración transaccional, el procedimiento seguro ante respuesta incierta sigue siendo revisar las sesiones existentes.
+
+## Diagnóstico de configuración
+
+La página, el endpoint de creación y el de recibos comparten la misma interpretación estricta de las banderas. Solo el valor exacto `true` habilita una opción. Ejecutar `npx tsx scripts/inspect-roleplay-creation-ledger.ts --config-only` para diagnosticar las variables del entorno donde se ejecuta, sin abrir una conexión PostgreSQL ni imprimir sus valores originales.
+
+| Estado | Nuevas creaciones con clave | Consulta de recibos |
+| --- | --- | --- |
+| disabled | No | No |
+| receipts-only | No | Sí |
+| blocked-missing-receipts | No (503, diagnóstico exit 1) | No |
+| pilot-configured | Sujetas al control de catálogo y permisos | Sí |
+
+El estado pilot-configured solo acredita la configuración local: no confirma el esquema, la versión desplegada ni la autorización de activación. Las solicitudes sin clave conservan su comportamiento. Si se desactiva la creación, mantener recibos habilitados cuando resulte seguro para recuperar solicitudes anteriores.
 
 ## Diagnóstico de catálogo previo a activación
 

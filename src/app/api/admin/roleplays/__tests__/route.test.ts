@@ -119,6 +119,7 @@ describe('POST /api/admin/roleplays', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
     process.env.FRONTEND_ORIGIN = 'https://front.test';
     delete process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED;
+    delete process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED;
     vi.mocked(isCreationLedgerReady).mockResolvedValue(true);
     vi.mocked(prisma.roleplayCreationRequest.create).mockReset().mockResolvedValue({ id: 'claim' } as never);
     vi.mocked(prisma.roleplayCreationRequest.findUnique).mockReset().mockResolvedValue(null);
@@ -276,14 +277,24 @@ describe('POST /api/admin/roleplays', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
     });
+    it('rejects keyed creation when only the creation flag is enabled', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      const response = await POST(keyed() as any);
+      expect(response.status).toBe(503);
+      expect(isCreationLedgerReady).not.toHaveBeenCalled();
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
     it.each(['candidate', 'all-active-interpreters'])('rejects unsupported keyed scope %s', async participantType => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       expect((await POST(keyed(participantType) as any)).status).toBe(400);
       expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
       expect(mockUpload).not.toHaveBeenCalled();
     });
     it('rejects a keyed request when the actual database is not ready', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       vi.mocked(isCreationLedgerReady).mockResolvedValueOnce(false);
       expect((await POST(keyed() as any)).status).toBe(503);
       expect(isCreationLedgerReady).toHaveBeenCalledExactlyOnceWith(prisma);
@@ -296,6 +307,7 @@ describe('POST /api/admin/roleplays', () => {
     });
     it('rejects a malformed key before parsing multipart', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       const request = keyed('interpreter', 'not-a-uuid');
       expect((await POST(request as any)).status).toBe(400);
       expect(request.bodyUsed).toBe(false);
@@ -303,6 +315,7 @@ describe('POST /api/admin/roleplays', () => {
     });
     it('completes the receipt within publication before sending notifications', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       const response = await POST(keyed() as any);
       expect(response.status).toBe(200);
       expect(prisma.roleplayCreationRequest.create).toHaveBeenCalledExactlyOnceWith({
@@ -318,6 +331,7 @@ describe('POST /api/admin/roleplays', () => {
     });
     it('preserves potentially committed audio and suppresses notifications when receipt completion fails', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       vi.mocked(prisma.roleplayCreationRequest.updateMany).mockResolvedValueOnce({ count: 0 });
       expect((await POST(keyed() as any)).status).toBe(500);
       expect(mockUpload).toHaveBeenCalledOnce();
@@ -326,6 +340,7 @@ describe('POST /api/admin/roleplays', () => {
     });
     it('blocks a competing request without uploading or reserving a session', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       vi.mocked(prisma.roleplayCreationRequest.create).mockRejectedValueOnce({ code: 'P2002' });
       vi.mocked(prisma.roleplayCreationRequest.findUnique).mockResolvedValueOnce(null);
       expect((await POST(keyed() as any)).status).toBe(409);
@@ -334,6 +349,7 @@ describe('POST /api/admin/roleplays', () => {
     });
     it.each([true, false])('replays only a receipt for the correct existing interpreter session (%s)', async owned => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       let payloadHash = '';
       vi.mocked(prisma.roleplayCreationRequest.create).mockImplementationOnce(async args => {
         payloadHash = args.data.payloadHash;
@@ -425,6 +441,7 @@ describe('POST /api/admin/roleplays', () => {
 
     it('leaves unkeyed requests unchanged even when the pilot flag is enabled', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       expect((await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any)).status).toBe(200);
       expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
       expect(prisma.roleplayCreationRequest.updateMany).not.toHaveBeenCalled();

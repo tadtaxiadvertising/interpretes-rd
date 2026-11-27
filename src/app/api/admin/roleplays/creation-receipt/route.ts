@@ -1,3 +1,4 @@
+import { readCreationPilotConfig } from '@/lib/roleplay/creation-pilot-config';
 import { privateRoleplayResponse } from '@/lib/roleplay/private-response';
 import { InvalidRoleplayReceiptRequestError, lookupRoleplayCreationReceipt, parseRoleplayReceiptRequest } from '@/lib/roleplay/creation-receipt';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
@@ -53,7 +54,7 @@ async function readSmallReceiptRequest(req: Request): Promise<string> {
  * This endpoint never claims keys, mutates sessions or returns invitations.
  */
 export async function POST(req: Request) {
-  if (process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED !== 'true') {
+  if (!readCreationPilotConfig(process.env).receiptsEnabled) {
     return privateRoleplayResponse({ success: false, error: 'Not found' }, { status: 404 });
   }
 
