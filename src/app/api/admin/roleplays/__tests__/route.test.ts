@@ -314,6 +314,35 @@ describe('POST /api/admin/roleplays', () => {
       expect(mockUpload).not.toHaveBeenCalled();
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
+    it.each([true, false])('replays only a receipt for the correct existing interpreter session (%s)', async owned => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      let payloadHash = '';
+      vi.mocked(prisma.roleplayCreationRequest.create).mockImplementationOnce(async args => {
+        payloadHash = args.data.payloadHash;
+        throw { code: 'P2002' };
+      });
+      vi.mocked(prisma.roleplayCreationRequest.findUnique)
+        .mockImplementationOnce(async () => ({ actorUserId: 'a1', payloadHash, status: 'COMPLETED' }) as never)
+        .mockResolvedValueOnce({
+          status: 'COMPLETED', sessionIds: ['sess-1'], createdCount: 1, skippedCount: 0,
+          scenarioCount: 1, completedAt: new Date(),
+        } as never);
+      vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce([{ id: 'sess-1' }] as never);
+      vi.mocked(prisma.roleplaySession.findFirst).mockResolvedValueOnce(owned ? { id: 'sess-1' } as never : null);
+      const response = await POST(keyed() as any);
+      expect(response.status).toBe(owned ? 200 : 409);
+      if (owned) expect((await response.json()).data).toEqual({
+        sessionId: 'sess-1', inviteLink: 'https://front.test/roleplays/sess-1', scenarioCount: 1,
+      });
+      expect(prisma.roleplaySession.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 'sess-1', interpreterId: 7, recruitmentCandidateId: null }),
+        select: { id: true },
+      });
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+
     it('leaves unkeyed requests unchanged even when the pilot flag is enabled', async () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
       expect((await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any)).status).toBe(200);
