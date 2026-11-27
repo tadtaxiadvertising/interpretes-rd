@@ -1,3 +1,5 @@
+import { withStudioDecodeSlot } from './decode-slot';
+
 export const LOCAL_MP3_MAX_BYTES = 8 * 1024 * 1024;
 export const LOCAL_MP3_MAX_SECONDS = 120;
 export const LOCAL_MP3_PCM_RATE = 24000;
@@ -36,6 +38,7 @@ export async function decodeLocalMp3ForAssignment(source: File, duration: number
   signal.throwIfAborted();
   if(!canPrepareLocalMp3(source,duration))throw new Error('MP3 local: máximo 2 minutos y 8 MiB.');
   if(typeof OfflineAudioContext!=='function')throw new Error('Este navegador no admite la conversión local. Usa el exportador habitual.');
+  return withStudioDecodeSlot(signal, async () => {
   const context=new OfflineAudioContext(2,1,LOCAL_MP3_PCM_RATE);
   const bytes=await source.arrayBuffer();
   signal.throwIfAborted();
@@ -46,4 +49,5 @@ export async function decodeLocalMp3ForAssignment(source: File, duration: number
   const wav=encodeStudioPcm16(decoded);
   signal.throwIfAborted();
   return new File([wav],'studio-local-converted.wav',{type:'audio/wav'});
+  });
 }
