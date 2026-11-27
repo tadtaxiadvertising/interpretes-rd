@@ -85,6 +85,7 @@ describe('next preparation step', () => {
     [{ draftBusy: true }, 'verificando el proyecto'],
     [{ analyzingSilences: true }, 'análisis de pausas'],
     [{ currentWavPlan: null }, 'Calculando la compatibilidad'],
+    [{ publicationPlan: { parts: [], issue: 'Plan inválido' } }, 'Guarda el borrador ampliado'],
     [{ currentWavPlan: { parts: [], issue: 'WAV incompatible' } }, 'exportador de escritorio'],
     [{ wavSource: false, localMp3Eligible: true }, 'Habilita el procesamiento local MP3'],
     [{ wavSource: false, localMp3Eligible: false, segmentCount: 1 }, 'Descarga el plan local JSON'],
