@@ -361,6 +361,24 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.play).not.toHaveBeenCalled();
   });
 
+  it('recovers an excluded turn after further edits, and removes the trash entry on restoration', () => {
+    selectAudio();
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Excluir y avanzar' }));
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
+    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Papelera editorial (1)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar Intervención 1' }));
+    expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Papelera editorial (1)' })).toBeNull();
+    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+  });
+
   it('excludes the active turn, advances chronologically and restores its private reference on undo', async () => {
     const player = selectAudio();
     const subtitle = new File(['mock'], 'exclude.srt', { type: 'text/plain' });
