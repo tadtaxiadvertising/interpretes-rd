@@ -148,7 +148,9 @@ describe('Audio Studio semantic theme', () => {
     expect(studio).toContain('border-[var(--theme-control-border)]');
     expect(studio).toContain('rounded-lg bg-black');
     expect(studio).toContain('theme-action-primary px-4 py-3 font-semibold');
-    expect(studio).toContain('theme-action-success px-5 py-3 font-bold');
+    const finalization = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/StudioFinalizationPanel.tsx'), 'utf8');
+    expect(finalization).toContain('theme-action-success px-5 py-3 font-bold');
+    expect(finalization).toContain('bg-[var(--theme-control-bg)]');
   });
 
   it('uses theme colors for the waveform, selection and playhead', () => {
@@ -302,8 +304,9 @@ describe('shared Audio Studio actions', () => {
     const studio = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/page.tsx'), 'utf8');
     expect(studio).toContain('disabled={segments.length >= editorLimit}');
     expect(studio).toContain('expandedEditor ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS');
-    expect(studio).toContain('disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}');
-    expect(studio).toContain('disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}');
+    const finalization = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/StudioFinalizationPanel.tsx'), 'utf8');
+    expect(finalization).toContain('disabled={busy || draftBusy || analyzingSilences || !segmentCount || segmentCount > ROLEPLAY_MAX_SCENARIOS}');
+    expect(finalization).toContain('disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}');
     const library = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/HappyScribeLibraryPanel.tsx'), 'utf8');
     expect(library).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
     expect(library).toContain('bg-[var(--theme-control-bg)]');
