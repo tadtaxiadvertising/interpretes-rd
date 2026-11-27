@@ -11,6 +11,7 @@ import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-pre
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guard';
+import { recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
@@ -46,6 +47,7 @@ interface NewRoleplayFormProps {
   initialCandidateId?: number;
   openingAssignmentEnabled?: boolean;
   directUploadEnabled?: boolean;
+  creationRecoveryEnabled?: boolean;
   studioTransfer?: string;
   librarySource?: {
     id: string;
@@ -73,7 +75,7 @@ function normalizeParticipantSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, studioTransfer }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, creationRecoveryEnabled = false, studioTransfer }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
@@ -92,6 +94,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // A state-driven disabled button updates on render; the ref also prevents
   // duplicate POST requests fired before React commits that render.
   const createPending = useRef(false);
+  // Same-tab only: keep the original attempt identity, not a new upload.
+  // No clinical media, request key or recipient is persisted in browser storage.
+  const keyedAttempt = useRef<{ key: string; scenarioCount: number; trackedToken: string | null } | null>(null);
+  const [keyedStatus, setKeyedStatus] = useState<SingleCreationRecovery['status'] | 'CHECKING' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -494,7 +500,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const handleCreate = async () => {
-    if (createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    if (keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
     if (!confirmRoleplayCreationRetry(submissionUncertain, Boolean(directAttempt.current), message => window.confirm(message))) return;
     const trackedToken = importedTransfer && trackedImportRevision.current === importRevision.current ? importedTransfer : null;
     if (directAttempt.current || useDirectUpload) {
@@ -581,10 +587,19 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const unknownResultMessage = 'No se pudo confirmar el resultado de la creación.';
       let res: Response;
       try {
+        const useKeyedCreation = creationRecoveryEnabled && participantType === 'interpreter';
+        if (useKeyedCreation) {
+          // If key generation fails, do not fall back to an unkeyed POST.
+          keyedAttempt.current = {
+            key: crypto.randomUUID(), scenarioCount: librarySource?.scenarios.length ?? scenarios.length, trackedToken,
+          };
+          setKeyedStatus('IN_PROGRESS');
+        }
         recordProductionAttempt(trackedToken, 'unconfirmed');
         res = await fetch('/api/admin/roleplays', {
           method: 'POST',
           body: formData,
+          ...(keyedAttempt.current ? { headers: { 'Idempotency-Key': keyedAttempt.current.key } } : {}),
         });
       } catch {
         setSubmissionUncertain(true);
@@ -651,6 +666,12 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
+      if (keyedAttempt.current && (!validSingle || payload.scenarioCount !== keyedAttempt.current.scenarioCount)) {
+        setSubmissionUncertain(true);
+        throw new Error(unknownResultMessage);
+      }
+      keyedAttempt.current = null;
+      setKeyedStatus(null);
       setSubmissionUncertain(false);
       recordProductionAttempt(trackedToken, 'created');
       if (payload.bulk) {
@@ -668,6 +689,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         });
       }
     } catch (err) {
+      if (keyedAttempt.current) setSubmissionUncertain(true);
       setError(err instanceof Error ? err.message : 'Failed to create roleplay');
     } finally {
       createPending.current = false;
@@ -675,6 +697,25 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     }
   };
 
+
+  const checkCreationReceipt = async () => {
+    const attempt = keyedAttempt.current;
+    if (!attempt || createPending.current || importPending.current || keyedStatus === 'COMPLETED') return;
+    createPending.current = true;
+    setKeyedStatus('CHECKING');
+    try {
+      const result = await recoverSingleRoleplayCreation(attempt.key, attempt.scenarioCount);
+      if (keyedAttempt.current !== attempt) return;
+      setKeyedStatus(result.status);
+      if (result.status === 'COMPLETED') {
+        setError(null);
+        setSubmissionUncertain(false);
+        recordProductionAttempt(attempt.trackedToken, 'created');
+      }
+    } finally {
+      createPending.current = false;
+    }
+  };
 
   if (success) {
     return (
@@ -719,7 +760,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   return (
     <div className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6 space-y-5">
       {productionBackupWarning && <p role="status" className="text-sm text-[var(--theme-warning)]">No se pudo actualizar el respaldo local del intento de producción. Conserva esta pestaña y consulta las sesiones existentes antes de repetir.</p>}
-      <fieldset disabled={directLocked} className="min-w-0 space-y-5">
+      <fieldset disabled={directLocked || keyedStatus !== null} className="min-w-0 space-y-5">
       <div>
         <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">¿A quién se asignará?</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1053,7 +1094,26 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <span>{error}</span>
         </div>
       )}
-      {submissionUncertain && (
+      {keyedStatus !== null && !isCreating && (
+        <section aria-label="Recuperación de creación" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4">
+          <p role="status" className="text-sm text-[var(--foreground)]">
+            {{
+              IN_PROGRESS: 'La creación está pendiente de confirmación. Consulta el recibo sin reenviar los audios.',
+              CHECKING: 'Consultando el resultado de la solicitud original…',
+              NOT_FOUND: 'Aún no hay un recibo disponible. Esto no demuestra que la creación haya fallado.',
+              REVIEW_REQUIRED: 'El recibo requiere revisión. Consulta las sesiones existentes.',
+              UNAVAILABLE: 'No se pudo consultar el recibo. Conserva esta pestaña y vuelve a consultar.',
+              COMPLETED: 'Creación confirmada mediante el recibo. Consulta la sesión existente antes de realizar otra asignación.',
+            }[keyedStatus]}
+          </p>
+          {keyedStatus !== 'COMPLETED' && <button type="button" disabled={keyedStatus === 'CHECKING'}
+            onClick={() => { void checkCreationReceipt(); }}
+            className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar resultado sin reenviar audios</button>}
+          <Link href="/admin/roleplays" className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes</Link>
+          {keyedStatus !== 'COMPLETED' && <p className="text-xs text-[var(--text-secondary)]">La clave temporal se conserva solo en esta pestaña. No recargues ni inicies otra creación hasta comprobar el resultado.</p>}
+        </section>
+      )}
+      {submissionUncertain && keyedStatus === null && (
         <p role="status" className="rounded-xl border border-amber-400/25 bg-amber-400/5 px-4 py-3 text-sm text-[var(--theme-warning)]">
           El servidor no pudo confirmar la operación o se interrumpió la conexión. El roleplay podría haberse creado.
           {' '}<Link href="/admin/roleplays" className="font-semibold underline underline-offset-2">
@@ -1064,10 +1124,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting}
+        disabled={isCreating || isImporting || keyedStatus !== null}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting
+          isCreating || isImporting || keyedStatus !== null
             ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed"
             : "theme-action-danger shadow-lg shadow-red-600/20"
         )}
