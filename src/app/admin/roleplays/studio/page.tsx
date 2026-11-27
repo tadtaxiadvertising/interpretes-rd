@@ -1606,7 +1606,7 @@ export default function RoleplayStudioPage() {
     exportAbort.current = controller;
     setBusy(true);
     setError('');
-    setNotice('Convirtiendo MP3 a WAV local de 24 kHz…');
+    setNotice('Preparando conversión local MP3 a WAV de 24 kHz. Si se están calculando las ondas, espera a que termine esa decodificación.');
     setAssignmentPackage(null);
     try {
       const wav = await decodeLocalMp3ForAssignment(source, duration, controller.signal);
@@ -1622,6 +1622,16 @@ export default function RoleplayStudioPage() {
         setBusy(false);
       }
     }
+  };
+
+  const releaseLocalMp3 = () => {
+    if (!convertedMp3 || busy || draftBusy || analyzingSilences || exportAbort.current) return;
+    setConvertedMp3(null);
+    setWavPlan(null);
+    setAssignmentPackage(null);
+    setPublicationPartKey('');
+    setNotice('Copia WAV temporal liberada. Se conservan la grabación original y todas las intervenciones.');
+    setError('');
   };
 
   const prepareLocalAssignment = async (part?: StudioPublicationPart<Segment>) => {
@@ -3907,6 +3917,13 @@ export default function RoleplayStudioPage() {
             <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
               <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM de 16 bits compatible o MP3 corto convertido localmente: se preparan los cortes sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
+              {convertedMp3 && convertedMp3.original === audio && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  <span>Copia WAV temporal: {(convertedMp3.wav.size/(1024*1024)).toFixed(2)} MiB. Se conserva para preparar otras partes sin reconvertir.</span>
+                  <button type="button" onClick={releaseLocalMp3} disabled={busy || draftBusy || analyzingSilences}
+                    className="rounded-lg theme-action-secondary px-3 py-2 font-semibold disabled:opacity-50">Liberar copia WAV temporal</button>
+                </div>
+              )}
               {wavSource && segments.length > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
               {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
               {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
