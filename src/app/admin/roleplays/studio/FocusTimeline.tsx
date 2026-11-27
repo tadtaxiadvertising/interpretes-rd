@@ -104,7 +104,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
           value={Math.max(window.start, Math.min(window.end, playhead))}
           aria-valuetext={formatStudioAccessibleTime(Math.max(window.start, Math.min(window.end, playhead)))}
           onChange={event => { setAnchor((window.start + window.end) / 2); onSeek(event.currentTarget.valueAsNumber); }}
-          className="h-11 w-full min-w-0 flex-1 accent-[var(--theme-link)] sm:h-auto"/>
+          className="h-11 min-h-11 w-full min-w-0 accent-[var(--theme-link)] sm:h-auto sm:min-h-0 sm:flex-1"/>
       </label>
       <div className="max-h-64 space-y-2 overflow-y-auto sm:max-h-40 sm:space-y-1">
         {laneLayers.map(lane => (
