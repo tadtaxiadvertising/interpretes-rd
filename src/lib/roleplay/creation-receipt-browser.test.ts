@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { recoverSingleRoleplayCreation } from './creation-receipt-browser';
+import { formatCreationRecoveryReference, parseCreationRecoveryReference, recoverSingleRoleplayCreation } from './creation-receipt-browser';
 
 const key = '123e4567-e89b-42d3-a456-426614174000';
 const complete = { status: 'COMPLETED', createdCount: 1, skippedCount: 0, scenarioCount: 2, sessionIds: ['synthetic-session'] };
@@ -33,5 +33,21 @@ describe('single creation receipt recovery', () => {
       expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'UNAVAILABLE' });
     }
     expect(fetcher).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('portable recovery reference', () => {
+  it.each([1, 25])('round trips a valid reference with %s scenarios', scenarioCount => {
+    const reference = { key, scenarioCount };
+    const encoded = formatCreationRecoveryReference(reference);
+    expect(parseCreationRecoveryReference(' ' + encoded + ' ')).toEqual(reference);
+  });
+  it.each(['', key, 'rp2:' + key + ':1', 'rp1:' + key + ':0', 'rp1:' + key + ':26',
+    'rp1:' + key + ':01', 'rp1:' + key + ':1:extra', 'rp1:' + key.toUpperCase() + ':1',
+    'rp1:invalid:1'])('rejects malformed recovery references (%s)', value => {
+    expect(parseCreationRecoveryReference(value)).toBeNull();
+  });
+  it('cannot format a reference with an invalid scenario count', () => {
+    expect(() => formatCreationRecoveryReference({ key, scenarioCount: 26 })).toThrow();
   });
 });
