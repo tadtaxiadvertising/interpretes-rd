@@ -302,6 +302,7 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     const request = ++primaryPlaybackRevision.current;
     audioPlayer.currentTime = segment.start;
+    setPlayhead(segment.start);
     previewEnd.current = segment.end;
     setPreviewingId(segment.id);
     void audioPlayer.play().catch(() => {
@@ -2647,6 +2648,8 @@ export default function RoleplayStudioPage() {
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
           )}
+          <details open={!focusMode} className="space-y-3 rounded-lg border border-[var(--border)] p-2">
+            <summary className="cursor-pointer text-sm font-semibold text-[var(--foreground)]">Herramientas de clasificación y protocolos</summary>
           <section aria-label="Flujo de interpretación médica" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             <div>
               <h3 className="text-sm font-semibold text-[var(--foreground)]">Flujo médico bilingüe</h3>
@@ -2741,6 +2744,7 @@ export default function RoleplayStudioPage() {
               </button>
             </div>
           )}
+          </details>
           {originalInterpreterCount > 0 && (
             <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-xs text-[var(--theme-warning)]">
               <p>
@@ -2780,7 +2784,7 @@ export default function RoleplayStudioPage() {
             </p>
           )}
           {focusMode && focusedTurn && (
-            <nav aria-label="Navegador de intervenciones" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
+            <nav aria-label="Navegador de intervenciones" className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 md:sticky md:top-0 md:z-10">
               <button type="button" disabled={focusIndex === 0}
                 onClick={() => selectFocusedTurn(visibleSegments[focusIndex - 1].segment.id)}
                 className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
@@ -2803,6 +2807,32 @@ export default function RoleplayStudioPage() {
               <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
                 Intervención {focusedTurn.index + 1} de {segments.length} · {focusIndex + 1} de {visibleSegments.length} visibles
               </p>
+              <div role="group" aria-label="Reproducción en modo enfoque" className="flex basis-full flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
+                <button type="button" onClick={() => previewSegment(focusedTurn.segment)}
+                  aria-pressed={previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id}
+                  className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
+                  {previewingId === focusedTurn.segment.id || pairPreviewId === focusedTurn.segment.id
+                    ? 'Detener fragmento activo' : 'Escuchar intervención activa'}
+                </button>
+                <button type="button" onClick={() => { stopPreview(); stopPairPreview(); }}
+                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">
+                  Pausar audio
+                </button>
+                <button type="button" aria-label="Retroceder audio 5 segundos"
+                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) - 5)}
+                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">−5 s</button>
+                <button type="button" aria-label="Avanzar audio 5 segundos"
+                  onClick={() => seekAudio((player.current?.currentTime ?? playhead) + 5)}
+                  className="rounded-lg border border-[var(--border)] px-2 py-2 text-xs text-[var(--foreground)]">+5 s</button>
+                <label className="flex min-w-32 flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
+                  <span className="shrink-0 tabular-nums">{formatTime(playhead)}</span>
+                  <input type="range" aria-label="Posición de grabación en modo enfoque" min={0} max={duration}
+                    step={0.1} value={Math.min(duration, Math.max(0, playhead))}
+                    onChange={event => seekAudio(event.currentTarget.valueAsNumber)}
+                    className="min-w-0 flex-1 accent-blue-500"/>
+                  <span className="shrink-0 tabular-nums">{formatTime(duration)}</span>
+                </label>
+              </div>
             </nav>
           )}
           {renderedSegments.map(({ segment, index }) => (
@@ -3040,7 +3070,7 @@ export default function RoleplayStudioPage() {
                 <button type="button" className="rounded-lg border border-blue-400/25 px-3 py-2 text-[var(--theme-link)] hover:bg-blue-500/10"
                   disabled={Boolean(segment.ranges)}
                   onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
-                {!compactRows && (
+                {!compactRows && !focusMode && (
                   <button type="button" className="rounded-lg border border-emerald-400/25 px-3 py-2 text-[var(--theme-success)] hover:bg-emerald-500/10"
                     aria-label={segment.ranges
                       ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
