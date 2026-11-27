@@ -16,6 +16,22 @@ Paciente: Me duele el estómago.`);
     ]);
   });
 
+  it.each([',', '.'])('preserves exactly 100 ms cues without admitting 99 ms intervals (%s)', separator => {
+    const cue = (end: string) => `00:00:10${separator}000 --> 00:00:10${separator}${end}\nDoctor: Short cue`;
+    const raw = cue('100');
+    expect(parseTimedTranscript(raw)).toHaveLength(1);
+    expect(parseTimedTranscriptForReviewWithDiagnostics(raw)).toEqual({
+      cues: [{ start: 10, end: 10.1, text: 'Doctor: Short cue', speaker: 'Doctor' }],
+      diagnostics: { reordered: 0, overlapping: 0, divided: 0, skipped: 0 },
+    });
+    expect(() => parseTimedTranscript(cue('099'))).toThrow();
+    const review = parseTimedTranscriptForReviewWithDiagnostics(
+      cue('099') + `\n\n00:00:11${separator}000 --> 00:00:12${separator}000\nPatient: Next cue`
+    );
+    expect(review.cues).toHaveLength(1);
+    expect(review.diagnostics.skipped).toBe(1);
+  });
+
   it('imports WebVTT with voice tags and timestamp settings', () => {
     const vtt = `WEBVTT
 
