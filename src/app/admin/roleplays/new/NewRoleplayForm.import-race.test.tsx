@@ -6,6 +6,7 @@ import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import NewRoleplayForm from './NewRoleplayForm';
+import { stageStudioHandoff, peekStudioHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: ReactNode }) =>
@@ -39,7 +40,7 @@ describe('Admin roleplay import concurrency', () => {
     });
   });
 
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+  afterEach(() => { cleanup(); clearStudioHandoff(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
   const chooseManifest = () => {
     fireEvent.change(screen.getByLabelText(/Importar roleplay preparado/i), {
@@ -48,6 +49,33 @@ describe('Admin roleplay import concurrency', () => {
       },
     });
   };
+
+  it('validates a same-tab Studio transfer automatically without creating a session', async () => {
+    const file = new File(['x'.repeat(22)], 'roleplay-studio.zip', { type: 'application/zip' });
+    const audio = new File(['ID3'], 'segment-01.mp3', { type: 'audio/mpeg' });
+    stageStudioHandoff('test-transfer', file);
+    vi.mocked(extractStudioZip).mockResolvedValueOnce([audio]);
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce([{
+      title: 'Desde Studio', baseAudioFile: audio, durationLimitSec: 120,
+      scriptPrompt: '', sha256: 'a'.repeat(64),
+    }]);
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    await act(async () => { render(<NewRoleplayForm interpreters={[]} candidates={[]} studioTransfer="test-transfer" />); });
+    expect(extractStudioZip).toHaveBeenCalledWith(file);
+    expect(prepareRoleplayManifestImport).toHaveBeenCalledWith([audio]);
+    expect(screen.getByText('Desde Studio')).toBeTruthy();
+    expect(screen.getByText(/Paquete de Audio Studio verificado/)).toBeTruthy();
+    expect(peekStudioHandoff('test-transfer')).toBeNull();
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it('leaves the form usable when the transfer no longer exists', () => {
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} studioTransfer="expired" />);
+    expect(screen.getByText(/paquete temporal ya no está disponible/)).toBeTruthy();
+    expect(screen.getByTestId('draft-scenario')).toBeTruthy();
+    expect(prepareRoleplayManifestImport).not.toHaveBeenCalled();
+  });
 
   it('provides a direct path to prepare a valid ZIP in Audio Studio', () => {
     render(<NewRoleplayForm interpreters={[]} candidates={[]} />);
