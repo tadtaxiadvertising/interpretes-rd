@@ -2,15 +2,17 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
+import * as timeFormat from '@/lib/roleplay-studio/format-time';
+import { useStudioCardActions } from './useStudioCardActions';
 import StudioInterventionCard, { type StudioIntervention } from './StudioInterventionCard';
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 const segment: StudioIntervention = {
   id:'turn-a',title:'Consulta',start:1,end:4,scriptPrompt:'Interpreta',responseLimit:60,
   speakerRole:'doctor',language:'en',
 };
-function setup(overrides: Partial<ComponentProps<typeof StudioInterventionCard>> = {}) {
-  const props: ComponentProps<typeof StudioInterventionCard> = {
+function makeProps(overrides: Partial<ComponentProps<typeof StudioInterventionCard>> = {}): ComponentProps<typeof StudioInterventionCard> {
+  return {
     segment,index:2,canPreviewPair:false,caption:'Referencia privada',compactRows:false,focusMode:true,
     expandedSegmentId:segment.id,advancedTurnId:null,turnActionFeedback:null,boundaryProposal:null,
     canUseBoundaryProposal:false,proposalPreviewId:'boundary-proposal:turn-a',previewingId:null,pairPreviewId:null,duration:90,
@@ -19,6 +21,9 @@ function setup(overrides: Partial<ComponentProps<typeof StudioInterventionCard>>
     insertProtocol:vi.fn(),markAtPlayhead:vi.fn(),applyBoundaryProposal:vi.fn(),onToggleExpanded:vi.fn(),onToggleAdvanced:vi.fn(),
     ...overrides,
   };
+}
+function setup(overrides: Partial<ComponentProps<typeof StudioInterventionCard>> = {}) {
+  const props = makeProps(overrides);
   return {props,...render(<StudioInterventionCard {...props}/>)};
 }
 describe('controlled intervention editor',()=>{
@@ -33,7 +38,7 @@ describe('controlled intervention editor',()=>{
     fireEvent.change(screen.getByLabelText('Idioma de la intervención'),{target:{value:'es'}});
     expect(vi.mocked(props.update).mock.calls).toEqual([['turn-a',{speakerRole:'patient'}],['turn-a',{language:'es'}]]);
     fireEvent.click(advanced);
-    expect(props.onToggleAdvanced).toHaveBeenCalledOnce();
+    expect(props.onToggleAdvanced).toHaveBeenCalledExactlyOnceWith('turn-a');
     rerender(<StudioInterventionCard {...props} advancedTurnId="turn-a"/>);
     fireEvent.change(screen.getByLabelText('Título'),{target:{value:'Consulta revisada'}});
     fireEvent.change(screen.getByLabelText('Inicio (segundos)'),{target:{value:'2'}});
@@ -50,6 +55,25 @@ describe('controlled intervention editor',()=>{
     expect(screen.getByRole('button',{name:/Unir intervención 3/})).toHaveProperty('disabled',true);
     fireEvent.click(screen.getByRole('button',{name:'Separar cortes de intervención 3'}));
     expect(props.separateCompound).toHaveBeenCalledWith('turn-a');
+  });
+  it('skips unchanged card work while dispatching actions from the latest committed parent render',()=>{
+    const props = makeProps();
+    const initial = vi.fn();
+    const next = vi.fn();
+    const format = vi.spyOn(timeFormat, 'formatStudioTime');
+    function Parent({tick, update}: {tick: number; update: typeof props.update}) {
+      const actions = useStudioCardActions({...props, update});
+      return <><span>Cursor {tick}</span><StudioInterventionCard {...props} {...actions}/></>;
+    }
+    const {rerender} = render(<Parent tick={1} update={initial}/>);
+    expect(format).toHaveBeenCalled();
+    format.mockClear();
+    rerender(<Parent tick={2} update={next}/>);
+    expect(screen.getByText('Cursor 2')).toBeTruthy();
+    expect(format).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('Perfil del hablante'),{target:{value:'patient'}});
+    expect(next).toHaveBeenCalledWith('turn-a',{speakerRole:'patient'});
+    expect(initial).not.toHaveBeenCalled();
   });
   it('previews a boundary proposal without applying it',()=>{
     const {props}=setup({boundaryProposal:{start:1.2,end:3.8,reason:'silence'},canUseBoundaryProposal:true});

@@ -36,6 +36,7 @@ import HappyScribeLibraryPanel from './HappyScribeLibraryPanel';
 import StudioFinalizationPanel from './StudioFinalizationPanel';
 import StudioFocusNavigation from './StudioFocusNavigation';
 import StudioInterventionCard, { type StudioIntervention as Segment } from './StudioInterventionCard';
+import { useStudioCardActions } from './useStudioCardActions';
 import { STUDIO_HISTORY_LIMIT } from '@/lib/roleplay-studio/editorial-history';
 import { useStudioEditorialHistory, hasRecoverableUndo, type EditorialSnapshot } from './useStudioEditorialHistory';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
@@ -2262,6 +2263,13 @@ export default function RoleplayStudioPage() {
     if (!workspaceActive && wasWorkspaceActive.current) workspaceEnter.current?.focus({ preventScroll: true });
     wasWorkspaceActive.current = workspaceActive;
   }, [workspaceActive]);
+  const cardActions = useStudioCardActions({
+    seekAudio, splitAtPlayhead, mergeWithNext, separateCompound,
+    previewPairWithoutGap, previewSegment, removeIntervention, update,
+    insertProtocol, markAtPlayhead, applyBoundaryProposal,
+    onToggleExpanded: id => setExpandedSegmentId(previous => previous === id ? null : id),
+    onToggleAdvanced: id => setAdvancedTurnId(previous => previous === id ? null : id),
+  });
   const studioSteps = [
     { id: 'studio-source', title: '1. Grabación', detail: sourceReady ? 'Grabación lista' : 'Selecciona audio o video', available: true, done: sourceReady },
     { id: reviewCues.length ? 'studio-transcript-review' : 'studio-subtitles', title: '2. Transcripción', detail: reviewCues.length ? 'Turnos para seleccionar' : 'Importa subtítulos o usa cortes manuales', available: sourceReady, done: segments.length > 0 && reviewCues.length === 0 },
@@ -3200,16 +3208,16 @@ export default function RoleplayStudioPage() {
             return <StudioInterventionCard key={segment.id} segment={segment} index={index}
               nextTurn={nextTurn} canPreviewPair={previewablePairIds.has(segment.id)}
               caption={captionTexts[segment.id]} compactRows={compactRows} focusMode={focusMode}
-              expandedSegmentId={expandedSegmentId} advancedTurnId={advancedTurnId} turnActionFeedback={turnActionFeedback}
+              expandedSegmentId={expandedSegmentId === segment.id ? segment.id : null}
+              advancedTurnId={advancedTurnId === segment.id ? segment.id : null}
+              turnActionFeedback={turnActionFeedback?.id === segment.id ? turnActionFeedback : null}
               boundaryProposal={focusedTurn?.segment.id === segment.id ? boundaryProposal : null}
-              canUseBoundaryProposal={canUseBoundaryProposal} proposalPreviewId={proposalPreviewId}
-              previewingId={previewingId} pairPreviewId={pairPreviewId} duration={duration}
-              seekAudio={seekAudio} splitAtPlayhead={splitAtPlayhead} mergeWithNext={mergeWithNext}
-              separateCompound={separateCompound} previewPairWithoutGap={previewPairWithoutGap}
-              previewSegment={previewSegment} removeIntervention={removeIntervention} update={update}
-              insertProtocol={insertProtocol} markAtPlayhead={markAtPlayhead} applyBoundaryProposal={applyBoundaryProposal}
-              onToggleExpanded={() => setExpandedSegmentId(previous => previous === segment.id ? null : segment.id)}
-              onToggleAdvanced={() => setAdvancedTurnId(previous => previous === segment.id ? null : segment.id)}
+              canUseBoundaryProposal={focusedTurn?.segment.id === segment.id && canUseBoundaryProposal}
+              proposalPreviewId={focusedTurn?.segment.id === segment.id ? proposalPreviewId : ''}
+              previewingId={previewingId === segment.id ||
+                (focusedTurn?.segment.id === segment.id && previewingId === proposalPreviewId) ? previewingId : null}
+              pairPreviewId={pairPreviewId === segment.id ? segment.id : null} duration={duration}
+              {...cardActions}
             />;
           })}
           </div>
