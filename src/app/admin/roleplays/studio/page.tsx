@@ -30,6 +30,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
 import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
@@ -89,21 +90,26 @@ export default function RoleplayStudioPage() {
   const [publicationPartKey, setPublicationPartKey] = useState('');
   const genericPublicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
   const [wavPlan, setWavPlan] = useState<{ source: File; cuts: Segment[]; parts: LocalWavPart<Segment>[]; issue: string | null } | null>(null);
-  const wavSource = audio !== null && /\.wav$/i.test(audio.name);
-  const currentWavPlan = wavPlan && wavPlan.source === audio && wavPlan.cuts === segments ? wavPlan : null;
+  const [convertedMp3, setConvertedMp3] = useState<{ original: File; wav: File } | null>(null);
+  const localMp3Eligible = Boolean(audio && canPrepareLocalMp3(audio, duration));
+  const localWavSource = audio && /\.wav$/i.test(audio.name) ? audio :
+    convertedMp3 && convertedMp3.original === audio ? convertedMp3.wav : null;
+  const wavSource = localWavSource !== null;
+  const currentWavPlan = wavPlan && wavPlan.source === localWavSource && wavPlan.cuts === segments ? wavPlan : null;
+  useEffect(() => { setConvertedMp3(null); }, [audio]);
   useEffect(() => {
-    if (!audio || !wavSource || !duration || !segments.length) { setWavPlan(null); return; }
+    if (!localWavSource || !duration || !segments.length) { setWavPlan(null); return; }
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void planLocalWavParts(audio, segments, controller.signal).then(parts => {
-        if (!controller.signal.aborted) setWavPlan({ source: audio, cuts: segments, parts, issue: null });
+      void planLocalWavParts(localWavSource, segments, controller.signal).then(parts => {
+        if (!controller.signal.aborted) setWavPlan({ source: localWavSource, cuts: segments, parts, issue: null });
       }).catch(cause => {
-        if (!controller.signal.aborted) setWavPlan({ source: audio, cuts: segments, parts: [],
+        if (!controller.signal.aborted) setWavPlan({ source: localWavSource, cuts: segments, parts: [],
           issue: cause instanceof Error ? cause.message : 'No se pudo calcular el tamaño WAV.' });
       });
     }, 150);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [audio, wavSource, duration, segments]);
+  }, [localWavSource, duration, segments]);
   const publicationPlan = currentWavPlan && !currentWavPlan.issue ? currentWavPlan : genericPublicationPlan;
   useEffect(() => {
     if (currentWavPlan && !currentWavPlan.issue && currentWavPlan.parts.length > 1 &&
@@ -1592,10 +1598,36 @@ export default function RoleplayStudioPage() {
     }
   };
 
+  const enableLocalMp3 = async () => {
+    if (!audio || !localMp3Eligible || busy || draftBusy || analyzingSilences || exportAbort.current) return;
+    const source = audio;
+    const operation = ++exportRevision.current;
+    const controller = new AbortController();
+    exportAbort.current = controller;
+    setBusy(true);
+    setError('');
+    setNotice('Convirtiendo MP3 a WAV local de 24 kHz…');
+    setAssignmentPackage(null);
+    try {
+      const wav = await decodeLocalMp3ForAssignment(source, duration, controller.signal);
+      if (operation !== exportRevision.current || controller.signal.aborted) return;
+      setConvertedMp3({ original: source, wav });
+      setNotice('Audio local listo. Escucha y revisa los cortes antes de asignar.');
+    } catch (cause) {
+      if (operation === exportRevision.current && !controller.signal.aborted)
+        setError(cause instanceof Error ? cause.message : 'No se pudo convertir el MP3 local.');
+    } finally {
+      if (operation === exportRevision.current) {
+        exportAbort.current = null;
+        setBusy(false);
+      }
+    }
+  };
+
   const prepareLocalAssignment = async (part?: StudioPublicationPart<Segment>) => {
     if (!audio || !duration || busy || draftBusy || analyzingSilences || exportAbort.current) return;
     const selected = part?.turns ?? segments;
-    if (!currentWavPlan || currentWavPlan.issue || (part ? !currentWavPlan.parts.some(item => item.key === part.key) : currentWavPlan.parts.length !== 1)) return;
+    if (!localWavSource || !currentWavPlan || currentWavPlan.issue || (part ? !currentWavPlan.parts.some(item => item.key === part.key) : currentWavPlan.parts.length !== 1)) return;
     setAssignmentPackage(null);
     setError('');
     setNotice('');
@@ -1607,7 +1639,7 @@ export default function RoleplayStudioPage() {
       editorRevision === subtitleImportRevision.current && !controller.signal.aborted;
     setBusy(true);
     try {
-      const files = await prepareLocalWavAssignment(audio, selected, controller.signal,
+      const files = await prepareLocalWavAssignment(localWavSource, selected, controller.signal,
         (done,total) => { if (current()) setNotice(`Preparando audio local: ${done}/${total}.`); });
       if (!current()) return;
       setAssignmentPackage({ token: crypto.randomUUID(), files, revision: editorRevision, source: audio,
@@ -3871,10 +3903,10 @@ export default function RoleplayStudioPage() {
                 </details>
               </div>
             )}
-          {(!localOnly || (audio && /\.wav$/i.test(audio.name))) && (
+          {(!localOnly || wavSource || localMp3Eligible) && (
             <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
-              <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM estándar de 16 bits: se preparan los cortes en este equipo sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
+              <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM de 16 bits compatible o MP3 corto convertido localmente: se preparan los cortes sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
               {wavSource && segments.length > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
               {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
               {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
@@ -3897,9 +3929,11 @@ export default function RoleplayStudioPage() {
                   className="inline-flex rounded-xl theme-action-primary px-4 py-2 font-semibold">Continuar a asignación</Link>
               ) : localOnly ? (
                 <div className="flex flex-wrap gap-2">
-                  <button type="button" onClick={() => void prepareLocalAssignment()}
+                  {localMp3Eligible && !wavSource && <button type="button" disabled={busy || draftBusy || analyzingSilences} onClick={() => void enableLocalMp3()}
+                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Habilitar procesamiento local MP3 (WAV 24 kHz)</button>}
+                  {wavSource && <button type="button" onClick={() => void prepareLocalAssignment()}
                     disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || currentWavPlan.parts.length !== 1}
-                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar WAV local para asignación</button>
+                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar WAV local para asignación</button>}
                   {currentWavPlan && !currentWavPlan.issue && selectedPublicationPart && currentWavPlan.parts.length > 1 && <button type="button" onClick={() => void prepareLocalAssignment(selectedPublicationPart)}
                     disabled={busy || draftBusy || analyzingSilences}
                     className="rounded-xl theme-action-secondary px-4 py-2 font-semibold disabled:opacity-50">Preparar parte {selectedPublicationPart.number} en WAV local</button>}
