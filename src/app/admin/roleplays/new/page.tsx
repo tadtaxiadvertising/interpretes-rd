@@ -1,3 +1,4 @@
+import { readCreationPilotConfig } from '@/lib/roleplay/creation-pilot-config';
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
@@ -126,8 +127,8 @@ export default async function NewRoleplayPage({
             initialCandidateId={initialCandidateId} librarySource={librarySource}
             studioTransfer={!sourceSessionId && typeof studioTransfer === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(studioTransfer) ? studioTransfer : undefined}
             openingAssignmentEnabled={openingAssignmentEnabled()}
-            creationRecoveryEnabled={process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED === 'true' && process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED === 'true'}
-            receiptRecoveryEnabled={process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED === 'true'}
+            creationRecoveryEnabled={readCreationPilotConfig(process.env).keyedCreationEnabled}
+            receiptRecoveryEnabled={readCreationPilotConfig(process.env).receiptsEnabled}
             directUploadEnabled={openingAssignmentEnabled() && [
               'ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED',
               'ROLEPLAY_DIRECT_UPLOAD_VERIFICATION_API_ENABLED',
