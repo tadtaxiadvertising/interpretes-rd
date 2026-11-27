@@ -12,7 +12,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
@@ -656,6 +656,20 @@ export default function RoleplayStudioPage() {
     setChosenCueIndices([]);
     setError('');
     setNotice('Selección SRT vaciada. Las intervenciones existentes no se han modificado.');
+  };
+
+  const keepCueAndRemoveConflicts = (index: number) => {
+    if (!chosenCueIndices.includes(index)) return;
+    const conflicts = conflictingSelectedTimedCueIndices(reviewCues, chosenCueIndices, index);
+    if (!conflicts.length) return;
+    if (!window.confirm(
+      `Conservar el turno ${index + 1} y retirar ${conflicts.length} turnos solapados de la selección pendiente. Los subtítulos originales y las intervenciones del editor se conservarán. ¿Continuar?`,
+    )) return;
+    const removed = new Set(conflicts);
+    subtitleImportRevision.current += 1;
+    setChosenCueIndices(previous => previous.filter(value => !removed.has(value)));
+    setError('');
+    setNotice(`Turno ${index + 1} conservado. ${conflicts.length} turnos incompatibles retirados solo de la selección; revisa los conflictos restantes antes de aplicar.`);
   };
 
   const toggleCueSelection = (index: number) => {
@@ -2692,6 +2706,8 @@ export default function RoleplayStudioPage() {
           </div>
           <div className="max-h-80 space-y-2 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
             {visibleCues.map(({ cue, index }) => {
+              const conflicts = overlappingSelectedCues.includes(index)
+                ? conflictingSelectedTimedCueIndices(reviewCues, chosenCueIndices, index) : [];
               return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
@@ -2704,13 +2720,22 @@ export default function RoleplayStudioPage() {
                     {classifySpeakerRole(cue.speaker) === 'unknown'
                       ? ' Hablante por revisar'
                       : ` ${cue.speaker}`}
-                    {overlappingSelectedCues.includes(index) && (
-                      <span className="font-semibold text-[var(--theme-danger)]"> · Solapa otro turno seleccionado</span>
+                    {conflicts.length > 0 && (
+                      <span className="font-semibold text-[var(--theme-danger)]">
+                        {' · Solapa: '}{conflicts.slice(0, 3).map(other => other + 1).join(', ')}
+                        {conflicts.length > 3 ? ` y ${conflicts.length - 3} más` : ''}
+                      </span>
                     )}
                   </p>
                   <p className="mt-1 break-words text-xs text-[var(--text-secondary)]">
                     {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
                   </p>
+                  {conflicts.length > 0 && (
+                    <button type="button" onClick={() => keepCueAndRemoveConflicts(index)}
+                      className="mt-2 rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--theme-link)]">
+                      Conservar turno {index + 1} y retirar {conflicts.length} {conflicts.length === 1 ? 'conflicto' : 'conflictos'} de la selección
+                    </button>
+                  )}
                 </div>
                 <button type="button" onClick={() => previewSubtitleCue(cue, index)}
                   aria-label={previewingId === `subtitle-${index}`
