@@ -150,7 +150,14 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
   };
 
   const mediaHandlers = {
-    onPlay: () => setEditorPlaybackRevision(n => n + 1),
+    onPlay: (event: SyntheticEvent<HTMLMediaElement>) => {
+      // Native controls can resume the primary player during a compound
+      // preview. A queued play event from a paused or replaced element must
+      // not interrupt a newer auxiliary preview.
+      if (event.currentTarget !== player.current || event.currentTarget.paused) return;
+      if (pairPlayback.current) stopPairPreview();
+      setEditorPlaybackRevision(n => n + 1);
+    },
     onLoadedMetadata: (event: SyntheticEvent<HTMLMediaElement>) => {
       const length = event.currentTarget.duration;
       if (!Number.isFinite(length) || length <= 0) {
