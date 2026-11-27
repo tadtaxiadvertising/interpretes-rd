@@ -4,7 +4,8 @@ import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 // UUID v4/v7 only, as required by the durable creation-claim helper.
 // The key is scoped by an authenticated administrator, never a bearer token.
 const VALID_REQUEST_KEY = /^[a-f0-9]{8}-[a-f0-9]{4}-[47][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
-const MAX_RECEIPT_SESSIONS = 1000;
+// Shared by receipt readers and transactional writers. A valid write must remain readable.
+export const MAX_RECEIPT_SESSIONS = 1000;
 
 export class InvalidRoleplayReceiptRequestError extends Error {
   constructor() {
