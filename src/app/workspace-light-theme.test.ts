@@ -300,8 +300,10 @@ describe('shared Audio Studio actions', () => {
 
   it('preserves native disabled conditions on studio actions', () => {
     const studio = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/page.tsx'), 'utf8');
-    expect(studio).toContain('disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}');
-    expect(studio).toContain('disabled={busy || draftBusy || analyzingSilences || !segments.length}');
+    expect(studio).toContain('disabled={segments.length >= editorLimit}');
+    expect(studio).toContain('expandedEditor ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS');
+    expect(studio).toContain('disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}');
+    expect(studio).toContain('disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}');
     expect(studio).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
   });
 });
