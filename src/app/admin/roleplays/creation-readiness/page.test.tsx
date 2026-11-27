@@ -35,6 +35,7 @@ describe('admin runtime diagnostic', () => {
     expect(html).not.toContain('Solo consulta de recibos');
     expect(html).not.toContain('Conserva la recuperación');
     expect(html).not.toContain('Contrasta el SHA');
+    expect(html).not.toContain('Evidencia de comprobación');
     expect(html).not.toContain('a'.repeat(40));
     expect(mocks.readiness).not.toHaveBeenCalled();
     expect(mocks.validate).toHaveBeenCalledWith('admin');
@@ -42,6 +43,7 @@ describe('admin runtime diagnostic', () => {
   it.each([undefined, '0', 'true', ['1', '1']])('does not inspect until one explicit check is requested (%o)', async check => {
     const html = await view(check);
     expect(html).toContain('Comprobación no ejecutada');
+    expect(html).not.toContain('Evidencia de comprobación');
     expect(html).toContain('Solo consulta de recibos');
     expect(mocks.readiness).not.toHaveBeenCalled();
   });
@@ -67,6 +69,22 @@ describe('admin runtime diagnostic', () => {
     expect(html).toContain('Contrasta el SHA y la identidad del proyecto');
     expect(mocks.readiness).toHaveBeenCalledExactlyOnceWith(mocks.db);
   });
+  it('provides a timestamped evidence summary only after a requested check', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-11-27T18:00:00Z'));
+      const html = await view('1');
+      expect(html).toContain('Evidencia de comprobación');
+      expect(html).toContain('Fecha de comprobación (UTC): 2026-11-27T18:00:00.000Z');
+      expect(html).toContain('SHA del servicio: ' + 'a'.repeat(40));
+      expect(html).toContain('Modo: receipts-only');
+      expect(html).toContain('Registro de idempotencia: Disponible según comprobación');
+      expect(html).toContain('Resultado puntual; no autoriza activar el piloto.');
+      expect(mocks.readiness).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('reports unavailable state and suppresses malformed build metadata', async () => {
     vi.stubEnv('GIT_SHA', 'synthetic-secret-not-a-sha');
     mocks.readiness.mockResolvedValue(false);
@@ -76,5 +94,7 @@ describe('admin runtime diagnostic', () => {
     expect(html).toContain('no repitas creaciones inciertas');
     expect(html).toContain('No informado por el despliegue');
     expect(html).not.toContain('synthetic-secret-not-a-sha');
+    expect(html).toContain('SHA del servicio: No informado');
+    expect(html).toContain('Registro de idempotencia: No disponible según comprobación');
   });
 });
