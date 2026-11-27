@@ -144,6 +144,11 @@ test.describe('mobile timeline controls', () => {
           expect(box!.x).toBeGreaterThanOrEqual(0);
           expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
         }
+        const documentSizes = await page.evaluate(() => ({
+          scroll: document.documentElement.scrollWidth,
+          client: document.documentElement.clientWidth,
+        }));
+        expect(documentSizes.scroll).toBeLessThanOrEqual(documentSizes.client + 1);
         for (const region of [waveform, timeline]) {
           const sizes = await region.evaluate(element => ({ scroll: element.scrollWidth, client: element.clientWidth }));
           expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
