@@ -32,6 +32,7 @@ import {
 import StudioWaveform from './StudioWaveform';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
+import { studioProductionKey, productionStatus, trackProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
@@ -125,6 +126,7 @@ export default function RoleplayStudioPage() {
   const [analyzingSilences, setAnalyzingSilences] = useState(false);
   const [serverConsent, setServerConsent] = useState(false);
   const [allowServerZipExport, setAllowServerZipExport] = useState(false);
+  const [productionKeys, setProductionKeys] = useState<{ source: File; cuts: Segment[]; mode: 'wav' | 'mp3'; keys: Map<string, string> } | null>(null);
   const [assignmentPackage, setAssignmentPackage] = useState<({ token: string; revision: number; source: File; cuts: Segment[]; partKey?: string } & ({ file: File; files?: never } | { files: File[]; file?: never })) | null>(null);
   const [localVadSnapshot, setLocalVadSnapshot] = useState<LocalVadSnapshot | null>(null);
   const [detectedSilences, setDetectedSilences] = useState<StudioSilence[]>([]);
@@ -1990,6 +1992,22 @@ export default function RoleplayStudioPage() {
   const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
   const hasCompound = segments.some(segment => segment.ranges !== undefined);
   const localOnly = audio !== null && (sourceRequiresLocal || hasCompound || !allowServerZipExport);
+  const productionMode = localOnly ? 'wav' : 'mp3';
+  const activeProductionKeys = productionKeys && productionKeys.source === audio && productionKeys.cuts === segments &&
+    productionKeys.mode === productionMode ? productionKeys.keys : null;
+  useEffect(() => {
+    if (!audio || !segments.length || (localOnly && (!currentWavPlan || currentWavPlan.issue))) {
+      setProductionKeys(null);
+      return;
+    }
+    let cancelled = false;
+    const source = audio;
+    const parts = localOnly ? currentWavPlan!.parts : publicationPlan.parts.length === 1 ? publicationPlan.parts : [];
+    void Promise.all(parts.map(async part => [part.key, await studioProductionKey(source, part.turns, productionMode)] as const))
+      .then(entries => { if (!cancelled) setProductionKeys({ source, cuts: segments, mode: productionMode, keys: new Map(entries) }); })
+      .catch(() => { if (!cancelled) setProductionKeys(null); });
+    return () => { cancelled = true; };
+  }, [audio, segments, localOnly, currentWavPlan, publicationPlan, productionMode]);
   const readyAssignment = assignmentPackage && assignmentPackage.source === audio &&
     assignmentPackage.cuts === segments && assignmentPackage.revision === subtitleImportRevision.current &&
     (assignmentPackage.files ? (!assignmentPackage.partKey || assignmentPackage.partKey === publicationPartKey) : !localOnly)
@@ -3927,6 +3945,27 @@ export default function RoleplayStudioPage() {
               {wavSource && segments.length > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
               {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
               {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
+              {activeProductionKeys && activeProductionKeys.size > 0 && (
+                <section aria-label="Seguimiento de producción" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+                  <h4 className="text-sm font-semibold text-[var(--foreground)]">Seguimiento de producción</h4>
+                  <p className="text-xs text-[var(--text-secondary)]">Registro orientativo de esta pestaña. Una creación confirmada significa al menos una asignación, no que todos los destinatarios la hayan recibido. Al recargar se pierde; consulta las sesiones existentes antes de repetir una creación.</p>
+                  <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
+                    {publicationPlan.parts.filter(part => activeProductionKeys.has(part.key)).map(part => {
+                      const status = productionStatus(activeProductionKeys.get(part.key)!);
+                      const prepared = Boolean(readyAssignment && (readyAssignment.partKey === part.key || (!readyAssignment.partKey && publicationPlan.parts.length === 1)));
+                      const label = status === 'created' ? 'Creación confirmada' : status === 'unconfirmed' ? 'Intento sin confirmar' :
+                        prepared ? 'Preparado' : status === 'verified' ? 'Importado y verificado' : status === 'transferred' ? 'Transferido' : 'Pendiente';
+                      return <li key={part.key} className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--border)] p-2">
+                        <span>Parte {part.number} · {part.first}–{part.last}</span>
+                        <span className={status === 'created' ? 'text-[var(--theme-success)]' : status === 'unconfirmed' ? 'text-[var(--theme-warning)]' : 'text-[var(--text-secondary)]'}>{label}</span>
+                        {localOnly && publicationPlan.parts.length > 1 && <button type="button" disabled={busy || draftBusy || analyzingSilences}
+                          className="theme-action-secondary rounded px-2 py-1 disabled:opacity-50" onClick={() => setPublicationPartKey(part.key)}>Seleccionar parte {part.number}</button>}
+                      </li>;
+                    })}
+                  </ul>
+                  <Link href="/admin/roleplays" className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
+                </section>
+              )}
               {readyAssignment ? (
                 <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
                   prefetch={false}
@@ -3937,9 +3976,15 @@ export default function RoleplayStudioPage() {
                     if (readyAssignment.revision !== subtitleImportRevision.current || busy || draftBusy || !confirmEditorNavigation()) {
                       event.preventDefault(); return;
                     }
+                    const key = activeProductionKeys?.get(readyAssignment.partKey ?? publicationPlan.parts[0]?.key ?? '');
+                    const status = key ? productionStatus(key) : undefined;
+                    if ((status === 'created' || status === 'unconfirmed') && !window.confirm('Esta parte ya tiene una creación confirmada o un intento sin confirmar en esta pestaña. Consulta las sesiones existentes para evitar duplicados. ¿Continuar de todos modos?')) {
+                      event.preventDefault(); return;
+                    }
                     try {
                       if (readyAssignment.files) stageLocalWavHandoff(readyAssignment.token, readyAssignment.files);
                       else stageStudioHandoff(readyAssignment.token, readyAssignment.file);
+                      if (key) trackProductionTransfer(readyAssignment.token, key);
                     }
                     catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : 'No se pudo transferir el paquete.'); }
                   }}
