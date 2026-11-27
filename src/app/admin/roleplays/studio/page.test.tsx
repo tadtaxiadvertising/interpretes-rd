@@ -82,7 +82,32 @@ describe('Audio Studio clip review player', () => {
     expect(screen.getByText(/Último fragmento añadido deshecho/)).toBeTruthy();
   });
 
-  it('undoes the first manually added clip and invalidates undo after editing a new one', () => {
+  it('undoes and redoes successive edits, grouping typing and clearing redo after a new edit', () => {
+    const {container}=render(<RoleplayStudioPage />);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i),{
+      target:{files:[new File(['ID3'],'history.mp3',{type:'audio/mpeg'})]},
+    });
+    const player=container.querySelector('audio')!;
+    Object.defineProperty(player,'duration',{configurable:true,value:90});
+    fireEvent.loadedMetadata(player);
+    fireEvent.click(screen.getByRole('button',{name:/Añadir fragmento/i}));
+    const title=()=>screen.getByLabelText('Título') as HTMLInputElement;
+    fireEvent.change(title(),{target:{value:'Revisión'}});
+    fireEvent.change(title(),{target:{value:'Revisión final'}});
+    fireEvent.click(screen.getByRole('button',{name:'Deshacer edición de intervención'}));
+    expect(title().value).toBe('Intervención 1');
+    fireEvent.click(screen.getByRole('button',{name:'Deshacer adición manual'}));
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Rehacer último cambio'}));
+    expect(title().value).toBe('Intervención 1');
+    fireEvent.click(screen.getByRole('button',{name:'Rehacer último cambio'}));
+    expect(title().value).toBe('Revisión final');
+    fireEvent.click(screen.getByRole('button',{name:'Deshacer edición de intervención'}));
+    fireEvent.change(title(),{target:{value:'Otra revisión'}});
+    expect(screen.queryByRole('button',{name:'Rehacer último cambio'})).toBeNull();
+  });
+
+  it('undoes the first manually added clip and keeps later manual edits independently reversible', () => {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
       target: { files: [new File(['ID3'], 'first-undo.mp3', { type: 'audio/mpeg' })] },
