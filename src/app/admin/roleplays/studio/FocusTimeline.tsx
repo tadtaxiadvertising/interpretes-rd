@@ -46,7 +46,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
   const select = (id: string, isExcluded: boolean) => {
     const turn = (isExcluded ? excluded : active).find(item => item.id === id);
     if (!turn) return;
-    setAnchor(null);
+    setAnchor(isExcluded ? turn.start : null);
     onSelect(id, isExcluded);
     if (Number.isFinite(turn.start)) onSeek(Math.min(duration, Math.max(0, turn.start)));
   };
