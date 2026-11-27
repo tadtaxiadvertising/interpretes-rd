@@ -2,9 +2,18 @@
 
 ## Estado de la fase
 
-**Preparación de persistencia y pruebas, no activada.** Esta fase añade el modelo Prisma `RoleplayCreationRequest`, su migración SQL y funciones `fingerprintRoleplayCreation`, `claimRoleplayCreation` y `completeRoleplayCreationInTransaction`. El endpoint `POST /api/admin/roleplays` y el formulario siguen funcionando exactamente como antes: **todavía no envían ni aceptan claves de idempotencia**.
+**Preparación de persistencia y pruebas, no activada.** Esta fase añade el modelo Prisma `RoleplayCreationRequest`, su migración SQL y funciones `fingerprintRoleplayCreation`, `claimRoleplayCreation` y `completeRoleplayCreationInTransaction`. El formulario sigue sin emitir claves de idempotencia. El endpoint dispone de un piloto explícito, apagado por defecto, descrito a continuación.
 
 La migración es aditiva, sin modificación ni eliminación de sesiones/escenarios/audio existentes, con RLS habilitado y sin acceso directo a `anon`, `authenticated` ni `PUBLIC`. No se ha ejecutado en producción.
+
+## Piloto de publicación individual (apagado por defecto)
+
+- Solo con `ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED=true` y encabezado `Idempotency-Key` UUID v4/v7. Una solicitud con clave cuando el piloto está deshabilitado devuelve 503; nunca pasa silenciosamente a la ruta antigua.
+- Admite únicamente el destino `interpreter` individual, con audio multipart validado o snapshot de biblioteca verificado. El formulario aún no envía claves. Candidatos, asignaciones masivas y subida directa quedan fuera de esta fase.
+- Reserva después de validar el destino y el paquete, antes de reservar la sesión o subir archivos; completa el recibo en la misma transacción que publica los escenarios y la sesión. Un fallo de escritura del recibo impide confirmar la publicación.
+- Una clave repetida con resultado completo puede devolver el mismo identificador, únicamente si la sesión corresponde al intérprete y no está en DRAFT/CANCELLED. No vuelve a subir audio, publicar ni notificar. Un resultado incierto o conflicto devuelve 409 y requiere revisión.
+- Tras una reserva exitosa, un error posterior (incluida una precondición de publicación) puede dejar IN_PROGRESS. No libera automáticamente la clave. La consulta de recibos es independiente y permanece deshabilitada. Un reenvío multipart puede volver a consumir tráfico y cálculo de huellas antes del reconocimiento; no es una solución de transporte.
+- **No habilitar todavía**: exige comprobar esquema real, endurecimiento de constraints, autenticación y transacciones en entorno controlado, y recuperación desde interfaz. No se ha modificado la base de producción.
 
 ## Contrato seguro
 
@@ -24,7 +33,7 @@ La ruta `POST /api/admin/roleplays/creation-receipt` acepta exclusivamente JSON 
 
 El recibo indica `NOT_FOUND`, `IN_PROGRESS`, `REVIEW_REQUIRED` o `COMPLETED`. Los completados se devuelven solo si los contadores son coherentes y todos los ID de sesión del ledger aún existen; de lo contrario requieren revisión manual. Las respuestas de todos los estados son `private, no-store` y no contienen nombres, correos, URLs de audio, tokens ni enlaces firmados. La consulta no libera `IN_PROGRESS` por antigüedad.
 
-**No activar la bandera como sustituto del backend:** el endpoint de creación todavía no genera ni completa recibos, de modo que `NOT_FOUND` hoy no demuestra que una publicación haya fallado. Hasta que se complete la integración transaccional, el procedimiento seguro ante respuesta incierta sigue siendo revisar las sesiones existentes.
+**No activar la bandera como sustituto del backend:** el piloto de creación está deshabilitado por defecto, de modo que `NOT_FOUND` hoy no demuestra que una publicación haya fallado. Hasta que se complete la integración transaccional, el procedimiento seguro ante respuesta incierta sigue siendo revisar las sesiones existentes.
 
 ## Reconciliación y rollback
 
