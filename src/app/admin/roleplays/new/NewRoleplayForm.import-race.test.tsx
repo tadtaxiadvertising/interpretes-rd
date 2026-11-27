@@ -6,6 +6,7 @@ import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import NewRoleplayForm from './NewRoleplayForm';
+import { productionStatus, trackProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { stageStudioHandoff, peekStudioHandoff, stageLocalWavHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 
 vi.mock('next/link', () => ({
@@ -54,6 +55,8 @@ describe('Admin roleplay import concurrency', () => {
     const file = new File(['x'.repeat(22)], 'roleplay-studio.zip', { type: 'application/zip' });
     const audio = new File(['ID3'], 'segment-01.mp3', { type: 'audio/mpeg' });
     stageStudioHandoff('test-transfer', file);
+    const trackedKey = '1'.repeat(64);
+    trackProductionTransfer('test-transfer', trackedKey);
     vi.mocked(extractStudioZip).mockResolvedValueOnce([audio]);
     vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce([{
       title: 'Desde Studio', baseAudioFile: audio, durationLimitSec: 120,
@@ -67,6 +70,7 @@ describe('Admin roleplay import concurrency', () => {
     expect(screen.getByText('Desde Studio')).toBeTruthy();
     expect(screen.getByText(/Paquete de Audio Studio verificado/)).toBeTruthy();
     expect(peekStudioHandoff('test-transfer')).toBeNull();
+    expect(productionStatus(trackedKey)).toBe('verified');
     expect(fetcher).not.toHaveBeenCalled();
   });
 
