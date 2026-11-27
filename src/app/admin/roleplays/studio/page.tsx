@@ -30,6 +30,7 @@ import {
   suggestStudioClips, type StudioSilence, type StudioSuggestedClip,
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
+import { emptyStudioHistory, rememberStudioEdit, stepStudioHistory, mapStudioHistory, STUDIO_HISTORY_LIMIT, type StudioHistory } from '@/lib/roleplay-studio/editorial-history';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
 import { studioProductionKey, productionStatus, trackProductionTransfer, productionReceipts, restoreProductionReceipts } from '@/lib/roleplay-studio/production-tracking';
@@ -66,6 +67,30 @@ type Segment = {
 };
 
 
+
+type EditorialSnapshot = {
+    kind: 'edición de intervención' | 'recuperación de papelera' | 'ajuste de tiempos' | 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición manual' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
+    segments: Segment[];
+    captions: Record<string, string>;
+    expandedId: string | null;
+    previousSuggestions?: {
+      silences: StudioSilence[];
+      clips: StudioSuggestedClip[];
+      omittedCount: number;
+    };
+    previousReview?: {
+      cues: TimedTranscriptCue[];
+      selected: number[];
+      page: number;
+      search: string;
+      selectedOnly: boolean;
+      alertsOnly: boolean;
+      segmentSearch: string;
+      pendingOnly: boolean;
+    };
+    excluded?: Array<{ turn: Segment; caption?: string }>;
+    confirmations?: ReadonlyMap<string, Segment>;
+};
 
 export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
@@ -163,27 +188,19 @@ export default function RoleplayStudioPage() {
   const pairPlayer = useRef<HTMLAudioElement | null>(null);
   const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
   const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
-  const [lastStructuralEdit, setLastStructuralEdit] = useState<{
-    kind: 'ajuste de tiempos' | 'división' | 'unión' | 'separación' | 'exclusión' | 'idiomas' | 'hablantes' | 'eliminación' | 'adición manual' | 'adición VAD' | 'importación de subtítulos' | 'aplicación de pausas' | 'apertura de proyecto';
-    segments: Segment[];
-    captions: Record<string, string>;
-    expandedId: string | null;
-    previousSuggestions?: {
-      silences: StudioSilence[];
-      clips: StudioSuggestedClip[];
-      omittedCount: number;
-    };
-    previousReview?: {
-      cues: TimedTranscriptCue[];
-      selected: number[];
-      page: number;
-      search: string;
-      selectedOnly: boolean;
-      alertsOnly: boolean;
-      segmentSearch: string;
-      pendingOnly: boolean;
-    };
-  } | null>(null);
+  const [history, setHistory] = useState<StudioHistory<EditorialSnapshot>>(() => emptyStudioHistory());
+  const lastStructuralEdit = history.past.at(-1) ?? null;
+  const nextStructuralEdit = history.future.at(-1) ?? null;
+  const editGroup = useRef<{ key: string; at: number } | null>(null);
+  const clearEditorialHistory = () => {
+    editGroup.current = null;
+    setHistory(emptyStudioHistory());
+  };
+  const rememberEdit = (snapshot: EditorialSnapshot) => {
+    editGroup.current = null;
+    const before = { ...snapshot, excluded: excludedTurns, confirmations: confirmedTurns };
+    setHistory(previous => rememberStudioEdit(previous, before));
+  };
   // Source identity prevents a delayed decode from updating a replacement MP3.
   const activeAudioFile = useRef<File | null>(null);
   const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
@@ -210,29 +227,29 @@ export default function RoleplayStudioPage() {
   // previous edits still exist in the one-step undo snapshot. Protect that
   // recoverable work before switching audio, navigating away or transferring
   // a HappyScribe source.
-  const hasRecoverableUndo = (edit: typeof lastStructuralEdit) =>
+  const hasRecoverableUndo = (edit: EditorialSnapshot | null) =>
     Boolean(edit && (edit.segments.length > 0 ||
-      Object.keys(edit.captions).length > 0 ||
+      Object.keys(edit.captions).length > 0 || (edit.excluded?.length ?? 0) > 0 ||
       (edit.previousReview?.cues.length ?? 0) > 0 ||
       (edit.previousSuggestions?.clips.length ?? 0) > 0 ||
       (edit.previousSuggestions?.silences.length ?? 0) > 0));
   const audioReplacementEdits = useRef({
-    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit, excludedTurns,
+    segments, reviewCues, suggestedClips, captionTexts, history, excludedTurns,
   });
   audioReplacementEdits.current = {
-    segments, reviewCues, suggestedClips, captionTexts, lastStructuralEdit, excludedTurns,
+    segments, reviewCues, suggestedClips, captionTexts, history, excludedTurns,
   };
   const replacementPrompt = 'Cambiar la grabación eliminará las intervenciones y sugerencias actuales, incluidas las ediciones recuperables con «Deshacer». Guarda antes tu proyecto si deseas conservarlas. ¿Continuar?';
   const hasReplacementWork = (edits: typeof audioReplacementEdits.current) =>
     edits.segments.length > 0 || edits.excludedTurns.length > 0 || edits.reviewCues.length > 0 ||
     edits.suggestedClips.length > 0 || Object.keys(edits.captionTexts).length > 0 ||
-    hasRecoverableUndo(edits.lastStructuralEdit);
+    [...edits.history.past, ...edits.history.future].some(hasRecoverableUndo);
   const sameEditorEdits = (snapshot: typeof audioReplacementEdits.current) => {
     const live = audioReplacementEdits.current;
     return live.segments === snapshot.segments && live.reviewCues === snapshot.reviewCues &&
       live.suggestedClips === snapshot.suggestedClips &&
       live.captionTexts === snapshot.captionTexts &&
-      live.lastStructuralEdit === snapshot.lastStructuralEdit && live.excludedTurns === snapshot.excludedTurns;
+      live.history === snapshot.history && live.excludedTurns === snapshot.excludedTurns;
   };
   // The JSON project omits the original audio and private transcript context.
   // Guard the in-memory editor even after an export: leaving can discard
@@ -243,7 +260,7 @@ export default function RoleplayStudioPage() {
   // unapplied silence suggestions are part of the portable JSON schema.
   const hasUnstoredDraftContext = reviewCues.length > 0 ||
     suggestedClips.length > 0 || Object.keys(captionTexts).length > 0 ||
-    hasRecoverableUndo(lastStructuralEdit) || excludedTurns.length > 0;
+    [...history.past, ...history.future].some(hasRecoverableUndo) || excludedTurns.length > 0;
   const leaveEditorPrompt = 'Salir de Audio Studio descartará los cortes y las selecciones de esta pestaña. Comprueba que guardaste tu proyecto y conservas el audio original. ¿Continuar?';
   useEffect(() => {
     if (!hasActiveEditorWork) return;
@@ -478,25 +495,39 @@ export default function RoleplayStudioPage() {
     });
   };
 
-  const undoLastStructuralEdit = () => {
-    if (!lastStructuralEdit) return;
+  const applyEditorialHistory = (direction: 'undo' | 'redo') => {
+    const snapshot = direction === 'undo' ? lastStructuralEdit : nextStructuralEdit;
+    if (!snapshot || busy || draftBusy || analyzingSilences || happyScribeImporting || happyScribeMediaImporting) return;
+    editGroup.current = null;
+    const current: EditorialSnapshot = {
+      kind: snapshot.kind, segments, captions: captionTexts, expandedId: expandedSegmentId,
+      excluded: excludedTurns, confirmations: confirmedTurns,
+      ...(snapshot.previousSuggestions && serverConsent ? { previousSuggestions: { silences: detectedSilences, clips: suggestedClips, omittedCount: omittedSuggestions } } : {}),
+      ...(snapshot.previousReview ? { previousReview: { cues: reviewCues, selected: chosenCueIndices, page: cuePage, search: cueSearch,
+        selectedOnly: showOnlySelectedCues, alertsOnly: showCueReviewAlertsOnly, segmentSearch, pendingOnly: showPendingReview } } : {}),
+    };
+    setHistory(previous => stepStudioHistory(previous, current, direction));
     stopPreview();
     stopPairPreview();
     subtitleImportRevision.current += 1;
-    setSegments(lastStructuralEdit.segments);
-    const restoredIds = new Set(lastStructuralEdit.segments.map(turn => turn.id));
-    setExcludedTurns(previous => previous.filter(entry => !restoredIds.has(entry.turn.id)));
-    setCaptionTexts(lastStructuralEdit.captions);
-    setExpandedSegmentId(lastStructuralEdit.expandedId);
+    setSegments(snapshot.segments);
+    const restoredIds = new Set(snapshot.segments.map(turn => turn.id));
+    setExcludedTurns(snapshot.excluded ?? excludedTurns.filter(entry => !restoredIds.has(entry.turn.id)));
+    if (snapshot.confirmations) setConfirmedTurns(snapshot.confirmations);
+    if (snapshot.segments.length > ROLEPLAY_MAX_SCENARIOS) setExpandedEditor(true);
+    setAdvancedTurnId(null);
+    setAssignmentPackage(null);
+    setCaptionTexts(snapshot.captions);
+    setExpandedSegmentId(snapshot.expandedId);
     // Revoking consent clears server-derived pause metadata; undo must not
     // silently restore those suggestions after the administrator opted out.
-    if (lastStructuralEdit.previousSuggestions && serverConsent) {
-      setDetectedSilences(lastStructuralEdit.previousSuggestions.silences);
-      setSuggestedClips(lastStructuralEdit.previousSuggestions.clips);
-      setOmittedSuggestions(lastStructuralEdit.previousSuggestions.omittedCount);
+    if (snapshot.previousSuggestions && serverConsent) {
+      setDetectedSilences(snapshot.previousSuggestions.silences);
+      setSuggestedClips(snapshot.previousSuggestions.clips);
+      setOmittedSuggestions(snapshot.previousSuggestions.omittedCount);
     }
-    if (lastStructuralEdit.previousReview) {
-      const review = lastStructuralEdit.previousReview;
+    if (snapshot.previousReview) {
+      const review = snapshot.previousReview;
       setReviewCues(review.cues);
       setChosenCueIndices(review.selected);
       setCuePage(review.page);
@@ -506,27 +537,28 @@ export default function RoleplayStudioPage() {
       setSegmentSearch(review.segmentSearch);
       setShowPendingReview(review.pendingOnly);
     }
-    setNotice(lastStructuralEdit.kind === 'idiomas'
+    setNotice(direction === 'redo' ? `Rehecha: ${snapshot.kind}. Revisa los cortes antes de exportar.` : snapshot.kind === 'idiomas'
       ? 'Asignación masiva de idiomas deshecha. Revisa los idiomas pendientes.'
-      : lastStructuralEdit.kind === 'hablantes'
+      : snapshot.kind === 'hablantes'
         ? 'Asignación masiva de hablantes deshecha. Revisa los perfiles pendientes.'
-      : lastStructuralEdit.kind === 'eliminación'
+      : snapshot.kind === 'eliminación'
         ? 'Intervención recuperada con sus ajustes y referencia privada de transcripción.'
-        : lastStructuralEdit.kind === 'adición VAD'
+        : snapshot.kind === 'adición VAD'
           ? 'Cortes VAD retirados. Las intervenciones y referencias anteriores se conservaron.'
-        : lastStructuralEdit.kind === 'adición manual'
+        : snapshot.kind === 'adición manual'
           ? 'Último fragmento añadido deshecho. Se recuperaron los cortes y referencias anteriores.'
-        : lastStructuralEdit.kind === 'importación de subtítulos'
+        : snapshot.kind === 'importación de subtítulos'
           ? 'Importación de subtítulos deshecha. Se restauraron las intervenciones, referencias privadas y sugerencias anteriores.'
-        : lastStructuralEdit.kind === 'aplicación de pausas'
+        : snapshot.kind === 'aplicación de pausas'
           ? 'Cortes sugeridos deshechos. Recuperaste las intervenciones, referencias y selección de subtítulos anteriores.'
-        : lastStructuralEdit.kind === 'apertura de proyecto'
+        : snapshot.kind === 'apertura de proyecto'
           ? 'Apertura del proyecto deshecha. Se restauraron las intervenciones, referencias privadas y revisión anteriores.'
-        : `Deshecha la última ${lastStructuralEdit.kind}. Revisa los cortes antes de exportar.`);
+        : `Deshecha la última ${snapshot.kind}. Revisa los cortes antes de exportar.`);
     setError('');
     setTurnActionFeedback(null);
-    setLastStructuralEdit(null);
   };
+  const undoLastStructuralEdit = () => applyEditorialHistory('undo');
+  const redoLastStructuralEdit = () => applyEditorialHistory('redo');
 
   useEffect(() => () => { if (url) URL.revokeObjectURL(url); }, [url]);
   useEffect(() => () => {
@@ -573,7 +605,7 @@ export default function RoleplayStudioPage() {
       approved?.edits.reviewCues === editsNow.reviewCues &&
       approved?.edits.suggestedClips === editsNow.suggestedClips &&
       approved?.edits.captionTexts === editsNow.captionTexts &&
-      approved?.edits.lastStructuralEdit === editsNow.lastStructuralEdit && approved?.edits.excludedTurns === editsNow.excludedTurns;
+      approved?.edits.history === editsNow.history && approved?.edits.excludedTurns === editsNow.excludedTurns;
     if (activeAudioFile.current && hasReplacementWork(editsNow) &&
         !approvedStillValid && !window.confirm(replacementPrompt)) {
       return;
@@ -634,7 +666,7 @@ export default function RoleplayStudioPage() {
     setShowPendingReview(false);
     setExpandedSegmentId(null);
     setTurnActionFeedback(null);
-    setLastStructuralEdit(null);
+    clearEditorialHistory();
     setDuration(0);
     setPlayhead(0);
     setDraftBusy(false);
@@ -674,7 +706,7 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     // One accepted SRT/VTT import is a reversible editorial operation.
     // Keep private reference text in memory only; no source audio is copied.
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'importación de subtítulos', segments: [...segments],
       captions: { ...captionTexts }, expandedId: expandedSegmentId,
       previousSuggestions: {
@@ -891,7 +923,7 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     // A confirmed replacement from server-derived pauses must be just as
     // reversible as an SRT import. Keep only editorial metadata in memory.
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'aplicación de pausas',
       segments: [...segments],
       captions: { ...captionTexts },
@@ -1071,7 +1103,7 @@ export default function RoleplayStudioPage() {
     }
     subtitleImportRevision.current += 1;
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'división',
       segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1141,7 +1173,7 @@ export default function RoleplayStudioPage() {
     // explicit server choice now so separating or undoing this merge never
     // silently restores an upload path.
     if (compound) setAllowServerZipExport(false);
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'unión',
       segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1180,7 +1212,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'separación',
       segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1207,7 +1239,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'exclusión',
       segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1233,7 +1265,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'idiomas', segments: [...segments],
       captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1267,7 +1299,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'idiomas', segments: [...segments],
       captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1303,7 +1335,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'hablantes', segments: [...segments],
       captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1334,7 +1366,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'hablantes', segments: [...segments],
       captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1361,7 +1393,7 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     // Creating a cut manually should be as reversible as adding a VAD batch.
     // Preserve the previous private editor metadata, never the source media.
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'adición manual',
       segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
     });
@@ -1385,7 +1417,14 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'Separa los dos cortes antes de modificar sus límites.', true);
       return;
     }
-    setLastStructuralEdit(null);
+    const current = segments.find(segment => segment.id === id);
+    if (!current || Object.entries(patch).every(([key,value]) => current[key as keyof Segment] === value)) return;
+    const groupKey = id + ':' + Object.keys(patch).sort().join(',');
+    const at = Date.now();
+    if (!editGroup.current || editGroup.current.key !== groupKey || at - editGroup.current.at > 750) {
+      rememberEdit({ kind: 'edición de intervención', segments, captions: captionTexts, expandedId: expandedSegmentId });
+    }
+    editGroup.current = { key: groupKey, at };
     if (previewingId?.startsWith('boundary-proposal:')) stopPreview();
     stopPairPreview();
     setTurnActionFeedback(null);
@@ -1541,7 +1580,7 @@ export default function RoleplayStudioPage() {
       stopPairPreview();
       // Confirmed, source-verified JSON recovery can still be mistaken.
       // Make it a single reversible local edit without embedding audio in undo.
-      setLastStructuralEdit({
+      rememberEdit({
         kind: 'apertura de proyecto',
         segments: [...segments], captions: { ...captionTexts }, expandedId: expandedSegmentId,
         previousSuggestions: {
@@ -2175,7 +2214,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'ajuste de tiempos', segments: [...segments],
       captions: { ...captionTexts }, expandedId: current.id,
     });
@@ -2188,6 +2227,7 @@ export default function RoleplayStudioPage() {
   const canConfirmFocused = Boolean(focusedTurn && !focusedReviewIssue && !busy && !draftBusy && !analyzingSilences);
   const confirmAndAdvance = () => {
     if (!focusedTurn || !canConfirmFocused) return;
+    editGroup.current = null;
     const current = focusedTurn.segment;
     const confirmed = new Set(confirmedIds);
     confirmed.add(current.id);
@@ -2221,12 +2261,12 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
+    rememberEdit({ kind: 'recuperación de papelera', segments, captions: captionTexts, expandedId: expandedSegmentId });
     const restored = { ...entry.turn };
     setSegments(previous => [...previous, restored]);
     if (entry.caption) setCaptionTexts(previous => ({ ...previous, [id]: entry.caption! }));
     setExcludedTurns(previous => previous.filter(item => item.turn.id !== id));
     setConfirmedTurns(previous => { const next = new Map(previous); next.delete(id); return next; });
-    setLastStructuralEdit(null);
     setSegmentSearch('');
     setShowPendingReview(false);
     setFocusMode(true);
@@ -2236,10 +2276,10 @@ export default function RoleplayStudioPage() {
     setNotice('Intervención recuperada. Revisa el corte antes de confirmar.');
   };
   const discardExcluded = (id: string) => {
-    if (!window.confirm('¿Eliminar definitivamente este corte de la papelera? La grabación original permanece intacta.')) return;
+    if (!window.confirm('¿Eliminar definitivamente este corte de la papelera? También se limpiará el historial de deshacer y rehacer. La grabación original permanece intacta.')) return;
     subtitleImportRevision.current += 1;
     setExcludedTurns(previous => previous.filter(item => item.turn.id !== id));
-    setLastStructuralEdit(null);
+    clearEditorialHistory();
     setError('');
     setNotice('Corte retirado de la papelera.');
   };
@@ -2249,7 +2289,7 @@ export default function RoleplayStudioPage() {
     subtitleImportRevision.current += 1;
     stopPreview();
     stopPairPreview();
-    setLastStructuralEdit({
+    rememberEdit({
       kind: 'eliminación', segments: [...segments],
       captions: { ...captionTexts }, expandedId: advance ? id : expandedSegmentId,
     });
@@ -2396,7 +2436,7 @@ export default function RoleplayStudioPage() {
         setDetectedSilences([]);
         setOmittedSuggestions(0);
         setLocalVadSnapshot(null);
-        setLastStructuralEdit(null);
+        clearEditorialHistory();
         setTurnActionFeedback(null);
         setSegmentSearch('');
         setShowPendingReview(false);
@@ -2493,6 +2533,11 @@ export default function RoleplayStudioPage() {
       onKeyDown={event => {
         if (!focusMode || (workspaceActive && workspaceTab !== 'edit') || event.defaultPrevented || event.repeat || event.nativeEvent.isComposing ||
             !(event.target instanceof HTMLElement) || event.target.closest('input, textarea, select, [contenteditable="true"]')) return;
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
+          const redo = event.shiftKey || event.key.toLowerCase() === 'y';
+          if (redo ? nextStructuralEdit : lastStructuralEdit) { event.preventDefault(); applyEditorialHistory(redo ? 'redo' : 'undo'); }
+          return;
+        }
         if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && canConfirmFocused) {
           event.preventDefault();
           confirmAndAdvance();
@@ -2819,7 +2864,7 @@ export default function RoleplayStudioPage() {
                   subtitleImportRevision.current += 1;
                   stopPairPreview();
                   // One batch is a single reversible edit; no audio is persisted.
-                  setLastStructuralEdit({
+                  rememberEdit({
                     kind: 'adición VAD', segments: [...segments],
                     captions: { ...captionTexts }, expandedId: expandedSegmentId,
                   });
@@ -2855,9 +2900,8 @@ export default function RoleplayStudioPage() {
                     if (!allowed) {
                       // Revocation also releases server-derived pause metadata
                       // held in a one-step undo snapshot; keep the older cuts.
-                      setLastStructuralEdit(previous => previous?.previousSuggestions
-                        ? { ...previous, previousSuggestions: undefined }
-                        : previous);
+                      setHistory(previous => mapStudioHistory(previous, snapshot => snapshot.previousSuggestions
+                         ? { ...snapshot, previousSuggestions: undefined } : snapshot));
                       silenceRevision.current += 1;
                       silenceAbort.current?.abort();
                       silenceAbort.current = null;
@@ -3200,7 +3244,7 @@ export default function RoleplayStudioPage() {
                 </button>
               )}
               {lastStructuralEdit && (
-                <button type="button" onClick={undoLastStructuralEdit}
+                <button type="button" onClick={undoLastStructuralEdit} disabled={busy || draftBusy || analyzingSilences}
                   aria-label={lastStructuralEdit.kind === 'exclusión'
                     ? 'Deshacer exclusión de intérpretes'
                     : lastStructuralEdit.kind === 'idiomas'
@@ -3221,11 +3265,17 @@ export default function RoleplayStudioPage() {
                                 ? 'Deshacer apertura de proyecto JSON'
                                 : lastStructuralEdit.kind === 'ajuste de tiempos'
                                   ? 'Deshacer ajuste de tiempos'
-                                  : 'Deshacer última división o unión'}
+                                  : lastStructuralEdit.kind === 'edición de intervención' ? 'Deshacer edición de intervención'
+                                   : lastStructuralEdit.kind === 'recuperación de papelera' ? 'Deshacer recuperación de papelera'
+                                   : 'Deshacer última división o unión'}
                   className="rounded-lg border border-amber-400/30 px-3 py-1.5 text-xs font-semibold text-[var(--theme-warning)] hover:bg-amber-400/10">
                   Deshacer {lastStructuralEdit.kind}
                 </button>
               )}
+              {nextStructuralEdit && <button type="button" onClick={redoLastStructuralEdit}
+                disabled={busy || draftBusy || analyzingSilences} aria-label="Rehacer último cambio"
+                className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-50">Rehacer {nextStructuralEdit.kind}</button>}
+              {(history.past.length > 0 || history.future.length > 0) && <span className="text-xs text-[var(--text-secondary)]" title="Ctrl/Cmd+Z · Ctrl/Cmd+Shift+Z fuera de campos de texto">Historial: {history.past.length}/{STUDIO_HISTORY_LIMIT} · {history.future.length} para rehacer</span>}
               {!expandedEditor && <button type="button" onClick={() => { setExpandedEditor(true); setFocusMode(true); }}
                 className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold">Ampliar editor a {STUDIO_MAX_EDITOR_SEGMENTS}</button>}
               {expandedEditor && <span className="text-xs text-[var(--text-secondary)]">Edición ampliada · publicación: {ROLEPLAY_MAX_SCENARIOS}</span>}
