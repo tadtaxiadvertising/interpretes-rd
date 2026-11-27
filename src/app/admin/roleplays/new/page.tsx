@@ -42,9 +42,9 @@ async function getCandidates(candidateId?: number) {
 export default async function NewRoleplayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ candidateId?: string; sourceSessionId?: string }>;
+  searchParams: Promise<{ candidateId?: string; sourceSessionId?: string; studioTransfer?: string }>;
 }) {
-  const { candidateId, sourceSessionId } = await searchParams;
+  const { candidateId, sourceSessionId, studioTransfer } = await searchParams;
   const storageUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
   const parsedCandidateId = candidateId && /^\d+$/.test(candidateId) ? Number(candidateId) : undefined;
   const [interpreters, candidates] = await Promise.all([
@@ -124,6 +124,7 @@ export default async function NewRoleplayPage({
         ) : (
           <NewRoleplayForm interpreters={interpreters} candidates={candidates}
             initialCandidateId={initialCandidateId} librarySource={librarySource}
+            studioTransfer={!sourceSessionId && typeof studioTransfer === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(studioTransfer) ? studioTransfer : undefined}
             openingAssignmentEnabled={openingAssignmentEnabled()}
             directUploadEnabled={openingAssignmentEnabled() && [
               'ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED',
