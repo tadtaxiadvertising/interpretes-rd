@@ -50,12 +50,16 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
       fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
+      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Excluir y avanzar' }));
+      expect(screen.getByRole('button', { name: 'Papelera editorial (1)' })).toBeTruthy();
       expect(localStorage.getItem(STUDIO_RECOVERY_KEY)).toBeNull();
       await act(async () => {
         fireEvent.click(screen.getByRole('button', { name: 'Activar guardado local' }));
       });
       await waitFor(() => expect(localStorage.getItem(STUDIO_RECOVERY_KEY)).not.toBeNull(), { timeout: 2000 });
       expect(JSON.parse(localStorage.getItem(STUDIO_RECOVERY_KEY)!).confirmed).toEqual([0]);
+      expect(JSON.parse(localStorage.getItem(STUDIO_RECOVERY_KEY)!).excluded.segments).toHaveLength(1);
       cleanup();
       selectAudio();
       fingerprint.mockResolvedValue('cd'.repeat(32));
@@ -65,6 +69,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       fingerprint.mockResolvedValue('ab'.repeat(32));
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Recuperar respaldo local' })); });
       expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/1');
+      expect(screen.getByRole('button', { name: 'Papelera editorial (1)' })).toBeTruthy();
       expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
       expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
       vi.spyOn(window, 'confirm').mockReturnValue(true);
