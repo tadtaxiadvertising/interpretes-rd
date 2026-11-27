@@ -184,3 +184,18 @@ test('creation ledger operator inspection is read-only and never runs in product
   const workflow = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
   assert.doesNotMatch(workflow, /inspect-roleplay-creation-ledger\.ts/);
 });
+
+
+test('real Prisma creation lifecycle uses only the guarded disposable database', () => {
+  const verifier = readFileSync(resolve(root, 'scripts/verify-roleplay-creation-ledger-postgres.ts'), 'utf8');
+  const lifecycle = readFileSync(resolve(root, 'scripts/roleplay-creation-prisma-pilot.ts'), 'utf8');
+  assert.match(verifier, /new PrismaPg\(\{ connectionString: url\.toString\(\)/);
+  assert.ok(verifier.indexOf('url.pathname = \'/\' + name') < verifier.indexOf('new PrismaPg('));
+  assert.ok(verifier.indexOf('created = true') < verifier.indexOf('new PrismaPg('));
+  assert.match(verifier, /verifyPrismaCreationLifecycle\(prismaFirst, prismaSecond\)/);
+  assert.ok(verifier.indexOf('client.$disconnect()') < verifier.indexOf('DROP DATABASE'));
+  assert.match(lifecycle, /completeRoleplayCreationInTransaction\(tx,/);
+  assert.match(lifecycle, /Promise\.allSettled/);
+  assert.match(lifecycle, /recoverSingleRoleplayCreation/);
+  assert.doesNotMatch(lifecycle, /process\.env|new PrismaClient|@\/lib\/prisma|supabaseAdmin|createClient\(/);
+});
