@@ -221,7 +221,7 @@ export default function StudioWaveform({
   };
 
   return (
-    <div className="rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-4" data-testid="audio-studio-waveform">
+    <div className="min-w-0 rounded-xl border border-[var(--border)] bg-[var(--theme-panel)] p-3 sm:p-4" data-testid="audio-studio-waveform">
       <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-[var(--foreground)]">Línea de tiempo del audio</p>
         <p className="text-xs text-[var(--text-secondary)]">
@@ -231,13 +231,13 @@ export default function StudioWaveform({
         </p>
       </div>
       <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-2 text-[var(--text-secondary)]">
+        <label className="flex w-full min-w-0 items-center gap-2 text-[var(--text-secondary)] sm:w-auto">
           Detalle
           <select
             aria-label="Zoom de la línea de tiempo"
             value={zoom}
             onChange={event => centerOnPlayhead(Number(event.currentTarget.value))}
-            className="rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-[var(--theme-control-text)]"
+            className="min-h-11 min-w-0 flex-1 rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-[var(--theme-control-text)] sm:min-h-0"
           >
 {availableZoomLevels.map(level => (
               <option key={level} value={level}>
@@ -247,28 +247,28 @@ export default function StudioWaveform({
           </select>
         </label>
         <button type="button" onClick={() => pan(-1)} disabled={zoom === 1 || windowStart <= 0}
-          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] disabled:opacity-40">
+          className="min-h-11 min-w-11 rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] sm:min-h-0 sm:min-w-0 disabled:opacity-40">
           Anterior
         </button>
         <button type="button" onClick={() => pan(1)} disabled={zoom === 1 || windowStart >= maxStart}
-          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] disabled:opacity-40">
+          className="min-h-11 min-w-11 rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] sm:min-h-0 sm:min-w-0 disabled:opacity-40">
           Siguiente
         </button>
         <button type="button" onClick={() => centerOnPlayhead(zoom)} disabled={zoom === 1}
-          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] disabled:opacity-40">
+          className="min-h-11 min-w-11 rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] sm:min-h-0 sm:min-w-0 disabled:opacity-40">
           Ir al cursor
         </button>
         <button type="button" onClick={() => onSeek(Math.max(0, safeTime - 5))}
           aria-label="Retroceder cinco segundos"
-          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)]">
+          className="min-h-11 min-w-11 rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] sm:min-h-0 sm:min-w-0">
           −5 s
         </button>
         <button type="button" onClick={() => onSeek(Math.min(safeDuration, safeTime + 5))}
           aria-label="Avanzar cinco segundos"
-          className="rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)]">
+          className="min-h-11 min-w-11 rounded-md border border-[var(--border)] px-2 py-1.5 text-[var(--foreground)] sm:min-h-0 sm:min-w-0">
           +5 s
         </button>
-        <span className="text-[var(--text-secondary)]">Ventana: {timeLabel(windowStart)}–{timeLabel(windowEnd)}</span>
+        <span className="basis-full text-[var(--text-secondary)] sm:basis-auto">Ventana: {timeLabel(windowStart)}–{timeLabel(windowEnd)}</span>
       </div>
       <svg
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
@@ -303,7 +303,7 @@ export default function StudioWaveform({
           const value = event.currentTarget.valueAsNumber;
           if (Number.isFinite(value)) onSeek(Math.min(safeDuration, Math.max(0, value)));
         }}
-        className="mt-2 w-full cursor-pointer accent-[var(--theme-link)]"
+        className="mt-2 h-11 w-full cursor-pointer accent-[var(--theme-link)] sm:h-auto"
       />
       <div className="flex items-center justify-between text-xs text-[var(--text-secondary)]">
         <span aria-label="Tiempo exacto del cursor">{preciseTimeLabel(safeTime)}</span>
