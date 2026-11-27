@@ -9,6 +9,7 @@ import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/li
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-preflight';
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
+import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
@@ -96,6 +97,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importedTransfer, setImportedTransfer] = useState<string | null>(null);
+  const trackedImportRevision = useRef<number | null>(null);
   const [validationFocus, setValidationFocus] = useState<{
     scenarioId: string; field: 'title' | 'audio'; requestId: number;
   } | null>(null);
@@ -364,7 +366,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             (current.sourceEndSec ?? null) === (incoming.sourceEndSec ?? null);
         });
       if (identicalPackage) {
-        if (transferToken) { clearStudioHandoff(transferToken); setImportedTransfer(transferToken); }
+        if (transferToken) { clearStudioHandoff(transferToken); setImportedTransfer(transferToken); trackedImportRevision.current = revision; advanceProductionTransfer(transferToken, 'verified'); }
         setImportNotice('Este paquete ya está importado y no tiene cambios. Conservamos los escenarios existentes.');
         return;
       }
@@ -397,6 +399,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       if (transferToken) {
         clearStudioHandoff(transferToken);
         setImportedTransfer(transferToken);
+        trackedImportRevision.current = revision;
+        advanceProductionTransfer(transferToken, 'verified');
         setImportNotice('Paquete de Audio Studio verificado. Selecciona el destinatario y revisa los escenarios antes de crear.');
       }
     } catch (cause) {
@@ -486,6 +490,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
   const handleCreate = async () => {
     if (createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    const trackedToken = importedTransfer && trackedImportRevision.current === importRevision.current ? importedTransfer : null;
     if (directAttempt.current || useDirectUpload) {
       createPending.current = true;
       setIsCreating(true);
@@ -507,7 +512,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         }
         const controller=new AbortController();
         directAbort.current=controller;
+        if (trackedToken) advanceProductionTransfer(trackedToken, 'unconfirmed');
         const result=await directAttempt.current.run({signal:controller.signal,onProgress:setDirectProgress});
+        if (trackedToken) advanceProductionTransfer(trackedToken, 'created');
         setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete'});
       } catch {
         setError(directAttempt.current
@@ -566,6 +573,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const unknownResultMessage = 'No se pudo confirmar el resultado de la creación.';
       let res: Response;
       try {
+        if (trackedToken) advanceProductionTransfer(trackedToken, 'unconfirmed');
         res = await fetch('/api/admin/roleplays', {
           method: 'POST',
           body: formData,
@@ -635,6 +643,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
+      if (trackedToken) advanceProductionTransfer(trackedToken, 'created');
       if (payload.bulk) {
         setSuccess({
           link: `${window.location.origin}/admin/roleplays`,
@@ -685,6 +694,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           >
             Copiar enlace
           </button>
+          {importedTransfer && <Link href="/admin/roleplays/studio" className="px-6 py-3 theme-action-secondary rounded-xl font-bold">Volver a Audio Studio</Link>}
           <Link 
             href="/admin/roleplays"
             className="px-6 py-3 bg-[var(--theme-surface-muted)] hover:bg-[var(--theme-hover)] text-[var(--foreground)] rounded-xl font-bold transition-colors"
