@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
 import Link from 'next/link';
 import { readAudioStudioEditorPreferences } from '@/app/actions/audio-studio-settings';
-import { ArrowLeft, AudioLines, Download, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, AudioLines, Plus, Trash2 } from 'lucide-react';
 import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import {
   parseTimedTranscriptForReviewWithDiagnostics, toPublishableStudioSegments,
@@ -32,6 +32,7 @@ import {
 } from '@/lib/roleplay-studio/silence-analysis';
 import StudioWaveform from './StudioWaveform';
 import HappyScribeLibraryPanel from './HappyScribeLibraryPanel';
+import StudioFinalizationPanel from './StudioFinalizationPanel';
 import { emptyStudioHistory, rememberStudioEdit, stepStudioHistory, mapStudioHistory, STUDIO_HISTORY_LIMIT, type StudioHistory } from '@/lib/roleplay-studio/editorial-history';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
@@ -3845,160 +3846,35 @@ export default function RoleplayStudioPage() {
           )}
           {!workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {!workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
-          <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
-          {segments.length > ROLEPLAY_MAX_SCENARIOS && <div role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--theme-warning)]">
-            Este proyecto supera el máximo publicable de {ROLEPLAY_MAX_SCENARIOS} intervenciones. Puedes preparar partes independientes sin borrar intervenciones.
-            <button type="button" disabled={busy || draftBusy} onClick={() => void saveDraft()} className="ml-2 rounded-lg theme-action-secondary px-3 py-2">Guardar borrador ampliado</button>
-          </div>}
-          {segments.length > 0 && (expandedEditor || publicationPlan.parts.length > 1) && (
-            <div className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
-              <h4 className="text-sm font-semibold text-[var(--foreground)]">Preparar roleplays por partes</h4>
-              <p className="text-xs text-[var(--text-secondary)]">Se proponen partes cronológicas de hasta {ROLEPLAY_MAX_SCENARIOS} intervenciones y 15 minutos de audio cada una. {currentWavPlan && !currentWavPlan.issue ? 'Para WAV también se aplica el máximo de 16 MiB por transferencia, incluido el manifiesto.' : 'Descarga solo la parte elegida, en formato local compatible.'} El proyecto completo no se modifica.</p>
-              {publicationPlan.issue ? <p role="alert" className="text-xs text-[var(--theme-warning)]">{publicationPlan.issue}</p> : <>
-                <label className="block text-sm text-[var(--foreground)]">Parte del roleplay
-                  <select value={selectedPublicationPart?.key ?? ''} disabled={busy || draftBusy || analyzingSilences}
-                    onChange={event => setPublicationPartKey(event.currentTarget.value)}
-                    className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
-                    <option value="">Selecciona una parte ({publicationPlan.parts.length} disponibles)</option>
-                    {publicationPlan.parts.map(part => {
-                      const wavPart = currentWavPlan?.parts.find(item => item.key === part.key);
-                      return <option key={part.key} value={part.key}>Parte {part.number} · intervenciones {part.first}–{part.last} · {formatTime(part.seconds)}{wavPart ? ' · ' + (wavPart.bytes/(1024*1024)).toFixed(2) + ' MiB' : ''}</option>;
-                    })}
-                  </select>
-                </label>
-                <button type="button" disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}
-                  onClick={() => { if (selectedPublicationPart) void exportPackage(selectedPublicationPart); }}
-                  className="rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Descargar parte seleccionada (JSON local)</button>
-              </>}
-            </div>
-          )}
-          <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos. Prepara los cortes y continúa a asignación, o guarda un paquete para utilizarlo después.</p>
-            {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
-              <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
-                <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar los cortes</legend>
-                <label className="flex items-start gap-2 text-sm text-[var(--theme-info)]">
-                  <input type="radio" name="studio-export-location"
-                    checked={!allowServerZipExport}
-                    onChange={() => {
-                      subtitleImportRevision.current += 1;
-                      draftOperationRevision.current += 1;
-                      exportRevision.current += 1;
-                      exportAbort.current?.abort();
-                      exportAbort.current = null;
-                      setBusy(false);
-                      setDraftBusy(false);
-                      setAllowServerZipExport(false);
-                      setError('');
-                      setNotice('Modo local: prepara los cortes en el navegador si el formato es compatible o guarda el JSON para usar el exportador de escritorio.');
-                    }}
-                    className="mt-1 accent-cyan-400"/>
-                  Local (predeterminado): no subir el MP3. Prepara cortes compatibles en el navegador o usa el exportador de escritorio.
-                </label>
-                <label className="mt-2 flex items-start gap-2 text-sm text-[var(--foreground)]">
-                  <input type="radio" name="studio-export-location"
-                    checked={allowServerZipExport}
-                    onChange={() => {
-                      subtitleImportRevision.current += 1;
-                      draftOperationRevision.current += 1;
-                      exportRevision.current += 1;
-                      exportAbort.current?.abort();
-                      exportAbort.current = null;
-                      setBusy(false);
-                      setDraftBusy(false);
-                      setAllowServerZipExport(true);
-                      setError('');
-                      setNotice('Modo servidor seleccionado: al exportar, el MP3 se enviará para generar el ZIP.');
-                    }}
-                    className="mt-1 accent-blue-400"/>
-                  Servidor (opcional): el MP3 se subirá al exportar y consumirá recursos de la plataforma.
-                </label>
-              </fieldset>
-            )}
-            {localOnly && duration > 0 && (
-              <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-[var(--theme-info)]">
-                {hasCompound && (
-                  <p className="mb-2 font-semibold text-[var(--theme-warning)]">
-                    Proyecto compuesto v2: la exportación local se ha activado automáticamente.
-                    Usa un exportador actualizado para que el MP3 omita las pausas; la grabación no se envía al servidor.
-                  </p>
-                )}
-                <strong>Preparación local:</strong> la grabación no se sube al servidor.
-                Puedes revisar, marcar y guardar los cortes sin decodificar el archivo completo.
-                {wavSource || localMp3Eligible ? ' Puedes preparar cortes compatibles directamente en este navegador y continuar a asignación sin ZIP.' : ' Para este formato o duración, utiliza el exportador de escritorio.'}
-                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
-                  <summary className="cursor-pointer font-semibold">Alternativa: guardar JSON y usar el exportador de escritorio</summary>
-                  <p className="mt-2">El JSON no contiene audio ni video. Paso 1: guarda el proyecto JSON. Paso 2: genera el ZIP junto a la grabación original. Paso 3: importa el ZIP desde «Crear roleplay».</p>
-                <a
-                  href="https://github.com/tadtaxiadvertising/interpretes-rd/blob/main/tools/roleplay-studio-desktop/README.md"
-                  target="_blank" rel="noopener noreferrer"
-                  className="mt-1 inline-block font-semibold text-[var(--theme-info)] underline underline-offset-2">
-                  Cómo obtener el exportador local actualizado
-                </a>
-                <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
-                  <summary className="cursor-pointer font-semibold">Cómo generar el ZIP sin subir el original</summary>
-                  <p className="mt-2">
-                    Opción con interfaz gráfica: cuando el mantenedor haya generado y verificado
-                    la aplicación de escritorio, ábrela y pulsa «Elegir grabación + JSON».
-                    Selecciona ambos archivos una vez: se propondrá un nombre ZIP disponible.
-                    Pulsa «Generar ZIP local»; no requiere comandos ni subir la grabación.
-                  </p>
-                  <details className="mt-2 rounded border border-cyan-300/15 px-2 py-1">
-                    <summary className="cursor-pointer">Alternativa técnica con Node.js</summary>
-                    <p className="mt-1">En un equipo con el repositorio instalado, ejecuta:</p>
-                    <code className="mt-1 block break-all rounded bg-[var(--theme-surface-muted)] p-2 text-[11px] text-[var(--foreground)]">
-                      node scripts/export-studio-long-local.mjs --source llamada.mp4 --project roleplay-studio-proyecto-largo.json --output roleplay-studio.zip
-                    </code>
-                  </details>
-                </details>
-                </details>
-              </div>
-            )}
-          {(!localOnly || wavSource || localMp3Eligible) && (
-            <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
-              <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
-              <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM de 16 bits compatible o MP3 corto convertido localmente: se preparan los cortes sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
-              {convertedMp3 && convertedMp3.original === audio && (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
-                  <span>Copia WAV temporal: {(convertedMp3.wav.size/(1024*1024)).toFixed(2)} MiB. Se conserva para preparar otras partes sin reconvertir.</span>
-                  <button type="button" onClick={releaseLocalMp3} disabled={busy || draftBusy || analyzingSilences}
-                    className="rounded-lg theme-action-secondary px-3 py-2 font-semibold disabled:opacity-50">Liberar copia WAV temporal</button>
-                </div>
-              )}
-              {wavSource && segments.length > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
-              {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
-              {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
-              {activeProductionKeys && activeProductionKeys.size > 0 && (
-                <section aria-label="Seguimiento de producción" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
-                  <h4 className="text-sm font-semibold text-[var(--foreground)]">Seguimiento de producción</h4>
-                  <p className="text-xs text-[var(--text-secondary)]">Registro orientativo. Una creación confirmada significa al menos una asignación, no que todos los destinatarios la hayan recibido. Con respaldo local activo se conservan los intentos y creaciones confirmadas; los archivos preparados no sobreviven a una recarga. Consulta las sesiones existentes antes de repetir.</p>
-                  <ul className="max-h-40 space-y-1 overflow-y-auto text-xs">
-                    {publicationPlan.parts.filter(part => activeProductionKeys.has(part.key)).map(part => {
-                      const status = productionStatus(activeProductionKeys.get(part.key)!);
-                      const prepared = Boolean(readyAssignment && (readyAssignment.partKey === part.key || (!readyAssignment.partKey && publicationPlan.parts.length === 1)));
-                      const label = status === 'created' ? 'Creación confirmada' : status === 'unconfirmed' ? 'Intento sin confirmar' :
-                        prepared ? 'Preparado' : status === 'verified' ? 'Importado y verificado' : status === 'transferred' ? 'Transferido' : 'Pendiente';
-                      return <li key={part.key} className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--border)] p-2">
-                        <span>Parte {part.number} · {part.first}–{part.last}</span>
-                        <span className={status === 'created' ? 'text-[var(--theme-success)]' : status === 'unconfirmed' ? 'text-[var(--theme-warning)]' : 'text-[var(--text-secondary)]'}>{label}</span>
-                        {localOnly && publicationPlan.parts.length > 1 && <button type="button" disabled={busy || draftBusy || analyzingSilences}
-                          className="theme-action-secondary rounded px-2 py-1 disabled:opacity-50" onClick={() => setPublicationPartKey(part.key)}>Seleccionar parte {part.number}</button>}
-                      </li>;
-                    })}
-                  </ul>
-                  {localOnly && publicationPlan.parts.length > 1 && (() => {
-                    const next = publicationPlan.parts.find(part => activeProductionKeys.has(part.key) && !productionStatus(activeProductionKeys.get(part.key)!));
-                    return next ? <button type="button" disabled={busy || draftBusy || analyzingSilences}
-                      onClick={() => setPublicationPartKey(next.key)}
-                      className="theme-action-secondary rounded px-3 py-2 text-xs font-semibold disabled:opacity-50">Elegir siguiente parte pendiente ({next.number})</button> : null;
-                  })()}
-                  <Link href="/admin/roleplays" onClick={event => { if (!confirmEditorNavigation()) event.preventDefault(); }} className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
-                </section>
-              )}
-              {readyAssignment && (!activeProductionKeys || !activeProductionKeys.has(readyAssignment.partKey ?? publicationPlan.parts[0]?.key ?? '')) && <p className="text-xs text-[var(--theme-warning)]">Seguimiento no disponible para este paquete. Puedes continuar, pero verifica las sesiones existentes para evitar duplicados.</p>}
-              {readyAssignment ? (
-                <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
-                  prefetch={false}
-                  onClick={event => {
+          <StudioFinalizationPanel
+            segmentCount={segments.length} expandedEditor={expandedEditor}
+            publicationPlan={publicationPlan} currentWavPlan={currentWavPlan} selectedPublicationPart={selectedPublicationPart}
+            hasAudio={Boolean(audio)} duration={duration} sourceRequiresLocal={sourceRequiresLocal} hasCompound={hasCompound}
+            allowServerZipExport={allowServerZipExport} localOnly={localOnly} wavSource={wavSource}
+            localMp3Eligible={localMp3Eligible} convertedMp3Bytes={convertedMp3 && convertedMp3.original === audio ? convertedMp3.wav.size : null}
+            busy={busy} draftBusy={draftBusy} analyzingSilences={analyzingSilences}
+            activeProductionKeys={activeProductionKeys} readyAssignment={readyAssignment ? { token: readyAssignment.token, partKey: readyAssignment.partKey } : null}
+            onSelectPart={setPublicationPartKey} onSaveDraft={() => void saveDraft()}
+            onDownloadPart={() => { if (selectedPublicationPart) void exportPackage(selectedPublicationPart); }}
+            onChangeMode={mode => {
+              subtitleImportRevision.current += 1;
+              draftOperationRevision.current += 1;
+              exportRevision.current += 1;
+              exportAbort.current?.abort();
+              exportAbort.current = null;
+              setBusy(false);
+              setDraftBusy(false);
+              setAllowServerZipExport(mode === 'server');
+              setError('');
+              setNotice(mode === 'server' ? 'Modo servidor seleccionado: al exportar, el MP3 se enviará para generar el ZIP.' : 'Modo local: prepara los cortes en el navegador si el formato es compatible o guarda el JSON para usar el exportador de escritorio.');
+            }}
+            onReleaseMp3={releaseLocalMp3} onEnableMp3={() => void enableLocalMp3()}
+            onPrepareLocal={() => void prepareLocalAssignment(currentWavPlan && currentWavPlan.parts.length > 1 ? selectedPublicationPart : undefined)}
+            onPrepareServer={() => void exportPackage(undefined, 'assignment')}
+            onDownload={() => void exportPackage()}
+            onConfirmNavigation={confirmEditorNavigation}
+                  onContinue={event => {
+                    if (!readyAssignment) { event.preventDefault(); return; }
                     if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) {
                       event.preventDefault(); setError('Continúa en esta misma pestaña para conservar el paquete temporal.'); return;
                     }
@@ -4021,27 +3897,7 @@ export default function RoleplayStudioPage() {
                     }
                     catch (cause) { event.preventDefault(); setError(cause instanceof Error ? cause.message : 'No se pudo transferir el paquete.'); }
                   }}
-                  className="inline-flex rounded-xl theme-action-primary px-4 py-2 font-semibold">Continuar a asignación</Link>
-              ) : localOnly ? (
-                <div className="flex flex-wrap gap-2">
-                  {localMp3Eligible && !wavSource && <button type="button" disabled={busy || draftBusy || analyzingSilences} onClick={() => void enableLocalMp3()}
-                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Habilitar procesamiento local MP3 (WAV 24 kHz)</button>}
-                  {wavSource && <button type="button" onClick={() => void prepareLocalAssignment(currentWavPlan && currentWavPlan.parts.length > 1 ? selectedPublicationPart : undefined)}
-                    disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || !currentWavPlan.parts.length || (currentWavPlan.parts.length > 1 && !selectedPublicationPart)}
-                    className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">{currentWavPlan && currentWavPlan.parts.length > 1 && selectedPublicationPart ? `Preparar parte ${selectedPublicationPart.number} en WAV local` : 'Preparar WAV local para asignación'}</button>}
-                </div>
-              ) : <button type="button" onClick={() => void exportPackage(undefined, 'assignment')}
-                  disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
-                  className="rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50">Preparar para asignación</button>}
-            </div>
-          )}
-          <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
-            className="inline-flex items-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold">
-            <Download size={18} /> {busy
-              ? 'Procesando segmentos…'
-              : draftBusy ? 'Verificando proyecto…'
-                : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
-          </button>
+          />
           </div>
           </div>
         </section>
