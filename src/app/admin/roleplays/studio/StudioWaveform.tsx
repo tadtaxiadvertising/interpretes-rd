@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { withStudioDecodeSlot } from '@/lib/roleplay-studio/decode-slot';
 import { detectLocalSpeech, type LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
 import {
   calculateWaveformPeaks,
@@ -80,6 +81,7 @@ export default function StudioWaveform({
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     let context: AudioContext | null = null;
     const send = (result: LocalVadSnapshot) => {
       if (!cancelled && /\.mp3$/i.test(file.name)) {
@@ -156,12 +158,13 @@ export default function StudioWaveform({
         if (context) await context.close().catch(() => {});
       }
     };
-    void load();
+    void withStudioDecodeSlot(controller.signal, load).catch(() => {});
     return () => {
       cancelled = true;
-      // Release a decoder promptly if an administrator swaps the source while
-      // browser decoding is still in progress. The async finally also closes.
-      if (context) void context.close().catch(() => {});
+      controller.abort();
+      // Keep the slot until the native decode settles. Closing the context
+      // here does not guarantee that the decoder has stopped allocating.
+      // The task's finally closes it before releasing the slot.
     };
   }, [file, duration]);
 
