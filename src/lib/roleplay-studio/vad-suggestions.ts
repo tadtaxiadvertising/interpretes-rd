@@ -9,7 +9,7 @@ export type LocalVadSuggestions = {
 };
 
 /**
- * VAD detects speech-like energy, not actual speakers. Merge its padded
+ * VAD detects speech-like energy, not actual speakers. Merge only overlapping padded
  * windows, then omit (never clip mid-sentence) those that would overlap an
  * editorial cut or exceed the existing 25-cut / 15-minute export contract.
  * Neither waveform audio nor transcript text is used or retained here.
@@ -32,7 +32,7 @@ export function proposeLocalVadCuts(
   const merged: TimeRange[] = [];
   for (const cut of ordered) {
     const previous = merged[merged.length - 1];
-    if (previous && cut.start <= previous.end) {
+    if (previous && cut.start < previous.end) {
       previous.end = Math.max(previous.end, cut.end);
     } else {
       merged.push({ start: cut.start, end: cut.end });
@@ -45,7 +45,7 @@ export function proposeLocalVadCuts(
   for (const cut of merged) {
     // Round inward to hundredths; never extend a window into another clip.
     const start = Math.max(0, Math.ceil((cut.start - 1e-8) * 100) / 100);
-    const end = Math.floor((cut.end + 1e-8) * 100) / 100;
+    const end = Math.min(Math.floor(duration * 100) / 100, Math.floor((cut.end + 1e-8) * 100) / 100);
     const seconds = end - start;
     if (seconds < 1.25 - 1e-8 || seconds > 300 || clips.length + current.length >= ROLEPLAY_MAX_SCENARIOS ||
         selectedTotal + seconds > 900 + 1e-8 ||
