@@ -11,7 +11,7 @@ import { inspectRoleplayAdminAudioDraft } from '@/lib/roleplay/browser-audio-pre
 import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guard';
-import { recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
+import { formatCreationRecoveryReference, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
@@ -98,6 +98,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // No clinical media, request key or recipient is persisted in browser storage.
   const keyedAttempt = useRef<{ key: string; scenarioCount: number; trackedToken: string | null } | null>(null);
   const [keyedStatus, setKeyedStatus] = useState<SingleCreationRecovery['status'] | 'CHECKING' | null>(null);
+  const [recoveryInput, setRecoveryInput] = useState('');
+  const [recoveryInputError, setRecoveryInputError] = useState<string | null>(null);
+  const [referenceCopyNotice, setReferenceCopyNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -698,6 +701,35 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
 
+  const copyRecoveryReference = async () => {
+    const attempt = keyedAttempt.current;
+    if (!attempt) return;
+    try {
+      await navigator.clipboard.writeText(formatCreationRecoveryReference(attempt));
+      setReferenceCopyNotice('Referencia copiada.');
+    } catch {
+      setReferenceCopyNotice('No se pudo copiar automáticamente. Selecciona y copia el campo de referencia.');
+    }
+  };
+
+  const restoreCreationReference = () => {
+    if (!creationRecoveryEnabled || keyedAttempt.current || createPending.current || importPending.current || directAttempt.current) return;
+    const reference = parseCreationRecoveryReference(recoveryInput);
+    if (!reference) {
+      setRecoveryInputError('Introduce una referencia de recuperación válida.');
+      return;
+    }
+    // A restored reference is not linked to the current editorial draft.
+    // Do not credit an unrelated Studio transfer or infer its destination.
+    keyedAttempt.current = { ...reference, trackedToken: null };
+    setKeyedStatus('IN_PROGRESS');
+    setSubmissionUncertain(true);
+    setRecoveryInputError(null);
+    setRecoveryInput('');
+    setError(null);
+    void checkCreationReceipt();
+  };
+
   const checkCreationReceipt = async () => {
     const attempt = keyedAttempt.current;
     if (!attempt || createPending.current || importPending.current || keyedStatus === 'COMPLETED') return;
@@ -760,6 +792,23 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   return (
     <div className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6 space-y-5">
       {productionBackupWarning && <p role="status" className="text-sm text-[var(--theme-warning)]">No se pudo actualizar el respaldo local del intento de producción. Conserva esta pestaña y consulta las sesiones existentes antes de repetir.</p>}
+      {creationRecoveryEnabled && keyedStatus === null && !directLocked && (
+        <details className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+          <summary className="cursor-pointer font-semibold text-sm text-[var(--foreground)]">Recuperar una creación anterior</summary>
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-[var(--text-secondary)]">Si guardaste una referencia, puedes consultar el resultado con la misma cuenta de administrador. No se enviarán audios. El borrador actual quedará bloqueado mientras revisas el intento.</p>
+            <label htmlFor="roleplay-recovery-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia de recuperación</label>
+            <input id="roleplay-recovery-reference" type="text" value={recoveryInput}
+              onChange={event => { setRecoveryInput(event.target.value); setRecoveryInputError(null); }}
+              maxLength={80} autoComplete="off" spellCheck={false} disabled={isCreating || isImporting}
+              aria-invalid={Boolean(recoveryInputError)}
+              className="min-h-11 w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 text-sm text-[var(--theme-control-text)]"/>
+            {recoveryInputError && <p role="alert" className="text-sm text-[var(--theme-danger)]">{recoveryInputError}</p>}
+            <button type="button" onClick={restoreCreationReference} disabled={isCreating || isImporting || !recoveryInput.trim()}
+              className="min-h-11 w-full rounded-xl theme-action-secondary px-3 py-2 text-sm font-semibold disabled:opacity-50 sm:w-auto">Recuperar intento anterior</button>
+          </div>
+        </details>
+      )}
       <fieldset disabled={directLocked || keyedStatus !== null} className="min-w-0 space-y-5">
       <div>
         <h3 className="text-lg font-bold text-[var(--foreground)] mb-2">¿A quién se asignará?</h3>
@@ -1110,7 +1159,18 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             onClick={() => { void checkCreationReceipt(); }}
             className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar resultado sin reenviar audios</button>}
           <Link href="/admin/roleplays" className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes</Link>
-          {keyedStatus !== 'COMPLETED' && <p className="text-xs text-[var(--text-secondary)]">La clave temporal se conserva solo en esta pestaña. No recargues ni inicies otra creación hasta comprobar el resultado.</p>}
+          {keyedStatus !== 'COMPLETED' && keyedAttempt.current && (
+            <div className="space-y-2">
+              <label htmlFor="active-roleplay-recovery-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia del intento</label>
+              <input id="active-roleplay-recovery-reference" readOnly value={formatCreationRecoveryReference(keyedAttempt.current)}
+                onFocus={event => event.currentTarget.select()}
+                className="min-h-11 w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 text-sm text-[var(--theme-control-text)]"/>
+              <button type="button" onClick={() => { void copyRecoveryReference(); }}
+                className="min-h-11 w-full rounded-xl theme-action-secondary px-3 py-2 text-sm font-semibold sm:w-auto">Copiar referencia de recuperación</button>
+              {referenceCopyNotice && <p role="status" className="text-xs text-[var(--text-secondary)]">{referenceCopyNotice}</p>}
+              <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia antes de cerrar o recargar. Solo la misma cuenta de administrador puede consultar el recibo. No inicies otra creación hasta comprobar el resultado.</p>
+            </div>
+          )}
         </section>
       )}
       {submissionUncertain && keyedStatus === null && (
