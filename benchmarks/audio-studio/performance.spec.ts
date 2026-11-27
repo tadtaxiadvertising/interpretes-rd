@@ -110,3 +110,54 @@ test('speaker cut labels and keyboard focus remain legible in both workspace the
     await expect(selected).toHaveCSS('outline-offset', '-4px');
   }
 });
+
+
+test.describe('mobile timeline controls', () => {
+  test.use({ hasTouch: true, isMobile: true });
+  for (const width of [320, 390]) {
+    test(`keeps timeline controls usable at ${width}px in both themes`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto('/?contrast');
+      const waveform = page.getByTestId('audio-studio-waveform');
+      const timeline = page.getByRole('region', { name: 'Línea de tiempo de intervenciones' });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(value => {
+          document.documentElement.dataset.theme = value;
+          document.getElementById('root')?.classList.add('theme-workspace');
+        }, theme);
+        await waveform.getByRole('combobox', { name: 'Zoom de la línea de tiempo' }).selectOption('4320');
+        await timeline.getByRole('combobox', { name: 'Escala de intervenciones' }).selectOption('120');
+        const controls = [
+          ...await waveform.getByRole('button').all(),
+          ...await waveform.getByRole('combobox').all(),
+          ...await waveform.getByRole('slider').all(),
+          ...await timeline.getByRole('button', { name: /^(Ventana temporal anterior|Ventana temporal siguiente|Ir al cursor|Centrar intervención)$/ }).all(),
+          ...await timeline.getByRole('combobox').all(),
+          ...await timeline.getByRole('slider').all(),
+        ];
+        expect(controls).toHaveLength(14);
+        for (const control of controls) {
+          const box = await control.boundingBox();
+          expect(box).not.toBeNull();
+          expect(box!.height).toBeGreaterThanOrEqual(44);
+          expect(box!.width).toBeGreaterThanOrEqual(44);
+          expect(box!.x).toBeGreaterThanOrEqual(0);
+          expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
+        }
+        for (const region of [waveform, timeline]) {
+          const sizes = await region.evaluate(element => ({ scroll: element.scrollWidth, client: element.clientWidth }));
+          expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
+        }
+
+        const slider = waveform.getByRole('slider');
+        const before = Number(await slider.getAttribute('min'));
+        await waveform.getByRole('button', { name: 'Siguiente' }).tap();
+        expect(Number(await slider.getAttribute('min'))).toBeGreaterThan(before);
+        await waveform.getByRole('button', { name: 'Ir al cursor' }).tap();
+        expect(Number(await slider.getAttribute('min'))).toBeCloseTo(before, 5);
+        await timeline.getByRole('combobox', { name: 'Localizar corte en línea de tiempo' }).selectOption('x:excluded-test');
+        await expect(timeline.getByRole('button', { name: 'Excluida: Corte excluido de prueba' })).toBeVisible();
+      }
+    });
+  }
+});
