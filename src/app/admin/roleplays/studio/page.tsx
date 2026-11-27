@@ -3208,10 +3208,15 @@ export default function RoleplayStudioPage() {
             return <StudioInterventionCard key={segment.id} segment={segment} index={index}
               nextTurn={nextTurn} canPreviewPair={previewablePairIds.has(segment.id)}
               caption={captionTexts[segment.id]} compactRows={compactRows} focusMode={focusMode}
-              expandedSegmentId={expandedSegmentId} advancedTurnId={advancedTurnId} turnActionFeedback={turnActionFeedback}
+              expandedSegmentId={expandedSegmentId === segment.id ? segment.id : null}
+              advancedTurnId={advancedTurnId === segment.id ? segment.id : null}
+              turnActionFeedback={turnActionFeedback?.id === segment.id ? turnActionFeedback : null}
               boundaryProposal={focusedTurn?.segment.id === segment.id ? boundaryProposal : null}
-              canUseBoundaryProposal={canUseBoundaryProposal} proposalPreviewId={proposalPreviewId}
-              previewingId={previewingId} pairPreviewId={pairPreviewId} duration={duration}
+              canUseBoundaryProposal={focusedTurn?.segment.id === segment.id && canUseBoundaryProposal}
+              proposalPreviewId={focusedTurn?.segment.id === segment.id ? proposalPreviewId : ''}
+              previewingId={previewingId === segment.id ||
+                (focusedTurn?.segment.id === segment.id && previewingId === proposalPreviewId) ? previewingId : null}
+              pairPreviewId={pairPreviewId === segment.id ? segment.id : null} duration={duration}
               {...cardActions}
             />;
           })}
