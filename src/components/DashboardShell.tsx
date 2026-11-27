@@ -68,8 +68,8 @@ export function DashboardShell({ children, role, userName, interpreterId, userEm
         <div className="flex min-w-0 flex-col flex-1 h-dvh overflow-hidden">
           <Navbar email={userName} notifications={notifications} notificationUnreadCount={notificationUnreadCount} notificationPreferenceScope={notificationPreferenceScope} role={role} />
 
-          <main className="min-h-0 flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar transition-all duration-500 relative">
-            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-20">
+          <main className="min-h-0 flex-1 p-4 md:p-8 overflow-y-auto custom-scrollbar transition-all duration-500 relative lg:has-[[data-studio-workspace=active]]:overflow-hidden">
+            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-20 lg:has-[[data-studio-workspace=active]]:pb-0">
               {children}
             </div>
           </main>
