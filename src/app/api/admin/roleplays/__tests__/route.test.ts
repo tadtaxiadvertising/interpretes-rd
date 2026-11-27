@@ -38,6 +38,7 @@ vi.mock('@/lib/prisma', () => ({
     roleplayScenario: { create: vi.fn(), deleteMany: vi.fn() },
     roleplayAccess: { create: vi.fn(), findUnique: vi.fn() },
     roleplayLibraryArchive: { findUnique: vi.fn() },
+    roleplayCreationRequest: { create: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   },
@@ -113,6 +114,9 @@ describe('POST /api/admin/roleplays', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://supabase.test';
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-role';
     process.env.FRONTEND_ORIGIN = 'https://front.test';
+    delete process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED;
+    vi.mocked(prisma.roleplayCreationRequest.create).mockResolvedValue({ id: 'claim' } as never);
+    vi.mocked(prisma.roleplayCreationRequest.updateMany).mockResolvedValue({ count: 1 });
 
     (validateAction as any).mockResolvedValue(adminAuth);
     (prisma.interpreter.findUnique as any).mockResolvedValue({ id: 7 });
@@ -146,6 +150,7 @@ describe('POST /api/admin/roleplays', () => {
         },
         roleplayAccess: { findUnique: prisma.roleplayAccess.findUnique, create: prisma.roleplayAccess.create },
         roleplayLibraryArchive: { findUnique: prisma.roleplayLibraryArchive.findUnique },
+        roleplayCreationRequest: { updateMany: prisma.roleplayCreationRequest.updateMany },
       })
     );
 
@@ -247,6 +252,102 @@ describe('POST /api/admin/roleplays', () => {
       expect(res.headers.get('Cache-Control')).toBe('private, no-store');
       expect(res.headers.get('Vary')).toBe('Cookie, Authorization');
       expect(prisma.roleplaySession.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('explicit single interpreter idempotency pilot', () => {
+    const requestKey = '123e4567-e89b-42d3-a456-426614174000';
+    const keyed = (participantType = 'interpreter', key = requestKey) => {
+      const request = buildRequest({ participantType, participantId: '7', scenarios: oneScenario, audios: [audioFile()] });
+      request.headers.set('Idempotency-Key', key);
+      return request;
+    };
+
+    it('rejects keyed requests while disabled, without creating or uploading', async () => {
+      const response = await POST(keyed() as any);
+      expect(response.status).toBe(503);
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+    it.each(['candidate', 'all-active-interpreters'])('rejects unsupported keyed scope %s', async participantType => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      expect((await POST(keyed(participantType) as any)).status).toBe(400);
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+    });
+    it('rejects a malformed key before parsing multipart', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      const request = keyed('interpreter', 'not-a-uuid');
+      expect((await POST(request as any)).status).toBe(400);
+      expect(request.bodyUsed).toBe(false);
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+    });
+    it('completes the receipt within publication before sending notifications', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      const response = await POST(keyed() as any);
+      expect(response.status).toBe(200);
+      expect(prisma.roleplayCreationRequest.create).toHaveBeenCalledExactlyOnceWith({
+        data: { actorUserId: 'a1', requestKey, payloadHash: expect.stringMatching(/^[a-f0-9]{64}$/), status: 'IN_PROGRESS' },
+        select: { id: true },
+      });
+      expect(prisma.roleplayCreationRequest.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { actorUserId: 'a1', requestKey, payloadHash: expect.stringMatching(/^[a-f0-9]{64}$/), status: 'IN_PROGRESS' },
+        data: expect.objectContaining({ status: 'COMPLETED', sessionIds: ['sess-1'], createdCount: 1, skippedCount: 0, scenarioCount: 1 }),
+      });
+      expect(prisma.roleplaySession.updateMany).toHaveBeenCalledBefore(prisma.roleplayCreationRequest.updateMany as any);
+      expect(prisma.roleplayCreationRequest.updateMany).toHaveBeenCalledBefore(notificationMocks.notifyRoleplayAssignments);
+    });
+    it('preserves potentially committed audio and suppresses notifications when receipt completion fails', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      vi.mocked(prisma.roleplayCreationRequest.updateMany).mockResolvedValueOnce({ count: 0 });
+      expect((await POST(keyed() as any)).status).toBe(500);
+      expect(mockUpload).toHaveBeenCalledOnce();
+      expect(mockRemove).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+    it('blocks a competing request without uploading or reserving a session', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      vi.mocked(prisma.roleplayCreationRequest.create).mockRejectedValueOnce({ code: 'P2002' });
+      vi.mocked(prisma.roleplayCreationRequest.findUnique).mockResolvedValueOnce(null);
+      expect((await POST(keyed() as any)).status).toBe(409);
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+    it.each([true, false])('replays only a receipt for the correct existing interpreter session (%s)', async owned => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      let payloadHash = '';
+      vi.mocked(prisma.roleplayCreationRequest.create).mockImplementationOnce(async args => {
+        payloadHash = args.data.payloadHash;
+        throw { code: 'P2002' };
+      });
+      vi.mocked(prisma.roleplayCreationRequest.findUnique)
+        .mockImplementationOnce(async () => ({ actorUserId: 'a1', payloadHash, status: 'COMPLETED' }) as never)
+        .mockResolvedValueOnce({
+          status: 'COMPLETED', sessionIds: ['sess-1'], createdCount: 1, skippedCount: 0,
+          scenarioCount: 1, completedAt: new Date(),
+        } as never);
+      vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce([{ id: 'sess-1' }] as never);
+      vi.mocked(prisma.roleplaySession.findFirst).mockResolvedValueOnce(owned ? { id: 'sess-1' } as never : null);
+      const response = await POST(keyed() as any);
+      expect(response.status).toBe(owned ? 200 : 409);
+      if (owned) expect((await response.json()).data).toEqual({
+        sessionId: 'sess-1', inviteLink: 'https://front.test/roleplays/sess-1', scenarioCount: 1,
+      });
+      expect(prisma.roleplaySession.findFirst).toHaveBeenCalledWith({
+        where: expect.objectContaining({ id: 'sess-1', interpreterId: 7, recruitmentCandidateId: null }),
+        select: { id: true },
+      });
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(notificationMocks.notifyRoleplayAssignments).not.toHaveBeenCalled();
+    });
+
+    it('leaves unkeyed requests unchanged even when the pilot flag is enabled', async () => {
+      process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+      expect((await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()] }) as any)).status).toBe(200);
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+      expect(prisma.roleplayCreationRequest.updateMany).not.toHaveBeenCalled();
     });
   });
 
