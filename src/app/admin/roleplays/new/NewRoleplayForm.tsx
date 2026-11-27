@@ -48,6 +48,7 @@ interface NewRoleplayFormProps {
   openingAssignmentEnabled?: boolean;
   directUploadEnabled?: boolean;
   creationRecoveryEnabled?: boolean;
+  receiptRecoveryEnabled?: boolean;
   studioTransfer?: string;
   librarySource?: {
     id: string;
@@ -75,7 +76,7 @@ function normalizeParticipantSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, creationRecoveryEnabled = false, studioTransfer }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, creationRecoveryEnabled = false, receiptRecoveryEnabled = creationRecoveryEnabled, studioTransfer }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
@@ -590,7 +591,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       const unknownResultMessage = 'No se pudo confirmar el resultado de la creación.';
       let res: Response;
       try {
-        const useKeyedCreation = creationRecoveryEnabled && participantType === 'interpreter';
+        const useKeyedCreation = creationRecoveryEnabled && receiptRecoveryEnabled && participantType === 'interpreter';
         if (useKeyedCreation) {
           // If key generation fails, do not fall back to an unkeyed POST.
           keyedAttempt.current = {
@@ -713,7 +714,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const restoreCreationReference = () => {
-    if (!creationRecoveryEnabled || keyedAttempt.current || createPending.current || importPending.current || directAttempt.current) return;
+    if (!receiptRecoveryEnabled || keyedAttempt.current || createPending.current || importPending.current || directAttempt.current) return;
     const reference = parseCreationRecoveryReference(recoveryInput);
     if (!reference) {
       setRecoveryInputError('Introduce una referencia de recuperación válida.');
@@ -792,10 +793,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   return (
     <div className="glass rounded-3xl border border-[var(--border)] p-4 sm:p-6 space-y-5">
       {productionBackupWarning && <p role="status" className="text-sm text-[var(--theme-warning)]">No se pudo actualizar el respaldo local del intento de producción. Conserva esta pestaña y consulta las sesiones existentes antes de repetir.</p>}
-      {creationRecoveryEnabled && keyedStatus === null && !directLocked && (
+      {receiptRecoveryEnabled && keyedStatus === null && !directLocked && (
         <details className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
           <summary className="cursor-pointer font-semibold text-sm text-[var(--foreground)]">Recuperar una creación anterior</summary>
           <div className="mt-3 space-y-2">
+            {!creationRecoveryEnabled && <p role="status" className="text-sm text-[var(--theme-warning)]">La creación con clave está pausada. Puedes consultar recibos anteriores, pero las nuevas creaciones utilizan el flujo tradicional.</p>}
             <p className="text-sm text-[var(--text-secondary)]">Si guardaste una referencia, puedes consultar el resultado con la misma cuenta de administrador. No se enviarán audios. El borrador actual quedará bloqueado mientras revisas el intento.</p>
             <label htmlFor="roleplay-recovery-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia de recuperación</label>
             <input id="roleplay-recovery-reference" type="text" value={recoveryInput}
