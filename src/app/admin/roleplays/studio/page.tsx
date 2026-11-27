@@ -78,6 +78,7 @@ export default function RoleplayStudioPage() {
   const [duration, setDuration] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [excludedTurns, setExcludedTurns] = useState<Array<{ turn: Segment; caption?: string }>>([]);
+  const excludedTimelineTurns = useMemo(() => excludedTurns.map(entry => entry.turn), [excludedTurns]);
   const [trashOpen, setTrashOpen] = useState(false);
   const [timelineOpen, setTimelineOpen] = useState(false);
   const [reviewCenterOpen, setReviewCenterOpen] = useState(false);
@@ -3001,7 +3002,7 @@ export default function RoleplayStudioPage() {
           {focusMode && timelineOpen && (segments.length > 0 || excludedTurns.length > 0) && (
             <div id="studio-focused-timeline">
               <FocusTimeline duration={duration} playhead={playhead} active={segments}
-                excluded={excludedTurns.map(entry => entry.turn)} selectedId={focusedTurn?.segment.id}
+                excluded={excludedTimelineTurns} selectedId={focusedTurn?.segment.id}
                 onSeek={seconds => { stopPreview(); stopPairPreview(); seekAudio(seconds); }}
                 onSelect={(id, excluded) => {
                   if (excluded) {
