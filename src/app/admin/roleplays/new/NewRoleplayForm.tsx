@@ -1143,10 +1143,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <span>{error}</span>
         </div>
       )}
-      {keyedStatus !== null && !isCreating && (
+      {keyedStatus !== null && (
         <section aria-label="Recuperación de creación" className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-4">
           <p role="status" className="text-sm text-[var(--foreground)]">
-            {{
+            {isCreating ? 'Creación en curso. Puedes guardar la referencia antes de cerrar esta pestaña.' : {
               IN_PROGRESS: 'La creación está pendiente de confirmación. Consulta el recibo sin reenviar los audios.',
               CHECKING: 'Consultando el resultado de la solicitud original…',
               NOT_FOUND: 'Aún no hay un recibo disponible. Esto no demuestra que la creación haya fallado.',
@@ -1155,7 +1155,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               COMPLETED: 'Creación confirmada mediante el recibo. Consulta la sesión existente antes de realizar otra asignación.',
             }[keyedStatus]}
           </p>
-          {keyedStatus !== 'COMPLETED' && <button type="button" disabled={keyedStatus === 'CHECKING'}
+          {keyedStatus !== 'COMPLETED' && !isCreating && <button type="button" disabled={keyedStatus === 'CHECKING'}
             onClick={() => { void checkCreationReceipt(); }}
             className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar resultado sin reenviar audios</button>}
           <Link href="/admin/roleplays" className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes</Link>
