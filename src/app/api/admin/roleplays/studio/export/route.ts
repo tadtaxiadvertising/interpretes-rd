@@ -7,7 +7,7 @@ import ffmpegPath from 'ffmpeg-static';
 import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import { applyRateLimit, createRateLimitHeaders, RATE_LIMITS } from '@/lib/security/rate-limit';
-import { ROLEPLAY_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
+import { ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS, ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { parseFinalFfmpegOutputSeconds } from '@/lib/roleplay-studio/ffmpeg-progress';
 import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 
@@ -32,7 +32,7 @@ function parseSegments(value: string | null): Segment[] | null {
   if (!value || value.length > MAX_METADATA_CHARS) return null;
   let raw: unknown;
   try { raw = JSON.parse(value); } catch { return null; }
-  if (!Array.isArray(raw) || raw.length < 1 || raw.length > ROLEPLAY_MAX_SCENARIOS) return null;
+  if (!Array.isArray(raw) || raw.length < 1 || raw.length > ROLEPLAY_STUDIO_PACKAGE_MAX_SCENARIOS) return null;
   const result: Segment[] = [];
   let lastEnd = 0;
   let total = 0;
