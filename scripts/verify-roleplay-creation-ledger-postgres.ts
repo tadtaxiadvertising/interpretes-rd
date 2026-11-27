@@ -26,6 +26,10 @@ async function main() {
     created = true;
     await first.connect();
     await second.connect();
+    // Apply the unchanged historical migration first, then the proposed
+    // constraint hardening. Both execute only in this newly created DB.
+    const historical = await readFile('prisma/migrations/20261121210000_roleplay_creation_idempotency_ledger/migration.sql', 'utf8');
+    await first.query(historical);
     const sql = await readFile('docs/operations/staged-sql/roleplay-creation-requests.sql', 'utf8');
     assert.ok(sql.includes('STAGED DESIGN ONLY'));
     await first.query(sql);
@@ -91,6 +95,11 @@ async function main() {
     await assert.rejects(first.query(
       "UPDATE public.roleplay_creation_requests SET status='COMPLETED', completed_at=now() WHERE actor_user_id=$1 AND request_key=$2",
       ['synthetic-admin-b', key],
+    ), { code: '23514' });
+    // Even with a correct counter cardinality, oversized receipts must fail.
+    await assert.rejects(first.query(
+      "UPDATE public.roleplay_creation_requests SET status='COMPLETED', completed_at=now(), session_ids=$3, created_count=1001, skipped_count=0, scenario_count=1 WHERE actor_user_id=$1 AND request_key=$2",
+      ['synthetic-admin-b', key, Array.from({ length: 1001 }, (_, index) => 'synthetic-' + index)],
     ), { code: '23514' });
     const other = await first.query(
       'SELECT status FROM public.roleplay_creation_requests WHERE actor_user_id=$1 AND request_key=$2',
