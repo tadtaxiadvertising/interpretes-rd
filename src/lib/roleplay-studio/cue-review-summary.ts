@@ -49,6 +49,26 @@ export function overlappingSelectedTimedCueIndices(
   return [...overlaps].sort((a, b) => a - b);
 }
 
+/** Exact selected conflicts for one candidate; adjacent endpoints are compatible. */
+export function conflictingSelectedTimedCueIndices(
+  cues: readonly TimedTranscriptCue[],
+  indices: readonly number[],
+  candidateIndex: number,
+): number[] {
+  const valid = (index: number) => {
+    if (!Number.isSafeInteger(index) || index < 0 || index >= cues.length) return false;
+    const cue = cues[index];
+    return Number.isFinite(cue.start) && Number.isFinite(cue.end) &&
+      cue.start >= 0 && cue.end > cue.start;
+  };
+  if (!valid(candidateIndex)) return [];
+  const candidate = cues[candidateIndex];
+  return [...new Set(indices)]
+    .filter(index => index !== candidateIndex && valid(index))
+    .filter(index => candidate.start < cues[index].end && cues[index].start < candidate.end)
+    .sort((a, b) => a - b);
+}
+
 /** Identify candidate turns requiring an operator's attention, without inferring voices. */
 export function cueRequiresEditorialReview(cue: TimedTranscriptCue): boolean {
   const role = classifySpeakerRole(cue.speaker);
