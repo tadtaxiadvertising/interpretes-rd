@@ -81,36 +81,36 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
     <option key={turn.id} value={'x:' + turn.id}>{turn.title}</option>), [excluded]);
 
   return (
-    <section aria-label="Línea de tiempo de intervenciones" className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
+    <section aria-label="Línea de tiempo de intervenciones" className="min-w-0 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2">
       <div className="flex flex-wrap items-center gap-2 text-xs">
-        <label className="flex items-center gap-1 text-[var(--text-secondary)]">Ventana
+        <label className="flex w-full min-w-0 items-center gap-2 text-[var(--text-secondary)] sm:w-auto">Ventana
           <select aria-label="Escala de intervenciones" value={span} onChange={event => { setSpan(Number(event.currentTarget.value)); setAnchor(null); }}
-            className="rounded border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1 text-[var(--theme-control-text)]">
+            className="min-h-11 min-w-0 flex-1 rounded border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1 text-[var(--theme-control-text)] sm:min-h-0">
             <option value={30}>30 s</option><option value={120}>2 min</option><option value={0}>Completa</option>
           </select>
         </label>
         <button type="button" aria-label="Ventana temporal anterior" disabled={window.start <= 0}
           onClick={() => setAnchor((window.start + window.end) / 2 - width * 0.75)}
-          className="theme-action-secondary rounded px-2 py-1 disabled:opacity-40">−</button>
+          className="theme-action-secondary min-h-11 min-w-11 rounded px-2 py-1 sm:min-h-0 sm:min-w-0 disabled:opacity-40">−</button>
         <button type="button" aria-label="Ventana temporal siguiente" disabled={window.end >= duration}
           onClick={() => setAnchor((window.start + window.end) / 2 + width * 0.75)}
-          className="theme-action-secondary rounded px-2 py-1 disabled:opacity-40">+</button>
-        <button type="button" onClick={() => setAnchor(playhead)} className="theme-action-secondary rounded px-2 py-1">Ir al cursor</button>
-        <button type="button" onClick={() => setAnchor(null)} className="theme-action-secondary rounded px-2 py-1">Centrar intervención</button>
-        <span className="ml-auto tabular-nums text-[var(--text-secondary)]">{labelTime(window.start)}–{labelTime(window.end)}</span>
+          className="theme-action-secondary min-h-11 min-w-11 rounded px-2 py-1 sm:min-h-0 sm:min-w-0 disabled:opacity-40">+</button>
+        <button type="button" onClick={() => setAnchor(playhead)} className="theme-action-secondary min-h-11 min-w-11 rounded px-2 py-1 sm:min-h-0 sm:min-w-0">Ir al cursor</button>
+        <button type="button" onClick={() => setAnchor(null)} className="theme-action-secondary min-h-11 min-w-11 rounded px-2 py-1 sm:min-h-0 sm:min-w-0">Centrar intervención</button>
+        <span className="basis-full tabular-nums text-[var(--text-secondary)] sm:ml-auto sm:basis-auto">{labelTime(window.start)}–{labelTime(window.end)}</span>
       </div>
-      <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">Posición en ventana
+      <label className="flex flex-col items-stretch gap-1 text-xs text-[var(--text-secondary)] sm:flex-row sm:items-center sm:gap-2">Posición en ventana
         <input type="range" aria-label="Posición en la ventana temporal" min={window.start} max={window.end} step={0.01}
           value={Math.max(window.start, Math.min(window.end, playhead))}
           aria-valuetext={formatStudioAccessibleTime(Math.max(window.start, Math.min(window.end, playhead)))}
           onChange={event => { setAnchor((window.start + window.end) / 2); onSeek(event.currentTarget.valueAsNumber); }}
-          className="min-w-0 flex-1 accent-[var(--theme-link)]"/>
+          className="h-11 w-full min-w-0 flex-1 accent-[var(--theme-link)] sm:h-auto"/>
       </label>
-      <div className="max-h-40 space-y-1 overflow-y-auto">
+      <div className="max-h-64 space-y-2 overflow-y-auto sm:max-h-40 sm:space-y-1">
         {laneLayers.map(lane => (
-          <div key={lane.role} className="grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-2">
-            <span className="truncate text-xs text-[var(--text-secondary)]" title={lane.label}>{lane.label}</span>
-            <div className="relative h-7 overflow-hidden rounded border border-[var(--border)] bg-[var(--theme-surface-muted)]">
+          <div key={lane.role} className="grid min-w-0 grid-cols-1 items-center gap-1 sm:grid-cols-[7rem_minmax(0,1fr)] sm:gap-2">
+            <span className="break-words text-xs text-[var(--text-secondary)] sm:truncate" title={lane.label}>{lane.label}</span>
+            <div className="relative h-11 overflow-hidden rounded border border-[var(--border)] bg-[var(--theme-surface-muted)] sm:h-7">
               {lane.buttons}
               {cursor >= 0 && cursor <= 100 && <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-30 w-px bg-white shadow-[0_0_0_1px_#111827]" style={{ left: cursor + '%' }}/>}
             </div>
@@ -121,7 +121,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
         <select aria-label="Localizar corte en línea de tiempo" value="" onChange={event => {
           const value = event.currentTarget.value;
           if (value) select(value.slice(2), value.startsWith('x:'));
-        }} className="min-w-0 flex-1 rounded border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1 text-[var(--theme-control-text)]">
+        }} className="min-h-11 w-full min-w-0 rounded border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1 text-[var(--theme-control-text)] sm:min-h-0 sm:w-auto sm:flex-1">
           <option value="">Elegir intervención, incluso fuera de ventana</option>
           <optgroup label="Activas">{activeOptions}</optgroup>
           <optgroup label="Excluidas">{excludedOptions}</optgroup>
