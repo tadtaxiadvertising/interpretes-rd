@@ -43,6 +43,7 @@ describe('Roleplay Studio accessible waveform timeline', () => {
 
     const slider = screen.getByRole('slider', { name: /Posición del reproductor en segundos/i });
     expect(slider.getAttribute('value')).toBe('20');
+    expect(slider.getAttribute('aria-valuetext')).toBe('20 segundos');
     fireEvent.change(slider, { target: { value: '25.5' } });
     expect(seek).toHaveBeenCalledWith(25.5);
     expect(screen.getByText('01:30')).toBeTruthy();
