@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type SyntheticEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useStudioPlayback } from './useStudioPlayback';
 import Link from 'next/link';
 import { readAudioStudioEditorPreferences } from '@/app/actions/audio-studio-settings';
 import { ArrowLeft, AudioLines, Plus } from 'lucide-react';
@@ -51,7 +52,7 @@ import {
 } from '@/lib/roleplay-studio/draft';
 import {
   createLongMediaDraft, openLongMediaDraft, fingerprintLocalMedia, mediaKind,
-  usesLocalLongMode, validateLocalMedia, MAX_LOCAL_MEDIA_SECONDS,
+  usesLocalLongMode, validateLocalMedia,
 } from '@/lib/roleplay-studio/long-media';
 import {
   classifySpeakerRole, filterInterpreterCues,
@@ -68,8 +69,6 @@ export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
   const [url, setUrl] = useState('');
   const [duration, setDuration] = useState(0);
-  const [playhead, setPlayhead] = useState(0);
-  const [editorPlaybackRevision, setEditorPlaybackRevision] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [excludedTurns, setExcludedTurns] = useState<Array<{ turn: Segment; caption?: string }>>([]);
   const [trashOpen, setTrashOpen] = useState(false);
@@ -126,6 +125,11 @@ export default function RoleplayStudioPage() {
   const [protocolKind, setProtocolKind] = useState<StudioProtocolKind>('opening');
   const [protocolLanguage, setProtocolLanguage] = useState<StudioProtocolLanguage>('en');
   const [error, setError] = useState('');
+  const {
+    player, pairPlayer, attachPlayer, pauseEditorialAudio, playhead, setPlayhead,
+    editorPlaybackRevision, previewingId, pairPreviewId, stopPreview, stopPairPreview, seekAudio,
+    previewSimpleSegment, previewSubtitleCue, previewVadRegion, startPairPreview, mediaHandlers, pairMediaHandlers,
+  } = useStudioPlayback(duration, setDuration, setError);
   const [notice, setNotice] = useState('');
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
   const [excludeInterpreter, setExcludeInterpreter] = useState(true);
@@ -149,24 +153,12 @@ export default function RoleplayStudioPage() {
   const happyScribeSelection = happyScribeItems.find(item => item.id === happyScribeSelectedId);
 
   const CUES_PER_PAGE = 60;
-  const player = useRef<HTMLMediaElement | null>(null);
-  const pairPlayer = useRef<HTMLAudioElement | null>(null);
-  const pairPlayback = useRef<{ plan: GaplessPairPlan; stage: 1 | 2 } | null>(null);
-  const [pairPreviewId, setPairPreviewId] = useState<string | null>(null);
   const {
     history, lastStructuralEdit, nextStructuralEdit, clearEditorialHistory, rememberEdit,
     rememberGroupedEdit, endEditGroup, stepHistory, forgetServerSuggestions,
   } = useStudioEditorialHistory(excludedTurns, confirmedTurns);
   // Source identity prevents a delayed decode from updating a replacement MP3.
   const activeAudioFile = useRef<File | null>(null);
-  const attachPlayer = (element: HTMLMediaElement | null) => { player.current = element; };
-  const pauseEditorialAudio = useCallback(() => { player.current?.pause(); pairPlayer.current?.pause(); }, []);
-  const previewEnd = useRef<number | null>(null);
-  // Ignore rejections from an old play() request after the user previews a
-  // different turn, seeks elsewhere, stops, or replaces the recording.
-  const primaryPlaybackRevision = useRef(0);
-  // A retired auxiliary play() promise must never cancel a newer gapless pair.
-  const pairPlaybackRevision = useRef(0);
   const subtitleImportRevision = useRef(0);
   const draftOperationRevision = useRef(0);
   const savingDraft = useRef(false);
@@ -223,7 +215,6 @@ export default function RoleplayStudioPage() {
   }, [hasActiveEditorWork]);
   const confirmEditorNavigation = () =>
     !hasActiveEditorWork || window.confirm(leaveEditorPrompt);
-  const [previewingId, setPreviewingId] = useState<string | null>(null);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
   const [bulkSpeakerRole, setBulkSpeakerRole] =
@@ -288,37 +279,6 @@ export default function RoleplayStudioPage() {
     setTurnActionFeedback({ id, message, error });
   };
 
-  const stopPairPreview = () => {
-    pairPlaybackRevision.current += 1;
-    const wasActive = pairPlayback.current !== null;
-    pairPlayback.current = null;
-    setPairPreviewId(null);
-    // Never pause an idle auxiliary player: changing ordinary clips must not
-    // interfere with the primary player's pause/resume lifecycle.
-    if (wasActive) pairPlayer.current?.pause();
-  };
-
-  const stopPreview = () => {
-    primaryPlaybackRevision.current += 1;
-    previewEnd.current = null;
-    setPreviewingId(null);
-    player.current?.pause();
-  };
-
-  const seekAudio = (seconds: number) => {
-    const audioPlayer = player.current;
-    if (!audioPlayer || !Number.isFinite(seconds) || !duration) return;
-    const timestamp = Math.min(duration, Math.max(0, seconds));
-    // Seeking manually exits a clip preview; its previous end must not stop
-    // the administrator when inspecting another timestamp.
-    primaryPlaybackRevision.current += 1;
-    previewEnd.current = null;
-    setPreviewingId(null);
-    stopPairPreview();
-    audioPlayer.currentTime = timestamp;
-    setPlayhead(timestamp);
-  };
-
   const markAtPlayhead = (id: string, boundary: 'start' | 'end') => {
     const position = player.current?.currentTime;
     if (position === undefined || !Number.isFinite(position) || !duration) return;
@@ -328,73 +288,7 @@ export default function RoleplayStudioPage() {
 
   const previewSegment = (segment: Segment) => {
     if (segment.ranges) { previewPairWithoutGap(segment.id); return; }
-    const audioPlayer = player.current;
-    if (!audioPlayer || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
-      segment.end <= segment.start || segment.start < 0 || segment.end > duration) return;
-    if (previewingId === segment.id) {
-      stopPreview();
-      return;
-    }
-    // Seek directly even if audio is already playing. Calling pause() here
-    // schedules an onPause event which can clear the new segment's end marker.
-    stopPairPreview();
-    const request = ++primaryPlaybackRevision.current;
-    audioPlayer.currentTime = segment.start;
-    setPlayhead(segment.start);
-    previewEnd.current = segment.end;
-    setPreviewingId(segment.id);
-    void audioPlayer.play().catch(() => {
-      if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
-      previewEnd.current = null;
-      setPreviewingId(null);
-      setError('No fue posible reproducir el fragmento.');
-    });
-  };
-
-  /** Listen to precisely one SRT candidate without modifying its selection or cuts. */
-  const previewSubtitleCue = (cue: TimedTranscriptCue, index: number) => {
-    const audioPlayer = player.current;
-    if (!audioPlayer || !Number.isFinite(cue.start) || !Number.isFinite(cue.end) ||
-        cue.start < 0 || cue.end <= cue.start || cue.end > duration) return;
-    const previewId = `subtitle-${index}`;
-    if (previewingId === previewId) {
-      stopPreview();
-      return;
-    }
-    // Reuse the existing timeupdate cutoff and player. Never upload or
-    // transcode private subtitle audio just to audition an intervention.
-    stopPairPreview();
-    const request = ++primaryPlaybackRevision.current;
-    audioPlayer.currentTime = cue.start;
-    setPlayhead(cue.start);
-    previewEnd.current = cue.end;
-    setPreviewingId(previewId);
-    void audioPlayer.play().catch(() => {
-      if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
-      previewEnd.current = null;
-      setPreviewingId(null);
-      setError('No fue posible escuchar este turno de la transcripción.');
-    });
-  };
-
-  /** Preview a suggested local VAD region in the existing player, without exporting or uploading audio. */
-  const previewVadRegion = ({ start, end }: StudioSuggestedClip) => {
-    const audioPlayer = player.current;
-    if (!audioPlayer || !Number.isFinite(start) || !Number.isFinite(end) ||
-        start < 0 || end <= start || end > duration) return;
-    // Reuse the same bounded playback marker as editorial cuts. Seeking does
-    // not pause the player, avoiding an old onPause clearing the new marker.
-    stopPairPreview();
-    const request = ++primaryPlaybackRevision.current;
-    audioPlayer.currentTime = start;
-    setPlayhead(start);
-    previewEnd.current = end;
-    setPreviewingId(null);
-    void audioPlayer.play().catch(() => {
-      if (request !== primaryPlaybackRevision.current || player.current !== audioPlayer) return;
-      previewEnd.current = null;
-      setError('No fue posible escuchar la región sugerida.');
-    });
+    previewSimpleSegment(segment);
   };
 
   /** Only previews the seam: no export, no transcode and no server request. */
@@ -428,21 +322,11 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'El siguiente corte está oculto: limpia los filtros para escucharlo.', true);
       return;
     }
-    stopPreview();
-    stopPairPreview();
-    const request = ++pairPlaybackRevision.current;
-    pairPlayback.current = { plan, stage: 1 };
-    setPairPreviewId(id);
-    element.currentTime = plan.first.start;
-    setEditorPlaybackRevision(n => n + 1);
-    reportTurnAction(id, first?.ranges
-      ? `Preescucha de intervención compuesta: ${formatTime(plan.selectedSeconds)} de audio sin la pausa de ${formatTime(plan.skippedSeconds)}.`
-      : `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
-    void element.play().catch(() => {
-      if (request !== pairPlaybackRevision.current || pairPlayer.current !== element) return;
-      stopPairPreview();
-      reportTurnAction(id, 'El navegador no pudo iniciar la preescucha sin pausa.', true);
-    });
+    startPairPreview(id, plan, () => {
+      reportTurnAction(id, first?.ranges
+        ? `Preescucha de intervención compuesta: ${formatTime(plan.selectedSeconds)} de audio sin la pausa de ${formatTime(plan.skippedSeconds)}.`
+        : `Preescucha local: se saltan ${formatTime(plan.skippedSeconds)} entre los dos cortes. No se modifica el proyecto.`);
+    }, () => reportTurnAction(id, 'El navegador no pudo iniciar la preescucha sin pausa.', true));
   };
 
   const applyEditorialHistory = (direction: 'undo' | 'redo') => {
@@ -2167,10 +2051,7 @@ export default function RoleplayStudioPage() {
     if (!previewingId?.startsWith('boundary-proposal:')) return;
     if (focusMode && (!immersiveMode || workspaceTab === 'edit') &&
         previewingId === proposalPreviewId && boundaryProposal) return;
-    primaryPlaybackRevision.current += 1;
-    previewEnd.current = null;
-    setPreviewingId(null);
-    player.current?.pause();
+    stopPreview();
   }, [previewingId, focusMode, immersiveMode, workspaceTab, proposalPreviewId, boundaryProposal]);
   const applyBoundaryProposal = () => {
     if (!focusedTurn || !boundaryProposal || !canUseBoundaryProposal) return;
@@ -2303,54 +2184,6 @@ export default function RoleplayStudioPage() {
     const next = visiblePendingTurns[index].segment;
     setExpandedSegmentId(next.id);
     setReviewFocusRequest({ id: next.id, attempt: ++reviewFocusAttempt.current });
-  };
-
-  const mediaHandlers = {
-    onPlay: () => setEditorPlaybackRevision(n => n + 1),
-    onLoadedMetadata: (event: SyntheticEvent<HTMLMediaElement>) => {
-      const length = event.currentTarget.duration;
-      if (!Number.isFinite(length) || length <= 0) {
-        setDuration(0);
-        setError('No se pudo determinar la duración de la grabación. Verifica el formato.');
-      } else if (length > MAX_LOCAL_MEDIA_SECONDS) {
-        setDuration(0);
-        setError('El archivo supera las 12 horas admitidas en modo local.');
-      } else {
-        setDuration(length);
-        setError('');
-      }
-    },
-    onTimeUpdate: (event: SyntheticEvent<HTMLMediaElement>) => {
-      setPlayhead(event.currentTarget.currentTime);
-      if (previewEnd.current !== null &&
-          event.currentTarget.currentTime >= previewEnd.current) stopPreview();
-    },
-    // A queued pause/ended event can arrive after another cue has started.
-    // Read the element's *current* state so an obsolete event cannot cancel
-    // the new bounded preview (or invalidate its play() rejection guard).
-    onPause: (event: SyntheticEvent<HTMLMediaElement>) => {
-      if (!event.currentTarget.paused) return;
-      primaryPlaybackRevision.current += 1;
-      previewEnd.current = null;
-      setPreviewingId(null);
-    },
-    onEnded: (event: SyntheticEvent<HTMLMediaElement>) => {
-      if (!event.currentTarget.ended) return;
-      primaryPlaybackRevision.current += 1;
-      previewEnd.current = null;
-      setPreviewingId(null);
-    },
-    onError: (event: SyntheticEvent<HTMLMediaElement>) => {
-      // MediaError may have been cleared by a newer source or playback
-      // request before an old queued error event reaches this handler.
-      // Never invalidate a healthy recording or its SRT review in that case.
-      if (!event.currentTarget.error) return;
-      primaryPlaybackRevision.current += 1;
-      previewEnd.current = null;
-      setPreviewingId(null);
-      setDuration(0);
-      setError('El navegador no puede decodificar esta grabación. Prueba MP4/H.264 con AAC o MP3.');
-    },
   };
 
   const sourceReady = Boolean(audio && duration > 0);
@@ -2547,32 +2380,8 @@ export default function RoleplayStudioPage() {
                   {...mediaHandlers} className="w-full"/>}
         {url && <audio ref={pairPlayer} src={url} preload="none"
           aria-label="Reproductor de preescucha sin pausa"
-          onTimeUpdate={event => {
-            const current = pairPlayback.current;
-            if (!current) return;
-            if (current.stage === 1 &&
-                event.currentTarget.currentTime >= current.plan.first.end - 0.025) {
-              current.stage = 2;
-              event.currentTarget.currentTime = current.plan.second.start;
-            } else if (current.stage === 2 &&
-                       event.currentTarget.currentTime >= current.plan.second.end - 0.025) {
-              stopPairPreview();
-            }
-          }}
-          // Media events from the previous pair can be queued after seeking
-          // and resuming a newer pair on this same auxiliary element.
-          onEnded={event => {
-            if (event.currentTarget.ended) stopPairPreview();
-          }}
-          onPause={event => {
-            if (event.currentTarget.paused && pairPlayback.current) stopPairPreview();
-          }}
-          onError={event => {
-            if (!pairPlayback.current || !event.currentTarget.error) return;
-            stopPairPreview();
-            setError('El navegador no pudo reproducir la preescucha. Comprueba el formato de la grabación.');
-          }}
-          className="hidden" />}
+          {...pairMediaHandlers}
+           className="hidden" />}
             <div id="studio-subtitles" className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
