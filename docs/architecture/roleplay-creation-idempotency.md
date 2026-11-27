@@ -2,18 +2,24 @@
 
 ## Estado de la fase
 
-**Preparación de persistencia y pruebas, no activada.** Esta fase añade el modelo Prisma `RoleplayCreationRequest`, su migración SQL y funciones `fingerprintRoleplayCreation`, `claimRoleplayCreation` y `completeRoleplayCreationInTransaction`. El formulario sigue sin emitir claves de idempotencia. El endpoint dispone de un piloto explícito, apagado por defecto, descrito a continuación.
+**Preparación de persistencia y pruebas, no activada.** Esta fase añade el modelo Prisma `RoleplayCreationRequest`, su migración SQL y funciones `fingerprintRoleplayCreation`, `claimRoleplayCreation` y `completeRoleplayCreationInTransaction`. El endpoint y el formulario disponen de un piloto explícito, apagado por defecto, descrito a continuación.
 
 La migración es aditiva, sin modificación ni eliminación de sesiones/escenarios/audio existentes, con RLS habilitado y sin acceso directo a `anon`, `authenticated` ni `PUBLIC`. No se ha ejecutado en producción.
 
 ## Piloto de publicación individual (apagado por defecto)
 
 - Solo con `ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED=true` y encabezado `Idempotency-Key` UUID v4/v7. Una solicitud con clave cuando el piloto está deshabilitado devuelve 503; nunca pasa silenciosamente a la ruta antigua.
-- Admite únicamente el destino `interpreter` individual, con audio multipart validado o snapshot de biblioteca verificado. El formulario aún no envía claves. Candidatos, asignaciones masivas y subida directa quedan fuera de esta fase.
+- Admite únicamente el destino `interpreter` individual, con audio multipart validado o snapshot de biblioteca verificado. El formulario emite una clave solo si ambas banderas de creación y recibos están activas y el flujo no es de subida directa. Candidatos, asignaciones masivas y subida directa quedan fuera de esta fase.
 - Reserva después de validar el destino y el paquete, antes de reservar la sesión o subir archivos; completa el recibo en la misma transacción que publica los escenarios y la sesión. Un fallo de escritura del recibo impide confirmar la publicación.
 - Una clave repetida con resultado completo puede devolver el mismo identificador, únicamente si la sesión corresponde al intérprete y no está en DRAFT/CANCELLED. No vuelve a subir audio, publicar ni notificar. Un resultado incierto o conflicto devuelve 409 y requiere revisión.
 - Tras una reserva exitosa, un error posterior (incluida una precondición de publicación) puede dejar IN_PROGRESS. No libera automáticamente la clave. La consulta de recibos es independiente y permanece deshabilitada. Un reenvío multipart puede volver a consumir tráfico y cálculo de huellas antes del reconocimiento; no es una solución de transporte.
 - **No habilitar todavía**: exige comprobar esquema real, endurecimiento de constraints, autenticación y transacciones en entorno controlado, y recuperación desde interfaz. No se ha modificado la base de producción.
+
+## Recuperación desde el formulario (apagada por defecto)
+
+La página habilita la recuperación únicamente cuando ambas banderas (`ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED` y `ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED`) son exactamente true. En asignaciones individuales de intérpretes por multipart o biblioteca, el navegador genera una UUID v4 antes del primer envío. Conserva solo en memoria la clave, el número esperado de escenarios y la referencia local de seguimiento. No se usa esta ruta para candidatos, asignaciones masivas ni subida directa.
+
+Si el envío con clave no confirma una creación válida, se bloquean el borrador y nuevas creaciones desde ese formulario. El botón de recuperación consulta únicamente el recibo con la clave original; nunca reenvía archivos, vuelve a crear o libera automáticamente la reserva. NOT_FOUND no prueba rollback; IN_PROGRESS, REVIEW_REQUIRED y errores de consulta tampoco. Un recibo completo y coherente confirma la creación y permite consultar la lista de sesiones, sin inventar enlaces de invitación. La recarga o navegación pierde la clave en memoria; conservar la pestaña y revisar sesiones antes de repetir. No es recuperación persistente entre pestañas o tras reinicio.
 
 ## Contrato seguro
 

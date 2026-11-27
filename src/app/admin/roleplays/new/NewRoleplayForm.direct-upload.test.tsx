@@ -42,3 +42,37 @@ describe('gated private roleplay form',()=>{
     expect(fetcher).not.toHaveBeenCalled();
   });
 });
+
+describe('gated creation receipt recovery form', () => {
+  const key = '123e4567-e89b-42d3-a456-426614174000';
+  const complete = { status: 'COMPLETED', sessionIds: ['session-123'], createdCount: 1, skippedCount: 0, scenarioCount: 1 };
+  it('retains the same key, locks editing and never resends the audio after a lost response', async () => {
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
+    const fetcher = vi.fn()
+      .mockRejectedValueOnce(new Error('connection lost'))
+      .mockResolvedValueOnce(Response.json({ success: true, data: { status: 'NOT_FOUND' } }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    const check = await screen.findByRole('button', { name: 'Consultar resultado sin reenviar audios' });
+    expect(screen.getByLabelText(/Destinatario ·/).closest('fieldset')?.disabled).toBe(true);
+    expect(fetcher.mock.calls[0][0]).toBe('/api/admin/roleplays');
+    expect(fetcher.mock.calls[0][1].headers).toEqual({ 'Idempotency-Key': key });
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fireEvent.click(check);
+    await screen.findByText(/Esto no demuestra que la creación haya fallado/);
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar resultado sin reenviar audios' }));
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    for (const call of fetcher.mock.calls.slice(1)) {
+      expect(call[0]).toBe('/api/admin/roleplays/creation-receipt');
+      expect(call[1].body).toBe(JSON.stringify({ requestKey: key }));
+    }
+    expect(screen.queryByRole('button', { name: 'Consultar resultado sin reenviar audios' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+  });
+});
