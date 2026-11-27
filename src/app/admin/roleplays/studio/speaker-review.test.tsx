@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RoleplayStudioPage from './page';
+import * as longMedia from '@/lib/roleplay-studio/long-media';
 
 vi.mock('next/link', () => ({
   default: ({ href, children }: { href: string; children: React.ReactNode }) =>
@@ -484,6 +485,27 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Descargar plan local de cortes (JSON)' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Guardar borrador ampliado' })).toBeTruthy();
+
+    const partSelector = screen.getByLabelText('Parte del roleplay') as HTMLSelectElement;
+    const exportPart = screen.getByRole('button', { name: 'Descargar parte seleccionada (JSON local)' });
+    expect(exportPart).toHaveProperty('disabled', true);
+    expect(partSelector.options).toHaveLength(3);
+    const fingerprint = vi.spyOn(longMedia, 'fingerprintLocalMedia').mockResolvedValue('ab'.repeat(32));
+    const createDraft = vi.spyOn(longMedia, 'createLongMediaDraft');
+    const downloaded: string[] = [];
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      downloaded.push(this.download);
+    });
+    fireEvent.change(partSelector, { target: { value: partSelector.options[2].value } });
+    expect(exportPart).toHaveProperty('disabled', false);
+    await act(async () => { fireEvent.click(exportPart); });
+    expect(fingerprint).toHaveBeenCalledTimes(1);
+    expect(createDraft).toHaveBeenCalledTimes(1);
+    expect(createDraft.mock.calls[0][2].map(turn => turn.start)).toEqual([50, 52, 54, 56, 58]);
+    expect(createDraft.mock.results[0].value.version).toBe(1);
+    expect(downloaded).toEqual(['roleplay-studio-parte-2.json']);
+    expect(screen.getByText(/Intervenciones \(30\/100\)/)).toBeTruthy();
+    expect(screen.getByText(/Parte 2 descargada/)).toBeTruthy();
   });
 
   it('keeps a pending 26-turn SRT review when another transcript import is declined', async () => {
