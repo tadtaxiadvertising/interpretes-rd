@@ -76,11 +76,12 @@ describe('gated creation receipt recovery form', () => {
     expect(screen.queryByRole('button', { name: 'Consultar resultado sin reenviar audios' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
   });
-  it('restores a saved reference after remount without posting any audio or linking the new draft', async () => {
+  it.each([true, false])('restores a saved reference with new keyed creation enabled=%s', async creationRecoveryEnabled => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: complete }));
     vi.stubGlobal('fetch', fetcher);
-    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled={creationRecoveryEnabled} receiptRecoveryEnabled/>);
     fireEvent.click(screen.getByText('Recuperar una creación anterior'));
+    if (!creationRecoveryEnabled) expect(screen.getByText(/La creación con clave está pausada/)).toBeTruthy();
     const input = screen.getByLabelText('Referencia de recuperación');
     fireEvent.change(input, { target: { value: 'invalid' } });
     fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
@@ -94,6 +95,27 @@ describe('gated creation receipt recovery form', () => {
     });
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
     expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+  });
+
+  it('does not send a new keyed request in receipt-only mode', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: {
+      sessionId: 'legacy-session', scenarioCount: 1, inviteLink: window.location.origin + '/roleplays/legacy-session',
+    } }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} receiptRecoveryEnabled/>);
+    expect(screen.getByText('Recuperar una creación anterior')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    await screen.findByText('¡Roleplay creado correctamente!');
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(fetcher.mock.calls[0][0]).toBe('/api/admin/roleplays');
+    expect(fetcher.mock.calls[0][1].headers).toBeUndefined();
+  });
+
+  it('does not offer recovery when the receipt endpoint is disabled', () => {
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled receiptRecoveryEnabled={false}/>);
+    expect(screen.queryByText('Recuperar una creación anterior')).toBeNull();
   });
 
 });
