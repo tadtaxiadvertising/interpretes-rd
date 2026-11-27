@@ -15,7 +15,7 @@ import { availableStudioInterval } from '@/lib/roleplay-studio/available-interva
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
 import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
-import { STUDIO_RECOVERY_KEY, createStudioRecovery, openStudioRecovery, mergeProductionReceipts, type RecoveryProductionReceipt } from '@/lib/roleplay-studio/recovery';
+import { useStudioLocalRecovery, type RestoredStudioRecovery } from './useStudioLocalRecovery';
 import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
 import { sourceSpeakerGroup, propagateSpeakerProfile } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
@@ -39,7 +39,7 @@ import { STUDIO_HISTORY_LIMIT } from '@/lib/roleplay-studio/editorial-history';
 import { useStudioEditorialHistory, hasRecoverableUndo, type EditorialSnapshot } from './useStudioEditorialHistory';
 import { canPrepareLocalMp3, decodeLocalMp3ForAssignment } from '@/lib/roleplay-studio/local-mp3-assignment';
 import { prepareLocalWavAssignment, planLocalWavParts, type LocalWavPart } from '@/lib/roleplay-studio/local-wav-assignment';
-import { studioProductionKey, productionStatus, trackProductionTransfer, productionReceipts, restoreProductionReceipts } from '@/lib/roleplay-studio/production-tracking';
+import { studioProductionKey, productionStatus, trackProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { stageStudioHandoff, stageLocalWavHandoff, STUDIO_HANDOFF_MAX_BYTES } from '@/lib/roleplay-studio/assignment-handoff';
 import FocusTimeline from './FocusTimeline';
 import type { LocalVadSnapshot } from '@/lib/roleplay-studio/local-vad';
@@ -78,14 +78,6 @@ export default function RoleplayStudioPage() {
   const [reviewCategory, setReviewCategory] = useState<'all' | 'unconfirmed' | StudioReviewCode>('all');
   // Confirmation belongs to this editing session, not to the published payload.
   const [confirmedTurns, setConfirmedTurns] = useState<ReadonlyMap<string, Segment>>(() => new Map());
-  const [recoveryEnabled, setRecoveryEnabled] = useState(false);
-  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
-  const [recoveryStatus, setRecoveryStatus] = useState('');
-  const [recoveryFingerprint, setRecoveryFingerprint] = useState<{ file: File; hash: string } | null>(null);
-  const recoveryExpected = useRef<string | null>(null);
-  const recoveryOperation = useRef(0);
-  const recoveryReceipts = useRef<RecoveryProductionReceipt[]>([]);
-  const flushRecovery = useRef<(() => string | undefined) | null>(null);
   const [expandedEditor, setExpandedEditor] = useState(false);
   const [publicationPartKey, setPublicationPartKey] = useState('');
   const genericPublicationPlan = useMemo(() => planStudioPublicationParts(segments, duration), [segments, duration]);
@@ -597,11 +589,7 @@ export default function RoleplayStudioPage() {
     stopPairPreview();
     setError('');
     setNotice('');
-    recoveryOperation.current += 1;
-    setRecoveryEnabled(false);
-    setRecoveryFingerprint(null);
-    recoveryReceipts.current = [];
-    setRecoveryStatus('');
+    resetRecoveryForSource();
     setSegments([]);
     setExcludedTurns([]);
     setTrashOpen(false);
@@ -2368,129 +2356,46 @@ export default function RoleplayStudioPage() {
   const sourceReady = Boolean(audio && duration > 0);
   const workspaceActive = immersiveMode && focusMode && sourceReady;
   const workspaceTurnId = focusedTurn?.segment.id;
-  useEffect(() => {
-    const refresh = () => {
-      try { setRecoveryAvailable(localStorage.getItem(STUDIO_RECOVERY_KEY) !== null); }
-      catch { setRecoveryStatus('El navegador no permite guardar respaldos locales.'); }
-    };
-    refresh();
-    window.addEventListener('storage', refresh);
-    return () => window.removeEventListener('storage', refresh);
-  }, []);
-  const startRecovery = async (restore: boolean) => {
-    if (!audio || !duration || busy || draftBusy || analyzingSilences) return;
-    const source = audio;
-    const revision = subtitleImportRevision.current;
-    const operation = ++recoveryOperation.current;
-    try {
-      const raw = localStorage.getItem(STUDIO_RECOVERY_KEY);
-      if (restore && !raw) throw new Error('No hay respaldo local disponible.');
-      if (!restore && raw) throw new Error('Ya existe un respaldo. Recupéralo o elimínalo explícitamente antes de activar otro.');
-      if (restore && hasActiveEditorWork && !window.confirm('Recuperar el respaldo reemplazará el trabajo actual. ¿Continuar?')) return;
-      setRecoveryStatus('Verificando grabación…');
-      const hash = await fingerprintLocalMedia(source);
-      if (operation !== recoveryOperation.current || activeAudioFile.current !== source) return;
-      if (revision !== subtitleImportRevision.current) {
-        setRecoveryStatus('El proyecto cambió durante la verificación. Inténtalo de nuevo.');
-        return;
-      }
-      if (localStorage.getItem(STUDIO_RECOVERY_KEY) !== raw) throw new Error('El respaldo cambió en otra pestaña. Inténtalo de nuevo.');
-      if (restore && raw) {
-        const saved = openStudioRecovery(raw, source.size, hash, duration);
-        recoveryReceipts.current = saved.production;
-        restoreProductionReceipts(saved.production);
-        const restored = saved.segments.map(segment => ({ ...segment, id: crypto.randomUUID() }));
-        subtitleImportRevision.current += 1;
-        stopPreview();
-        stopPairPreview();
-        setSegments(restored);
-        setExcludedTurns(saved.excluded.map(turn => ({ turn: { ...turn, id: crypto.randomUUID() } })));
-        setTrashOpen(false);
-        setConfirmedTurns(new Map(restored.filter((turn, index) => saved.confirmed.has(index) &&
-          !studioReviewIssue(turn, restored, duration)).map(turn => [turn.id, turn])));
-        setCaptionTexts({});
-        setReviewCues([]);
-        setChosenCueIndices([]);
-        setSuggestedClips([]);
-        setDetectedSilences([]);
-        setOmittedSuggestions(0);
-        setLocalVadSnapshot(null);
-        clearEditorialHistory();
-        setTurnActionFeedback(null);
-        setSegmentSearch('');
-        setShowPendingReview(false);
-        setExpandedEditor(restored.length > ROLEPLAY_MAX_SCENARIOS);
-        setFocusMode(true);
-        setWorkspaceTab('edit');
-        setAdvancedTurnId(null);
-        setExpandedSegmentId(restored[saved.active]?.id ?? restored[0]?.id ?? null);
-        setAllowServerZipExport(false);
-        setServerConsent(false);
-        seekAudio(saved.playhead);
-        setNotice('Progreso recuperado. La transcripción privada y las sugerencias sin aplicar no forman parte del respaldo.');
-      }
-      if (!restore) recoveryReceipts.current = [];
-      recoveryExpected.current = raw;
-      setRecoveryFingerprint({ file: source, hash });
-      setRecoveryEnabled(true);
-      setRecoveryStatus(restore ? 'Respaldo recuperado.' : 'Guardado local activado.');
-    } catch (cause) {
-      if (operation === recoveryOperation.current) setRecoveryStatus(cause instanceof Error ? cause.message : 'No fue posible verificar el respaldo.');
-    }
+  const applyRecoveredProject = (saved: RestoredStudioRecovery) => {
+    const restored = saved.segments.map(segment => ({ ...segment, id: crypto.randomUUID() }));
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setSegments(restored);
+    setExcludedTurns(saved.excluded.map(turn => ({ turn: { ...turn, id: crypto.randomUUID() } })));
+    setTrashOpen(false);
+    setConfirmedTurns(new Map(restored.filter((turn, index) => saved.confirmed.has(index) &&
+      !studioReviewIssue(turn, restored, duration)).map(turn => [turn.id, turn])));
+    setCaptionTexts({});
+    setReviewCues([]);
+    setChosenCueIndices([]);
+    setSuggestedClips([]);
+    setDetectedSilences([]);
+    setOmittedSuggestions(0);
+    setLocalVadSnapshot(null);
+    clearEditorialHistory();
+    setTurnActionFeedback(null);
+    setSegmentSearch('');
+    setShowPendingReview(false);
+    setExpandedEditor(restored.length > ROLEPLAY_MAX_SCENARIOS);
+    setFocusMode(true);
+    setWorkspaceTab('edit');
+    setAdvancedTurnId(null);
+    setExpandedSegmentId(restored[saved.active]?.id ?? restored[0]?.id ?? null);
+    setAllowServerZipExport(false);
+    setServerConsent(false);
+    seekAudio(saved.playhead);
+    setNotice('Progreso recuperado. La transcripción privada y las sugerencias sin aplicar no forman parte del respaldo.');
   };
-  const clearRecovery = () => {
-    if (!window.confirm('¿Eliminar el respaldo local de este navegador? El proyecto abierto no se modificará.')) return;
-    recoveryOperation.current += 1;
-    setRecoveryEnabled(false);
-    setRecoveryFingerprint(null);
-    try {
-      localStorage.removeItem(STUDIO_RECOVERY_KEY);
-      recoveryExpected.current = null;
-      recoveryReceipts.current = [];
-      setRecoveryAvailable(false);
-      setRecoveryStatus('Respaldo local eliminado.');
-    } catch { setRecoveryStatus('No se pudo eliminar el respaldo local.'); }
-  };
-  // Save only committed, valid cuts and their review progress. No audio,
-  // transcript references, provider labels, or uncommitted suggestions.
-  useEffect(() => {
-    if (!recoveryEnabled || !audio || recoveryFingerprint?.file !== audio || !duration) return;
-    const operation = recoveryOperation.current;
-    const write = () => {
-      if (operation !== recoveryOperation.current || activeAudioFile.current !== audio) return;
-      try {
-        if (localStorage.getItem(STUDIO_RECOVERY_KEY) !== recoveryExpected.current) {
-          recoveryOperation.current += 1;
-          setRecoveryEnabled(false);
-          setRecoveryAvailable(localStorage.getItem(STUDIO_RECOVERY_KEY) !== null);
-          setRecoveryStatus('Guardado detenido: el respaldo cambió en otra pestaña.');
-          return;
-        }
-        const receipts = mergeProductionReceipts(recoveryReceipts.current, productionReceipts(activeProductionKeys?.values() ?? []));
-        const raw = createStudioRecovery(audio.size, recoveryFingerprint.hash, duration, segments,
-          confirmedIds, workspaceTurnId, player.current?.currentTime ?? 0, excludedTurns.map(entry => entry.turn), receipts);
-        localStorage.setItem(STUDIO_RECOVERY_KEY, raw);
-        recoveryExpected.current = raw;
-        recoveryReceipts.current = receipts;
-        setRecoveryAvailable(true);
-        setRecoveryStatus('Respaldo local actualizado.');
-        return raw;
-      } catch {
-        setRecoveryStatus('Cambios sin respaldar: revisa cortes, títulos, tamaño del proyecto o almacenamiento. Se conserva el último respaldo válido.');
-      }
-    };
-    flushRecovery.current = write;
-    const timer = window.setTimeout(write, 650);
-    const flush = () => { if (document.visibilityState === 'hidden') write(); };
-    document.addEventListener('visibilitychange', flush);
-    window.addEventListener('pagehide', write);
-    return () => {
-      if (flushRecovery.current === write) flushRecovery.current = null;
-      window.clearTimeout(timer);
-      document.removeEventListener('visibilitychange', flush);
-      window.removeEventListener('pagehide', write);
-    };
-  }, [recoveryEnabled, recoveryFingerprint, audio, duration, segments, confirmedIds, workspaceTurnId, excludedTurns, activeProductionKeys]);
+  const {
+    recoveryEnabled, recoveryAvailable, recoveryStatus, resetRecoveryForSource,
+    startRecovery, pauseRecovery, clearRecovery, flushRecovery,
+  } = useStudioLocalRecovery({
+    audio, duration, segments, excludedTurns, confirmedIds, workspaceTurnId, activeProductionKeys,
+    activeAudioFile, editorRevision: subtitleImportRevision, player,
+    disabled: busy || draftBusy || analyzingSilences, hasActiveEditorWork,
+    onRestore: applyRecoveredProject,
+  });
 
   useEffect(() => {
     if (workspaceActive && workspaceContent.current) workspaceContent.current.scrollTop = 0;
@@ -2590,7 +2495,7 @@ export default function RoleplayStudioPage() {
               onClick={() => void startRecovery(false)} className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Activar guardado local</button>}
             {!recoveryEnabled && recoveryAvailable && <button type="button" disabled={!sourceReady || busy || draftBusy || analyzingSilences}
               onClick={() => void startRecovery(true)} className="theme-action-primary rounded-lg px-3 py-2 text-xs font-semibold">Recuperar respaldo local</button>}
-            {recoveryEnabled && <button type="button" onClick={() => { recoveryOperation.current += 1; setRecoveryEnabled(false); setRecoveryStatus('Guardado pausado; se conserva el respaldo.'); }}
+            {recoveryEnabled && <button type="button" onClick={pauseRecovery}
               className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Pausar guardado local</button>}
             {(recoveryAvailable || recoveryEnabled) && <button type="button" onClick={clearRecovery}
               className="rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--theme-danger)]">Eliminar respaldo local</button>}
