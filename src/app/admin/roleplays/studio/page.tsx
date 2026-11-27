@@ -29,7 +29,7 @@ import LocalVadAssistant from './LocalVadAssistant';
 import StudioConsecutivePreview from './StudioConsecutivePreview';
 import { detectStudioProjectFormat } from '@/lib/roleplay-studio/project-format';
 import {
-  createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS,
+  createStudioDraft, openStudioDraft, sha256StudioAudio, MAX_STUDIO_DRAFT_CHARS, STUDIO_MAX_EDITOR_SEGMENTS,
 } from '@/lib/roleplay-studio/draft';
 import {
   createLongMediaDraft, openLongMediaDraft, fingerprintLocalMedia, mediaKind,
@@ -61,6 +61,9 @@ export default function RoleplayStudioPage() {
   const [playhead, setPlayhead] = useState(0);
   const [editorPlaybackRevision, setEditorPlaybackRevision] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [expandedEditor, setExpandedEditor] = useState(false);
+  const editorLimit = expandedEditor ? STUDIO_MAX_EDITOR_SEGMENTS : ROLEPLAY_MAX_SCENARIOS;
+  const selectionPurpose = expandedEditor ? 'editor' : 'package';
   const [busy, setBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false);
   const [analyzingSilences, setAnalyzingSilences] = useState(false);
@@ -629,7 +632,7 @@ export default function RoleplayStudioPage() {
   const applyCueSelection = () => {
     setError('');
     try {
-      const selected = selectTimedCues(reviewCues, chosenCueIndices);
+      const selected = selectTimedCues(reviewCues, chosenCueIndices, selectionPurpose);
       // Only dismiss the transcript review after the operator accepts the
       // replacement. A declined confirmation must preserve the selection.
       if (!loadSelectedCues(selected, 0)) return;
@@ -647,11 +650,11 @@ export default function RoleplayStudioPage() {
   const completeFilteredCueSelection = (candidateIndices: readonly number[]) => {
     try {
       const next = fillCompatibleTimedCueSelection(
-        reviewCues, chosenCueIndices, candidateIndices,
+        reviewCues, chosenCueIndices, candidateIndices, selectionPurpose,
       );
       const added = next.length - chosenCueIndices.length;
       if (!added) {
-        setNotice('No se añadieron turnos: revisa filtros, solapamientos y el límite de 25 cortes o 15 minutos.');
+        setNotice(expandedEditor ? `No se añadieron turnos: revisa filtros, solapamientos y el máximo editorial de ${editorLimit}.` : 'No se añadieron turnos: revisa filtros, solapamientos y el límite de 25 cortes o 15 minutos.');
         return;
       }
       subtitleImportRevision.current += 1;
@@ -660,6 +663,19 @@ export default function RoleplayStudioPage() {
       setNotice(`${added} turnos compatibles añadidos a la selección. Revisa idiomas, hablantes y texto antes de aplicar.`);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Corrige la selección antes de completarla.');
+    }
+  };
+
+  const expandCueProject = () => {
+    try {
+      const next = fillCompatibleTimedCueSelection(reviewCues, chosenCueIndices, reviewCues.map((_, index) => index), 'editor');
+      subtitleImportRevision.current += 1;
+      setExpandedEditor(true);
+      setChosenCueIndices(next);
+      setError('');
+      setNotice(`Proyecto ampliado: ${next.length} turnos compatibles seleccionados. Puedes editar hasta ${STUDIO_MAX_EDITOR_SEGMENTS}; cada roleplay publicable sigue limitado a ${ROLEPLAY_MAX_SCENARIOS}.`);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Corrige la selección antes de ampliarla.');
     }
   };
 
@@ -703,8 +719,8 @@ export default function RoleplayStudioPage() {
       setChosenCueIndices(prev => prev.filter(value => value !== index));
       return;
     }
-    if (chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS) {
-      setError(`Puedes seleccionar como máximo ${ROLEPLAY_MAX_SCENARIOS} intervenciones.`);
+    if (chosenCueIndices.length >= editorLimit) {
+      setError(`Puedes seleccionar como máximo ${editorLimit} intervenciones en este proyecto.`);
       return;
     }
     setError('');
@@ -951,8 +967,8 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'Esta intervención contiene dos cortes. Usa «Separar cortes» antes de dividir.', true);
       return;
     }
-    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
-      reportTurnAction(id, `Límite de ${ROLEPLAY_MAX_SCENARIOS} intervenciones. Elimina un turno antes de dividir.`, true);
+    if (segments.length >= editorLimit) {
+      reportTurnAction(id, `Límite de ${editorLimit} intervenciones. Elimina un turno o amplía el proyecto antes de dividir.`, true);
       return;
     }
     const span = segment.end - segment.start;
@@ -1073,8 +1089,8 @@ export default function RoleplayStudioPage() {
   const separateCompound = (id: string) => {
     const segment = segments.find(item => item.id === id);
     if (!segment?.ranges) return;
-    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
-      reportTurnAction(id, 'Hay 25 intervenciones. Elimina otra antes de separar esta intervención.', true);
+    if (segments.length >= editorLimit) {
+      reportTurnAction(id, `Hay ${editorLimit} intervenciones. Elimina otra o amplía el proyecto antes de separar.`, true);
       return;
     }
     const ranges = validStudioRanges(segment, duration);
@@ -1233,8 +1249,8 @@ export default function RoleplayStudioPage() {
   };
 
   const addSegment = () => {
-    if (segments.length >= ROLEPLAY_MAX_SCENARIOS) {
-      setError('Se alcanzó el límite de intervenciones exportables.');
+    if (segments.length >= editorLimit) {
+      setError(`Se alcanzó el límite de ${editorLimit} intervenciones del editor.`);
       return;
     }
     // Insert in the gap at/after the playhead, not only after the last clip.
@@ -1335,7 +1351,9 @@ export default function RoleplayStudioPage() {
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 30000);
-      setNotice((localOnly
+      setNotice((snapshot.length > ROLEPLAY_MAX_SCENARIOS
+        ? 'Borrador editorial ampliado v3 guardado. Vuelve a abrirlo en Audio Studio; no es compatible con el exportador de paquetes actual hasta reducirlo al límite publicable.'
+        : localOnly
         ? 'Plan de cortes local descargado. Próximo paso: abre el JSON y la grabación original en el exportador local actualizado para generar el ZIP, y luego impórtalo en Crear roleplay. El JSON no contiene audio ni transcripción; la huella de la fuente es parcial.'
         : 'Proyecto guardado localmente. Conserva también el MP3 original; el JSON no contiene audio ni transcripción.') +
         (hasUnstoredDraftContext
@@ -1435,6 +1453,7 @@ export default function RoleplayStudioPage() {
           segmentSearch, pendingOnly: showPendingReview,
         },
       });
+      if (restored.length > ROLEPLAY_MAX_SCENARIOS) setExpandedEditor(true);
       setSegments(restored.map(segment => ({ ...segment, id: crypto.randomUUID() })));
       setCaptionTexts({});
       setReviewCues([]);
@@ -1448,7 +1467,9 @@ export default function RoleplayStudioPage() {
       setShowPendingReview(false);
       setExpandedSegmentId(null);
       setTurnActionFeedback(null);
-      setNotice(containsCompound
+      setNotice(restored.length > ROLEPLAY_MAX_SCENARIOS
+        ? `Borrador editorial ampliado v3 restaurado: ${restored.length} intervenciones. La publicación sigue limitada a ${ROLEPLAY_MAX_SCENARIOS}.`
+        : containsCompound
         ? `Proyecto v2 restaurado: ${restored.length} intervenciones. El modo local se activó para proteger el audio y conservar las pausas eliminadas. Usa un exportador local actualizado.`
         : sampledProject
           ? `Proyecto vinculado por tamaño, duración y huella parcial, restaurado: ${restored.length} intervenciones. El audio no se ha subido y el modo de exportación no ha cambiado.`
@@ -1494,6 +1515,10 @@ export default function RoleplayStudioPage() {
       setTurnActionFeedback({ id: segment.id, message: reason, error: true });
       setError(`Intervención ${index + 1}: ${reason}`);
     };
+    if (ordered.length > ROLEPLAY_MAX_SCENARIOS) {
+      setError(`El proyecto tiene ${ordered.length} intervenciones. La exportación admite ${ROLEPLAY_MAX_SCENARIOS} por roleplay. Guarda el proyecto ampliado antes de preparar una selección más pequeña.`);
+      return;
+    }
     // The original interpreter is never exportable: surface this safety
     // requirement before any other editorial validation, as before.
     const interpreterIndex = ordered.findIndex(item => item.speakerRole === 'interpreter');
@@ -1801,21 +1826,20 @@ export default function RoleplayStudioPage() {
       return [{ cue, index }];
     });
   }, [reviewCues, cueSearch, showOnlySelectedCues, showCueReviewAlertsOnly, chosenCueIndices, overlappingSelectedCues]);
-  // Reuse the export selection validator before the administrator applies a
-  // SRT review. At most 25 cues are inspected, entirely in the browser.
+  // Validate the chosen editorial scope locally; publication has its own cap.
   const cueSelectionStatus = useMemo(() => {
     if (!chosenCueIndices.length) {
       return { seconds: 0, issue: 'Selecciona al menos una intervención.' };
     }
     try {
-      const selected = selectTimedCues(reviewCues, chosenCueIndices);
+      const selected = selectTimedCues(reviewCues, chosenCueIndices, selectionPurpose);
       const seconds = selected.reduce((total, cue) => total + cue.end - cue.start, 0);
       return { seconds, issue: null };
     } catch (cause) {
       return { seconds: 0, issue: cause instanceof Error
         ? cause.message : 'Revisa los tiempos y solapamientos de los turnos seleccionados.' };
     }
-  }, [reviewCues, chosenCueIndices]);
+  }, [reviewCues, chosenCueIndices, selectionPurpose]);
   const cueReviewSummary = useMemo(
     () => summarizeTimedCueReview(reviewCues, chosenCueIndices, duration),
     [reviewCues, chosenCueIndices, duration],
@@ -2377,7 +2401,7 @@ export default function RoleplayStudioPage() {
           <h2 className="text-lg font-bold text-[var(--foreground)]">Seleccionar turnos de la transcripción</h2>
           <p className="text-sm text-[var(--text-secondary)]">
             Hay {reviewCues.length} turnos disponibles y {chosenCueIndices.length} seleccionados
-            (máximo {ROLEPLAY_MAX_SCENARIOS}). La propuesta abarca distintos momentos de la grabación.
+            (máximo editorial {editorLimit}). La propuesta abarca distintos momentos de la grabación.
             Escucha y ajusta los turnos; después pulsa «Aplicar» para revisar hablantes e idiomas.
             Tus cortes actuales no se reemplazan sin confirmación.
           </p>
@@ -2394,9 +2418,14 @@ export default function RoleplayStudioPage() {
             </label>
             <button type="button"
               onClick={() => completeFilteredCueSelection(visibleCues.map(entry => entry.index))}
-              disabled={visibleCues.length === 0 || chosenCueIndices.length >= ROLEPLAY_MAX_SCENARIOS}
+              disabled={visibleCues.length === 0 || chosenCueIndices.length >= editorLimit}
               className="rounded border border-amber-300/30 px-2 py-1 text-xs font-semibold text-[var(--theme-warning)] disabled:opacity-40">
               Completar con turnos compatibles de esta página
+            </button>
+            <button type="button" onClick={expandCueProject}
+              disabled={chosenCueIndices.length >= STUDIO_MAX_EDITOR_SEGMENTS}
+              className="rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-40">
+              Ampliar selección compatible (hasta {STUDIO_MAX_EDITOR_SEGMENTS})
             </button>
             <button type="button" onClick={restoreBalancedCueSuggestion}
               disabled={reviewCues.length === 0}
@@ -2480,7 +2509,7 @@ export default function RoleplayStudioPage() {
             className="text-xs leading-5 text-[var(--foreground)]">
             {cueSelectionStatus.issue
               ? `Selección no válida: ${cueSelectionStatus.issue}`
-              : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)} de 15:00 como máximo. Verifica los roles antes de aplicar.`}
+              : `Audio seleccionado: ${formatTime(cueSelectionStatus.seconds)}${expandedEditor ? ' (proyecto editorial; exportación limitada a 15:00)' : ' de 15:00 como máximo'}. Verifica los roles antes de aplicar.`}
           </p>
           {(chosenCueIndices.length > 0 || showCueReviewAlertsOnly) && (
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2600,7 +2629,7 @@ export default function RoleplayStudioPage() {
             </div>
           )}
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
-            <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{ROLEPLAY_MAX_SCENARIOS})</h2>
+            <h2 className="flex items-center gap-2 text-lg font-bold text-[var(--foreground)]"><AudioLines size={20} /> Intervenciones ({segments.length}/{editorLimit})</h2>
             <div className="flex flex-wrap items-center gap-2">
               <input type="search" aria-label="Buscar intervenciones" value={segmentSearch}
                 onChange={event => setSegmentSearch(event.currentTarget.value)}
@@ -2677,7 +2706,10 @@ export default function RoleplayStudioPage() {
                   Deshacer {lastStructuralEdit.kind}
                 </button>
               )}
-              <button type="button" onClick={addSegment} disabled={segments.length >= ROLEPLAY_MAX_SCENARIOS}
+              {!expandedEditor && <button type="button" onClick={() => { setExpandedEditor(true); setFocusMode(true); }}
+                className="theme-action-secondary rounded-lg px-3 py-1.5 text-xs font-semibold">Ampliar editor a {STUDIO_MAX_EDITOR_SEGMENTS}</button>}
+              {expandedEditor && <span className="text-xs text-[var(--text-secondary)]">Edición ampliada · publicación: {ROLEPLAY_MAX_SCENARIOS}</span>}
+              <button type="button" onClick={addSegment} disabled={segments.length >= editorLimit}
                 className="inline-flex items-center gap-2 rounded-lg theme-action-primary px-3 py-1.5 text-sm font-semibold"><Plus size={16}/> Añadir fragmento</button>
             </div>
           </div>
@@ -3152,6 +3184,10 @@ export default function RoleplayStudioPage() {
           {!workspaceActive && error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-[var(--theme-danger)]">{error}</p>}
           {!workspaceActive && notice && <p role="status" className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-[var(--theme-success)]">{notice}</p>}
           <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
+          {segments.length > ROLEPLAY_MAX_SCENARIOS && <div role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--theme-warning)]">
+            Este proyecto supera el máximo publicable de {ROLEPLAY_MAX_SCENARIOS} intervenciones. Guarda el borrador completo antes de reducir la selección.
+            <button type="button" disabled={busy || draftBusy} onClick={() => void saveDraft()} className="ml-2 rounded-lg theme-action-secondary px-3 py-2">Guardar borrador ampliado</button>
+          </div>}
           <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos antes de exportar. Después podrás importar el paquete y asignar el roleplay.</p>
             {audio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
               <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
@@ -3234,7 +3270,7 @@ export default function RoleplayStudioPage() {
                 </details>
               </div>
             )}
-          <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length}
+          <button type="button" onClick={() => void exportPackage()} disabled={busy || draftBusy || analyzingSilences || !segments.length || segments.length > ROLEPLAY_MAX_SCENARIOS}
             className="inline-flex items-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold">
             <Download size={18} /> {busy
               ? 'Procesando segmentos…'
