@@ -1,7 +1,4 @@
-type PilotEnvironment = {
-  ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED?: string;
-  ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED?: string;
-};
+type PilotEnvironment = Readonly<Record<string, string | undefined>>;
 
 export type CreationPilotMode = 'disabled' | 'receipts-only' | 'blocked-missing-receipts' | 'pilot-configured';
 
