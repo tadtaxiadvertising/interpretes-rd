@@ -2,6 +2,7 @@
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { studioTimelineWindow, studioTimelineGeometry, type StudioTimelineCut } from '@/lib/roleplay-studio/focus-timeline';
+import { formatStudioAccessibleTime } from '@/lib/roleplay-studio/format-time';
 import type { StudioSpeakerRole } from '@/lib/roleplay-studio/speaker-profiles';
 
 type TimelineTurn = StudioTimelineCut & { title: string; speakerRole: StudioSpeakerRole; ranges?: readonly { start: number; end: number }[] };
@@ -101,6 +102,7 @@ export default function FocusTimeline({ duration, playhead, active, excluded, se
       <label className="flex items-center gap-2 text-xs text-[var(--text-secondary)]">Posición en ventana
         <input type="range" aria-label="Posición en la ventana temporal" min={window.start} max={window.end} step={0.01}
           value={Math.max(window.start, Math.min(window.end, playhead))}
+          aria-valuetext={formatStudioAccessibleTime(Math.max(window.start, Math.min(window.end, playhead)))}
           onChange={event => { setAnchor((window.start + window.end) / 2); onSeek(event.currentTarget.valueAsNumber); }}
           className="min-w-0 flex-1 accent-blue-500"/>
       </label>
