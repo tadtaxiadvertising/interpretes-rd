@@ -185,6 +185,29 @@ export default function StudioWaveform({
     const sourceIndex = Math.min(peaks.length - 1, Math.floor(at / safeDuration * peaks.length));
     return peaks[sourceIndex];
   }), [status, peaks, safeDuration, windowSeconds, windowStart]);
+  // The cursor moves independently of the static SVG layers. Reuse the
+  // elements until the source peaks, viewport or editorial intervals change.
+  const waveformBars = useMemo(() => bars.map((peak, index) => {
+    const width = CHART_WIDTH / bars.length;
+    const height = Math.max(3, Math.min(1, peak) * (CHART_HEIGHT - 10));
+    return (
+      <rect key={index}
+        x={index * width} y={(CHART_HEIGHT - height) / 2}
+        width={Math.max(0.6, width - 0.7)} height={height}
+        className="fill-[var(--theme-link)]"/>
+    );
+  }), [bars]);
+  const segmentMarkers = useMemo(() => segments.filter(segment =>
+    Number.isFinite(segment.start) && Number.isFinite(segment.end) &&
+    segment.start >= 0 && segment.end > segment.start && segment.end <= safeDuration &&
+    segment.end > windowStart && segment.start < windowEnd
+  ).map(segment => (
+    <rect key={segment.id} data-testid="studio-window-segment"
+      x={(Math.max(segment.start, windowStart) - windowStart) / windowSeconds * CHART_WIDTH} y={0}
+      width={(Math.min(segment.end, windowEnd) - Math.max(segment.start, windowStart)) / windowSeconds * CHART_WIDTH}
+      height={CHART_HEIGHT} className="fill-[var(--theme-success)] opacity-25"/>
+  )),
+    [segments, safeDuration, windowStart, windowEnd, windowSeconds]);
   const centerOnPlayhead = (scale: number) => {
     // Never expose an unusably narrow window on short recordings.
     if (!availableZoomLevels.includes(scale as typeof ZOOM_LEVELS[number])) return;
@@ -260,26 +283,8 @@ export default function StudioWaveform({
       >
         <line x1={0} y1={HALF_HEIGHT} x2={CHART_WIDTH} y2={HALF_HEIGHT}
           stroke="currentColor" className="text-[var(--theme-control-border)]" strokeWidth={1}/>
-        {bars.map((peak, index) => {
-          const width = CHART_WIDTH / bars.length;
-          const height = Math.max(3, Math.min(1, peak) * (CHART_HEIGHT - 10));
-          return (
-            <rect key={index}
-              x={index * width} y={(CHART_HEIGHT - height) / 2}
-              width={Math.max(0.6, width - 0.7)} height={height}
-              className="fill-[var(--theme-link)]"/>
-          );
-        })}
-        {segments.filter(segment =>
-          Number.isFinite(segment.start) && Number.isFinite(segment.end) &&
-          segment.start >= 0 && segment.end > segment.start && segment.end <= safeDuration &&
-          segment.end > windowStart && segment.start < windowEnd
-        ).map(segment => (
-          <rect key={segment.id} data-testid="studio-window-segment"
-            x={(Math.max(segment.start, windowStart) - windowStart) / windowSeconds * CHART_WIDTH} y={0}
-            width={(Math.min(segment.end, windowEnd) - Math.max(segment.start, windowStart)) / windowSeconds * CHART_WIDTH}
-            height={CHART_HEIGHT} className="fill-[var(--theme-success)] opacity-25"/>
-        ))}
+        {waveformBars}
+        {segmentMarkers}
         {playheadVisible && (
           <line x1={progressX} y1={0} x2={progressX} y2={CHART_HEIGHT}
             strokeWidth={2.5} className="stroke-[var(--theme-warning)]"/>
