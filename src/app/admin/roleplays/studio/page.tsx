@@ -65,6 +65,12 @@ import {
 
 
 
+// Original-interpreter turns are not exportable, even when their speaker is
+// identified and their language is known; keep them in the pending queue.
+const needsReview = (segment: Segment) =>
+  segment.speakerRole === 'unknown' || segment.speakerRole === 'interpreter' ||
+  segment.language === 'unknown';
+
 export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
   const [url, setUrl] = useState('');
@@ -1969,11 +1975,6 @@ export default function RoleplayStudioPage() {
   // Only the selected row expands when reviewing a longer recording.
   const compactRows = !focusMode && (compactPreference ?? (sourceRequiresLocal || segments.length >= 6));
   const query = segmentSearch.trim().toLocaleLowerCase();
-  // Original-interpreter turns are not exportable, even when their speaker is
-  // identified and their language is known; keep them in the pending queue.
-  const needsReview = (segment: Segment) =>
-    segment.speakerRole === 'unknown' || segment.speakerRole === 'interpreter' ||
-    segment.language === 'unknown';
   const pendingReviewCount = segments.filter(needsReview).length;
   const reviewedCount = segments.length - pendingReviewCount;
   const unidentifiedSpeakerCount = segments.filter(
@@ -1985,7 +1986,7 @@ export default function RoleplayStudioPage() {
   const originalInterpreterCount = segments.filter(
     segment => segment.speakerRole === 'interpreter',
   ).length;
-  const orderedSegments = [...segments].sort((a, b) => a.start - b.start);
+  const orderedSegments = useMemo(() => [...segments].sort((a, b) => a.start - b.start), [segments]);
   const reviewInspection = useMemo(() => inspectStudioReview(segments, duration), [segments, duration]);
   const confirmedIds = useMemo(() => new Set(reviewInspection.filter(({ turn, findings }) =>
     confirmedTurns.get(turn.id) === turn && findings.length === 0,
@@ -2005,12 +2006,21 @@ export default function RoleplayStudioPage() {
     { code: 'instructions', label: 'Instrucciones' },
     { code: 'response', label: 'Tiempo de respuesta' },
   ];
-  const visibleSegments = orderedSegments
+  // Media time updates do not change the editorial list or pair eligibility.
+  const visibleSegments = useMemo(() => orderedSegments
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => (!showPendingReview || (focusMode ? !confirmedIds.has(segment.id) : needsReview(segment))) &&
       (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
         segment.speakerRole, segment.language]
-        .some(value => value.toLocaleLowerCase().includes(query))));
+        .some(value => value.toLocaleLowerCase().includes(query)))),
+    [orderedSegments, showPendingReview, focusMode, confirmedIds, query, captionTexts]);
+  const previewablePairIds = useMemo(() => {
+    const visibleIds = new Set(visibleSegments.map(({ segment }) => segment.id));
+    return new Set(visibleSegments.filter(({ segment, index }) => {
+      const next = orderedSegments[index + 1];
+      return next && visibleIds.has(next.id) && planGaplessPair(segment, next, duration);
+    }).map(({ segment }) => segment.id));
+  }, [visibleSegments, orderedSegments, duration]);
 
   // Keep a single editor in the same place. The full filtered collection is
   // still used for bulk actions, validation and gapless preview eligibility.
@@ -2018,7 +2028,9 @@ export default function RoleplayStudioPage() {
     segment.id === expandedSegmentId));
   const focusedTurn = visibleSegments[focusIndex];
   const renderedSegments = focusMode ? (focusedTurn ? [focusedTurn] : []) : visibleSegments;
-  const sourceProfileCount = focusedTurn ? propagateSpeakerProfile(segments, focusedTurn.segment.id).changed : 0;
+  const focusedTurnId = focusedTurn?.segment.id;
+  const sourceProfileCount = useMemo(() => focusedTurnId
+    ? propagateSpeakerProfile(segments, focusedTurnId).changed : 0, [segments, focusedTurnId]);
   const selectFocusedTurn = (id: string) => {
     if (previewingId?.startsWith('boundary-proposal:')) stopPreview();
     setAdvancedTurnId(null);
@@ -3174,7 +3186,7 @@ export default function RoleplayStudioPage() {
           {renderedSegments.map(({ segment, index }) => {
             const nextTurn = orderedSegments[index + 1];
             return <StudioInterventionCard key={segment.id} segment={segment} index={index}
-              nextTurn={nextTurn} canPreviewPair={Boolean(nextTurn && visibleSegments.some(item => item.segment.id === nextTurn.id) && planGaplessPair(segment, nextTurn, duration))}
+              nextTurn={nextTurn} canPreviewPair={previewablePairIds.has(segment.id)}
               caption={captionTexts[segment.id]} compactRows={compactRows} focusMode={focusMode}
               expandedSegmentId={expandedSegmentId} advancedTurnId={advancedTurnId} turnActionFeedback={turnActionFeedback}
               boundaryProposal={focusedTurn?.segment.id === segment.id ? boundaryProposal : null}
