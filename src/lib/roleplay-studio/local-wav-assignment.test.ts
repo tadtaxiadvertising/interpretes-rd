@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-import { prepareLocalWavAssignment } from './local-wav-assignment';
+import { prepareLocalWavAssignment, planLocalWavParts } from './local-wav-assignment';
 import { prepareRoleplayManifestImport } from '@/lib/roleplay-manifest-import';
 import { stageLocalWavHandoff, peekLocalWavHandoff, peekStudioHandoff, clearStudioHandoff } from './assignment-handoff';
 
@@ -63,6 +63,28 @@ describe('local PCM assignment',()=>{
     await expect(prepareLocalWavAssignment(wave(100,48000,2),[{...turn,start:0,end:45},{...turn,start:45,end:90}],signal())).rejects.toThrow(/presupuesto/);
     const abort=new AbortController();abort.abort();
     await expect(prepareLocalWavAssignment(source,[turn],abort.signal)).rejects.toThrow();
+  });
+  it('plans by exact bytes including multibyte metadata, then generates only the selected part',async()=>{
+    const source=wave(100,48000,2);
+    const turns=[{...turn,id:'first',title:'Consulta – español',start:0,end:45},
+      {...turn,id:'second',title:'Révision 🩺',start:45,end:90}];
+    const read=vi.spyOn(source,'arrayBuffer');
+    const parts=await planLocalWavParts(source,turns,signal());
+    expect(parts.map(p=>p.turns.map(t=>t.id))).toEqual([['first'],['second']]);
+    expect(parts.map(p=>[p.first,p.last])).toEqual([[1,1],[2,2]]);
+    expect(read).not.toHaveBeenCalled();
+    for(const part of parts){
+      const files=await prepareLocalWavAssignment(source,part.turns,signal());
+      expect(files.reduce((sum,file)=>sum+file.size,0)).toBe(part.bytes);
+      expect(part.bytes).toBeLessThanOrEqual(16*1024*1024);
+    }
+  });
+  it('preserves all 100 chronological turns under the existing per-package count cap',async()=>{
+    const turns=Array.from({length:100},(_,i)=>({...turn,id:String(i),start:i*0.2,end:i*0.2+0.15}));
+    const parts=await planLocalWavParts(wave(21),turns.reverse(),signal());
+    expect(parts.map(p=>p.turns.length)).toEqual([25,25,25,25]);
+    expect(parts.flatMap(p=>p.turns.map(t=>t.id))).toEqual(Array.from({length:100},(_,i)=>String(i)));
+    await expect(planLocalWavParts(wave(100,48000,2),[{...turn,id:'large',start:0,end:90}],signal())).rejects.toThrow(/Intervención 1.*15 MiB/);
   });
   it('rejects tampered audio during manifest import',async()=>{
     const files=await prepareLocalWavAssignment(wave(),[turn],signal());
