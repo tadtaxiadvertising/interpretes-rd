@@ -133,3 +133,28 @@ test('staged Roleplay verifier targets a new disposable CI database only', () =>
   assert.doesNotMatch(workflow,
     /(?:npm run migrate|prisma migrate deploy)[^\n]*roleplay-upload-reservations/i);
 });
+
+
+test('roleplay creation ledger remains staged and only runs against disposable CI PostgreSQL', () => {
+  const staged = readFileSync(resolve(stagedDir, 'roleplay-creation-requests.sql'), 'utf8');
+  assert.match(staged, /STAGED DESIGN ONLY/);
+  assert.match(staged, /roleplay_creation_requests_actor_key UNIQUE/);
+  assert.match(staged, /ENABLE ROW LEVEL SECURITY/);
+  assert.match(staged, /REVOKE ALL ON TABLE/);
+  for (const relative of readdirSync(migrationDir, { recursive: true }).map(String)) {
+    if (!relative.endsWith('migration.sql')) continue;
+    assert.doesNotMatch(readFileSync(resolve(migrationDir, relative), 'utf8'), /roleplay_creation_requests/i);
+  }
+  const verifier = readFileSync(resolve(root, 'scripts/verify-roleplay-creation-ledger-postgres.ts'), 'utf8');
+  assert.match(verifier, /process\.env\.CI !== 'true'/);
+  assert.match(verifier, /url\.pathname !== '\/interpreters_e2e'/);
+  assert.match(verifier, /randomBytes\(6\)/);
+  assert.match(verifier, /CREATE DATABASE/);
+  assert.match(verifier, /DROP DATABASE/);
+  assert.match(verifier, /Promise\.allSettled/);
+  assert.match(verifier, /ROLLBACK/);
+  const workflow = readFileSync(resolve(root, '.github/workflows/deploy.yml'), 'utf8');
+  assert.match(workflow, /Verify staged Roleplay creation ledger \(isolated PostgreSQL only\)/);
+  assert.match(workflow, /npx tsx scripts\/verify-roleplay-creation-ledger-postgres\.ts/);
+  assert.doesNotMatch(workflow, /(?:npm run migrate|prisma migrate deploy)[^\n]*roleplay.creation.requests/i);
+});
