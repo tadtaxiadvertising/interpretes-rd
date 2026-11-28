@@ -227,8 +227,6 @@ export default function RoleplayStudioPage() {
     !hasActiveEditorWork || window.confirm(leaveEditorPrompt);
   const [segmentSearch, setSegmentSearch] = useState('');
   const [showPendingReview, setShowPendingReview] = useState(false);
-  const [bulkSpeakerRole, setBulkSpeakerRole] =
-    useState<'doctor' | 'patient' | 'nurse' | 'operator'>('doctor');
   const [compactPreference, setCompactPreference] = useState<boolean | null>(null);
   const [focusMode, setFocusMode] = useState(false);
   const [advancedTurnId, setAdvancedTurnId] = useState<string | null>(null);
@@ -1157,11 +1155,13 @@ export default function RoleplayStudioPage() {
   };
 
   const setSpeakerForPendingTurns = (
-    role: 'doctor' | 'patient' | 'nurse' | 'operator', visibleIds: readonly string[],
+    role: 'doctor' | 'patient', visibleIds: readonly string[],
   ) => {
     const visible = new Set(visibleIds);
+    const language: StudioLanguage = role === 'doctor' ? 'en' : 'es';
     const pendingIds = new Set(segments.filter(item =>
-      visible.has(item.id) && item.speakerRole === 'unknown',
+      visible.has(item.id) && item.speakerRole === 'unknown' &&
+      (item.language === 'unknown' || item.language === language),
     ).map(item => item.id));
     if (!pendingIds.size) return;
     // An administrator must explicitly choose the generic role. Never infer
@@ -1182,17 +1182,17 @@ export default function RoleplayStudioPage() {
         if (!pendingIds.has(item.id)) return item;
         return {
           ...item,
-          speakerRole: role,
+          speakerRole: role, language,
           title: titleAfterProfileChange(
             item.title, item.speakerRole, item.language,
-            indexById.get(item.id) ?? 0, role, item.language,
+            indexById.get(item.id) ?? 0, role, language,
           ),
         };
       });
     });
     setTurnActionFeedback(null);
     setError('');
-    setNotice(`Perfil ${role} asignado a ${pendingIds.size} intervenciones visibles sin hablante. Revisa cada audio; puedes deshacer esta asignación.`);
+    setNotice(`Perfil ${role === 'doctor' ? 'Cliente' : 'Hispanohablante'} (${language.toUpperCase()}) asignado a ${pendingIds.size} intervenciones visibles. Se conservaron los idiomas incompatibles ya revisados. Escucha cada audio; puedes deshacer esta asignación.`);
   };
 
   const applySourceSpeakerProfile = (id: string) => {
@@ -2183,16 +2183,22 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds } = useMemo(() => {
+  const { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds, pendingClientIds, pendingSpanishIds } = useMemo(() => {
     const pendingLanguageIds: string[] = [];
     const medicalLanguagePendingIds: string[] = [];
     const pendingSpeakerIds: string[] = [];
+    const pendingClientIds: string[] = [];
+    const pendingSpanishIds: string[] = [];
     for (const { segment } of visibleSegments) {
       if (segment.language === 'unknown' && segment.speakerRole !== 'interpreter') pendingLanguageIds.push(segment.id);
       if (segment.language === 'unknown' && (segment.speakerRole === 'doctor' || segment.speakerRole === 'patient')) medicalLanguagePendingIds.push(segment.id);
-      if (segment.speakerRole === 'unknown') pendingSpeakerIds.push(segment.id);
+      if (segment.speakerRole === 'unknown') {
+        pendingSpeakerIds.push(segment.id);
+        if (segment.language === 'unknown' || segment.language === 'en') pendingClientIds.push(segment.id);
+        if (segment.language === 'unknown' || segment.language === 'es') pendingSpanishIds.push(segment.id);
+      }
     }
-    return { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds };
+    return { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds, pendingClientIds, pendingSpanishIds };
   }, [visibleSegments]);
   const visiblePendingTurns = useMemo(() => visibleSegments.filter(({ segment }) =>
     focusMode ? !confirmedIds.has(segment.id) : needsReview(segment)), [visibleSegments, focusMode, confirmedIds]);
@@ -3124,21 +3130,15 @@ export default function RoleplayStudioPage() {
               <span className="mr-auto text-xs text-[var(--text-secondary)]">
                 {pendingSpeakerIds.length} intervenciones visibles sin hablante. Se respetarán los perfiles revisados y los filtros actuales.
               </span>
-              <label className="flex items-center gap-2 text-xs text-[var(--foreground)]">
-                Perfil
-                <select aria-label="Hablante para pendientes" value={bulkSpeakerRole}
-                  onChange={event => setBulkSpeakerRole(event.target.value as typeof bulkSpeakerRole)}
-                  className="rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-[var(--theme-control-text)]">
-                  <option value="doctor">Médico</option>
-                  <option value="patient">Paciente</option>
-                  <option value="nurse">Enfermería</option>
-                  <option value="operator">Operador</option>
-                </select>
-              </label>
-              <button type="button" onClick={() => setSpeakerForPendingTurns(bulkSpeakerRole, pendingSpeakerIds)}
-                className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
-                Asignar hablante a {pendingSpeakerIds.length} pendientes
+              <button type="button" disabled={!pendingClientIds.length} onClick={() => setSpeakerForPendingTurns('doctor', pendingClientIds)}
+                className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                Cliente · EN ({pendingClientIds.length})
               </button>
+              <button type="button" disabled={!pendingSpanishIds.length} onClick={() => setSpeakerForPendingTurns('patient', pendingSpanishIds)}
+                className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                Hispanohablante · ES ({pendingSpanishIds.length})
+              </button>
+              <p className="w-full text-xs text-[var(--text-secondary)]">Solo se asignan turnos sin perfil e idioma compatible. Clasifica al intérprete original individualmente para evitar exclusiones accidentales.</p>
             </div>
           )}
           {pendingLanguageIds.length > 1 && (

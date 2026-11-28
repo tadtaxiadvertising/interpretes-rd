@@ -34,9 +34,8 @@ describe('controlled intervention editor',()=>{
     const advanced=screen.getByRole('button',{name:'Ajustes avanzados'});
     expect(advanced.getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByLabelText('Título').closest('#studio-advanced-turn-a')?.hasAttribute('hidden')).toBe(true);
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'),{target:{value:'patient'}});
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'),{target:{value:'es'}});
-    expect(vi.mocked(props.update).mock.calls).toEqual([['turn-a',{speakerRole:'patient'}],['turn-a',{language:'es'}]]);
+    fireEvent.click(screen.getByRole('button',{name:'Hispanohablante · ES'}));
+    expect(vi.mocked(props.update).mock.calls).toEqual([['turn-a',{speakerRole:'patient',language:'es'}]]);
     fireEvent.click(advanced);
     expect(props.onToggleAdvanced).toHaveBeenCalledExactlyOnceWith('turn-a');
     rerender(<StudioInterventionCard {...props} advancedTurnId="turn-a"/>);
@@ -45,6 +44,12 @@ describe('controlled intervention editor',()=>{
     expect(props.update).toHaveBeenCalledWith('turn-a',{title:'Consulta revisada'});
     expect(props.update).toHaveBeenCalledWith('turn-a',{start:2});
     expect(props.previewSegment).not.toHaveBeenCalled();
+  });
+  it('offers exactly three profiles in compact view and assigns English to interpreter',()=>{
+    const {props}=setup({compactRows:true,expandedSegmentId:null,segment:{...segment,speakerRole:'unknown',language:'unknown'}});
+    expect(screen.getByRole('group',{name:'Perfil de intervención 3'}).querySelectorAll('button')).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button',{name:'Intérprete original — excluir · EN'}));
+    expect(props.update).toHaveBeenCalledExactlyOnceWith('turn-a',{speakerRole:'interpreter',language:'en'});
   });
   it('does not let compound cuts be edited as continuous ranges',()=>{
     const compound={...segment,end:12,ranges:[{start:1,end:4},{start:9,end:12}]};
@@ -71,8 +76,8 @@ describe('controlled intervention editor',()=>{
     rerender(<Parent tick={2} update={next}/>);
     expect(screen.getByText('Cursor 2')).toBeTruthy();
     expect(format).not.toHaveBeenCalled();
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'),{target:{value:'patient'}});
-    expect(next).toHaveBeenCalledWith('turn-a',{speakerRole:'patient'});
+    fireEvent.click(screen.getByRole('button',{name:'Hispanohablante · ES'}));
+    expect(next).toHaveBeenCalledWith('turn-a',{speakerRole:'patient',language:'es'});
     expect(initial).not.toHaveBeenCalled();
   });
   it('previews a boundary proposal without applying it',()=>{

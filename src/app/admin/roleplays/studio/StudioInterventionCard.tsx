@@ -67,6 +67,29 @@ function StudioInterventionCard({
   previewPairWithoutGap,previewSegment,removeIntervention,update,insertProtocol,markAtPlayhead,
   applyBoundaryProposal,onToggleExpanded,onToggleAdvanced,
 }: Props) {
+  // Keep legacy persisted roles compatible while presenting three editorial profiles.
+  const activeProfile = segment.speakerRole === 'patient' ? 'patient'
+    : segment.speakerRole === 'interpreter' ? 'interpreter'
+    : segment.speakerRole === 'unknown' ? null : 'doctor';
+  const profileButtons = (
+    <div role="group" aria-label={'Perfil de intervención ' + (index + 1)} className="flex flex-wrap items-center gap-2">
+      {([
+        ['doctor', 'en', 'Cliente'],
+        ['patient', 'es', 'Hispanohablante'],
+        ['interpreter', 'en', 'Intérprete original — excluir'],
+      ] as const).map(([speakerRole, language, label]) => (
+        <button key={speakerRole} type="button"
+          aria-pressed={activeProfile === speakerRole && segment.language === language}
+          onClick={() => update(segment.id, { speakerRole: speakerRole === 'doctor' && activeProfile === 'doctor' ? segment.speakerRole : speakerRole, language })}
+          className={`rounded-lg border px-3 py-2 text-xs font-semibold ${activeProfile === speakerRole && segment.language === language ? 'theme-action-primary' : 'theme-action-secondary'}`}>
+          {label} · {language.toUpperCase()}
+        </button>
+      ))}
+      {(!activeProfile || segment.language !== (activeProfile === 'patient' ? 'es' : 'en')) && (
+        <span className="text-xs text-[var(--theme-warning)]">Perfil o idioma pendiente de revisar</span>
+      )}
+    </div>
+  );
   const turnTools = (<div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => seekAudio(segment.start)}
         aria-label={'Ir al inicio de intervención ' + (index + 1)}
@@ -172,35 +195,7 @@ function StudioInterventionCard({
     )}
     {compactRows && expandedSegmentId !== segment.id && (
       <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
-        <label className="flex min-w-[180px] flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
-          <span className="shrink-0">Hablante</span>
-          <select aria-label={'Hablante rápido intervención ' + (index + 1)}
-            value={segment.speakerRole}
-            onChange={event => update(segment.id, {
-              speakerRole: event.target.value as StudioSpeakerRole,
-            })}
-            className="min-w-0 flex-1 rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)]">
-            <option value="unknown">Por identificar</option>
-            <option value="doctor">Médico</option>
-            <option value="patient">Paciente</option>
-            <option value="nurse">Enfermería</option>
-            <option value="operator">Operador</option>
-            <option value="interpreter">Intérprete original — excluir</option>
-          </select>
-        </label>
-        <label className="flex min-w-[140px] flex-1 items-center gap-2 text-xs text-[var(--text-secondary)]">
-          <span className="shrink-0">Idioma</span>
-          <select aria-label={'Idioma rápido intervención ' + (index + 1)}
-            value={segment.language}
-            onChange={event => update(segment.id, {
-              language: event.target.value as StudioLanguage,
-            })}
-            className="min-w-0 flex-1 rounded-md border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)]">
-            <option value="unknown">Por revisar</option>
-            <option value="en">Inglés (EN)</option>
-            <option value="es">Español (ES)</option>
-          </select>
-        </label>
+        {profileButtons}
       </div>
     )}
     {(!compactRows || expandedSegmentId === segment.id) && (
@@ -211,31 +206,7 @@ function StudioInterventionCard({
         <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--text-secondary)]">{caption}</p>
       </div>
     )}
-    <div className="grid gap-3 sm:grid-cols-2">
-      <label className="block text-sm text-[var(--text-secondary)]">
-        Perfil del hablante
-        <select value={segment.speakerRole} onChange={event => {
-          update(segment.id, { speakerRole: event.target.value as StudioSpeakerRole });
-        }} className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
-          <option value="unknown">Hablante sin identificar</option>
-          <option value="doctor">Médico / profesional de salud</option>
-          <option value="patient">Paciente</option>
-          <option value="nurse">Enfermería</option>
-          <option value="operator">Operador</option>
-          <option value="interpreter">Intérprete original — excluir</option>
-        </select>
-      </label>
-      <label className="block text-sm text-[var(--text-secondary)]">
-        Idioma de la intervención
-        <select value={segment.language} onChange={event => {
-          update(segment.id, { language: event.target.value as StudioLanguage });
-        }} className="mt-1 w-full rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]">
-          <option value="unknown">Por revisar</option>
-          <option value="en">Inglés (EN)</option>
-          <option value="es">Español (ES)</option>
-        </select>
-      </label>
-    </div>
+    {profileButtons}
     {focusMode && boundaryProposal && (
       <section aria-label="Propuesta de ajuste de tiempos" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
         <h4 className="text-sm font-semibold text-[var(--foreground)]">{boundaryProposal.reason === 'overlap' ? 'Propuesta: corregir solapamiento breve' : 'Propuesta: reducir silencio en los bordes'}</h4>

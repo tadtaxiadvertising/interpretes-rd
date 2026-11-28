@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import RoleplayStudioPage from './page';
 
 vi.mock('next/link', () => ({
@@ -28,6 +28,21 @@ describe('Audio Studio compact editing', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
+
+  function chooseProfile(index: number, profile: 'client' | 'spanish' | 'interpreter') {
+    const labels = { client: 'Cliente · EN', spanish: 'Hispanohablante · ES', interpreter: 'Intérprete original — excluir · EN' };
+    fireEvent.click(within(screen.getByRole('group', { name: 'Perfil de intervención ' + index }))
+      .getByRole('button', { name: labels[profile] }));
+  }
+
+  function displayedLanguages() {
+    return screen.getAllByRole('group', { name: /Perfil de intervención / }).map(group => {
+      const metadata = group.closest('article')?.querySelector('h3 > span')?.textContent ?? '';
+      const match = metadata.match(/ · (EN|ES|UNKNOWN)$/);
+      if (!match) throw new Error('Missing visible language metadata: ' + metadata);
+      return match[1].toLowerCase();
+    });
+  }
 
   function loadAudio(duration = 240) {
     const { container } = render(<RoleplayStudioPage />);
@@ -78,9 +93,7 @@ describe('Audio Studio compact editing', () => {
   it('reveals an interpreter-original turn for correction instead of exporting it', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), {
-      target: { value: 'interpreter' },
-    });
+    chooseProfile(1, 'interpreter');
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'turno oculto' },
     });
@@ -411,11 +424,8 @@ describe('Audio Studio compact editing', () => {
     for (let i = 0; i < 4; i++) {
       fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     }
-    const roles = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
-    const languages = screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[];
-    fireEvent.change(roles[0], { target: { value: 'doctor' } });
-    fireEvent.change(languages[0], { target: { value: 'en' } });
-    fireEvent.change(roles[3], { target: { value: 'interpreter' } });
+    chooseProfile(1, 'client');
+    chooseProfile(4, 'interpreter');
     fireEvent.change(screen.getAllByLabelText('Título')[1], {
       target: { value: 'Escenario personalizado' },
     });
@@ -423,23 +433,40 @@ describe('Audio Studio compact editing', () => {
     const apply = screen.getByRole('button', { name: 'Marcar pendientes como español' });
     expect(screen.getByText(/2 intervenciones visibles sin idioma/)).toBeTruthy();
     fireEvent.click(apply);
-    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
-      .map(input => input.value)).toEqual(['en', 'es', 'es', 'unknown']);
+    expect(displayedLanguages()).toEqual(['en', 'es', 'es', 'en']);
     expect((screen.getAllByLabelText('Título') as HTMLInputElement[])
       .map(input => input.value)).toEqual([
-        'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención · 3 (ES)', 'Intérprete · 4',
+        'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención · 3 (ES)', 'Intérprete · 4 (EN)',
       ]);
     expect(screen.queryByRole('button', { name: 'Marcar pendientes como español' })).toBeNull();
     expect(screen.getByText(/Idioma ES asignado a 2 intervenciones/)).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de idiomas' }));
-    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
-      .map(input => input.value)).toEqual(['en', 'unknown', 'unknown', 'unknown']);
+    expect(displayedLanguages()).toEqual(['en', 'unknown', 'unknown', 'en']);
     expect((screen.getAllByLabelText('Título') as HTMLInputElement[])
       .map(input => input.value)).toEqual([
-        'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención 3', 'Intérprete · 4',
+        'Doctor · 1 (EN)', 'Escenario personalizado', 'Intervención 3', 'Intérprete · 4 (EN)',
       ]);
     expect(screen.getByRole('button', { name: 'Marcar pendientes como español' })).toBeTruthy();
+  });
+
+  it('assigns profile and language in bulk only to visible compatible pending turns and undoes both', () => {
+    loadAudio(180);
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    chooseProfile(1, 'client');
+    const titles = screen.getAllByLabelText('Título');
+    fireEvent.change(titles[1], { target: { value: 'Grupo revisado A' } });
+    fireEvent.change(titles[2], { target: { value: 'Grupo revisado B' } });
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    fireEvent.change(search, { target: { value: 'Grupo revisado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Hispanohablante · ES (2)' }));
+    fireEvent.change(search, { target: { value: '' } });
+    expect(displayedLanguages()).toEqual(['en', 'es', 'es', 'unknown']);
+    expect(within(screen.getByRole('group', { name: 'Perfil de intervención 2' }))
+      .getByRole('button', { name: 'Hispanohablante · ES' }).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getAllByLabelText('Título')[1] as HTMLInputElement).value).toBe('Grupo revisado A');
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de hablantes' }));
+    expect(displayedLanguages()).toEqual(['en', 'unknown', 'unknown', 'unknown']);
   });
 
   it('never assigns languages to turns hidden by the active search filter', () => {
@@ -456,12 +483,10 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/2 intervenciones visibles sin idioma/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Marcar pendientes como inglés' }));
     fireEvent.change(search, { target: { value: '' } });
-    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
-      .map(item => item.value)).toEqual(['unknown', 'en', 'unknown', 'en']);
+    expect(displayedLanguages()).toEqual(['unknown', 'en', 'unknown', 'en']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de idiomas' }));
-    expect((screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[])
-      .map(item => item.value)).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
+    expect(displayedLanguages()).toEqual(['unknown', 'unknown', 'unknown', 'unknown']);
   });
 
   it('adds a turn near the cursor even when another turn exists much later', () => {
@@ -543,12 +568,7 @@ describe('Audio Studio compact editing', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[0], {
-      target: { value: 'doctor' },
-    });
-    fireEvent.change(screen.getAllByLabelText('Idioma de la intervención')[0], {
-      target: { value: 'en' },
-    });
+    chooseProfile(1, 'client');
     fireEvent.click(screen.getByRole('checkbox', { name: /Pendientes \(1\)/ }));
     // The visible title is now updated automatically after classifying its
     // speaker; row identity must not depend on the old placeholder title.
@@ -574,27 +594,23 @@ describe('Audio Studio compact editing', () => {
     for (let i = 0; i < 6; i++) {
       fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     }
-    const speaker = screen.getByRole('combobox', { name: 'Hablante rápido intervención 1' });
-    const language = screen.getByRole('combobox', { name: 'Idioma rápido intervención 1' });
-    fireEvent.change(speaker, { target: { value: 'interpreter' } });
-    fireEvent.change(language, { target: { value: 'en' } });
+    chooseProfile(1, 'interpreter');
     expect(screen.getByRole('checkbox', { name: 'Pendientes (6)' })).toBeTruthy();
     expect(screen.getByText(/Excluye esos fragmentos antes de exportar/)).toBeTruthy();
-    fireEvent.change(speaker, { target: { value: 'doctor' } });
+    chooseProfile(1, 'client');
     expect(screen.queryByText(/Excluye esos fragmentos antes de exportar/)).toBeNull();
     expect(screen.getByRole('checkbox', { name: 'Pendientes (5)' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
-    expect(screen.queryByRole('combobox', { name: 'Hablante rápido intervención 1' })).toBeNull();
-    expect(screen.getByRole('combobox', { name: 'Hablante rápido intervención 2' })).toBeTruthy();
+    expect(screen.queryByRole('group', { name: 'Perfil de intervención 1' })).toBeNull();
+    expect(screen.getByRole('group', { name: 'Perfil de intervención 2' })).toBeTruthy();
     fireEvent.click(screen.getByRole('checkbox', { name: 'Pendientes (5)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Vista detallada' }));
 
-    const fullSpeakers = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
-    const fullLanguages = screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[];
-    expect(fullSpeakers[0].value).toBe('doctor');
-    expect(fullLanguages[0].value).toBe('en');
-    expect(screen.queryByRole('combobox', { name: 'Hablante rápido intervención 1' })).toBeNull();
+    expect(within(screen.getByRole('group', { name: 'Perfil de intervención 1' }))
+      .getByRole('button', { name: 'Cliente · EN' }).getAttribute('aria-pressed')).toBe('true');
+    expect(displayedLanguages()[0]).toBe('en');
+    expect(screen.getAllByLabelText('Título')).toHaveLength(6);
   });
 
   it('preserves the current source and interventions when the file picker is cancelled', () => {
@@ -707,12 +723,8 @@ describe('Audio Studio compact editing', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
-    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[0], {
-      target: { value: 'doctor' },
-    });
-    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], {
-      target: { value: 'patient' },
-    });
+    chooseProfile(1, 'client');
+    chooseProfile(2, 'spanish');
     fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
     const alert = screen.getByRole('alert');
@@ -830,9 +842,9 @@ describe('Audio Studio compact editing', () => {
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
     fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
-    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], { target: { value: 'patient' } });
+    chooseProfile(2, 'spanish');
     expect(screen.queryByRole('button', { name: /Preescuchar intervenciones/ })).toBeNull();
-    fireEvent.change(screen.getAllByLabelText('Perfil del hablante')[1], { target: { value: 'unknown' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer edición de intervención' }));
     expect(screen.getByRole('button', { name: /Preescuchar intervenciones/ })).toBeTruthy();
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Intervención 1' },
