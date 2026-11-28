@@ -24,6 +24,21 @@ function setup(overrides: Partial<ComponentProps<typeof StudioFocusNavigation>> 
 }
 
 describe('focused intervention navigation',()=>{
+  it('renders one set of controls and keeps secondary help collapsed by default',()=>{
+    setup();
+    expect(screen.getAllByRole('group',{name:'Reproducción en modo enfoque'})).toHaveLength(1);
+    expect(screen.getAllByRole('button',{name:'Escuchar intervención activa'})).toHaveLength(1);
+    expect(screen.getAllByRole('button',{name:'Confirmar y avanzar'})).toHaveLength(1);
+    expect(screen.getAllByRole('button',{name:'Excluir y avanzar'})).toHaveLength(1);
+    expect(screen.getAllByRole('slider')).toHaveLength(1);
+    const summary=screen.getByText('Ayuda de reproducción y teclado');
+    const details=summary.closest('details')!;
+    expect(details.open).toBe(false);
+    expect(details.querySelector('#studio-focused-shortcuts')).toBeTruthy();
+    expect(details.querySelector('#studio-next-preview-help')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Usar atajos de teclado'})).toBeTruthy();
+    expect(screen.getByRole('checkbox',{name:'Escuchar siguiente al confirmar'})).toBeTruthy();
+  });
   it('places playback and confirmation before secondary keyboard assistance',()=>{
     const {props}=setup();
     const playback=screen.getByRole('button',{name:'Escuchar intervención activa'});
