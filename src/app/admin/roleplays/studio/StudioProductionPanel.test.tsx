@@ -73,6 +73,25 @@ describe('production package guidance', () => {
     expect(fireEvent.click(screen.getByRole('link', { name: 'Consultar sesiones existentes' }))).toBe(false);
     expect(props.onConfirmNavigation).toHaveBeenCalledOnce();
   });
+  it('offers a safe new-tab lookup for uncertain attempts without invoking editor navigation', () => {
+    const { props } = setup({ preparedPartKey: '6' });
+    const link = screen.getByRole('link', { name: 'Consultar sesiones sin salir de Audio Studio (nueva pestaña)' });
+    expect(link.getAttribute('href')).toBe('/admin/roleplays');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(screen.getByText(/eso no demuestra que la creación haya fallado/)).toBeTruthy();
+    // Prevent jsdom navigation while checking the editor callback is untouched.
+    link.addEventListener('click', event => event.preventDefault(), { once: true });
+    fireEvent.click(link);
+    expect(props.onConfirmNavigation).not.toHaveBeenCalled();
+    expect(props.onSelectPart).not.toHaveBeenCalled();
+    expect(screen.getByText('Preparado')).toBeTruthy();
+  });
+  it('does not show uncertainty-specific lookup when there is no uncertain attempt', () => {
+    setup({ activeProductionKeys: new Map([['1', 'created'], ['6', 'new']]) });
+    expect(screen.queryByRole('link', { name: /Consultar sesiones sin salir de Audio Studio/ })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Consultar sesiones existentes' })).toBeTruthy();
+  });
   it('keeps selection disabled during an operation', () => {
     const { props } = setup({ disabled: true });
     const region = within(screen.getByRole('region', { name: 'Seguimiento de producción' }));

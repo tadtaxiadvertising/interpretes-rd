@@ -40,7 +40,12 @@ export default function StudioProductionPanel({
         {tracked.length} de {parts.length} partes con seguimiento · {pending.length} pendientes · {prepared.length} preparados · {transferred.length} transferidos · {verified.length} verificados · {created.length} con creación confirmada · {uncertain.length} sin confirmar.
       </p>
       {untrackedCount > 0 && <p className="text-xs text-[var(--theme-warning)]">{untrackedCount} {untrackedCount === 1 ? 'parte sin seguimiento disponible' : 'partes sin seguimiento disponible'}. No se puede deducir su estado de creación.</p>}
-      {uncertain.length > 0 && <p className="text-xs font-semibold text-[var(--theme-warning)]">Consulta las sesiones existentes antes de repetir una parte con intento sin confirmar.</p>}
+      {uncertain.length > 0 && <div className="space-y-2 rounded-lg border border-[var(--theme-control-border)] p-3">
+        <p className="text-xs font-semibold text-[var(--theme-warning)]">Consulta las sesiones existentes antes de repetir una parte con intento sin confirmar.</p>
+        <p className="text-xs text-[var(--text-secondary)]">Conserva el editor abierto. Busca al destinatario de la asignación original; si no encuentras la sesión, eso no demuestra que la creación haya fallado. Si conservas una referencia de recuperación, consulta el intento original cuando esa función esté disponible.</p>
+        <Link href="/admin/roleplays" target="_blank" rel="noopener noreferrer" prefetch={false}
+          className="theme-action-secondary inline-flex min-h-11 w-full items-center justify-center rounded-lg px-3 py-2 text-center text-xs font-semibold sm:w-auto">Consultar sesiones sin salir de Audio Studio (nueva pestaña)</Link>
+      </div>}
       {transferred.length + verified.length > 0 && <p className="text-xs text-[var(--text-secondary)]">Las partes transferidas o verificadas todavía no tienen creación confirmada.</p>}
       {preparedPartKey !== null && localOnly && parts.length > 1 && <p className="text-xs text-[var(--text-secondary)]">Hay un paquete preparado. Continúa a asignación antes de elegir otra parte; cambiar de parte puede descartar el paquete temporal.</p>}
       <ul className="max-h-64 space-y-1 overflow-y-auto text-xs sm:max-h-40">
@@ -59,7 +64,7 @@ export default function StudioProductionPanel({
       {localOnly && parts.length > 1 && next && <button type="button" disabled={disabled}
         onClick={() => onSelectPart(next.key)}
         className="theme-action-secondary min-h-11 w-full rounded px-3 py-2 text-xs font-semibold disabled:opacity-50 sm:min-h-0 sm:w-auto">Elegir siguiente parte pendiente ({next.number})</button>}
-      <Link href="/admin/roleplays" onClick={event => { if (!onConfirmNavigation()) event.preventDefault(); }} className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
+      <Link href="/admin/roleplays" prefetch={false} onClick={event => { if (!onConfirmNavigation()) event.preventDefault(); }} className="text-xs font-semibold text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>
     </section>
 
   );
