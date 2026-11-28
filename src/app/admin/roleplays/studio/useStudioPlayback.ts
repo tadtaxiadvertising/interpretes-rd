@@ -85,11 +85,11 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
   };
 
   /** Listen to precisely one SRT candidate without modifying its selection or cuts. */
-  const previewSubtitleCue = (cue: TimedTranscriptCue, index: number) => {
+  const previewSubtitleCue = (cue: TimedTranscriptCue, index: number, adjusted = false) => {
     const audioPlayer = player.current;
     if (!audioPlayer || !Number.isFinite(cue.start) || !Number.isFinite(cue.end) ||
         cue.start < 0 || cue.end <= cue.start || cue.end > duration) return;
-    const previewId = `subtitle-${index}`;
+    const previewId = adjusted ? `subtitle-trim-${index}` : `subtitle-${index}`;
     if (previewingId === previewId) {
       stopPreview();
       return;
