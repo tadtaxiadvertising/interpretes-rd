@@ -436,7 +436,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // The keyed path verifies all bytes once in the claim preparation helper.
+    if (!isBulk && participantType === 'interpreter') {
+      const interpreter = await db.interpreter.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
+      if (!interpreter) return privateRoleplayJson({ success: false, error: 'Interpreter not found' }, { status: 404 });
+    } else if (!isBulk) {
+      const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
+      if (!candidate) return privateRoleplayJson({ success: false, error: 'Candidate not found' }, { status: 404 });
+    }
+
+    // Reject missing destinations before reading audio streams. The keyed
+    // path verifies all bytes once in the claim preparation helper.
     if (!creationRequestKey && !useLibrary && expectedAudioChecksums) {
       for (let index = 0; index < scenarioAudios.length; index++) {
         const expected = expectedAudioChecksums[index];
@@ -448,14 +457,6 @@ export async function POST(req: NextRequest) {
           return privateRoleplayJson({ success: false, error: `Audio checksum mismatch for scenario ${index + 1}` }, { status: 400 });
         }
       }
-    }
-
-    if (!isBulk && participantType === 'interpreter') {
-      const interpreter = await db.interpreter.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
-      if (!interpreter) return privateRoleplayJson({ success: false, error: 'Interpreter not found' }, { status: 404 });
-    } else if (!isBulk) {
-      const candidate = await db.recruitmentCandidate.findUnique({ where: { id: parsedParticipantId! }, select: { id: true } });
-      if (!candidate) return privateRoleplayJson({ success: false, error: 'Candidate not found' }, { status: 404 });
     }
 
     if (creationRequestKey && participantType === 'interpreter') {
