@@ -74,6 +74,38 @@ describe('Admin roleplay import concurrency', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it('interrupts a Studio ZIP verification and retries without consuming the package or applying stale results', async () => {
+    const zip = new File(['x'.repeat(22)], 'roleplay-studio.zip', { type: 'application/zip' });
+    const audio = new File(['ID3'], 'segment-01.mp3', { type: 'audio/mpeg' });
+    stageStudioHandoff('retry-transfer', zip);
+    let finishOld!: (files: File[]) => void;
+    vi.mocked(extractStudioZip).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve; }));
+    vi.mocked(extractStudioZip).mockResolvedValueOnce([audio]);
+    vi.mocked(prepareRoleplayManifestImport).mockResolvedValueOnce([{
+      title: 'Reintento verificado', baseAudioFile: audio, durationLimitSec: 120,
+      scriptPrompt: '', sha256: 'a'.repeat(64),
+    }]);
+    const fetcher = vi.fn();
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} studioTransfer="retry-transfer" />);
+    const originalId = screen.getByTestId('draft-scenario').getAttribute('data-draft-id');
+    fireEvent.click(screen.getByRole('button', { name: 'Interrumpir verificación' }));
+    expect(screen.getByText(/Verificación interrumpida/)).toBeTruthy();
+    expect(screen.getByTestId('draft-scenario').getAttribute('data-draft-id')).toBe(originalId);
+    expect(peekStudioHandoff('retry-transfer')).toBe(zip);
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cargar paquete de Audio Studio' }));
+    });
+    expect(screen.getByText('Reintento verificado')).toBeTruthy();
+    expect(peekStudioHandoff('retry-transfer')).toBeNull();
+    await act(async () => { finishOld([audio]); });
+    expect(prepareRoleplayManifestImport).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Reintento verificado')).toBeTruthy();
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
   it('imports local WAV cuts without a ZIP reader or automatic publication', async () => {
     const manifest = new File(['{}'], 'manifest.json', { type: 'application/json' });
     const audio = new File(['x'.repeat(48)], 'segment-01.wav', { type: 'audio/wav' });
