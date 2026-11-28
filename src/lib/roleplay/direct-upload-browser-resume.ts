@@ -152,5 +152,6 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
       active = false;
     }
   }
-  return {run};
+  // Expose only the original correlation UUID, never the signed slots.
+  return {get requestKey() { return requestKey; },run};
 }
