@@ -1409,6 +1409,11 @@ describe('Audio Studio clip review player', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' }));
       await Promise.resolve();
     });
+    const transcriptButton = screen.getByRole('button', { name: 'Importar transcripción' });
+    expect(transcriptButton).toHaveProperty('disabled', true);
+    expect(screen.getByText('Carga la grabación original antes de importar los subtítulos.')).toBeTruthy();
+    fireEvent.click(transcriptButton);
+    expect(fetcher).toHaveBeenCalledTimes(1);
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Importar audio original' }));
       await Promise.resolve();
@@ -1423,6 +1428,12 @@ describe('Audio Studio clip review player', () => {
       .map(([source]) => source)
       .find((source): source is File => source instanceof File && source.type === 'audio/mpeg');
     expect(importedMedia?.name).toBe('Practice recording.mp3');
+    expect(transcriptButton).toHaveProperty('disabled', true);
+    expect(screen.getByText('Esperando la duración de la grabación…')).toBeTruthy();
+    Object.defineProperty(player!, 'duration', { configurable: true, value: 90 });
+    fireEvent.loadedMetadata(player!);
+    expect(transcriptButton).toHaveProperty('disabled', false);
+    expect(screen.getByText('Grabación lista. Comprueba que corresponde a la transcripción seleccionada.')).toBeTruthy();
   });
 
 });
