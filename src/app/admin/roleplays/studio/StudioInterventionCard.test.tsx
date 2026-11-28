@@ -67,6 +67,19 @@ describe('controlled intervention editor',()=>{
     expect(props.onToggleExpanded).toHaveBeenCalledExactlyOnceWith('turn-a');
     expect(props.update).not.toHaveBeenCalled();
   });
+  it('uses shared theme tokens for compact action boundaries and preserves selected profile state',()=>{
+    setup({compactRows:true,focusMode:false,expandedSegmentId:null});
+    const tools=screen.getByRole('group',{name:'Herramientas de intervención 3'});
+    for (const button of tools.querySelectorAll('button')) {
+      expect(button.className).toContain('border-[var(--theme-control-border)]');
+    }
+    const client=screen.getByRole('button',{name:'Cliente · EN'});
+    expect(client.getAttribute('aria-pressed')).toBe('true');
+    expect(client.className).toContain('theme-action-primary');
+    const spanish=screen.getByRole('button',{name:'Hispanohablante · ES'});
+    expect(spanish.getAttribute('aria-pressed')).toBe('false');
+    expect(spanish.className).toContain('theme-action-secondary');
+  });
   it('does not let compound cuts be edited as continuous ranges',()=>{
     const compound={...segment,end:12,ranges:[{start:1,end:4},{start:9,end:12}]};
     const {props}=setup({segment:compound,advancedTurnId:segment.id});
