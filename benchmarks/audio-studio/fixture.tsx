@@ -70,7 +70,8 @@ function renderProject() {
     {focusScenario && <StudioFocusNavigation visibleSegments={visibleSegments} focusedTurn={visibleSegments[focusIndex]}
       focusIndex={focusIndex} totalTurns={count} workspaceActive canConfirmFocused editingDisabled={false}
       confirmed={false} focusedReviewIssue={null} sourceProfileCount={2} previewActive={previewActive}
-      playhead={position} duration={duration} onSelect={selectFocus} onConfirm={advanceFocus}
+      playhead={position} duration={duration} onFocusCard={onSelect}
+      listenAfterConfirm={false} onListenAfterConfirmChange={onSelect} onSelect={selectFocus} onConfirm={advanceFocus}
       onExclude={advanceFocus} onApplyProfile={onSelect} onPreview={togglePreview} onPause={pausePreview}
       onSkip={seconds => seekFocus(position + seconds)} onSeek={seekFocus}/>}
 
