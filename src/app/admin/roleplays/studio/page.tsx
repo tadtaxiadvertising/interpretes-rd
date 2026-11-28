@@ -3081,7 +3081,7 @@ export default function RoleplayStudioPage() {
                 Centro de revisión ({issueTurns.length})
               </button>
               <span className="text-xs text-[var(--text-secondary)]">{issueTurns.length} con incidencias · {readyUnconfirmedCount} listas para confirmar</span>
-              {issueTurns.length > 0 && <button type="button" onClick={() => openReviewEntry(issueTurns[0].turn.id)}
+              {issueTurns.length > 0 && <button type="button" onClick={() => openReviewEntry(issueTurns[0].turn.id, issueTurns[0].findings[0]?.code)}
                 className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">Ir a primera incidencia</button>}
             </div>
           )}
@@ -3420,7 +3420,7 @@ export default function RoleplayStudioPage() {
               )}
               <div className="flex flex-wrap gap-2">
                 {issueTurns.length > 0 && <button type="button" disabled={busy || draftBusy || analyzingSilences}
-                  onClick={() => openReviewEntry(issueTurns[0].turn.id)}
+                  onClick={() => openReviewEntry(issueTurns[0].turn.id, issueTurns[0].findings[0]?.code)}
                   className="theme-action-primary min-h-11 rounded-lg px-3 py-2 text-sm font-semibold">Corregir primera incidencia</button>}
                 {readyUnconfirmedCount > 0 && <button type="button" disabled={busy || draftBusy || analyzingSilences}
                   onClick={() => openReviewEntry(readyUnconfirmed[0].turn.id)}
