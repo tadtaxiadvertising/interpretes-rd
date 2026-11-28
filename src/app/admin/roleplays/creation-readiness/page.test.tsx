@@ -36,6 +36,7 @@ describe('admin runtime diagnostic', () => {
     expect(html).not.toContain('Conserva la recuperación');
     expect(html).not.toContain('Contrasta el SHA');
     expect(html).not.toContain('Evidencia de comprobación');
+    expect(html).not.toContain('Copiar diagnóstico');
     expect(html).not.toContain('a'.repeat(40));
     expect(mocks.readiness).not.toHaveBeenCalled();
     expect(mocks.validate).toHaveBeenCalledWith('admin');
@@ -44,6 +45,7 @@ describe('admin runtime diagnostic', () => {
     const html = await view(check);
     expect(html).toContain('Comprobación no ejecutada');
     expect(html).not.toContain('Evidencia de comprobación');
+    expect(html).not.toContain('Copiar diagnóstico');
     expect(html).toContain('Solo consulta de recibos');
     expect(mocks.readiness).not.toHaveBeenCalled();
   });
@@ -75,6 +77,7 @@ describe('admin runtime diagnostic', () => {
       vi.setSystemTime(new Date('2026-11-27T18:00:00Z'));
       const html = await view('1');
       expect(html).toContain('Evidencia de comprobación');
+      expect(html).toContain('Copiar diagnóstico');
       expect(html).toContain('Fecha de comprobación (UTC): 2026-11-27T18:00:00.000Z');
       expect(html).toContain('SHA del servicio: ' + 'a'.repeat(40));
       expect(html).toContain('Modo: receipts-only');
