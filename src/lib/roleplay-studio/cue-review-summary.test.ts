@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from './cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -104,6 +104,33 @@ describe('pre-apply SRT quality summary', () => {
     for (const index of [-1, 2, 3, 4, 6, 0.5]) {
       expect(conflictingSelectedTimedCueIndices(cues, [0, 1], index)).toEqual([]);
     }
+  });
+
+  it('proposes trimming either side of a small overlap without changing source cues', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    const cues = [cue(0, 2.25), cue(2, 4), cue(4, 6)];
+    expect(proposeSelectedCueEdgeTrim(cues, [0, 1, 2], 0, 6)).toEqual({ start: 0, end: 2 });
+    expect(proposeSelectedCueEdgeTrim(cues, [0, 1, 2], 1, 6)).toEqual({ start: 2.25, end: 4 });
+    expect(proposeSelectedCueEdgeTrim(cues, [0, 1, 2], 2, 6)).toBeNull();
+    expect(cues).toEqual([cue(0, 2.25), cue(2, 4), cue(4, 6)]);
+    const adjusted = [{ ...cues[0], end: 2 }, ...cues.slice(1)];
+    expect(overlappingSelectedTimedCueIndices(adjusted, [0, 1, 2])).toEqual([]);
+  });
+
+  it('rejects containment, multiple conflicts, large trims and insufficient remaining duration', () => {
+    const cue = (start: number, end: number) => ({ start, end, speaker: null, text: 'Reference' });
+    for (const [cues, indices, index, duration] of [
+      [[cue(0, 4), cue(1, 2)], [0, 1], 0, 4],
+      [[cue(0, 3), cue(2.8, 4), cue(2.9, 5)], [0, 1, 2], 0, 5],
+      [[cue(0, 2.501), cue(2, 4)], [0, 1], 0, 4],
+      [[cue(1.6, 2.2), cue(2, 4)], [0, 1], 0, 4],
+      [[cue(0, 2.25), cue(2, 4)], [0, 1], 0, 3.9],
+      [[cue(0, 2.25), cue(2, 4)], [1], 0, 4],
+    ] as const) {
+      expect(proposeSelectedCueEdgeTrim(cues, indices, index, duration)).toBeNull();
+    }
+    expect(proposeSelectedCueEdgeTrim([cue(0, 1), cue(0.5, 2)], [0, 1], 0, 2))
+      .toEqual({ start: 0, end: 0.5 });
   });
 
   it('ignores invalid source times and indexes while providing review hints', () => {
