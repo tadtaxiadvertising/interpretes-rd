@@ -602,16 +602,24 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       // A network failure or an unreadable response may happen after the DB
       // transaction committed. Do not imply the request definitely failed.
       const unknownResultMessage = 'No se pudo confirmar el resultado de la creación.';
-      let res: Response;
-      try {
-        const useKeyedCreation = creationRecoveryEnabled && receiptRecoveryEnabled && participantType === 'interpreter';
-        if (useKeyedCreation) {
-          // If key generation fails, do not fall back to an unkeyed POST.
-          keyedAttempt.current = {
+      const useKeyedCreation = creationRecoveryEnabled && receiptRecoveryEnabled && participantType === 'interpreter';
+      if (useKeyedCreation) {
+        // Local preparation is not a network attempt. Validate the reference
+        // before retaining it or marking the Studio transfer unconfirmed.
+        try {
+          const attempt = {
             key: crypto.randomUUID(), scenarioCount: librarySource?.scenarios.length ?? scenarios.length, trackedToken,
           };
+          formatCreationRecoveryReference(attempt);
+          keyedAttempt.current = attempt;
           setKeyedStatus('IN_PROGRESS');
+        } catch {
+          setError('No se pudo preparar la referencia de recuperación. No se enviaron audios en este intento. Comprueba que el navegador admite una conexión segura y vuelve a intentarlo.');
+          return;
         }
+      }
+      let res: Response;
+      try {
         recordProductionAttempt(trackedToken, 'unconfirmed');
         res = await fetch('/api/admin/roleplays', {
           method: 'POST',
