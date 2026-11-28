@@ -5,6 +5,7 @@ import { resolveCurrentIdentity } from '@/lib/identity/resolve-user';
 import prisma from '@/lib/prisma';
 import { getAdminReviewUrl } from '@/lib/roleplay';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { openingAssignmentConfigured } from '@/lib/roleplay/direct-upload-pilot-config';
 import { ROLEPLAY_MAX_SCENARIOS } from '@/lib/roleplay-limits';
 
 export const dynamic = 'force-dynamic';
@@ -107,8 +108,11 @@ export default async function RoleplayLibraryDetailPage({
             {preview.length} escenarios · Creado el {source.createdAt.toLocaleDateString('es-DO')} · Estado de referencia: {source.status}
           </p>
         </div>
-        {allAvailable ? (
+        {allAvailable && reusable.kind === 'private' && !openingAssignmentConfigured(process.env) ? (
+          <p className="max-w-xs rounded-xl border border-[var(--theme-control-border)] p-3 text-sm text-[var(--theme-warning)]">Asignación privada no habilitada. Puedes escuchar y revisar esta plantilla.</p>
+        ) : allAvailable ? (
           <Link href={`/admin/roleplays/new?sourceSessionId=${encodeURIComponent(source.id)}`}
+            prefetch={false}
             className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-500">
             <ShieldCheck size={17} /> Asignar esta plantilla
           </Link>
