@@ -1228,6 +1228,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               finally { directObservationPending.current = false; }
             }} className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar estado de la reserva</button>
             {directObservation && <p role="status" className="text-sm text-[var(--foreground)]">{directReservationObservationLabels[directObservation]}</p>}
+            <Link href="/admin/roleplays/creation-readiness" target="_blank" rel="noopener noreferrer" prefetch={false} className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar reservas guardadas (nueva pestaña)</Link>
 
             <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia para que el responsable autorizado pueda identificar la solicitud original. No es un enlace de acceso ni permite recuperar automáticamente los archivos o iniciar otra reserva.</p>
           </div>
