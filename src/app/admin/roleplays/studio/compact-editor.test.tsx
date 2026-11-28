@@ -508,6 +508,23 @@ describe('Audio Studio compact editing', () => {
     expect(displayedLanguages()).toEqual(['en', 'unknown', 'unknown', 'unknown']);
   });
 
+  it('completes known legacy profiles with their corresponding languages and preserves unknown turns', async () => {
+    loadAudio(90);
+    const captions = '1\n00:00:00,000 --> 00:00:10,000\nNurse: Synthetic A\n\n2\n00:00:10,000 --> 00:00:20,000\nPatient: Synthetic B\n\n3\n00:00:20,000 --> 00:00:30,000\nUnassigned synthetic C';
+    const file = new File(['srt'], 'reference.srt', { type: 'text/plain' });
+    Object.defineProperty(file, 'text', { value: async () => captions, configurable: true });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [file] },
+      });
+    });
+    expect(displayedLanguages()).toEqual(['unknown', 'unknown', 'unknown']);
+    fireEvent.click(screen.getByRole('button', { name: 'Completar cliente EN / hispanohablante ES (2 pendientes visibles)' }));
+    expect(displayedLanguages()).toEqual(['en', 'es', 'unknown']);
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de idiomas' }));
+    expect(displayedLanguages()).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
   it('never assigns languages to turns hidden by the active search filter', () => {
     loadAudio(180);
     for (let i = 0; i < 4; i++) {

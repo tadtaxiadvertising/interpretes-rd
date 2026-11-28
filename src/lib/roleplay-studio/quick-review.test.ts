@@ -15,6 +15,24 @@ describe('explicit Studio review', () => {
     expect(studioReviewIssue({ ...a, start: -1 }, [a,b], 20)).toContain('límites');
     expect(studioReviewIssue({ ...a, responseLimit: 301 }, [a,b], 20)).toContain('respuesta');
   });
+  it.each([
+    ['doctor', 'es', 'Cliente (EN)'],
+    ['nurse', 'es', 'Cliente (EN)'],
+    ['operator', 'es', 'Cliente (EN)'],
+    ['patient', 'en', 'Hispanohablante (ES)'],
+  ] as const)('flags an incompatible %s/%s without rewriting its metadata', (speakerRole, language, label) => {
+    const turn = { ...a, speakerRole, language };
+    const before = JSON.stringify(turn);
+    const report = inspectStudioReview([turn], 20);
+    expect(report[0].findings).toEqual([{ code: 'language', message: 'El idioma no coincide con ' + label + '. Escucha y revisa el perfil.' }]);
+    expect(studioReviewIssue(turn, [turn], 20)).toContain(label);
+    expect(JSON.stringify(turn)).toBe(before);
+    expect(studioReviewIssue({ ...turn, language: speakerRole === 'patient' ? 'es' : 'en' }, [turn], 20)).toBeNull();
+  });
+  it('preserves original-interpreter exclusion ahead of language review', () => {
+    const turn = { ...a, speakerRole: 'interpreter' as const, language: 'es' as const };
+    expect(inspectStudioReview([turn], 20)[0].findings.map(issue => issue.code)).toEqual(['interpreter']);
+  });
   it('reports all issues per turn in chronological order without mutating the project', () => {
     const incomplete = { ...a, speakerRole: 'unknown' as const, language: 'unknown' as const, title: '', end: 6 };
     const input = [b, incomplete];

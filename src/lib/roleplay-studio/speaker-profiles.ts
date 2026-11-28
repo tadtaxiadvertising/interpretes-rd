@@ -14,6 +14,13 @@ export function studioEditorialProfile(role: StudioSpeakerRole): { role: 'doctor
   return { role: 'doctor', label: 'Cliente', language: 'en' };
 }
 
+/** A known language that disagrees with the editorial profile needs review,
+ * not automatic correction: the recorded speech may differ from its label. */
+export function hasStudioProfileLanguageMismatch(role: StudioSpeakerRole, language: StudioLanguage): boolean {
+  const profile = studioEditorialProfile(role);
+  return profile !== null && language !== 'unknown' && language !== profile.language;
+}
+
 /** A profile name is searchable independently of the title or old role code. */
 export function studioProfileSearchText(role: StudioSpeakerRole): string {
   const profile = studioEditorialProfile(role);
