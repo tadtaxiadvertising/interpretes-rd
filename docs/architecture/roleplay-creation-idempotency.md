@@ -101,4 +101,6 @@ Tras una comprobación explícita, la pantalla ofrece «Copiar diagnóstico» pa
 
 ## Precaución de recursos
 
+La ruta de creación multipart limita a 60 segundos la inactividad durante la recepción del cuerpo, renovando el plazo solo cuando llegan bytes nuevos. Si se agota, devuelve HTTP 408, descarta la lectura y libera el cupo local de creación sin iniciar escrituras ni subidas a Storage. No limita la duración total de una carga activa ni las operaciones posteriores al parser. Un proxy puede almacenar el cuerpo antes de entregarlo al proceso; este control no sustituye los límites del proxy ni demuestra un ahorro de memoria en producción. El formulario sigue tratando HTTP 408 de forma conservadora y no reenvía automáticamente los archivos.
+
 La idempotencia no elimina los bytes que ya cruzaron el proxy en una primera solicitud multipart: una petición duplicada puede consumir tráfico antes de llegar al parser. Tampoco arregla el pico de memoria de hasta 25×15 MiB. La subida navegador → Storage, con bucket privado y permisos verificados (#287/#368), sigue siendo el objetivo de #290. Nunca ejecutar pruebas de estrés con audio clínico o contra el VPS pequeño.

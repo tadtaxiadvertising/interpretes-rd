@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
-import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from './bounded-multipart';
+import { MultipartBodyIdleTimeoutError, MultipartBodyTooLargeError, readBoundedMultipartFormData } from './bounded-multipart';
 
 const url = 'http://localhost/api/admin/roleplays/studio/silences';
 
@@ -54,6 +54,75 @@ describe('bounded multipart form decoding', () => {
     await vi.waitFor(() => expect(cancel).toHaveBeenCalled());
   });
 
+  it.each([false, true])('rejects a stalled stream even if upstream cancellation hangs (%s)', async hangCancellation => {
+    vi.useFakeTimers();
+    try {
+      const cancel = vi.fn(() => hangCancellation ? new Promise<void>(() => {}) : undefined);
+      const source = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('--b\r\nContent-Disposition: form-data; name="audio"\r\n\r\npartial'));
+        },
+        cancel,
+      });
+      const request = new Request(url, {
+        method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=b' },
+        body: source, duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+      const result = readBoundedMultipartFormData(request, 1024, 100);
+      const assertion = expect(result).rejects.toBeInstanceOf(MultipartBodyIdleTimeoutError);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(100);
+      await assertion;
+      expect(cancel).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('allows slow active uploads beyond the idle limit and clears the deadline on completion', async () => {
+    vi.useFakeTimers();
+    try {
+      let stream!: ReadableStreamDefaultController<Uint8Array>;
+      const source = new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } });
+      const request = new Request(url, {
+        method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=b' },
+        body: source, duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+      const encode = (value: string) => new TextEncoder().encode(value);
+      const result = readBoundedMultipartFormData(request, 1024, 100);
+      stream.enqueue(encode('--b\r\nContent-Disposition: form-data; name="audio"\r\n\r\n'));
+      await vi.advanceTimersByTimeAsync(60);
+      stream.enqueue(encode('hello'));
+      await vi.advanceTimersByTimeAsync(60);
+      stream.enqueue(encode('\r\n--b--\r\n'));
+      stream.close();
+      expect((await result).get('audio')).toBe('hello');
+      await vi.advanceTimersByTimeAsync(100);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not count empty chunks as upload progress', async () => {
+    vi.useFakeTimers();
+    try {
+      let stream!: ReadableStreamDefaultController<Uint8Array>;
+      const source = new ReadableStream<Uint8Array>({ start(controller) { stream = controller; } });
+      const request = new Request(url, {
+        method: 'POST', headers: { 'content-type': 'multipart/form-data; boundary=b' },
+        body: source, duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+      const result = readBoundedMultipartFormData(request, 1024, 100);
+      const assertion = expect(result).rejects.toBeInstanceOf(MultipartBodyIdleTimeoutError);
+      await vi.advanceTimersByTimeAsync(60);
+      stream.enqueue(new Uint8Array(0));
+      await vi.advanceTimersByTimeAsync(40);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('does not disclose malformed multipart contents or parse unlimited fields', async () => {
     const malformed = new Request(url, {
       method: 'POST',
@@ -66,6 +135,8 @@ describe('bounded multipart form decoding', () => {
   it('rejects invalid resource budgets before consuming the body', async () => {
     const request = formRequest();
     await expect(readBoundedMultipartFormData(request, 0)).rejects.toThrow('INVALID_MULTIPART_BYTE_LIMIT');
+    expect(request.bodyUsed).toBe(false);
+    await expect(readBoundedMultipartFormData(request, 1024, 0)).rejects.toThrow('INVALID_MULTIPART_IDLE_TIMEOUT');
     expect(request.bodyUsed).toBe(false);
   });
 });

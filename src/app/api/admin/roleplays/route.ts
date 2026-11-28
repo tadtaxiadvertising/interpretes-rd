@@ -19,7 +19,7 @@ import { parseRoleplayReceiptRequest, InvalidRoleplayReceiptRequestError } from 
 import { InvalidCreationAudioError } from '@/lib/roleplay/creation-audio-digests';
 import { getAdminRoleplayAudioExtension } from '@/lib/roleplay/admin-audio-extension';
 import { isParsedMultipartFile } from '@/lib/roleplay/parsed-multipart-file';
-import { MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
+import { MultipartBodyIdleTimeoutError, MultipartBodyTooLargeError, readBoundedMultipartFormData } from '@/lib/roleplay-studio/bounded-multipart';
 import {
   blockingAssignmentStatuses, candidateAssignmentScope, interpreterAssignmentBatchScope,
   interpreterAssignmentScope,
@@ -62,6 +62,8 @@ const MAX_ROLEPLAY_MULTIPART_BYTES = ROLEPLAY_MULTIPART_MAX_BYTES;
 // uploads. Admit only one create request per Next.js process at a time.
 // This is not a distributed quota or a substitute for direct-to-Storage upload.
 const MAX_ACTIVE_ROLEPLAY_CREATES = 1;
+// Limit inactivity, not the total time required for a slow active upload.
+const ROLEPLAY_MULTIPART_IDLE_TIMEOUT_MS = 60_000;
 let activeRoleplayCreates = 0;
 const MAX_TITLE = 200;
 const MAX_SCRIPT_PROMPT = 5000;
@@ -186,7 +188,7 @@ export async function POST(req: NextRequest) {
       return privateRoleplayJson({ success: false, error: 'El registro seguro de creación todavía no está disponible.' }, { status: 503 });
     }
     multipartReadStarted = true;
-    const formData = await readBoundedMultipartFormData(req, MAX_ROLEPLAY_MULTIPART_BYTES);
+    const formData = await readBoundedMultipartFormData(req, MAX_ROLEPLAY_MULTIPART_BYTES, ROLEPLAY_MULTIPART_IDLE_TIMEOUT_MS);
     const participantType = formData.get('participantType');
     const participantId = formData.get('participantId');
     const rawScenarios = formData.get('scenarios');
@@ -876,6 +878,9 @@ export async function POST(req: NextRequest) {
     if (error instanceof InvalidRoleplayReceiptRequestError || error instanceof InvalidCreationAudioError ||
         (error instanceof InvalidRoleplayCreationKeyError && !creationClaim)) {
       return privateRoleplayJson({ success: false, error: 'Clave de creación o contenido del paquete inválido.' }, { status: 400 });
+    }
+    if (error instanceof MultipartBodyIdleTimeoutError) {
+      return privateRoleplayJson({ success: false, error: 'La recepción del audio se interrumpió por inactividad.' }, { status: 408 });
     }
     if (error instanceof MultipartBodyTooLargeError) {
       return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
