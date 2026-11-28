@@ -76,6 +76,25 @@ function normalizeParticipantSearch(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
 }
 
+// Stop waiting even if a transport or body reader does not honor abort.
+// This only stops the browser wait; it is not a server-side rollback.
+async function awaitPublication<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return operation;
+  let onAbort = () => {};
+  const stopped = new Promise<never>((_, reject) => {
+    onAbort = () => reject(new Error('Publication wait interrupted'));
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    const result = await Promise.race([operation, stopped]);
+    signal.throwIfAborted();
+    return result;
+  } finally {
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
 export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, creationRecoveryEnabled = false, receiptRecoveryEnabled = creationRecoveryEnabled, studioTransfer }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
@@ -98,6 +117,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // Same-tab only: keep the original attempt identity, not a new upload.
   // No clinical media, request key or recipient is persisted in browser storage.
   const keyedAttempt = useRef<{ key: string; scenarioCount: number; trackedToken: string | null } | null>(null);
+  const keyedPublicationAbort = useRef<AbortController | null>(null);
+  useEffect(() => () => keyedPublicationAbort.current?.abort(), []);
   const [keyedStatus, setKeyedStatus] = useState<SingleCreationRecovery['status'] | 'CHECKING' | null>(null);
   const [recoveredSessionId, setRecoveredSessionId] = useState<string | null>(null);
   // Keep the reference in memory; warn about a full-page exit only while
@@ -618,14 +639,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           return;
         }
       }
+      const publication = keyedAttempt.current ? new AbortController() : null;
+      keyedPublicationAbort.current = publication;
       let res: Response;
       try {
         recordProductionAttempt(trackedToken, 'unconfirmed');
-        res = await fetch('/api/admin/roleplays', {
+        res = await awaitPublication(fetch('/api/admin/roleplays', {
           method: 'POST',
           body: formData,
-          ...(keyedAttempt.current ? { headers: { 'Idempotency-Key': keyedAttempt.current.key } } : {}),
-        });
+          ...(keyedAttempt.current ? { headers: { 'Idempotency-Key': keyedAttempt.current.key }, signal: publication!.signal } : {}),
+        }), publication?.signal);
       } catch {
         setSubmissionUncertain(true);
         throw new Error(unknownResultMessage);
@@ -641,7 +664,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       let raw: unknown;
       try {
-        raw = await res.json();
+        raw = await awaitPublication(res.json(), publication?.signal);
       } catch {
         setSubmissionUncertain(true);
         throw new Error(unknownResultMessage);
@@ -725,6 +748,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       if (keyedAttempt.current) setSubmissionUncertain(true);
       setError(err instanceof Error ? err.message : 'Failed to create roleplay');
     } finally {
+      keyedPublicationAbort.current = null;
       createPending.current = false;
       setIsCreating(false);
     }
@@ -1190,6 +1214,13 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               COMPLETED: 'Creación confirmada mediante el recibo. Consulta la sesión existente antes de realizar otra asignación.',
             }[keyedStatus]}
           </p>
+          {isCreating && keyedPublicationAbort.current && (
+            <div className="space-y-1">
+              <button type="button" onClick={() => keyedPublicationAbort.current?.abort()}
+                className="min-h-11 w-full rounded-xl theme-action-secondary px-4 py-2 font-semibold sm:w-auto">Dejar de esperar la publicación</button>
+              <p className="text-xs text-[var(--text-secondary)]">El servidor podría continuar la creación. Después podrás consultar el recibo sin reenviar audios.</p>
+            </div>
+          )}
           {keyedStatus !== 'COMPLETED' && !isCreating && <button type="button" disabled={keyedStatus === 'CHECKING'}
             onClick={() => { void checkCreationReceipt(); }}
             className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar resultado sin reenviar audios</button>}

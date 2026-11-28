@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { ComponentPropsWithoutRef } from 'react';
 import userEvent from '@testing-library/user-event';
-import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
+import { act,cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import { afterEach,describe,expect,it,vi } from 'vitest';
 const m=vi.hoisted(()=>({create:vi.fn(),upload:vi.fn(),consolidate:vi.fn(),publish:vi.fn()}));
 vi.mock('@/lib/roleplay/direct-upload-browser-http',()=>({
@@ -71,6 +71,42 @@ describe('gated creation receipt recovery form', () => {
     await screen.findByText('¡Roleplay creado correctamente!');
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls[0][1].headers).toEqual({ 'Idempotency-Key': key });
+  });
+
+  it.each(['headers', 'body'])('stops waiting for publication %s and recovers only the original receipt', async stage => {
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
+    let finish!: (value: unknown) => void;
+    const stalled = new Promise<unknown>(resolve => { finish = resolve; });
+    const json = vi.fn(() => stalled);
+    const fetcher = vi.fn()
+      .mockImplementationOnce(() => stage === 'headers'
+        ? stalled
+        : Promise.resolve({ ok: true, status: 200, json }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    const stop = await screen.findByRole('button', { name: 'Dejar de esperar la publicación' });
+    if (stage === 'body') await waitFor(() => expect(json).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: 'Consultar resultado sin reenviar audios' })).toBeNull();
+    expect(fetcher.mock.calls[0][1].signal.aborted).toBe(false);
+    fireEvent.click(stop);
+    const check = await screen.findByRole('button', { name: 'Consultar resultado sin reenviar audios' });
+    expect(fetcher.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(screen.getByLabelText('Referencia del intento')).toHaveProperty('value', 'rp1:' + key + ':1');
+    expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    fireEvent.click(check);
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    const late = { success: true, data: { sessionId: 'late-session', scenarioCount: 1 } };
+    await act(async () => { finish(stage === 'headers' ? Response.json(late) : late); });
+    expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
+    expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1][0]).toBe('/api/admin/roleplays/creation-receipt');
+    expect(fetcher.mock.calls[1][1].body).toBe(JSON.stringify({ requestKey: key }));
   });
 
   it('retains the original key after an ambiguous proxy timeout', async () => {
