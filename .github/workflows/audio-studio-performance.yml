@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - 'benchmarks/audio-studio/**'
+      - 'src/app/admin/roleplays/studio/**'
+      - 'src/lib/roleplay-studio/**'
+      - 'src/app/globals.css'
       - '.github/workflows/audio-studio-performance.yml'
   workflow_dispatch:
 
