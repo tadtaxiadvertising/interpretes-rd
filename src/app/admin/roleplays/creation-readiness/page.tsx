@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import CopyDiagnostic from './copy-diagnostic';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
 import { readCreationPilotConfig, type CreationPilotMode } from '@/lib/roleplay/creation-pilot-config';
@@ -87,8 +88,8 @@ export default async function CreationReadinessPage({
       {evidence !== null && (
         <section aria-label="Evidencia de comprobación" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
           <h2 className="font-semibold text-[var(--foreground)]">Evidencia de comprobación</h2>
-          <p className="text-sm text-[var(--text-secondary)]">Selecciona y copia este resumen para registrar el resultado. Refleja la comprobación realizada, no el estado futuro ni la identidad verificada del proyecto.</p>
-          <pre className="select-all whitespace-pre-wrap break-words rounded-xl border border-[var(--border)] p-3 font-mono text-xs text-[var(--foreground)]">{evidence}</pre>
+          <p className="text-sm text-[var(--text-secondary)]">Copia este resumen para registrar el resultado. Refleja la comprobación realizada, no el estado futuro ni la identidad verificada del proyecto.</p>
+          <CopyDiagnostic key={evidence} evidence={evidence} />
         </section>
       )}
       <p className="text-sm text-[var(--text-secondary)]">Un resultado favorable no autoriza activar el piloto. Aún se debe verificar el proyecto, el SHA esperado, las restricciones y el procedimiento de recuperación. Esta pantalla no aplica migraciones ni modifica banderas.</p>
