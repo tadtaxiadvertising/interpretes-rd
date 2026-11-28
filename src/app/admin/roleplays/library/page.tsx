@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { openingAssignmentConfigured } from '@/lib/roleplay/direct-upload-pilot-config';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
-import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch, ROLEPLAY_LIBRARY_SIZE_OPTIONS, parseRoleplayLibrarySize, matchesRoleplayLibrarySize } from '@/lib/roleplay-library-topics';
+import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch, ROLEPLAY_LIBRARY_SIZE_OPTIONS, parseRoleplayLibrarySize, matchesRoleplayLibrarySize, selectRoleplayLibraryPreview } from '@/lib/roleplay-library-topics';
 import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
 import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
@@ -278,13 +278,19 @@ export default async function RoleplayLibraryPage({
                   : 'Sin clasificar'}</p>
                 <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">{item.audioKind === 'private' ? 'Audio privado · Apertura bilingüe obligatoria' : 'Audio histórico público · Sin apertura obligatoria'}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {item.titles.slice(0, 5).map((title, index) => (
-                    <span key={index} className="rounded-full border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-1 text-xs text-[var(--text-secondary)]">
-                      {index + 1}. {title}
+                  {selectRoleplayLibraryPreview(item.titles, q).map(({ title, index, matches }) => (
+                    <span key={index} className={`max-w-full break-words rounded-full border px-3 py-1 text-xs ${matches ? 'border-[var(--theme-control-border)] font-semibold text-[var(--theme-link)]' : 'border-[var(--border)] bg-[var(--theme-surface-muted)] text-[var(--text-secondary)]'}`}>
+                      {index + 1}. {title}{matches && <span className="sr-only"> (coincidencia de búsqueda)</span>}
                     </span>
                   ))}
-                  {item.titles.length > 5 && <span className="px-2 py-1 text-xs text-[var(--text-tertiary)]">+{item.titles.length - 5} más</span>}
+                  
                 </div>
+                {item.titles.length > 5 && <details className="mt-2 text-xs text-[var(--text-secondary)]">
+                  <summary className="min-h-11 cursor-pointer py-3 font-semibold text-[var(--theme-link)]">Ver los {item.titles.length} escenarios</summary>
+                  <ol className="list-decimal space-y-1 pl-5">
+                    {item.titles.map((title, index) => <li key={index} className="break-words">{title}</li>)}
+                  </ol>
+                </details>}
                 <p className="mt-3 flex min-w-0 flex-wrap items-center gap-2 break-all font-mono text-xs text-[var(--text-tertiary)]">
                   <Copy size={13} /> Huella de plantilla: {item.fingerprint.slice(0, 16)}…
                 </p>
