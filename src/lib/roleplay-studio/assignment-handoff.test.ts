@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stageStudioHandoff, peekStudioHandoff, clearStudioHandoff } from './assignment-handoff';
+import { stageStudioHandoff, peekStudioHandoff, clearStudioHandoff, stageLocalWavHandoff, peekStudioHandoffTopic } from './assignment-handoff';
 const file = () => new File(['x'.repeat(22)], 'roleplay-studio.zip', { type: 'application/zip' });
 afterEach(() => { clearStudioHandoff(); vi.useRealTimers(); });
 describe('ephemeral Studio handoff', () => {
@@ -15,6 +15,31 @@ describe('ephemeral Studio handoff', () => {
     expect(peekStudioHandoff('second')).toBe(b);
     clearStudioHandoff('second');
     expect(peekStudioHandoff('second')).toBeNull();
+  });
+  it('keeps a validated topic scoped to the same token, consumption and expiry', () => {
+    vi.useFakeTimers();
+    const selection = { topic: 'medical', subtopic: 'pharmacy' };
+    stageStudioHandoff('topic', file(), selection);
+    expect(peekStudioHandoffTopic('topic')).toEqual(selection);
+    expect(peekStudioHandoffTopic('other')).toBeNull();
+    selection.subtopic = 'consultation';
+    expect(peekStudioHandoffTopic('topic')?.subtopic).toBe('pharmacy');
+    const peeked = peekStudioHandoffTopic('topic')!;
+    peeked.subtopic = 'consultation';
+    expect(peekStudioHandoffTopic('topic')?.subtopic).toBe('pharmacy');
+    stageStudioHandoff('next', file(), { topic: 'medical', subtopic: 'claims' });
+    expect(peekStudioHandoffTopic('topic')).toBeNull();
+    expect(peekStudioHandoffTopic('next')).toBeNull();
+    stageStudioHandoff('expiry', file(), selection);
+    vi.advanceTimersByTime(300001);
+    expect(peekStudioHandoffTopic('expiry')).toBeNull();
+  });
+  it('also transfers a topic with local WAV files and clears it on consumption', () => {
+    const files = [new File(['{}'], 'manifest.json'), new File(['x'.repeat(45)], 'segment-01.wav', { type: 'audio/wav' })];
+    stageLocalWavHandoff('wav', files, { topic: 'finance', subtopic: 'banking' });
+    expect(peekStudioHandoffTopic('wav')).toEqual({ topic: 'finance', subtopic: 'banking' });
+    clearStudioHandoff('wav');
+    expect(peekStudioHandoffTopic('wav')).toBeNull();
   });
   it('expires and rejects malformed transfer metadata', () => {
     vi.useFakeTimers();
