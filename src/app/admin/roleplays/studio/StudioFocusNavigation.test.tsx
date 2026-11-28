@@ -16,7 +16,7 @@ function setup(overrides: Partial<ComponentProps<typeof StudioFocusNavigation>> 
     visibleSegments:turns,focusedTurn:turns[1],focusIndex:1,totalTurns:5,workspaceActive:true,
     canConfirmFocused:true,editingDisabled:false,confirmed:false,focusedReviewIssue:null,
     sourceProfileCount:2,previewActive:false,playhead:10,duration:90,
-    listenAfterConfirm:false,onListenAfterConfirmChange:vi.fn(),
+    onFocusCard:vi.fn(),listenAfterConfirm:false,onListenAfterConfirmChange:vi.fn(),
     onSelect:vi.fn(),onConfirm:vi.fn(),onExclude:vi.fn(),onApplyProfile:vi.fn(),
     onPreview:vi.fn(),onPause:vi.fn(),onSkip:vi.fn(),onSeek:vi.fn(),...overrides,
   };
@@ -24,6 +24,18 @@ function setup(overrides: Partial<ComponentProps<typeof StudioFocusNavigation>> 
 }
 
 describe('focused intervention navigation',()=>{
+  it('places playback and confirmation before secondary keyboard assistance',()=>{
+    const {props}=setup();
+    const playback=screen.getByRole('button',{name:'Escuchar intervención activa'});
+    const confirm=screen.getByRole('button',{name:'Confirmar y avanzar'});
+    const keyboard=screen.getByRole('button',{name:'Usar atajos de teclado'});
+    expect(playback.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(confirm.compareDocumentPosition(keyboard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(keyboard);
+    expect(props.onFocusCard).toHaveBeenCalledOnce();
+    expect(props.onPreview).not.toHaveBeenCalled();
+    expect(props.onConfirm).not.toHaveBeenCalled();
+  });
   it('delegates opt-in without starting playback or confirming a turn',()=>{
     const {props,rerender}=setup();
     const optIn=screen.getByRole('checkbox',{name:'Escuchar siguiente al confirmar'});
