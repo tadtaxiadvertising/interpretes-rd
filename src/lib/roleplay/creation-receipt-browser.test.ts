@@ -7,7 +7,7 @@ const complete = { status: 'COMPLETED', createdCount: 1, skippedCount: 0, scenar
 describe('single creation receipt recovery', () => {
   it('only sends the original request key to the private read endpoint', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, data: complete }));
-    expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'COMPLETED' });
+    expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'COMPLETED', sessionId: 'synthetic-session' });
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store', signal: expect.any(AbortSignal),
     });
@@ -30,7 +30,7 @@ describe('single creation receipt recovery', () => {
       expect(fetcher).toHaveBeenCalledTimes(1);
       expect(vi.getTimerCount()).toBe(0);
       fetcher.mockResolvedValueOnce(Response.json({ success: true, data: complete }));
-      expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'COMPLETED' });
+      expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'COMPLETED', sessionId: 'synthetic-session' });
       expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ requestKey: key }));
       expect(vi.getTimerCount()).toBe(0);
     } finally {
@@ -44,7 +44,7 @@ describe('single creation receipt recovery', () => {
   });
   it.each([
     { createdCount: 2 }, { skippedCount: 1 }, { scenarioCount: 3 },
-    { sessionIds: [] }, { sessionIds: ['a', 'b'] }, { sessionIds: [' '] }, { status: 'UNKNOWN' },
+    { sessionIds: [] }, { sessionIds: ['a', 'b'] }, { sessionIds: [' '] }, { sessionIds: ['..'] }, { sessionIds: ['a/b'] }, { sessionIds: ['https://external.example'] }, { sessionIds: ['a?x=1'] }, { sessionIds: ['a%2fb'] }, { sessionIds: ['a'.repeat(129)] }, { status: 'UNKNOWN' },
   ])('requires a coherent single-session receipt (%o)', async patch => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, data: { ...complete, ...patch } }));
     expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'REVIEW_REQUIRED' });
