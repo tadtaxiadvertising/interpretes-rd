@@ -137,6 +137,31 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .toBe('Doctor · 1 (EN)');
   });
 
+  it('filters exact numbered groups and does not propagate to hidden turns', async () => {
+    selectAudio();
+    const source = new File(['mock'], 'groups.srt', { type: 'text/plain' });
+    Object.defineProperty(source, 'text', { value: async () => [
+      '1','00:00:00,000 --> 00:00:02,000','Speaker 1: Hello','',
+      '2','00:00:02,000 --> 00:00:04,000','Speaker 10: Hola','',
+      '3','00:00:04,000 --> 00:00:06,000','Speaker 1: Goodbye',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), { target: { files: [source] } });
+    });
+    fireEvent.change(screen.getByLabelText('Etiqueta de voz'), { target: { value: 'speaker 1' } });
+    expect(profileGroups()).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    chooseProfile('doctor');
+    expect(screen.getByRole('button', { name: 'Aplicar perfil a 1 turnos de la misma etiqueta' })).toBeTruthy();
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), { target: { value: 'Hello' } });
+    expect(screen.queryByRole('button', { name: /Aplicar perfil a .* turnos de la misma etiqueta/ })).toBeNull();
+    fireEvent.change(screen.getByLabelText('Etiqueta de voz'), { target: { value: 'speaker 1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil a 1 turnos de la misma etiqueta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a lista' }));
+    fireEvent.change(screen.getByLabelText('Etiqueta de voz'), { target: { value: '' } });
+    expect(roles()).toEqual(['doctor','unknown','doctor']);
+  });
+
   it('applies the active profile only to the same numbered source speaker and supports undo', async () => {
     selectAudio();
     const subtitle = new File(['mock'], 'speakers.srt', { type: 'text/plain' });
