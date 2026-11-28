@@ -125,7 +125,7 @@ export default async function CreationReadinessPage({
           <CopyDiagnostic key={evidence} evidence={evidence} />
         </section>
       )}
-      <details className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4" open={!allRequested}>
+      <details className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4" open={!allRequested && (requested || directRequested || rolloutRequested)}>
         <summary className="min-h-11 cursor-pointer py-2 font-semibold text-[var(--foreground)]">Detalles técnicos y comprobaciones individuales</summary>
       <section aria-label="Configuración actual" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
         <h2 className="font-semibold text-[var(--foreground)]">Configuración del piloto</h2>
