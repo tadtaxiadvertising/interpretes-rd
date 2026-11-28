@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "roleplay:opening-cleanup": "tsx --tsconfig tsconfig.scripts.json scripts/cleanup-roleplay-opening-storage.ts",
+    "roleplay:topics-readiness": "tsx --tsconfig tsconfig.scripts.json scripts/roleplay-library-topics-readiness.ts",
     "roleplay:opening-storage": "tsx --tsconfig tsconfig.scripts.json scripts/prepare-roleplay-opening-storage.ts",
     "roleplay:audio-worker": "tsx --tsconfig tsconfig.scripts.json scripts/roleplay-audio-worker.ts",
     "migrate": "tsx scripts/run-migration.ts",
