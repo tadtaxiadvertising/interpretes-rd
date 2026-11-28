@@ -122,3 +122,22 @@ export function matchesRoleplayLibrarySearch(
 ): boolean {
   return scoreRoleplayLibrarySearch(titles, fingerprint, topics, query) > 0;
 }
+
+/** Counts describe the existing snapshot, not audio length or response time. */
+export const ROLEPLAY_LIBRARY_SIZE_OPTIONS = [
+  { id: '', label: 'Cualquier cantidad', min: 1, max: 25 },
+  { id: 'single', label: '1 escenario', min: 1, max: 1 },
+  { id: 'short', label: '2–5 escenarios', min: 2, max: 5 },
+  { id: 'medium', label: '6–15 escenarios', min: 6, max: 15 },
+  { id: 'long', label: '16–25 escenarios', min: 16, max: 25 },
+] as const;
+
+export function parseRoleplayLibrarySize(value: unknown) {
+  return ROLEPLAY_LIBRARY_SIZE_OPTIONS.find(option => option.id === value)?.id ?? '';
+}
+
+export function matchesRoleplayLibrarySize(count: number, size: ReturnType<typeof parseRoleplayLibrarySize>) {
+  if (!size) return true;
+  const option = ROLEPLAY_LIBRARY_SIZE_OPTIONS.find(item => item.id === size);
+  return Boolean(option && Number.isInteger(count) && count >= option.min && count <= option.max);
+}
