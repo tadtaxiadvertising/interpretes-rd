@@ -36,7 +36,8 @@ describe('production package guidance', () => {
     const { props } = setup();
     const summary = screen.getByRole('status', { name: 'Resumen de producción' });
     expect(summary.textContent).toContain('5 de 6 partes con seguimiento');
-    expect(summary.textContent).toContain('1 pendientes');
+    expect(summary.textContent).toContain('1 pendientes · 0 preparados · 1 transferidos · 1 verificados · 1 con creación confirmada · 1 sin confirmar.');
+    expect(screen.getByText(/1 parte sin seguimiento disponible/)).toBeTruthy();
     expect(screen.getByText('Creación confirmada')).toBeTruthy();
     expect(screen.getByText('Intento sin confirmar')).toBeTruthy();
     expect(screen.getByText('Transferido')).toBeTruthy();
@@ -52,10 +53,18 @@ describe('production package guidance', () => {
     expect(screen.getByText(/Hay un paquete preparado/)).toBeTruthy();
     if (preparedPartKey === '6') {
       expect(screen.getByText('Preparado')).toBeTruthy();
-      expect(screen.getByRole('status', { name: 'Resumen de producción' }).textContent).toContain('0 pendientes');
+      expect(screen.getByRole('status', { name: 'Resumen de producción' }).textContent).toContain('0 pendientes · 1 preparados');
     }
     if (preparedPartKey === '1') expect(screen.getByText('Creación confirmada')).toBeTruthy();
     if (preparedPartKey === '2') expect(screen.getByText('Intento sin confirmar')).toBeTruthy();
+    if (preparedPartKey === '1' || preparedPartKey === '2') expect(screen.getByText('Nuevo paquete preparado')).toBeTruthy();
+  });
+  it.each([['3', '0 transferidos · 1 verificados'], ['4', '1 transferidos · 0 verificados']])('counts a newly prepared transient part %s only once', (preparedPartKey, counts) => {
+    setup({ preparedPartKey });
+    const summary = screen.getByRole('status', { name: 'Resumen de producción' });
+    expect(summary.textContent).toContain('1 preparados · ' + counts);
+    expect(screen.getByText('Preparado')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Elegir siguiente parte pendiente/ })).toBeNull();
   });
   it('allows deliberate manual selection while preserving guarded navigation', () => {
     const { props } = setup({ preparedPartKey: '6' });
