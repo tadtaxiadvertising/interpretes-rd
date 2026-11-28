@@ -73,6 +73,27 @@ describe('gated creation receipt recovery form', () => {
     expect(fetcher.mock.calls[0][1].headers).toEqual({ 'Idempotency-Key': key });
   });
 
+  it('retains the original key after an ambiguous proxy timeout', async () => {
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({ success: false, error: 'private proxy detail' }, { status: 408 }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    const check = await screen.findByRole('button', { name: 'Consultar resultado sin reenviar audios' });
+    expect(screen.getByLabelText('Referencia del intento')).toHaveProperty('value', 'rp1:' + key + ':1');
+    expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+    expect(screen.queryByText('private proxy detail')).toBeNull();
+    fireEvent.click(check);
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls[1][0]).toBe('/api/admin/roleplays/creation-receipt');
+    expect(fetcher.mock.calls[1][1].body).toBe(JSON.stringify({ requestKey: key }));
+  });
+
   it('retains the same key, locks editing and never resends the audio after a lost response', async () => {
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
     const fetcher = vi.fn()

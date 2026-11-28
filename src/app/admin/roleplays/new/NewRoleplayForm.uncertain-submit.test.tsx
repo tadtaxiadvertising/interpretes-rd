@@ -101,6 +101,39 @@ describe('Roleplay admin: uncertain creation outcome', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 
+  it.each([408, 425, 429, 499, 502, 504])('preserves uncertainty and does not parse a proxy HTTP %s response', async status => {
+    const json = vi.fn().mockResolvedValue({ success: false, error: 'PRIVATE_PROXY_DETAIL' });
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: false, status, json });
+    vi.stubGlobal('fetch', fetchSpy);
+    submit();
+
+    await screen.findByText('No se pudo confirmar el resultado de la creación.');
+    expect(screen.getByRole('link', { name: 'Comprobar los roleplays existentes' })).toBeTruthy();
+    expect(screen.getByText(/1\. Intervención sintética/)).toBeTruthy();
+    expect(json).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toContain('PRIVATE_PROXY_DETAIL');
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Asignar plantilla' }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats a failure envelope with HTTP 200 as contradictory', async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({
+      ok: true, status: 200,
+      json: async () => ({ success: false, error: 'PRIVATE_INCONSISTENT_DETAIL' }),
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    submit();
+
+    await screen.findByText('No se pudo confirmar el resultado de la creación.');
+    expect(screen.getByRole('link', { name: 'Comprobar los roleplays existentes' })).toBeTruthy();
+    expect(document.body.textContent).not.toContain('PRIVATE_INCONSISTENT_DETAIL');
+    expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
   it('rejects a missing single-session identity even when success is true', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
       ok: true, status: 200, json: async () => ({ success: true, data: {} }),
