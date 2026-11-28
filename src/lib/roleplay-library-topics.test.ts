@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch, parseRoleplayLibrarySize, matchesRoleplayLibrarySize } from './roleplay-library-topics';
+import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch, parseRoleplayLibrarySize, matchesRoleplayLibrarySize, selectRoleplayLibraryPreview } from './roleplay-library-topics';
 
 describe('library topic suggestions', () => {
   it('recognizes bilingual titles and ignores case and accents', () => {
@@ -120,5 +120,26 @@ describe('catalog scenario count filters', () => {
     expect(matchesRoleplayLibrarySize(25, 'long')).toBe(true);
     expect(matchesRoleplayLibrarySize(26, 'long')).toBe(false);
     expect(matchesRoleplayLibrarySize(2.5, 'short')).toBe(false);
+  });
+});
+
+describe('compact library scenario previews', () => {
+  const titles = ['Inicio', 'Datos personales', 'Confirmación', 'Información', 'Seguimiento', 'Consulta pediátrica', 'Farmacia'];
+  it('keeps the first five titles when there is no query or no title match', () => {
+    for (const query of ['', '!!!', 'no-existe']) {
+      expect(selectRoleplayLibraryPreview(titles, query)).toEqual(titles.slice(0, 5).map((title,index) => ({ title,index,matches:false })));
+    }
+  });
+  it('reveals later matching titles with their original numbering and a five-item cap', () => {
+    const result = selectRoleplayLibraryPreview(titles, 'consulta pediatrica');
+    expect(result.map(item => item.index)).toEqual([0,1,2,3,5]);
+    expect(result[4]).toEqual({title:'Consulta pediátrica', index:5, matches:true});
+    expect(titles[5]).toBe('Consulta pediátrica');
+  });
+  it('prioritizes direct phrase matches over partial matches and handles short templates', () => {
+    const input = ['Consulta', 'Datos', 'Seguimiento', 'Inicio', 'Final', 'Consulta médica', 'Medica consulta'];
+    expect(selectRoleplayLibraryPreview(input, 'consulta medica').map(item=>item.index)).toEqual([0,1,2,5,6]);
+    expect(selectRoleplayLibraryPreview(['Farmacia'], 'farm')).toEqual([{title:'Farmacia',index:0,matches:true}]);
+    expect(selectRoleplayLibraryPreview([], 'farm')).toEqual([]);
   });
 });
