@@ -712,6 +712,34 @@ describe('Audio Studio compact editing', () => {
     expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
   });
 
+  it('preserves listening opt-in on declined replacement and resets it on accepted new recording', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const preference = () => screen.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' });
+    expect(preference()).toHaveProperty('checked', false);
+    fireEvent.click(preference());
+    expect(preference()).toHaveProperty('checked', true);
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'declined.mp3', { type: 'audio/mpeg' })] },
+    });
+    expect(preference()).toHaveProperty('checked', true);
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'accepted.mp3', { type: 'audio/mpeg' })] },
+    });
+    const replacementPlayer = document.querySelector('audio')!;
+    Object.defineProperty(replacementPlayer, 'duration', { configurable: true, value: 120 });
+    fireEvent.loadedMetadata(replacementPlayer);
+    expect(screen.getByText(/Intervenciones \(0\/25\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    const enterFocus = screen.queryByRole('button', { name: 'Modo enfoque' });
+    if (enterFocus) fireEvent.click(enterFocus);
+    expect(preference()).toHaveProperty('checked', false);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
+
   it('preserves active audio, interventions and editor state when replacement media is invalid', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
