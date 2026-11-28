@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters } from './roleplay-library-topics';
+import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics } from './roleplay-library-topics';
 
 describe('library topic suggestions', () => {
   it('recognizes bilingual titles and ignores case and accents', () => {
@@ -31,5 +31,22 @@ describe('library topic suggestions', () => {
     expect(matchesRoleplayTopic(hints, 'medical', 'consultation')).toBe(false);
     expect(matchesRoleplayTopic(hints, 'unclassified', '')).toBe(false);
     expect(matchesRoleplayTopic([], 'unclassified', '')).toBe(true);
+  });
+});
+
+describe('explicit editorial categories', () => {
+  it('requires an exact allowed parent and child', () => {
+    expect(parseEditorialRoleplayTopic('medical', 'pharmacy')).toEqual({topic:'medical', subtopic:'pharmacy'});
+    expect(parseEditorialRoleplayTopic('medical', 'claims')).toBeNull();
+    expect(parseEditorialRoleplayTopic('unclassified', '')).toBeNull();
+    expect(parseEditorialRoleplayTopic('medical', '')).toBeNull();
+    expect(parseEditorialRoleplayTopic(['medical'], 'pharmacy')).toBeNull();
+  });
+  it('gives explicit selections precedence without mutating titles', () => {
+    const titles = ['Pharmacy', 'Insurance claim'];
+    expect(resolveRoleplayTopics(titles, {topic:'finance', subtopic:'banking'})).toEqual([{topic:'finance',subtopic:'banking'}]);
+    expect(titles).toEqual(['Pharmacy', 'Insurance claim']);
+    expect(resolveRoleplayTopics(titles, null)).toEqual(inferRoleplayTopics(titles));
+    expect(resolveRoleplayTopics(titles, {topic:'medical',subtopic:'claims'})).toEqual(inferRoleplayTopics(titles));
   });
 });
