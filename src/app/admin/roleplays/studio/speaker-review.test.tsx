@@ -931,6 +931,24 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       .toBe(false);
   });
 
+  it('imports explicitly labelled profiles and languages without guessing numbered voices', async () => {
+    selectAudio();
+    const source = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });
+    const labels = ['Cliente · EN', 'Hispanohablante (ES)', 'Speaker 1 (ES)', 'Paciente (EN)', 'Doctor'];
+    const transcript = labels.map((label, i) =>
+      `${i+1}\n00:00:0${i*2},000 --> 00:00:0${i*2+1},000\n${label}: Example`).join('\n\n');
+    Object.defineProperty(source, 'text', { value: async () => transcript });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), {
+        target: { files: [source] },
+      });
+    });
+    expect(roles()).toEqual(['doctor','patient','unknown','patient','doctor']);
+    expect(languages()).toEqual(['en','es','unknown','en','unknown']);
+    expect(within(profileGroups()[3]).getByText('Perfil o idioma pendiente de revisar')).toBeTruthy();
+    expect(screen.queryByText(/Speaker 1 \(ES\) · 3/)).toBeNull();
+  });
+
   it('updates generated titles without another click but respects manual titles', async () => {
     selectAudio();
     const subtitle = new File(['mock'], 'dialogue.srt', { type: 'text/plain' });
