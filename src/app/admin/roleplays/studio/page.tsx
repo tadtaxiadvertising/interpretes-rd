@@ -280,7 +280,7 @@ export default function RoleplayStudioPage() {
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
   const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number } | null>(null);
   const exportFocusAttempt = useRef(0);
-  const [reviewFocusRequest, setReviewFocusRequest] = useState<{ id: string; attempt: number } | null>(null);
+  const [reviewFocusRequest, setReviewFocusRequest] = useState<{ id: string; attempt: number; issue?: StudioReviewCode } | null>(null);
   const reviewFocusAttempt = useRef(0);
   // Focus the first invalid clip after filters have been cleared and the row
   // has been rendered again. No media file is read or uploaded by this action.
@@ -292,7 +292,7 @@ export default function RoleplayStudioPage() {
   // It never seeks, plays, uploads, or alters intervention content.
   useEffect(() => {
     if (!reviewFocusRequest) return;
-    focusStudioIntervention(reviewFocusRequest.id, !focusMode);
+    focusStudioIntervention(reviewFocusRequest.id, !focusMode || Boolean(reviewFocusRequest.issue), reviewFocusRequest.issue);
   }, [reviewFocusRequest]);
   const [turnActionFeedback, setTurnActionFeedback] = useState<{
     id: string; message: string; error: boolean;
@@ -2059,6 +2059,11 @@ export default function RoleplayStudioPage() {
     : issueTurns.filter(item => reviewCategory === 'all' || item.findings.some(finding => finding.code === reviewCategory)),
   [reviewCategory, readyUnconfirmed, issueTurns]);
   const readyUnconfirmedCount = readyUnconfirmed.length;
+  const reviewActionLabels: Record<StudioReviewCode, string> = {
+    interpreter: 'Revisar intérprete', speaker: 'Elegir perfil', language: 'Revisar idioma',
+    title: 'Editar título', range: 'Ajustar límites', overlap: 'Revisar solapamiento',
+    instructions: 'Editar instrucciones', response: 'Ajustar respuesta',
+  };
   const reviewCategories: Array<{ code: StudioReviewCode; label: string }> = [
     { code: 'interpreter', label: 'Intérprete original' },
     { code: 'speaker', label: 'Hablante pendiente' },
@@ -2095,7 +2100,7 @@ export default function RoleplayStudioPage() {
   const focusedTurnId = focusedTurn?.segment.id;
   const sourceProfileCount = useMemo(() => focusedTurnId
     ? propagateSpeakerProfile(segments, focusedTurnId, { visibleIds: visibleSpeakerTurnIds, protectedIds: confirmedIds }).changed : 0, [segments, focusedTurnId, visibleSpeakerTurnIds, confirmedIds]);
-  const selectFocusedTurn = (id: string) => {
+  const selectFocusedTurn = (id: string, issue?: StudioReviewCode) => {
     // Selecting another turn is not a request to keep listening to the old one.
     if (id !== focusedTurnId || previewingId?.startsWith('boundary-proposal:')) {
       stopPreview();
@@ -2103,11 +2108,11 @@ export default function RoleplayStudioPage() {
     }
     setAdvancedTurnId(null);
     setExpandedSegmentId(id);
-    setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
+    setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current, issue });
   };
 
   const focusedReviewIssue = reviewInspection.find(item => item.turn.id === focusedTurn?.segment.id)?.findings[0]?.message ?? null;
-  const openReviewEntry = (id: string) => {
+  const openReviewEntry = (id: string, issue?: StudioReviewCode) => {
     const entry = reviewInspection.find(item => item.turn.id === id);
     if (!entry) return;
     setSegmentSearch('');
@@ -2116,8 +2121,8 @@ export default function RoleplayStudioPage() {
     setWorkspaceTab('edit');
     setTrashOpen(false);
     setReviewCenterOpen(false);
-    selectFocusedTurn(id);
-    if (entry.findings.some(finding => ['range', 'overlap', 'title', 'instructions', 'response'].includes(finding.code))) {
+    selectFocusedTurn(id, issue);
+    if (entry.findings.some(finding => (!issue || finding.code === issue) && ['range', 'overlap', 'title', 'instructions', 'response'].includes(finding.code))) {
       setAdvancedTurnId(id);
     }
   };
@@ -3161,8 +3166,14 @@ export default function RoleplayStudioPage() {
                     #{entry.number} · {entry.turn.title}
                   </button>
                   <p className="text-xs text-[var(--text-secondary)]">{formatTime(entry.turn.start)}–{formatTime(entry.turn.end)}</p>
-                  {entry.findings.length ? <ul className="list-disc pl-4 text-xs text-[var(--theme-warning)]">
-                    {entry.findings.map(finding => <li key={finding.code}>{finding.message}</li>)}
+                  {entry.findings.length ? <ul className="mt-2 space-y-2">
+                    {entry.findings.map(finding => <li key={finding.code} className="flex flex-wrap items-center gap-2 rounded-md bg-[var(--theme-surface-muted)] p-2">
+                      <span className="min-w-0 flex-1 break-words text-xs text-[var(--theme-warning)]">{finding.message}</span>
+                      <button type="button" disabled={busy || draftBusy || analyzingSilences}
+                        aria-label={reviewActionLabels[finding.code] + ' de intervención ' + entry.number}
+                        onClick={() => openReviewEntry(entry.turn.id, finding.code)}
+                        className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold">{reviewActionLabels[finding.code]}</button>
+                    </li>)}
                   </ul> : <p className="text-xs text-[var(--text-secondary)]">Sin incidencias detectadas; requiere revisión humana.</p>}
                 </div>)}
               </div>

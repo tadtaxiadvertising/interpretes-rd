@@ -71,7 +71,7 @@ function StudioInterventionCard({
   const profile = studioEditorialProfile(segment.speakerRole);
   const activeProfile = profile?.role ?? null;
   const profileButtons = (
-    <div role="group" aria-label={'Perfil de intervención ' + (index + 1)} className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
+    <div data-review-field="profile" role="group" aria-label={'Perfil de intervención ' + (index + 1)} className="grid w-full min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
       {([
         ['doctor', 'en', 'Cliente'],
         ['patient', 'es', 'Hispanohablante'],
@@ -111,7 +111,7 @@ function StudioInterventionCard({
           nextTurn.start - segment.end > 2 ? 'Unir sin pausa' : 'Unir'}
       </button>
       {segment.ranges && (
-        <button type="button" onClick={() => separateCompound(segment.id)}
+        <button type="button" data-review-field="separate" onClick={() => separateCompound(segment.id)}
           aria-label={'Separar cortes de intervención ' + (index + 1)}
           className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--theme-warning)]">
           Separar cortes
@@ -214,7 +214,7 @@ function StudioInterventionCard({
         <p className="text-xs text-[var(--text-secondary)]">Actual: {segment.start.toFixed(3)}–{segment.end.toFixed(3)} s · Propuesto: {boundaryProposal.start.toFixed(3)}–{boundaryProposal.end.toFixed(3)} s</p>
         <p className="text-xs text-[var(--text-secondary)]">Escucha ambos cortes antes de aplicar. La sugerencia no garantiza que se preserve toda la voz.</p>
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={!canUseBoundaryProposal} onClick={() => previewSegment({ ...segment, id: proposalPreviewId, start: boundaryProposal.start, end: boundaryProposal.end })}
+          <button type="button" data-review-field="preview-proposal" disabled={!canUseBoundaryProposal} onClick={() => previewSegment({ ...segment, id: proposalPreviewId, start: boundaryProposal.start, end: boundaryProposal.end })}
             aria-pressed={previewingId === proposalPreviewId}
             className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold">
             {previewingId === proposalPreviewId ? 'Detener propuesta' : 'Escuchar propuesta'}
@@ -236,24 +236,24 @@ function StudioInterventionCard({
       className={focusMode && advancedTurnId !== segment.id ? 'hidden' : 'space-y-2'}>
       {focusMode && turnTools}
       <label className="block text-sm text-[var(--text-secondary)]">Título
-      <input value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
+      <input data-review-field="title" value={segment.title} maxLength={200} onChange={event => update(segment.id, {title: event.target.value})}
         className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
     </label>
     <div className="grid min-w-0 grid-cols-2 gap-2 sm:grid-cols-3">
       <label className="text-sm text-[var(--text-secondary)]">Inicio (segundos)
-        <input type="number" min={0} max={duration} step="0.1" value={segment.start}
+        <input data-review-field="start" type="number" min={0} max={duration} step="0.1" value={segment.start}
           disabled={Boolean(segment.ranges)}
           onChange={event => update(segment.id, {start: event.target.valueAsNumber})}
           className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
       </label>
       <label className="text-sm text-[var(--text-secondary)]">Final (segundos)
-        <input type="number" min={0} max={duration} step="0.1" value={segment.end}
+        <input data-review-field="end" type="number" min={0} max={duration} step="0.1" value={segment.end}
           disabled={Boolean(segment.ranges)}
           onChange={event => update(segment.id, {end: event.target.valueAsNumber})}
           className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
       </label>
       <label className="col-span-2 min-w-0 text-sm text-[var(--text-secondary)] sm:col-span-1">Límite de respuesta (segundos)
-        <input type="number" min={0} max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC} step={1} value={segment.responseLimit}
+        <input data-review-field="response" type="number" min={0} max={ROLEPLAY_RESPONSE_MAX_DURATION_SEC} step={1} value={segment.responseLimit}
           onChange={event => update(segment.id, {responseLimit: event.target.valueAsNumber})}
           className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
       </label>
@@ -265,7 +265,7 @@ function StudioInterventionCard({
       Aplicar perfil e idioma al título
     </button>
     <label className="block text-sm text-[var(--text-secondary)]">Instrucciones para el participante
-      <textarea value={segment.scriptPrompt} maxLength={5000} rows={2}
+      <textarea data-review-field="instructions" value={segment.scriptPrompt} maxLength={5000} rows={2}
         onChange={event => update(segment.id, {scriptPrompt: event.target.value})}
         className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
     </label>
