@@ -83,18 +83,42 @@ export function parseRoleplayLibrarySearch(value: unknown): string {
   return typeof value === 'string' ? value.trim().slice(0, 100) : '';
 }
 
+/** Higher scores are stronger matches; zero excludes the template.
+ * Only existing title and resolved category metadata participate. */
+export function scoreRoleplayLibrarySearch(
+  titles: readonly string[], fingerprint: string,
+  topics: readonly { topic: string; subtopic: string }[], query: string,
+): number {
+  if (!query) return 1;
+  if (/^[a-f0-9]+$/i.test(query) && fingerprint.startsWith(query.toLowerCase())) return 5;
+  const normalized = normalizeRoleplayTopicText(query);
+  if (!normalized) return 0;
+  const normalizedTitles = titles.map(normalizeRoleplayTopicText);
+  const categories = topics.flatMap(selection => {
+    const topic = ROLEPLAY_TOPICS.find(item => item.id === selection.topic);
+    const child = topic?.subtopics.find(item => item.id === selection.subtopic);
+    return topic && child ? [{
+      label: normalizeRoleplayTopicText(topic.label + ' ' + child.label),
+      aliases: [topic.id, child.id, ...child.words].map(normalizeRoleplayTopicText),
+    }] : [];
+  });
+  if (normalizedTitles.some(title => title.includes(normalized))) return 4;
+  if (categories.some(category => category.label.includes(normalized))) return 3;
+  const terms = [...new Set(normalized.split(' '))];
+  const includesAllTerms = (fields: readonly string[]) => {
+    const words = new Set(fields.flatMap(field => field.split(' ')));
+    return terms.every(term => words.has(term) ||
+      (term.length >= 3 && [...words].some(word => word.startsWith(term))));
+  };
+  if (includesAllTerms(normalizedTitles)) return 2;
+  return includesAllTerms([
+    ...normalizedTitles, ...categories.flatMap(category => [category.label, ...category.aliases]),
+  ]) ? 1 : 0;
+}
+
 export function matchesRoleplayLibrarySearch(
   titles: readonly string[], fingerprint: string,
   topics: readonly { topic: string; subtopic: string }[], query: string,
 ): boolean {
-  if (!query) return true;
-  if (/^[a-f0-9]+$/i.test(query) && fingerprint.startsWith(query.toLowerCase())) return true;
-  const normalized = normalizeRoleplayTopicText(query);
-  if (!normalized) return false;
-  const labels = topics.flatMap(selection => {
-    const topic = ROLEPLAY_TOPICS.find(item => item.id === selection.topic);
-    const child = topic?.subtopics.find(item => item.id === selection.subtopic);
-    return topic && child ? [topic.label + ' ' + child.label] : [];
-  });
-  return [...titles, ...labels].some(value => normalizeRoleplayTopicText(value).includes(normalized));
+  return scoreRoleplayLibrarySearch(titles, fingerprint, topics, query) > 0;
 }

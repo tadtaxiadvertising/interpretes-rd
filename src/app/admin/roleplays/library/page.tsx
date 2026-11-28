@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { openingAssignmentConfigured } from '@/lib/roleplay/direct-upload-pilot-config';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
-import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch } from '@/lib/roleplay-library-topics';
+import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch } from '@/lib/roleplay-library-topics';
 import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
 import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
@@ -124,7 +124,9 @@ export default async function RoleplayLibraryPage({
   const searchable = result.items.filter(item =>
     showArchived ? item.archivedAt !== null : item.archivedAt === null
   ).map(item => ({ ...item, editorialTopic: editorial.get(item.fingerprint) ?? null, topicHints: resolveRoleplayTopics(item.titles, editorial.get(item.fingerprint)) }))
-    .filter(item => matchesRoleplayLibrarySearch(item.titles, item.fingerprint, item.topicHints, q));
+    .map(item => ({ ...item, searchScore: scoreRoleplayLibrarySearch(item.titles, item.fingerprint, item.topicHints, q) }))
+    .filter(item => item.searchScore > 0)
+    .sort((a, b) => b.searchScore - a.searchScore);
   const matches = searchable.filter(item => matchesRoleplayTopic(item.topicHints, topic, subtopic));
   const selectedTopic = ROLEPLAY_TOPICS.find(item => item.id === topic);
   const topicCount = (id: string, child = '') => searchable.filter(item => matchesRoleplayTopic(item.topicHints, id, child)).length;
@@ -190,7 +192,7 @@ export default async function RoleplayLibraryPage({
         <label className="sr-only" htmlFor="library-query">Buscar ejercicios por título, tema o huella</label>
         <input id="library-query" name="q" type="search" maxLength={100}
           defaultValue={q}
-          placeholder="Buscar por escenario, tema o identificador"
+          placeholder="Buscar escenario, tema o palabras en español / inglés"
           className="min-w-0 w-full sm:w-auto sm:min-w-0 flex-1 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-3 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]" />
         {showArchived && <input type="hidden" name="archived" value="1" />}
         {topic && <input type="hidden" name="topic" value={topic} />}
