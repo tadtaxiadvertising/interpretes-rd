@@ -17,9 +17,16 @@ export type DirectUploadReviewReason = 'RESERVATION_EXPIRED' | 'RESERVATION_UNCE
 
 /** The current controller cannot safely continue without reviewing the reservation. */
 export class DirectUploadReviewRequired extends Error {
-  constructor(readonly reason: DirectUploadReviewReason) {
+  readonly requestKey: string | null;
+
+  constructor(readonly reason: DirectUploadReviewReason, requestKey?: unknown) {
     super('ROLEPLAY_UPLOAD_INTERRUPTED');
     this.name = 'DirectUploadReviewRequired';
+    // A correlation ID, not a signed Storage token or invitation. Do not
+    // include an arbitrary provider response in the review reference.
+    this.requestKey = typeof requestKey === 'string' &&
+      /^[a-f0-9]{8}-[a-f0-9]{4}-[47][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(requestKey)
+      ? requestKey : null;
   }
 }
 
@@ -64,7 +71,7 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
     active = true;
     const check = () => {
       if (options.signal?.aborted) throw new Error('UPLOAD_INTERRUPTED');
-      if (reservation && Date.now() >= Date.parse(reservation.expiresAt)) throw new DirectUploadReviewRequired('RESERVATION_EXPIRED');
+      if (reservation && Date.now() >= Date.parse(reservation.expiresAt)) throw new DirectUploadReviewRequired('RESERVATION_EXPIRED', requestKey);
     };
     const emit = (phase:DirectUploadProgress['phase']) => {
       options.onProgress?.({phase,verified,total});
@@ -73,7 +80,7 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
     try {
       check();
       if (!reservation) {
-        if (reservationRequested) throw new DirectUploadReviewRequired('RESERVATION_UNCERTAIN');
+        if (reservationRequested) throw new DirectUploadReviewRequired('RESERVATION_UNCERTAIN', requestKey);
         emit('hashing');
         const batch = Array.from(pendingFiles.values());
         const declarations = await hash(batch,{signal:options.signal});
@@ -138,8 +145,8 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
       // A provider exception may include a signed URL. Expose only a fixed
       // error; callers may invoke run again with the same controller.
       try { options.onProgress?.({phase:'interrupted',verified,total}); } catch { /* safe */ }
-      if (error instanceof DirectUploadReviewRequired) throw error;
-      if (reservationRequested && !reservation) throw new DirectUploadReviewRequired('RESERVATION_UNCERTAIN');
+      if (error instanceof DirectUploadReviewRequired) throw new DirectUploadReviewRequired(error.reason, requestKey);
+      if (reservationRequested && !reservation) throw new DirectUploadReviewRequired('RESERVATION_UNCERTAIN', requestKey);
       throw new Error('ROLEPLAY_UPLOAD_INTERRUPTED');
     } finally {
       active = false;
