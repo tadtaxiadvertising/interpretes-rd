@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { formatCreationRecoveryReference, parseCreationRecoveryReference, recoverSingleRoleplayCreation } from './creation-receipt-browser';
+import { CREATION_RECEIPT_TIMEOUT_MS, formatCreationRecoveryReference, parseCreationRecoveryReference, recoverSingleRoleplayCreation } from './creation-receipt-browser';
 
 const key = '123e4567-e89b-42d3-a456-426614174000';
 const complete = { status: 'COMPLETED', createdCount: 1, skippedCount: 0, scenarioCount: 2, sessionIds: ['synthetic-session'] };
@@ -9,9 +9,35 @@ describe('single creation receipt recovery', () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, data: complete }));
     expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'COMPLETED' });
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store',
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store', signal: expect.any(AbortSignal),
     });
   });
+  it.each(['headers', 'body'])('times out stalled %s and ignores late success', async stage => {
+    vi.useFakeTimers();
+    try {
+      let finish!: (value: unknown) => void;
+      const stalled = new Promise<unknown>(resolve => { finish = resolve; });
+      const fetcher = vi.fn<typeof fetch>().mockImplementation(() => stage === 'headers'
+        ? stalled as Promise<Response>
+        : Promise.resolve({ ok: true, json: () => stalled } as Response));
+      const result = recoverSingleRoleplayCreation(key, 2, fetcher);
+      await vi.advanceTimersByTimeAsync(CREATION_RECEIPT_TIMEOUT_MS);
+      expect(await result).toEqual({ status: 'UNAVAILABLE' });
+      expect(fetcher.mock.calls[0][1]?.signal?.aborted).toBe(true);
+      finish(stage === 'headers' ? Response.json({ success: true, data: complete }) : { success: true, data: complete });
+      await Promise.resolve();
+      expect(await result).toEqual({ status: 'UNAVAILABLE' });
+      expect(fetcher).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+      fetcher.mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+      expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'COMPLETED' });
+      expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ requestKey: key }));
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(['NOT_FOUND', 'IN_PROGRESS', 'REVIEW_REQUIRED'])('never converts %s into success', async status => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, data: { status } }));
     expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status });
