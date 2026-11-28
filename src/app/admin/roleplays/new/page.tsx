@@ -131,6 +131,7 @@ export default async function NewRoleplayPage({
           <NewRoleplayForm interpreters={interpreters} candidates={candidates}
             initialCandidateId={initialCandidateId} librarySource={librarySource}
             studioTransfer={!sourceSessionId && typeof studioTransfer === 'string' && /^[a-zA-Z0-9-]{1,80}$/.test(studioTransfer) ? studioTransfer : undefined}
+            editorialTopicsEnabled={process.env.ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED === 'true'}
             openingAssignmentEnabled={openingAssignmentEnabled()}
             creationRecoveryEnabled={readCreationPilotConfig(process.env).keyedCreationEnabled}
             receiptRecoveryEnabled={readCreationPilotConfig(process.env).receiptsEnabled}

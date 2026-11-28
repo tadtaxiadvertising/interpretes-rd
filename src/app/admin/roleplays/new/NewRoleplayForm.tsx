@@ -13,6 +13,7 @@ import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-trac
 import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guard';
 import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff, peekStudioHandoffTopic, type StudioTopicSelection } from '@/lib/roleplay-studio/assignment-handoff';
+import PublishedRoleplayTopic from './PublishedRoleplayTopic';
 import { ROLEPLAY_TOPICS } from '@/lib/roleplay-library-topics';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import DirectReservationObservationSummary from '@/components/admin/DirectReservationObservationSummary';
@@ -54,6 +55,7 @@ interface NewRoleplayFormProps {
   creationRecoveryEnabled?: boolean;
   receiptRecoveryEnabled?: boolean;
   studioTransfer?: string;
+  editorialTopicsEnabled?: boolean;
   librarySource?: {
     id: string;
     fingerprint: string;
@@ -99,7 +101,7 @@ async function awaitPublication<T>(operation: Promise<T>, signal?: AbortSignal):
   }
 }
 
-export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, creationRecoveryEnabled = false, receiptRecoveryEnabled = creationRecoveryEnabled, studioTransfer }: NewRoleplayFormProps) {
+export default function NewRoleplayForm({ interpreters, candidates, initialCandidateId, librarySource, openingAssignmentEnabled = false, directUploadEnabled = false, creationRecoveryEnabled = false, receiptRecoveryEnabled = creationRecoveryEnabled, studioTransfer, editorialTopicsEnabled = false }: NewRoleplayFormProps) {
   const [participantType, setParticipantType] = useState<'interpreter' | 'candidate' | 'all-active-interpreters'>(initialCandidateId ? 'candidate' : 'interpreter');
   const [selectedParticipantId, setSelectedParticipantId] = useState<string>(initialCandidateId ? String(initialCandidateId) : '');
   const [participantSearch, setParticipantSearch] = useState('');
@@ -146,7 +148,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [recoveryInputError, setRecoveryInputError] = useState<string | null>(null);
   const [referenceCopyNotice, setReferenceCopyNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
+  const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string; sessionId?: string; topic?: StudioTopicSelection } | null>(null);
   const hasPendingDirectAttempt = directLocked && !success;
   useEffect(() => {
     if (!hasPendingDirectAttempt) return;
@@ -590,7 +592,9 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         const result=await directAttempt.current.run({signal:controller.signal,onProgress:setDirectProgress});
         setSubmissionUncertain(false);
         recordProductionAttempt(trackedToken, 'created');
-        setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete'});
+        setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete',
+          sessionId: isConfirmedRoleplaySessionId(result.sessionId) ? result.sessionId : undefined,
+          topic: !librarySource && transferredTopic ? { ...transferredTopic } : undefined});
       } catch (error) {
         if (error instanceof DirectUploadReviewRequired) {
           setDirectReview(error.reason);
@@ -769,6 +773,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       } else {
         setSuccess({
           link: payload.inviteLink || `${window.location.origin}/roleplays/${payload.sessionId}`,
+          sessionId: isConfirmedRoleplaySessionId(payload.sessionId) ? payload.sessionId : undefined,
+          topic: !librarySource && transferredTopic ? { ...transferredTopic } : undefined,
           participantName: participantType === 'interpreter'
             ? interpreters.find(i => i.id === parseInt(selectedParticipantId))?.name || 'Intérprete'
             : candidates.find(c => c.id === parseInt(selectedParticipantId))?.name || 'Candidato',
@@ -846,6 +852,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </p>
         <p className="text-[var(--text-secondary)] mb-6">{librarySource?.scenarios.length ?? scenarios.length} escenarios configurados</p>
         {success.summary && <p className="text-sm text-[var(--text-secondary)] mb-6">{success.summary}</p>}
+        {editorialTopicsEnabled && success.sessionId && success.topic && <PublishedRoleplayTopic sessionId={success.sessionId} selection={success.topic}/>}
+        {transferredTopic && (!editorialTopicsEnabled || !success.sessionId) && <p className="mb-4 text-sm text-[var(--text-secondary)]">La sesión está creada. La categoría no se guardó automáticamente; puedes clasificarla en la biblioteca cuando esté habilitada la edición temática.</p>}
         {productionBackupWarning && <p role="status" className="mb-4 text-sm text-[var(--theme-warning)]">La creación está confirmada, pero el respaldo local cambió o no se pudo actualizar. Consulta las sesiones existentes antes de repetirla.</p>}
         <div className="mb-6 p-4 bg-[var(--theme-surface-muted)] rounded-xl">
           <input 
@@ -1168,7 +1176,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           <p className="mt-1 text-sm text-[var(--foreground)]">
             {ROLEPLAY_TOPICS.find(item => item.id === transferredTopic.topic)?.label} / {ROLEPLAY_TOPICS.find(item => item.id === transferredTopic.topic)?.subtopics.find(item => item.id === transferredTopic.subtopic)?.label}
           </p>
-          <p className="mt-1 text-xs text-[var(--text-secondary)]">Referencia temporal. La creación no guarda esta categoría automáticamente; clasifica el ejercicio en la biblioteca cuando esté habilitada la clasificación editorial.</p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">{editorialTopicsEnabled && !isBulk ? 'Se intentará guardar esta categoría después de confirmar la creación individual. Si no se confirma, podrás reintentar sin crear otra sesión.' : 'Referencia temporal. Esta modalidad no guarda automáticamente la categoría; clasifica el ejercicio en la biblioteca cuando esté habilitada la edición temática.'}</p>
           <button type="button" onClick={() => setTransferredTopic(null)} className="theme-action-secondary mt-2 min-h-11 rounded-lg px-3 py-2 text-xs font-semibold">Quitar referencia de tema</button>
         </section>
       )}
