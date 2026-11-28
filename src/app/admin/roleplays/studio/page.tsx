@@ -2392,12 +2392,17 @@ export default function RoleplayStudioPage() {
         <p className="mt-3 text-xs text-[var(--text-secondary)]">Puedes volver a cualquier paso disponible sin perder los cambios. La transcripción es opcional.</p>
       </nav>
       <section id="studio-source" tabIndex={-1} className="scroll-mt-6 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <h2 className="mr-auto text-lg font-semibold text-[var(--foreground)]">Cargar grabación y transcripción</h2>
+          <a href="#studio-happyscribe" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Desde HappyScribe</a>
+          {url && <a href="#studio-subtitles" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-xs font-semibold">Subtítulos locales</a>}
+        </div>
         <label htmlFor="studio-audio" className="block text-sm font-semibold text-[var(--foreground)]">
           Grabación original MP3 o video/audio largo (local, hasta 8 GiB)
         </label>
         <input id="studio-audio" type="file"
           accept=".mp3,.m4a,.wav,.aac,.ogg,.oga,.opus,.flac,.mp4,.m4v,.mov,.webm,.mkv,audio/*,video/*"
-          className="mt-2 block w-full text-sm text-[var(--text-secondary)]"
+          className="mt-2 block min-h-11 w-full text-sm text-[var(--text-secondary)]"
           onChange={event => {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = '';
@@ -2423,6 +2428,7 @@ export default function RoleplayStudioPage() {
         {/* Keep the provider panel available before a source is selected. */}
         <HappyScribeLibraryPanel key={happyScribeFilterEpoch}
           items={happyScribeItems} selectedId={happyScribeSelectedId}
+          sourceReady={sourceReady} hasSource={Boolean(audio)}
           loading={happyScribeLoading} importing={happyScribeImporting}
           mediaImporting={happyScribeMediaImporting} mediaEnabled={happyScribeMediaEnabled}
           hasMore={happyScribeHasMore} configUnavailable={happyScribeConfigUnavailable}
@@ -2467,7 +2473,7 @@ export default function RoleplayStudioPage() {
           aria-label="Reproductor de preescucha sin pausa"
           {...pairMediaHandlers}
            className="hidden" />}
-            <div id="studio-subtitles" tabIndex={-1} className="scroll-mt-6 rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+            <div id="studio-subtitles" tabIndex={-1} className="scroll-mt-6 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-surface-muted)] p-4">
               <label htmlFor="studio-transcript" className="block text-sm font-semibold text-[var(--theme-link)]">
                 Opcional: importar tiempos de transcripción SRT / WebVTT
               </label>
