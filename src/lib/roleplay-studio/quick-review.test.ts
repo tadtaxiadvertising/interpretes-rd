@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview } from './quick-review';
+import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, studioTurnFieldValidity } from './quick-review';
 
 const a = { id: 'a', title: 'Doctor', start: 0, end: 5, scriptPrompt: '', responseLimit: 120,
   speakerRole: 'doctor' as const, language: 'en' as const };
 const b = { ...a, id: 'b', start: 5, end: 10 };
 describe('explicit Studio review', () => {
+  it('shares exact metadata boundaries without introducing speaker or language export blocks', () => {
+    expect(studioTurnFieldValidity({title:'x'.repeat(200),scriptPrompt:'x'.repeat(5000),responseLimit:0})).toEqual({title:true,instructions:true,response:true});
+    expect(studioTurnFieldValidity({title:'x'.repeat(201),scriptPrompt:'x'.repeat(5001),responseLimit:-1})).toEqual({title:false,instructions:false,response:false});
+    expect(studioTurnFieldValidity({...a,title:'   ',responseLimit:1.5})).toEqual({title:false,instructions:true,response:false});
+    expect(studioTurnFieldValidity({...a,responseLimit:301}).response).toBe(false);
+    const pending = {...a,speakerRole:'unknown' as const,language:'unknown' as const};
+    expect(studioTurnFieldValidity(pending)).toEqual({title:true,instructions:true,response:true});
+    expect(inspectStudioReview([pending],20)[0].findings.map(issue=>issue.code)).toEqual(['speaker','language']);
+  });
   it('accepts adjacent valid cuts and rejects unresolved editorial issues', () => {
     expect(studioReviewIssue(a, [a, b], 20)).toBeNull();
     expect(studioReviewIssue({ ...a, speakerRole: 'interpreter' }, [a,b], 20)).toContain('intérprete');
