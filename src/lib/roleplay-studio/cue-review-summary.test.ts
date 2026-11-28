@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from './cue-review-summary';
+import { cueTrimActivityHint, conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -131,6 +131,31 @@ describe('pre-apply SRT quality summary', () => {
     }
     expect(proposeSelectedCueEdgeTrim([cue(0, 1), cue(0.5, 2)], [0, 1], 0, 2))
       .toEqual({ start: 0, end: 0.5 });
+  });
+
+  it('warns only when the removed edge intersects detected acoustic activity', () => {
+    const cue = { start: 1, end: 4 };
+    const snapshot = { status: 'ready' as const, segments: [{ start: 1.1, end: 2, signalLevel: 0.5 }] };
+    expect(cueTrimActivityHint(cue, { start: 1.25, end: 4 }, snapshot)).toBe('detected');
+    expect(cueTrimActivityHint(cue, { start: 1, end: 3.75 }, snapshot)).toBe('not-detected');
+    expect(cueTrimActivityHint(cue, { start: 1.1, end: 4 }, snapshot)).toBe('not-detected');
+  });
+
+  it('does not claim acoustic clearance from empty, capped, unavailable or invalid results', () => {
+    const cue = { start: 1, end: 4 };
+    const trim = { start: 1, end: 3.75 };
+    expect(cueTrimActivityHint(cue, trim, null)).toBe('unavailable');
+    for (const status of ['loading', 'limited', 'unavailable'] as const) {
+      expect(cueTrimActivityHint(cue, trim, { status, segments: [] })).toBe('unavailable');
+    }
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments: [] })).toBe('unavailable');
+    const segments = Array.from({ length: 100 }, (_, i) => ({ start: 5 + i, end: 5.5 + i, signalLevel: 0.5 }));
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments })).toBe('unavailable');
+    segments[0] = { start: 3.8, end: 4.2, signalLevel: 0.5 };
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments })).toBe('detected');
+    expect(cueTrimActivityHint(cue, trim, { status: 'ready', segments: [{ start: NaN, end: 2, signalLevel: 0.5 }] })).toBe('unavailable');
+    expect(cueTrimActivityHint(cue, { start: 0, end: 4 }, { status: 'ready', segments })).toBe('unavailable');
+    expect(cueTrimActivityHint(cue, cue, { status: 'ready', segments })).toBe('unavailable');
   });
 
   it('ignores invalid source times and indexes while providing review hints', () => {
