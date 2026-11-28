@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
 import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic } from '@/lib/roleplay-library-topics';
+import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
 import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
 
@@ -180,6 +181,8 @@ export default async function RoleplayLibraryPage({
       )}
 
       {editorialUnavailable && <p role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--theme-warning)]">La clasificación guardada no está disponible. Se muestran las sugerencias de títulos; no se han cambiado las categorías.</p>}
+
+      <RoleplayTopicsReadiness />
 
       <form action="/admin/roleplays/library" method="get" className="flex flex-wrap gap-3">
         <label className="sr-only" htmlFor="library-query">Buscar ejercicios por título o huella</label>
