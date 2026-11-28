@@ -309,8 +309,9 @@ describe('POST /api/admin/roleplays', () => {
       process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
       process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
       const request = keyed('interpreter', 'not-a-uuid');
+      const cancel = vi.spyOn(request.body!, 'cancel');
       expect((await POST(request as any)).status).toBe(400);
-      expect(request.bodyUsed).toBe(false);
+      expect(cancel).toHaveBeenCalledOnce();
       expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
     });
     it('completes the receipt within publication before sending notifications', async () => {
@@ -496,6 +497,46 @@ describe('POST /api/admin/roleplays', () => {
       expect(next.status).toBe(200);
       expect(mockUpload).toHaveBeenCalledTimes(2);
     });
+
+    it.each(['unauthorized', 'disabled', 'invalid-key', 'unready'] as const)(
+      'discards a rejected streaming upload before parsing (%s)',
+      async reason => {
+        const cancel = vi.fn();
+        const source = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('private synthetic upload bytes'));
+          },
+          cancel,
+        });
+        const headers = new Headers({ 'Content-Type': 'multipart/form-data; boundary=synthetic' });
+        if (reason === 'unauthorized') {
+          vi.mocked(validateAction).mockResolvedValueOnce({ error: 'Access denied', code: 'UNAUTHORIZED' } as never);
+        } else {
+          headers.set('Idempotency-Key', reason === 'invalid-key' ? 'invalid' : '123e4567-e89b-42d3-a456-426614174000');
+          if (reason !== 'disabled') {
+            process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+            process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
+          }
+          if (reason === 'unready') vi.mocked(isCreationLedgerReady).mockResolvedValueOnce(false);
+        }
+        const request = new Request('http://localhost/api/admin/roleplays', {
+          method: 'POST', headers, body: source, duplex: 'half',
+        } as RequestInit & { duplex: 'half' });
+        const response = await POST(request as any);
+        expect(response.status).toBe(reason === 'unauthorized' ? 403 : reason === 'invalid-key' ? 400 : 503);
+        expect(response.headers.get('Cache-Control')).toContain('no-store');
+        expect(JSON.stringify(await response.json())).not.toContain('private synthetic');
+        await vi.waitFor(() => expect(cancel).toHaveBeenCalledOnce());
+        expect(mockUpload).not.toHaveBeenCalled();
+        expect(prisma.$transaction).not.toHaveBeenCalled();
+        expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+        const next = await POST(buildRequest({
+          participantType: 'interpreter', participantId: '7',
+          scenarios: oneScenario, audios: [audioFile()],
+        }) as any);
+        expect(next.status).toBe(200);
+      },
+    );
 
     it('cancels an oversized declared multipart before parsing, Storage or database work', async () => {
       const cancel = vi.fn();
