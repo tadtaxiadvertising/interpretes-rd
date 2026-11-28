@@ -3,6 +3,7 @@ import { AlertTriangle, AudioLines, Copy, Layers3, Library, Plus } from 'lucide-
 import prisma from '@/lib/prisma';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { ROLEPLAY_TOPICS, inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters } from '@/lib/roleplay-library-topics';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
 
 export const dynamic = 'force-dynamic';
@@ -90,16 +91,29 @@ async function getLibrary() {
 export default async function RoleplayLibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; archived?: string }>;
+  searchParams: Promise<{ q?: string; archived?: string; topic?: string; subtopic?: string }>;
 }) {
   const params = await searchParams;
   const q = (params.q ?? '').trim().toLowerCase().slice(0, 100);
   const showArchived = params.archived === '1';
   const result = await getLibrary();
-  const matches = result.items.filter((item) =>
+  const { topic, subtopic } = parseRoleplayTopicFilters(params.topic, params.subtopic);
+  const searchable = result.items.filter((item) =>
     (showArchived ? item.archivedAt !== null : item.archivedAt === null) &&
     (!q || item.titles.some((title) => title.toLowerCase().includes(q)) || item.fingerprint.startsWith(q))
-  );
+  ).map(item => ({ ...item, topicHints: inferRoleplayTopics(item.titles) }));
+  const matches = searchable.filter(item => matchesRoleplayTopic(item.topicHints, topic, subtopic));
+  const selectedTopic = ROLEPLAY_TOPICS.find(item => item.id === topic);
+  const topicCount = (id: string, child = '') => searchable.filter(item => matchesRoleplayTopic(item.topicHints, id, child)).length;
+  const libraryHref = (nextTopic = '', nextSubtopic = '', nextQ = q, archived = showArchived) => {
+    const query = new URLSearchParams();
+    if (nextQ) query.set('q', nextQ);
+    if (archived) query.set('archived', '1');
+    if (nextTopic) query.set('topic', nextTopic);
+    if (nextSubtopic) query.set('subtopic', nextSubtopic);
+    const suffix = query.toString();
+    return '/admin/roleplays/library' + (suffix ? '?' + suffix : '');
+  };
   const archivedCount = result.items.filter((item) => item.archivedAt !== null).length;
 
   return (
@@ -152,17 +166,52 @@ export default async function RoleplayLibraryPage({
           placeholder="Buscar por escenario o identificador SHA-256"
           className="min-w-0 w-full sm:w-auto sm:min-w-0 flex-1 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-4 py-3 text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]" />
         {showArchived && <input type="hidden" name="archived" value="1" />}
+        {topic && <input type="hidden" name="topic" value={topic} />}
+        {subtopic && <input type="hidden" name="subtopic" value={subtopic} />}
         <button type="submit" className="rounded-xl theme-action-primary px-5 py-3 font-semibold">Buscar</button>
-        {q && <Link href={showArchived ? '/admin/roleplays/library?archived=1' : '/admin/roleplays/library'} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]">Limpiar</Link>}
+        {(q || topic) && <Link href={libraryHref('', '', '')} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]">Limpiar</Link>}
       </form>
+
+      {!result.error && (
+        <nav aria-label="Temas y subtemas de roleplays" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
+          <div>
+            <h2 className="font-semibold text-[var(--foreground)]">Explorar por tema</h2>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">Sugerencias a partir de los títulos existentes; un ejercicio puede aparecer en varios temas. No son categorías guardadas.</p>
+          </div>
+          <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+            {[{ id: '', label: 'Todos' }, ...ROLEPLAY_TOPICS, { id: 'unclassified', label: 'Sin clasificar' }].map(item => (
+              <Link key={item.id || 'all'} href={libraryHref(item.id)}
+                aria-current={topic === item.id ? 'true' : undefined}
+                className={`flex min-h-11 min-w-0 flex-wrap items-center justify-between gap-1 rounded-xl border px-3 py-2 text-sm ${topic === item.id ? 'theme-action-primary' : 'theme-action-secondary border-[var(--border)]'}`}>
+                <span className="break-words">{item.label}</span>
+                <span className="text-xs tabular-nums">{topicCount(item.id)}</span>
+              </Link>
+            ))}
+          </div>
+          {selectedTopic && (
+            <div className="space-y-2 border-t border-[var(--border)] pt-3">
+              <h3 className="text-sm font-semibold text-[var(--foreground)]">{selectedTopic.label} · Subtemas</h3>
+              <div className="flex flex-wrap gap-2">
+                {[{ id: '', label: 'Todos los subtemas' }, ...selectedTopic.subtopics].map(item => (
+                  <Link key={item.id || 'all'} href={libraryHref(topic, item.id)}
+                    aria-current={subtopic === item.id ? 'true' : undefined}
+                    className={`inline-flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm ${subtopic === item.id ? 'theme-action-primary' : 'theme-action-secondary'}`}>
+                    {item.label} <span className="text-xs tabular-nums">{topicCount(topic, item.id)}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </nav>
+      )}
 
       <section aria-label="Ejercicios reutilizables" className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-[var(--foreground)]">{showArchived ? 'Ejercicios archivados' : 'Ejercicios disponibles'}</h2>
             <div className="mt-2 flex flex-wrap gap-3 text-sm">
-              <Link href="/admin/roleplays/library" className={!showArchived ? 'font-bold text-[var(--theme-link)]' : 'text-[var(--text-secondary)] hover:text-[var(--foreground)]'}>Disponibles</Link>
-              <Link href="/admin/roleplays/library?archived=1" className={showArchived ? 'font-bold text-[var(--theme-link)]' : 'text-[var(--text-secondary)] hover:text-[var(--foreground)]'}>Eliminados de la biblioteca ({archivedCount})</Link>
+              <Link href={libraryHref(topic, subtopic, q, false)} className={!showArchived ? 'font-bold text-[var(--theme-link)]' : 'text-[var(--text-secondary)] hover:text-[var(--foreground)]'}>Disponibles</Link>
+              <Link href={libraryHref(topic, subtopic, q, true)} className={showArchived ? 'font-bold text-[var(--theme-link)]' : 'text-[var(--text-secondary)] hover:text-[var(--foreground)]'}>Eliminados de la biblioteca ({archivedCount})</Link>
             </div>
           </div>
           {!result.error && <p className="text-sm text-[var(--text-secondary)]">{matches.length} instantáneas · {result.scanned} sesiones examinadas</p>}
@@ -170,8 +219,8 @@ export default async function RoleplayLibraryPage({
         {!result.error && matches.length === 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-12 text-center">
             <AudioLines size={38} className="mx-auto mb-3 text-[var(--text-tertiary)]" />
-            <p className="font-semibold text-[var(--foreground)]">{showArchived ? 'No hay ejercicios archivados' : q ? 'No hay ejercicios con esa búsqueda' : 'No hay ejercicios reutilizables todavía'}</p>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">{showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
+            <p className="font-semibold text-[var(--foreground)]">{q || topic ? 'No hay ejercicios con estos filtros' : showArchived ? 'No hay ejercicios archivados' : 'No hay ejercicios reutilizables todavía'}</p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{q || topic ? 'Cambia de tema, subtema o búsqueda para ver otros ejercicios.' : showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
           </div>
         )}
         {matches.map((item) => (
@@ -183,6 +232,13 @@ export default async function RoleplayLibraryPage({
                   {item.audioCount} {item.audioCount === 1 ? 'escenario' : 'escenarios'} ·
                   {' '}{item.assignmentsInWindow} {item.assignmentsInWindow === 1 ? 'sesión coincidente' : 'sesiones coincidentes'} en la muestra
                 </p>
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">Temas sugeridos: {item.topicHints.length
+                  ? item.topicHints.map(hint => {
+                    const parent = ROLEPLAY_TOPICS.find(entry => entry.id === hint.topic);
+                    const child = parent?.subtopics.find(entry => entry.id === hint.subtopic);
+                    return parent && child ? parent.label + ' / ' + child.label : '';
+                  }).filter(Boolean).join(' · ')
+                  : 'Sin clasificar'}</p>
                 <p className="mt-2 text-xs font-medium text-[var(--text-secondary)]">{item.audioKind === 'private' ? 'Audio privado · Apertura bilingüe obligatoria' : 'Audio histórico público · Sin apertura obligatoria'}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {item.titles.slice(0, 5).map((title, index) => (
