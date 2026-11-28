@@ -12,7 +12,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { conflictingSelectedTimedCueIndices, cueTrimActivityHint, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueTrimActivityHint, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, removedCueEdge, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
@@ -2746,6 +2746,7 @@ export default function RoleplayStudioPage() {
               const trim = conflicts.length === 1
                 ? proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration) : null;
               const trimActivity = trim ? cueTrimActivityHint(cue, trim, localVadSnapshot) : 'unavailable';
+              const removedEdge = trim ? removedCueEdge(cue, trim) : null;
               return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
@@ -2783,6 +2784,14 @@ export default function RoleplayStudioPage() {
                         className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
                         {previewingId === `subtitle-trim-${index}` ? 'Detener ajuste' : 'Escuchar ajuste'}
                       </button>
+                      {removedEdge && (
+                        <button type="button" onClick={() => previewSubtitleCue(removedEdge, index, 'removed')}
+                          aria-pressed={previewingId === `subtitle-removed-${index}`}
+                          aria-label={previewingId === `subtitle-removed-${index}` ? `Detener parte retirada del turno ${index + 1}` : `Escuchar parte que se retiraría del turno ${index + 1}`}
+                          className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
+                          {previewingId === `subtitle-removed-${index}` ? 'Detener parte retirada' : `Escuchar parte retirada (${Math.round((removedEdge.end - removedEdge.start) * 1000)} ms)`}
+                        </button>
+                      )}
                       <button type="button" onClick={() => applyCueEdgeTrim(index)}
                         className="rounded border border-[var(--border)] px-2 py-1 font-semibold text-[var(--theme-link)]">
                         Ajustar y conservar ambos turnos
