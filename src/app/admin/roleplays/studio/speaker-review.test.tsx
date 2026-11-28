@@ -553,6 +553,29 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.queryByRole('slider', { name: 'Posición de grabación en modo enfoque' })).toBeNull();
   });
 
+  it.each(['next', 'select', 'pending', 'filter'] as const)('stops the old preview on %s navigation without confirming or starting another', method => {
+    const player = selectAudio();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar intervención activa' }));
+    expect(screen.getByRole('button', { name: 'Detener fragmento activo' })).toBeTruthy();
+    vi.mocked(player.pause).mockClear();
+    if (method === 'next') fireEvent.click(screen.getByRole('button', { name: 'Siguiente intervención' }));
+    if (method === 'select') fireEvent.change(selector, { target: { value: selector.options[1].value } });
+    if (method === 'pending') fireEvent.click(screen.getByRole('button', { name: 'Ir al siguiente pendiente' }));
+    if (method === 'filter') fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), { target: { value: 'Intervención 2' } });
+    expect(player.pause).toHaveBeenCalled();
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('button', { name: 'Escuchar intervención activa' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('0/2');
+    expect(screen.getByText(/Intervención 2 de 2 ·/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Escuchar intervención activa' }));
+    expect(player.play).toHaveBeenCalledTimes(2);
+    expect(player.currentTime).toBe(30);
+  });
+
   it('keeps focus navigation within filtered interventions and allows direct selection', () => {
     selectAudio();
     for (let i = 0; i < 3; i++) {

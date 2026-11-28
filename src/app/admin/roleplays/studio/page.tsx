@@ -2032,7 +2032,11 @@ export default function RoleplayStudioPage() {
   const sourceProfileCount = useMemo(() => focusedTurnId
     ? propagateSpeakerProfile(segments, focusedTurnId).changed : 0, [segments, focusedTurnId]);
   const selectFocusedTurn = (id: string) => {
-    if (previewingId?.startsWith('boundary-proposal:')) stopPreview();
+    // Selecting another turn is not a request to keep listening to the old one.
+    if (id !== focusedTurnId || previewingId?.startsWith('boundary-proposal:')) {
+      stopPreview();
+      stopPairPreview();
+    }
     setAdvancedTurnId(null);
     setExpandedSegmentId(id);
     setReviewFocusRequest({ id, attempt: ++reviewFocusAttempt.current });
@@ -2059,6 +2063,16 @@ export default function RoleplayStudioPage() {
   }, [segments, focusedTurn?.segment.id, duration, serverConsent, detectedSilences]);
   const proposalPreviewId = focusedTurn ? 'boundary-proposal:' + focusedTurn.segment.id : '';
   const canUseBoundaryProposal = Boolean(focusedTurn && boundaryProposal && !busy && !draftBusy && !analyzingSilences);
+  // Search, pending filters and edits can change the visible focus without a
+  // navigation click. Stop stale bounded playback, including compound audio.
+  const previousReviewFocus = useRef<{ mode: boolean; id: string | undefined }>({ mode: false, id: undefined });
+  useEffect(() => {
+    const previous = previousReviewFocus.current;
+    previousReviewFocus.current = { mode: focusMode, id: focusedTurnId };
+    if (!focusMode || (previous.mode && previous.id === focusedTurnId)) return;
+    if (previewingId && previewingId !== focusedTurnId && previewingId !== proposalPreviewId) stopPreview();
+    if (pairPreviewId && pairPreviewId !== focusedTurnId) stopPairPreview();
+  }, [focusMode, focusedTurnId, previewingId, pairPreviewId, proposalPreviewId, stopPreview, stopPairPreview]);
   useEffect(() => {
     if (!previewingId?.startsWith('boundary-proposal:')) return;
     if (focusMode && (!immersiveMode || workspaceTab === 'edit') &&
@@ -2207,8 +2221,7 @@ export default function RoleplayStudioPage() {
     // Pending navigation is available in the finalization header too.
     // Reveal the editor before the review-focus effect runs.
     setWorkspaceTab('edit');
-    setExpandedSegmentId(next.id);
-    setReviewFocusRequest({ id: next.id, attempt: ++reviewFocusAttempt.current });
+    selectFocusedTurn(next.id);
   };
 
   const sourceReady = Boolean(audio && duration > 0);
