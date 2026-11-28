@@ -450,6 +450,25 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByRole('button', { name: 'Marcar pendientes como español' })).toBeTruthy();
   });
 
+  it('assigns profile and language in bulk only to visible compatible pending turns and undoes both', () => {
+    loadAudio(180);
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    chooseProfile(1, 'client');
+    const titles = screen.getAllByLabelText('Título');
+    fireEvent.change(titles[1], { target: { value: 'Grupo revisado A' } });
+    fireEvent.change(titles[2], { target: { value: 'Grupo revisado B' } });
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    fireEvent.change(search, { target: { value: 'Grupo revisado' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Hispanohablante · ES (2)' }));
+    fireEvent.change(search, { target: { value: '' } });
+    expect(displayedLanguages()).toEqual(['en', 'es', 'es', 'unknown']);
+    expect(within(screen.getByRole('group', { name: 'Perfil de intervención 2' }))
+      .getByRole('button', { name: 'Hispanohablante · ES' }).getAttribute('aria-pressed')).toBe('true');
+    expect((screen.getAllByLabelText('Título')[1] as HTMLInputElement).value).toBe('Grupo revisado A');
+    fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de hablantes' }));
+    expect(displayedLanguages()).toEqual(['en', 'unknown', 'unknown', 'unknown']);
+  });
+
   it('never assigns languages to turns hidden by the active search filter', () => {
     loadAudio(180);
     for (let i = 0; i < 4; i++) {
