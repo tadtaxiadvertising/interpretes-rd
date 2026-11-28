@@ -141,3 +141,24 @@ export function matchesRoleplayLibrarySize(count: number, size: ReturnType<typeo
   const option = ROLEPLAY_LIBRARY_SIZE_OPTIONS.find(item => item.id === size);
   return Boolean(option && Number.isInteger(count) && count >= option.min && count <= option.max);
 }
+
+/** Keep the preview compact, revealing directly matching later scenarios
+ * without relabeling their original positions or changing playback order. */
+export function selectRoleplayLibraryPreview(titles: readonly string[], query: string) {
+  const normalized = normalizeRoleplayTopicText(query);
+  const entries = titles.map((title, index) => {
+    const text = normalizeRoleplayTopicText(title);
+    const directMatch = Boolean(normalized) && text.includes(normalized);
+    const words = text.split(' ');
+    const terms = normalized ? [...new Set(normalized.split(' '))] : [];
+    const matchingTerms = terms.filter(term => words.some(word =>
+      word === term || (term.length >= 3 && word.startsWith(term)))).length;
+    return { title, index, directMatch, matchingTerms };
+  });
+  const selected = [...entries].sort((a, b) =>
+    Number(b.directMatch) - Number(a.directMatch) || b.matchingTerms - a.matchingTerms || a.index - b.index
+  ).slice(0, 5).sort((a, b) => a.index - b.index);
+  return selected.map(({title, index, directMatch, matchingTerms}) => ({
+    title, index, matches: directMatch || matchingTerms > 0,
+  }));
+}
