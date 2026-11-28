@@ -15,8 +15,33 @@ vi.mock('./ScenarioCard',()=>({
     <button type="button" onClick={()=>onUpdate(scenario.id,{title:'Consulta de prueba',baseAudioFile:new File(['ID3'],'synthetic.mp3',{type:'audio/mpeg'}),studioTurn:1,studioLanguage:'en'})}>Preparar escenario</button>,
 }));
 import NewRoleplayForm from './NewRoleplayForm';
+import { DirectUploadReviewRequired } from '@/lib/roleplay/direct-upload-browser-resume';
 afterEach(()=>{cleanup();vi.resetAllMocks();vi.unstubAllGlobals();});
 describe('gated private roleplay form',()=>{
+  it.each([
+    ['RESERVATION_EXPIRED', 'La reserva de subida ha caducado'],
+    ['RESERVATION_UNCERTAIN', 'No se pudo confirmar la reserva de subida'],
+  ] as const)('requires review without starting another upload (%s)', async (reason, message) => {
+    const fetcher=vi.fn();
+    vi.stubGlobal('fetch',fetcher);
+    m.create.mockReturnValue({run:m.upload});
+    m.upload.mockRejectedValue(new DirectUploadReviewRequired(reason));
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} openingAssignmentEnabled directUploadEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/),{target:{value:'11'}});
+    fireEvent.click(screen.getByRole('button',{name:'Preparar escenario'}));
+    fireEvent.click(screen.getByRole('button',{name:'Crear roleplay'}));
+    await screen.findByText(new RegExp(message));
+    const retry=screen.getByRole('button',{name:'Reserva pendiente de revisión'});
+    expect(retry).toHaveProperty('disabled',true);
+    fireEvent.click(retry);
+    expect(m.create).toHaveBeenCalledOnce();
+    expect(m.upload).toHaveBeenCalledOnce();
+    expect(m.consolidate).not.toHaveBeenCalled();
+    expect(m.publish).not.toHaveBeenCalled();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(screen.getByRole('link',{name:'Consultar sesiones existentes'}).getAttribute('target')).toBe('_blank');
+  });
+
   it('keeps one controller and one reservation after uncertain publication',async()=>{
     const fetcher=vi.fn();
     vi.stubGlobal('fetch',fetcher);
