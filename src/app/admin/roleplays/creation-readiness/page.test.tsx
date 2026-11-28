@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  validate: vi.fn(), readiness: vi.fn(), directCatalog: vi.fn(), db: {},
+  validate: vi.fn(), readiness: vi.fn(), directCatalog: vi.fn(), rollout: vi.fn(), db: {},
 }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: mocks.validate }));
 vi.mock('@/lib/prisma', () => ({ default: mocks.db }));
@@ -12,11 +12,12 @@ vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
 vi.mock('@/lib/roleplay/direct-upload-catalog-readiness', () => ({ inspectDirectUploadCatalog: mocks.directCatalog }));
+vi.mock('@/lib/roleplay/direct-upload-rollout-inspection', () => ({ inspectDirectRolloutMetadata: mocks.rollout }));
 import CreationReadinessPage from './page';
 import { DIRECT_UPLOAD_FORM_FLAGS, OPENING_ASSIGNMENT_FLAGS } from '@/lib/roleplay/direct-upload-pilot-config';
 
-async function view(check?: string | string[], checkDirect?: string | string[]) {
-  return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check, checkDirect }) }));
+async function view(check?: string | string[], checkDirect?: string | string[], checkRollout?: string | string[]) {
+  return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check, checkDirect, checkRollout }) }));
 }
 
 beforeEach(() => {
@@ -27,11 +28,45 @@ beforeEach(() => {
   vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'false');
   mocks.validate.mockResolvedValue({ user: { role: 'admin' } });
   mocks.readiness.mockResolvedValue(true);
+  mocks.rollout.mockResolvedValue({
+    schemaMetadataReady: false,
+    tableChecks: [{ name: 'roleplay_bilingual_openings', state: 'missing' }],
+    triggerChecks: [{ table: 'roleplay_bilingual_openings', name: 'roleplay_opening_record_guard', enabled: false }],
+    columnChecks: { opening: false, capability: true, releaseGate: true, assignmentHash: true },
+    buckets: [{ id: 'roleplay-audio-private', state: 'metadata-ready' }, { id: 'roleplay-opening-private', state: 'review-required' }],
+  });
   mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'accounting-consistent', permissions: { state: 'recognized', tables: [{ name: 'roleplay_upload_reservations', runtimeAccess: true, privateAccess: true }] }, capacity: { maxSlots: 25, allocatedSlots: 10, remainingSlots: 15 } });
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('admin runtime diagnostic', () => {
+  it.each([undefined, '0', 'true', ['1', '1']])('does not inspect rollout metadata without one explicit request (%o)', async checkRollout => {
+    expect(await view(undefined, undefined, checkRollout)).toContain('Metadatos sin comprobar');
+    expect(mocks.rollout).not.toHaveBeenCalled();
+  });
+  it('shows recognized bucket metadata and missing opening guards without authorizing activation', async () => {
+    const html = await view(undefined, undefined, '1');
+    expect(mocks.rollout).toHaveBeenCalledExactlyOnceWith(mocks.db);
+    expect(mocks.directCatalog).not.toHaveBeenCalled();
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    expect(html).toContain('Estructura de publicación y apertura requiere revisión');
+    expect(html).toContain('Bucket roleplay-audio-private: Metadatos reconocidos');
+    expect(html).toContain('Bucket roleplay-opening-private: Requiere revisión');
+    expect(html).toContain('roleplay_opening_record_guard');
+    expect(html).toContain('15 MiB por archivo');
+    expect(html).toContain('No autorizan activar el piloto');
+  });
+  it('keeps accounting results if rollout metadata is unavailable and rejects unauthorized probes', async () => {
+    mocks.rollout.mockResolvedValue(null);
+    const html = await view(undefined, '1', '1');
+    expect(html).toContain('Metadatos no disponibles desde esta conexión');
+    expect(html).toContain('Cupos contables: 10 de 25; restantes: 15');
+    expect(html).toContain('Estructura de publicación y apertura: No disponible');
+    mocks.rollout.mockClear();
+    mocks.validate.mockResolvedValue({ user: { role: 'interpreter' } });
+    expect(await view(undefined, undefined, '1')).not.toContain('Comprobar estructura y buckets');
+    expect(mocks.rollout).not.toHaveBeenCalled();
+  });
   it.each([undefined, '0', 'true', ['1', '1']])('does not read the direct catalog without one explicit check (%o)', async checkDirect => {
     const html = await view(undefined, checkDirect);
     expect(html).toContain('Catálogo y presupuesto de subida directa');
