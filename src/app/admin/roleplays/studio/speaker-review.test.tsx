@@ -379,6 +379,8 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.change(titles[2], { target: { value: 'Visible C' } });
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), { target: { value: 'Visible' } });
     fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
     const optIn = screen.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' });
     expect(optIn).toHaveProperty('checked', false);
     fireEvent.click(optIn);
@@ -405,6 +407,8 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     fireEvent.change(screen.getAllByLabelText('Final (segundos)')[1], { target: { value: '121' } });
     fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
     fireEvent.click(screen.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' }));
     chooseProfile('doctor');
     fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
