@@ -6,6 +6,21 @@
 export type StudioSpeakerRole = 'doctor' | 'patient' | 'interpreter' | 'nurse' | 'operator' | 'unknown';
 export type StudioLanguage = 'en' | 'es' | 'unknown';
 
+/** Editorial presentation only: do not rewrite persisted professional roles. */
+export function studioEditorialProfile(role: StudioSpeakerRole): { role: 'doctor' | 'patient' | 'interpreter'; label: string; language: 'en' | 'es' } | null {
+  if (role === 'unknown') return null;
+  if (role === 'patient') return { role: 'patient', label: 'Hispanohablante', language: 'es' };
+  if (role === 'interpreter') return { role: 'interpreter', label: 'Intérprete original', language: 'en' };
+  return { role: 'doctor', label: 'Cliente', language: 'en' };
+}
+
+/** A profile name is searchable independently of the title or old role code. */
+export function studioProfileSearchText(role: StudioSpeakerRole): string {
+  const profile = studioEditorialProfile(role);
+  if (!profile) return 'Sin perfil Hablante pendiente';
+  return profile.label + (profile.role === 'interpreter' ? ' interprete' : '');
+}
+
 const ROLE_LABELS: Record<Exclude<StudioSpeakerRole, 'unknown'>, string> = {
   doctor: 'Doctor',
   patient: 'Paciente',

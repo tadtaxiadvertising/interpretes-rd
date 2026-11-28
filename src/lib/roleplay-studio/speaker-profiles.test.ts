@@ -5,9 +5,27 @@ import {
   makeNeutralSegmentTitle,
   titleAfterProfileChange,
   safePublishableSpeakerLabel,
+  studioEditorialProfile,
+  studioProfileSearchText,
 } from './speaker-profiles';
 
 describe('Studio three-party speaker review with bilingual role labels', () => {
+  it.each([
+    ['doctor', 'doctor', 'Cliente', 'en'],
+    ['nurse', 'doctor', 'Cliente', 'en'],
+    ['operator', 'doctor', 'Cliente', 'en'],
+    ['patient', 'patient', 'Hispanohablante', 'es'],
+    ['interpreter', 'interpreter', 'Intérprete original', 'en'],
+  ] as const)('presents legacy %s under its generic editorial profile', (role, expected, label, language) => {
+    expect(studioEditorialProfile(role)).toEqual({ role: expected, label, language });
+    expect(studioProfileSearchText(role)).toContain(label);
+  });
+
+  it('leaves unknown roles pending without inferring a profile', () => {
+    expect(studioEditorialProfile('unknown')).toBeNull();
+    expect(studioProfileSearchText('unknown')).toContain('Sin perfil');
+  });
+
   it('recognizes only exact generic professional roles, never real names', () => {
     expect(classifySpeakerRole('Doctor')).toBe('doctor');
     expect(classifySpeakerRole('Médico')).toBe('doctor');
