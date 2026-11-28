@@ -103,9 +103,9 @@ describe('Audio Studio compact editing', () => {
     expect(search.value).toBe('');
     expect(screen.getByLabelText('Título')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Contraer' })).toBeTruthy();
-    expect(document.activeElement).toBe(
-      screen.getByRole('button', { name: 'Ir al inicio de intervención 1' }).closest('article'),
-    );
+    expect(document.activeElement).toBe(screen.getByLabelText('Título'));
+    expect(screen.getByLabelText('Título')).toHaveProperty('value', '');
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
     expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
   });
 
