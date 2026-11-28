@@ -6,6 +6,7 @@ import {
   titleAfterProfileChange,
   safePublishableSpeakerLabel,
   studioEditorialProfile,
+  studioProfileSelection,
   studioProfileSearchText,
 } from './speaker-profiles';
 
@@ -19,6 +20,14 @@ describe('Studio three-party speaker review with bilingual role labels', () => {
   ] as const)('presents legacy %s under its generic editorial profile', (role, expected, label, language) => {
     expect(studioEditorialProfile(role)).toEqual({ role: expected, label, language });
     expect(studioProfileSearchText(role)).toContain(label);
+  });
+
+  it('preserves legacy client identifiers and applies all three explicit language profiles', () => {
+    expect(studioProfileSelection('nurse', 'doctor')).toEqual({ speakerRole: 'nurse', language: 'en' });
+    expect(studioProfileSelection('operator', 'doctor')).toEqual({ speakerRole: 'operator', language: 'en' });
+    expect(studioProfileSelection('unknown', 'doctor')).toEqual({ speakerRole: 'doctor', language: 'en' });
+    expect(studioProfileSelection('doctor', 'patient')).toEqual({ speakerRole: 'patient', language: 'es' });
+    expect(studioProfileSelection('patient', 'interpreter')).toEqual({ speakerRole: 'interpreter', language: 'en' });
   });
 
   it('leaves unknown roles pending without inferring a profile', () => {

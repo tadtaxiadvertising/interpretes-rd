@@ -61,7 +61,7 @@ import {
 } from '@/lib/roleplay-studio/long-media';
 import {
   classifySpeakerRole, filterInterpreterCues,
-  titleAfterProfileChange, studioProfileSearchText, studioEditorialProfile, hasStudioProfileLanguageMismatch, type StudioLanguage,
+  titleAfterProfileChange, studioProfileSearchText, studioEditorialProfile, studioProfileSelection, hasStudioProfileLanguageMismatch, type StudioLanguage,
 } from '@/lib/roleplay-studio/speaker-profiles';
 
 
@@ -2299,6 +2299,34 @@ export default function RoleplayStudioPage() {
       onKeyDown={event => {
         if (!focusMode || (workspaceActive && workspaceTab !== 'edit') || event.defaultPrevented || event.repeat || event.nativeEvent.isComposing ||
             !isStudioShortcutTarget(event.target)) return;
+        // Single-key shortcuts are scoped to the explicitly focused article,
+        // never to buttons, fields or the rest of the document.
+        if (focusedTurn && event.target instanceof HTMLElement &&
+            event.target.id === 'studio-intervention-' + focusedTurn.segment.id &&
+            event.target === document.activeElement &&
+            !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
+            !busy && !draftBusy && !analyzingSilences) {
+          const key = event.key;
+          if (key === ' ') {
+            event.preventDefault();
+            previewSegment(focusedTurn.segment);
+            return;
+          }
+          if (key === '1' || key === '2' || key === '3') {
+            event.preventDefault();
+            update(focusedTurn.segment.id, studioProfileSelection(focusedTurn.segment.speakerRole,
+              key === '1' ? 'doctor' : key === '2' ? 'patient' : 'interpreter'));
+            return;
+          }
+          if (key === 'ArrowLeft' || key === 'ArrowRight') {
+            const next = visibleSegments[focusIndex + (key === 'ArrowLeft' ? -1 : 1)];
+            if (next) {
+              event.preventDefault();
+              selectFocusedTurn(next.segment.id);
+            }
+            return;
+          }
+        }
         if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key.toLowerCase() === 'z' || event.key.toLowerCase() === 'y')) {
           const redo = event.shiftKey || event.key.toLowerCase() === 'y';
           if (redo ? nextStructuralEdit : lastStructuralEdit) { event.preventDefault(); applyEditorialHistory(redo ? 'redo' : 'undo'); }

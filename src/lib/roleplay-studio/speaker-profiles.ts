@@ -14,6 +14,15 @@ export function studioEditorialProfile(role: StudioSpeakerRole): { role: 'doctor
   return { role: 'doctor', label: 'Cliente', language: 'en' };
 }
 
+/** Shared explicit profile selection for buttons and focused keyboard review.
+ * Preserve a legacy client role when choosing its existing generic profile. */
+export function studioProfileSelection(current: StudioSpeakerRole, selected: 'doctor' | 'patient' | 'interpreter'): { speakerRole: StudioSpeakerRole; language: 'en' | 'es' } {
+  return {
+    speakerRole: selected === 'doctor' && studioEditorialProfile(current)?.role === 'doctor' ? current : selected,
+    language: selected === 'patient' ? 'es' : 'en',
+  };
+}
+
 /** A known language that disagrees with the editorial profile needs review,
  * not automatic correction: the recorded speech may differ from its label. */
 export function hasStudioProfileLanguageMismatch(role: StudioSpeakerRole, language: StudioLanguage): boolean {
