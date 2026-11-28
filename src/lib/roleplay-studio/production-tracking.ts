@@ -51,6 +51,12 @@ export function productionReceipts(keys: Iterable<string>): RecoveryProductionRe
 
 export function trackProductionTransfer(token: string, key: string, expectedBackup?: string) {
   if (!/^[a-f0-9]{64}$/.test(key)) return;
+  if (transfer?.token === token) {
+    // Repeated navigation must not re-arm an invalidated backup or change
+    // the package associated with an already tracked reference.
+    if (transfer.key !== key) throw new Error('La referencia de producción ya corresponde a otro paquete.');
+    return;
+  }
   transfer = {token,key,expectedBackup};
   // Do not erase a previous confirmed or uncertain creation merely because
   // someone opens another assignment form for the same package.
