@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe,expect,it,vi } from 'vitest';
+import { afterEach,beforeEach,describe,expect,it,vi } from 'vitest';
 import { createRoleplayUploadController, DirectUploadReviewRequired } from './direct-upload-browser-resume';
 import { prepareRoleplayDirectUploadBatch } from './direct-upload-contract';
 const batchId='123e4567-e89b-42d3-a456-426614174000';
@@ -16,6 +16,9 @@ function fixture(){
   return {controller,reserve,inspect,verify,transfer,hash,slots};
 }
 describe('same-tab roleplay upload recovery',()=>{
+  const requestKey='823e4567-e89b-42d3-a456-426614174001';
+  beforeEach(()=>{vi.spyOn(crypto,'randomUUID').mockReturnValue(requestKey);});
+  afterEach(()=>{vi.restoreAllMocks();});
   it.each(['signed-secret','https://external.example/private','',undefined])('does not expose invalid review references (%s)',value=>{
     const error=new DirectUploadReviewRequired('RESERVATION_UNCERTAIN',value);
     expect(error.requestKey).toBeNull();
@@ -84,7 +87,7 @@ describe('same-tab roleplay upload recovery',()=>{
   });
   it('does not reserve again after an ambiguous reservation reply',async()=>{
     const f=fixture();f.reserve.mockRejectedValueOnce(new Error('lost'));
-    await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN',requestKey:expect.any(String)});
+    await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN',requestKey});
     await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN',requestKey:f.reserve.mock.calls[0][0]});
     expect(f.reserve).toHaveBeenCalledTimes(1);
     expect(f.transfer).not.toHaveBeenCalled();
