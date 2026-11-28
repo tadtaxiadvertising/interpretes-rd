@@ -85,11 +85,17 @@ export default async function CreationReadinessPage({
 
   return (
     <main className="mx-auto max-w-3xl space-y-6">
-      <Link href="/admin/roleplays" className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--theme-link)] underline">Volver a roleplays</Link>
+      <nav aria-label="Navegación de roleplays" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm font-semibold text-[var(--theme-link)]">
+        <Link href="/admin/roleplays" prefetch={false} className="inline-flex min-h-11 items-center underline">Volver a roleplays</Link>
+        <Link href="/admin/roleplays/studio" prefetch={false} className="inline-flex min-h-11 items-center underline">Audio Studio</Link>
+        <Link href="/admin/roleplays/new" prefetch={false} className="inline-flex min-h-11 items-center underline">Crear roleplay</Link>
+        {direct.reservationLookupConfigured && <a href="#saved-reservation-title" className="inline-flex min-h-11 items-center underline">Recuperar una reserva</a>}
+      </nav>
       <header>
         <h1 className="text-2xl font-bold text-[var(--foreground)] sm:text-3xl">Diagnóstico de creación segura</h1>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">Comprueba la configuración y el registro de solicitudes del servicio actual sin crear sesiones ni modificar PostgreSQL.</p>
       </header>
+      {direct.reservationLookupConfigured && <SavedReservationLookup />}
       <section aria-label="Resumen del diagnóstico" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
         <h2 className="text-lg font-semibold text-[var(--foreground)]">Diagnóstico integral</h2>
         <p className="text-sm text-[var(--text-secondary)]">Comprueba los tres grupos de metadatos con un solo clic. Se ejecutan de forma secuencial, sin cambios ni subidas de archivos.</p>
@@ -112,6 +118,15 @@ export default async function CreationReadinessPage({
           <p className="text-sm font-semibold text-[var(--foreground)]">Activación no autorizada por este diagnóstico.</p>
         </>}
       </section>
+      {evidence !== null && (
+        <section aria-label="Evidencia de comprobación" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
+          <h2 className="font-semibold text-[var(--foreground)]">Evidencia de comprobación</h2>
+          <p className="text-sm text-[var(--text-secondary)]">Copia este resumen para registrar el resultado. Refleja la comprobación realizada, no el estado futuro ni la identidad verificada del proyecto.</p>
+          <CopyDiagnostic key={evidence} evidence={evidence} />
+        </section>
+      )}
+      <details className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4" open={!allRequested}>
+        <summary className="min-h-11 cursor-pointer py-2 font-semibold text-[var(--foreground)]">Detalles técnicos y comprobaciones individuales</summary>
       <section aria-label="Configuración actual" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
         <h2 className="font-semibold text-[var(--foreground)]">Configuración del piloto</h2>
         <p className="text-sm font-medium text-[var(--foreground)]">{modeLabels[pilot.mode]}</p>
@@ -140,13 +155,6 @@ export default async function CreationReadinessPage({
           <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{requested ? 'Volver a comprobar' : 'Comprobar disponibilidad'}</button>
         </form>
       </section>
-      {evidence !== null && (
-        <section aria-label="Evidencia de comprobación" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
-          <h2 className="font-semibold text-[var(--foreground)]">Evidencia de comprobación</h2>
-          <p className="text-sm text-[var(--text-secondary)]">Copia este resumen para registrar el resultado. Refleja la comprobación realizada, no el estado futuro ni la identidad verificada del proyecto.</p>
-          <CopyDiagnostic key={evidence} evidence={evidence} />
-        </section>
-      )}
       <section aria-label="Configuración de subida directa" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
         <h2 className="font-semibold text-[var(--foreground)]">Subida directa de audios</h2>
         <p className="text-sm font-medium text-[var(--foreground)]">{direct.formConfigured ? 'Banderas de subida directa configuradas' : 'Subida directa no configurada por completo'}</p>
@@ -224,7 +232,7 @@ export default async function CreationReadinessPage({
           <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{rolloutRequested ? 'Volver a comprobar estructura y buckets' : 'Comprobar estructura y buckets'}</button>
         </form>
       </section>
-      {direct.reservationLookupConfigured && <SavedReservationLookup />}
+      </details>
       <p className="text-sm text-[var(--text-secondary)]">Un resultado favorable no autoriza activar el piloto. Aún se debe verificar el proyecto, el SHA esperado, las restricciones y el procedimiento de recuperación. Esta pantalla no aplica migraciones ni modifica banderas.</p>
     </main>
   );
