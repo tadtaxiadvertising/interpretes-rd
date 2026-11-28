@@ -58,6 +58,9 @@ export default function StudioFocusNavigation({
       <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
         Intervención {focusedTurn.index + 1} de {totalTurns} · {focusIndex + 1} de {visibleSegments.length} visibles
       </p>
+      <p id="studio-focused-shortcuts" className="basis-full text-xs text-[var(--text-secondary)]">
+        Con la tarjeta de intervención enfocada: Espacio para escuchar o detener; 1 cliente, 2 hispanohablante, 3 intérprete original; ← / → para cambiar de turno. Clasificar no confirma ni excluye.
+      </p>
       <div className="flex basis-full flex-wrap items-center gap-2">
         <button type="button" disabled={!canConfirmFocused} onClick={onConfirm}
           aria-keyshortcuts="Control+Enter Meta+Enter"
