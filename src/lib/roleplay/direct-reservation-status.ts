@@ -1,8 +1,24 @@
 import type { PrismaClient } from '@prisma/client';
-import { isRoleplayDirectUploadRequestKey } from './direct-upload-reservation-fingerprint';
+import { isRoleplayDirectUploadRequestKey, fingerprintRoleplayDirectUploadDeclarations } from './direct-upload-reservation-fingerprint';
+import { prepareRoleplayDirectUploadBatch, type PreparedRoleplayUpload } from './direct-upload-contract';
+import { ROLEPLAY_UPLOAD_RESERVATION_TTL_MS } from './direct-upload-reservation';
+import { ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS } from '@/lib/roleplay-limits';
+import type { TrustedRoleplayUploadEvidence } from './direct-upload-publication-gate';
 
 export type DirectReservationStatus = 'NOT_FOUND' | 'RESERVED' | 'VERIFIED' | 'EXPIRED' |
   'PUBLICATION_RECORDED' | 'CANCELLED' | 'REVIEW_REQUIRED';
+
+export type DirectReservationRecordedProgress = {
+  total: number;
+  recordedVerifiedCount: number;
+  expiresAt: string;
+  observedAt: string;
+};
+
+export type DirectReservationStatusResult = {
+  status: DirectReservationStatus;
+  progress?: DirectReservationRecordedProgress;
+};
 
 /** Ledger observation only. No Storage observation, receipt verification,
  * signing, mutation or authorization to retry follows from this result. */
@@ -11,13 +27,14 @@ export async function lookupDirectReservationStatus(
   actorUserId: string,
   requestKey: string,
   now = Date.now(),
-): Promise<{ status: DirectReservationStatus }> {
+): Promise<DirectReservationStatusResult> {
   if (!actorUserId.trim() || actorUserId.length > 256 || !isRoleplayDirectUploadRequestKey(requestKey)) {
     throw new Error('INVALID_RESERVATION_LOOKUP');
   }
   const row = await db.roleplayUploadReservation.findUnique({
     where: { actorUserId_requestKey: { actorUserId, requestKey } },
-    select: { status: true, expiresAt: true },
+    select: { status: true, expiresAt: true, createdAt: true, id: true,
+      declarationHash: true, items: true, verifiedObjects: true },
   });
   if (!row) return { status: 'NOT_FOUND' };
   // A published ledger row is not proof that the session still exists.
@@ -26,7 +43,41 @@ export async function lookupDirectReservationStatus(
   if (row.status === 'CANCELLED') return { status: 'CANCELLED' };
   if (row.status !== 'RESERVED' && row.status !== 'VERIFIED') return { status: 'REVIEW_REQUIRED' };
   const expires = row.expiresAt instanceof Date ? row.expiresAt.getTime() : NaN;
-  if (!Number.isFinite(expires) || !Number.isFinite(now)) return { status: 'REVIEW_REQUIRED' };
-  if (now >= expires) return { status: 'EXPIRED' };
-  return { status: row.status };
+  const created = row.createdAt instanceof Date ? row.createdAt.getTime() : NaN;
+  if (!Number.isSafeInteger(now) || !Number.isFinite(expires) ||
+      !Number.isFinite(created) || created <= 0 || created > now ||
+      expires - created !== ROLEPLAY_UPLOAD_RESERVATION_TTL_MS) return { status: 'REVIEW_REQUIRED' };
+
+  // Expose only bounded counts from a coherent, ordered ledger snapshot.
+  // No filenames, hashes, object paths, tokens or raw evidence leave this helper.
+  try {
+    if (!Array.isArray(row.items) || row.items.length < 1 ||
+        row.items.length > ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS ||
+        !Array.isArray(row.verifiedObjects)) return { status: 'REVIEW_REQUIRED' };
+    const stored = row.items as unknown as PreparedRoleplayUpload[];
+    const { items } = prepareRoleplayDirectUploadBatch(row.id,
+      stored.map(({ order, mime, sizeBytes, sha256 }) => ({ order, mime, sizeBytes, sha256 })));
+    if (fingerprintRoleplayDirectUploadDeclarations(items) !== row.declarationHash ||
+        items.some((item, i) => Object.entries(item).some(([key, value]) =>
+          (stored[i] as unknown as Record<string, unknown>)[key] !== value))) return { status: 'REVIEW_REQUIRED' };
+    const evidence = row.verifiedObjects as unknown as TrustedRoleplayUploadEvidence[];
+    if (evidence.length > items.length || (row.status === 'VERIFIED') !== (evidence.length === items.length) ||
+        evidence.some((proof, i) => !proof || Object.keys(proof).length !== 5 ||
+          proof.order !== i || proof.path !== items[i].path || proof.sizeBytes !== items[i].sizeBytes ||
+          proof.sha256 !== items[i].sha256 || !Number.isSafeInteger(proof.verifiedAtMs) ||
+          proof.verifiedAtMs < created || proof.verifiedAtMs > now || proof.verifiedAtMs >= expires)) {
+      return { status: 'REVIEW_REQUIRED' };
+    }
+    return {
+      status: now >= expires ? 'EXPIRED' : row.status,
+      progress: {
+        total: items.length,
+        recordedVerifiedCount: evidence.length,
+        expiresAt: row.expiresAt.toISOString(),
+        observedAt: new Date(now).toISOString(),
+      },
+    };
+  } catch {
+    return { status: 'REVIEW_REQUIRED' };
+  }
 }
