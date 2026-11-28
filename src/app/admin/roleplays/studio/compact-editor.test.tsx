@@ -4,8 +4,8 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import RoleplayStudioPage from './page';
 
 vi.mock('next/link', () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) =>
-    <a href={href}>{children}</a>,
+  default: ({ href, children, target, rel, onClick }: { href: string; children: React.ReactNode; target?: string; rel?: string; onClick?: React.MouseEventHandler<HTMLAnchorElement> }) =>
+    <a href={href} target={target} rel={rel} onClick={onClick}>{children}</a>,
 }));
 
 describe('Audio Studio compact editing', () => {
@@ -54,6 +54,26 @@ describe('Audio Studio compact editing', () => {
     fireEvent.loadedMetadata(player);
     return player;
   }
+
+  it('opens the library in another tab while retaining edits and guarding same-tab navigation', () => {
+    const player = loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    const title = screen.getByLabelText('Título');
+    fireEvent.change(title, { target: { value: 'Consulta en preparación' } });
+    const library = screen.getByRole('link', { name: 'Biblioteca (nueva pestaña)' });
+    expect(library.getAttribute('href')).toBe('/admin/roleplays/library');
+    expect(library.getAttribute('target')).toBe('_blank');
+    expect(library.getAttribute('rel')).toBe('noopener noreferrer');
+    library.addEventListener('click', event => event.preventDefault(), { once: true });
+    fireEvent.click(library);
+    expect(window.confirm).not.toHaveBeenCalled();
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    expect(fireEvent.click(screen.getByRole('link', { name: 'Importar y asignar' }))).toBe(false);
+    expect(window.confirm).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText('Título')).toHaveProperty('value', 'Consulta en preparación');
+    expect(player.isConnected).toBe(true);
+    expect(HTMLMediaElement.prototype.play).not.toHaveBeenCalled();
+  });
 
   it('finds generic profiles independently of custom titles and keeps all turns', () => {
     loadAudio(120);

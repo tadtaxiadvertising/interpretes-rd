@@ -2423,6 +2423,7 @@ export default function RoleplayStudioPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Link href="/admin/roleplays/creation-readiness" prefetch={false} target="_blank" rel="noopener noreferrer" className="theme-action-secondary inline-flex min-h-11 items-center rounded-xl px-4 py-3 text-sm font-semibold">Diagnóstico (nueva pestaña)</Link>
+          <Link href="/admin/roleplays/library" prefetch={false} target="_blank" rel="noopener noreferrer" className="theme-action-secondary inline-flex min-h-11 items-center rounded-xl px-4 py-3 text-sm font-semibold">Biblioteca (nueva pestaña)</Link>
           <Link href="/admin/roleplays/settings" onClick={event => {
             if (!confirmEditorNavigation()) event.preventDefault();
           }} className="theme-action-secondary rounded-xl px-4 py-3 text-sm font-semibold">Configurar Audio Studio</Link>
