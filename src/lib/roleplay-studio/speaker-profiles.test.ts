@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   classifySpeakerRole,
+  classifyImportedSpeaker,
+  hasStudioProfileLanguageMismatch,
   filterInterpreterCues,
   makeNeutralSegmentTitle,
   titleAfterProfileChange,
@@ -60,6 +62,21 @@ describe('Studio three-party speaker review with bilingual role labels', () => {
     expect(classifySpeakerRole('Cliente Juan')).toBe('unknown');
     expect(safePublishableSpeakerLabel('Cliente Juan')).toBeNull();
     expect(safePublishableSpeakerLabel('Spanish speaker')).toBe('Hispanohablante');
+  });
+
+  it('preserves only explicitly tagged generic languages and keeps conflicts reviewable', () => {
+    expect(classifyImportedSpeaker('Cliente · EN')).toEqual({ speakerRole: 'doctor', language: 'en' });
+    expect(classifyImportedSpeaker('Hispanohablante (ES)')).toEqual({ speakerRole: 'patient', language: 'es' });
+    expect(classifyImportedSpeaker('Interpreter (EN)')).toEqual({ speakerRole: 'interpreter', language: 'en' });
+    expect(classifyImportedSpeaker('Doctor')).toEqual({ speakerRole: 'doctor', language: 'unknown' });
+    expect(classifyImportedSpeaker('Patient (EN)')).toEqual({ speakerRole: 'patient', language: 'en' });
+    expect(hasStudioProfileLanguageMismatch('patient', 'en')).toBe(true);
+    for (const label of ['Dr. Ana Pérez (EN)', 'Speaker 1 (ES)', 'Cliente Juan · EN', 'Cliente (FR)', 'Doctor (EN) extra']) {
+      expect(classifyImportedSpeaker(label)).toEqual({ speakerRole: 'unknown', language: 'unknown' });
+      expect(safePublishableSpeakerLabel(label)).toBeNull();
+    }
+    expect(safePublishableSpeakerLabel('Cliente · EN')).toBe('Cliente');
+    expect(filterInterpreterCues([{speaker:'Interpreter (EN)'}, {speaker:'Interpreter Ana (EN)'}], true).excludedCount).toBe(1);
   });
 
   it('selects bilingual dialogue while omitting only the original interpreter', () => {
