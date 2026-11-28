@@ -1,5 +1,5 @@
 import { directInterpreterAssignment, type DirectInterpreterAssignment } from './direct-upload-interpreter-assignment';
-import type { DirectUploadProgress } from './direct-upload-browser-resume';
+import { DirectUploadReviewRequired, type DirectUploadProgress } from './direct-upload-browser-resume';
 
 export type FormProgress = {phase:DirectUploadProgress['phase']|'consolidating'|'publishing'|'published'; verified:number; consolidated:number; total:number};
 type Options = {signal?:AbortSignal; onProgress?:(p:FormProgress)=>void};
@@ -47,8 +47,9 @@ export function createDirectRoleplayFormController(input:unknown,port:Port) {
       receipt={...result};
       emit('published');
       return {...receipt};
-    } catch {
+    } catch (error) {
       try {options.onProgress?.({phase:'interrupted',verified,consolidated,total});} catch { /* no sensitive details */ }
+      if (error instanceof DirectUploadReviewRequired) throw error;
       throw new Error('ROLEPLAY_DIRECT_OPERATION_INTERRUPTED');
     } finally {active=false;}
   }
