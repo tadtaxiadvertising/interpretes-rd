@@ -13,6 +13,16 @@ export type DirectUploadProgress = {phase:'hashing'|'reserving'|'uploading'|'ver
 type Options = {signal?:AbortSignal; onProgress?:(progress:DirectUploadProgress)=>void};
 type Hash = typeof hashRoleplayFilesSequentially;
 
+export type DirectUploadReviewReason = 'RESERVATION_EXPIRED' | 'RESERVATION_UNCERTAIN';
+
+/** The current controller cannot safely continue without reviewing the reservation. */
+export class DirectUploadReviewRequired extends Error {
+  constructor(readonly reason: DirectUploadReviewReason) {
+    super('ROLEPLAY_UPLOAD_INTERRUPTED');
+    this.name = 'DirectUploadReviewRequired';
+  }
+}
+
 function progressResult(value:unknown, total:number, order:number):number | null {
   if (!value || typeof value !== 'object') return null;
   const v = value as Record<string,unknown>;
@@ -54,7 +64,7 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
     active = true;
     const check = () => {
       if (options.signal?.aborted) throw new Error('UPLOAD_INTERRUPTED');
-      if (reservation && Date.now() >= Date.parse(reservation.expiresAt)) throw new Error('UPLOAD_RESERVATION_EXPIRED');
+      if (reservation && Date.now() >= Date.parse(reservation.expiresAt)) throw new DirectUploadReviewRequired('RESERVATION_EXPIRED');
     };
     const emit = (phase:DirectUploadProgress['phase']) => {
       options.onProgress?.({phase,verified,total});
@@ -63,7 +73,7 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
     try {
       check();
       if (!reservation) {
-        if (reservationRequested) throw new Error('UPLOAD_RESERVATION_UNCERTAIN');
+        if (reservationRequested) throw new DirectUploadReviewRequired('RESERVATION_UNCERTAIN');
         emit('hashing');
         const batch = Array.from(pendingFiles.values());
         const declarations = await hash(batch,{signal:options.signal});
@@ -124,10 +134,12 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
       emit('ready');
       // Verified slots have already relinquished their file references and tokens.
       return {requestKey,verifiedCount:verified,total};
-    } catch {
+    } catch (error) {
       // A provider exception may include a signed URL. Expose only a fixed
       // error; callers may invoke run again with the same controller.
       try { options.onProgress?.({phase:'interrupted',verified,total}); } catch { /* safe */ }
+      if (error instanceof DirectUploadReviewRequired) throw error;
+      if (reservationRequested && !reservation) throw new DirectUploadReviewRequired('RESERVATION_UNCERTAIN');
       throw new Error('ROLEPLAY_UPLOAD_INTERRUPTED');
     } finally {
       active = false;
