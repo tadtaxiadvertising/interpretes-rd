@@ -170,6 +170,31 @@ describe('gated creation receipt recovery form', () => {
     expect(after.defaultPrevented).toBe(false);
   });
 
+  it.each([
+    [403, /No tienes acceso a la consulta del recibo/],
+    [404, /La ruta de consulta del recibo no está disponible/],
+  ] as const)('retains the reference and blocks creation after HTTP %s', async (httpStatus, guidance) => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({ error: 'private diagnostic' }, { status: httpStatus }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[]} candidates={[]} receiptRecoveryEnabled/>);
+    fireEvent.click(screen.getByText('Recuperar una creación anterior'));
+    fireEvent.change(screen.getByLabelText('Referencia de recuperación'), { target: { value: 'rp1:' + key + ':1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
+    await screen.findByText(guidance);
+    expect(screen.getByLabelText('Referencia del intento')).toHaveProperty('value', 'rp1:' + key + ':1');
+    expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+    expect(screen.queryByText('private diagnostic')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar resultado sin reenviar audios' }));
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    for (const call of fetcher.mock.calls) {
+      expect(call[0]).toBe('/api/admin/roleplays/creation-receipt');
+      expect(call[1].body).toBe(JSON.stringify({ requestKey: key }));
+    }
+  });
+
   it('does not send a new keyed request in receipt-only mode', async () => {
     const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: {
       sessionId: 'legacy-session', scenarioCount: 1, inviteLink: window.location.origin + '/roleplays/legacy-session',

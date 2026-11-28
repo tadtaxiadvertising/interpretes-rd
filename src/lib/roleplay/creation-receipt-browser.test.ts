@@ -49,6 +49,17 @@ describe('single creation receipt recovery', () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ success: true, data: { ...complete, ...patch } }));
     expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status: 'REVIEW_REQUIRED' });
   });
+  it.each([
+    [401, 'ACCESS_REQUIRED'], [403, 'ACCESS_REQUIRED'], [404, 'ENDPOINT_UNAVAILABLE'],
+    [429, 'UNAVAILABLE'], [503, 'UNAVAILABLE'],
+  ])('classifies HTTP %s without trusting the error body', async (httpStatus, status) => {
+    const json = vi.fn().mockResolvedValue({ success: true, data: complete, error: 'private diagnostic' });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue({ ok: false, status: httpStatus, json } as unknown as Response);
+    expect(await recoverSingleRoleplayCreation(key, 2, fetcher)).toEqual({ status });
+    expect(json).not.toHaveBeenCalled();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it('does not interpret network, HTTP or malformed JSON failures as missing receipts', async () => {
     const fetcher = vi.fn<typeof fetch>();
     fetcher.mockRejectedValueOnce(new Error('transport'));
