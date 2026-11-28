@@ -38,9 +38,9 @@ describe('Audio Studio compact editing', () => {
   function displayedLanguages() {
     return screen.getAllByRole('group', { name: /Perfil de intervención / }).map(group => {
       const metadata = group.closest('article')?.querySelector('h3 > span')?.textContent ?? '';
-      const match = metadata.match(/ · (EN|ES|UNKNOWN)$/);
+      const match = metadata.match(/ · (EN|ES|Idioma pendiente)$/);
       if (!match) throw new Error('Missing visible language metadata: ' + metadata);
-      return match[1].toLowerCase();
+      return match[1] === 'Idioma pendiente' ? 'unknown' : match[1].toLowerCase();
     });
   }
 
@@ -54,6 +54,25 @@ describe('Audio Studio compact editing', () => {
     fireEvent.loadedMetadata(player);
     return player;
   }
+
+  it('finds generic profiles independently of custom titles and keeps all turns', () => {
+    loadAudio(120);
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    chooseProfile(1, 'client');
+    chooseProfile(2, 'spanish');
+    chooseProfile(3, 'interpreter');
+    const titles = screen.getAllByLabelText('Título');
+    titles.forEach((field, i) => fireEvent.change(field, { target: { value: 'Turno personalizado ' + (i + 1) } }));
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    for (const [query, index] of [['cliente', 1], ['hispanohablante', 2], ['interprete', 3]] as const) {
+      fireEvent.change(search, { target: { value: query } });
+      expect(screen.getAllByRole('group', { name: /Perfil de intervención / })).toHaveLength(1);
+      expect(screen.getByRole('group', { name: 'Perfil de intervención ' + index })).toBeTruthy();
+    }
+    fireEvent.change(search, { target: { value: '' } });
+    expect(screen.getAllByRole('group', { name: /Perfil de intervención / })).toHaveLength(3);
+    expect(displayedLanguages()).toEqual(['en', 'es', 'en']);
+  });
 
   it('filters interventions without altering the underlying project', () => {
     loadAudio(120);
