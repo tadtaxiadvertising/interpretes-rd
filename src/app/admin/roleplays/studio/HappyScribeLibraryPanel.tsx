@@ -7,6 +7,8 @@ import { filterHappyScribeLibrary, happyScribeResultPage, happyScribeReady, type
 
 type Props = {
   items: HappyScribeLibraryItem[];
+  sourceReady: boolean;
+  hasSource: boolean;
   selectedId: string;
   loading: boolean;
   importing: boolean;
@@ -27,7 +29,7 @@ type Props = {
 /** Local search state stays inside the panel. The Studio owns network requests,
  * editorial preflight, cancellation, and source replacement. */
 export default function HappyScribeLibraryPanel({
-  items: happyScribeItems, selectedId: happyScribeSelectedId,
+  items: happyScribeItems, selectedId: happyScribeSelectedId, sourceReady, hasSource,
   loading: happyScribeLoading, importing: happyScribeImporting,
   mediaImporting: happyScribeMediaImporting, mediaEnabled: happyScribeMediaEnabled,
   hasMore: happyScribeHasMore, configUnavailable: happyScribeConfigUnavailable,
@@ -51,17 +53,17 @@ export default function HappyScribeLibraryPanel({
   };
 
   return (
-  <div className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/5 p-3">
+  <section id="studio-happyscribe" tabIndex={-1} aria-label="Importación desde HappyScribe" className="mt-4 scroll-mt-6 rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-surface-muted)] p-3">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <div>
-        <p className="text-sm font-semibold text-[var(--theme-success)]">Importar desde HappyScribe</p>
+        <h3 className="text-sm font-semibold text-[var(--foreground)]">Importar desde HappyScribe</h3>
         <p className="mt-1 text-xs text-[var(--text-secondary)]">
-          Importa el MP3 original desde HappyScribe o selecciónalo en tu equipo. Después importa los tiempos y textos; revisa las voces antes de excluir al intérprete original.
+          Selecciona una transcripción. Usa su audio original o carga la misma grabación desde tu equipo; después importa los subtítulos automáticamente.
         </p>
       </div>
       <button type="button" onClick={onRefresh}
         disabled={happyScribeLoading || happyScribeImporting || happyScribeMediaImporting}
-        className="rounded-lg border border-emerald-300/30 px-3 py-2 text-sm text-[var(--theme-success)] disabled:opacity-50">
+        className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50">
         {happyScribeLoading ? 'Consultando…' : 'Actualizar biblioteca'}
       </button>
     </div>
@@ -114,12 +116,14 @@ export default function HappyScribeLibraryPanel({
       </section>
     )}
     {happyScribeItems.length > 0 && (
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+      <div className="mt-3 space-y-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-3">
+        <h4 className="text-sm font-semibold text-[var(--foreground)]">1. Seleccionar transcripción</h4>
+        <div className="flex flex-col gap-2">
         <select aria-label="Transcripción de HappyScribe"
           disabled={happyScribeImporting || happyScribeLoading}
           value={happyScribeSelectedId}
           onChange={event => onSelect(event.currentTarget.value)}
-          className="min-w-0 flex-1 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]">
+          className="min-h-11 min-w-0 flex-1 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-sm text-[var(--theme-control-text)]">
           <option value="">Selecciona una transcripción</option>
           {happyScribeResults.pinned && <option value={happyScribeResults.pinned.id}>Selección actual: {happyScribeResults.pinned.name}</option>}
           {happyScribeResults.results.map(item => (
@@ -128,11 +132,19 @@ export default function HappyScribeLibraryPanel({
             </option>
           ))}
         </select>
+        </div>
+        <div className="space-y-2 border-t border-[var(--border)] pt-3">
+          <h4 className="text-sm font-semibold text-[var(--foreground)]">2. Preparar grabación</h4>
+          <p id="studio-happyscribe-source-status" className={`text-xs ${sourceReady ? 'text-[var(--theme-success)]' : 'text-[var(--text-secondary)]'}`}>
+            {sourceReady ? 'Grabación lista. Comprueba que corresponde a la transcripción seleccionada.' : hasSource ? 'Esperando la duración de la grabación…' : 'Carga la grabación original antes de importar los subtítulos.'}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+          <a href="#studio-audio" className="theme-action-secondary inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-semibold">Elegir audio local</a>
         {happyScribeMediaEnabled && (
           <button type="button" onClick={onImportAudio}
-            disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeLoading ||
+            disabled={!happyScribeSelectedId || happyScribeMediaImporting || happyScribeImporting || happyScribeLoading ||
               happyScribeItems.find(item => item.id === happyScribeSelectedId)?.state !== 'automatic_done'}
-            className="rounded-lg border border-emerald-300/30 px-4 py-2 text-sm font-semibold text-[var(--theme-success)] disabled:opacity-50">
+            className="theme-action-secondary min-h-11 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50">
             {happyScribeMediaImporting ? 'Descargando audio…' : 'Importar audio original'}
           </button>
         )}
@@ -141,9 +153,15 @@ export default function HappyScribeLibraryPanel({
             Cancelar descarga
           </button>
         )}
+          </div>
+        </div>
+        <div className="space-y-2 border-t border-[var(--border)] pt-3">
+          <h4 className="text-sm font-semibold text-[var(--foreground)]">3. Importar subtítulos</h4>
+          <div className="flex flex-wrap gap-2">
         <button type="button" onClick={onImportTranscript}
-          disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
-          className="rounded-lg theme-action-success px-4 py-2 text-sm font-semibold">
+          aria-describedby="studio-happyscribe-source-status"
+          disabled={!sourceReady || !happyScribeSelection || !happyScribeReady(happyScribeSelection) || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}
+          className="theme-action-primary min-h-11 rounded-lg px-4 py-2 text-sm font-semibold">
           {happyScribeImporting ? 'Importando…' : 'Importar transcripción'}
         </button>
         {happyScribeImporting && (
@@ -152,6 +170,8 @@ export default function HappyScribeLibraryPanel({
             Cancelar transcripción
           </button>
         )}
+          </div>
+        </div>
       </div>
     )}
     {happyScribeSelection && (
@@ -178,7 +198,7 @@ export default function HappyScribeLibraryPanel({
     {happyScribeItems.length === 0 && !happyScribeLoading && (
       <p className="mt-2 text-xs text-[var(--text-tertiary)]">Pulsa «Actualizar biblioteca» para consultar los archivos disponibles en el espacio conectado.</p>
     )}
-  </div>
+  </section>
 
   );
 }
