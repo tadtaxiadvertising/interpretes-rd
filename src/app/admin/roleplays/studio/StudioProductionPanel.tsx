@@ -27,17 +27,21 @@ export default function StudioProductionPanel({
   const pending = tracked.filter(item => !item.status && !item.prepared);
   const uncertain = tracked.filter(item => item.status === 'unconfirmed');
   const created = tracked.filter(item => item.status === 'created');
-  const transferred = tracked.filter(item => item.status === 'transferred' || item.status === 'verified');
+  const prepared = tracked.filter(item => item.prepared && item.status !== 'created' && item.status !== 'unconfirmed');
+  const transferred = tracked.filter(item => !item.prepared && item.status === 'transferred');
+  const verified = tracked.filter(item => !item.prepared && item.status === 'verified');
+  const untrackedCount = parts.length - tracked.length;
   const next = preparedPartKey === null ? pending[0]?.part : undefined;
   return (
     <section aria-label="Seguimiento de producción" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
       <h4 className="text-sm font-semibold text-[var(--foreground)]">Seguimiento de producción</h4>
       <p className="text-xs text-[var(--text-secondary)]">Registro orientativo. Una creación confirmada significa al menos una asignación, no que todos los destinatarios la hayan recibido. Con respaldo local activo se conservan los intentos y creaciones confirmadas; los archivos preparados no sobreviven a una recarga. Consulta las sesiones existentes antes de repetir.</p>
       <p role="status" aria-label="Resumen de producción" className="text-xs text-[var(--text-secondary)]">
-        {tracked.length} de {parts.length} partes con seguimiento · {pending.length} pendientes · {created.length} con creación confirmada · {uncertain.length} sin confirmar.
+        {tracked.length} de {parts.length} partes con seguimiento · {pending.length} pendientes · {prepared.length} preparados · {transferred.length} transferidos · {verified.length} verificados · {created.length} con creación confirmada · {uncertain.length} sin confirmar.
       </p>
+      {untrackedCount > 0 && <p className="text-xs text-[var(--theme-warning)]">{untrackedCount} {untrackedCount === 1 ? 'parte sin seguimiento disponible' : 'partes sin seguimiento disponible'}. No se puede deducir su estado de creación.</p>}
       {uncertain.length > 0 && <p className="text-xs font-semibold text-[var(--theme-warning)]">Consulta las sesiones existentes antes de repetir una parte con intento sin confirmar.</p>}
-      {transferred.length > 0 && <p className="text-xs text-[var(--text-secondary)]">Las partes transferidas o verificadas todavía no tienen creación confirmada.</p>}
+      {transferred.length + verified.length > 0 && <p className="text-xs text-[var(--text-secondary)]">Las partes transferidas o verificadas todavía no tienen creación confirmada.</p>}
       {preparedPartKey !== null && localOnly && parts.length > 1 && <p className="text-xs text-[var(--text-secondary)]">Hay un paquete preparado. Continúa a asignación antes de elegir otra parte; cambiar de parte puede descartar el paquete temporal.</p>}
       <ul className="max-h-64 space-y-1 overflow-y-auto text-xs sm:max-h-40">
         {tracked.map(({ part, status, prepared }) => {
@@ -46,6 +50,7 @@ export default function StudioProductionPanel({
           return <li key={part.key} className="flex flex-wrap items-center justify-between gap-2 rounded border border-[var(--border)] p-2">
             <span>Parte {part.number} · {part.first}–{part.last}</span>
             <span className={status === 'created' ? 'text-[var(--theme-success)]' : status === 'unconfirmed' ? 'text-[var(--theme-warning)]' : 'text-[var(--text-secondary)]'}>{label}</span>
+            {prepared && (status === 'created' || status === 'unconfirmed') && <span className="text-[var(--text-secondary)]">Nuevo paquete preparado</span>}
             {localOnly && parts.length > 1 && <button type="button" disabled={disabled}
               className="theme-action-secondary min-h-11 rounded px-2 py-1 disabled:opacity-50 sm:min-h-0" onClick={() => onSelectPart(part.key)}>Seleccionar parte {part.number}</button>}
           </li>;
