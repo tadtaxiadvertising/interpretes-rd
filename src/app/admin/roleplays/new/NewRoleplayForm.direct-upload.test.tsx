@@ -23,6 +23,46 @@ afterEach(()=>{
   else Reflect.deleteProperty(navigator, 'clipboard');
 });
 describe('gated private roleplay form',()=>{
+  it('exposes the original reference while uploading and retains it after interruption',async()=>{
+    const reference='123e4567-e89b-42d3-a456-426614174000';
+    const fetcher=vi.fn();
+    vi.stubGlobal('fetch',fetcher);
+    const writeText=vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText}});
+    let interrupt!: (error: Error) => void;
+    m.create.mockReturnValue({run:m.upload,requestKey:reference});
+    m.upload.mockImplementationOnce(()=>new Promise((_resolve,reject)=>{interrupt=reject;}))
+      .mockResolvedValueOnce({requestKey:reference,verifiedCount:1,total:1});
+    m.consolidate.mockResolvedValue({verifiedCount:1,total:1,complete:true});
+    m.publish.mockResolvedValue({sessionId:'session-123',scenarioCount:1,inviteLink:window.location.origin+'/roleplays/session-123'});
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} openingAssignmentEnabled directUploadEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/),{target:{value:'11'}});
+    fireEvent.click(screen.getByRole('button',{name:'Preparar escenario'}));
+    expect(screen.queryByLabelText('Referencia de la reserva directa')).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Crear roleplay'}));
+    const field=await screen.findByLabelText('Referencia de la reserva directa');
+    expect(field).toHaveProperty('value',reference);
+    expect(screen.queryByRole('button',{name:'Consultar estado de la reserva'})).toBeNull();
+    fireEvent.click(screen.getByRole('button',{name:'Copiar referencia de la reserva'}));
+    await screen.findByText('Referencia copiada.');
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(reference);
+    const unload=new Event('beforeunload',{cancelable:true});
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    await act(async()=>interrupt(new Error('interrupted')));
+    await screen.findByText(/La operación se interrumpió/);
+    expect(screen.getByLabelText('Referencia de la reserva directa')).toHaveProperty('value',reference);
+    expect(screen.getByRole('button',{name:'Consultar estado de la reserva'})).toBeTruthy();
+    fireEvent.click(screen.getByRole('button',{name:'Continuar creación'}));
+    await screen.findByText('¡Roleplay creado correctamente!');
+    expect(m.create).toHaveBeenCalledOnce();
+    expect(m.upload).toHaveBeenCalledTimes(2);
+    expect(fetcher).not.toHaveBeenCalled();
+    const completed=new Event('beforeunload',{cancelable:true});
+    window.dispatchEvent(completed);
+    expect(completed.defaultPrevented).toBe(false);
+  });
+
   it.each([
     ['RESERVATION_EXPIRED', 'La reserva de subida ha caducado'],
     ['RESERVATION_UNCERTAIN', 'No se pudo confirmar la reserva de subida'],

@@ -15,7 +15,7 @@ import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCre
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import DirectReservationObservationSummary from '@/components/admin/DirectReservationObservationSummary';
-import { observeDirectReservation, type DirectReservationObservationResult } from '@/lib/roleplay/direct-reservation-status-browser';
+import { observeDirectReservation, parseDirectReservationReference, type DirectReservationObservationResult } from '@/lib/roleplay/direct-reservation-status-browser';
 import { DirectUploadReviewRequired, type DirectUploadReviewReason } from '@/lib/roleplay/direct-upload-browser-resume';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
 import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
@@ -146,6 +146,16 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [referenceCopyNotice, setReferenceCopyNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ link: string; participantName: string; summary?: string } | null>(null);
+  const hasPendingDirectAttempt = directLocked && !success;
+  useEffect(() => {
+    if (!hasPendingDirectAttempt) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasPendingDirectAttempt]);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
@@ -546,10 +556,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const handleCreate = async () => {
-    if (directReview || keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    if (directReview || directObservationPending.current || keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
     if (!confirmRoleplayCreationRetry(submissionUncertain, Boolean(directAttempt.current), message => window.confirm(message))) return;
     const trackedToken = importedTransfer && trackedImportRevision.current === importRevision.current ? importedTransfer : null;
     if (directAttempt.current || useDirectUpload) {
+      setDirectObservation(null);
       createPending.current = true;
       setIsCreating(true);
       setError(null);
@@ -566,6 +577,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           };
           const upload = createConfiguredRoleplayUploadController(files,assignment);
           directAttempt.current = createDirectRoleplayFormController(assignment,{upload:upload.run,consolidate:consolidatePreparedRoleplaySlot,publish:publishConsolidatedRoleplay});
+          setDirectReviewReference(typeof upload.requestKey === 'string' ? parseDirectReservationReference(upload.requestKey) : null);
           setDirectLocked(true);
         }
         const controller=new AbortController();
@@ -578,7 +590,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       } catch (error) {
         if (error instanceof DirectUploadReviewRequired) {
           setDirectReview(error.reason);
-          setDirectReviewReference(error.requestKey);
+          setDirectReviewReference(previous => previous ?? error.requestKey);
           setError(error.reason === 'RESERVATION_EXPIRED'
             ? 'La reserva de subida ha caducado. Conserva esta pestaña y consulta las sesiones existentes antes de solicitar una revisión de la reserva. No inicies otra creación.'
             : 'No se pudo confirmar la reserva de subida. Conserva esta pestaña y solicita una revisión de la reserva antes de iniciar otra creación.');
@@ -1206,7 +1218,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             <progress className="block w-full" max={directProgress.total} value={directProgress.consolidated}/></label>
         </>}
         {directLocked && isCreating && <button type="button" onClick={()=>directAbort.current?.abort()} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)]">Pausar operación</button>}
-        {directReview && directReviewReference && (
+        {directLocked && directReviewReference && (
           <div className="space-y-2">
             <label htmlFor="direct-review-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia de la reserva directa</label>
             <input id="direct-review-reference" readOnly value={directReviewReference}
@@ -1221,17 +1233,17 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               }
             }} className="min-h-11 w-full rounded-xl theme-action-secondary px-3 py-2 text-sm font-semibold sm:w-auto">Copiar referencia de la reserva</button>
             {directCopyNotice && <p role="status" className="text-xs text-[var(--text-secondary)]">{directCopyNotice}</p>}
-            <button type="button" disabled={directObservation === 'CHECKING'} onClick={async () => {
+            {!isCreating && <button type="button" disabled={directObservation === 'CHECKING'} onClick={async () => {
               if (directObservationPending.current) return;
               directObservationPending.current = true;
               setDirectObservation('CHECKING');
               try { setDirectObservation(await observeDirectReservation(directReviewReference)); }
               finally { directObservationPending.current = false; }
-            }} className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar estado de la reserva</button>
+            }} className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar estado de la reserva</button>}
             {directObservation && <DirectReservationObservationSummary result={directObservation}/>}
             <Link href="/admin/roleplays/creation-readiness" target="_blank" rel="noopener noreferrer" prefetch={false} className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar reservas guardadas (nueva pestaña)</Link>
 
-            <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia para que el responsable autorizado pueda identificar la solicitud original. No es un enlace de acceso ni permite recuperar automáticamente los archivos o iniciar otra reserva.</p>
+            <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia antes de cerrar o recargar. Identifica el intento original, incluso si la reserva aún no se ha registrado. No es un enlace de acceso ni permite recuperar automáticamente los archivos o iniciar otra reserva.</p>
           </div>
         )}
         {directLocked && !isCreating && <Link href="/admin/roleplays" target="_blank" rel="noopener noreferrer" className="inline-block text-sm text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>}
@@ -1298,10 +1310,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting || keyedStatus !== null || directReview !== null}
+        disabled={isCreating || isImporting || keyedStatus !== null || directReview !== null || directObservation === 'CHECKING'}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting || keyedStatus !== null || directReview !== null
+          isCreating || isImporting || keyedStatus !== null || directReview !== null || directObservation === 'CHECKING'
             ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed"
             : "theme-action-danger shadow-lg shadow-red-600/20"
         )}
