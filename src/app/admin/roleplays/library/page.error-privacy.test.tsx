@@ -43,6 +43,15 @@ describe('Admin roleplay library protects server error logs', () => {
     expect(prisma.roleplayLibraryArchive.findMany).not.toHaveBeenCalled();
   });
 
+  it('handles repeated URL query parameters without crashing', async () => {
+    vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce([]);
+    const page = await RoleplayLibraryPage({ searchParams: Promise.resolve({
+      q: ['consulta', 'farmacia'], topic: ['medical', 'finance'], archived: ['1','0'],
+    }) });
+    expect(page).toBeTruthy();
+    expect(prisma.roleplaySession.findMany).toHaveBeenCalledOnce();
+  });
+
   it('also redacts arbitrary non-Error rejection payloads', async () => {
     vi.mocked(prisma.roleplaySession.findMany).mockRejectedValueOnce({
       token: 'FAKE_ARBITRARY_SECRET', message: 'private',
