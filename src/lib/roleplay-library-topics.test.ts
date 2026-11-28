@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch } from './roleplay-library-topics';
+import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch } from './roleplay-library-topics';
 
 describe('library topic suggestions', () => {
   it('recognizes bilingual titles and ignores case and accents', () => {
@@ -67,6 +67,27 @@ describe('catalog search', () => {
     expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'ABC123')).toBe(true);
     expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'!!!')).toBe(false);
     expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'farmacia')).toBe(false);
+  });
+  it('matches reordered words and bilingual aliases while ranking direct titles first', () => {
+    const fingerprint = '0'.repeat(64);
+    const topics = [{ topic: 'medical', subtopic: 'pharmacy' }];
+    expect(scoreRoleplayLibrarySearch(['Pharmacy consultation'], fingerprint, topics, 'pharmacy')).toBe(4);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, topics, 'farmacia')).toBe(3);
+    expect(scoreRoleplayLibrarySearch(['Consulta médica inicial'], fingerprint, topics, 'inicial consulta')).toBe(2);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, topics, 'pharmacy')).toBe(1);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, topics, 'prescription farmacia')).toBe(1);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, topics, 'pharmacy legal')).toBe(0);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, [], 'pharmacy')).toBe(0);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, topics, '0000')).toBe(5);
+    expect(scoreRoleplayLibrarySearch(['Intervención 1'], fingerprint, topics, '')).toBe(1);
+  });
+  it('uses only the selected categories for bilingual expansion and requires every query term', () => {
+    const titles = ['Consulta médica', 'Intervención inicial'];
+    const topics = resolveRoleplayTopics(titles, { topic: 'finance', subtopic: 'banking' });
+    expect(matchesRoleplayLibrarySearch(titles, '0'.repeat(64), topics, 'bank account')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles, '0'.repeat(64), topics, 'doctor appointment')).toBe(false);
+    expect(matchesRoleplayLibrarySearch(titles, '0'.repeat(64), topics, 'consulta inicial')).toBe(true);
+    expect(matchesRoleplayLibrarySearch(titles, '0'.repeat(64), topics, 'consulta inexistente')).toBe(false);
   });
   it('searches resolved topic and child labels without substituting inferred classifications for saved ones', () => {
     const titles = ['Intervención 1'];
