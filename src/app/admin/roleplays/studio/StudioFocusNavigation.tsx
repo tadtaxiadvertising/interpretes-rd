@@ -41,7 +41,7 @@ export default function StudioFocusNavigation({
     <nav aria-label="Navegador de intervenciones" className={`flex min-w-0 shrink-0 flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 ${workspaceActive ? '' : 'md:sticky md:top-0 md:z-10'}`}>
       <button type="button" aria-label="Anterior intervención" disabled={focusIndex === 0}
         onClick={() => onSelect(visibleSegments[focusIndex - 1].segment.id)}
-        className="min-h-11 min-w-11 rounded-lg border border-[var(--border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
+        className="min-h-11 min-w-11 rounded-lg border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--foreground)] disabled:opacity-50">
         Anterior<span className="hidden sm:inline"> intervención</span>
       </button>
       <label className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
@@ -55,7 +55,7 @@ export default function StudioFocusNavigation({
       </label>
       <button type="button" aria-label="Siguiente intervención" disabled={focusIndex === visibleSegments.length - 1}
         onClick={() => onSelect(visibleSegments[focusIndex + 1].segment.id)}
-        className="min-h-11 min-w-11 rounded-lg border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">
+        className="min-h-11 min-w-11 rounded-lg border border-[var(--theme-control-border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)] disabled:opacity-50">
         Siguiente<span className="hidden sm:inline"> intervención</span>
       </button>
       <p role="status" className="basis-full text-xs text-[var(--text-secondary)]">
@@ -95,6 +95,11 @@ export default function StudioFocusNavigation({
         <button type="button" onClick={onExclude} disabled={editingDisabled}
           className="min-h-11 min-w-0 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-semibold text-[var(--theme-danger)] disabled:opacity-50">Excluir y avanzar</button>
         <span className="col-span-2 text-xs text-[var(--text-secondary)]">
+          className="min-h-11 min-w-11 rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Confirmar y avanzar</button>
+        <button type="button" onClick={onExclude}
+          disabled={editingDisabled}
+          className="min-h-11 min-w-11 rounded-lg border border-[var(--theme-control-border)] px-3 py-2 text-sm font-semibold text-[var(--theme-danger)] disabled:opacity-50">Excluir y avanzar</button>
+        <span className="text-xs text-[var(--text-secondary)]">
           {focusedReviewIssue ?? (confirmed ? 'Confirmada' : 'Lista para revisión')} · Ctrl/⌘ + Enter
         </span>
       </div>
@@ -124,6 +129,40 @@ export default function StudioFocusNavigation({
           Aplicar perfil a {sourceProfileCount} turnos de la misma etiqueta
         </button>
       )}
+      <div className="flex basis-full flex-wrap items-center gap-2">
+        <button type="button" onClick={onFocusCard} disabled={editingDisabled}
+          className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">Usar atajos de teclado</button>
+        <p id="studio-focused-shortcuts" className="min-w-0 flex-1 text-xs text-[var(--text-secondary)]">
+          Con la tarjeta enfocada: Espacio para escuchar o detener; 1 cliente, 2 hispanohablante, 3 intérprete original; ← / → para cambiar de turno. Clasificar no confirma ni excluye.
+        </p>
+      <div role="group" aria-label="Reproducción en modo enfoque" className="flex basis-full flex-wrap items-center gap-2 border-t border-[var(--border)] pt-2">
+        <button type="button" onClick={onPreview}
+          aria-pressed={previewActive}
+          className="min-h-11 min-w-11 rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
+          {previewActive
+            ? 'Detener fragmento activo' : 'Escuchar intervención activa'}
+        </button>
+        <button type="button" onClick={onPause}
+          className="min-h-11 min-w-11 rounded-lg border border-[var(--theme-control-border)] px-2 py-2 text-xs text-[var(--foreground)]">
+          Pausar audio
+        </button>
+        <button type="button" aria-label="Retroceder audio 5 segundos"
+          onClick={() => onSkip(-5)}
+          className="min-h-11 min-w-11 rounded-lg border border-[var(--theme-control-border)] px-2 py-2 text-xs text-[var(--foreground)]">−5 s</button>
+        <button type="button" aria-label="Avanzar audio 5 segundos"
+          onClick={() => onSkip(5)}
+          className="min-h-11 min-w-11 rounded-lg border border-[var(--theme-control-border)] px-2 py-2 text-xs text-[var(--foreground)]">+5 s</button>
+        <label className="flex w-full min-w-0 basis-full items-center gap-2 text-xs text-[var(--text-secondary)] sm:w-auto sm:min-w-32 sm:basis-auto sm:flex-1">
+          <span className="shrink-0 tabular-nums">{formatTime(playhead)}</span>
+          <input type="range" aria-label="Posición de grabación en modo enfoque" min={0} max={duration}
+            step={0.1} value={Math.min(duration, Math.max(0, playhead))}
+            aria-valuetext={formatStudioAccessibleTime(Math.min(duration, Math.max(0, playhead)), 1)}
+            onChange={event => onSeek(event.currentTarget.valueAsNumber)}
+            className="h-11 min-w-0 flex-1 accent-[var(--theme-link)]"/>
+          <span className="shrink-0 tabular-nums">{formatTime(duration)}</span>
+        </label>
+      </div>
+
     </nav>
   );
 }
