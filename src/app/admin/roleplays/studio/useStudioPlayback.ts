@@ -29,7 +29,7 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     pairPlayback.current = null;
   }, []);
 
-  const stopPairPreview = () => {
+  const stopPairPreview = useCallback(() => {
     pairPlaybackRevision.current += 1;
     const wasActive = pairPlayback.current !== null;
     pairPlayback.current = null;
@@ -37,14 +37,14 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     // Never pause an idle auxiliary player: changing ordinary clips must not
     // interfere with the primary player's pause/resume lifecycle.
     if (wasActive) pairPlayer.current?.pause();
-  };
+  }, []);
 
-  const stopPreview = () => {
+  const stopPreview = useCallback(() => {
     primaryPlaybackRevision.current += 1;
     previewEnd.current = null;
     setPreviewingId(null);
     player.current?.pause();
-  };
+  }, []);
 
   const seekAudio = (seconds: number) => {
     const audioPlayer = player.current;
