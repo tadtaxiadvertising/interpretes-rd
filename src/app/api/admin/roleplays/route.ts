@@ -193,6 +193,9 @@ export async function POST(req: NextRequest) {
     const participantId = formData.get('participantId');
     const rawScenarios = formData.get('scenarios');
     const scenarioAudios = formData.getAll('scenarioAudios');
+    // Transfer ownership of the file references to the ordered upload queue.
+    // The multipart container must not retain already uploaded files.
+    formData.delete('scenarioAudios');
     const rawAudioChecksums = formData.get('scenarioAudioSha256');
     const openingFields = formData.getAll('requiresBilingualOpening');
     if (openingFields.length > 1 || (openingFields.length === 1 && !['true', 'false'].includes(String(openingFields[0])))) {
@@ -537,7 +540,8 @@ export async function POST(req: NextRequest) {
       const batchId = randomUUID();
       const batchPath = `base/bulk-${batchId}`;
       for (let i = 0; i < scenarios.length; i++) {
-        const audio = scenarioAudios[i] as File;
+        // All files were validated (and hashed where required) before upload.
+        const audio = scenarioAudios.shift() as File;
         // MIME was validated before any upload. Never derive Storage paths from
         // an attacker-controlled File.name (e.g. .html, .svg or separators).
         const extension = getAdminRoleplayAudioExtension(audio.type);
@@ -736,7 +740,8 @@ export async function POST(req: NextRequest) {
       if (!storageClient) throw new Error('Storage is not configured');
       const batchId = randomUUID();
       for (let i = 0; i < scenarios.length; i++) {
-      const audio = scenarioAudios[i] as File;
+      // All files were validated (and hashed where required) before upload.
+        const audio = scenarioAudios.shift() as File;
       // MIME was validated before any upload. Never derive Storage paths from
         // an attacker-controlled File.name (e.g. .html, .svg or separators).
         const extension = getAdminRoleplayAudioExtension(audio.type);
