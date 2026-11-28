@@ -5,14 +5,16 @@ import {
   type ReservationCatalogReader, type RoleplayReservationSchemaState,
 } from './direct-upload-reservation-catalog';
 import { readRoleplayBudgetAccounting } from './direct-upload-budget-accounting';
+import { readDirectLedgerPermissions, unavailableDirectLedgerPermissions, type DirectLedgerPermissions } from './direct-upload-ledger-permissions';
 
 export type DirectCatalogDiagnostic = {
   reservation: RoleplayReservationSchemaState | 'unavailable';
   budget: 'absent' | 'incomplete' | 'accounting-consistent' | 'review-required' | 'unavailable';
+  permissions: DirectLedgerPermissions;
   capacity: { maxSlots: number; allocatedSlots: number; remainingSlots: number } | null;
 };
 
-const unavailable: DirectCatalogDiagnostic = { reservation: 'unavailable', budget: 'unavailable', capacity: null };
+const unavailable: DirectCatalogDiagnostic = { reservation: 'unavailable', budget: 'unavailable', permissions: unavailableDirectLedgerPermissions, capacity: null };
 
 /** On-demand, read-only snapshot of the application's actual connection.
  * Recognizable catalog markers and aggregate accounting are NOT proof of
@@ -28,16 +30,17 @@ export async function inspectDirectUploadCatalog(db: Pick<PrismaClient, '$transa
         },
       };
       const reservation = classifyRoleplayReservationCatalog(await readRoleplayReservationCatalog(reader));
+      const permissions = await readDirectLedgerPermissions(reader);
       const { budget } = await readRoleplayBudgetAccounting(reader);
       const state = budget.state;
       if (state !== 'absent' && state !== 'incomplete' && state !== 'accounting-consistent' && state !== 'review-required') return unavailable;
       // Never display usable capacity for inconsistent or untracked accounting.
-      const capacity = state === 'accounting-consistent' && reservation === 'catalog-ready' &&
+      const capacity = state === 'accounting-consistent' && reservation === 'catalog-ready' && permissions.state === 'recognized' &&
         'maxSlots' in budget && typeof budget.maxSlots === 'number' &&
         typeof budget.allocatedSlots === 'number' && typeof budget.remainingSlots === 'number' &&
         budget.orphanCharges === 0 && budget.untrackedCharges === 0
         ? { maxSlots: budget.maxSlots, allocatedSlots: budget.allocatedSlots, remainingSlots: budget.remainingSlots } : null;
-      return { reservation, budget: state, capacity };
+      return { reservation, budget: state, permissions, capacity };
     }, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead, maxWait: 2000, timeout: 5000 });
   } catch {
     // Database errors may include personal data, credentials or endpoints.

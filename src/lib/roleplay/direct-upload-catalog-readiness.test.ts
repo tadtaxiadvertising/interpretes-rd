@@ -1,11 +1,14 @@
 import type { PrismaClient } from '@prisma/client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ read: vi.fn(), classify: vi.fn(), accounting: vi.fn() }));
+const m = vi.hoisted(() => ({ read: vi.fn(), classify: vi.fn(), accounting: vi.fn(), permissions: vi.fn() }));
 vi.mock('./direct-upload-reservation-catalog', () => ({
   readRoleplayReservationCatalog: m.read, classifyRoleplayReservationCatalog: m.classify,
 }));
 vi.mock('./direct-upload-budget-accounting', () => ({ readRoleplayBudgetAccounting: m.accounting }));
+vi.mock('./direct-upload-ledger-permissions', async importOriginal => ({
+  ...await importOriginal<typeof import('./direct-upload-ledger-permissions')>(), readDirectLedgerPermissions: m.permissions,
+}));
 import { inspectDirectUploadCatalog } from './direct-upload-catalog-readiness';
 
 function fixture() {
@@ -15,11 +18,13 @@ function fixture() {
 }
 const budget = { state: 'accounting-consistent', maxSlots: 25, allocatedSlots: 10, remainingSlots: 15,
   orphanCharges: 0, untrackedCharges: 0 };
+const permissions = { state: 'recognized', tables: [] };
 beforeEach(() => {
   vi.resetAllMocks();
   m.read.mockResolvedValue({});
   m.classify.mockReturnValue('catalog-ready');
   m.accounting.mockResolvedValue({ budget });
+  m.permissions.mockResolvedValue(permissions);
 });
 describe('read-only direct upload runtime diagnostic', () => {
   it('opens a bounded read-only repeatable-read transaction and projects only aggregate capacity', async () => {
@@ -29,7 +34,7 @@ describe('read-only direct upload runtime diagnostic', () => {
       return {};
     });
     expect(await inspectDirectUploadCatalog(f.db)).toEqual({
-      reservation: 'catalog-ready', budget: 'accounting-consistent',
+      reservation: 'catalog-ready', budget: 'accounting-consistent', permissions,
       capacity: { maxSlots: 25, allocatedSlots: 10, remainingSlots: 15 },
     });
     expect(f.transaction).toHaveBeenCalledExactlyOnceWith(expect.any(Function), {
@@ -49,13 +54,21 @@ describe('read-only direct upload runtime diagnostic', () => {
     async (reservation, state, orphanCharges, untrackedCharges) => {
       m.classify.mockReturnValue(reservation);
       m.accounting.mockResolvedValue({ budget: { ...budget, state, orphanCharges, untrackedCharges } });
-      expect(await inspectDirectUploadCatalog(fixture().db)).toEqual({ reservation, budget: state, capacity: null });
+      expect(await inspectDirectUploadCatalog(fixture().db)).toEqual({ reservation, budget: state, permissions, capacity: null });
     });
+
+  it.each(['review-required', 'unavailable'])('suppresses capacity if permissions are %s', async state => {
+    const p = { state, tables: [] };
+    m.permissions.mockResolvedValue(p);
+    expect(await inspectDirectUploadCatalog(fixture().db)).toEqual({
+      reservation: 'catalog-ready', budget: 'accounting-consistent', permissions: p, capacity: null,
+    });
+  });
 
   it('returns a fixed unavailable result on transaction or query errors', async () => {
     const f = fixture();
     m.accounting.mockRejectedValueOnce(new Error('PRIVATE_DATABASE_CONNECTION'));
-    const unavailable = { reservation: 'unavailable', budget: 'unavailable', capacity: null };
+    const unavailable = { reservation: 'unavailable', budget: 'unavailable', permissions: { state: 'unavailable', tables: [] }, capacity: null };
     expect(await inspectDirectUploadCatalog(f.db)).toEqual(unavailable);
     f.tx.$executeRaw.mockRejectedValueOnce(new Error('PRIVATE_DATABASE_CONNECTION'));
     m.read.mockClear();

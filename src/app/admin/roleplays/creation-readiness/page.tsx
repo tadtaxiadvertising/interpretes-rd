@@ -46,6 +46,7 @@ export default async function CreationReadinessPage({
   const ready = requested ? await isCreationLedgerReady(prisma) : null;
   const directCatalog = directRequested ? await inspectDirectUploadCatalog(prisma) : null;
   const reservationLabels = { absent: 'Ausente', incomplete: 'Incompleto', 'catalog-ready': 'Estructura reconocida', unavailable: 'No disponible' } as const;
+  const permissionLabels = { recognized: 'Permisos reconocidos', 'review-required': 'Requiere revisión de permisos', unavailable: 'No disponible' } as const;
   const budgetLabels = { absent: 'Ausente', incomplete: 'Incompleto', 'accounting-consistent': 'Contabilidad coherente', 'review-required': 'Requiere revisión', unavailable: 'No disponible' } as const;
 
   // Record when this check finished, not a build timestamp or an approval.
@@ -62,7 +63,8 @@ export default async function CreationReadinessPage({
     'Catálogo de reservas: ' + (directCatalog ? reservationLabels[directCatalog.reservation] : 'No comprobado'),
     'Presupuesto de objetos: ' + (directCatalog ? budgetLabels[directCatalog.budget] : 'No comprobado'),
     ...(directCatalog?.capacity ? ['Cupos contables: ' + directCatalog.capacity.allocatedSlots + ' de ' + directCatalog.capacity.maxSlots + '; restantes: ' + directCatalog.capacity.remainingSlots] : []),
-    'Subida directa: permisos efectivos, Storage y configuración del navegador no comprobados.',
+    'Permisos de registros internos: ' + (directCatalog ? permissionLabels[directCatalog.permissions.state] : 'No comprobados'),
+    'Subida directa: permisos de otras tablas, operaciones reales, Storage y configuración del navegador no comprobados.',
     'Resultado puntual; no autoriza activar el piloto.',
   ].join('\n');
 
@@ -132,13 +134,27 @@ export default async function CreationReadinessPage({
         <dl className="space-y-2 text-sm">
           <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Registro de reservas</dt><dd className="text-[var(--foreground)]">{directCatalog ? reservationLabels[directCatalog.reservation] : 'Sin comprobar'}</dd></div>
           <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Presupuesto persistente</dt><dd className="text-[var(--foreground)]">{directCatalog ? budgetLabels[directCatalog.budget] : 'Sin comprobar'}</dd></div>
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Permisos de registros internos</dt><dd className="text-[var(--foreground)]">{directCatalog ? permissionLabels[directCatalog.permissions.state] : 'Sin comprobar'}</dd></div>
           {directCatalog?.capacity && <>
             <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Cupos contables asignados</dt><dd className="text-[var(--foreground)]">{directCatalog.capacity.allocatedSlots} de {directCatalog.capacity.maxSlots}</dd></div>
             <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Cupos contables restantes</dt><dd className="text-[var(--foreground)]">{directCatalog.capacity.remainingSlots}</dd></div>
           </>}
         </dl>
+        {directCatalog && directCatalog.permissions.tables.length > 0 && (
+          <details className="space-y-2">
+            <summary className="cursor-pointer text-sm font-semibold text-[var(--theme-link)]">Ver permisos por registro interno</summary>
+            <dl className="space-y-2 text-xs">
+              {directCatalog.permissions.tables.map(table => (
+                <div key={table.name} className="space-y-1">
+                  <dt className="break-all font-medium text-[var(--foreground)]">{table.name}</dt>
+                  <dd className="text-[var(--text-secondary)]">Acceso del servicio: {table.runtimeAccess ? 'Reconocido' : 'Requiere revisión'}. Aislamiento de roles públicos: {table.privateAccess ? 'Reconocido' : 'Requiere revisión'}.</dd>
+                </div>
+              ))}
+            </dl>
+          </details>
+        )}
         {directCatalog && !directCatalog.capacity && <p role="status" className="text-sm text-[var(--theme-warning)]">No se informa capacidad contable utilizable; revisa la auditoría de reservas y presupuesto.</p>}
-        <p className="text-sm text-[var(--text-secondary)]">Los cupos contables no representan espacio libre real ni autorizan subidas. Una estructura reconocida no demuestra que todas sus restricciones, permisos efectivos o políticas privadas sean correctos.</p>
+        <p className="text-sm text-[var(--text-secondary)]">Los cupos contables no representan espacio libre real ni autorizan subidas. Se comprueban los permisos esperados de cinco tablas internas, no todas las operaciones de publicación, los disparadores ni las políticas privadas de Storage.</p>
         <form action="/admin/roleplays/creation-readiness" method="get">
           <input type="hidden" name="checkDirect" value="1" />
           {requested && <input type="hidden" name="check" value="1" />}
