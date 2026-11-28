@@ -8,6 +8,25 @@ const key = '123e4567-e89b-42d3-a456-426614174000';
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 describe('saved direct reservation lookup', () => {
+  it('keeps the live region mounted and clears a previous result without another request', async () => {
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: { status: 'NOT_FOUND' } }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<SavedReservationLookup />);
+    const input = screen.getByLabelText('Referencia de la reserva directa guardada');
+    const live = screen.getByRole('status');
+    expect(live.textContent).toBe('');
+    expect(input.getAttribute('enterkeyhint')).toBe('search');
+    fireEvent.change(input, { target: { value: key } });
+    fireEvent.submit(screen.getByRole('button', { name: 'Consultar reserva guardada' }).closest('form')!);
+    await screen.findByText(/No se encontró una reserva/);
+    expect(screen.getByRole('status')).toBe(live);
+    fireEvent.click(screen.getByRole('button', { name: 'Limpiar referencia' }));
+    expect(input).toHaveProperty('value', '');
+    expect(document.activeElement).toBe(input);
+    expect(screen.getByRole('status')).toBe(live);
+    expect(live.textContent).toBe('');
+    expect(fetcher).toHaveBeenCalledOnce();
+  });
   it.each(['session-confirmed', '../external', 'https://external.example', undefined])(
     'offers only a safe confirmed administrative session link (%s)', async sessionId => {
       const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: {
@@ -74,18 +93,22 @@ describe('saved direct reservation lookup', () => {
     fireEvent.change(input, { target: { value: 'signed-token' } });
     fireEvent.click(submit);
     expect(screen.getByRole('alert').textContent).toContain('UUID válida');
+    expect(document.activeElement).toBe(input);
+    expect(input.getAttribute('aria-describedby')).toBe('saved-reservation-help saved-reservation-error');
     expect(fetcher).not.toHaveBeenCalled();
     fireEvent.change(input, { target: { value: ' ' + key + ' ' } });
     expect(screen.queryByRole('alert')).toBeNull();
     expect(fetcher).not.toHaveBeenCalled();
+    expect(input.getAttribute('aria-describedby')).toBe('saved-reservation-help');
     fireEvent.click(submit);
     await screen.findByText(/El registro indica una publicación/);
+    expect(screen.getByRole('link', { name: 'Consultar roleplays existentes (nueva pestaña)' }).getAttribute('target')).toBe('_blank');
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/uploads/status', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ requestKey: key }), cache: 'no-store',
     }));
     expect(screen.queryByRole('button', { name: /Crear|Continuar creación/ })).toBeNull();
     fireEvent.change(input, { target: { value: '' } });
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 
   it('prevents concurrent queries and preserves the reference on failure', async () => {
@@ -99,6 +122,8 @@ describe('saved direct reservation lookup', () => {
     fireEvent.click(submit);
     expect(input).toHaveProperty('disabled', true);
     expect(submit).toHaveProperty('disabled', true);
+    expect(submit.textContent).toBe('Consultando reserva…');
+    expect(screen.getByRole('button', { name: 'Limpiar referencia' })).toHaveProperty('disabled', true);
     fireEvent.submit(submit.closest('form')!);
     expect(fetcher).toHaveBeenCalledTimes(1);
     finish(Response.json({ error: 'PRIVATE_PROVIDER_DETAIL' }, { status: 503 }));
