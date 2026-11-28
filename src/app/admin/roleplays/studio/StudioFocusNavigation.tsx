@@ -17,6 +17,8 @@ type Props = {
   previewActive: boolean;
   playhead: number;
   duration: number;
+  listenAfterConfirm: boolean;
+  onListenAfterConfirmChange: (enabled: boolean) => void;
   onSelect: (id: string) => void;
   onConfirm: () => void;
   onExclude: () => void;
@@ -32,7 +34,7 @@ export default function StudioFocusNavigation({
   visibleSegments, focusedTurn, focusIndex, totalTurns, workspaceActive,
   canConfirmFocused, editingDisabled, confirmed, focusedReviewIssue, sourceProfileCount,
   previewActive, playhead, duration, onSelect, onConfirm, onExclude, onApplyProfile,
-  onPreview, onPause, onSkip, onSeek,
+  onPreview, onPause, onSkip, onSeek, listenAfterConfirm, onListenAfterConfirmChange,
 }: Props) {
   return (
     <nav aria-label="Navegador de intervenciones" className={`flex min-w-0 shrink-0 flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-panel)] p-2 ${workspaceActive ? '' : 'md:sticky md:top-0 md:z-10'}`}>
@@ -72,6 +74,14 @@ export default function StudioFocusNavigation({
           {focusedReviewIssue ?? (confirmed ? 'Confirmada' : 'Lista para revisión')} · Ctrl/⌘ + Enter
         </span>
       </div>
+      <label className="flex min-h-11 basis-full cursor-pointer items-center gap-2 text-xs text-[var(--foreground)]">
+        <input type="checkbox" checked={listenAfterConfirm} disabled={editingDisabled}
+          onChange={event => onListenAfterConfirmChange(event.currentTarget.checked)}
+          aria-describedby="studio-next-preview-help"
+          className="size-5 shrink-0 accent-[var(--theme-link)]"/>
+        Escuchar siguiente al confirmar
+      </label>
+      <p id="studio-next-preview-help" className="basis-full text-xs text-[var(--text-secondary)]">Solo reproduce el siguiente turno visible sin confirmar, si sus tiempos son válidos. Nunca confirma ni excluye por ti. Se desactiva al cambiar de grabación.</p>
       {focusedTurn.segment.sourceSpeakerGroup && <p className="text-xs text-[var(--text-secondary)]">Etiqueta de origen: {focusedTurn.segment.sourceSpeakerGroup}. Escucha y confirma la voz antes de aplicar el perfil a otros turnos.</p>}
       {sourceProfileCount > 0 && (
         <button type="button" onClick={onApplyProfile}
