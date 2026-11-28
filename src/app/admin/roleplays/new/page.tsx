@@ -111,6 +111,10 @@ export default async function NewRoleplayPage({
           </div>
         </div>
 
+        <nav aria-label="Herramientas de creación" className="mb-4 flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold text-[var(--theme-link)]">
+          <Link href="/admin/roleplays/studio" prefetch={false} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center underline">Audio Studio (nueva pestaña)</Link>
+          <Link href="/admin/roleplays/creation-readiness" prefetch={false} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center underline">Diagnóstico y recuperación (nueva pestaña)</Link>
+        </nav>
         {librarySource?.requiresOpening && !openingAssignmentEnabled() ? (
           <div role="alert" className="rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-6">
             <p className="font-semibold text-[var(--foreground)]">La asignación privada todavía no está habilitada</p>
