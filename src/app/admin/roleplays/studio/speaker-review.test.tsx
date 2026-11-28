@@ -576,6 +576,46 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.currentTime).toBe(30);
   });
 
+  it('reviews with scoped keyboard shortcuts without typing, confirming or excluding accidentally', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    const article = () => profileGroup().closest('article')!;
+    article().focus();
+    expect(article().getAttribute('tabindex')).toBe('0');
+    fireEvent.keyDown(article(), { key: ' ' });
+    expect(player.play).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(article(), { key: ' ', repeat: true });
+    expect(screen.getByRole('button', { name: 'Detener fragmento activo' })).toBeTruthy();
+    fireEvent.keyDown(article(), { key: ' ' });
+    expect(screen.getByRole('button', { name: 'Escuchar intervención activa' })).toBeTruthy();
+    fireEvent.keyDown(article(), { key: '1' });
+    expect(metadata(profileGroup())).toEqual({ role: 'doctor', language: 'en' });
+    fireEvent.keyDown(article(), { key: '2' });
+    expect(metadata(profileGroup())).toEqual({ role: 'patient', language: 'es' });
+    fireEvent.keyDown(article(), { key: '3' });
+    expect(metadata(profileGroup())).toEqual({ role: 'interpreter', language: 'en' });
+    expect(screen.getByRole('button', { name: 'Confirmar y avanzar' })).toHaveProperty('disabled', true);
+    expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
+    const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
+    search.focus();
+    fireEvent.keyDown(search, { key: '1' });
+    expect(metadata(profileGroup()).role).toBe('interpreter');
+    const profileButton = within(profileGroup()).getByRole('button', { name: 'Cliente · EN' });
+    profileButton.focus();
+    fireEvent.keyDown(profileButton, { key: '2' });
+    expect(metadata(profileGroup()).role).toBe('interpreter');
+    article().focus();
+    fireEvent.keyDown(article(), { key: '1', altKey: true });
+    expect(metadata(profileGroup()).role).toBe('interpreter');
+    fireEvent.keyDown(article(), { key: 'ArrowRight' });
+    expect(screen.getByText('Intervención 2 de 2 · 2 de 2 visibles')).toBeTruthy();
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('0/2');
+  });
+
   it('keeps focus navigation within filtered interventions and allows direct selection', () => {
     selectAudio();
     for (let i = 0; i < 3; i++) {
