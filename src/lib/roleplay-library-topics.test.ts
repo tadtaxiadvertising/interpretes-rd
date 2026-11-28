@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch, parseRoleplayLibrarySize, matchesRoleplayLibrarySize, selectRoleplayLibraryPreview } from './roleplay-library-topics';
+import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch, parseRoleplayLibrarySize, matchesRoleplayLibrarySize, selectRoleplayLibraryPreview, paginateRoleplayLibrary } from './roleplay-library-topics';
 
 describe('library topic suggestions', () => {
   it('recognizes bilingual titles and ignores case and accents', () => {
@@ -141,5 +141,23 @@ describe('compact library scenario previews', () => {
     expect(selectRoleplayLibraryPreview(input, 'consulta medica').map(item=>item.index)).toEqual([0,1,2,5,6]);
     expect(selectRoleplayLibraryPreview(['Farmacia'], 'farm')).toEqual([{title:'Farmacia',index:0,matches:true}]);
     expect(selectRoleplayLibraryPreview([], 'farm')).toEqual([]);
+  });
+});
+
+describe('catalog pagination', () => {
+  const items = Array.from({ length: 25 }, (_, i) => i + 1);
+  it('preserves ranked order and visits every template without duplicates', () => {
+    const pages = ['1', '2', '3'].map(page => paginateRoleplayLibrary(items, page));
+    expect(pages.map(p => p.visible.length)).toEqual([12,12,1]);
+    expect(pages.flatMap(p => p.visible)).toEqual(items);
+    expect(pages.map(p => [p.first,p.last,p.totalPages])).toEqual([[1,12,3],[13,24,3],[25,25,3]]);
+  });
+  it('clamps stale pages and rejects ambiguous or malformed requests', () => {
+    expect(paginateRoleplayLibrary(items, '999').page).toBe(3);
+    for (const page of [undefined, ['2','3'], '0', '-1', '1.5', '1e2', '999999999999999999999']) {
+      expect(paginateRoleplayLibrary(items, page).page).toBe(1);
+    }
+    expect(paginateRoleplayLibrary([], '3')).toEqual({page:1,totalPages:1,visible:[],first:0,last:0});
+    expect(paginateRoleplayLibrary(items.slice(0,12), '2').page).toBe(1);
   });
 });
