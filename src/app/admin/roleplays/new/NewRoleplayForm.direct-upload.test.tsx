@@ -58,6 +58,15 @@ describe('gated private roleplay form',()=>{
     expect(m.publish).not.toHaveBeenCalled();
     expect(fetcher).not.toHaveBeenCalled();
     expect(screen.getByRole('link',{name:'Consultar sesiones existentes'}).getAttribute('target')).toBe('_blank');
+    fetcher.mockResolvedValueOnce(Response.json({success:true,data:{status:'PUBLICATION_RECORDED'}}));
+    fireEvent.click(screen.getByRole('button',{name:'Consultar estado de la reserva'}));
+    await screen.findByText(/El registro indica una publicación/);
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/uploads/status',expect.objectContaining({
+      method:'POST',body:JSON.stringify({requestKey:reference}),cache:'no-store',
+    }));
+    expect(retry).toHaveProperty('disabled',true);
+    expect(m.upload).toHaveBeenCalledOnce();
+    expect(m.publish).not.toHaveBeenCalled();
   });
 
   it('keeps one controller and one reservation after uncertain publication',async()=>{
