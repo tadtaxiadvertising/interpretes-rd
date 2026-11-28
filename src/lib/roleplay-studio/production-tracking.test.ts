@@ -76,6 +76,24 @@ describe('advisory same-tab production tracking',()=>{
     expect(storage.get(STUDIO_RECOVERY_KEY)).toBe(raw);
     expect(setItem).toHaveBeenCalledTimes(2);
   });
+  it('does not re-arm a changed backup or rebind an active production reference',()=>{
+    const hash='ab'.repeat(32), key='88'.repeat(32), other='99'.repeat(32);
+    const raw=createStudioRecovery(300,hash,120,[{...turn,id:'a'}],new Set(),undefined,0);
+    const storage=new Map([[STUDIO_RECOVERY_KEY,raw]]);
+    const setItem=vi.fn((name:string,value:string)=>{storage.set(name,value);});
+    vi.stubGlobal('localStorage',{getItem:(name:string)=>storage.get(name)??null,setItem});
+    trackProductionTransfer('repeat-reference',key,raw);
+    storage.delete(STUDIO_RECOVERY_KEY);
+    expect(advanceProductionTransfer('repeat-reference','unconfirmed')).toBe('backup-changed');
+    storage.set(STUDIO_RECOVERY_KEY,raw);
+    trackProductionTransfer('repeat-reference',key,raw);
+    expect(()=>trackProductionTransfer('repeat-reference',other,raw)).toThrow(/referencia de producción/);
+    expect(productionStatus(other)).toBeUndefined();
+    expect(advanceProductionTransfer('repeat-reference','created')).toBe('backup-changed');
+    expect(productionStatus(key)).toBe('created');
+    expect(storage.get(STUDIO_RECOVERY_KEY)).toBe(raw);
+    expect(setItem).not.toHaveBeenCalled();
+  });
   it('restores durable receipts without importing transient states or downgrading confirmation',()=>{
     const key='55'.repeat(32), other='66'.repeat(32);
     restoreProductionReceipts([{key,status:'created'},{key:other,status:'unconfirmed'}]);
