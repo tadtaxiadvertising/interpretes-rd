@@ -24,6 +24,16 @@ describe('same-tab roleplay upload recovery',()=>{
     expect(error.requestKey).toBeNull();
     expect(error.message).toBe('ROLEPLAY_UPLOAD_INTERRUPTED');
   });
+  it('exposes the same reference before any reservation or transfer',async()=>{
+    const f=fixture();
+    expect(f.controller.requestKey).toBe(requestKey);
+    expect(f.reserve).not.toHaveBeenCalled();
+    expect(f.hash).not.toHaveBeenCalled();
+    expect(f.transfer).not.toHaveBeenCalled();
+    await expect(f.controller.run()).resolves.toMatchObject({requestKey});
+    expect(f.reserve.mock.calls[0][0]).toBe(requestKey);
+    expect(f.controller.requestKey).toBe(requestKey);
+  });
   it('transfers then verifies each file sequentially and returns no tokens',async()=>{
     const f=fixture();
     const result=await f.controller.run();
