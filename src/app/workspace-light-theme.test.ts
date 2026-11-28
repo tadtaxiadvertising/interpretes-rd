@@ -308,7 +308,8 @@ describe('shared Audio Studio actions', () => {
     expect(finalization).toContain('disabled={busy || draftBusy || analyzingSilences || !segmentCount || segmentCount > ROLEPLAY_MAX_SCENARIOS}');
     expect(finalization).toContain('disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}');
     const library = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/HappyScribeLibraryPanel.tsx'), 'utf8');
-    expect(library).toContain('disabled={!happyScribeSelectedId || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
+    expect(library).toContain('disabled={waitingCombinedMetadata || !sourceReady || !happyScribeSelection || !happyScribeReady(happyScribeSelection) || happyScribeImporting || happyScribeMediaImporting || happyScribeLoading}');
+    expect(library).toContain('disabled={waitingCombinedMetadata || !happyScribeSelectedId || happyScribeMediaImporting || happyScribeImporting || happyScribeLoading ||');
     expect(library).toContain('bg-[var(--theme-control-bg)]');
     expect(library).toContain('text-[var(--theme-control-text)]');
   });
