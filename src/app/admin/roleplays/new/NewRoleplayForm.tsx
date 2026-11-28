@@ -226,6 +226,14 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     setIsImporting(false);
     setError('Importación descartada: modificaste el borrador antes de terminar la verificación.');
   }, []);
+  const stopImportVerification = () => {
+    if (!importPending.current) return;
+    importRevision.current += 1;
+    importPending.current = false;
+    setIsImporting(false);
+    setImportNotice(null);
+    setError('Verificación interrumpida. El borrador se conserva. Puedes volver a cargar el paquete si sigue disponible.');
+  };
   const [eligibility, setEligibility] = useState<{ activeCount: number; eligibleCount: number; skippedCount: number } | null>(null);
   const [eligibilityLoading, setEligibilityLoading] = useState(false);
   const [eligibilityError, setEligibilityError] = useState<string | null>(null);
@@ -405,6 +413,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         try {
           files = await extractStudioZip(selected[0]);
         } catch (nativeError) {
+          if (revision !== importRevision.current) return;
           if (transferToken) throw nativeError;
           try {
             files = await extractExternalStudioZip(selected[0]);
@@ -415,6 +424,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           }
         }
       }
+      if (revision !== importRevision.current) return;
       const prepared = localWav ? await prepareRoleplayManifestImport(files, { localWav: true }) : await prepareRoleplayManifestImport(files);
       // Never overwrite a newer ZIP import or edits made during validation.
       if (revision !== importRevision.current) return;
@@ -1094,7 +1104,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             onChange={(event) => { void handleManifestImport(event); }}
             className="mt-3 block w-full text-sm text-[var(--text-secondary)] file:mr-3 file:rounded-md file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:font-semibold file:text-white disabled:opacity-50"
           />
-          {isImporting && <p role="status" className="mt-2 text-sm text-[var(--theme-link)]">Verificando archivos y huellas SHA-256…</p>}
+          {isImporting && <div className="mt-2 flex flex-wrap items-center gap-2">
+            <p role="status" className="text-sm text-[var(--theme-link)]">Verificando archivos y huellas SHA-256…</p>
+            <button type="button" onClick={stopImportVerification}
+              className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-sm font-semibold">Interrumpir verificación</button>
+          </div>}
           {importNotice && <p role="status" className="mt-2 text-sm text-[var(--theme-success)]">{importNotice}</p>}
         </div>
         <div className="flex items-center justify-between mb-4">
