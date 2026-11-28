@@ -278,7 +278,7 @@ export default function RoleplayStudioPage() {
     return () => { active = false; };
   }, []);
   const [expandedSegmentId, setExpandedSegmentId] = useState<string | null>(null);
-  const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number } | null>(null);
+  const [invalidExportTurn, setInvalidExportTurn] = useState<{ id: string; attempt: number; issue?: StudioReviewCode } | null>(null);
   const exportFocusAttempt = useRef(0);
   const [reviewFocusRequest, setReviewFocusRequest] = useState<{ id: string; attempt: number; issue?: StudioReviewCode } | null>(null);
   const reviewFocusAttempt = useRef(0);
@@ -286,7 +286,7 @@ export default function RoleplayStudioPage() {
   // has been rendered again. No media file is read or uploaded by this action.
   useEffect(() => {
     if (!invalidExportTurn) return;
-    focusStudioIntervention(invalidExportTurn.id, !focusMode);
+    focusStudioIntervention(invalidExportTurn.id, !focusMode || Boolean(invalidExportTurn.issue), invalidExportTurn.issue);
   }, [invalidExportTurn]);
   // Navigating the review queue changes only focus and the open editor.
   // It never seeks, plays, uploads, or alters intervention content.
@@ -1572,7 +1572,7 @@ export default function RoleplayStudioPage() {
     if (purpose === 'assignment') setAssignmentPackage(null);
     const masterOrder = [...segments].sort((a, b) => a.start - b.start);
     const ordered = part ? part.turns : masterOrder;
-    const revealInvalidTurn = (segment: Segment, index: number, reason: string) => {
+    const revealInvalidTurn = (segment: Segment, index: number, reason: string, issue?: StudioReviewCode) => {
       // Export is blocked before saving or uploading anything. Surface the
       // exact turn, even if a search or pending-only filter was hiding it.
       setSegmentSearch('');
@@ -1580,7 +1580,7 @@ export default function RoleplayStudioPage() {
       setExpandedSegmentId(segment.id);
       setWorkspaceTab('edit');
       setAdvancedTurnId(segment.id);
-      setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current });
+      setInvalidExportTurn({ id: segment.id, attempt: ++exportFocusAttempt.current, issue });
       setTurnActionFeedback({ id: segment.id, message: reason, error: true });
       setError(`Intervención ${part ? masterOrder.findIndex(item => item.id === segment.id) + 1 : index + 1}: ${reason}`);
     };
@@ -1600,22 +1600,22 @@ export default function RoleplayStudioPage() {
     let total = 0;
     for (const [index, segment] of ordered.entries()) {
       const ranges = validStudioRanges(segment, duration);
-      const issue = !segment.title.trim()
-        ? 'añade un título antes de exportar.'
+      const issue: { code: StudioReviewCode; message: string } | null = !segment.title.trim()
+        ? { code: 'title', message: 'añade un título antes de exportar.' }
         : segment.title.length > 200
-          ? 'reduce el título a 200 caracteres o menos.'
+          ? { code: 'title', message: 'reduce el título a 200 caracteres o menos.' }
           : !ranges
-            ? 'corrige los límites de corte (máximo 5 minutos de audio seleccionado).'
+            ? { code: 'range', message: 'corrige los límites de corte (máximo 5 minutos de audio seleccionado).' }
             : segment.start < end
-              ? 'este corte se solapa con la intervención anterior.'
+              ? { code: 'overlap', message: 'este corte se solapa con la intervención anterior.' }
               : segment.scriptPrompt.length > 5000
-                ? 'reduce las instrucciones a 5000 caracteres o menos.'
+                ? { code: 'instructions', message: 'reduce las instrucciones a 5000 caracteres o menos.' }
                 : !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
                     segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC
-                  ? `ajusta el tiempo de respuesta entre 0 y ${ROLEPLAY_RESPONSE_MAX_DURATION_SEC} segundos.`
+                  ? { code: 'response', message: `ajusta el tiempo de respuesta entre 0 y ${ROLEPLAY_RESPONSE_MAX_DURATION_SEC} segundos.` }
                   : null;
       if (issue) {
-        revealInvalidTurn(segment, index, issue);
+        revealInvalidTurn(segment, index, issue.message, issue.code);
         return;
       }
       // An invalid range always produces an issue above, before this point.
