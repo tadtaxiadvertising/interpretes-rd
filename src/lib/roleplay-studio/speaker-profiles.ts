@@ -68,14 +68,34 @@ const SPEAKER_ALIASES: ReadonlyMap<string, { role: StudioSpeakerRole; label: str
   ['operador', { role: 'operator', label: 'Operador' }],
 ]);
 
+/** Only exact generic aliases and explicit EN/ES suffixes. A provider role
+ * alone is not evidence of the spoken language. Never parse personal names,
+ * speaker numbers, free-form text or ambiguous language descriptions. */
+function importedSpeaker(label: string | null): { role: StudioSpeakerRole; label: string | null; language: StudioLanguage } {
+  const normalized = label?.trim().toLocaleLowerCase('es') ?? '';
+  const unknown = { role: 'unknown', label: null, language: 'unknown' } as const;
+  const direct = SPEAKER_ALIASES.get(normalized);
+  if (direct) return { ...direct, language: 'unknown' };
+  const explicit = /^(.+?)(?:\s*·\s*(en|es)|\s*\((en|es)\))$/.exec(normalized);
+  if (!explicit) return unknown;
+  const alias = SPEAKER_ALIASES.get(explicit[1].trim());
+  const language = explicit[2] ?? explicit[3];
+  if (!alias || (language !== 'en' && language !== 'es')) return unknown;
+  return { ...alias, language };
+}
+
 export function classifySpeakerRole(label: string | null): StudioSpeakerRole {
-  if (!label) return 'unknown';
-  return SPEAKER_ALIASES.get(label.trim().toLocaleLowerCase('es'))?.role ?? 'unknown';
+  return importedSpeaker(label).role;
 }
 
 export function safePublishableSpeakerLabel(label: string | null): string | null {
-  if (!label) return null;
-  return SPEAKER_ALIASES.get(label.trim().toLocaleLowerCase('es'))?.label ?? null;
+  return importedSpeaker(label).label;
+}
+
+/** Imported metadata is provisional; mismatches remain reviewable. */
+export function classifyImportedSpeaker(label: string | null): { speakerRole: StudioSpeakerRole; language: StudioLanguage } {
+  const { role, language } = importedSpeaker(label);
+  return { speakerRole: role, language };
 }
 
 export function makeNeutralSegmentTitle(
