@@ -12,7 +12,8 @@ import { extractStudioZip } from '@/lib/roleplay-studio/zip';
 import { advanceProductionTransfer } from '@/lib/roleplay-studio/production-tracking';
 import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guard';
 import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
-import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
+import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff, peekStudioHandoffTopic, type StudioTopicSelection } from '@/lib/roleplay-studio/assignment-handoff';
+import { ROLEPLAY_TOPICS } from '@/lib/roleplay-library-topics';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
 import DirectReservationObservationSummary from '@/components/admin/DirectReservationObservationSummary';
 import { observeDirectReservation, parseDirectReservationReference, type DirectReservationObservationResult } from '@/lib/roleplay/direct-reservation-status-browser';
@@ -160,6 +161,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [isImporting, setIsImporting] = useState(false);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importedTransfer, setImportedTransfer] = useState<string | null>(null);
+  const [transferredTopic, setTransferredTopic] = useState<StudioTopicSelection | null>(null);
   const trackedImportRevision = useRef<number | null>(null);
   const [productionBackupWarning, setProductionBackupWarning] = useState(false);
   const recordProductionAttempt = (token: string | null, status: 'unconfirmed' | 'created') => {
@@ -386,6 +388,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
     if (selected.length === 0) return;
     if (createPending.current || directAttempt.current) return;
     const revision = ++importRevision.current;
+    const incomingTopic = transferToken ? peekStudioHandoffTopic(transferToken) : null;
     importPending.current = true;
     setIsImporting(true);
     setLastRemoved(null);
@@ -433,7 +436,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             (current.sourceEndSec ?? null) === (incoming.sourceEndSec ?? null);
         });
       if (identicalPackage) {
-        if (transferToken) { clearStudioHandoff(transferToken); setImportedTransfer(transferToken); trackedImportRevision.current = revision; advanceProductionTransfer(transferToken, 'verified'); }
+        if (transferToken) { setTransferredTopic(incomingTopic); clearStudioHandoff(transferToken); setImportedTransfer(transferToken); trackedImportRevision.current = revision; advanceProductionTransfer(transferToken, 'verified'); }
         setImportNotice('Este paquete ya está importado y no tiene cambios. Conservamos los escenarios existentes.');
         return;
       }
@@ -463,6 +466,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       // replayed. Even when an import becomes stale while React is batching,
       // return a new unchanged array to schedule orphan preview cleanup.
       setScenarios(prev => revision === importRevision.current ? next : [...prev]);
+      setTransferredTopic(incomingTopic);
       if (transferToken) {
         clearStudioHandoff(transferToken);
         setImportedTransfer(transferToken);
@@ -1156,6 +1160,17 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         </div>
       </div>
 
+      )}
+
+      {transferredTopic && !librarySource && (
+        <section aria-label="Tema recibido de Audio Studio" className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
+          <h3 className="text-sm font-semibold text-[var(--foreground)]">Tema recibido de Audio Studio</h3>
+          <p className="mt-1 text-sm text-[var(--foreground)]">
+            {ROLEPLAY_TOPICS.find(item => item.id === transferredTopic.topic)?.label} / {ROLEPLAY_TOPICS.find(item => item.id === transferredTopic.topic)?.subtopics.find(item => item.id === transferredTopic.subtopic)?.label}
+          </p>
+          <p className="mt-1 text-xs text-[var(--text-secondary)]">Referencia temporal. La creación no guarda esta categoría automáticamente; clasifica el ejercicio en la biblioteca cuando esté habilitada la clasificación editorial.</p>
+          <button type="button" onClick={() => setTransferredTopic(null)} className="theme-action-secondary mt-2 min-h-11 rounded-lg px-3 py-2 text-xs font-semibold">Quitar referencia de tema</button>
+        </section>
       )}
 
       <section aria-label="Resumen de asignación" className="rounded-xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3 sm:p-4 space-y-2">
