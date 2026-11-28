@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from 'react';
+import userEvent from '@testing-library/user-event';
 import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import { afterEach,describe,expect,it,vi } from 'vitest';
 const m=vi.hoisted(()=>({create:vi.fn(),upload:vi.fn(),consolidate:vi.fn(),publish:vi.fn()}));
@@ -95,6 +96,32 @@ describe('gated creation receipt recovery form', () => {
     });
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
     expect(screen.queryByText('¡Roleplay creado correctamente!')).toBeNull();
+  });
+
+  it('submits recovery via Enter, associates validation errors, and never creates a session', async () => {
+    const user = userEvent.setup();
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} receiptRecoveryEnabled/>);
+    await user.click(screen.getByText('Recuperar una creación anterior'));
+    const input = screen.getByLabelText('Referencia de recuperación');
+    expect(input.getAttribute('autocapitalize')).toBe('none');
+    expect(input.getAttribute('autocorrect')).toBe('off');
+    await user.click(input);
+    await user.keyboard('invalid{Enter}');
+    const error = screen.getByRole('alert');
+    expect(input.getAttribute('aria-describedby')).toBe(error.id);
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+    expect(fetcher).not.toHaveBeenCalled();
+    await user.clear(input);
+    await user.type(input, 'rp1:' + key + ':1');
+    expect(input.hasAttribute('aria-describedby')).toBe(false);
+    await user.keyboard('{Enter}');
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store',
+    });
+    expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
   });
 
   it('does not send a new keyed request in receipt-only mode', async () => {
