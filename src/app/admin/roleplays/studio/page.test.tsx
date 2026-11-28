@@ -1384,6 +1384,44 @@ describe('Audio Studio clip review player', () => {
     expect(screen.queryByRole('button', { name: 'Cancelar descarga' })).toBeNull();
   });
 
+  it.each(['continue', 'cancel', 'replace'] as const)('handles combined import after metadata: %s', async (action) => {
+    const itemId = 'a'.repeat(32);
+    const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        if (String(url).endsWith('/media')) return new Response(new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00]), {
+          status: 200, headers: { 'Content-Type': 'audio/mpeg' },
+        });
+        return new Response(JSON.stringify({ success: false, error: 'SRT no disponible' }), { status: 503 });
+      }
+      return { ok: true, json: async () => ({
+        success: true, data: [{ id: itemId, name: 'Practice recording.mp3', state: 'automatic_done',
+          language: 'en-US', durationSeconds: 90, createdAt: null, folder: null }], mediaImportEnabled: true,
+      }) } as Response;
+    });
+    vi.stubGlobal('fetch', fetcher);
+    const { container } = render(<RoleplayStudioPage />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Actualizar biblioteca' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Importar audio y transcripción' })); });
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual(['/api/admin/happyscribe/media']);
+    expect(screen.getByRole('button', { name: 'Importar transcripción' })).toHaveProperty('disabled', true);
+    if (action === 'cancel') fireEvent.click(screen.getByRole('button', { name: 'Cancelar importación conjunta' }));
+    if (action === 'replace') fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
+      target: { files: [new File(['ID3'], 'other.mp3', { type: 'audio/mpeg' })] },
+    });
+    const player = container.querySelector('audio')!;
+    Object.defineProperty(player, 'duration', { configurable: true, value: 90 });
+    await act(async () => { fireEvent.loadedMetadata(player); });
+    const posts = fetcher.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url);
+    expect(posts).toEqual(action === 'continue' ? ['/api/admin/happyscribe/media', '/api/admin/happyscribe/transcriptions'] : ['/api/admin/happyscribe/media']);
+    if (action === 'continue') {
+      expect(screen.getByRole('alert').textContent).toContain('SRT no disponible');
+      fireEvent.loadedMetadata(player);
+      expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2);
+    }
+    expect(player.getAttribute('src')).toMatch(/^blob:/);
+    expect(screen.queryByRole('button', { name: 'Cancelar importación conjunta' })).toBeNull();
+  });
+
   it('imports the original HappyScribe MP3 directly into the Audio Studio source', async () => {
     const itemId = 'a'.repeat(32);
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {

@@ -180,6 +180,15 @@ export default function RoleplayStudioPage() {
   const exportRevision = useRef(0);
   const exportAbort = useRef<AbortController | null>(null);
   const happyScribeMediaAbort = useRef<AbortController | null>(null);
+  const pendingCombinedImport = useRef<{ source: File; id: string; proof: HappyScribeLibraryItem['importProof']; revision: number } | null>(null);
+  const combinedImportTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [waitingCombinedMetadata, setWaitingCombinedMetadata] = useState(false);
+  const clearCombinedImport = () => {
+    pendingCombinedImport.current = null;
+    if (combinedImportTimer.current !== null) clearTimeout(combinedImportTimer.current);
+    combinedImportTimer.current = null;
+    setWaitingCombinedMetadata(false);
+  };
   const happyScribeTranscriptAbort = useRef<AbortController | null>(null);
   const happyScribeListAbort = useRef<AbortController | null>(null);
   // Keep an up-to-date snapshot for transfers that may resolve after edits.
@@ -406,6 +415,8 @@ export default function RoleplayStudioPage() {
     happyScribeTranscriptAbort.current = null;
     happyScribeListAbort.current?.abort();
     happyScribeListAbort.current = null;
+    pendingCombinedImport.current = null;
+    if (combinedImportTimer.current !== null) clearTimeout(combinedImportTimer.current);
   }, []);
 
   // Edits invalidate the ZIP snapshot immediately: never download an older
@@ -445,6 +456,7 @@ export default function RoleplayStudioPage() {
         !approvedStillValid && !window.confirm(replacementPrompt)) {
       return;
     }
+    clearCombinedImport();
     // Stop the upstream transfer when an operator accepts a different source.
     // Otherwise a stale HappyScribe MP3 can waste up to 250 MiB of bandwidth.
     happyScribeMediaAbort.current?.abort();
@@ -1672,7 +1684,7 @@ export default function RoleplayStudioPage() {
   const loadHappyScribeItems = async (page = 0, refreshId?: string) => {
     // Page 0 is a manual refresh. Other pages load only on explicit request.
     // The ref closes the rapid-click race before React rerenders disabled buttons.
-    if (happyScribeListAbort.current || happyScribeTranscriptAbort.current || happyScribeMediaAbort.current) return;
+    if (happyScribeListAbort.current || happyScribeTranscriptAbort.current || happyScribeMediaAbort.current || pendingCombinedImport.current) return;
     if (refreshId ? happyScribeOrigins.current.get(refreshId) !== page :
       (page !== 0 && (!happyScribeHasMore || page !== happyScribePage + 1 || page > 1000))) return;
     const controller = new AbortController();
@@ -1766,7 +1778,7 @@ export default function RoleplayStudioPage() {
     }
     // State-based disabled controls render later. The ref closes the window
     // between a first click and that render, avoiding duplicate provider exports.
-    if (!happyScribeSelectedId || happyScribeImporting || happyScribeTranscriptAbort.current) return;
+    if (!happyScribeSelectedId || happyScribeImporting || happyScribeTranscriptAbort.current || happyScribeMediaAbort.current || pendingCombinedImport.current) return;
     const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
     if (!item || !['automatic_done', 'done'].includes(item.state)) {
       setError('Selecciona una transcripción completada en HappyScribe.');
@@ -1823,9 +1835,9 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const importHappyScribeAudio = async () => {
+  const importHappyScribeAudio = async (includeTranscript = false) => {
     // Prevent a second potentially expensive MP3 export before React rerenders.
-    if (!happyScribeSelectedId || happyScribeMediaImporting || happyScribeMediaAbort.current) return;
+    if (!happyScribeSelectedId || happyScribeMediaImporting || happyScribeMediaAbort.current || happyScribeTranscriptAbort.current || pendingCombinedImport.current) return;
     const item = happyScribeItems.find(entry => entry.id === happyScribeSelectedId);
     if (!item || item.state !== 'automatic_done') {
       setError('El audio original solo está disponible para transcripciones completadas con el estado automatic_done.');
@@ -1871,7 +1883,19 @@ export default function RoleplayStudioPage() {
       const file = new File([blob], filename, { type: 'audio/mpeg' });
       chooseAudio(file, preflight);
       if (activeAudioFile.current !== file) return;
-      setNotice('Audio original importado desde HappyScribe. Espera a que Audio Studio calcule su duración y después importa la transcripción para revisar y asignar los hablantes.');
+      if (includeTranscript) {
+        const pending = { source: file, id: item.id, proof: item.importProof, revision: subtitleImportRevision.current };
+        pendingCombinedImport.current = pending;
+        setWaitingCombinedMetadata(true);
+        combinedImportTimer.current = setTimeout(() => {
+          if (pendingCombinedImport.current !== pending) return;
+          clearCombinedImport();
+          setNotice('El audio se conserva. No se pudo confirmar su duración a tiempo; importa la transcripción manualmente cuando esté lista.');
+        }, 60000);
+        setNotice('Audio original importado desde HappyScribe. Preparando subtítulos al confirmar la duración…');
+      } else {
+        setNotice('Audio original importado desde HappyScribe. Espera a que Audio Studio calcule su duración y después importa la transcripción para revisar y asignar los hablantes.');
+      }
     } catch (cause) {
       if (!controller.signal.aborted &&
           revisionAtRequest === subtitleImportRevision.current &&
@@ -1885,6 +1909,23 @@ export default function RoleplayStudioPage() {
       }
     }
   };
+
+  // Consume once after metadata is committed; never export SRT against another
+  // source, a renewed selection, or changes made since the accepted download.
+  const continueCombinedImport = useRef(() => {});
+  continueCombinedImport.current = () => {
+    const pending = pendingCombinedImport.current;
+    if (!pending || !audio || !(duration > 0)) return;
+    clearCombinedImport();
+    if (pending.source !== audio || pending.source !== activeAudioFile.current ||
+        pending.id !== happyScribeSelectedId || pending.proof !== happyScribeSelection?.importProof ||
+        pending.revision !== subtitleImportRevision.current || hasReplacementWork(audioReplacementEdits.current)) {
+      setNotice('Se conservó la grabación. La importación conjunta se detuvo porque cambió la selección o la edición.');
+      return;
+    }
+    void importHappyScribeTranscript();
+  };
+  useEffect(() => { continueCombinedImport.current(); }, [audio, duration, waitingCombinedMetadata]);
 
   const sourceRequiresLocal = audio !== null && usesLocalLongMode(audio, duration);
   const hasCompound = segments.some(segment => segment.ranges !== undefined);
@@ -2428,7 +2469,7 @@ export default function RoleplayStudioPage() {
         {/* Keep the provider panel available before a source is selected. */}
         <HappyScribeLibraryPanel key={happyScribeFilterEpoch}
           items={happyScribeItems} selectedId={happyScribeSelectedId}
-          sourceReady={sourceReady} hasSource={Boolean(audio)}
+          sourceReady={sourceReady} hasSource={Boolean(audio)} waitingCombinedMetadata={waitingCombinedMetadata}
           loading={happyScribeLoading} importing={happyScribeImporting}
           mediaImporting={happyScribeMediaImporting} mediaEnabled={happyScribeMediaEnabled}
           hasMore={happyScribeHasMore} configUnavailable={happyScribeConfigUnavailable}
@@ -2440,6 +2481,7 @@ export default function RoleplayStudioPage() {
             if (page !== undefined) void loadHappyScribeItems(page, happyScribeSelection.id);
           }}
           onSelect={id => {
+            clearCombinedImport();
             // Changing selection invalidates the pending media download.
             happyScribeMediaAbort.current?.abort();
             happyScribeMediaAbort.current = null;
@@ -2447,6 +2489,8 @@ export default function RoleplayStudioPage() {
             setHappyScribeSelectedId(id);
           }}
           onImportAudio={() => void importHappyScribeAudio()}
+          onImportBoth={() => void importHappyScribeAudio(true)}
+          onCancelCombined={() => { clearCombinedImport(); setNotice('Importación conjunta cancelada. La grabación descargada se conserva.'); }}
           onImportTranscript={() => void importHappyScribeTranscript()}
           onCancelAudio={() => {
             happyScribeMediaAbort.current?.abort();
