@@ -16,6 +16,11 @@ function fixture(){
   return {controller,reserve,inspect,verify,transfer,hash,slots};
 }
 describe('same-tab roleplay upload recovery',()=>{
+  it.each(['signed-secret','https://external.example/private','',undefined])('does not expose invalid review references (%s)',value=>{
+    const error=new DirectUploadReviewRequired('RESERVATION_UNCERTAIN',value);
+    expect(error.requestKey).toBeNull();
+    expect(error.message).toBe('ROLEPLAY_UPLOAD_INTERRUPTED');
+  });
   it('transfers then verifies each file sequentially and returns no tokens',async()=>{
     const f=fixture();
     const result=await f.controller.run();
@@ -79,8 +84,8 @@ describe('same-tab roleplay upload recovery',()=>{
   });
   it('does not reserve again after an ambiguous reservation reply',async()=>{
     const f=fixture();f.reserve.mockRejectedValueOnce(new Error('lost'));
-    await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN'});
-    await expect(f.controller.run()).rejects.toBeInstanceOf(DirectUploadReviewRequired);
+    await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN',requestKey:expect.any(String)});
+    await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN',requestKey:f.reserve.mock.calls[0][0]});
     expect(f.reserve).toHaveBeenCalledTimes(1);
     expect(f.transfer).not.toHaveBeenCalled();
   });
@@ -92,7 +97,7 @@ describe('same-tab roleplay upload recovery',()=>{
         if(p.phase==='uploading' && p.verified===1) abort.abort();
       }})).rejects.toThrow();
       vi.advanceTimersByTime(26*60_000);
-      await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_EXPIRED'});
+      await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_EXPIRED',requestKey:f.reserve.mock.calls[0][0]});
       expect(f.reserve).toHaveBeenCalledTimes(1);
       expect(f.transfer).toHaveBeenCalledTimes(1);
       expect(f.verify).toHaveBeenCalledTimes(1);

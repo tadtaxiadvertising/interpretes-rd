@@ -110,6 +110,8 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const [directLocked,setDirectLocked] = useState(false);
   const [directProgress,setDirectProgress] = useState<FormProgress | null>(null);
   const [directReview,setDirectReview] = useState<DirectUploadReviewReason | null>(null);
+  const [directReviewReference,setDirectReviewReference] = useState<string | null>(null);
+  const [directCopyNotice,setDirectCopyNotice] = useState<string | null>(null);
   useEffect(()=>()=>directAbort.current?.abort(),[]);
   // Transport failures do not tell us whether the server committed the roleplay.
   const [submissionUncertain, setSubmissionUncertain] = useState(false);
@@ -572,6 +574,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       } catch (error) {
         if (error instanceof DirectUploadReviewRequired) {
           setDirectReview(error.reason);
+          setDirectReviewReference(error.requestKey);
           setError(error.reason === 'RESERVATION_EXPIRED'
             ? 'La reserva de subida ha caducado. Conserva esta pestaña y consulta las sesiones existentes antes de solicitar una revisión de la reserva. No inicies otra creación.'
             : 'No se pudo confirmar la reserva de subida. Conserva esta pestaña y solicita una revisión de la reserva antes de iniciar otra creación.');
@@ -1199,6 +1202,24 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             <progress className="block w-full" max={directProgress.total} value={directProgress.consolidated}/></label>
         </>}
         {directLocked && isCreating && <button type="button" onClick={()=>directAbort.current?.abort()} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)]">Pausar operación</button>}
+        {directReview && directReviewReference && (
+          <div className="space-y-2">
+            <label htmlFor="direct-review-reference" className="block text-sm font-medium text-[var(--foreground)]">Referencia de la reserva directa</label>
+            <input id="direct-review-reference" readOnly value={directReviewReference}
+              onFocus={event => event.currentTarget.select()}
+              className="min-h-11 w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 text-sm text-[var(--theme-control-text)]"/>
+            <button type="button" onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(directReviewReference);
+                setDirectCopyNotice('Referencia copiada.');
+              } catch {
+                setDirectCopyNotice('No se pudo copiar automáticamente. Selecciona y copia el campo de referencia.');
+              }
+            }} className="min-h-11 w-full rounded-xl theme-action-secondary px-3 py-2 text-sm font-semibold sm:w-auto">Copiar referencia de la reserva</button>
+            {directCopyNotice && <p role="status" className="text-xs text-[var(--text-secondary)]">{directCopyNotice}</p>}
+            <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia para que el responsable autorizado pueda identificar la solicitud original. No es un enlace de acceso ni permite recuperar automáticamente los archivos o iniciar otra reserva.</p>
+          </div>
+        )}
         {directLocked && !isCreating && <Link href="/admin/roleplays" target="_blank" rel="noopener noreferrer" className="inline-block text-sm text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>}
       </section>}
       {error && (

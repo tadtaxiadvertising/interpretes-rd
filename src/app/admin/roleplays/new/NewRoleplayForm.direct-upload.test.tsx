@@ -16,7 +16,12 @@ vi.mock('./ScenarioCard',()=>({
 }));
 import NewRoleplayForm from './NewRoleplayForm';
 import { DirectUploadReviewRequired } from '@/lib/roleplay/direct-upload-browser-resume';
-afterEach(()=>{cleanup();vi.resetAllMocks();vi.unstubAllGlobals();});
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+afterEach(()=>{
+  cleanup();vi.resetAllMocks();vi.unstubAllGlobals();
+  if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+  else Reflect.deleteProperty(navigator, 'clipboard');
+});
 describe('gated private roleplay form',()=>{
   it.each([
     ['RESERVATION_EXPIRED', 'La reserva de subida ha caducado'],
@@ -25,12 +30,25 @@ describe('gated private roleplay form',()=>{
     const fetcher=vi.fn();
     vi.stubGlobal('fetch',fetcher);
     m.create.mockReturnValue({run:m.upload});
-    m.upload.mockRejectedValue(new DirectUploadReviewRequired(reason));
+    const reference='123e4567-e89b-42d3-a456-426614174000';
+    const writeText=vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText}});
+    m.upload.mockRejectedValue(new DirectUploadReviewRequired(reason,reference));
     render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} openingAssignmentEnabled directUploadEnabled/>);
     fireEvent.change(screen.getByLabelText(/Destinatario ·/),{target:{value:'11'}});
     fireEvent.click(screen.getByRole('button',{name:'Preparar escenario'}));
     fireEvent.click(screen.getByRole('button',{name:'Crear roleplay'}));
     await screen.findByText(new RegExp(message));
+    const field=screen.getByLabelText('Referencia de la reserva directa');
+    expect(field).toHaveProperty('value',reference);
+    expect(field).toHaveProperty('readOnly',true);
+    fireEvent.click(screen.getByRole('button',{name:'Copiar referencia de la reserva'}));
+    await screen.findByText('Referencia copiada.');
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(reference);
+    writeText.mockRejectedValueOnce(new Error('clipboard denied'));
+    fireEvent.click(screen.getByRole('button',{name:'Copiar referencia de la reserva'}));
+    await screen.findByText(/Selecciona y copia el campo de referencia/);
+    expect(field).toHaveProperty('value',reference);
     const retry=screen.getByRole('button',{name:'Reserva pendiente de revisión'});
     expect(retry).toHaveProperty('disabled',true);
     fireEvent.click(retry);
