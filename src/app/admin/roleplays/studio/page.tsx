@@ -2065,8 +2065,11 @@ export default function RoleplayStudioPage() {
   const canUseBoundaryProposal = Boolean(focusedTurn && boundaryProposal && !busy && !draftBusy && !analyzingSilences);
   // Search, pending filters and edits can change the visible focus without a
   // navigation click. Stop stale bounded playback, including compound audio.
+  const previousReviewFocus = useRef<{ mode: boolean; id: string | undefined }>({ mode: false, id: undefined });
   useEffect(() => {
-    if (!focusMode) return;
+    const previous = previousReviewFocus.current;
+    previousReviewFocus.current = { mode: focusMode, id: focusedTurnId };
+    if (!focusMode || (previous.mode && previous.id === focusedTurnId)) return;
     if (previewingId && previewingId !== focusedTurnId && previewingId !== proposalPreviewId) stopPreview();
     if (pairPreviewId && pairPreviewId !== focusedTurnId) stopPairPreview();
   }, [focusMode, focusedTurnId, previewingId, pairPreviewId, proposalPreviewId, stopPreview, stopPairPreview]);
