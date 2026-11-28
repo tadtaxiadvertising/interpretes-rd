@@ -59,7 +59,7 @@ import {
 } from '@/lib/roleplay-studio/long-media';
 import {
   classifySpeakerRole, filterInterpreterCues,
-  titleAfterProfileChange, studioProfileSearchText, type StudioLanguage,
+  titleAfterProfileChange, studioProfileSearchText, studioEditorialProfile, hasStudioProfileLanguageMismatch, type StudioLanguage,
 } from '@/lib/roleplay-studio/speaker-profiles';
 
 
@@ -72,7 +72,7 @@ import {
 // identified and their language is known; keep them in the pending queue.
 const needsReview = (segment: Segment) =>
   segment.speakerRole === 'unknown' || segment.speakerRole === 'interpreter' ||
-  segment.language === 'unknown';
+  segment.language === 'unknown' || hasStudioProfileLanguageMismatch(segment.speakerRole, segment.language);
 
 export default function RoleplayStudioPage() {
   const [audio, setAudio] = useState<File | null>(null);
@@ -1090,7 +1090,8 @@ export default function RoleplayStudioPage() {
     const visible = new Set(visibleIds);
     const pendingIds = new Set(segments.filter(item =>
       visible.has(item.id) && item.language === 'unknown' &&
-      item.speakerRole !== 'interpreter',
+      item.speakerRole !== 'interpreter' &&
+      (!studioEditorialProfile(item.speakerRole) || studioEditorialProfile(item.speakerRole)?.language === language),
     ).map(item => item.id));
     if (!pendingIds.size) return;
     // The choice is intentional and undoable; never infer a clip's language
@@ -1123,10 +1124,10 @@ export default function RoleplayStudioPage() {
     setNotice(`Idioma ${language.toUpperCase()} asignado a ${pendingIds.size} intervenciones pendientes, sin modificar idiomas ya revisados ni al intérprete original. Puedes deshacerlo; verifica cada audio antes de exportar.`);
   };
 
-  const applyMedicalLanguagePattern = (visibleIds: readonly string[]) => {
+  const applyProfileLanguagePattern = (visibleIds: readonly string[]) => {
     const visible = new Set(visibleIds);
     const pending = segments.filter(item => visible.has(item.id) &&
-      item.language === 'unknown' && (item.speakerRole === 'doctor' || item.speakerRole === 'patient'));
+      item.language === 'unknown' && item.speakerRole !== 'interpreter' && studioEditorialProfile(item.speakerRole) !== null);
     if (!pending.length) return;
     const ids = new Set(pending.map(item => item.id));
     subtitleImportRevision.current += 1;
@@ -1139,9 +1140,9 @@ export default function RoleplayStudioPage() {
     setSegments(previous => {
       const order = [...previous].sort((a, b) => a.start - b.start);
       return previous.map(item => {
-        if (!ids.has(item.id) || item.language !== 'unknown' ||
-          (item.speakerRole !== 'doctor' && item.speakerRole !== 'patient')) return item;
-        const language: StudioLanguage = item.speakerRole === 'doctor' ? 'en' : 'es';
+        const profile = studioEditorialProfile(item.speakerRole);
+        if (!ids.has(item.id) || item.language !== 'unknown' || !profile || profile.role === 'interpreter') return item;
+        const language = profile.language;
         return {
           ...item, language,
           title: titleAfterProfileChange(item.title, item.speakerRole, item.language,
@@ -1151,7 +1152,7 @@ export default function RoleplayStudioPage() {
     });
     setTurnActionFeedback(null);
     setError('');
-    setNotice(`Patrón médico EN / paciente ES aplicado a ${pending.length} turnos pendientes. Escucha y confirma los idiomas; puedes deshacer esta acción.`);
+    setNotice(`Patrón cliente EN / hispanohablante ES aplicado a ${pending.length} turnos pendientes. Escucha y confirma los idiomas; puedes deshacer esta acción.`);
   };
 
   const setSpeakerForPendingTurns = (
@@ -1985,7 +1986,7 @@ export default function RoleplayStudioPage() {
     for (const segment of segments) {
       if (needsReview(segment)) pendingReviewCount++;
       if (segment.speakerRole === 'unknown') unidentifiedSpeakerCount++;
-      if (segment.language === 'unknown' && segment.speakerRole !== 'interpreter') unreviewedLanguageCount++;
+      if (segment.speakerRole !== 'interpreter' && (segment.language === 'unknown' || hasStudioProfileLanguageMismatch(segment.speakerRole, segment.language))) unreviewedLanguageCount++;
       if (segment.speakerRole === 'interpreter') originalInterpreterCount++;
     }
     return { pendingReviewCount, reviewedCount: segments.length - pendingReviewCount,
@@ -2007,7 +2008,7 @@ export default function RoleplayStudioPage() {
   const reviewCategories: Array<{ code: StudioReviewCode; label: string }> = [
     { code: 'interpreter', label: 'Intérprete original' },
     { code: 'speaker', label: 'Hablante pendiente' },
-    { code: 'language', label: 'Idioma pendiente' },
+    { code: 'language', label: 'Idioma por revisar' },
     { code: 'range', label: 'Límites de audio' },
     { code: 'overlap', label: 'Solapamientos' },
     { code: 'title', label: 'Títulos' },
@@ -2183,22 +2184,22 @@ export default function RoleplayStudioPage() {
     }
   };
 
-  const { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds, pendingClientIds, pendingSpanishIds } = useMemo(() => {
+  const { pendingLanguageIds, profileLanguagePendingIds, pendingSpeakerIds, pendingClientIds, pendingSpanishIds } = useMemo(() => {
     const pendingLanguageIds: string[] = [];
-    const medicalLanguagePendingIds: string[] = [];
+    const profileLanguagePendingIds: string[] = [];
     const pendingSpeakerIds: string[] = [];
     const pendingClientIds: string[] = [];
     const pendingSpanishIds: string[] = [];
     for (const { segment } of visibleSegments) {
-      if (segment.language === 'unknown' && segment.speakerRole !== 'interpreter') pendingLanguageIds.push(segment.id);
-      if (segment.language === 'unknown' && (segment.speakerRole === 'doctor' || segment.speakerRole === 'patient')) medicalLanguagePendingIds.push(segment.id);
+      if (segment.language === 'unknown' && segment.speakerRole === 'unknown') pendingLanguageIds.push(segment.id);
+      if (segment.language === 'unknown' && segment.speakerRole !== 'interpreter' && studioEditorialProfile(segment.speakerRole)) profileLanguagePendingIds.push(segment.id);
       if (segment.speakerRole === 'unknown') {
         pendingSpeakerIds.push(segment.id);
         if (segment.language === 'unknown' || segment.language === 'en') pendingClientIds.push(segment.id);
         if (segment.language === 'unknown' || segment.language === 'es') pendingSpanishIds.push(segment.id);
       }
     }
-    return { pendingLanguageIds, medicalLanguagePendingIds, pendingSpeakerIds, pendingClientIds, pendingSpanishIds };
+    return { pendingLanguageIds, profileLanguagePendingIds, pendingSpeakerIds, pendingClientIds, pendingSpanishIds };
   }, [visibleSegments]);
   const visiblePendingTurns = useMemo(() => visibleSegments.filter(({ segment }) =>
     focusMode ? !confirmedIds.has(segment.id) : needsReview(segment)), [visibleSegments, focusMode, confirmedIds]);
@@ -2944,7 +2945,7 @@ export default function RoleplayStudioPage() {
             <p role="status" aria-label="Resumen de revisión de intervenciones"
               className="text-xs text-[var(--text-secondary)]">
               Revisión de roles e idiomas: {reviewedCount}/{segments.length} sin pendientes ·
-              {' '}{unidentifiedSpeakerCount} sin hablante · {unreviewedLanguageCount} sin idioma
+              {' '}{unidentifiedSpeakerCount} sin hablante · {unreviewedLanguageCount} con idioma por revisar
               {originalInterpreterCount > 0 &&
                 <> · {originalInterpreterCount} del intérprete original por excluir</>}
             </p>
@@ -3086,20 +3087,20 @@ export default function RoleplayStudioPage() {
               <p className="text-xs text-[var(--text-secondary)]">Solo se asignan turnos sin perfil e idioma compatible. Clasifica al intérprete original individualmente para evitar exclusiones accidentales.</p>
             </section>
           )}
-          {(medicalLanguagePendingIds.length > 0 || pendingLanguageIds.length > 1) && (
+          {(profileLanguagePendingIds.length > 0 || pendingLanguageIds.length > 1) && (
             <section aria-label="Idiomas pendientes" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
               <h3 className="text-sm font-semibold text-[var(--foreground)]">Completar idiomas pendientes</h3>
-              <p className="text-xs text-[var(--text-secondary)]">Para turnos importados o sin idioma confirmado. No modifica los idiomas ya revisados.</p>
-            {medicalLanguagePendingIds.length > 0 && (
-              <button type="button" onClick={() => applyMedicalLanguagePattern(medicalLanguagePendingIds)}
+              <p className="text-xs text-[var(--text-secondary)]">Completa solo idiomas desconocidos. Los idiomas incompatibles requieren escuchar el fragmento y corregir su perfil individualmente.</p>
+            {profileLanguagePendingIds.length > 0 && (
+              <button type="button" onClick={() => applyProfileLanguagePattern(profileLanguagePendingIds)}
                 className="rounded-lg theme-action-primary px-3 py-2 text-xs font-semibold">
-                Aplicar médico EN / paciente ES ({medicalLanguagePendingIds.length} pendientes visibles)
+                Completar cliente EN / hispanohablante ES ({profileLanguagePendingIds.length} pendientes visibles)
               </button>
             )}
           {pendingLanguageIds.length > 1 && (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] px-3 py-2">
               <span className="mr-auto text-xs text-[var(--text-secondary)]">
-                {pendingLanguageIds.length} intervenciones visibles sin idioma. Solo se cambiarán las que aparecen con los filtros actuales.
+                {pendingLanguageIds.length} intervenciones visibles sin idioma ni perfil. Solo se cambiarán las que aparecen con los filtros actuales.
               </span>
               <button type="button" onClick={() => setLanguageForPendingTurns('en', pendingLanguageIds)}
                 className="rounded-lg border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--theme-link)] hover:bg-blue-500/10">
