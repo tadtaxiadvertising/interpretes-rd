@@ -280,7 +280,7 @@ describe('Audio Studio clip review player', () => {
       expect(screen.getByText(/Proyecto vinculado por tamaño, duración y huella parcial, restaurado/)).toBeTruthy();
     });
     expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
+    expect(screen.getByRole('button', { name: 'Cliente · EN' }).getAttribute('aria-pressed')).toBe('true');
     expect(fetcher).not.toHaveBeenCalled();
   });
 
