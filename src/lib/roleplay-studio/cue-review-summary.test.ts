@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cueTrimActivityHint, conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from './cue-review-summary';
+import { removedCueEdge, cueTrimActivityHint, conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from './cue-review-summary';
 
 describe('pre-apply SRT quality summary', () => {
   it('counts unknown speakers, original interpreters and lengthy cues without revealing dialogue', () => {
@@ -131,6 +131,23 @@ describe('pre-apply SRT quality summary', () => {
     }
     expect(proposeSelectedCueEdgeTrim([cue(0, 1), cue(0.5, 2)], [0, 1], 0, 2))
       .toEqual({ start: 0, end: 0.5 });
+  });
+
+  it('returns the exact removed leading or trailing edge without modifying the cue', () => {
+    const cue = { start: 1, end: 4 };
+    expect(removedCueEdge(cue, { start: 1.25, end: 4 })).toEqual({ start: 1, end: 1.25 });
+    expect(removedCueEdge(cue, { start: 1, end: 3.75 })).toEqual({ start: 3.75, end: 4 });
+    expect(cue).toEqual({ start: 1, end: 4 });
+  });
+
+  it('rejects ambiguous, expanded, unchanged and invalid preview intervals', () => {
+    const cue = { start: 1, end: 4 };
+    for (const proposal of [
+      { start: 1, end: 4 }, { start: 1.25, end: 3.75 },
+      { start: 0.9, end: 4 }, { start: 1, end: 4.1 },
+      { start: 4, end: 4 }, { start: NaN, end: 4 }, { start: 1, end: Infinity },
+    ]) expect(removedCueEdge(cue, proposal)).toBeNull();
+    expect(removedCueEdge({ start: -1, end: 4 }, { start: 0, end: 4 })).toBeNull();
   });
 
   it('warns only when the removed edge intersects detected acoustic activity', () => {
