@@ -82,7 +82,15 @@ La prueba de rutas ejecuta los handlers reales de creación y consulta de recibo
 
 En Gestión de roleplays, abrir «Diagnóstico de creación». Esta pantalla exige una sesión administrativa, muestra el modo de configuración del servicio Next.js y el SHA de build si está disponible y es válido. El botón «Comprobar disponibilidad» ejecuta el mismo control acotado de catálogo y permisos que usa la creación con clave, con la conexión Prisma real del servicio. No consulta el catálogo al abrir la pantalla inicialmente ni al precargar el enlace. No instala herramientas, ejecuta migraciones, lee recibos individuales, concede permisos, activa banderas ni muestra credenciales. El resultado es una condición necesaria, no aprobación de activación; si falta SHA, verificar procedencia mediante el procedimiento de Easypanel.
 
-Tras una comprobación explícita, la pantalla ofrece un resumen seleccionable para registrar fecha UTC de finalización, SHA validado o no informado, modo y resultado puntual. No contiene datos de usuarios, credenciales ni recibos. No es una certificación de identidad del proyecto, de la versión esperada ni una aprobación de activación. No se genera evidencia antes de comprobar la disponibilidad.
+Tras una comprobación explícita, la pantalla ofrece «Copiar diagnóstico» para copiar exactamente el resumen visible: fecha UTC de finalización, SHA validado o no informado, modo y resultado puntual. Si el portapapeles no está disponible o el navegador deniega el permiso, se conserva el resumen seleccionable para copia manual; la confirmación de éxito solo aparece tras completar la escritura. No contiene datos de usuarios, credenciales ni recibos. No es una certificación de identidad del proyecto, de la versión esperada ni una aprobación de activación. No se genera evidencia antes de comprobar la disponibilidad.
+
+### Verificación operativa después de un despliegue autorizado
+
+1. Verificar el SHA real del servicio contra la versión aprobada y la identidad del proyecto; no deducirlos de un PR integrado ni de CI verde. Respetar cualquier congelación de despliegue vigente.
+2. Con una cuenta administrativa autorizada, abrir «Diagnóstico de creación». Confirmar que no aparece evidencia ni botón de copia antes de solicitar la comprobación.
+3. Ejecutar «Comprobar disponibilidad», copiar el resumen y contrastar localmente el texto con lo mostrado. Comprobar que el mensaje de éxito aparece solo cuando se ha copiado. Si falla el portapapeles, usar selección manual. No enviar el contenido a servicios externos para verificarlo.
+4. Repetir la comprobación y confirmar que el resultado y la fecha pertenecen a la nueva consulta. Verificar legibilidad y acceso al control en móvil y en ambos temas.
+5. Registrar el SHA esperado y observado, el resultado y la fecha en el registro operativo autorizado. Si la identidad, el SHA o el catálogo no se pueden confirmar, mantener el piloto sin activar. Esta verificación no exige crear sesiones, subir audio, ejecutar migraciones ni cambiar banderas.
 
 ## Reconciliación y rollback
 
