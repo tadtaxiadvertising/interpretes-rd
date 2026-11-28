@@ -339,6 +339,30 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.play).not.toHaveBeenCalled();
   });
 
+  it('opens a correction hidden by an exact voice-group filter without changing any profile', async () => {
+    const player = selectAudio();
+    const source = new File(['mock'], 'groups.srt', { type: 'text/plain' });
+    Object.defineProperty(source, 'text', { value: async () => [
+      '1','00:00:00,000 --> 00:00:02,000','Speaker 1: Hello','',
+      '2','00:00:02,000 --> 00:00:04,000','Speaker 10: Hola',
+    ].join('\n') });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), { target: { files: [source] } });
+    });
+    fireEvent.change(screen.getByLabelText('Etiqueta de voz'), { target: { value: 'speaker 1' } });
+    expect(profileGroups()).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Centro de revisión (2)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir perfil de intervención 2' }));
+    expect(screen.getByLabelText('Etiqueta de voz')).toHaveProperty('value', '');
+    expect(screen.getByRole('searchbox', { name: 'Buscar intervenciones' })).toHaveProperty('value', '');
+    expect(screen.getByText('Intervención 2 de 2 · 2 de 2 visibles')).toBeTruthy();
+    expect(document.activeElement).toBe(within(profileGroup()).getByRole('button', { name: 'Cliente · EN' }));
+    expect(metadata(profileGroup()).role).toBe('unknown');
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Volver a lista' }));
+    expect(roles()).toEqual(['unknown', 'unknown']);
+  });
+
   it('opens the precise correction field without changing cuts or playing audio', () => {
     const player = selectAudio();
     for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
@@ -629,7 +653,8 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(within(quality).getByRole('button', { name: 'Corregir primera incidencia' }));
     expect(screen.getByRole('button', { name: 'Editar' }).getAttribute('aria-pressed')).toBe('true');
     expect(metadata(profileGroup()).role).toBe('unknown');
-    expect(document.activeElement?.id).toBe('studio-intervention-studio-3');
+    expect(document.activeElement).toBe(within(profileGroup()).getByRole('button', { name: 'Cliente · EN' }));
+    expect(profileGroup().closest('article')?.id).toBe('studio-intervention-studio-3');
     expect(player.play).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }));
     fireEvent.click(within(screen.getByRole('region', { name: 'Calidad antes de publicar' })).getByRole('button', { name: 'Ver todas las pendientes' }));
