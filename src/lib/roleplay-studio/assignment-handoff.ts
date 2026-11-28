@@ -35,8 +35,20 @@ export function stageLocalWavHandoff(token: string, files: File[], topic?: Studi
 }
 
 function stage(token: string, files: File[], kind: 'zip' | 'wav', topic?: StudioTopicSelection | null) {
+  const selection = topic ? parseEditorialRoleplayTopic(topic.topic, topic.subtopic) : null;
+  if (pending && pending.expiresAt <= Date.now()) clearStudioHandoff();
+  if (pending?.token === token) {
+    // A repeated click may update the editorial topic, but must not replace
+    // the prepared media or extend its original lifetime.
+    if (pending.kind !== kind || pending.files.length !== files.length ||
+        pending.files.some((file, index) => file !== files[index])) {
+      throw new Error('La referencia temporal ya corresponde a otro paquete.');
+    }
+    pending.topic = selection;
+    return;
+  }
   clearStudioHandoff();
-  pending = { token, files: [...files], kind, topic: topic ? parseEditorialRoleplayTopic(topic.topic, topic.subtopic) : null, expiresAt: Date.now() + HANDOFF_TTL_MS };
+  pending = { token, files: [...files], kind, topic: selection, expiresAt: Date.now() + HANDOFF_TTL_MS };
   timer = setTimeout(() => clearStudioHandoff(token), HANDOFF_TTL_MS);
 }
 
