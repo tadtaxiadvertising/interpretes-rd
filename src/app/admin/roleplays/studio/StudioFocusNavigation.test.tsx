@@ -16,6 +16,7 @@ function setup(overrides: Partial<ComponentProps<typeof StudioFocusNavigation>> 
     visibleSegments:turns,focusedTurn:turns[1],focusIndex:1,totalTurns:5,workspaceActive:true,
     canConfirmFocused:true,editingDisabled:false,confirmed:false,focusedReviewIssue:null,
     sourceProfileCount:2,previewActive:false,playhead:10,duration:90,
+    listenAfterConfirm:false,onListenAfterConfirmChange:vi.fn(),
     onSelect:vi.fn(),onConfirm:vi.fn(),onExclude:vi.fn(),onApplyProfile:vi.fn(),
     onPreview:vi.fn(),onPause:vi.fn(),onSkip:vi.fn(),onSeek:vi.fn(),...overrides,
   };
@@ -23,6 +24,18 @@ function setup(overrides: Partial<ComponentProps<typeof StudioFocusNavigation>> 
 }
 
 describe('focused intervention navigation',()=>{
+  it('delegates opt-in without starting playback or confirming a turn',()=>{
+    const {props,rerender}=setup();
+    const optIn=screen.getByRole('checkbox',{name:'Escuchar siguiente al confirmar'});
+    expect(optIn).toHaveProperty('checked',false);
+    fireEvent.click(optIn);
+    expect(props.onListenAfterConfirmChange).toHaveBeenCalledExactlyOnceWith(true);
+    expect(props.onPreview).not.toHaveBeenCalled();
+    expect(props.onConfirm).not.toHaveBeenCalled();
+    rerender(<StudioFocusNavigation {...props} listenAfterConfirm editingDisabled/>);
+    expect(optIn).toHaveProperty('checked',true);
+    expect(optIn).toHaveProperty('disabled',true);
+  });
   it('uses visible neighbors and preserves original numbering without starting playback',()=>{
     const {props}=setup();
     expect(screen.getByText('Intervención 3 de 5 · 2 de 3 visibles')).toBeTruthy();
