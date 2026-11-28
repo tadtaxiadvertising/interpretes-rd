@@ -71,7 +71,7 @@ export async function verifyPrismaCreationLifecycle(first: PrismaClient, second:
     assert.equal(init?.body, JSON.stringify({ requestKey: key }));
     return Response.json({ success: true, data: await lookupRoleplayCreationReceipt(second, actor, key) });
   };
-  assert.deepEqual(await recoverSingleRoleplayCreation(key, 1, transport), { status: 'COMPLETED' });
+  assert.deepEqual(await recoverSingleRoleplayCreation(key, 1, transport), { status: 'COMPLETED', sessionId: winner });
   await first.$executeRaw`DELETE FROM public.roleplay_sessions WHERE id=${winner}`;
   assert.deepEqual(await lookupRoleplayCreationReceipt(second, actor, key), { status: 'REVIEW_REQUIRED' });
   assert.deepEqual(await recoverSingleRoleplayCreation(key, 1, transport), { status: 'REVIEW_REQUIRED' });

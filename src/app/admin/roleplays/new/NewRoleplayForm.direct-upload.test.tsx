@@ -67,8 +67,10 @@ describe('gated creation receipt recovery form', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     fireEvent.click(check);
     await screen.findByText(/Esto no demuestra que la creación haya fallado/);
+    expect(screen.queryByRole('link', { name: 'Ver roleplay recuperado' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Consultar resultado sin reenviar audios' }));
     await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
     expect(fetcher).toHaveBeenCalledTimes(3);
     for (const call of fetcher.mock.calls.slice(1)) {
       expect(call[0]).toBe('/api/admin/roleplays/creation-receipt');
@@ -91,6 +93,7 @@ describe('gated creation receipt recovery form', () => {
     fireEvent.change(input, { target: { value: 'rp1:' + key + ':1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
     await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store', signal: expect.any(AbortSignal),
     });
@@ -118,6 +121,7 @@ describe('gated creation receipt recovery form', () => {
     expect(input.hasAttribute('aria-describedby')).toBe(false);
     await user.keyboard('{Enter}');
     await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
     expect(fetcher).toHaveBeenCalledExactlyOnceWith('/api/admin/roleplays/creation-receipt', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store', signal: expect.any(AbortSignal),
     });
@@ -146,6 +150,7 @@ describe('gated creation receipt recovery form', () => {
     expect(link.getAttribute('rel')).toBe('noopener noreferrer');
     fireEvent.click(screen.getByRole('button', { name: 'Consultar resultado sin reenviar audios' }));
     await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
     expect(exitPrevented()).toBe(false);
     expect(screen.getByRole('link', { name: 'Consultar roleplays existentes' }).hasAttribute('target')).toBe(false);
     unmount();
@@ -188,6 +193,7 @@ describe('gated creation receipt recovery form', () => {
     expect(screen.queryByText('private diagnostic')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Consultar resultado sin reenviar audios' }));
     await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(screen.getByRole('link', { name: 'Ver roleplay recuperado' }).getAttribute('href')).toBe('/admin/roleplays/session-123');
     expect(fetcher).toHaveBeenCalledTimes(2);
     for (const call of fetcher.mock.calls) {
       expect(call[0]).toBe('/api/admin/roleplays/creation-receipt');

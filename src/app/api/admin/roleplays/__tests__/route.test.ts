@@ -418,7 +418,7 @@ describe('POST /api/admin/roleplays', () => {
         expect(response.headers.get('Cache-Control')).toBe('private, no-store');
         return response;
       };
-      expect(await recoverSingleRoleplayCreation(requestKey, 1, transport)).toEqual({ status: 'COMPLETED' });
+      expect(await recoverSingleRoleplayCreation(requestKey, 1, transport)).toEqual({ status: 'COMPLETED', sessionId: 'sess-1' });
 
       // Same UUID cannot expose a receipt belonging to another administrator.
       vi.mocked(validateAction).mockResolvedValueOnce({
