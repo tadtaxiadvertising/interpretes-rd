@@ -21,7 +21,7 @@ export function formatCreationRecoveryReference(reference: CreationRecoveryRefer
 
 export type SingleCreationRecovery =
   | { status: 'COMPLETED' }
-  | { status: 'NOT_FOUND' | 'IN_PROGRESS' | 'REVIEW_REQUIRED' | 'UNAVAILABLE' };
+  | { status: 'NOT_FOUND' | 'IN_PROGRESS' | 'REVIEW_REQUIRED' | 'UNAVAILABLE' | 'ACCESS_REQUIRED' | 'ENDPOINT_UNAVAILABLE' };
 
 export const CREATION_RECEIPT_TIMEOUT_MS = 15_000;
 
@@ -62,6 +62,9 @@ async function queryReceipt(
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ requestKey }), cache: 'no-store', signal,
     });
+    // HTTP failures are not ledger states. Never read or expose their body.
+    if (response.status === 401 || response.status === 403) return { status: 'ACCESS_REQUIRED' };
+    if (response.status === 404) return { status: 'ENDPOINT_UNAVAILABLE' };
     if (!response.ok) return { status: 'UNAVAILABLE' };
     const payload: unknown = await response.json();
     if (!payload || typeof payload !== 'object' || !('success' in payload) ||
