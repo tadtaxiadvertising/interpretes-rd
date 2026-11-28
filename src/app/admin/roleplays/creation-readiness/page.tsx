@@ -3,6 +3,7 @@ import CopyDiagnostic from './copy-diagnostic';
 import SavedReservationLookup from './saved-reservation-lookup';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
+import { inspectDirectRolloutMetadata } from '@/lib/roleplay/direct-upload-rollout-inspection';
 import { inspectDirectUploadCatalog } from '@/lib/roleplay/direct-upload-catalog-readiness';
 import { readDirectUploadPilotConfig } from '@/lib/roleplay/direct-upload-pilot-config';
 import { readCreationPilotConfig, type CreationPilotMode } from '@/lib/roleplay/creation-pilot-config';
@@ -27,7 +28,7 @@ const modeGuidance: Record<CreationPilotMode, string> = {
 export default async function CreationReadinessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ check?: string | string[]; checkDirect?: string | string[] }>;
+  searchParams: Promise<{ check?: string | string[]; checkDirect?: string | string[]; checkRollout?: string | string[] }>;
 }) {
   const auth = await validateAction('admin');
   if ('error' in auth || auth.user.role !== 'admin') {
@@ -43,15 +44,18 @@ export default async function CreationReadinessPage({
   const params = await searchParams;
   const requested = params.check === '1';
   const directRequested = params.checkDirect === '1';
+  const rolloutRequested = params.checkRollout === '1';
   const ready = requested ? await isCreationLedgerReady(prisma) : null;
   const directCatalog = directRequested ? await inspectDirectUploadCatalog(prisma) : null;
+  const rollout = rolloutRequested ? await inspectDirectRolloutMetadata(prisma) : null;
   const reservationLabels = { absent: 'Ausente', incomplete: 'Incompleto', 'catalog-ready': 'Estructura reconocida', unavailable: 'No disponible' } as const;
   const permissionLabels = { recognized: 'Permisos reconocidos', 'review-required': 'Requiere revisión de permisos', unavailable: 'No disponible' } as const;
   const budgetLabels = { absent: 'Ausente', incomplete: 'Incompleto', 'accounting-consistent': 'Contabilidad coherente', 'review-required': 'Requiere revisión', unavailable: 'No disponible' } as const;
 
   // Record when this check finished, not a build timestamp or an approval.
   // Only fixed labels and validated build metadata enter the evidence.
-  const evidence = ready === null && directCatalog === null ? null : [
+  const metadataLabels: Record<string, string> = { 'present-private': 'Estructura privada reconocida', 'metadata-ready': 'Metadatos reconocidos', 'review-required': 'Requiere revisión', missing: 'Ausente' };
+  const evidence = ready === null && !directRequested && !rolloutRequested ? null : [
     'Diagnóstico de creación segura — Intérpretes RD',
     'Fecha de comprobación (UTC): ' + new Date().toISOString(),
     'SHA del servicio: ' + (buildId ?? 'No informado'),
@@ -64,7 +68,9 @@ export default async function CreationReadinessPage({
     'Presupuesto de objetos: ' + (directCatalog ? budgetLabels[directCatalog.budget] : 'No comprobado'),
     ...(directCatalog?.capacity ? ['Cupos contables: ' + directCatalog.capacity.allocatedSlots + ' de ' + directCatalog.capacity.maxSlots + '; restantes: ' + directCatalog.capacity.remainingSlots] : []),
     'Permisos de registros internos: ' + (directCatalog ? permissionLabels[directCatalog.permissions.state] : 'No comprobados'),
-    'Subida directa: permisos de otras tablas, operaciones reales, Storage y configuración del navegador no comprobados.',
+    'Estructura de publicación y apertura: ' + (rollout ? rollout.schemaMetadataReady ? 'Metadatos reconocidos' : 'Requiere revisión' : rolloutRequested ? 'No disponible' : 'No comprobada'),
+    ...(rollout ? rollout.buckets.map(bucket => 'Bucket ' + bucket.id + ': ' + metadataLabels[bucket.state]) : []),
+    'Subida directa: acceso real a Storage, políticas efectivas de objetos y configuración del navegador no comprobados.',
     'Resultado puntual; no autoriza activar el piloto.',
   ].join('\n');
 
@@ -159,6 +165,32 @@ export default async function CreationReadinessPage({
           <input type="hidden" name="checkDirect" value="1" />
           {requested && <input type="hidden" name="check" value="1" />}
           <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{directRequested ? 'Volver a comprobar catálogo y presupuesto' : 'Comprobar catálogo y presupuesto'}</button>
+        </form>
+      </section>
+      <section aria-label="Estructura de publicación y almacenamiento" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
+        <h2 className="font-semibold text-[var(--foreground)]">Estructura de publicación y almacenamiento</h2>
+        <p className="text-sm text-[var(--text-secondary)]">Revisa los metadatos de las tablas de publicación y apertura, los disparadores esperados y la configuración de los buckets privados. No lee objetos ni genera enlaces firmados.</p>
+        <p role="status" className="text-sm font-medium text-[var(--foreground)]">{rollout ? rollout.schemaMetadataReady ? 'Estructura de publicación y apertura reconocida' : 'Estructura de publicación y apertura requiere revisión' : rolloutRequested ? 'Metadatos no disponibles desde esta conexión' : 'Metadatos sin comprobar'}</p>
+        {rollout && <>
+          <dl className="space-y-2 text-sm">
+            <div className="flex flex-wrap justify-between gap-2"><dt>Tablas reconocidas</dt><dd>{rollout.tableChecks.filter(t => t.state === 'present-private').length} de {rollout.tableChecks.length}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2"><dt>Disparadores reconocidos</dt><dd>{rollout.triggerChecks.filter(t => t.enabled).length} de {rollout.triggerChecks.length}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2"><dt>Columnas reconocidas</dt><dd>{Object.values(rollout.columnChecks).filter(Boolean).length} de {Object.keys(rollout.columnChecks).length}</dd></div>
+            {rollout.buckets.map(bucket => <div key={bucket.id} className="space-y-1"><dt className="break-all font-medium">{bucket.id}</dt><dd>{metadataLabels[bucket.state]}</dd><dd className="text-xs text-[var(--text-secondary)]">Requisito: privado, 15 MiB por archivo; {bucket.id === 'roleplay-audio-private' ? 'MP3, WAV, WebM y MP4' : 'WebM, MP4, OGG y MP3'} de audio.</dd></div>)}
+          </dl>
+          <details className="space-y-2 text-sm">
+            <summary className="cursor-pointer font-semibold text-[var(--theme-link)]">Ver comprobaciones de estructura</summary>
+            <dl className="space-y-2 text-xs">
+              {rollout.tableChecks.map(t => <div key={t.name}><dt className="break-all">{t.name}</dt><dd>{metadataLabels[t.state]}</dd></div>)}
+              {rollout.triggerChecks.map(t => <div key={t.name}><dt className="break-all">{t.name}</dt><dd>{t.enabled ? 'Reconocido' : 'Requiere revisión'}</dd></div>)}
+              {Object.entries(rollout.columnChecks).map(([name, present]) => <div key={name}><dt>{({ opening: 'Apertura requerida', capability: 'Estado de capacidad', releaseGate: 'Control de liberación', assignmentHash: 'Huella de asignación' } as Record<string, string>)[name]}</dt><dd>{present ? 'Reconocida' : 'Requiere revisión'}</dd></div>)}
+            </dl>
+          </details>
+        </>}
+        <p className="text-sm text-[var(--text-secondary)]">Estos resultados no comprueban las políticas efectivas de Storage, el contenido de los objetos, los permisos de la API ni el funcionamiento real de los disparadores. No autorizan activar el piloto.</p>
+        <form action="/admin/roleplays/creation-readiness" method="get">
+          <input type="hidden" name="checkRollout" value="1" />
+          <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{rolloutRequested ? 'Volver a comprobar estructura y buckets' : 'Comprobar estructura y buckets'}</button>
         </form>
       </section>
       {direct.reservationLookupConfigured && <SavedReservationLookup />}
