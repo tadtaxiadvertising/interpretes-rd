@@ -23,16 +23,44 @@ export type SingleCreationRecovery =
   | { status: 'COMPLETED' }
   | { status: 'NOT_FOUND' | 'IN_PROGRESS' | 'REVIEW_REQUIRED' | 'UNAVAILABLE' };
 
-/** Query one existing attempt. No media, destination metadata or new creation. */
+export const CREATION_RECEIPT_TIMEOUT_MS = 15_000;
+
+/** Query one existing attempt, with a deadline covering headers and JSON. */
 export async function recoverSingleRoleplayCreation(
   requestKey: string,
   expectedScenarioCount: number,
   fetcher: typeof fetch = fetch,
 ): Promise<SingleCreationRecovery> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<SingleCreationRecovery>(resolve => {
+    timer = setTimeout(() => {
+      resolve({ status: 'UNAVAILABLE' });
+      controller.abort();
+    }, CREATION_RECEIPT_TIMEOUT_MS);
+  });
+  try {
+    // Race even if an injected transport fails to honor abort. A late
+    // response cannot change the returned result or release the draft.
+    return await Promise.race([
+      deadline,
+      queryReceipt(requestKey, expectedScenarioCount, fetcher, controller.signal),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function queryReceipt(
+  requestKey: string,
+  expectedScenarioCount: number,
+  fetcher: typeof fetch,
+  signal: AbortSignal,
+): Promise<SingleCreationRecovery> {
   try {
     const response = await fetcher('/api/admin/roleplays/creation-receipt', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ requestKey }), cache: 'no-store',
+      body: JSON.stringify({ requestKey }), cache: 'no-store', signal,
     });
     if (!response.ok) return { status: 'UNAVAILABLE' };
     const payload: unknown = await response.json();
