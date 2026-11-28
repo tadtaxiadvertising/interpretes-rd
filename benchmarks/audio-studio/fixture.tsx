@@ -53,6 +53,7 @@ const focusScenario = new URLSearchParams(location.search).has('focus');
 const visibleSegments = active.map((segment, index) => ({ segment, index }));
 let focusIndex = 1;
 let previewActive = false;
+let listenAfterConfirm = false;
 const selectFocus = (id: string) => {
   const index = visibleSegments.findIndex(item => item.segment.id === id);
   if (index >= 0) { focusIndex = index; previewActive = false; renderProject(); }
@@ -70,7 +71,9 @@ function renderProject() {
     {focusScenario && <StudioFocusNavigation visibleSegments={visibleSegments} focusedTurn={visibleSegments[focusIndex]}
       focusIndex={focusIndex} totalTurns={count} workspaceActive canConfirmFocused editingDisabled={false}
       confirmed={false} focusedReviewIssue={null} sourceProfileCount={2} previewActive={previewActive}
-      playhead={position} duration={duration} onSelect={selectFocus} onConfirm={advanceFocus}
+      playhead={position} duration={duration} onFocusCard={onSelect}
+      listenAfterConfirm={listenAfterConfirm} onListenAfterConfirmChange={enabled => { listenAfterConfirm = enabled; renderProject(); }}
+      onSelect={selectFocus} onConfirm={advanceFocus}
       onExclude={advanceFocus} onApplyProfile={onSelect} onPreview={togglePreview} onPause={pausePreview}
       onSkip={seconds => seekFocus(position + seconds)} onSeek={seekFocus}/>}
 
