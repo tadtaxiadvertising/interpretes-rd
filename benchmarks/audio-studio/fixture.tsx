@@ -74,6 +74,7 @@ function renderProject() {
       playhead={position} duration={duration} onFocusCard={onSelect}
       listenAfterConfirm={listenAfterConfirm} onListenAfterConfirmChange={enabled => { listenAfterConfirm = enabled; renderProject(); }}
       onSelect={selectFocus} onConfirm={advanceFocus}
+      listenAfterConfirm={false} onListenAfterConfirmChange={onSelect} onSelect={selectFocus} onConfirm={advanceFocus}
       onExclude={advanceFocus} onApplyProfile={onSelect} onPreview={togglePreview} onPause={pausePreview}
       onSkip={seconds => seekFocus(position + seconds)} onSeek={seekFocus}/>}
 
