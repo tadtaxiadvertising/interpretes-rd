@@ -59,7 +59,7 @@ import {
 } from '@/lib/roleplay-studio/long-media';
 import {
   classifySpeakerRole, filterInterpreterCues,
-  titleAfterProfileChange, type StudioLanguage,
+  titleAfterProfileChange, studioProfileSearchText, type StudioLanguage,
 } from '@/lib/roleplay-studio/speaker-profiles';
 
 
@@ -2019,7 +2019,7 @@ export default function RoleplayStudioPage() {
     .map((segment, index) => ({ segment, index }))
     .filter(({ segment }) => (!showPendingReview || (focusMode ? !confirmedIds.has(segment.id) : needsReview(segment))) &&
       (!query || [segment.title, segment.scriptPrompt, captionTexts[segment.id] || '',
-        segment.speakerRole, segment.language]
+        segment.speakerRole, segment.language, studioProfileSearchText(segment.speakerRole)]
         .some(value => value.toLocaleLowerCase().includes(query)))),
     [orderedSegments, showPendingReview, focusMode, confirmedIds, query, captionTexts]);
   const previewablePairIds = useMemo(() => {
@@ -2852,7 +2852,7 @@ export default function RoleplayStudioPage() {
             <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
               <input type="search" aria-label="Buscar intervenciones" value={segmentSearch}
                 onChange={event => setSegmentSearch(event.currentTarget.value)}
-                placeholder="Buscar turno, hablante o nota…"
+                placeholder="Buscar cliente, hispanohablante o nota…"
                 className="min-h-11 w-full min-w-0 rounded-lg sm:min-h-0 sm:w-48 border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-2 py-1.5 text-xs text-[var(--theme-control-text)] placeholder:text-[var(--text-tertiary)]"/>
               <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 sm:min-h-0 text-xs text-[var(--foreground)]">
                 <input type="checkbox" checked={showPendingReview}
