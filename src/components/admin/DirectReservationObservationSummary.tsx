@@ -10,22 +10,26 @@ function utc(value: string) {
 /** Snapshot of the server ledger, never live Storage or publication evidence. */
 export default function DirectReservationObservationSummary({
   result,
-}: { result: DirectReservationObservationResult | 'CHECKING' }) {
-  if (result === 'CHECKING') return <p role="status" className="text-sm text-[var(--foreground)]">{directReservationObservationLabels.CHECKING}</p>;
-  const { status, progress } = result;
+}: { result: DirectReservationObservationResult | 'CHECKING' | null }) {
+  const observation = result === 'CHECKING' ? null : result;
+  const status = result === 'CHECKING' ? 'CHECKING' : observation?.status;
+  const progress = observation?.progress;
   const seconds = progress ? Math.max(0, Math.ceil((Date.parse(progress.expiresAt) - Date.parse(progress.observedAt)) / 1000)) : 0;
   return (
-    <div className="space-y-2" role="status">
-      <p className="text-sm text-[var(--foreground)]">{directReservationObservationLabels[status]}</p>
-      {status === 'PUBLICATION_CONFIRMED' && result.sessionId && (
-        <Link href={`/admin/roleplays/${encodeURIComponent(result.sessionId)}`} prefetch={false} target="_blank" rel="noopener noreferrer"
-          className="inline-flex min-h-11 items-center rounded-xl theme-action-primary px-4 py-2 text-sm font-semibold">Ver roleplay confirmado (nueva pestaña)</Link>
+    <div className="space-y-2">
+      <p role="status" aria-atomic="true" className="text-sm text-[var(--foreground)]">{status ? directReservationObservationLabels[status] : ''}</p>
+      {status === 'PUBLICATION_CONFIRMED' && observation?.sessionId && (
+        <Link href={`/admin/roleplays/${encodeURIComponent(observation.sessionId)}`} prefetch={false} target="_blank" rel="noopener noreferrer"
+          className="inline-flex min-h-11 w-full items-center justify-center rounded-xl theme-action-primary px-4 py-2 text-center text-sm font-semibold sm:w-auto">Ver roleplay confirmado (nueva pestaña)</Link>
+      )}
+      {status === 'PUBLICATION_RECORDED' && (
+        <Link href="/admin/roleplays" prefetch={false} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes (nueva pestaña)</Link>
       )}
       {progress && (
         <div className="space-y-2 rounded-xl border border-[var(--border)] p-3">
           <label className="block text-sm text-[var(--foreground)]">
             Verificación registrada: {progress.recordedVerifiedCount} de {progress.total} audios
-            <progress className="mt-1 block w-full" max={progress.total} value={progress.recordedVerifiedCount}/>
+            <progress className="mt-2 block h-3 w-full accent-[var(--theme-link)]" max={progress.total} value={progress.recordedVerifiedCount}/>
           </label>
           <dl className="space-y-1 text-sm">
             <div><dt className="text-[var(--text-secondary)]">Vencimiento registrado</dt><dd className="text-[var(--foreground)]"><time dateTime={progress.expiresAt}>{utc(progress.expiresAt)}</time></dd></div>
