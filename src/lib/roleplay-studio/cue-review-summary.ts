@@ -1,5 +1,6 @@
 import { classifySpeakerRole } from './speaker-profiles';
 import type { TimedTranscriptCue } from './transcript';
+import type { LocalVadSnapshot } from './local-vad';
 
 /**
  * Read-only, local metadata for the SRT review. These counts never infer
@@ -91,6 +92,39 @@ export function proposeSelectedCueEdgeTrim(
   const trimmed = (start - cue.start) + (cue.end - end);
   if (trimmed <= 0 || trimmed > 0.5 + 1e-9 || end - start < 0.5 - 1e-9) return null;
   return { start, end };
+}
+
+export type CueTrimActivityHint = 'detected' | 'not-detected' | 'unavailable';
+
+/**
+ * Advisory only: padded VAD regions can contain silence, and missing regions
+ * may hide quiet speech, short events or activity beyond the detector cap.
+ * Never treat a negative result as evidence of a safe word boundary.
+ */
+export function cueTrimActivityHint(
+  cue: Pick<TimedTranscriptCue, 'start' | 'end'>,
+  proposal: Pick<TimedTranscriptCue, 'start' | 'end'>,
+  snapshot: LocalVadSnapshot | null,
+): CueTrimActivityHint {
+  if (snapshot?.status !== 'ready' ||
+      ![cue.start, cue.end, proposal.start, proposal.end].every(Number.isFinite) ||
+      cue.start < 0 || proposal.start < cue.start || proposal.end > cue.end ||
+      proposal.end <= proposal.start ||
+      (proposal.start === cue.start && proposal.end === cue.end) ||
+      snapshot.segments.some(region => !Number.isFinite(region.start) ||
+        !Number.isFinite(region.end) || region.start < 0 || region.end <= region.start)) {
+    return 'unavailable';
+  }
+  const removed = [
+    { start: cue.start, end: proposal.start },
+    { start: proposal.end, end: cue.end },
+  ].filter(range => range.end > range.start);
+  if (snapshot.segments.some(region => removed.some(range =>
+    range.start < region.end && region.start < range.end))) return 'detected';
+  // The detector caps its output at 100 regions; do not imply coverage of
+  // the remaining audio or of an empty result.
+  if (snapshot.segments.length === 0 || snapshot.segments.length >= 100) return 'unavailable';
+  return 'not-detected';
 }
 
 /** Identify candidate turns requiring an operator's attention, without inferring voices. */
