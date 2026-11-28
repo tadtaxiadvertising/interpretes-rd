@@ -35,8 +35,6 @@ export default function StudioFocusNavigation({
   visibleSegments, focusedTurn, focusIndex, totalTurns, workspaceActive,
   canConfirmFocused, editingDisabled, confirmed, focusedReviewIssue, sourceProfileCount,
   previewActive, playhead, duration, onFocusCard, onSelect, onConfirm, onExclude, onApplyProfile,
-  onPreview, onPause, onSkip, onSeek,
-  previewActive, playhead, duration, onSelect, onConfirm, onExclude, onApplyProfile,
   onPreview, onPause, onSkip, onSeek, listenAfterConfirm, onListenAfterConfirmChange,
 }: Props) {
   return (
