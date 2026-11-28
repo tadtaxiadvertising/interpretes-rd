@@ -52,6 +52,13 @@ export default function StudioFinalizationPanel({
   onSelectPart, onSaveDraft, onDownloadPart, onChangeMode, onReleaseMp3, onEnableMp3,
   onPrepareLocal, onPrepareServer, onDownload, onConfirmNavigation, onContinue,
 }: Props) {
+  const directPreparationAvailable = !localOnly || wavSource || localMp3Eligible;
+  const localPlanRecommended = localOnly && (!directPreparationAvailable ||
+    (wavSource && Boolean(currentWavPlan && (currentWavPlan.issue || !currentWavPlan.parts.length))));
+  const partDownloadRecommended = !readyAssignment && segmentCount > ROLEPLAY_MAX_SCENARIOS &&
+    (localPlanRecommended || !localOnly);
+  const downloadRecommended = !readyAssignment && localPlanRecommended && segmentCount > 0 &&
+    segmentCount <= ROLEPLAY_MAX_SCENARIOS;
   const nextStep = !hasAudio || duration <= 0
     ? 'Selecciona una grabación válida para empezar.'
     : busy ? 'Hay una preparación en curso. Espera a que termine antes de continuar.'
@@ -105,11 +112,11 @@ export default function StudioFinalizationPanel({
           </label>
           <button type="button" disabled={!selectedPublicationPart || busy || draftBusy || analyzingSilences}
             onClick={onDownloadPart}
-            className="rounded-lg theme-action-primary px-3 py-2 text-sm font-semibold disabled:opacity-50">Descargar parte seleccionada (JSON local)</button>
+            className={`min-h-11 rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50 ${partDownloadRecommended ? 'theme-action-primary' : 'theme-action-secondary'}`}>Descargar parte seleccionada (JSON local)</button>
         </>}
       </div>
     )}
-    <p className="text-sm text-[var(--text-secondary)]">Escucha los turnos y revisa los avisos. Prepara los cortes y continúa a asignación, o guarda un paquete para utilizarlo después.</p>
+    <p className="text-sm text-[var(--text-secondary)]">Prepara los cortes revisados y continúa a asignación. Si prefieres trabajar fuera del navegador, conserva el plan o el paquete.</p>
       {hasAudio && duration > 0 && !sourceRequiresLocal && !hasCompound && (
         <fieldset aria-label="Modo de exportación del MP3" className="rounded-lg border border-[var(--border)] bg-[var(--theme-surface-muted)] p-3">
           <legend className="px-1 text-sm font-semibold text-[var(--foreground)]">Dónde preparar los cortes</legend>
@@ -118,7 +125,7 @@ export default function StudioFinalizationPanel({
               checked={!allowServerZipExport}
               onChange={() => onChangeMode('local')}
               className="mt-1 accent-cyan-400"/>
-            Local (predeterminado): no subir el MP3. Prepara cortes compatibles en el navegador o usa el exportador de escritorio.
+            Local (predeterminado): no subir el MP3.
           </label>
           <label className="mt-2 flex items-start gap-2 text-sm text-[var(--foreground)]">
             <input type="radio" name="studio-export-location"
@@ -129,6 +136,57 @@ export default function StudioFinalizationPanel({
           </label>
         </fieldset>
       )}
+    {directPreparationAvailable && (
+      <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+        <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
+        {hasAudio && duration > 0 && segmentCount > 0 && !localPlanRecommended && !(segmentCount > ROLEPLAY_MAX_SCENARIOS && !localOnly) && <p className="text-xs font-semibold text-[var(--theme-info)]">{readyAssignment ? 'Paquete preparado' : 'Ruta recomendada para esta grabación'}</p>}
+        <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM de 16 bits compatible o MP3 corto convertido localmente: se preparan los cortes sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
+        {convertedMp3Bytes !== null && (
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+            <span>Copia WAV temporal: {(convertedMp3Bytes/(1024*1024)).toFixed(2)} MiB. Se conserva para preparar otras partes sin reconvertir.</span>
+            <button type="button" onClick={onReleaseMp3} disabled={busy || draftBusy || analyzingSilences}
+              className="rounded-lg theme-action-secondary px-3 py-2 font-semibold disabled:opacity-50">Liberar copia WAV temporal</button>
+          </div>
+        )}
+        {wavSource && segmentCount > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
+        {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
+        {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
+        {activeProductionKeys && activeProductionKeys.size > 0 && (
+          <StudioProductionPanel parts={publicationPlan.parts} activeProductionKeys={activeProductionKeys}
+            preparedPartKey={readyAssignment ? readyAssignment.partKey ?? (publicationPlan.parts.length === 1 ? publicationPlan.parts[0].key : null) : null}
+            localOnly={localOnly} disabled={busy || draftBusy || analyzingSilences}
+            onSelectPart={onSelectPart} onConfirmNavigation={onConfirmNavigation}/>
+        )}
+        {readyAssignment && (!activeProductionKeys || !activeProductionKeys.has(readyAssignment.partKey ?? publicationPlan.parts[0]?.key ?? '')) && <p className="text-xs text-[var(--theme-warning)]">Seguimiento no disponible para este paquete. Puedes continuar, pero verifica las sesiones existentes para evitar duplicados.</p>}
+        {readyAssignment ? (
+          <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
+            prefetch={false}
+            onClick={onContinue}
+            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">Continuar a asignación</Link>
+        ) : localOnly ? (
+          <div className="flex flex-wrap gap-2">
+            {localMp3Eligible && !wavSource && <button type="button" disabled={busy || draftBusy || analyzingSilences} onClick={onEnableMp3}
+              className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 sm:min-h-0 sm:w-auto font-semibold disabled:opacity-50">Habilitar procesamiento local MP3 (WAV 24 kHz)</button>}
+            {wavSource && <button type="button" onClick={onPrepareLocal}
+              disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || !currentWavPlan.parts.length || (currentWavPlan.parts.length > 1 && !selectedPublicationPart)}
+              className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 sm:min-h-0 sm:w-auto font-semibold disabled:opacity-50">{currentWavPlan && currentWavPlan.parts.length > 1 && selectedPublicationPart ? `Preparar parte ${selectedPublicationPart.number} en WAV local` : 'Preparar WAV local para asignación'}</button>}
+          </div>
+        ) : <button type="button" onClick={onPrepareServer}
+            disabled={busy || draftBusy || analyzingSilences || !segmentCount || segmentCount > ROLEPLAY_MAX_SCENARIOS}
+            className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 sm:min-h-0 sm:w-auto font-semibold disabled:opacity-50">Preparar para asignación</button>}
+      </div>
+    )}
+    <section aria-label="Descarga del plan o paquete" className="space-y-2 rounded-lg border border-[var(--border)] p-3">
+      <h3 className="text-sm font-semibold text-[var(--foreground)]">{downloadRecommended ? 'Preparar con el exportador de escritorio' : 'Alternativa: descargar plan o paquete'}</h3>
+      <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'El plan JSON no contiene la grabación. Conserva ambos archivos para preparar los cortes en tu equipo.' : 'El ZIP incluye los cortes y el manifiesto. La exportación envía la grabación original al servidor.'}</p>
+    <button type="button" onClick={onDownload} disabled={busy || draftBusy || analyzingSilences || !segmentCount || segmentCount > ROLEPLAY_MAX_SCENARIOS}
+      className={`inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-4 py-2 font-semibold sm:w-auto ${downloadRecommended ? 'theme-action-primary' : 'theme-action-secondary'}`}>
+      <Download size={18} /> {busy
+        ? 'Procesando segmentos…'
+        : draftBusy ? 'Verificando proyecto…'
+          : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
+    </button>
+    </section>
       {localOnly && duration > 0 && (
         <div className="rounded-lg border border-cyan-400/20 bg-cyan-400/5 px-3 py-2 text-xs leading-5 text-[var(--theme-info)]">
           {hasCompound && (
@@ -168,52 +226,6 @@ export default function StudioFinalizationPanel({
           </details>
         </div>
       )}
-    {(!localOnly || wavSource || localMp3Eligible) && (
-      <div className="space-y-2 rounded-lg border border-[var(--border)] p-3">
-        <h3 className="font-semibold text-[var(--foreground)]">Continuar a la asignación sin descargar ZIP</h3>
-        <p className="text-xs text-[var(--text-secondary)]">{localOnly ? 'WAV PCM de 16 bits compatible o MP3 corto convertido localmente: se preparan los cortes sin subir el original, hasta 16 MiB por transferencia. Los cortes se subirán únicamente al crear el roleplay.' : 'Se procesará el MP3 en el servidor según la opción autorizada.'} El paquete pasará temporalmente al formulario de esta pestaña; guarda el proyecto original antes de salir. No se creará ninguna sesión hasta confirmar el destinatario.</p>
-        {convertedMp3Bytes !== null && (
-          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
-            <span>Copia WAV temporal: {(convertedMp3Bytes/(1024*1024)).toFixed(2)} MiB. Se conserva para preparar otras partes sin reconvertir.</span>
-            <button type="button" onClick={onReleaseMp3} disabled={busy || draftBusy || analyzingSilences}
-              className="rounded-lg theme-action-secondary px-3 py-2 font-semibold disabled:opacity-50">Liberar copia WAV temporal</button>
-          </div>
-        )}
-        {wavSource && segmentCount > 0 && !currentWavPlan && <p role="status" className="text-xs text-[var(--text-secondary)]">Calculando tamaño de los cortes WAV…</p>}
-        {currentWavPlan && !currentWavPlan.issue && <p className="text-xs text-[var(--text-secondary)]">{currentWavPlan.parts.length} {currentWavPlan.parts.length === 1 ? 'paquete compatible' : 'paquetes compatibles'} · {((currentWavPlan.parts.reduce((sum,part) => sum + part.bytes,0))/(1024*1024)).toFixed(2)} MiB en total. Se prepara solo el paquete elegido.</p>}
-        {currentWavPlan?.issue && <p role="alert" className="text-xs text-[var(--theme-warning)]">{currentWavPlan.issue} Puedes conservar el plan JSON y usar el exportador local.</p>}
-        {activeProductionKeys && activeProductionKeys.size > 0 && (
-          <StudioProductionPanel parts={publicationPlan.parts} activeProductionKeys={activeProductionKeys}
-            preparedPartKey={readyAssignment ? readyAssignment.partKey ?? (publicationPlan.parts.length === 1 ? publicationPlan.parts[0].key : null) : null}
-            localOnly={localOnly} disabled={busy || draftBusy || analyzingSilences}
-            onSelectPart={onSelectPart} onConfirmNavigation={onConfirmNavigation}/>
-        )}
-        {readyAssignment && (!activeProductionKeys || !activeProductionKeys.has(readyAssignment.partKey ?? publicationPlan.parts[0]?.key ?? '')) && <p className="text-xs text-[var(--theme-warning)]">Seguimiento no disponible para este paquete. Puedes continuar, pero verifica las sesiones existentes para evitar duplicados.</p>}
-        {readyAssignment ? (
-          <Link href={'/admin/roleplays/new?studioTransfer=' + encodeURIComponent(readyAssignment.token)}
-            prefetch={false}
-            onClick={onContinue}
-            className="inline-flex min-h-11 w-full items-center justify-center rounded-xl theme-action-primary px-4 py-2 font-semibold sm:min-h-0 sm:w-auto">Continuar a asignación</Link>
-        ) : localOnly ? (
-          <div className="flex flex-wrap gap-2">
-            {localMp3Eligible && !wavSource && <button type="button" disabled={busy || draftBusy || analyzingSilences} onClick={onEnableMp3}
-              className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 sm:min-h-0 sm:w-auto font-semibold disabled:opacity-50">Habilitar procesamiento local MP3 (WAV 24 kHz)</button>}
-            {wavSource && <button type="button" onClick={onPrepareLocal}
-              disabled={busy || draftBusy || analyzingSilences || !currentWavPlan || Boolean(currentWavPlan.issue) || !currentWavPlan.parts.length || (currentWavPlan.parts.length > 1 && !selectedPublicationPart)}
-              className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 sm:min-h-0 sm:w-auto font-semibold disabled:opacity-50">{currentWavPlan && currentWavPlan.parts.length > 1 && selectedPublicationPart ? `Preparar parte ${selectedPublicationPart.number} en WAV local` : 'Preparar WAV local para asignación'}</button>}
-          </div>
-        ) : <button type="button" onClick={onPrepareServer}
-            disabled={busy || draftBusy || analyzingSilences || !segmentCount || segmentCount > ROLEPLAY_MAX_SCENARIOS}
-            className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 sm:min-h-0 sm:w-auto font-semibold disabled:opacity-50">Preparar para asignación</button>}
-      </div>
-    )}
-    <button type="button" onClick={onDownload} disabled={busy || draftBusy || analyzingSilences || !segmentCount || segmentCount > ROLEPLAY_MAX_SCENARIOS}
-      className="inline-flex w-full items-center justify-center gap-2 rounded-xl theme-action-success px-5 py-3 font-bold sm:w-auto">
-      <Download size={18} /> {busy
-        ? 'Procesando segmentos…'
-        : draftBusy ? 'Verificando proyecto…'
-          : localOnly ? 'Descargar plan local de cortes (JSON)' : 'Exportar MP3 + manifiesto ZIP (envía MP3 al servidor)'}
-    </button>
     </>
   );
 }
