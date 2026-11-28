@@ -631,11 +631,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         throw new Error(unknownResultMessage);
       }
 
-      // A 5xx may be returned after a successful DB commit (or after
-      // losing its acknowledgment). Even a JSON success:false at this
-      // status is not proof that publishing was rolled back. Likewise, a
-      // transport/proxy error must never echo its body in the UI.
-      if (typeof res.status === 'number' && res.status >= 500) {
+      // A transport, timeout or proxy response can arrive after commit.
+      // Never echo its body or treat it as proof of rollback.
+      if (typeof res.status === 'number' &&
+          (res.status >= 500 || [408, 425, 429, 499].includes(res.status))) {
         setSubmissionUncertain(true);
         throw new Error(unknownResultMessage);
       }
@@ -670,6 +669,12 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         };
       };
       if (!data.success) {
+        // A successful HTTP status contradicts a failure envelope. The
+        // creation endpoint uses non-2xx for definitive rejections.
+        if (res.ok === true) {
+          setSubmissionUncertain(true);
+          throw new Error(unknownResultMessage);
+        }
         throw new Error(typeof data.error === 'string' && data.error.trim()
           ? data.error : 'El servidor rechazó la creación del roleplay.');
       }
