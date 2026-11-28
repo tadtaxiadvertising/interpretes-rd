@@ -92,28 +92,28 @@ function StudioInterventionCard({
   const turnTools = (<div role="group" aria-label={'Herramientas de intervención ' + (index + 1)} className="flex w-full min-w-0 flex-wrap items-center gap-2">
         <button type="button" onClick={() => seekAudio(segment.start)}
         aria-label={'Ir al inicio de intervención ' + (index + 1)}
-        className="min-h-11 min-w-0 rounded-md border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+        className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--theme-hover)]">
         Ir al inicio
       </button>
       <button type="button" onClick={() => splitAtPlayhead(segment.id)}
         disabled={Boolean(segment.ranges)}
         aria-label={'Dividir intervención ' + (index + 1) + ' en cursor o punto medio'}
         title={segment.ranges ? 'Separa los dos cortes antes de dividir' : 'Divide en cursor o punto medio'}
-        className="min-h-11 min-w-0 rounded-md border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+        className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--theme-hover)]">
         Dividir
       </button>
       <button type="button" onClick={() => mergeWithNext(segment.id)}
         disabled={Boolean(segment.ranges)}
         aria-label={'Unir intervención ' + (index + 1) + ' con siguiente'}
         title={segment.ranges ? 'Separa los dos cortes antes de añadir otro' : 'Une con el siguiente turno visible; omite pausas largas en el MP3 local'}
-        className="min-h-11 min-w-0 rounded-md border border-[var(--border)] px-3 py-2 text-xs text-[var(--text-secondary)]">
+        className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--foreground)] hover:bg-[var(--theme-hover)]">
         {nextTurn &&
           nextTurn.start - segment.end > 2 ? 'Unir sin pausa' : 'Unir'}
       </button>
       {segment.ranges && (
         <button type="button" onClick={() => separateCompound(segment.id)}
           aria-label={'Separar cortes de intervención ' + (index + 1)}
-          className="min-h-11 min-w-0 rounded-md border border-amber-400/30 px-3 py-2 text-xs text-[var(--theme-warning)]">
+          className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--theme-warning)]">
           Separar cortes
         </button>
       )}
@@ -123,7 +123,7 @@ function StudioInterventionCard({
             aria-label={'Preescuchar intervenciones ' + (index + 1) + ' y ' + (index + 2) + ' sin pausa'}
             aria-pressed={pairPreviewId === segment.id}
             title="Preescucha dos cortes; usa Unir sin pausa para generar una intervención física en el proyecto v2"
-            className="min-h-11 min-w-0 rounded-md border border-cyan-400/30 px-3 py-2 text-xs text-[var(--theme-info)] hover:bg-cyan-400/10">
+            className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--theme-info)] hover:bg-[var(--theme-hover)]">
             {pairPreviewId === segment.id ? 'Detener preescucha' : 'Escuchar sin pausa'}
           </button>
         )}
@@ -133,7 +133,7 @@ function StudioInterventionCard({
             aria-label={segment.ranges
               ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
               : `${previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'} de intervención ${index + 1}`}
-            className="min-h-11 min-w-0 rounded-md border border-emerald-400/25 px-3 py-2 text-xs text-[var(--theme-success)]">
+            className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--theme-success)]">
             {segment.ranges
               ? pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'
               : previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'}
@@ -141,13 +141,13 @@ function StudioInterventionCard({
           <button type="button" onClick={() =>
             onToggleExpanded(segment.id)}
             aria-expanded={expandedSegmentId === segment.id}
-            className="min-h-11 min-w-0 rounded-md border border-blue-400/25 px-3 py-2 text-xs text-[var(--theme-link)]">
+            className="min-h-11 min-w-0 rounded-md border border-[var(--theme-control-border)] px-3 py-2 text-xs text-[var(--theme-link)]">
             {expandedSegmentId === segment.id ? 'Contraer' : 'Editar'}
           </button>
         </>
       )}
       <button type="button" aria-label={'Quitar intervención ' + (index + 1)} onClick={() => removeIntervention(segment.id)}
-        className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[var(--border)] p-2 text-[var(--theme-danger)] hover:bg-[var(--theme-hover)]"><Trash2 size={16} aria-hidden="true"/></button>
+        className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-[var(--theme-control-border)] p-2 text-[var(--theme-danger)] hover:bg-[var(--theme-hover)]"><Trash2 size={16} aria-hidden="true"/></button>
     </div>);
   return (
   <article key={segment.id} id={`studio-intervention-${segment.id}`} tabIndex={focusMode ? 0 : -1}
@@ -189,8 +189,8 @@ function StudioInterventionCard({
       <p
         role={turnActionFeedback.error ? 'alert' : 'status'}
         className={turnActionFeedback.error
-          ? 'rounded-md border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-[var(--theme-warning)]'
-          : 'rounded-md border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs text-[var(--theme-success)]'}>
+          ? 'rounded-md border border-[var(--theme-warning)] bg-[var(--theme-panel)] px-3 py-2 text-xs text-[var(--theme-warning)]'
+          : 'rounded-md border border-[var(--theme-success)] bg-[var(--theme-panel)] px-3 py-2 text-xs text-[var(--theme-success)]'}>
         {turnActionFeedback.message}
       </p>
     )}
@@ -202,7 +202,7 @@ function StudioInterventionCard({
     {(!compactRows || expandedSegmentId === segment.id) && (
     <div className="space-y-2 border-t border-[var(--border)] pt-2">
     {caption && (
-      <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 p-3">
+      <div className="rounded-lg border border-[var(--theme-warning)] bg-[var(--theme-panel)] p-3">
         <p className="text-xs font-bold text-[var(--theme-warning)]">Transcripción de referencia · solo editor</p>
         <p className="mt-1 whitespace-pre-wrap break-words text-sm text-[var(--text-secondary)]">{caption}</p>
       </div>
@@ -216,11 +216,11 @@ function StudioInterventionCard({
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={!canUseBoundaryProposal} onClick={() => previewSegment({ ...segment, id: proposalPreviewId, start: boundaryProposal.start, end: boundaryProposal.end })}
             aria-pressed={previewingId === proposalPreviewId}
-            className="theme-action-secondary rounded-lg px-3 py-2 text-xs font-semibold">
+            className="theme-action-secondary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold">
             {previewingId === proposalPreviewId ? 'Detener propuesta' : 'Escuchar propuesta'}
           </button>
           <button type="button" disabled={!canUseBoundaryProposal} onClick={applyBoundaryProposal}
-            className="theme-action-primary rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">Aplicar ajuste de tiempos</button>
+            className="theme-action-primary min-h-11 rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-50">Aplicar ajuste de tiempos</button>
         </div>
       </section>
     )}
@@ -270,18 +270,18 @@ function StudioInterventionCard({
         className="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] p-2 text-[var(--theme-control-text)]"/>
     </label>
     <button type="button" onClick={() => insertProtocol(segment)}
-      className="min-h-11 rounded-lg border border-teal-400/30 bg-teal-400/5 px-3 py-2 text-sm text-[var(--theme-info)] hover:bg-teal-400/10">
+      className="min-h-11 rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-panel)] px-3 py-2 text-sm text-[var(--theme-info)] hover:bg-[var(--theme-hover)]">
       Añadir protocolo seleccionado a esta intervención
     </button>
     <div className="flex flex-wrap items-center gap-3 text-sm">
-      <button type="button" className="min-h-11 rounded-lg border border-blue-400/25 px-3 py-2 text-[var(--theme-link)] hover:bg-blue-500/10"
+      <button type="button" className="min-h-11 rounded-lg border border-[var(--theme-control-border)] px-3 py-2 text-[var(--theme-link)] hover:bg-[var(--theme-hover)]"
         disabled={Boolean(segment.ranges)}
         onClick={() => markAtPlayhead(segment.id, 'start')}>Marcar inicio actual</button>
-      <button type="button" className="min-h-11 rounded-lg border border-blue-400/25 px-3 py-2 text-[var(--theme-link)] hover:bg-blue-500/10"
+      <button type="button" className="min-h-11 rounded-lg border border-[var(--theme-control-border)] px-3 py-2 text-[var(--theme-link)] hover:bg-[var(--theme-hover)]"
         disabled={Boolean(segment.ranges)}
         onClick={() => markAtPlayhead(segment.id, 'end')}>Marcar fin actual</button>
       {!compactRows && !focusMode && (
-        <button type="button" className="min-h-11 rounded-lg border border-emerald-400/25 px-3 py-2 text-[var(--theme-success)] hover:bg-emerald-500/10"
+        <button type="button" className="min-h-11 rounded-lg border border-[var(--theme-control-border)] px-3 py-2 text-[var(--theme-success)] hover:bg-[var(--theme-hover)]"
           aria-label={segment.ranges
             ? `${pairPreviewId === segment.id ? 'Detener unión' : 'Escuchar unido'} de intervención ${index + 1}`
             : `${previewingId === segment.id ? 'Detener fragmento' : 'Escuchar fragmento'} de intervención ${index + 1}`}
