@@ -149,7 +149,9 @@ describe('Audio Studio semantic theme', () => {
     expect(studio).toContain('rounded-lg bg-black');
     expect(studio).toContain('theme-action-primary px-4 py-3 font-semibold');
     const finalization = readFileSync(resolve(process.cwd(), 'src/app/admin/roleplays/studio/StudioFinalizationPanel.tsx'), 'utf8');
-    expect(finalization).toContain('theme-action-success px-5 py-3 font-bold');
+    expect(finalization).toContain('theme-action-primary px-4 py-2');
+    expect(finalization).toContain('onClick={onPrepareLocal}');
+    expect(finalization).toContain('onClick={onPrepareServer}');
     expect(finalization).toContain('bg-[var(--theme-control-bg)]');
   });
 
