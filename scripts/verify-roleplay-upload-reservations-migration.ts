@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Client } from 'pg';
+import { readDirectLedgerPermissions } from '../src/lib/roleplay/direct-upload-ledger-permissions';
 import { classifyRoleplayReservationCatalog, readRoleplayReservationCatalog } from './roleplay-upload-reservation-schema-catalog';
 import { verifyFinalEvidencePostgres } from './verify-roleplay-final-evidence-postgres';
 import { readRoleplayStorageBudgetAudit } from './roleplay-storage-budget-audit';
@@ -342,8 +343,64 @@ async function main(): Promise<void> {
     if(retained.rowCount!==1) throw new Error('Final write claim was lost with reservation');
     console.log('Durable final write claim verified: concurrent admission, no replay writes, immutable claim, retained tombstone.');
 
+    // Exercise the exact runtime permission query on the disposable database.
+    await first.query('BEGIN READ ONLY');
+    try {
+      const incomplete = await readDirectLedgerPermissions(first);
+      if (incomplete.state !== 'review-required' ||
+          incomplete.tables.find(t => t.name === 'roleplay_direct_upload_budget')?.runtimeAccess !== false)
+        throw new Error('Ledger permission query accepted absent budget table.');
+    } finally { await first.query('ROLLBACK'); }
+
     // Install the optional quota layer only after the baseline fixtures.
     await first.query(await readFile(resolve(process.cwd(),'docs/operations/staged-sql/roleplay-direct-upload-budget.sql'),'utf8'));
+    await first.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    try {
+      const recognized = await readDirectLedgerPermissions(first);
+      if (recognized.state !== 'recognized' || recognized.tables.length !== 5)
+        throw new Error('Staged ledger permission query did not recognize expected isolation.');
+    } finally { await first.query('ROLLBACK'); }
+
+    // All deliberately unsafe changes are limited to this disposable database
+    // and rolled back. Never grant access or create roles in a hosted project.
+    await first.query('BEGIN');
+    try {
+      await first.query('SAVEPOINT test_public_grant');
+      await first.query('GRANT SELECT ON public.roleplay_direct_upload_budget TO PUBLIC');
+      const exposed = await readDirectLedgerPermissions(first);
+      if (exposed.state !== 'review-required' ||
+          exposed.tables.find(t => t.name === 'roleplay_direct_upload_budget')?.privateAccess !== false)
+        throw new Error('Public table grant was not detected.');
+      await first.query('ROLLBACK TO SAVEPOINT test_public_grant');
+
+      await first.query('SAVEPOINT test_public_column');
+      await first.query('GRANT SELECT (slots) ON public.roleplay_direct_upload_budget_charges TO PUBLIC');
+      const column = await readDirectLedgerPermissions(first);
+      if (column.state !== 'review-required' ||
+          column.tables.find(t => t.name === 'roleplay_direct_upload_budget_charges')?.privateAccess !== false)
+        throw new Error('Public column grant was not detected.');
+      await first.query('ROLLBACK TO SAVEPOINT test_public_column');
+
+      await first.query('SAVEPOINT test_public_policy');
+      await first.query('CREATE POLICY ci_unapproved_ledger_read ON public.roleplay_final_write_claims FOR SELECT USING (true)');
+      const policy = await readDirectLedgerPermissions(first);
+      if (policy.state !== 'review-required' ||
+          policy.tables.find(t => t.name === 'roleplay_final_write_claims')?.privateAccess !== false)
+        throw new Error('Unexpected RLS policy was not detected.');
+      await first.query('ROLLBACK TO SAVEPOINT test_public_policy');
+
+      // Unique role name generated exclusively from trusted random hex.
+      const limitedRole = 'rp_ledger_ci_' + randomBytes(6).toString('hex');
+      await first.query('CREATE ROLE "' + limitedRole + '" NOLOGIN');
+      await first.query('SET LOCAL ROLE "' + limitedRole + '"');
+      const limited = await readDirectLedgerPermissions(first);
+      if (limited.state !== 'review-required' || limited.tables.some(t => t.runtimeAccess))
+        throw new Error('Restricted runtime connection was not detected.');
+      await first.query('RESET ROLE');
+    } finally { await first.query('ROLLBACK'); }
+    if ((await readDirectLedgerPermissions(first)).state !== 'recognized')
+      throw new Error('Ledger permission query failed after rollback.');
+    console.log('Runtime ledger permissions verified: missing table, private catalog, PUBLIC table and column grants, unexpected policy and restricted role.');
     await first.query('BEGIN');
     await expectRejected(first,row(),['23514']);
     await first.query('ROLLBACK');
