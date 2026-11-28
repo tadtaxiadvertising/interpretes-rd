@@ -78,7 +78,7 @@ export default function StudioFinalizationPanel({
                       : 'Descarga el plan local JSON y utiliza el exportador de escritorio junto con la grabación original.';
   return (
     <>
-    <h3 id="studio-export" className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
+    <h3 id="studio-export" tabIndex={-1} className="scroll-mt-6 border-t border-[var(--border)] pt-4 text-base font-semibold text-[var(--foreground)]">Preparar paquete del roleplay</h3>
     <div role="status" aria-label="Siguiente paso de preparación" className="rounded-lg border border-[var(--theme-control-border)] bg-[var(--theme-surface-muted)] p-3 text-sm text-[var(--foreground)]">
       <p className="font-semibold">Siguiente paso</p>
       <p className="mt-1 text-xs leading-5 text-[var(--text-secondary)]">{nextStep}</p>
