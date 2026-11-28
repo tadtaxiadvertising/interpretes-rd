@@ -611,6 +611,34 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.play).not.toHaveBeenCalled();
   });
 
+  it('shows global finalization quality and returns directly to the affected cut without playing', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir escritorio de edición' }));
+    const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
+    fireEvent.change(selector, { target: { value: selector.options[0].value } });
+    chooseProfile('doctor');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
+    chooseProfile('patient');
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }));
+    const quality = screen.getByRole('region', { name: 'Calidad antes de publicar' });
+    const counts = within(quality).getByRole('status', { name: 'Estado de calidad del proyecto' });
+    expect(counts.textContent).toContain('1Con incidencias');
+    expect(counts.textContent).toContain('1Por confirmar');
+    expect(counts.textContent).toContain('1Confirmadas');
+    fireEvent.click(within(quality).getByRole('button', { name: 'Corregir primera incidencia' }));
+    expect(screen.getByRole('button', { name: 'Editar' }).getAttribute('aria-pressed')).toBe('true');
+    expect(metadata(profileGroup()).role).toBe('unknown');
+    expect(document.activeElement?.id).toBe('studio-intervention-studio-3');
+    expect(player.play).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }));
+    fireEvent.click(within(screen.getByRole('region', { name: 'Calidad antes de publicar' })).getByRole('button', { name: 'Ver todas las pendientes' }));
+    const review = screen.getByRole('region', { name: 'Centro de revisión editorial' });
+    expect(document.activeElement).toBe(review);
+    expect(within(review).getByRole('button', { name: 'Revisar intervención 3' })).toBeTruthy();
+    expect(player.isConnected).toBe(true);
+  });
+
   it('returns from immersive finalization to the invalid intervention before exporting', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
