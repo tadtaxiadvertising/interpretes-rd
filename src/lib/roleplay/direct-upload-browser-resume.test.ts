@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe,expect,it,vi } from 'vitest';
-import { createRoleplayUploadController } from './direct-upload-browser-resume';
+import { createRoleplayUploadController, DirectUploadReviewRequired } from './direct-upload-browser-resume';
 import { prepareRoleplayDirectUploadBatch } from './direct-upload-contract';
 const batchId='123e4567-e89b-42d3-a456-426614174000';
 function fixture(){
@@ -79,10 +79,24 @@ describe('same-tab roleplay upload recovery',()=>{
   });
   it('does not reserve again after an ambiguous reservation reply',async()=>{
     const f=fixture();f.reserve.mockRejectedValueOnce(new Error('lost'));
-    await expect(f.controller.run()).rejects.toThrow();
-    await expect(f.controller.run()).rejects.toThrow();
+    await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_UNCERTAIN'});
+    await expect(f.controller.run()).rejects.toBeInstanceOf(DirectUploadReviewRequired);
     expect(f.reserve).toHaveBeenCalledTimes(1);
     expect(f.transfer).not.toHaveBeenCalled();
+  });
+  it('requires review after reservation expiry without repeating transfers',async()=>{
+    vi.useFakeTimers();
+    try {
+      const f=fixture(),abort=new AbortController();
+      await expect(f.controller.run({signal:abort.signal,onProgress:p=>{
+        if(p.phase==='uploading' && p.verified===1) abort.abort();
+      }})).rejects.toThrow();
+      vi.advanceTimersByTime(26*60_000);
+      await expect(f.controller.run()).rejects.toMatchObject({reason:'RESERVATION_EXPIRED'});
+      expect(f.reserve).toHaveBeenCalledTimes(1);
+      expect(f.transfer).toHaveBeenCalledTimes(1);
+      expect(f.verify).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
   });
   it('rejects a changed signed plan before transferring bytes',async()=>{
     const f=fixture();f.slots[0].sha256='b'.repeat(64);

@@ -14,6 +14,7 @@ import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guar
 import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
+import { DirectUploadReviewRequired, type DirectUploadReviewReason } from '@/lib/roleplay/direct-upload-browser-resume';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
 import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
 
@@ -108,6 +109,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   const directAbort = useRef<AbortController | null>(null);
   const [directLocked,setDirectLocked] = useState(false);
   const [directProgress,setDirectProgress] = useState<FormProgress | null>(null);
+  const [directReview,setDirectReview] = useState<DirectUploadReviewReason | null>(null);
   useEffect(()=>()=>directAbort.current?.abort(),[]);
   // Transport failures do not tell us whether the server committed the roleplay.
   const [submissionUncertain, setSubmissionUncertain] = useState(false);
@@ -538,7 +540,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const handleCreate = async () => {
-    if (keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    if (directReview || keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
     if (!confirmRoleplayCreationRetry(submissionUncertain, Boolean(directAttempt.current), message => window.confirm(message))) return;
     const trackedToken = importedTransfer && trackedImportRevision.current === importRevision.current ? importedTransfer : null;
     if (directAttempt.current || useDirectUpload) {
@@ -567,8 +569,13 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
         setSubmissionUncertain(false);
         recordProductionAttempt(trackedToken, 'created');
         setSuccess({link:result.inviteLink,participantName:selectedParticipant?.name || 'Intérprete'});
-      } catch {
-        setError(directAttempt.current
+      } catch (error) {
+        if (error instanceof DirectUploadReviewRequired) {
+          setDirectReview(error.reason);
+          setError(error.reason === 'RESERVATION_EXPIRED'
+            ? 'La reserva de subida ha caducado. Conserva esta pestaña y consulta las sesiones existentes antes de solicitar una revisión de la reserva. No inicies otra creación.'
+            : 'No se pudo confirmar la reserva de subida. Conserva esta pestaña y solicita una revisión de la reserva antes de iniciar otra creación.');
+        } else setError(directAttempt.current
           ? 'La operación se interrumpió. Conserva esta pestaña y pulsa «Continuar creación» para recuperar el mismo intento. No vuelvas a crear el ejercicio desde otra pestaña.'
           : 'No fue posible preparar la subida directa. Revisa los datos del ejercicio.');
       } finally {
@@ -1192,7 +1199,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
             <progress className="block w-full" max={directProgress.total} value={directProgress.consolidated}/></label>
         </>}
         {directLocked && isCreating && <button type="button" onClick={()=>directAbort.current?.abort()} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)]">Pausar operación</button>}
-        {directLocked && !isCreating && <Link href="/admin/roleplays" className="inline-block text-sm text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>}
+        {directLocked && !isCreating && <Link href="/admin/roleplays" target="_blank" rel="noopener noreferrer" className="inline-block text-sm text-[var(--theme-link)] underline">Consultar sesiones existentes</Link>}
       </section>}
       {error && (
         <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-[var(--theme-danger)] flex items-center gap-3">
@@ -1256,15 +1263,15 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting || keyedStatus !== null}
+        disabled={isCreating || isImporting || keyedStatus !== null || directReview !== null}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting || keyedStatus !== null
+          isCreating || isImporting || keyedStatus !== null || directReview !== null
             ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed"
             : "theme-action-danger shadow-lg shadow-red-600/20"
         )}
       >
-        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creando...</> : <><Mic2 size={24} /> {directLocked ? 'Continuar creación' : librarySource ? 'Asignar plantilla' : isBulk ? 'Crear para todos los intérpretes activos' : 'Crear roleplay'}</>}
+        {isCreating ? <><Loader2 className="animate-spin" size={24} /> Creando...</> : <><Mic2 size={24} /> {directReview ? 'Reserva pendiente de revisión' : directLocked ? 'Continuar creación' : librarySource ? 'Asignar plantilla' : isBulk ? 'Crear para todos los intérpretes activos' : 'Crear roleplay'}</>}
       </button>
     </div>
   );
