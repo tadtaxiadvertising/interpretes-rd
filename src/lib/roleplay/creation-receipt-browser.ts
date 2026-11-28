@@ -19,6 +19,11 @@ export function formatCreationRecoveryReference(reference: CreationRecoveryRefer
   return value;
 }
 
+/** Only bounded, path-safe session IDs may identify a confirmed creation. */
+export function isConfirmedRoleplaySessionId(value: unknown): value is string {
+  return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value);
+}
+
 export type SingleCreationRecovery =
   | { status: 'COMPLETED'; sessionId: string }
   | { status: 'NOT_FOUND' | 'IN_PROGRESS' | 'REVIEW_REQUIRED' | 'UNAVAILABLE' | 'ACCESS_REQUIRED' | 'ENDPOINT_UNAVAILABLE' };
@@ -78,7 +83,7 @@ async function queryReceipt(
     }
     if (data.status === 'COMPLETED' && data.createdCount === 1 && data.skippedCount === 0 &&
         data.scenarioCount === expectedScenarioCount && Array.isArray(data.sessionIds) &&
-        data.sessionIds.length === 1 && typeof data.sessionIds[0] === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(data.sessionIds[0])) {
+        data.sessionIds.length === 1 && isConfirmedRoleplaySessionId(data.sessionIds[0])) {
       return { status: 'COMPLETED', sessionId: data.sessionIds[0] };
     }
     return { status: 'REVIEW_REQUIRED' };
