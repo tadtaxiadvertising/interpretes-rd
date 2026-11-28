@@ -16,8 +16,8 @@ vi.mock('@/lib/roleplay/direct-upload-rollout-inspection', () => ({ inspectDirec
 import CreationReadinessPage from './page';
 import { DIRECT_UPLOAD_FORM_FLAGS, OPENING_ASSIGNMENT_FLAGS } from '@/lib/roleplay/direct-upload-pilot-config';
 
-async function view(check?: string | string[], checkDirect?: string | string[], checkRollout?: string | string[]) {
-  return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check, checkDirect, checkRollout }) }));
+async function view(check?: string | string[], checkDirect?: string | string[], checkRollout?: string | string[], checkAll?: string | string[]) {
+  return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check, checkDirect, checkRollout, checkAll }) }));
 }
 
 beforeEach(() => {
@@ -40,6 +40,40 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('admin runtime diagnostic', () => {
+  it.each([undefined, '0', 'true', ['1', '1']])('does not run all probes without a single explicit request (%o)', async checkAll => {
+    expect(await view(undefined, undefined, undefined, checkAll)).toContain('Ejecutar diagnóstico integral');
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    expect(mocks.directCatalog).not.toHaveBeenCalled();
+    expect(mocks.rollout).not.toHaveBeenCalled();
+  });
+
+  it('runs each probe exactly once in order and summarizes incomplete metadata without activation', async () => {
+    const html = await view('1', '1', '1', '1');
+    expect(mocks.readiness).toHaveBeenCalledExactlyOnceWith(mocks.db);
+    expect(mocks.directCatalog).toHaveBeenCalledExactlyOnceWith(mocks.db);
+    expect(mocks.rollout).toHaveBeenCalledExactlyOnceWith(mocks.db);
+    expect(mocks.readiness.mock.invocationCallOrder[0]).toBeLessThan(mocks.directCatalog.mock.invocationCallOrder[0]);
+    expect(mocks.directCatalog.mock.invocationCallOrder[0]).toBeLessThan(mocks.rollout.mock.invocationCallOrder[0]);
+    expect(html).toContain('Repetir diagnóstico integral');
+    expect(html).toContain('Verificaciones externas pendientes');
+    expect(html).toContain('Activación no autorizada por este diagnóstico.');
+    expect(html).toContain('Revisa las tablas, columnas y disparadores pendientes');
+    expect(html).toContain('Cupos contables: 10 de 25; restantes: 15');
+    expect(html).toContain('Diagnóstico integral:');
+  });
+
+  it('reports failed probes independently and never probes for an unauthorized integral request', async () => {
+    mocks.readiness.mockResolvedValue(false);
+    mocks.rollout.mockResolvedValue(null);
+    const html = await view(undefined, undefined, undefined, '1');
+    expect(html).toContain('Metadatos no disponibles desde esta conexión');
+    expect(html).toContain('Cupos contables: 10 de 25; restantes: 15');
+    expect(html).toContain('Revisa los límites, formatos y privacidad de los buckets.');
+    for (const probe of [mocks.readiness, mocks.directCatalog, mocks.rollout]) probe.mockClear();
+    mocks.validate.mockResolvedValue({ user: { role: 'interpreter' } });
+    expect(await view(undefined, undefined, undefined, '1')).not.toContain('Diagnóstico integral');
+    for (const probe of [mocks.readiness, mocks.directCatalog, mocks.rollout]) expect(probe).not.toHaveBeenCalled();
+  });
   it.each([undefined, '0', 'true', ['1', '1']])('does not inspect rollout metadata without one explicit request (%o)', async checkRollout => {
     expect(await view(undefined, undefined, checkRollout)).toContain('Metadatos sin comprobar');
     expect(mocks.rollout).not.toHaveBeenCalled();

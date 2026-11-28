@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { summarizeCreationReadiness } from '@/lib/roleplay/creation-readiness-summary';
 import CopyDiagnostic from './copy-diagnostic';
 import SavedReservationLookup from './saved-reservation-lookup';
 import { validateAction } from '@/lib/auth/actions';
@@ -28,7 +29,7 @@ const modeGuidance: Record<CreationPilotMode, string> = {
 export default async function CreationReadinessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ check?: string | string[]; checkDirect?: string | string[]; checkRollout?: string | string[] }>;
+  searchParams: Promise<{ check?: string | string[]; checkDirect?: string | string[]; checkRollout?: string | string[]; checkAll?: string | string[] }>;
 }) {
   const auth = await validateAction('admin');
   if ('error' in auth || auth.user.role !== 'admin') {
@@ -42,9 +43,10 @@ export default async function CreationReadinessPage({
   // No catalog query on initial visit, link prefetch, or malformed request.
   // A refresh with check=1 repeats the bounded, read-only runtime check.
   const params = await searchParams;
-  const requested = params.check === '1';
-  const directRequested = params.checkDirect === '1';
-  const rolloutRequested = params.checkRollout === '1';
+  const allRequested = params.checkAll === '1';
+  const requested = allRequested || params.check === '1';
+  const directRequested = allRequested || params.checkDirect === '1';
+  const rolloutRequested = allRequested || params.checkRollout === '1';
   const ready = requested ? await isCreationLedgerReady(prisma) : null;
   const directCatalog = directRequested ? await inspectDirectUploadCatalog(prisma) : null;
   const rollout = rolloutRequested ? await inspectDirectRolloutMetadata(prisma) : null;
@@ -54,6 +56,8 @@ export default async function CreationReadinessPage({
 
   // Record when this check finished, not a build timestamp or an approval.
   // Only fixed labels and validated build metadata enter the evidence.
+  const summary = summarizeCreationReadiness({ pilot, direct, buildId, ready, catalog: directCatalog, rollout, rolloutRequested });
+  const summaryLabels = { recognized: 'Reconocido', review: 'Requiere revisión', unchecked: 'Sin comprobar' } as const;
   const metadataLabels: Record<string, string> = { 'present-private': 'Estructura privada reconocida', 'metadata-ready': 'Metadatos reconocidos', 'review-required': 'Requiere revisión', missing: 'Ausente' };
   const evidence = ready === null && !directRequested && !rolloutRequested ? null : [
     'Diagnóstico de creación segura — Intérpretes RD',
@@ -71,6 +75,11 @@ export default async function CreationReadinessPage({
     'Estructura de publicación y apertura: ' + (rollout ? rollout.schemaMetadataReady ? 'Metadatos reconocidos' : 'Requiere revisión' : rolloutRequested ? 'No disponible' : 'No comprobada'),
     ...(rollout ? rollout.buckets.map(bucket => 'Bucket ' + bucket.id + ': ' + metadataLabels[bucket.state]) : []),
     'Subida directa: acceso real a Storage, políticas efectivas de objetos y configuración del navegador no comprobados.',
+    ...(allRequested ? [
+      'Diagnóstico integral: ' + summary.recognized + ' reconocidos, ' + summary.review + ' por revisar, ' + summary.unchecked + ' sin comprobar.',
+      ...summary.checks.filter(check => check.state !== 'recognized').map(check => check.label + ': ' + summaryLabels[check.state] + '. ' + check.action),
+      ...summary.externalChecks.map(action => 'Pendiente de verificación externa: ' + action),
+    ] : []),
     'Resultado puntual; no autoriza activar el piloto.',
   ].join('\n');
 
@@ -81,6 +90,28 @@ export default async function CreationReadinessPage({
         <h1 className="text-2xl font-bold text-[var(--foreground)] sm:text-3xl">Diagnóstico de creación segura</h1>
         <p className="mt-2 text-sm text-[var(--text-secondary)]">Comprueba la configuración y el registro de solicitudes del servicio actual sin crear sesiones ni modificar PostgreSQL.</p>
       </header>
+      <section aria-label="Resumen del diagnóstico" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
+        <h2 className="text-lg font-semibold text-[var(--foreground)]">Diagnóstico integral</h2>
+        <p className="text-sm text-[var(--text-secondary)]">Comprueba los tres grupos de metadatos con un solo clic. Se ejecutan de forma secuencial, sin cambios ni subidas de archivos.</p>
+        <form action="/admin/roleplays/creation-readiness" method="get">
+          <input type="hidden" name="checkAll" value="1" />
+          <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{allRequested ? 'Repetir diagnóstico integral' : 'Ejecutar diagnóstico integral'}</button>
+        </form>
+        {allRequested && <>
+          <p role="status" className="text-sm font-semibold text-[var(--foreground)]">{summary.recognized} reconocidos · {summary.review} por revisar · {summary.unchecked} sin comprobar</p>
+          <dl className="space-y-3 text-sm">
+            {summary.checks.map(check => <div key={check.id} className="space-y-1">
+              <dt className="font-medium text-[var(--foreground)]">{check.label}</dt>
+              <dd className={check.state === 'review' ? 'text-[var(--theme-warning)]' : 'text-[var(--text-secondary)]'}>{summaryLabels[check.state]}</dd>
+              {check.state !== 'recognized' && <dd className="text-[var(--text-secondary)]">{check.action}</dd>}
+            </div>)}
+          </dl>
+          <p className="text-sm text-[var(--text-secondary)]">Banderas de subida directa: {summary.flagsConfigured ? 'Configuradas' : 'Incompletas o desactivadas deliberadamente'}. Recuperación por recibos: {summary.recoveryConfigured ? 'Configurada' : 'Desactivada'}. No modifiques las banderas para obtener un resultado favorable.</p>
+          <h3 className="font-semibold text-[var(--foreground)]">Verificaciones externas pendientes</h3>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-[var(--text-secondary)]">{summary.externalChecks.map(action => <li key={action}>{action}</li>)}</ul>
+          <p className="text-sm font-semibold text-[var(--foreground)]">Activación no autorizada por este diagnóstico.</p>
+        </>}
+      </section>
       <section aria-label="Configuración actual" className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
         <h2 className="font-semibold text-[var(--foreground)]">Configuración del piloto</h2>
         <p className="text-sm font-medium text-[var(--foreground)]">{modeLabels[pilot.mode]}</p>
