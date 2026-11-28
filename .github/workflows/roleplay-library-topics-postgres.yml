@@ -7,6 +7,8 @@ on:
       - 'src/app/api/admin/roleplays/library/**'
       - 'src/lib/roleplay-library-topics*'
       - 'scripts/ci/verify-roleplay-library-topics-postgres.sh'
+      - 'scripts/ci/roleplay-library-topics-readiness.sql'
+      - 'scripts/roleplay-library-topics-readiness.ts'
       - '.github/workflows/roleplay-library-topics-postgres.yml'
   workflow_dispatch:
 
