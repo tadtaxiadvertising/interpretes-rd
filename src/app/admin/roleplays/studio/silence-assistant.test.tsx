@@ -73,8 +73,7 @@ describe('Audio Studio pause assistant is advisory, never auto-publishing', () =
     expect(screen.getByText(/Intervenciones \(3\/25\)/i)).toBeTruthy();
     expect((screen.getAllByLabelText('Título')[0] as HTMLInputElement).value)
       .toBe('Intervención sugerida 1');
-    expect((screen.getAllByLabelText(/Perfil del hablante/i)[0] as HTMLSelectElement).value)
-      .toBe('unknown');
+    expect(screen.getAllByRole('group', { name: /Perfil de intervención / })[0].querySelector('[aria-pressed="true"]')).toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
     // A consumed proposal must not remain available to erase later edits.
     expect(screen.queryByRole('button', { name: /Reemplazar con .* cortes sugeridos/i })).toBeNull();

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { STUDIO_RECOVERY_KEY } from '@/lib/roleplay-studio/recovery';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RoleplayStudioPage from './page';
@@ -29,6 +29,22 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     vi.unstubAllGlobals();
   });
 
+  const profileGroups = () => screen.getAllByRole('group', { name: /Perfil de intervención / });
+  const profileGroup = () => screen.getByRole('group', { name: /Perfil de intervención / });
+  const profileLabels = { doctor: 'Cliente · EN', patient: 'Hispanohablante · ES', interpreter: 'Intérprete original — excluir · EN' } as const;
+  function chooseProfile(role: keyof typeof profileLabels, index?: number) {
+    fireEvent.click(within(index === undefined ? profileGroup() : profileGroups()[index])
+      .getByRole('button', { name: profileLabels[role] }));
+  }
+  function metadata(group: HTMLElement) {
+    const text = group.closest('article')?.querySelector('h3 > span')?.textContent ?? '';
+    const match = text.match(/ · (doctor|patient|nurse|operator|interpreter|unknown) · (EN|ES|UNKNOWN)$/);
+    if (!match) throw new Error('Missing visible role/language: ' + text);
+    return { role: match[1], language: match[2].toLowerCase() };
+  }
+  const roles = () => profileGroups().map(group => metadata(group).role);
+  const languages = () => profileGroups().map(group => metadata(group).language);
+
   function selectAudio(duration = 120) {
     const { container } = render(<RoleplayStudioPage />);
     fireEvent.change(screen.getByLabelText(/Grabación original MP3/i), {
@@ -47,8 +63,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       selectAudio();
       fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
       fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
-      fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-      fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+      chooseProfile('doctor');
       fireEvent.click(screen.getByRole('button', { name: 'Confirmar y avanzar' }));
       fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
       fireEvent.click(screen.getByRole('button', { name: 'Excluir y avanzar' }));
@@ -70,8 +85,8 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Recuperar respaldo local' })); });
       expect(screen.getByRole('status', { name: 'Confirmaciones editoriales' }).textContent).toContain('1/1');
       expect(screen.getByRole('button', { name: 'Papelera editorial (1)' })).toBeTruthy();
-      expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
-      expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+      expect(metadata(profileGroup()).role).toBe('doctor');
+      expect(metadata(profileGroup()).language).toBe('en');
       vi.spyOn(window, 'confirm').mockReturnValue(true);
       fireEvent.click(screen.getByRole('button', { name: 'Eliminar respaldo local' }));
       expect(localStorage.getItem(STUDIO_RECOVERY_KEY)).toBeNull();
@@ -115,8 +130,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getByText('Doctor: How are you?')).toBeTruthy();
     expect(screen.getByText('Paciente: Me duele la cabeza.')).toBeTruthy();
 
-    const languages = screen.getAllByLabelText(/Idioma de la intervención/i);
-    fireEvent.change(languages[0], { target: { value: 'en' } });
+    chooseProfile('doctor', 0);
     fireEvent.click(screen.getAllByRole('button', { name: /Aplicar perfil e idioma al título/i })[0]);
     expect((screen.getAllByLabelText('Título')[0] as HTMLInputElement).value)
       .toBe('Doctor · 1 (EN)');
@@ -138,17 +152,16 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
     const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
     fireEvent.change(selector, { target: { value: selector.options[0].value } });
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar perfil a 1 turnos de la misma etiqueta' }));
     fireEvent.change(selector, { target: { value: selector.options[2].value } });
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
-    expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+    expect(metadata(profileGroup()).role).toBe('doctor');
+    expect(metadata(profileGroup()).language).toBe('en');
     fireEvent.change(selector, { target: { value: selector.options[1].value } });
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+    expect(metadata(profileGroup()).role).toBe('unknown');
     fireEvent.click(screen.getByRole('button', { name: /Deshacer.*hablantes/i }));
     fireEvent.change(selector, { target: { value: selector.options[2].value } });
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+    expect(metadata(profileGroup()).role).toBe('unknown');
   });
 
   it('excludes all recognized interpreter turns at once and restores private references on undo', async () => {
@@ -176,30 +189,27 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getByText('Interpreter: Original rendition')).toBeTruthy();
   });
 
-  it('applies the medical language pattern only to visible pending doctor and patient turns and supports undo', () => {
+  it('applies the medical language pattern only to visible pending doctor and patient turns and supports undo', async () => {
     selectAudio(180);
-    for (let i = 0; i < 5; i++) {
-      fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
-    }
-    const speakers = screen.getAllByLabelText('Perfil del hablante');
-    const languages = screen.getAllByLabelText('Idioma de la intervención');
-    expect(speakers).toHaveLength(5);
-    expect(languages).toHaveLength(5);
-    ['doctor', 'patient', 'doctor', 'interpreter', 'patient'].forEach((role, index) => {
-      fireEvent.change(speakers[index], { target: { value: role } });
+    fireEvent.click(screen.getByLabelText(/Excluir intervenciones del intérprete original al importar/i));
+    const subtitle = new File(['mock'], 'legacy.srt', { type: 'text/plain' });
+    const labels = ['Doctor', 'Paciente', 'Doctor', 'Interpreter', 'Paciente'];
+    Object.defineProperty(subtitle, 'text', { value: async () => labels.map((label, i) =>
+      (i + 1) + '\n00:00:0' + i + ',000 --> 00:00:0' + (i + 1) + ',000\n' + label + ': Test').join('\n\n'), configurable: true });
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText(/Opcional: importar tiempos de transcripción/i), { target: { files: [subtitle] } });
     });
-    fireEvent.change(languages[2], { target: { value: 'es' } });
-    const titles = screen.getAllByLabelText('Título');
-    fireEvent.change(titles[4], { target: { value: 'Oculto' } });
+    expect(roles()).toEqual(['doctor', 'patient', 'doctor', 'interpreter', 'patient']);
+    chooseProfile('doctor', 2);
+    fireEvent.change(screen.getAllByLabelText('Título')[4], { target: { value: 'Oculto' } });
     const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
     fireEvent.change(search, { target: { value: 'Oculto' } });
     expect(screen.getByRole('button', { name: /Aplicar médico EN \/ paciente ES \(1 pendientes visibles\)/ })).toBeTruthy();
     fireEvent.change(search, { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: /Aplicar médico EN \/ paciente ES \(3 pendientes visibles\)/ }));
-    const values = () => (screen.getAllByLabelText('Idioma de la intervención') as HTMLSelectElement[]).map(item => item.value);
-    expect(values()).toEqual(['en', 'es', 'es', 'unknown', 'es']);
+    expect(languages()).toEqual(['en', 'es', 'en', 'unknown', 'es']);
     fireEvent.click(screen.getByRole('button', { name: /Deshacer asignación de idiomas/i }));
-    expect(values()).toEqual(['unknown', 'unknown', 'es', 'unknown', 'unknown']);
+    expect(languages()).toEqual(['unknown', 'unknown', 'en', 'unknown', 'unknown']);
   });
 
   it('assigns a chosen speaker only to pending visible turns and supports undo', () => {
@@ -207,21 +217,15 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     for (let i = 0; i < 3; i++) {
       fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     }
-    const speakers = screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[];
-    expect(speakers).toHaveLength(3);
-    fireEvent.change(speakers[0], { target: { value: 'patient' } });
-
-    const bulk = screen.getByRole('combobox', { name: 'Hablante para pendientes' });
-    fireEvent.change(bulk, { target: { value: 'nurse' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar hablante a 2 pendientes' }));
-
-    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
-      .map(element => element.value)).toEqual(['patient', 'nurse', 'nurse']);
-    expect(screen.getByText(/Perfil nurse asignado a 2 intervenciones/)).toBeTruthy();
-
+    expect(profileGroups()).toHaveLength(3);
+    chooseProfile('patient', 0);
+    fireEvent.click(screen.getByRole('button', { name: 'Cliente · EN (2)' }));
+    expect(roles()).toEqual(['patient', 'doctor', 'doctor']);
+    expect(languages()).toEqual(['es', 'en', 'en']);
+    expect(screen.getByText(/Perfil Cliente \(EN\) asignado a 2 intervenciones/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Deshacer asignación de hablantes' }));
-    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
-      .map(element => element.value)).toEqual(['patient', 'unknown', 'unknown']);
+    expect(roles()).toEqual(['patient', 'unknown', 'unknown']);
+    expect(languages()).toEqual(['es', 'unknown', 'unknown']);
   });
 
   it('applies bulk speaker review only to turns currently shown by the search filter', () => {
@@ -235,12 +239,11 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Intervención' },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Asignar hablante a 2 pendientes' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cliente · EN (2)' }));
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: '' },
     });
-    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
-      .map(element => element.value)).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
+    expect(roles()).toEqual(['unknown', 'unknown', 'doctor', 'doctor']);
   });
 
   it('navigates active and excluded cuts from the optional timeline without replaying or restoring them', () => {
@@ -319,10 +322,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(summary()).toContain('2 sin hablante');
     expect(summary()).toContain('2 sin idioma');
 
-    const speakers = screen.getAllByLabelText('Perfil del hablante');
-    const languages = screen.getAllByLabelText('Idioma de la intervención');
-    fireEvent.change(speakers[0], { target: { value: 'doctor' } });
-    fireEvent.change(languages[0], { target: { value: 'en' } });
+    chooseProfile('doctor', 0);
     expect(summary()).toMatch(/Revisión de roles e idiomas:\s*1\/2 sin pendientes/);
     expect(summary()).toContain('1 sin hablante');
     expect(summary()).toContain('1 sin idioma');
@@ -337,12 +337,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
   it('identifies original interpreter turns as pending until excluded', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), {
-      target: { value: 'interpreter' },
-    });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), {
-      target: { value: 'en' },
-    });
+    chooseProfile('interpreter');
     const summary = screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' });
     expect(summary.textContent).toMatch(/Revisión de roles e idiomas:\s*0\/1 sin pendientes/);
     expect(summary.textContent).toContain('1 del intérprete original por excluir');
@@ -371,8 +366,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: '' },
     });
-    expect((screen.getAllByLabelText('Perfil del hablante') as HTMLSelectElement[])
-      .map(element => element.value)).toEqual(['unknown', 'unknown', 'unknown']);
+    expect(roles()).toEqual(['unknown', 'unknown', 'unknown']);
   });
 
   it('confirms a classified turn and advances without losing it while filtering unconfirmed turns', () => {
@@ -384,8 +378,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Sin confirmar (2)' }));
     const confirm = () => screen.getByRole('button', { name: 'Confirmar y avanzar' });
     expect(confirm()).toHaveProperty('disabled', true);
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     expect(confirm()).toHaveProperty('disabled', false);
     expect(screen.getByText('Intervención 1 de 2 · 1 de 2 visibles')).toBeTruthy();
     fireEvent.click(confirm());
@@ -419,7 +412,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
     const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
     fireEvent.change(selector, { target: { value: selector.options[0].value } });
-    const profile = screen.getByLabelText('Perfil del hablante');
+    const profile = profileGroup();
     expect(profile.closest('[hidden]')).toBeNull();
     expect(screen.getByText('Doctor: Hello').compareDocumentPosition(profile) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Marcar inicio actual' })).toBeNull();
@@ -441,14 +434,13 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.change(selector, { target: { value: selector.options[0].value } });
     fireEvent.click(screen.getByRole('button', { name: 'Excluir y avanzar' }));
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     expect(screen.queryByRole('button', { name: 'Deshacer eliminación de intervención' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Papelera editorial (1)' }));
     fireEvent.click(screen.getByRole('button', { name: 'Recuperar Intervención 1' }));
     expect(screen.getByText(/Intervenciones \(3\/25\)/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Papelera editorial (1)' })).toBeNull();
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+    expect(metadata(profileGroup()).role).toBe('unknown');
   });
 
   it('excludes the active turn, advances chronologically and restores its private reference on undo', async () => {
@@ -486,19 +478,18 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Modo enfoque' }));
     const selector = screen.getByLabelText('Ir a intervención') as HTMLSelectElement;
     fireEvent.change(selector, { target: { value: selector.options[0].value } });
-    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect(profileGroups()).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Anterior intervención' })).toHaveProperty('disabled', true);
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     fireEvent.click(screen.getByRole('button', { name: 'Siguiente intervención' }));
-    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('unknown');
+    expect(profileGroups()).toHaveLength(1);
+    expect(metadata(profileGroup()).role).toBe('unknown');
     fireEvent.click(screen.getByRole('button', { name: 'Anterior intervención' }));
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
-    expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+    expect(metadata(profileGroup()).role).toBe('doctor');
+    expect(metadata(profileGroup()).language).toBe('en');
     expect(player.play).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Volver a lista' }));
-    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(3);
+    expect(profileGroups()).toHaveLength(3);
   });
 
   it('switches between immersive editing and finalization without remounting media or losing edits', () => {
@@ -509,16 +500,15 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.closest('[hidden]')).not.toBeNull();
     expect(player.isConnected).toBe(true);
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Salir del escritorio' }));
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }));
     expect(screen.getByRole('heading', { name: 'Preparar paquete del roleplay' })).toBeTruthy();
     expect(screen.queryByRole('navigation', { name: 'Navegador de intervenciones' })).toBeNull();
-    expect(screen.getByLabelText('Perfil del hablante').closest('[hidden]')).not.toBeNull();
+    expect(document.querySelector('[role="group"][aria-label^="Perfil de intervención "]')?.closest('[hidden]')).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Editar' }));
     expect(screen.queryByRole('heading', { name: 'Preparar paquete del roleplay' })).toBeNull();
-    expect((screen.getByLabelText('Perfil del hablante') as HTMLSelectElement).value).toBe('doctor');
-    expect((screen.getByLabelText('Idioma de la intervención') as HTMLSelectElement).value).toBe('en');
+    expect(metadata(profileGroup()).role).toBe('doctor');
+    expect(metadata(profileGroup()).language).toBe('en');
     expect(player.isConnected).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Salir del escritorio' }));
     expect(player.closest('[hidden]')).toBeNull();
@@ -531,7 +521,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     fireEvent.click(screen.getByRole('button', { name: 'Abrir escritorio de edición' }));
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'interpreter' } });
+    chooseProfile('interpreter');
     fireEvent.click(screen.getByRole('button', { name: 'Finalizar' }));
     fireEvent.click(screen.getByRole('button', { name: 'Descargar plan local de cortes (JSON)' }));
     expect(screen.getByRole('navigation', { name: 'Navegador de intervenciones' })).toBeTruthy();
@@ -575,7 +565,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       target: { value: 'Intervención 2' },
     });
     expect(screen.getByText('Intervención 2 de 3 · 1 de 1 visibles')).toBeTruthy();
-    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect(profileGroups()).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Siguiente intervención' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Anterior intervención' })).toHaveProperty('disabled', true);
   });
@@ -613,8 +603,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
     expect(screen.getByRole('button', { name: 'Ir al siguiente pendiente' })).toBeTruthy();
-    fireEvent.change(screen.getByLabelText('Perfil del hablante'), { target: { value: 'doctor' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     expect(screen.queryByRole('button', { name: 'Ir al siguiente pendiente' })).toBeNull();
   });
 
@@ -724,7 +713,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(screen.getByText(/30 turnos disponibles y 30 seleccionados/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Aplicar selección al editor (30)' }));
     expect(screen.getByText(/Intervenciones \(30\/100\)/)).toBeTruthy();
-    expect(screen.getAllByLabelText('Perfil del hablante')).toHaveLength(1);
+    expect(profileGroups()).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Descargar plan local de cortes (JSON)' })).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: 'Guardar borrador ampliado' })).toBeTruthy();
 
@@ -825,11 +814,11 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
       });
     });
 
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'en' } });
+    chooseProfile('doctor');
     const title = screen.getByLabelText('Título') as HTMLInputElement;
     expect(title.value).toBe('Doctor · 1 (EN)');
     fireEvent.change(title, { target: { value: 'Consulta personalizada' } });
-    fireEvent.change(screen.getByLabelText('Idioma de la intervención'), { target: { value: 'es' } });
+    chooseProfile('patient');
     expect(title.value).toBe('Consulta personalizada');
   });
 
