@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { openingAssignmentConfigured } from '@/lib/roleplay/direct-upload-pilot-config';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
-import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch } from '@/lib/roleplay-library-topics';
+import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, parseRoleplayLibrarySearch, scoreRoleplayLibrarySearch, ROLEPLAY_LIBRARY_SIZE_OPTIONS, parseRoleplayLibrarySize, matchesRoleplayLibrarySize } from '@/lib/roleplay-library-topics';
 import RoleplayTopicsReadiness from './RoleplayTopicsReadiness';
 import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
@@ -95,11 +95,12 @@ async function getLibrary() {
 export default async function RoleplayLibraryPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string | string[]; archived?: string | string[]; topic?: string | string[]; subtopic?: string | string[] }>;
+  searchParams: Promise<{ q?: string | string[]; archived?: string | string[]; topic?: string | string[]; subtopic?: string | string[]; size?: string | string[] }>;
 }) {
   const params = await searchParams;
   const q = parseRoleplayLibrarySearch(params.q);
   const showArchived = params.archived === '1';
+  const size = parseRoleplayLibrarySize(params.size);
   const privateAssignmentConfigured = openingAssignmentConfigured(process.env);
   const result = await getLibrary();
   let editorialEnabled = process.env.ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED === 'true';
@@ -122,7 +123,7 @@ export default async function RoleplayLibraryPage({
   }
   const { topic, subtopic } = parseRoleplayTopicFilters(params.topic, params.subtopic);
   const searchable = result.items.filter(item =>
-    showArchived ? item.archivedAt !== null : item.archivedAt === null
+    (showArchived ? item.archivedAt !== null : item.archivedAt === null) && matchesRoleplayLibrarySize(item.audioCount, size)
   ).map(item => ({ ...item, editorialTopic: editorial.get(item.fingerprint) ?? null, topicHints: resolveRoleplayTopics(item.titles, editorial.get(item.fingerprint)) }))
     .map(item => ({ ...item, searchScore: scoreRoleplayLibrarySearch(item.titles, item.fingerprint, item.topicHints, q) }))
     .filter(item => item.searchScore > 0)
@@ -130,9 +131,10 @@ export default async function RoleplayLibraryPage({
   const matches = searchable.filter(item => matchesRoleplayTopic(item.topicHints, topic, subtopic));
   const selectedTopic = ROLEPLAY_TOPICS.find(item => item.id === topic);
   const topicCount = (id: string, child = '') => searchable.filter(item => matchesRoleplayTopic(item.topicHints, id, child)).length;
-  const libraryHref = (nextTopic = '', nextSubtopic = '', nextQ = q, archived = showArchived) => {
+  const libraryHref = (nextTopic = '', nextSubtopic = '', nextQ = q, archived = showArchived, nextSize = size) => {
     const query = new URLSearchParams();
     if (nextQ) query.set('q', nextQ);
+    if (nextSize) query.set('size', nextSize);
     if (archived) query.set('archived', '1');
     if (nextTopic) query.set('topic', nextTopic);
     if (nextSubtopic) query.set('subtopic', nextSubtopic);
@@ -197,8 +199,14 @@ export default async function RoleplayLibraryPage({
         {showArchived && <input type="hidden" name="archived" value="1" />}
         {topic && <input type="hidden" name="topic" value={topic} />}
         {subtopic && <input type="hidden" name="subtopic" value={subtopic} />}
-        <button type="submit" className="rounded-xl theme-action-primary px-5 py-3 font-semibold">Buscar</button>
-        {(q || topic) && <Link href={libraryHref('', '', '')} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]">Limpiar</Link>}
+        <div className="w-full sm:w-auto">
+          <label htmlFor="library-size" className="mb-1 block text-xs font-semibold text-[var(--text-secondary)]">Cantidad de escenarios</label>
+          <select id="library-size" name="size" defaultValue={size} className="min-h-11 w-full rounded-xl border border-[var(--theme-control-border)] bg-[var(--theme-control-bg)] px-3 py-2 text-sm text-[var(--theme-control-text)]">
+            {ROLEPLAY_LIBRARY_SIZE_OPTIONS.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+          </select>
+        </div>
+        <button type="submit" className="min-h-11 self-end rounded-xl theme-action-primary px-5 py-3 font-semibold">Buscar</button>
+        {(q || topic || size) && <Link href={libraryHref('', '', '', showArchived, '')} className="rounded-xl border border-[var(--border)] px-4 py-3 text-sm text-[var(--text-secondary)] hover:bg-[var(--theme-hover)]">Limpiar</Link>}
       </form>
 
       {!result.error && (
@@ -248,8 +256,8 @@ export default async function RoleplayLibraryPage({
         {!result.error && matches.length === 0 && (
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--theme-surface-muted)] p-12 text-center">
             <AudioLines size={38} className="mx-auto mb-3 text-[var(--text-tertiary)]" />
-            <p className="font-semibold text-[var(--foreground)]">{q || topic ? 'No hay ejercicios con estos filtros' : showArchived ? 'No hay ejercicios archivados' : 'No hay ejercicios reutilizables todavía'}</p>
-            <p className="mt-2 text-sm text-[var(--text-secondary)]">{q || topic ? 'Cambia de tema, subtema o búsqueda para ver otros ejercicios.' : showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
+            <p className="font-semibold text-[var(--foreground)]">{q || topic || size ? 'No hay ejercicios con estos filtros' : showArchived ? 'No hay ejercicios archivados' : 'No hay ejercicios reutilizables todavía'}</p>
+            <p className="mt-2 text-sm text-[var(--text-secondary)]">{q || topic || size ? 'Cambia de tema, subtema, cantidad de escenarios o búsqueda para ver otros ejercicios.' : showArchived ? 'Los ejercicios borrados de la biblioteca pueden restaurarse aquí.' : 'Publica un roleplay con audios válidos para incorporarlo a esta biblioteca.'}</p>
           </div>
         )}
         {matches.map((item) => (
