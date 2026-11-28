@@ -18,7 +18,7 @@ import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
 import { restoreExcludedIssue, STUDIO_MAX_EXCLUDED_TURNS } from '@/lib/roleplay-studio/editorial-trash';
 import { useStudioLocalRecovery, type RestoredStudioRecovery } from './useStudioLocalRecovery';
-import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
+import { studioReviewIssue, nextUnconfirmedTurn, inspectStudioReview, studioTurnFieldValidity, type StudioReviewCode } from '@/lib/roleplay-studio/quick-review';
 import { sourceSpeakerGroup, propagateSpeakerProfile, summarizeSourceSpeakerGroups } from '@/lib/roleplay-studio/speaker-groups';
 import { planStudioPublicationParts, STUDIO_PACKAGE_AUDIO_SECONDS, type StudioPublicationPart } from '@/lib/roleplay-studio/publication-parts';
 import { planGaplessPair, type GaplessPairPlan } from '@/lib/roleplay-studio/gapless-pair-preview';
@@ -1600,18 +1600,18 @@ export default function RoleplayStudioPage() {
     let total = 0;
     for (const [index, segment] of ordered.entries()) {
       const ranges = validStudioRanges(segment, duration);
+      const fields = studioTurnFieldValidity(segment);
       const issue: { code: StudioReviewCode; message: string } | null = !segment.title.trim()
         ? { code: 'title', message: 'añade un título antes de exportar.' }
-        : segment.title.length > 200
+        : !fields.title
           ? { code: 'title', message: 'reduce el título a 200 caracteres o menos.' }
           : !ranges
             ? { code: 'range', message: 'corrige los límites de corte (máximo 5 minutos de audio seleccionado).' }
             : segment.start < end
               ? { code: 'overlap', message: 'este corte se solapa con la intervención anterior.' }
-              : segment.scriptPrompt.length > 5000
+              : !fields.instructions
                 ? { code: 'instructions', message: 'reduce las instrucciones a 5000 caracteres o menos.' }
-                : !Number.isInteger(segment.responseLimit) || segment.responseLimit < 0 ||
-                    segment.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC
+                : !fields.response
                   ? { code: 'response', message: `ajusta el tiempo de respuesta entre 0 y ${ROLEPLAY_RESPONSE_MAX_DURATION_SEC} segundos.` }
                   : null;
       if (issue) {

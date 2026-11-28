@@ -8,9 +8,20 @@ type ReviewTurn = { id: string; start: number; end: number; ranges?: unknown;
 export type StudioReviewCode = 'interpreter' | 'speaker' | 'language' | 'title' | 'range' | 'overlap' | 'instructions' | 'response';
 export type StudioReviewFinding = { code: StudioReviewCode; message: string };
 
+/** Shared metadata limits; editorial and export callers retain their own policy and messages. */
+export function studioTurnFieldValidity(turn: Pick<ReviewTurn, 'title' | 'scriptPrompt' | 'responseLimit'>) {
+  return {
+    title: Boolean(turn.title.trim()) && turn.title.length <= 200,
+    instructions: turn.scriptPrompt.length <= 5000,
+    response: Number.isInteger(turn.responseLimit) && turn.responseLimit >= 0 &&
+      turn.responseLimit <= ROLEPLAY_RESPONSE_MAX_DURATION_SEC,
+  };
+}
+
 /** All editorial issues, rather than hiding later problems behind the first one. */
 export function studioReviewFindings(turn: ReviewTurn, all: readonly ReviewTurn[], duration: number): StudioReviewFinding[] {
   const issues: StudioReviewFinding[] = [];
+  const fields = studioTurnFieldValidity(turn);
   if (turn.speakerRole === 'interpreter') issues.push({ code: 'interpreter', message: 'Excluye la voz del intérprete original.' });
   if (turn.speakerRole === 'unknown') issues.push({ code: 'speaker', message: 'Identifica el hablante.' });
   if (turn.language === 'unknown') issues.push({ code: 'language', message: 'Selecciona el idioma.' });
@@ -18,14 +29,13 @@ export function studioReviewFindings(turn: ReviewTurn, all: readonly ReviewTurn[
     const profile = studioEditorialProfile(turn.speakerRole)!;
     issues.push({ code: 'language', message: `El idioma no coincide con ${profile.label} (${profile.language.toUpperCase()}). Escucha y revisa el perfil.` });
   }
-  if (!turn.title.trim() || turn.title.length > 200) issues.push({ code: 'title', message: 'Revisa el título (1–200 caracteres).' });
+  if (!fields.title) issues.push({ code: 'title', message: 'Revisa el título (1–200 caracteres).' });
   if (!validStudioRanges(turn, duration)) issues.push({ code: 'range', message: 'Corrige los límites de audio.' });
   if (all.some(other => other.id !== turn.id && turn.start < other.end && other.start < turn.end)) {
     issues.push({ code: 'overlap', message: 'Corrige el solapamiento con otra intervención.' });
   }
-  if (turn.scriptPrompt.length > 5000) issues.push({ code: 'instructions', message: 'Reduce las instrucciones a 5000 caracteres.' });
-  if (!Number.isInteger(turn.responseLimit) || turn.responseLimit < 0 ||
-      turn.responseLimit > ROLEPLAY_RESPONSE_MAX_DURATION_SEC) issues.push({ code: 'response', message: 'Revisa el tiempo de respuesta.' });
+  if (!fields.instructions) issues.push({ code: 'instructions', message: 'Reduce las instrucciones a 5000 caracteres.' });
+  if (!fields.response) issues.push({ code: 'response', message: 'Revisa el tiempo de respuesta.' });
   return issues;
 }
 
