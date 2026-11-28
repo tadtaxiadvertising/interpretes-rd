@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  validate: vi.fn(), readiness: vi.fn(), db: {},
+  validate: vi.fn(), readiness: vi.fn(), directCatalog: vi.fn(), db: {},
 }));
 vi.mock('@/lib/auth/actions', () => ({ validateAction: mocks.validate }));
 vi.mock('@/lib/prisma', () => ({ default: mocks.db }));
@@ -11,11 +11,12 @@ vi.mock('@/lib/roleplay/creation-ledger-readiness', () => ({ isCreationLedgerRea
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a>,
 }));
+vi.mock('@/lib/roleplay/direct-upload-catalog-readiness', () => ({ inspectDirectUploadCatalog: mocks.directCatalog }));
 import CreationReadinessPage from './page';
 import { DIRECT_UPLOAD_FORM_FLAGS, OPENING_ASSIGNMENT_FLAGS } from '@/lib/roleplay/direct-upload-pilot-config';
 
-async function view(check?: string | string[]) {
-  return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check }) }));
+async function view(check?: string | string[], checkDirect?: string | string[]) {
+  return renderToStaticMarkup(await CreationReadinessPage({ searchParams: Promise.resolve({ check, checkDirect }) }));
 }
 
 beforeEach(() => {
@@ -26,10 +27,40 @@ beforeEach(() => {
   vi.stubEnv('ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED', 'false');
   mocks.validate.mockResolvedValue({ user: { role: 'admin' } });
   mocks.readiness.mockResolvedValue(true);
+  mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'accounting-consistent', capacity: { maxSlots: 25, allocatedSlots: 10, remainingSlots: 15 } });
 });
 afterEach(() => vi.unstubAllEnvs());
 
 describe('admin runtime diagnostic', () => {
+  it.each([undefined, '0', 'true', ['1', '1']])('does not read the direct catalog without one explicit check (%o)', async checkDirect => {
+    const html = await view(undefined, checkDirect);
+    expect(html).toContain('Catálogo y presupuesto de subida directa');
+    expect(html).toContain('Sin comprobar');
+    expect(mocks.directCatalog).not.toHaveBeenCalled();
+  });
+
+  it('reports accounting capacity separately from runtime Storage readiness', async () => {
+    const html = await view(undefined, '1');
+    expect(mocks.directCatalog).toHaveBeenCalledExactlyOnceWith(mocks.db);
+    expect(mocks.readiness).not.toHaveBeenCalled();
+    expect(html).toContain('Estructura reconocida');
+    expect(html).toContain('Contabilidad coherente');
+    expect(html).toContain('10 de 25');
+    expect(html).toContain('Cupos contables: 10 de 25; restantes: 15');
+    expect(html).toContain('no representan espacio libre real');
+  });
+
+  it('hides capacity when accounting requires review and never probes for unauthorized visitors', async () => {
+    mocks.directCatalog.mockResolvedValue({ reservation: 'catalog-ready', budget: 'review-required', capacity: null });
+    const html = await view(undefined, '1');
+    expect(html).toContain('Requiere revisión');
+    expect(html).not.toContain('Cupos contables restantes');
+    expect(html).toContain('No se informa capacidad contable utilizable');
+    mocks.directCatalog.mockClear();
+    mocks.validate.mockResolvedValue({ user: { role: 'interpreter' } });
+    expect(await view(undefined, '1')).not.toContain('Catálogo y presupuesto de subida directa');
+    expect(mocks.directCatalog).not.toHaveBeenCalled();
+  });
   it('shows only configuration states for direct uploads, without a runtime probe or secret values', async () => {
     for (const name of [...OPENING_ASSIGNMENT_FLAGS, ...DIRECT_UPLOAD_FORM_FLAGS]) vi.stubEnv(name, 'true');
     vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'synthetic-project-value');
