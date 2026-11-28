@@ -99,6 +99,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   // No clinical media, request key or recipient is persisted in browser storage.
   const keyedAttempt = useRef<{ key: string; scenarioCount: number; trackedToken: string | null } | null>(null);
   const [keyedStatus, setKeyedStatus] = useState<SingleCreationRecovery['status'] | 'CHECKING' | null>(null);
+  const [recoveredSessionId, setRecoveredSessionId] = useState<string | null>(null);
   // Keep the reference in memory; warn about a full-page exit only while
   // the receipt is unresolved. Browsers may suppress the native prompt.
   const hasPendingReceipt = keyedStatus !== null && keyedStatus !== 'COMPLETED';
@@ -753,6 +754,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
       if (keyedAttempt.current !== attempt) return;
       setKeyedStatus(result.status);
       if (result.status === 'COMPLETED') {
+        setRecoveredSessionId(result.sessionId);
         setError(null);
         setSubmissionUncertain(false);
         recordProductionAttempt(attempt.trackedToken, 'created');
@@ -1175,6 +1177,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
           {keyedStatus !== 'COMPLETED' && !isCreating && <button type="button" disabled={keyedStatus === 'CHECKING'}
             onClick={() => { void checkCreationReceipt(); }}
             className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar resultado sin reenviar audios</button>}
+          {keyedStatus === 'COMPLETED' && recoveredSessionId && (
+            <Link href={`/admin/roleplays/${encodeURIComponent(recoveredSessionId)}`} prefetch={false}
+              className="inline-flex min-h-11 w-full items-center justify-center rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">Ver roleplay recuperado</Link>
+          )}
           <Link href="/admin/roleplays" target={hasPendingReceipt ? '_blank' : undefined}
             rel={hasPendingReceipt ? 'noopener noreferrer' : undefined}
             className="block text-sm font-semibold text-[var(--theme-link)] underline">Consultar roleplays existentes{hasPendingReceipt ? ' (nueva pestaña)' : ''}</Link>
