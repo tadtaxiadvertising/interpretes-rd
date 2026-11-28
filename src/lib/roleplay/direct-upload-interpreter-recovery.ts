@@ -54,7 +54,8 @@ async function recoverPublished(db: Store, actor: string, requestKey: string,
     batchId:row.id, ownerUserId:actor, status:'VERIFIED', createdAtMs:created, expiresAtMs:expires,
     items:row.items as unknown as PreparedRoleplayUpload[],
   }, row.verifiedObjects as unknown as TrustedRoleplayUploadEvidence[], actor, Math.min(now,expires-1));
-  if (fingerprintRoleplayDirectUploadDeclarations(plans.map(p=>p.item)) !== row.declarationHash) throw new Error('PUBLICATION_REVIEW_REQUIRED');
+  if (fingerprintRoleplayDirectUploadDeclarations(plans.map(p=>p.item)) !== row.declarationHash ||
+      (original && original.scenarios.length !== plans.length)) throw new Error('PUBLICATION_REVIEW_REQUIRED');
   const sessionId = row.publishedSessionIds[0];
   const session = await db.roleplaySession.findUnique({
     where: {id:sessionId},
@@ -64,7 +65,11 @@ async function recoverPublished(db: Store, actor: string, requestKey: string,
   if (!session) throw new Error('PUBLICATION_REVIEW_REQUIRED');
   const data = original ?? directInterpreterAssignment.parse({
     interpreterId: session.interpreterId,
-    scenarios: session.scenarios.map(({ order: _order, baseAudioUrl: _audio, ...scenario }) => scenario),
+    scenarios: session.scenarios.map(s => ({
+      title: s.title, durationLimitSec: s.durationLimitSec, scriptPrompt: s.scriptPrompt,
+      studioLanguage: s.studioLanguage, studioTurn: s.studioTurn, studioSpeaker: s.studioSpeaker,
+      sourceStartSec: s.sourceStartSec, sourceEndSec: s.sourceEndSec,
+    })),
   });
   if (!original) await requireDirectAssignmentBinding(db,row.id,actor,requestKey,data);
   if (data.scenarios.length !== plans.length || session.id !== sessionId || session.status === 'DRAFT' ||
