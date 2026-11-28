@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
 import userEvent from '@testing-library/user-event';
 import { cleanup,fireEvent,render,screen,waitFor } from '@testing-library/react';
 import { afterEach,describe,expect,it,vi } from 'vitest';
@@ -9,7 +9,7 @@ vi.mock('@/lib/roleplay/direct-upload-browser-http',()=>({
   consolidatePreparedRoleplaySlot:m.consolidate,
   publishConsolidatedRoleplay:m.publish,
 }));
-vi.mock('next/link',()=>({default:({href,children}:{href:string;children:ReactNode})=><a href={href}>{children}</a>}));
+vi.mock('next/link',()=>({default:(props:ComponentPropsWithoutRef<'a'>)=><a {...props}/>}));
 vi.mock('./ScenarioCard',()=>({
   ScenarioCard:({scenario,onUpdate}:{scenario:{id:string};onUpdate:(id:string,updates:Record<string,unknown>)=>void})=>
     <button type="button" onClick={()=>onUpdate(scenario.id,{title:'Consulta de prueba',baseAudioFile:new File(['ID3'],'synthetic.mp3',{type:'audio/mpeg'}),studioTurn:1,studioLanguage:'en'})}>Preparar escenario</button>,
@@ -122,6 +122,52 @@ describe('gated creation receipt recovery form', () => {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requestKey: key }), cache: 'no-store',
     });
     expect(screen.getByRole('button', { name: 'Crear roleplay' })).toHaveProperty('disabled', true);
+  });
+
+  it('warns before a full page exit only for unresolved receipts and preserves the tab when reviewing sessions', async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(Response.json({ success: true, data: { status: 'IN_PROGRESS' } }))
+      .mockResolvedValueOnce(Response.json({ success: true, data: complete }));
+    vi.stubGlobal('fetch', fetcher);
+    const { unmount } = render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} receiptRecoveryEnabled/>);
+    const exitPrevented = () => {
+      const event = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    expect(exitPrevented()).toBe(false);
+    fireEvent.click(screen.getByText('Recuperar una creación anterior'));
+    fireEvent.change(screen.getByLabelText('Referencia de recuperación'), { target: { value: 'rp1:' + key + ':1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
+    await screen.findByText(/La creación está pendiente de confirmación/);
+    expect(exitPrevented()).toBe(true);
+    const link = screen.getByRole('link', { name: 'Consultar roleplays existentes (nueva pestaña)' });
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+    fireEvent.click(screen.getByRole('button', { name: 'Consultar resultado sin reenviar audios' }));
+    await screen.findByText(/Creación confirmada mediante el recibo/);
+    expect(exitPrevented()).toBe(false);
+    expect(screen.getByRole('link', { name: 'Consultar roleplays existentes' }).hasAttribute('target')).toBe(false);
+    unmount();
+    expect(exitPrevented()).toBe(false);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher.mock.calls.every(call => call[0] === '/api/admin/roleplays/creation-receipt')).toBe(true);
+  });
+
+  it('removes the native exit warning when an unresolved form unmounts', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ success: true, data: { status: 'NOT_FOUND' } })));
+    const { unmount } = render(<NewRoleplayForm interpreters={[]} candidates={[]} receiptRecoveryEnabled/>);
+    fireEvent.click(screen.getByText('Recuperar una creación anterior'));
+    fireEvent.change(screen.getByLabelText('Referencia de recuperación'), { target: { value: 'rp1:' + key + ':1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Recuperar intento anterior' }));
+    await screen.findByText(/Esto no demuestra que la creación haya fallado/);
+    const pending = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(pending);
+    expect(pending.defaultPrevented).toBe(true);
+    unmount();
+    const after = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(after);
+    expect(after.defaultPrevented).toBe(false);
   });
 
   it('does not send a new keyed request in receipt-only mode', async () => {
