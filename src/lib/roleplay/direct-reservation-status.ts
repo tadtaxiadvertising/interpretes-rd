@@ -1,4 +1,5 @@
 import type { PrismaClient } from '@prisma/client';
+import { observePublishedInterpreterRoleplay } from './direct-upload-interpreter-recovery';
 import { isRoleplayDirectUploadRequestKey, fingerprintRoleplayDirectUploadDeclarations } from './direct-upload-reservation-fingerprint';
 import { prepareRoleplayDirectUploadBatch, type PreparedRoleplayUpload } from './direct-upload-contract';
 import { ROLEPLAY_UPLOAD_RESERVATION_TTL_MS } from './direct-upload-reservation';
@@ -6,7 +7,7 @@ import { ROLEPLAY_DIRECT_UPLOAD_MAX_SLOTS } from '@/lib/roleplay-limits';
 import type { TrustedRoleplayUploadEvidence } from './direct-upload-publication-gate';
 
 export type DirectReservationStatus = 'NOT_FOUND' | 'RESERVED' | 'VERIFIED' | 'EXPIRED' |
-  'PUBLICATION_RECORDED' | 'CANCELLED' | 'REVIEW_REQUIRED';
+  'PUBLICATION_RECORDED' | 'PUBLICATION_CONFIRMED' | 'CANCELLED' | 'REVIEW_REQUIRED';
 
 export type DirectReservationRecordedProgress = {
   total: number;
@@ -18,12 +19,13 @@ export type DirectReservationRecordedProgress = {
 export type DirectReservationStatusResult = {
   status: DirectReservationStatus;
   progress?: DirectReservationRecordedProgress;
+  sessionId?: string;
 };
 
 /** Ledger observation only. No Storage observation, receipt verification,
  * signing, mutation or authorization to retry follows from this result. */
 export async function lookupDirectReservationStatus(
-  db: Pick<PrismaClient, 'roleplayUploadReservation'>,
+  db: Pick<PrismaClient, 'roleplayUploadReservation' | 'roleplaySession' | '$queryRaw'>,
   actorUserId: string,
   requestKey: string,
   now = Date.now(),
@@ -39,7 +41,13 @@ export async function lookupDirectReservationStatus(
   if (!row) return { status: 'NOT_FOUND' };
   // A published ledger row is not proof that the session still exists.
   // Expiration of a reservation does not erase a recorded publication.
-  if (row.status === 'PUBLISHED') return { status: 'PUBLICATION_RECORDED' };
+  if (row.status === 'PUBLISHED') {
+    try {
+      const receipt = await observePublishedInterpreterRoleplay(db, actorUserId, requestKey);
+      if (receipt) return { status: 'PUBLICATION_CONFIRMED', sessionId: receipt.sessionId };
+    } catch { /* An unconfirmed receipt must never expose a session link. */ }
+    return { status: 'PUBLICATION_RECORDED' };
+  }
   if (row.status === 'CANCELLED') return { status: 'CANCELLED' };
   if (row.status !== 'RESERVED' && row.status !== 'VERIFIED') return { status: 'REVIEW_REQUIRED' };
   const expires = row.expiresAt instanceof Date ? row.expiresAt.getTime() : NaN;
