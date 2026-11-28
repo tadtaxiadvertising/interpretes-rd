@@ -339,6 +339,27 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     expect(player.play).not.toHaveBeenCalled();
   });
 
+  it('opens the precise correction field without changing cuts or playing audio', () => {
+    const player = selectAudio();
+    for (let i = 0; i < 2; i++) fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
+    fireEvent.change(screen.getAllByLabelText('Título')[1], { target: { value: '' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
+      target: { value: 'Intervención 1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Centro de revisión (2)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Editar título de intervención 2' }));
+    expect(screen.getByLabelText('Título')).toBe(document.activeElement);
+    expect(screen.getByLabelText('Título')).toHaveProperty('value', '');
+    expect(screen.getByRole('searchbox', { name: 'Buscar intervenciones' })).toHaveProperty('value', '');
+    expect(metadata(profileGroup()).role).toBe('unknown');
+    fireEvent.click(screen.getByRole('button', { name: 'Centro de revisión (2)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Elegir perfil de intervención 1' }));
+    expect(within(profileGroup()).getByRole('button', { name: 'Cliente · EN' })).toBe(document.activeElement);
+    expect(metadata(profileGroup()).role).toBe('unknown');
+    expect(screen.getByRole('button', { name: 'Ajustes avanzados' }).getAttribute('aria-expanded')).toBe('false');
+    expect(player.play).not.toHaveBeenCalled();
+  });
+
   it('shows global review progress independent of search filters and updates after edits', () => {
     selectAudio();
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/i }));
