@@ -145,6 +145,7 @@ export async function POST(req: NextRequest) {
   // might have persisted its URL. A failed/ambiguous commit must preserve it.
   let audioCommitMayHaveStarted = false;
   let processingSlotAcquired = false;
+  let multipartReadStarted = false;
   let creationClaim: { actorUserId: string; requestKey: string; payloadHash: string } | null = null;
 
   try {
@@ -165,7 +166,6 @@ export async function POST(req: NextRequest) {
     // Reject additional uploads before reading multipart bytes. A second
     // request would multiply the temporary memory footprint on a small VPS.
     if (activeRoleplayCreates >= MAX_ACTIVE_ROLEPLAY_CREATES) {
-      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
       return privateRoleplayJson(
         { success: false, error: 'Ya se está creando otro roleplay. Vuelve a intentarlo cuando termine.' },
         { status: 503, headers: { 'Retry-After': '5' } },
@@ -178,18 +178,14 @@ export async function POST(req: NextRequest) {
     // The bounded reader also checks bytes as they arrive, before parsing.
     const declaredBytes = Number(req.headers.get('content-length') ?? 0);
     if (Number.isFinite(declaredBytes) && declaredBytes > MAX_ROLEPLAY_MULTIPART_BYTES) {
-      // Do not leave an oversized upload body streaming after an early 413.
-      // Cancellation is best-effort: always preserve the intended rejection
-      // even if an upstream transport refuses to cancel its request stream.
-      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
       return privateRoleplayJson({ success: false, error: 'El lote de audio excede el tamaño máximo admitido.' }, { status: 413 });
     }
     // Only keyed creations require the hardened ledger. Check the actual
     // runtime DB connection before buffering audio or reserving any claim.
     if (creationRequestKey && !await isCreationLedgerReady(db)) {
-      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
       return privateRoleplayJson({ success: false, error: 'El registro seguro de creación todavía no está disponible.' }, { status: 503 });
     }
+    multipartReadStarted = true;
     const formData = await readBoundedMultipartFormData(req, MAX_ROLEPLAY_MULTIPART_BYTES);
     const participantType = formData.get('participantType');
     const participantId = formData.get('participantId');
@@ -928,7 +924,13 @@ export async function POST(req: NextRequest) {
       { status: 500, headers: { 'Cache-Control': 'private, no-store' } }
     );
   } finally {
-    // Every exit path, including 413/401, Storage errors and ambiguous
+    // Every pre-parser rejection must discard the unread upload, including
+    // authorization and pilot configuration errors. Never wait on the upstream
+    // cancellation promise or let it replace the intended response.
+    if (!multipartReadStarted) {
+      try { void req.body?.cancel().catch(() => {}); } catch { /* Best effort. */ }
+    }
+    // Every exit path, including 413/403, Storage errors and ambiguous
     // transactions, must free the process-local admission slot.
     if (processingSlotAcquired) activeRoleplayCreates--;
   }
