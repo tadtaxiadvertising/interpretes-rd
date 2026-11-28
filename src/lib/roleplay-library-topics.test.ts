@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch } from './roleplay-library-topics';
+import { inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic, resolveRoleplayTopics, parseRoleplayLibrarySearch, matchesRoleplayLibrarySearch, scoreRoleplayLibrarySearch, parseRoleplayLibrarySize, matchesRoleplayLibrarySize } from './roleplay-library-topics';
 
 describe('library topic suggestions', () => {
   it('recognizes bilingual titles and ignores case and accents', () => {
@@ -97,5 +97,28 @@ describe('catalog search', () => {
     expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'medicina')).toBe(true);
     expect(matchesRoleplayLibrarySearch(titles,fingerprint,topics,'seguros')).toBe(false);
     expect(matchesRoleplayLibrarySearch(titles,fingerprint,[], 'pediatria')).toBe(false);
+  });
+});
+
+describe('catalog scenario count filters', () => {
+  it('accepts only defined scalar filters and rejects malformed or repeated parameters', () => {
+    expect(parseRoleplayLibrarySize('short')).toBe('short');
+    expect(parseRoleplayLibrarySize(['short', 'long'])).toBe('');
+    expect(parseRoleplayLibrarySize('unknown')).toBe('');
+    expect(parseRoleplayLibrarySize(undefined)).toBe('');
+  });
+  it('assigns every valid scenario count to exactly one bounded range', () => {
+    for (let count = 1; count <= 25; count++) {
+      const ranges = (['single', 'short', 'medium', 'long'] as const).filter(size => matchesRoleplayLibrarySize(count, size));
+      expect(ranges).toHaveLength(1);
+      expect(matchesRoleplayLibrarySize(count, '')).toBe(true);
+    }
+    expect(matchesRoleplayLibrarySize(5, 'short')).toBe(true);
+    expect(matchesRoleplayLibrarySize(6, 'short')).toBe(false);
+    expect(matchesRoleplayLibrarySize(15, 'medium')).toBe(true);
+    expect(matchesRoleplayLibrarySize(16, 'medium')).toBe(false);
+    expect(matchesRoleplayLibrarySize(25, 'long')).toBe(true);
+    expect(matchesRoleplayLibrarySize(26, 'long')).toBe(false);
+    expect(matchesRoleplayLibrarySize(2.5, 'short')).toBe(false);
   });
 });
