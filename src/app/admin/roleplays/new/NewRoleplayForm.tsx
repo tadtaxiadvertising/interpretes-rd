@@ -14,7 +14,7 @@ import { confirmRoleplayCreationRetry } from '@/lib/roleplay/creation-retry-guar
 import { formatCreationRecoveryReference, isConfirmedRoleplaySessionId, parseCreationRecoveryReference, recoverSingleRoleplayCreation, type SingleCreationRecovery } from '@/lib/roleplay/creation-receipt-browser';
 import { peekStudioHandoff, peekLocalWavHandoff, clearStudioHandoff } from '@/lib/roleplay-studio/assignment-handoff';
 import { extractExternalStudioZip } from '@/lib/roleplay-studio/external-zip';
-import { observeDirectReservation, type DirectReservationObservation } from '@/lib/roleplay/direct-reservation-status-browser';
+import { directReservationObservationLabels, observeDirectReservation, type DirectReservationObservation } from '@/lib/roleplay/direct-reservation-status-browser';
 import { DirectUploadReviewRequired, type DirectUploadReviewReason } from '@/lib/roleplay/direct-upload-browser-resume';
 import { createDirectRoleplayFormController, type FormProgress } from '@/lib/roleplay/direct-upload-form-controller';
 import { createConfiguredRoleplayUploadController, consolidatePreparedRoleplaySlot, publishConsolidatedRoleplay } from '@/lib/roleplay/direct-upload-browser-http';
@@ -1227,19 +1227,7 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
               try { setDirectObservation(await observeDirectReservation(directReviewReference)); }
               finally { directObservationPending.current = false; }
             }} className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold disabled:opacity-50 sm:w-auto">Consultar estado de la reserva</button>
-            {directObservation && <p role="status" className="text-sm text-[var(--foreground)]">{{
-              CHECKING: 'Consultando el registro de la reserva…',
-              NOT_FOUND: 'No se encontró una reserva para esta referencia y esta cuenta. Esto no demuestra que el intento haya fallado.',
-              RESERVED: 'La reserva figura como registrada. No confirma la presencia ni la integridad de los audios.',
-              VERIFIED: 'El registro indica que los audios fueron verificados. No confirma su publicación ni su disponibilidad actual.',
-              EXPIRED: 'La reserva ha caducado. Solicita una revisión antes de iniciar otra creación.',
-              PUBLICATION_RECORDED: 'El registro indica una publicación. Consulta las sesiones existentes para comprobar si sigue disponible.',
-              CANCELLED: 'El registro indica una reserva cancelada. Solicita una revisión antes de iniciar otra creación.',
-              REVIEW_REQUIRED: 'El registro requiere revisión administrativa.',
-              UNAVAILABLE: 'No se pudo consultar el registro. Conserva la referencia y vuelve a consultar.',
-              ACCESS_REQUIRED: 'Comprueba tu sesión administrativa y vuelve a consultar con la misma cuenta.',
-              ENDPOINT_UNAVAILABLE: 'La consulta del registro todavía no está disponible.',
-            }[directObservation]}</p>}
+            {directObservation && <p role="status" className="text-sm text-[var(--foreground)]">{directReservationObservationLabels[directObservation]}</p>}
 
             <p className="text-xs text-[var(--text-secondary)]">Guarda esta referencia para que el responsable autorizado pueda identificar la solicitud original. No es un enlace de acceso ni permite recuperar automáticamente los archivos o iniciar otra reserva.</p>
           </div>
