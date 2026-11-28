@@ -28,14 +28,26 @@ function progressResult(value:unknown, total:number, order:number):number | null
  */
 export function createRoleplayUploadController(files:readonly File[], port:Port,
   hash:Hash = hashRoleplayFilesSequentially) {
-  const batch = files.slice();
-  const total = batch.length;
+  const pendingFiles = new Map(files.map((file, order) => [order, file]));
+  const total = files.length;
   const requestKey = crypto.randomUUID();
   let reservation:Reservation | null = null;
   let reservationRequested = false;
   let active = false;
   let verified = 0;
   const attempted = new Set<number>();
+
+  function advanceVerified(count: number) {
+    if (!reservation) throw new Error('UPLOAD_PLAN_INVALID');
+    // Only a validated server acknowledgement advances the verified prefix.
+    // Its slots no longer need a local file, signed capability or retry marker.
+    for (let order = verified; order < count; order++) {
+      reservation.slots[order].token = '';
+      pendingFiles.delete(order);
+      attempted.delete(order);
+    }
+    verified = count;
+  }
 
   async function run(options:Options = {}) {
     if (active) throw new Error('UPLOAD_ALREADY_RUNNING');
@@ -53,6 +65,7 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
       if (!reservation) {
         if (reservationRequested) throw new Error('UPLOAD_RESERVATION_UNCERTAIN');
         emit('hashing');
+        const batch = Array.from(pendingFiles.values());
         const declarations = await hash(batch,{signal:options.signal});
         check();
         const normalized = prepareRoleplayDirectUploadBatch('123e4567-e89b-42d3-a456-426614174000',declarations);
@@ -84,7 +97,7 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
           const state = await port.inspect(requestKey,order,options.signal);
           check();
           const count = progressResult(state,total,order);
-          if (count !== null) { verified = count; emit('verifying'); continue; }
+          if (count !== null) { advanceVerified(count); emit('verifying'); continue; }
           if (!state || typeof state !== 'object') throw new Error('UPLOAD_REVIEW_REQUIRED');
           const v = state as Record<string,unknown>;
           if (v.total !== total || v.verifiedCount !== order ||
@@ -94,8 +107,10 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
         if (upload) {
           emit('uploading');
           // Mark before I/O: even a thrown response may have committed bytes.
+          const file = pendingFiles.get(order);
+          if (!file || !slot.token) throw new Error('UPLOAD_PLAN_INVALID');
           attempted.add(order);
-          const result = await port.transfer({path:slot.path,mime:slot.mime,token:slot.token},batch[order],options.signal);
+          const result = await port.transfer({path:slot.path,mime:slot.mime,token:slot.token},file,options.signal);
           check();
           if (!result || result.error !== null) throw new Error('UPLOAD_INTERRUPTED');
         }
@@ -104,11 +119,10 @@ export function createRoleplayUploadController(files:readonly File[], port:Port,
         check();
         const count = progressResult(result,total,order);
         if (count !== order+1) throw new Error('UPLOAD_REVIEW_REQUIRED');
-        verified = count;
+        advanceVerified(count);
       }
       emit('ready');
-      // No capability is returned or retained once all slots are verified.
-      reservation.slots.forEach(slot=>{slot.token='';});
+      // Verified slots have already relinquished their file references and tokens.
       return {requestKey,verifiedCount:verified,total};
     } catch {
       // A provider exception may include a signed URL. Expose only a fixed
