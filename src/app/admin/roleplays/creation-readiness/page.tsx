@@ -3,6 +3,7 @@ import CopyDiagnostic from './copy-diagnostic';
 import SavedReservationLookup from './saved-reservation-lookup';
 import { validateAction } from '@/lib/auth/actions';
 import prisma from '@/lib/prisma';
+import { inspectDirectUploadCatalog } from '@/lib/roleplay/direct-upload-catalog-readiness';
 import { readDirectUploadPilotConfig } from '@/lib/roleplay/direct-upload-pilot-config';
 import { readCreationPilotConfig, type CreationPilotMode } from '@/lib/roleplay/creation-pilot-config';
 import { isCreationLedgerReady } from '@/lib/roleplay/creation-ledger-readiness';
@@ -26,7 +27,7 @@ const modeGuidance: Record<CreationPilotMode, string> = {
 export default async function CreationReadinessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ check?: string | string[] }>;
+  searchParams: Promise<{ check?: string | string[]; checkDirect?: string | string[] }>;
 }) {
   const auth = await validateAction('admin');
   if ('error' in auth || auth.user.role !== 'admin') {
@@ -39,21 +40,29 @@ export default async function CreationReadinessPage({
   const buildId = /^[a-f0-9]{40}$/i.test(sha) ? sha.toLowerCase() : null;
   // No catalog query on initial visit, link prefetch, or malformed request.
   // A refresh with check=1 repeats the bounded, read-only runtime check.
-  const requested = (await searchParams).check === '1';
+  const params = await searchParams;
+  const requested = params.check === '1';
+  const directRequested = params.checkDirect === '1';
   const ready = requested ? await isCreationLedgerReady(prisma) : null;
+  const directCatalog = directRequested ? await inspectDirectUploadCatalog(prisma) : null;
+  const reservationLabels = { absent: 'Ausente', incomplete: 'Incompleto', 'catalog-ready': 'Estructura reconocida', unavailable: 'No disponible' } as const;
+  const budgetLabels = { absent: 'Ausente', incomplete: 'Incompleto', 'accounting-consistent': 'Contabilidad coherente', 'review-required': 'Requiere revisión', unavailable: 'No disponible' } as const;
 
   // Record when this check finished, not a build timestamp or an approval.
   // Only fixed labels and validated build metadata enter the evidence.
-  const evidence = ready === null ? null : [
+  const evidence = ready === null && directCatalog === null ? null : [
     'Diagnóstico de creación segura — Intérpretes RD',
     'Fecha de comprobación (UTC): ' + new Date().toISOString(),
     'SHA del servicio: ' + (buildId ?? 'No informado'),
     'Modo: ' + pilot.mode,
-    'Registro de idempotencia: ' + (ready ? 'Disponible según comprobación' : 'No disponible según comprobación'),
+    'Registro de idempotencia: ' + (ready === null ? 'No comprobado' : ready ? 'Disponible según comprobación' : 'No disponible según comprobación'),
     'Subida directa: ' + (direct.formConfigured ? 'Banderas configuradas' : 'Banderas incompletas'),
     'Variables de subida directa: ' + (direct.environmentValuesPresent ? 'Presentes en el servicio' : 'Faltan valores'),
     'Consulta de reservas directas: ' + (direct.reservationLookupConfigured ? 'Configurada' : 'Desactivada'),
-    'Subida directa: catálogo, Storage y configuración del navegador no comprobados.',
+    'Catálogo de reservas: ' + (directCatalog ? reservationLabels[directCatalog.reservation] : 'No comprobado'),
+    'Presupuesto de objetos: ' + (directCatalog ? budgetLabels[directCatalog.budget] : 'No comprobado'),
+    ...(directCatalog?.capacity ? ['Cupos contables: ' + directCatalog.capacity.allocatedSlots + ' de ' + directCatalog.capacity.maxSlots + '; restantes: ' + directCatalog.capacity.remainingSlots] : []),
+    'Subida directa: permisos efectivos, Storage y configuración del navegador no comprobados.',
     'Resultado puntual; no autoriza activar el piloto.',
   ].join('\n');
 
@@ -116,6 +125,25 @@ export default async function CreationReadinessPage({
           </dl>
         </details>
         <p className="text-sm text-[var(--text-secondary)]">Antes de activar: comprueba el catálogo y las restricciones de reservas, el presupuesto de objetos, los permisos privados, el flujo de recuperación y las pruebas aisladas de Storage. No actives banderas desde esta pantalla.</p>
+      </section>
+      <section aria-label="Catálogo y presupuesto de subida directa" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-5">
+        <h2 className="font-semibold text-[var(--foreground)]">Catálogo y presupuesto de subida directa</h2>
+        <p className="text-sm text-[var(--text-secondary)]">Consulta explícita del catálogo y la contabilidad de reservas desde la conexión del servicio. No recorre los objetos de Storage ni modifica registros.</p>
+        <dl className="space-y-2 text-sm">
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Registro de reservas</dt><dd className="text-[var(--foreground)]">{directCatalog ? reservationLabels[directCatalog.reservation] : 'Sin comprobar'}</dd></div>
+          <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Presupuesto persistente</dt><dd className="text-[var(--foreground)]">{directCatalog ? budgetLabels[directCatalog.budget] : 'Sin comprobar'}</dd></div>
+          {directCatalog?.capacity && <>
+            <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Cupos contables asignados</dt><dd className="text-[var(--foreground)]">{directCatalog.capacity.allocatedSlots} de {directCatalog.capacity.maxSlots}</dd></div>
+            <div className="flex flex-wrap justify-between gap-2"><dt className="text-[var(--text-secondary)]">Cupos contables restantes</dt><dd className="text-[var(--foreground)]">{directCatalog.capacity.remainingSlots}</dd></div>
+          </>}
+        </dl>
+        {directCatalog && !directCatalog.capacity && <p role="status" className="text-sm text-[var(--theme-warning)]">No se informa capacidad contable utilizable; revisa la auditoría de reservas y presupuesto.</p>}
+        <p className="text-sm text-[var(--text-secondary)]">Los cupos contables no representan espacio libre real ni autorizan subidas. Una estructura reconocida no demuestra que todas sus restricciones, permisos efectivos o políticas privadas sean correctos.</p>
+        <form action="/admin/roleplays/creation-readiness" method="get">
+          <input type="hidden" name="checkDirect" value="1" />
+          {requested && <input type="hidden" name="check" value="1" />}
+          <button type="submit" className="min-h-11 w-full rounded-xl theme-action-primary px-4 py-2 font-semibold sm:w-auto">{directRequested ? 'Volver a comprobar catálogo y presupuesto' : 'Comprobar catálogo y presupuesto'}</button>
+        </form>
       </section>
       {direct.reservationLookupConfigured && <SavedReservationLookup />}
       <p className="text-sm text-[var(--text-secondary)]">Un resultado favorable no autoriza activar el piloto. Aún se debe verificar el proyecto, el SHA esperado, las restricciones y el procedimiento de recuperación. Esta pantalla no aplica migraciones ni modifica banderas.</p>
