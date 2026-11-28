@@ -12,7 +12,7 @@ import {
   type TimedTranscriptCue,
 } from '@/lib/roleplay-studio/transcript';
 import { fillCompatibleTimedCueSelection, selectTimedCues, suggestRepresentativeTimedCueSelection } from '@/lib/roleplay-studio/cue-selection';
-import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
+import { conflictingSelectedTimedCueIndices, cueRequiresEditorialReview, overlappingSelectedTimedCueIndices, proposeSelectedCueEdgeTrim, summarizeTimedCueReview } from '@/lib/roleplay-studio/cue-review-summary';
 import { availableStudioInterval } from '@/lib/roleplay-studio/available-interval';
 import { summarizeStudioCoverage } from '@/lib/roleplay-studio/coverage';
 import { proposeStudioBoundaries } from '@/lib/roleplay-studio/boundary-proposals';
@@ -144,6 +144,9 @@ export default function RoleplayStudioPage() {
   const [captionTexts, setCaptionTexts] = useState<Record<string, string>>({});
   const [excludeInterpreter, setExcludeInterpreter] = useState(true);
   const [reviewCues, setReviewCues] = useState<TimedTranscriptCue[]>([]);
+  const [lastCueTrim, setLastCueTrim] = useState<{
+    index: number; before: TimedTranscriptCue; after: TimedTranscriptCue;
+  } | null>(null);
   const [chosenCueIndices, setChosenCueIndices] = useState<number[]>([]);
   const [cuePage, setCuePage] = useState(0);
   const [cueSearch, setCueSearch] = useState('');
@@ -656,6 +659,36 @@ export default function RoleplayStudioPage() {
     setChosenCueIndices([]);
     setError('');
     setNotice('Selección SRT vaciada. Las intervenciones existentes no se han modificado.');
+  };
+
+  const applyCueEdgeTrim = (index: number) => {
+    const proposal = proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration);
+    if (!proposal) return;
+    if (!window.confirm(
+      'Este ajuste de tiempos no conoce los límites de las palabras. ' +
+      'Escucha el fragmento propuesto antes de confirmar. Se conservarán ambos turnos y el archivo original. ¿Aplicar ajuste?',
+    )) return;
+    const before = reviewCues[index];
+    const after = { ...before, ...proposal };
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setReviewCues(previous => previous.map((cue, i) => i === index ? after : cue));
+    setLastCueTrim({ index, before, after });
+    setError('');
+    setNotice(`Turno ${index + 1} ajustado para revisión. Escucha ambos turnos antes de aplicar la selección.`);
+  };
+
+  const undoCueEdgeTrim = () => {
+    if (!lastCueTrim || reviewCues[lastCueTrim.index] !== lastCueTrim.after) return;
+    const { index, before } = lastCueTrim;
+    subtitleImportRevision.current += 1;
+    stopPreview();
+    stopPairPreview();
+    setReviewCues(previous => previous.map((cue, i) => i === index ? before : cue));
+    setLastCueTrim(null);
+    setError('');
+    setNotice('Último ajuste de subtítulos deshecho; se restauraron sus tiempos anteriores.');
   };
 
   const keepCueAndRemoveConflicts = (index: number) => {
@@ -2708,6 +2741,8 @@ export default function RoleplayStudioPage() {
             {visibleCues.map(({ cue, index }) => {
               const conflicts = overlappingSelectedCues.includes(index)
                 ? conflictingSelectedTimedCueIndices(reviewCues, chosenCueIndices, index) : [];
+              const trim = conflicts.length === 1
+                ? proposeSelectedCueEdgeTrim(reviewCues, chosenCueIndices, index, duration) : null;
               return (
               <div key={index} className="flex items-start gap-3 rounded-lg border border-[var(--border)] p-2">
                 <input type="checkbox" checked={chosenCueIndices.includes(index)}
@@ -2730,6 +2765,19 @@ export default function RoleplayStudioPage() {
                   <p className="mt-1 break-words text-xs text-[var(--text-secondary)]">
                     {cue.text.slice(0, 200)}{cue.text.length > 200 ? '…' : ''}
                   </p>
+                  {trim && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-[var(--text-secondary)]">
+                      <span>Ajuste propuesto: {trim.start.toFixed(3)}–{trim.end.toFixed(3)} s. No identifica palabras.</span>
+                      <button type="button" onClick={() => previewSubtitleCue({ ...cue, ...trim }, index)}
+                        className="rounded border border-[var(--border)] px-2 py-1 text-[var(--theme-link)]">
+                        Escuchar ajuste
+                      </button>
+                      <button type="button" onClick={() => applyCueEdgeTrim(index)}
+                        className="rounded border border-[var(--border)] px-2 py-1 font-semibold text-[var(--theme-link)]">
+                        Ajustar y conservar ambos turnos
+                      </button>
+                    </div>
+                  )}
                   {conflicts.length > 0 && (
                     <button type="button" onClick={() => keepCueAndRemoveConflicts(index)}
                       className="mt-2 rounded border border-[var(--border)] px-2 py-1 text-xs font-semibold text-[var(--theme-link)]">
@@ -2748,6 +2796,12 @@ export default function RoleplayStudioPage() {
               </div>
             ); })}
           </div>
+          {lastCueTrim && reviewCues[lastCueTrim.index] === lastCueTrim.after && (
+            <button type="button" onClick={undoCueEdgeTrim}
+              className="rounded border border-[var(--border)] px-3 py-2 text-xs font-semibold text-[var(--theme-link)]">
+              Deshacer último ajuste de subtítulos
+            </button>
+          )}
           <p role="status" aria-label="Estado de selección SRT"
             className="text-xs leading-5 text-[var(--foreground)]">
             {cueSelectionStatus.issue
