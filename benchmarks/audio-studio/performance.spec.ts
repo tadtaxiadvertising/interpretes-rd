@@ -183,8 +183,24 @@ test.describe('mobile focus navigation', () => {
           document.getElementById('root')?.classList.add('theme-workspace');
         }, theme);
         await selector.selectOption('turn-1');
-        const controls = [...await nav.getByRole('button').all(), selector, slider];
-        expect(controls).toHaveLength(11);
+        // Check each action by its accessible name, not a stale count of
+        // every button (native disclosure semantics vary by browser).
+        const actions = [
+          'Anterior intervención', 'Siguiente intervención',
+          'Escuchar intervención activa', 'Pausar audio',
+          'Retroceder audio 5 segundos', 'Avanzar audio 5 segundos',
+          'Confirmar y avanzar', 'Excluir y avanzar',
+          'Usar atajos de teclado', 'Aplicar perfil a 2 turnos de la misma etiqueta',
+        ];
+        const buttons = actions.map(name => nav.getByRole('button', { name, exact: true }));
+        for (const button of buttons) await expect(button).toHaveCount(1);
+        await expect(nav.getByRole('group', { name: 'Reproducción en modo enfoque' })).toHaveCount(1);
+        const help = nav.locator('summary').filter({ hasText: 'Ayuda de reproducción y teclado' });
+        await expect(help).toHaveCount(1);
+        const optIn = nav.getByRole('checkbox', { name: 'Escuchar siguiente al confirmar' });
+        await expect(optIn).toHaveCount(1);
+        const optInLabel = nav.locator('label').filter({ has: optIn });
+        const controls = [...buttons, selector, slider, help, optInLabel];
         for (const control of controls) {
           const box = await control.boundingBox();
           expect(box).not.toBeNull();
@@ -193,6 +209,15 @@ test.describe('mobile focus navigation', () => {
           expect(box!.x).toBeGreaterThanOrEqual(0);
           expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
         }
+        await expect(optIn).not.toBeChecked();
+        await optInLabel.tap();
+        await expect(optIn).toBeChecked();
+        await optInLabel.tap();
+        await expect(optIn).not.toBeChecked();
+        await help.tap();
+        await expect(nav.locator('#studio-focused-shortcuts')).toBeVisible();
+        await help.tap();
+        await expect(nav.locator('#studio-focused-shortcuts')).not.toBeVisible();
         const sizes = await nav.evaluate(element => ({ scroll: element.scrollWidth, client: element.clientWidth }));
         expect(sizes.scroll).toBeLessThanOrEqual(sizes.client + 1);
         await nav.getByRole('button', { name: 'Siguiente intervención' }).tap();
