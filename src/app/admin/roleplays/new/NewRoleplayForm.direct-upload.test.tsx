@@ -16,7 +16,12 @@ vi.mock('./ScenarioCard',()=>({
 }));
 import NewRoleplayForm from './NewRoleplayForm';
 import { DirectUploadReviewRequired } from '@/lib/roleplay/direct-upload-browser-resume';
-afterEach(()=>{cleanup();vi.resetAllMocks();vi.unstubAllGlobals();});
+const originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+afterEach(()=>{
+  cleanup();vi.resetAllMocks();vi.unstubAllGlobals();
+  if (originalClipboard) Object.defineProperty(navigator, 'clipboard', originalClipboard);
+  else Reflect.deleteProperty(navigator, 'clipboard');
+});
 describe('gated private roleplay form',()=>{
   it.each([
     ['RESERVATION_EXPIRED', 'La reserva de subida ha caducado'],
