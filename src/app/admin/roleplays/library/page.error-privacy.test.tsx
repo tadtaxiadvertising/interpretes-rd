@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { isValidElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/prisma', () => ({
@@ -62,11 +63,24 @@ describe('Admin roleplay library protects server error logs', () => {
     vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce(sessions as unknown as Awaited<ReturnType<typeof prisma.roleplaySession.findMany>>);
     vi.mocked(prisma.roleplayLibraryArchive.findMany).mockResolvedValueOnce([]);
     const page = await RoleplayLibraryPage({ searchParams: Promise.resolve({}) });
-    const serialized = JSON.stringify(page);
-    expect(serialized).toContain('/admin/roleplays/library/private-template');
-    expect(serialized).toContain('/admin/roleplays/new?sourceSessionId=legacy-template');
-    expect(serialized.includes('/admin/roleplays/new?sourceSessionId=private-template')).toBe(enabled);
-    expect(serialized.includes('Asignación privada no habilitada')).toBe(!enabled);
+    const links: Array<{ href: string; prefetch?: boolean }> = [];
+    const labels: string[] = [];
+    // Inspect the returned JSX tree, not React component types or module
+    // objects (which may contain circular references).
+    const visit = (node: ReactNode): void => {
+      if (typeof node === 'string') { labels.push(node); return; }
+      if (Array.isArray(node)) { node.forEach(visit); return; }
+      if (!isValidElement<{ children?: ReactNode; href?: string; prefetch?: boolean }>(node)) return;
+      if (typeof node.props.href === 'string') links.push({ href: node.props.href, prefetch: node.props.prefetch });
+      visit(node.props.children);
+    };
+    visit(page);
+    expect(links).toContainEqual({ href: '/admin/roleplays/library/private-template', prefetch: false });
+    expect(links).toContainEqual({ href: '/admin/roleplays/new?sourceSessionId=legacy-template', prefetch: false });
+    expect(links.some(link => link.href === '/admin/roleplays/new?sourceSessionId=private-template')).toBe(enabled);
+    expect(labels.some(label => label.includes('Asignación privada no habilitada'))).toBe(!enabled);
+  });
+
   it('handles repeated URL query parameters without crashing', async () => {
     vi.mocked(prisma.roleplaySession.findMany).mockResolvedValueOnce([]);
     const page = await RoleplayLibraryPage({ searchParams: Promise.resolve({
