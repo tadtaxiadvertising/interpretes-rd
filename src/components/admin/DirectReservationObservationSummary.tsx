@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   directReservationObservationLabels, type DirectReservationObservationResult,
 } from '@/lib/roleplay/direct-reservation-status-browser';
@@ -16,6 +17,10 @@ export default function DirectReservationObservationSummary({
   return (
     <div className="space-y-2" role="status">
       <p className="text-sm text-[var(--foreground)]">{directReservationObservationLabels[status]}</p>
+      {status === 'PUBLICATION_CONFIRMED' && result.sessionId && (
+        <Link href={`/admin/roleplays/${encodeURIComponent(result.sessionId)}`} prefetch={false} target="_blank" rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center rounded-xl theme-action-primary px-4 py-2 text-sm font-semibold">Ver roleplay confirmado (nueva pestaña)</Link>
+      )}
       {progress && (
         <div className="space-y-2 rounded-xl border border-[var(--border)] p-3">
           <label className="block text-sm text-[var(--foreground)]">
