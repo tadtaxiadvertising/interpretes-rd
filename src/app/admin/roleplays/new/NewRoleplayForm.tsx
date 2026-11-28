@@ -556,10 +556,11 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
   };
 
   const handleCreate = async () => {
-    if (directReview || keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
+    if (directReview || directObservationPending.current || keyedAttempt.current || createPending.current || importPending.current || (!directAttempt.current && !validateForm())) return;
     if (!confirmRoleplayCreationRetry(submissionUncertain, Boolean(directAttempt.current), message => window.confirm(message))) return;
     const trackedToken = importedTransfer && trackedImportRevision.current === importRevision.current ? importedTransfer : null;
     if (directAttempt.current || useDirectUpload) {
+      setDirectObservation(null);
       createPending.current = true;
       setIsCreating(true);
       setError(null);
@@ -1309,10 +1310,10 @@ export default function NewRoleplayForm({ interpreters, candidates, initialCandi
 
       <button
         onClick={handleCreate}
-        disabled={isCreating || isImporting || keyedStatus !== null || directReview !== null}
+        disabled={isCreating || isImporting || keyedStatus !== null || directReview !== null || directObservation === 'CHECKING'}
         className={cn(
           "w-full py-4 rounded-xl font-bold text-lg transition-all flex items-center justify-center gap-3",
-          isCreating || isImporting || keyedStatus !== null || directReview !== null
+          isCreating || isImporting || keyedStatus !== null || directReview !== null || directObservation === 'CHECKING'
             ? "bg-[var(--theme-surface-muted)] text-[var(--text-tertiary)] cursor-not-allowed"
             : "theme-action-danger shadow-lg shadow-red-600/20"
         )}
