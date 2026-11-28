@@ -76,3 +76,25 @@ export function resolveRoleplayTopics(titles: readonly string[], editorial: { to
   const selected = editorial && parseEditorialRoleplayTopic(editorial.topic, editorial.subtopic);
   return selected ? [selected] : inferRoleplayTopics(titles);
 }
+
+/** Search only public-to-admin catalog titles, fingerprint and resolved topic labels.
+ * Keep malformed or repeated query parameters from crashing the library. */
+export function parseRoleplayLibrarySearch(value: unknown): string {
+  return typeof value === 'string' ? value.trim().slice(0, 100) : '';
+}
+
+export function matchesRoleplayLibrarySearch(
+  titles: readonly string[], fingerprint: string,
+  topics: readonly { topic: string; subtopic: string }[], query: string,
+): boolean {
+  if (!query) return true;
+  if (/^[a-f0-9]+$/i.test(query) && fingerprint.startsWith(query.toLowerCase())) return true;
+  const normalized = normalizeRoleplayTopicText(query);
+  if (!normalized) return false;
+  const labels = topics.flatMap(selection => {
+    const topic = ROLEPLAY_TOPICS.find(item => item.id === selection.topic);
+    const child = topic?.subtopics.find(item => item.id === selection.subtopic);
+    return topic && child ? [topic.label + ' ' + child.label] : [];
+  });
+  return [...titles, ...labels].some(value => normalizeRoleplayTopicText(value).includes(normalized));
+}
