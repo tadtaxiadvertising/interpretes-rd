@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createHash } from 'node:crypto';
 
 const { mockUpload, mockRemove, mockGetPublicUrl, mockList, mockInfo, mockGetBucket, mockFrom } = vi.hoisted(() => ({
   mockUpload: vi.fn(),
@@ -68,6 +69,12 @@ import { validateAction } from '@/lib/auth/actions';
 import { actorFromBearer } from '@/lib/api-auth';
 import prisma from '@/lib/prisma';
 import { getRoleplaySnapshotHash } from '@/lib/roleplay-library';
+import { sha256RoleplayFile } from '@/lib/roleplay-streaming-checksum';
+
+vi.mock(import('@/lib/roleplay-streaming-checksum'), async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, sha256RoleplayFile: vi.fn(actual.sha256RoleplayFile) };
+});
 
 const adminAuth = {
   user: { userId: 'a1', email: 'admin@x.com', role: 'admin', interpreterId: null, profileId: 'a1' },
@@ -86,6 +93,7 @@ function buildRequest(fields: {
   librarySessionId?: string;
   libraryFingerprint?: string;
   requiresBilingualOpening?: string;
+  checksums?: string;
 }) {
   const formData = new FormData();
   if (fields.requiresBilingualOpening !== undefined) formData.append('requiresBilingualOpening', fields.requiresBilingualOpening);
@@ -95,6 +103,7 @@ function buildRequest(fields: {
   if (fields.librarySessionId !== undefined) formData.append('librarySessionId', fields.librarySessionId);
   if (fields.libraryFingerprint !== undefined) formData.append('libraryFingerprint', fields.libraryFingerprint);
   for (const a of fields.audios ?? []) formData.append('scenarioAudios', a);
+  if (fields.checksums !== undefined) formData.append('scenarioAudioSha256', fields.checksums);
   return new Request('http://localhost/api/admin/roleplays', { method: 'POST', body: formData });
 }
 
@@ -814,6 +823,55 @@ describe('POST /api/admin/roleplays', () => {
     it('rejects a disallowed audio type', async () => {
       const res = await POST(buildRequest({ participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile('a.txt', 'text/plain')] }) as any);
       expect(res.status).toBe(400);
+    });
+
+    it.each(['interpreter', 'candidate'] as const)('skips hashing when the %s does not exist', async participantType => {
+      if (participantType === 'interpreter') vi.mocked(prisma.interpreter.findUnique).mockResolvedValueOnce(null);
+      else vi.mocked(prisma.recruitmentCandidate.findUnique).mockResolvedValueOnce(null);
+      const res = await POST(buildRequest({
+        participantType, participantId: '7', scenarios: oneScenario, audios: [audioFile()],
+        checksums: JSON.stringify(['a'.repeat(64)]),
+      }) as any);
+      expect(res.status).toBe(404);
+      expect(sha256RoleplayFile).not.toHaveBeenCalled();
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('hashes a valid destination audio once and rejects mismatches (keyed=%s)', async keyed => {
+      const request = buildRequest({
+        participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()],
+        checksums: JSON.stringify(['a'.repeat(64)]),
+      });
+      if (keyed) {
+        process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+        process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
+        request.headers.set('Idempotency-Key', '123e4567-e89b-42d3-a456-426614174000');
+      }
+      const res = await POST(request as any);
+      expect(res.status).toBe(400);
+      expect(sha256RoleplayFile).toHaveBeenCalledOnce();
+      expect(mockUpload).not.toHaveBeenCalled();
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+      expect(prisma.roleplayCreationRequest.create).not.toHaveBeenCalled();
+    });
+
+    it.each([false, true])('publishes a matching audio checksum after exactly one digest (keyed=%s)', async keyed => {
+      const expected = createHash('sha256').update(new Uint8Array(8)).digest('hex');
+      const request = buildRequest({
+        participantType: 'interpreter', participantId: '7', scenarios: oneScenario, audios: [audioFile()],
+        checksums: JSON.stringify([expected]),
+      });
+      if (keyed) {
+        process.env.ROLEPLAY_CREATION_IDEMPOTENCY_ENABLED = 'true';
+        process.env.ROLEPLAY_IDEMPOTENCY_RECEIPTS_ENABLED = 'true';
+        request.headers.set('Idempotency-Key', '123e4567-e89b-42d3-a456-426614174000');
+      }
+      const res = await POST(request as any);
+      expect(res.status).toBe(200);
+      expect(sha256RoleplayFile).toHaveBeenCalledOnce();
+      expect(mockUpload).toHaveBeenCalledOnce();
+      expect(prisma.roleplayCreationRequest.create).toHaveBeenCalledTimes(keyed ? 1 : 0);
     });
 
     it('returns 404 when the interpreter does not exist', async () => {
