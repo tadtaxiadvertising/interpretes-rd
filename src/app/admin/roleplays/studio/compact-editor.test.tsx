@@ -862,6 +862,22 @@ describe('Audio Studio compact editing', () => {
     expect(screen.getByText(/Intervenciones \(2\/25\)/)).toBeTruthy();
   });
 
+  it('uses the same generic profile search for the list, audition and merge', () => {
+    loadAudio(120);
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));
+    chooseProfile(1, 'client');
+    chooseProfile(2, 'client');
+    fireEvent.change(screen.getAllByLabelText('Inicio (segundos)')[1], { target: { value: '40' } });
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), { target: { value: 'cliente' } });
+    expect(screen.getAllByRole('group', { name: /Perfil de intervención / })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Preescuchar intervenciones 1 y 2 sin pausa' }));
+    expect(HTMLMediaElement.prototype.play).toHaveBeenCalled();
+    expect(screen.getByText(/se saltan 00:10.0/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Unir intervención 1 con siguiente/ }));
+    expect(screen.getByText(/Intervenciones \(1\/25\)/)).toBeTruthy();
+  });
+
   it('auditions two distant turns without the gap and leaves both exported cuts intact', () => {
     loadAudio(120);
     fireEvent.click(screen.getByRole('button', { name: /Añadir fragmento/ }));

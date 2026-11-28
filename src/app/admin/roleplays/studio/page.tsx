@@ -316,13 +316,7 @@ export default function RoleplayStudioPage() {
       return;
     }
     // Do not play a turn hidden by the administrator's active filter.
-    const needle = segmentSearch.trim().toLocaleLowerCase();
-    if (!first?.ranges && second &&
-        ((showPendingReview && second.speakerRole !== 'unknown' &&
-          second.speakerRole !== 'interpreter' && second.language !== 'unknown') ||
-        (needle && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
-          second.speakerRole, second.language].some(value =>
-          value.toLocaleLowerCase().includes(needle))))) {
+    if (!first?.ranges && second && !visibleSegments.some(({ segment }) => segment.id === second.id)) {
       reportTurnAction(id, 'El siguiente corte está oculto: limpia los filtros para escucharlo.', true);
       return;
     }
@@ -969,10 +963,7 @@ export default function RoleplayStudioPage() {
       reportTurnAction(id, 'Para unir nuevos cortes, separa antes la intervención compuesta. El formato v2 admite dos tramos.', true);
       return;
     }
-    if ((showPendingReview && (focusMode ? confirmedIds.has(second.id) : !needsReview(second))) ||
-        (segmentSearch.trim() && ![second.title, second.scriptPrompt, captionTexts[second.id] || '',
-          second.speakerRole, second.language].some(value =>
-          value.toLocaleLowerCase().includes(segmentSearch.trim().toLocaleLowerCase())))) {
+    if (!visibleSegments.some(({ segment }) => segment.id === second.id)) {
       reportTurnAction(id, 'El turno siguiente está oculto por un filtro. Limpia los filtros antes de unir.', true);
       return;
     }

@@ -38,9 +38,10 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
   }
   function metadata(group: HTMLElement) {
     const text = group.closest('article')?.querySelector('h3 > span')?.textContent ?? '';
-    const match = text.match(/ · (doctor|patient|nurse|operator|interpreter|unknown) · (EN|ES|UNKNOWN)$/);
+    const match = text.match(/ · (Cliente|Hispanohablante|Intérprete original|Sin perfil) · (EN|ES|Idioma pendiente)$/);
     if (!match) throw new Error('Missing visible role/language: ' + text);
-    return { role: match[1], language: match[2].toLowerCase() };
+    const roles: Record<string, string> = { Cliente: 'doctor', Hispanohablante: 'patient', 'Intérprete original': 'interpreter', 'Sin perfil': 'unknown' };
+    return { role: roles[match[1]], language: match[2] === 'Idioma pendiente' ? 'unknown' : match[2].toLowerCase() };
   }
   const roles = () => profileGroups().map(group => metadata(group).role);
   const languages = () => profileGroups().map(group => metadata(group).language);
@@ -204,9 +205,9 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     fireEvent.change(screen.getAllByLabelText('Título')[4], { target: { value: 'Oculto' } });
     const search = screen.getByRole('searchbox', { name: 'Buscar intervenciones' });
     fireEvent.change(search, { target: { value: 'Oculto' } });
-    expect(screen.getByRole('button', { name: /Aplicar médico EN \/ paciente ES \(1 pendientes visibles\)/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Completar cliente EN \/ hispanohablante ES \(1 pendientes visibles\)/ })).toBeTruthy();
     fireEvent.change(search, { target: { value: '' } });
-    fireEvent.click(screen.getByRole('button', { name: /Aplicar médico EN \/ paciente ES \(3 pendientes visibles\)/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Completar cliente EN \/ hispanohablante ES \(3 pendientes visibles\)/ }));
     expect(languages()).toEqual(['en', 'es', 'en', 'unknown', 'es']);
     fireEvent.click(screen.getByRole('button', { name: /Deshacer asignación de idiomas/i }));
     expect(languages()).toEqual(['unknown', 'unknown', 'en', 'unknown', 'unknown']);
@@ -320,12 +321,12 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     const summary = () => screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' }).textContent || '';
     expect(summary()).toMatch(/Revisión de roles e idiomas:\s*0\/2 sin pendientes/);
     expect(summary()).toContain('2 sin hablante');
-    expect(summary()).toContain('2 sin idioma');
+    expect(summary()).toContain('2 con idioma por revisar');
 
     chooseProfile('doctor', 0);
     expect(summary()).toMatch(/Revisión de roles e idiomas:\s*1\/2 sin pendientes/);
     expect(summary()).toContain('1 sin hablante');
-    expect(summary()).toContain('1 sin idioma');
+    expect(summary()).toContain('1 con idioma por revisar');
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Buscar intervenciones' }), {
       target: { value: 'Intervención 2' },
@@ -341,7 +342,7 @@ describe('Roleplay Studio waveforms and bilingual speaker editing', () => {
     const summary = screen.getByRole('status', { name: 'Resumen de revisión de intervenciones' });
     expect(summary.textContent).toMatch(/Revisión de roles e idiomas:\s*0\/1 sin pendientes/);
     expect(summary.textContent).toContain('1 del intérprete original por excluir');
-    expect(summary.textContent).toContain('0 sin idioma');
+    expect(summary.textContent).toContain('0 con idioma por revisar');
   });
 
   it('navigates visible pending turns in chronological order without editing audio', () => {
