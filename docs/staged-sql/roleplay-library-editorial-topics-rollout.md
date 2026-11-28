@@ -9,3 +9,7 @@ Status: proposal only. Keep ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED off until 
 5. Obtain approval for the migration and rollout, apply the reviewed schema, then enable the server flag and run an administrative smoke test. Do not change fingerprint or archive behavior. If classification fails, disable the flag; the existing sessions and saved category rows should be retained. Do not drop the table as an initial rollback.
 
 This workflow does not prove real production permissions or deploy a migration. Bulk and recovered publication flows are not covered by automatic category saving.
+
+## Read-only readiness command
+
+From the application checkout with the same DATABASE_URL and trusted CA configuration as the Next.js service, run `npm run roleplay:topics-readiness`. It uses the existing runtime pool and a read-only transaction with a statement timeout. Output contains only metadata booleans and flag state; no role names, connection strings, or application rows. Nonzero exit means catalog checks are incomplete or the connection is unavailable. `metadataReady: true` is not permission to activate: verify actual CRUD and RLS in staging, obtain rollout approval, then perform the approved migration and smoke test. A non-owner server with active RLS requires particular attention to policies. Do not add a production grant based solely on this report.
