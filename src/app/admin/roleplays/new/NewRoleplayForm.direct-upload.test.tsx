@@ -47,6 +47,32 @@ describe('gated private roleplay form',()=>{
 describe('gated creation receipt recovery form', () => {
   const key = '123e4567-e89b-42d3-a456-426614174000';
   const complete = { status: 'COMPLETED', sessionIds: ['session-123'], createdCount: 1, skippedCount: 0, scenarioCount: 1 };
+  it.each(['unsupported', 'invalid'])('does not publish or mark a local key preparation failure as uncertain (%s)', async mode => {
+    const randomUUID = vi.fn().mockImplementationOnce(() => {
+      if (mode === 'unsupported') throw new Error('private browser error');
+      return 'invalid-key';
+    }).mockReturnValue(key);
+    vi.stubGlobal('crypto', { randomUUID });
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ success: true, data: {
+      sessionId: 'session-123', scenarioCount: 1, inviteLink: window.location.origin + '/roleplays/session-123',
+    } }));
+    vi.stubGlobal('fetch', fetcher);
+    render(<NewRoleplayForm interpreters={[{id:11,name:'Intérprete sintético'}]} candidates={[]} creationRecoveryEnabled/>);
+    fireEvent.change(screen.getByLabelText(/Destinatario ·/), { target: { value: '11' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Preparar escenario' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    await screen.findByText(/No se enviaron audios en este intento/);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText('Referencia del intento')).toBeNull();
+    expect(screen.queryByText(/El servidor no pudo confirmar la operación/)).toBeNull();
+    expect(screen.queryByText(/private browser error/)).toBeNull();
+    expect(screen.getByLabelText(/Destinatario ·/).closest('fieldset')?.disabled).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Crear roleplay' }));
+    await screen.findByText('¡Roleplay creado correctamente!');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetcher.mock.calls[0][1].headers).toEqual({ 'Idempotency-Key': key });
+  });
+
   it('retains the same key, locks editing and never resends the audio after a lost response', async () => {
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => key) });
     const fetcher = vi.fn()
