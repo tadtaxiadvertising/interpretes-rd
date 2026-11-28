@@ -13,3 +13,7 @@ This workflow does not prove real production permissions or deploy a migration. 
 ## Read-only readiness command
 
 From the application checkout with the same DATABASE_URL and trusted CA configuration as the Next.js service, run `npm run roleplay:topics-readiness`. It uses the existing runtime pool and a read-only transaction with a statement timeout. Output contains only metadata booleans and flag state; no role names, connection strings, or application rows. Nonzero exit means catalog checks are incomplete or the connection is unavailable. `metadataReady: true` is not permission to activate: verify actual CRUD and RLS in staging, obtain rollout approval, then perform the approved migration and smoke test. A non-owner server with active RLS requires particular attention to policies. Do not add a production grant based solely on this report.
+
+### Administrator interface
+
+After deployment, open Biblioteca de roleplays → Diagnóstico de categorías permanentes → Comprobar configuración. This requests the same metadata-only check as the terminal command, even while the feature flag is off. It does not perform schema changes, writes, or authorize activation. The standalone build must include the traced SQL file. A positive report still requires staging CRUD validation.
