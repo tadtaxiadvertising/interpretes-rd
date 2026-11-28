@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { stageStudioHandoff, peekStudioHandoff, clearStudioHandoff, stageLocalWavHandoff, peekStudioHandoffTopic } from './assignment-handoff';
+import { stageStudioHandoff, peekStudioHandoff, clearStudioHandoff, stageLocalWavHandoff, peekLocalWavHandoff, peekStudioHandoffTopic } from './assignment-handoff';
 const file = () => new File(['x'.repeat(22)], 'roleplay-studio.zip', { type: 'application/zip' });
 afterEach(() => { clearStudioHandoff(); vi.useRealTimers(); });
 describe('ephemeral Studio handoff', () => {
@@ -15,6 +15,32 @@ describe('ephemeral Studio handoff', () => {
     expect(peekStudioHandoff('second')).toBe(b);
     clearStudioHandoff('second');
     expect(peekStudioHandoff('second')).toBeNull();
+  });
+  it('does not extend the original expiry when staging the same ZIP again', () => {
+    vi.useFakeTimers();
+    const prepared = file();
+    stageStudioHandoff('same', prepared, { topic: 'medical', subtopic: 'pharmacy' });
+    vi.advanceTimersByTime(240000);
+    stageStudioHandoff('same', prepared, { topic: 'finance', subtopic: 'banking' });
+    expect(peekStudioHandoff('same')).toBe(prepared);
+    expect(peekStudioHandoffTopic('same')).toEqual({ topic: 'finance', subtopic: 'banking' });
+    expect(() => stageStudioHandoff('same', file())).toThrow(/referencia temporal/);
+    expect(peekStudioHandoff('same')).toBe(prepared);
+    vi.advanceTimersByTime(60001);
+    expect(peekStudioHandoff('same')).toBeNull();
+    expect(peekStudioHandoffTopic('same')).toBeNull();
+  });
+  it('preserves WAV references and expiry across repeated staging', () => {
+    vi.useFakeTimers();
+    const files = [new File(['{}'], 'manifest.json'), new File(['x'.repeat(45)], 'segment-01.wav', { type: 'audio/wav' })];
+    stageLocalWavHandoff('wav-same', files);
+    vi.advanceTimersByTime(299000);
+    stageLocalWavHandoff('wav-same', [...files]);
+    expect(peekLocalWavHandoff('wav-same')?.[1]).toBe(files[1]);
+    expect(() => stageStudioHandoff('wav-same', file())).toThrow(/referencia temporal/);
+    expect(peekLocalWavHandoff('wav-same')?.[0]).toBe(files[0]);
+    vi.advanceTimersByTime(1001);
+    expect(peekLocalWavHandoff('wav-same')).toBeNull();
   });
   it('keeps a validated topic scoped to the same token, consumption and expiry', () => {
     vi.useFakeTimers();
