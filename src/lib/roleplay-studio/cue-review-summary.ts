@@ -94,6 +94,23 @@ export function proposeSelectedCueEdgeTrim(
   return { start, end };
 }
 
+/** Return the single edge removed by a conservative trim, without changing either cue. */
+export function removedCueEdge(
+  cue: Pick<TimedTranscriptCue, 'start' | 'end'>,
+  proposal: Pick<TimedTranscriptCue, 'start' | 'end'>,
+): { start: number; end: number } | null {
+  if (![cue.start, cue.end, proposal.start, proposal.end].every(Number.isFinite) ||
+      cue.start < 0 || proposal.start < cue.start || proposal.end > cue.end ||
+      proposal.end <= proposal.start) return null;
+  if (proposal.start > cue.start && proposal.end === cue.end) {
+    return { start: cue.start, end: proposal.start };
+  }
+  if (proposal.start === cue.start && proposal.end < cue.end) {
+    return { start: proposal.end, end: cue.end };
+  }
+  return null;
+}
+
 export type CueTrimActivityHint = 'detected' | 'not-detected' | 'unavailable';
 
 /**
