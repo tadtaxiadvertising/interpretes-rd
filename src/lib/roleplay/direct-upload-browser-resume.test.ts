@@ -45,6 +45,38 @@ describe('same-tab roleplay upload recovery',()=>{
     expect(f.transfer).toHaveBeenCalledTimes(2);
     expect(f.verify).toHaveBeenCalledTimes(2);
   });
+  it('resumes only pending files after a verified prefix without rehashing or reserving',async()=>{
+    const f=fixture(),abort=new AbortController();
+    await expect(f.controller.run({signal:abort.signal,onProgress:p=>{
+      if(p.phase==='uploading' && p.verified===1) abort.abort();
+    }})).rejects.toThrow('ROLEPLAY_UPLOAD_INTERRUPTED');
+    expect(f.transfer).toHaveBeenCalledTimes(1);
+    expect(f.verify).toHaveBeenCalledTimes(1);
+    const progress=vi.fn();
+    await expect(f.controller.run({onProgress:progress})).resolves.toMatchObject({verifiedCount:2,total:2});
+    expect(f.hash).toHaveBeenCalledTimes(1);
+    expect(f.reserve).toHaveBeenCalledTimes(1);
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(f.transfer.mock.calls.map(call=>call[0].token)).toEqual(['private-token-0','private-token-1']);
+    expect(f.transfer.mock.calls.map(call=>call[1].name)).toEqual(['0.mp3','1.mp3']);
+    expect(progress).toHaveBeenLastCalledWith({phase:'ready',verified:2,total:2});
+    await expect(f.controller.run()).resolves.toMatchObject({verifiedCount:2,total:2});
+    expect(f.transfer).toHaveBeenCalledTimes(2);
+  });
+  it('keeps the verified prefix when a ready notification interrupts the operation',async()=>{
+    const f=fixture(),abort=new AbortController();
+    await expect(f.controller.run({signal:abort.signal,onProgress:p=>{
+      if(p.phase==='ready') abort.abort();
+    }})).rejects.toThrow('ROLEPLAY_UPLOAD_INTERRUPTED');
+    const result=await f.controller.run();
+    expect(result).toEqual({requestKey:f.reserve.mock.calls[0][0],verifiedCount:2,total:2});
+    expect(f.hash).toHaveBeenCalledTimes(1);
+    expect(f.reserve).toHaveBeenCalledTimes(1);
+    expect(f.transfer).toHaveBeenCalledTimes(2);
+    expect(f.verify).toHaveBeenCalledTimes(2);
+    expect(f.inspect).not.toHaveBeenCalled();
+    expect(JSON.stringify(result)).not.toContain('private-token');
+  });
   it('does not reserve again after an ambiguous reservation reply',async()=>{
     const f=fixture();f.reserve.mockRejectedValueOnce(new Error('lost'));
     await expect(f.controller.run()).rejects.toThrow();
