@@ -1,3 +1,4 @@
+import { readDirectUploadPilotConfig } from '@/lib/roleplay/direct-upload-pilot-config';
 import { readCreationPilotConfig } from '@/lib/roleplay/creation-pilot-config';
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
@@ -129,14 +130,7 @@ export default async function NewRoleplayPage({
             openingAssignmentEnabled={openingAssignmentEnabled()}
             creationRecoveryEnabled={readCreationPilotConfig(process.env).keyedCreationEnabled}
             receiptRecoveryEnabled={readCreationPilotConfig(process.env).receiptsEnabled}
-            directUploadEnabled={openingAssignmentEnabled() && [
-              'ROLEPLAY_DIRECT_UPLOAD_RESERVATION_API_ENABLED',
-              'ROLEPLAY_DIRECT_UPLOAD_VERIFICATION_API_ENABLED',
-              'ROLEPLAY_DIRECT_UPLOAD_PUBLICATION_ENABLED',
-              'ROLEPLAY_DIRECT_UPLOAD_PUBLICATION_PILOT_API_ENABLED',
-              'ROLEPLAY_DIRECT_UPLOAD_INCREMENTAL_API_ENABLED',
-              'ROLEPLAY_DIRECT_UPLOAD_FORM_ENABLED',
-            ].every(flag=>process.env[flag]==='true')} />
+            directUploadEnabled={openingAssignmentEnabled() && readDirectUploadPilotConfig(process.env).directStagesConfigured} />
         )}
       </div>
     </div>
