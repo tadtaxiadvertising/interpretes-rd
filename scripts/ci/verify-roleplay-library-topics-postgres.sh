@@ -116,4 +116,25 @@ DO $$ BEGIN
 END $$;
 RESET ROLE;
 SQL
+# Exercise the same read-only catalog query used by the runtime operator command.
+check_readiness() {
+  local role="$1" expected="$2"
+  {
+    printf 'SET ROLE %s; BEGIN READ ONLY;\n' "$role"
+    cat scripts/ci/roleplay-library-topics-readiness.sql
+    printf '\nROLLBACK; RESET ROLE;\n'
+  } | psql_ci -qAt | python3 -c '
+import json, sys
+result = json.load(sys.stdin)
+assert result["tableExists"] and result["rlsEnabled"] and result["columnsMatch"]
+assert result["fingerprintPrimaryKey"] and result["externalRolesPresent"]
+assert result["externalAccessDenied"]
+expected = sys.argv[1]
+assert result["serverDmlGranted"] == (expected != "denied")
+assert result["rlsActiveForServer"] == (expected == "policy")
+' "$expected"
+}
+check_readiness fixture_owner owner
+check_readiness fixture_app policy
+check_readiness service_role denied
 echo 'Isolated editorial topics SQL checks passed'
