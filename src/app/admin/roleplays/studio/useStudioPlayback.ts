@@ -60,11 +60,11 @@ export function useStudioPlayback(duration: number, setDuration: (duration: numb
     setPlayhead(timestamp);
   };
 
-  const previewSimpleSegment = (segment: Segment) => {
+  const previewSimpleSegment = (segment: Segment, restart = false) => {
     const audioPlayer = player.current;
     if (!audioPlayer || !Number.isFinite(segment.start) || !Number.isFinite(segment.end) ||
       segment.end <= segment.start || segment.start < 0 || segment.end > duration) return;
-    if (previewingId === segment.id) {
+    if (!restart && previewingId === segment.id) {
       stopPreview();
       return;
     }
