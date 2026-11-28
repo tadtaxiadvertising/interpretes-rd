@@ -5,7 +5,7 @@ import { Trash2 } from 'lucide-react';
 import { ROLEPLAY_RESPONSE_MAX_DURATION_SEC } from '@/lib/roleplay-limits';
 import { formatStudioTime as formatTime } from '@/lib/roleplay-studio/format-time';
 import { studioSelectedSeconds, type StudioCutRange } from '@/lib/roleplay-studio/compound-cuts';
-import { makeNeutralSegmentTitle, type StudioLanguage, type StudioSpeakerRole } from '@/lib/roleplay-studio/speaker-profiles';
+import { makeNeutralSegmentTitle, studioEditorialProfile, type StudioLanguage, type StudioSpeakerRole } from '@/lib/roleplay-studio/speaker-profiles';
 import type { BoundaryProposal } from '@/lib/roleplay-studio/boundary-proposals';
 
 export type StudioIntervention = {
@@ -68,9 +68,8 @@ function StudioInterventionCard({
   applyBoundaryProposal,onToggleExpanded,onToggleAdvanced,
 }: Props) {
   // Keep legacy persisted roles compatible while presenting three editorial profiles.
-  const activeProfile = segment.speakerRole === 'patient' ? 'patient'
-    : segment.speakerRole === 'interpreter' ? 'interpreter'
-    : segment.speakerRole === 'unknown' ? null : 'doctor';
+  const profile = studioEditorialProfile(segment.speakerRole);
+  const activeProfile = profile?.role ?? null;
   const profileButtons = (
     <div role="group" aria-label={'Perfil de intervención ' + (index + 1)} className="flex flex-wrap items-center gap-2">
       {([
@@ -81,11 +80,11 @@ function StudioInterventionCard({
         <button key={speakerRole} type="button"
           aria-pressed={activeProfile === speakerRole && segment.language === language}
           onClick={() => update(segment.id, { speakerRole: speakerRole === 'doctor' && activeProfile === 'doctor' ? segment.speakerRole : speakerRole, language })}
-          className={`rounded-lg border px-3 py-2 text-xs font-semibold ${activeProfile === speakerRole && segment.language === language ? 'theme-action-primary' : 'theme-action-secondary'}`}>
+          className={`min-h-11 rounded-lg border px-3 py-2 text-sm font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--theme-focus)] ${activeProfile === speakerRole && segment.language === language ? 'theme-action-primary' : 'theme-action-secondary'}`}>
           {label} · {language.toUpperCase()}
         </button>
       ))}
-      {(!activeProfile || segment.language !== (activeProfile === 'patient' ? 'es' : 'en')) && (
+      {(!activeProfile || segment.language !== profile?.language) && (
         <span className="text-xs text-[var(--theme-warning)]">Perfil o idioma pendiente de revisar</span>
       )}
     </div>
@@ -160,7 +159,7 @@ function StudioInterventionCard({
           {segment.ranges
             ? segment.ranges.map(range => formatTime(range.start) + '–' + formatTime(range.end)).join(' + ')
             : formatTime(segment.start) + '–' + formatTime(segment.end)}
-          {' · '}{segment.speakerRole} · {segment.language.toUpperCase()}
+          {' · '}{profile?.label ?? 'Sin perfil'} · {segment.language === 'unknown' ? 'Idioma pendiente' : segment.language.toUpperCase()}
         </span>
         {caption && compactRows && (
           <span className="ml-2 inline-block max-w-64 truncate align-bottom text-xs font-normal text-[var(--theme-warning)]">
