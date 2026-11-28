@@ -51,6 +51,22 @@ describe('controlled intervention editor',()=>{
     fireEvent.click(screen.getByRole('button',{name:'Intérprete original — excluir · EN'}));
     expect(props.update).toHaveBeenCalledExactlyOnceWith('turn-a',{speakerRole:'interpreter',language:'en'});
   });
+  it('keeps compact profile choices and grouped cutting tools directly available',()=>{
+    const {props}=setup({compactRows:true,focusMode:false,expandedSegmentId:null,
+      segment:{...segment,title:'Consulta de seguimiento con un título muy largo para pantallas pequeñas'}});
+    const profiles=screen.getByRole('group',{name:'Perfil de intervención 3'});
+    expect(profiles.querySelectorAll('button')).toHaveLength(3);
+    expect(profiles.className).toContain('grid-cols-2');
+    expect(screen.getByRole('button',{name:'Intérprete original — excluir · EN'}).className).toContain('col-span-2');
+    const tools=screen.getByRole('group',{name:'Herramientas de intervención 3'});
+    for (const button of tools.querySelectorAll('button')) expect(button.className).toContain('min-h-11');
+    expect(screen.getByRole('heading',{level:3}).className).not.toContain('truncate');
+    fireEvent.click(screen.getByRole('button',{name:'Escuchar fragmento de intervención 3'}));
+    expect(props.previewSegment).toHaveBeenCalledExactlyOnceWith(props.segment);
+    fireEvent.click(screen.getByRole('button',{name:'Editar'}));
+    expect(props.onToggleExpanded).toHaveBeenCalledExactlyOnceWith('turn-a');
+    expect(props.update).not.toHaveBeenCalled();
+  });
   it('does not let compound cuts be edited as continuous ranges',()=>{
     const compound={...segment,end:12,ranges:[{start:1,end:4},{start:9,end:12}]};
     const {props}=setup({segment:compound,advancedTurnId:segment.id});
