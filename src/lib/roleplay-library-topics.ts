@@ -63,3 +63,16 @@ export function matchesRoleplayTopic(matches: readonly { topic: string; subtopic
   if (topic === 'unclassified') return matches.length === 0;
   return matches.some(match => match.topic === topic && (!subtopic || match.subtopic === subtopic));
 }
+
+/** Explicit editorial choice. Unlike search filters, invalid combinations
+ * are rejected rather than silently reduced to a parent category. */
+export function parseEditorialRoleplayTopic(topic: unknown, subtopic: unknown): { topic: string; subtopic: string } | null {
+  const found = ROLEPLAY_TOPICS.find(item => item.id === topic);
+  if (!found || typeof subtopic !== 'string' || !found.subtopics.some(item => item.id === subtopic)) return null;
+  return { topic: found.id, subtopic };
+}
+
+export function resolveRoleplayTopics(titles: readonly string[], editorial: { topic: string; subtopic: string } | null | undefined) {
+  const selected = editorial && parseEditorialRoleplayTopic(editorial.topic, editorial.subtopic);
+  return selected ? [selected] : inferRoleplayTopics(titles);
+}

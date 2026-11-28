@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { AlertTriangle, AudioLines, Copy, Layers3, Library, Plus } from 'lucide-react';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
 import { safeServerErrorCategory } from '@/lib/security/safe-server-error';
 import { getReusableRoleplayAudio, getRoleplaySnapshotHash } from '@/lib/roleplay-library';
-import { ROLEPLAY_TOPICS, inferRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters } from '@/lib/roleplay-library-topics';
+import { ROLEPLAY_TOPICS, resolveRoleplayTopics, matchesRoleplayTopic, parseRoleplayTopicFilters, parseEditorialRoleplayTopic } from '@/lib/roleplay-library-topics';
+import { RoleplayLibraryTopicEditor } from './RoleplayLibraryTopicEditor';
 import { RoleplayLibraryVisibilityButton } from './RoleplayLibraryVisibilityButton';
 
 export const dynamic = 'force-dynamic';
@@ -97,11 +99,29 @@ export default async function RoleplayLibraryPage({
   const q = (params.q ?? '').trim().toLowerCase().slice(0, 100);
   const showArchived = params.archived === '1';
   const result = await getLibrary();
+  let editorialEnabled = process.env.ROLEPLAY_LIBRARY_EDITORIAL_TOPICS_ENABLED === 'true';
+  let editorialUnavailable = false;
+  const editorial = new Map<string, { topic: string; subtopic: string }>();
+  if (editorialEnabled && result.items.length) {
+    try {
+      const rows = await prisma.$queryRaw<Array<{ fingerprint: string; topic: string; subtopic: string }>>`
+        SELECT fingerprint, topic, subtopic FROM public.roleplay_library_topics
+        WHERE fingerprint IN (${Prisma.join(result.items.map(item => item.fingerprint))})`;
+      for (const row of rows) {
+        const valid = parseEditorialRoleplayTopic(row.topic, row.subtopic);
+        if (valid) editorial.set(row.fingerprint, valid);
+      }
+    } catch (error) {
+      console.error('[ADMIN ROLEPLAY LIBRARY] Failed to read editorial topics:', safeServerErrorCategory(error));
+      editorialEnabled = false;
+      editorialUnavailable = true;
+    }
+  }
   const { topic, subtopic } = parseRoleplayTopicFilters(params.topic, params.subtopic);
   const searchable = result.items.filter((item) =>
     (showArchived ? item.archivedAt !== null : item.archivedAt === null) &&
     (!q || item.titles.some((title) => title.toLowerCase().includes(q)) || item.fingerprint.startsWith(q))
-  ).map(item => ({ ...item, topicHints: inferRoleplayTopics(item.titles) }));
+  ).map(item => ({ ...item, editorialTopic: editorial.get(item.fingerprint) ?? null, topicHints: resolveRoleplayTopics(item.titles, editorial.get(item.fingerprint)) }));
   const matches = searchable.filter(item => matchesRoleplayTopic(item.topicHints, topic, subtopic));
   const selectedTopic = ROLEPLAY_TOPICS.find(item => item.id === topic);
   const topicCount = (id: string, child = '') => searchable.filter(item => matchesRoleplayTopic(item.topicHints, id, child)).length;
@@ -159,6 +179,8 @@ export default async function RoleplayLibraryPage({
         </div>
       )}
 
+      {editorialUnavailable && <p role="status" className="rounded-lg border border-[var(--border)] p-3 text-sm text-[var(--theme-warning)]">La clasificación guardada no está disponible. Se muestran las sugerencias de títulos; no se han cambiado las categorías.</p>}
+
       <form action="/admin/roleplays/library" method="get" className="flex flex-wrap gap-3">
         <label className="sr-only" htmlFor="library-query">Buscar ejercicios por título o huella</label>
         <input id="library-query" name="q" type="search" maxLength={100}
@@ -176,7 +198,7 @@ export default async function RoleplayLibraryPage({
         <nav aria-label="Temas y subtemas de roleplays" className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--theme-panel)] p-4">
           <div>
             <h2 className="font-semibold text-[var(--foreground)]">Explorar por tema</h2>
-            <p className="mt-1 text-xs text-[var(--text-secondary)]">Sugerencias a partir de los títulos existentes; un ejercicio puede aparecer en varios temas. No son categorías guardadas.</p>
+            <p className="mt-1 text-xs text-[var(--text-secondary)]">{editorialEnabled ? 'Las categorías guardadas prevalecen sobre las sugerencias de los títulos. Los ejercicios sin categoría pueden aparecer en varios temas.' : 'Sugerencias a partir de los títulos existentes; un ejercicio puede aparecer en varios temas.'}</p>
           </div>
           <div className="grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
             {[{ id: '', label: 'Todos' }, ...ROLEPLAY_TOPICS, { id: 'unclassified', label: 'Sin clasificar' }].map(item => (
@@ -232,7 +254,7 @@ export default async function RoleplayLibraryPage({
                   {item.audioCount} {item.audioCount === 1 ? 'escenario' : 'escenarios'} ·
                   {' '}{item.assignmentsInWindow} {item.assignmentsInWindow === 1 ? 'sesión coincidente' : 'sesiones coincidentes'} en la muestra
                 </p>
-                <p className="mt-2 text-xs text-[var(--text-secondary)]">Temas sugeridos: {item.topicHints.length
+                <p className="mt-2 text-xs text-[var(--text-secondary)]">{item.editorialTopic ? 'Tema guardado:' : 'Temas sugeridos:'} {item.topicHints.length
                   ? item.topicHints.map(hint => {
                     const parent = ROLEPLAY_TOPICS.find(entry => entry.id === hint.topic);
                     const child = parent?.subtopics.find(entry => entry.id === hint.subtopic);
@@ -269,6 +291,8 @@ export default async function RoleplayLibraryPage({
                     </Link>
                   </>
                 )}
+                {editorialEnabled && <RoleplayLibraryTopicEditor key={item.fingerprint + ':' + (item.editorialTopic?.topic ?? '') + ':' + (item.editorialTopic?.subtopic ?? '')}
+                  fingerprint={item.fingerprint} sourceSessionId={item.sourceSessionId} selection={item.editorialTopic} />}
                 <RoleplayLibraryVisibilityButton fingerprint={item.fingerprint}
                   sourceSessionId={item.sourceSessionId} archived={showArchived} />
               </div>
